@@ -12,24 +12,6 @@ Loom 当前聚焦三层能力：
 - `harness`
 - `SKILLS`
 
-## 当前阶段
-
-Loom 目前处于第一阶段：建立上游内核。
-
-本阶段目标是把来自真实仓库的治理与 harness 实践，收敛成：
-
-- 可复用的治理原则
-- 可复用的最小 harness 结构
-- 可复用的模板与采用路径
-- 后续初始化 `SKILL` 可直接装配的输入基础
-
-本阶段不追求：
-
-- 大而全 profile 体系
-- 完整自动化平台
-- 多项目类型一次性全支持
-- 绑定单一业务领域的模板复制
-
 ## 宪法规则
 
 1. Loom 是上游运行模型仓库，不是业务模板仓库。
@@ -50,10 +32,11 @@ Loom 目前处于第一阶段：建立上游内核。
 1. [AGENTS.md](./AGENTS.md)
 2. [VISION.md](./VISION.md)
 3. [README.md](./README.md)
-4. [adoption/extraction-ledger.md](./adoption/extraction-ledger.md)
-5. [adoption/landing-map.md](./adoption/landing-map.md)
-6. 各区域 `README.md`
-7. 各区域具体规则与说明文件
+4. [docs/roadmap.md](./docs/roadmap.md)
+5. [adoption/extraction-ledger.md](./adoption/extraction-ledger.md)
+6. [adoption/landing-map.md](./adoption/landing-map.md)
+7. 各区域 `README.md`
+8. 各区域具体规则与说明文件
 
 ## 读取顺序
 
@@ -76,6 +59,12 @@ Loom 目前处于第一阶段：建立上游内核。
 3. 各区域 `README.md`
 4. 各区域具体文件
 
+讨论 Loom 当前阶段、阶段目标与阶段顺序时：
+
+1. [AGENTS.md](./AGENTS.md)
+2. [docs/roadmap.md](./docs/roadmap.md)
+3. 对应 GitHub issues
+
 ## 目录职责
 
 - `governance/`
@@ -88,18 +77,6 @@ Loom 目前处于第一阶段：建立上游内核。
   - 提取台账、落点映射、采用动机、事项分流与候选模式
 - `skills/`
   - 初始化、执行、审查、收口等入口层职责定义
-
-## 当前默认推进顺序
-
-Loom 第一阶段默认按以下顺序推进：
-
-1. 提取多仓知识、资产、机制与教训
-2. 建立落点映射
-3. 将 `core` 条目升级为最小规范
-4. 将 `adapt` 条目收敛为候选能力
-5. 定义最小工件模板
-6. 设计初始化 `SKILL`
-7. 用 demo adoption 验证
 
 ## 工作纪律
 
