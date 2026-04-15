@@ -12,6 +12,7 @@
 - 采用动机与上游边界：[rationale.md](./rationale.md)
 - 事项分流、checkpoint 与入口策略：[routing-and-checkpoints.md](./routing-and-checkpoints.md)
 - 暂不固化、待继续验证的候选模式：[candidate-patterns.md](./candidate-patterns.md)
+- 初始化 `SKILL` 模拟验证：[demo-init-validation.md](./demo-init-validation.md)
 
 当前目录对应的主要 `EXT-*` 条目：
 

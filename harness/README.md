@@ -13,11 +13,17 @@
 
 - [execution-context.md](./execution-context.md)
   - `EXT-0011`
+- [work-item-contract.md](./work-item-contract.md)
+  - work item / exec-plan 最小合同
 - [workspace-model.md](./workspace-model.md)
   - `EXT-0012` `EXT-0025`
 - [recovery-model.md](./recovery-model.md)
   - `EXT-0003` `EXT-0013`
+- [status-surface.md](./status-surface.md)
+  - 状态面最小输出合同
 - [automation-frontload.md](./automation-frontload.md)
   - `EXT-0009`
 - [workspace-and-purity.md](./workspace-and-purity.md)
   - `EXT-0029`
+
+当前目录中的核心文件，应优先表达最小可执行规则，而不是只解释概念。

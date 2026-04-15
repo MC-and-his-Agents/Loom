@@ -2,6 +2,13 @@
 
 `skills/` 负责 Loom 的入口层。
 
+当前 `skills/` 的核心职责，是把 Loom 已有能力装配成可直接使用的入口。
+
+当前已落一个初始化入口：
+
+- [loom-init/SKILL.md](./loom-init/SKILL.md)
+  - 根据项目场景选择应引入的 Loom 能力与首批工件
+
 当前 ledger 里还没有直接落到 `skills` 的独立核心条目，但 `skills` 已有清晰职责：
 
 - 读取 `adoption/` 中的事项分流与 checkpoint 策略
