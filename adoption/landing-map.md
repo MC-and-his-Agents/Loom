@@ -61,3 +61,8 @@
 | EXT-0031 | `keep` | `adoption/routing-and-checkpoints.md` | `core` | 小型真实仓库先补最小治理入口 |
 | EXT-0032 | `keep` | `skills/loom-init/SKILL.md` | `core` | 既有根规则仓库优先 companion docs 接入 |
 | EXT-0033 | `keep` | `harness/recovery-model.md` | `core` | 低复杂度仓库允许 checkpoint-lite |
+| EXT-0034 | `keep` | `governance-design.md` | `core` | 短入口文档、深知识库与可机械校验的知识结构 |
+| EXT-0035 | `keep` | `harness-design.md` | `core` | 运行时可见性、日志指标 trace 与 agent 可验证性 |
+| EXT-0036 | `keep` | `harness-design.md` | `core` | 知识库、模板与执行支撑的机械化校验能力 |
+| EXT-0037 | `keep` | `harness-design.md` | `core` | initializer 产物、初始 progress 与 clean state |
+| EXT-0038 | `keep` | `harness-design.md` | `core` | 每轮读取与回写、单单元增量推进 |

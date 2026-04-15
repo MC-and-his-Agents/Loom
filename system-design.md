@@ -2,393 +2,281 @@
 
 ## 1. 文档定位
 
-本文档只回答设计问题，不重复 `VISION.md` 中的愿景与定位。
+本文档是 Loom 的系统总图。
 
-如果 `VISION.md` 回答的是：
+它只回答四件事：
 
-- 为什么要有 Loom
-- Loom 解决什么问题
+- Loom 由哪些系统部分组成
+- 每个部分负责什么
+- 它们之间如何依赖和协同
+- 详细定义分别落在哪些文档
 
-那么本文档回答的是：
+本文档不承接以下内容：
 
-- Loom 由什么组成
-- 各组件各自负责什么
-- 组件之间如何协同
-- 默认先装哪些组件
-- 在什么情况下启用更强组件
+- 愿景与价值判断
+  - 见 [VISION.md](./VISION.md)
+- 当前阶段、推进顺序、进度状态
+  - 见 [docs/roadmap.md](./docs/roadmap.md)
+- 多仓提取证据与落点台账
+  - 见 [adoption/extraction-ledger.md](./adoption/extraction-ledger.md)
+  - 见 [adoption/landing-map.md](./adoption/landing-map.md)
 
-## 2. 系统边界
+## 2. 系统总图
 
-Loom 由三层组成：
+从愿景层看，Loom 是三层系统：
 
 - `governance`
-  - 定义运行规则
 - `harness`
-  - 定义执行支撑
 - `skills`
-  - 定义入口与装配
+
+从仓库实现层看，Loom 由五个稳定部分协同组成：
+
+- `governance`
+  - 制度与判断规则
+- `harness`
+  - 执行支撑与运行可见性
+- `templates`
+  - 结构化工件与条件化模板
+- `skills`
+  - 装配入口与执行入口
+- `adoption`
+  - 多仓提取证据、落点映射与接入方法
 
 其中：
 
-- `governance` 是制度层
-- `harness` 是执行层
+- `governance` 和 `harness` 是系统内核
+- `templates` 是结构承载层
 - `skills` 是入口层
+- `adoption` 是证据与演化层
 
 `skills` 不拥有规则真相，也不拥有执行真相。
-它只负责根据当前仓库场景，选择并装配前两层的能力。
+`adoption` 不直接替代运行规则，它负责证明能力从哪里来、为什么成立、当前落在哪里。
 
-## 3. Governance 设计
+## 3. Governance 子系统
 
-### 3.1 目标
+治理方案的完整定义，见 [governance-design.md](./governance-design.md)。
 
-`governance` 负责回答：
+更细的稳定规则，见：
+
+- [governance/principles.md](./governance/principles.md)
+- [governance/review-model.md](./governance/review-model.md)
+- [governance/maturity-and-closing.md](./governance/maturity-and-closing.md)
+
+`governance` 负责定义：
 
 - 一件事如何进入执行
-- 哪些改动可直接实现
-- 哪些改动必须先说明再实现
-- 审查在什么时点发生
-- 什么叫完成，什么叫尚未完成
+- 哪些事项可以直接实现
+- 哪些事项必须先说明再实现
+- 正式审查在什么时点发生
+- 事项如何进入下一阶段
+- 什么状态才算真正完成
 
-### 3.2 组件
+Loom 将以下能力视为治理内核：
 
-`governance` 至少由以下组件构成：
+- 真相源分层
+  - 调度真相与仓库语义真相分开
+- 载体职责分离
+  - Issue、Project、PR、规则文档、规格文档、执行工件各自承担单一职责
+- 受控入口与事项分流
+  - 轻量事项、中等事项、边界事项走不同路径
+- 规格准入
+  - 高影响改动先收口再实现
+- 三个正式 checkpoint
+  - `commit checkpoint`
+  - `build checkpoint`
+  - `merge checkpoint`
+- 审查职责分层
+  - 作者、reviewer、自动检查、merge gate 各负其责
+- 成熟度与关闭语义
+  - 说明完成、实现进行中、合并就绪、进入主干并收口必须区分
+- 仓库知识库模型
+  - 短入口文档加深知识文档，而不是超大单文件
+- 机械化治理能力
+  - 规则落点、知识结构、核心引用关系应逐步可检查
 
-- 原则组件
-  - 真相源分层
-  - 规则单一落点
-  - 载体职责分离
-- 分流组件
-  - 轻量事项
-  - 中等事项
-  - 边界/高影响事项
-- 审查组件
-  - commit checkpoint
-  - build checkpoint
-  - merge checkpoint
-- 成熟度组件
-  - 说明已清楚
-  - 实现进行中
-  - 合并就绪
+总图中特别强调的能力包括：
 
-### 3.3 运行模型
+- 短 `AGENTS.md` 加深知识库结构
+- 规则与知识结构的机械化校验
 
-`governance` 的默认运行模型是：
+这两项能力在提取台账中对应：
 
-1. 先判断事项属于哪条路径
-2. 再决定是否进入实现
-3. 在实现中保留中途纠偏点
-4. 合并前只判断实现是否可放行
+- `EXT-0034`
+- `EXT-0036` 的治理侧部分
 
-这里最重要的约束是：
+## 4. Harness 子系统
 
-- `merge checkpoint` 不承担第一次高质量语义判断
-- 轻量事项不应被重型流程压垮
-- 边界事项不得直接裸奔进入实现
+执行方案的完整定义，见 [harness-design.md](./harness-design.md)。
 
-## 4. Harness 设计
+更细的稳定规则，见：
 
-### 4.1 目标
+- [harness/execution-context.md](./harness/execution-context.md)
+- [harness/workspace-model.md](./harness/workspace-model.md)
+- [harness/recovery-model.md](./harness/recovery-model.md)
+- [harness/status-surface.md](./harness/status-surface.md)
+- [harness/automation-frontload.md](./harness/automation-frontload.md)
+- [harness/workspace-and-purity.md](./harness/workspace-and-purity.md)
+- [harness/work-item-contract.md](./harness/work-item-contract.md)
 
-`harness` 负责回答：
+`harness` 负责定义：
 
-- 执行现场如何建立
-- 多轮事项如何持续推进
-- 中断后如何恢复
-- 当前执行状态如何被读取
-- 哪些判断交给脚本，哪些判断交给人
+- 仓库如何初始化到可执行状态
+- 执行上下文如何绑定
+- 工作现场如何建立和隔离
+- 多轮事项如何 checkpoint、resume、handoff
+- 每轮执行前后应读取和回写什么
+- 当前状态和运行事实如何被读取
+- 哪些检查应前置到脚本或 CI
+- merge gate 在执行侧如何放行
 
-### 4.2 组件
+Loom 将以下能力视为 harness 内核：
 
-`harness` 至少由以下组件构成：
-
-- 执行上下文组件
-  - 当前事项
-  - 当前路径
-  - 当前目标
-  - 当前工作现场
-  - 当前恢复入口
-  - 当前 checkpoint
-- 工作现场组件
+- 初始化机制
+  - 初始化入口、初始化步骤、初始工件和初始 clean state
+- 初始化产物
+  - 首批能力清单
+  - 首批事项清单
+  - 初始化脚本或等价入口
+  - 初始 checkpoint / progress 载体
+- 执行上下文
+  - 当前事项、路径、目标、工作现场、恢复入口、当前 checkpoint
+- 工作现场机制
   - 单现场单事项
   - 现场可恢复定位
-- 恢复组件
-  - checkpoint
-  - resume
-  - handoff
-  - 唯一恢复入口
-- 状态面组件
-  - 当前事项
-  - 当前阶段
-  - 当前停点
-  - 下一步
-  - 阻断项
-- 自动化前置组件
-  - 结构完整性检查
-  - 必填工件存在性
+- 恢复机制
+  - `checkpoint`
+  - `resume`
+  - `handoff`
+  - 唯一恢复主入口
+- 每轮读取与每轮回写
+  - 先读 progress / checkpoint
+  - 先读最近 git 历史
+  - 单轮只推进一个清晰单元
+  - 结束时回写进度、验证和下一步
+- 状态与运行时可见性
+  - 当前事项、停点、下一步、阻断项
+  - 日志、指标、trace 或等价诊断信息
+  - UI 或端到端结果可被 agent 直接验证
+- 自动化前置
+  - 结构完整性
+  - 文档和模板存在性
+  - 交叉链接与知识结构检查
   - 纯度与明显越界信号
+- merge gate
+  - 只承担执行放行，不承担第一次高质量语义判断
 
-### 4.3 轻重分层
+总图中特别强调的能力包括：
 
-`harness` 不是一刀切启用。
+- 运行时可见性与 agent 可验证性
+- 仓库知识结构、模板和执行支撑的机械化校验
+- initializer 的结构化输出
+- 单单元增量推进
+- 每轮读取 progress 与 git 历史、每轮回写进度与验证
 
-Loom 默认支持三种强度：
+这几项能力在提取台账中对应：
 
-- 轻量形态
-  - 不引入完整恢复工件
-  - 允许把停点、下一步、阻断项寄存在 issue / PR 描述中
-- 标准形态
-  - 引入明确恢复入口和执行工件
-- 强化形态
-  - 引入更完整的状态面、纯度预检和自动化支撑
+- `EXT-0035`
+- `EXT-0036`
+- `EXT-0037`
+- `EXT-0038`
 
-默认原则是：
+## 5. Templates 子系统
 
-- 先用足够轻的形态解决问题
-- 只有出现明确痛点时才升级到更重形态
+模板层的详细定义，见：
 
-## 5. Templates 设计
+- [templates/spec-suite.md](./templates/spec-suite.md)
+- [templates/pull-request.md](./templates/pull-request.md)
 
-### 5.1 目标
+`templates` 不定义治理真相，它只把治理和 harness 的要求压成稳定结构。
 
-模板层不负责治理决策，它只负责把治理要求压成稳定结构。
+模板层负责承接：
 
-### 5.2 组件
-
-模板层至少包含：
-
-- `spec.md`
-  - 目标
-  - 非目标
-  - 边界
-  - 关键场景
-  - 异常条件
-  - 验收标准
-- `plan.md`
-  - 实施目标
-  - 改动范围
-  - 分步实施
-  - 验证方式
-  - 风险与回退
-  - 进入实现前条件
+- 正式规格模板
+  - `spec.md`
+  - `plan.md`
 - PR 模板
-  - 问题
-  - 范围
-  - 验证
-  - 风险
-  - 关联事项
+  - 最小事实集
+  - 条件触发块
+- 其他结构化执行工件
+  - 只在对应场景下启用，不默认一刀切铺满
 
-### 5.3 条件化原则
+模板层的设计边界是：
 
-模板不是全部默认启用。
+- 承载结构
+- 不垄断规则
+- 不制造第二真相源
 
-Loom 的默认策略是：
+## 6. Skills 子系统
 
-- PR 模板属于基础模板
-- `spec.md` / `plan.md` 属于条件模板
-- 条件块优先于大而全模板
+入口层的详细定义，见：
 
-## 6. 接入模型
+- [skills/README.md](./skills/README.md)
+- [skills/loom-init/SKILL.md](./skills/loom-init/SKILL.md)
 
-Loom 不假设所有仓库从零开始。
+`skills` 负责把 Loom 的稳定能力装配成可直接执行的入口。
 
-它至少支持三种接入场景：
+它至少承担四类职责：
 
-### 6.1 新项目接入
+- 场景识别
+  - 判断是新项目、已有小仓库，还是复杂既有仓库
+- 能力选择
+  - 决定应启用哪些治理、harness 和模板组件
+- 初始化输出
+  - 产出首批工件、首批事项、checkpoint 策略和验证入口
+- 日常入口
+  - 逐步形成初始化、执行、审查、收口等统一入口
 
-适用于刚建立的仓库。
+`skills` 的边界同样明确：
 
-默认装配：
+- 不反向定义治理规则
+- 不替代恢复工件
+- 不替代状态真相
 
-- 根规则
-- 入口规则
-- review 规则
-- 基础 PR 模板
+## 7. Adoption 证据层
 
-### 6.2 小型既有仓库接入
+`adoption` 不是运行时内核，但它是 Loom 能否持续成立的证据层。
 
-适用于已有工程边界和 CI，但缺治理闭环的仓库。
+它负责三件事：
 
-默认装配：
+- 记录能力从哪些真实仓库和文章提取而来
+- 记录每条能力当前落在哪个 Loom 文件中
+- 记录不同仓库场景下的接入方法和候选模式
 
-- `WORKFLOW`
-- `code_review`
-- `spec_review`
-- 最小 PR 模板
-- 条件化 `spec.md` / `plan.md`
+关键文档包括：
 
-默认不装配：
+- [adoption/extraction-ledger.md](./adoption/extraction-ledger.md)
+  - 稳定提取结论
+- [adoption/landing-map.md](./adoption/landing-map.md)
+  - 条目到仓库落点的映射
+- [adoption/routing-and-checkpoints.md](./adoption/routing-and-checkpoints.md)
+  - 事项路径与 checkpoint 方法
+- [adoption/rationale.md](./adoption/rationale.md)
+  - Loom 为什么存在
 
-- 完整 recovery
-- work-item 合同
-- 状态面
-- profile 分层
+## 8. 依赖关系
 
-默认接入方式：
+Loom 的系统依赖应保持单向清晰：
 
-- 保留原有根级规则文档
-- 采用 companion docs 接入
+1. `governance`
+   定义规则、审查与关闭语义。
+2. `templates`
+   承接 `governance` 和 `harness` 需要的结构化工件。
+3. `harness`
+   在治理约束下，提供执行上下文、恢复、状态和自动化支撑。
+4. `skills`
+   读取 `governance`、`harness`、`templates`、`adoption`，把能力装配成入口。
+5. `adoption`
+   为上述能力提供提取证据、落点映射和后续演化依据。
 
-### 6.3 复杂既有仓库接入
-
-适用于已经出现重审查、重恢复、重边界治理问题的仓库。
-
-默认做法：
-
-- 先识别最痛的结构性问题
-- 再引入更强 governance / harness 组件
-- 必要时分阶段接入，而不是一次替换全部运行方式
-
-## 7. 默认配置与增强配置
-
-### 7.1 默认最小配置
-
-所有项目默认至少应有：
-
-- 根规则组件
-- 入口规则组件
-- review 规则组件
-- 基础 PR 模板
-
-### 7.2 中等配置
-
-当项目开始出现明显边界改动时，增加：
-
-- `spec_review`
-- `spec.md`
-- `plan.md`
-- build checkpoint
-
-### 7.3 增强配置
-
-当项目开始出现以下信号时，再引入更强组件：
-
-- 多轮事项明显增多
-- 中断恢复成本明显上升
-- 共享边界增多
-- PR 范围漂移明显
-- 审查负担显著上升
-
-此时再启用：
-
-- 恢复组件
-- 更强执行上下文
-- 状态面
-- 纯度预检
-- 更强自动化前置
-
-## 8. 组件间关系
-
-Loom 的组件关系应保持单向依赖：
-
-- `governance` 定义规则
-- `templates` 承接规则结构
-- `harness` 承接执行支撑
-- `skills` 装配前三者
-
-不允许出现：
+不允许出现以下反向关系：
 
 - `skills` 反向定义规则
-- 模板层承担治理真相
-- harness 层承担愿景和定位说明
+- 模板层承担唯一治理真相
+- 状态面成为第二套事项真相
+- `system-design.md` 混入阶段进度和当前执行状态
 
 ## 9. 一句话总结
 
-Loom 不是一组散落的文档、模板或 skills。
+Loom 不是一组散落文档。
 
-Loom 是一套：
-
-- 先定义治理规则
-- 再定义执行支撑
-- 再按仓库场景装配
-
-的项目运行系统。
-*** Add File: /Users/mc/dev/Loom/docs/roadmap.md
-# Loom Roadmap
-
-## 1. 文档定位
-
-本文件承接 Loom 的阶段性信息。
-
-它只回答：
-
-- Loom 当前处于哪个阶段
-- 每个阶段要解决什么问题
-- 每个阶段的进入与退出条件是什么
-- 当前阶段对应哪些 GitHub issues
-
-本文件不负责定义系统设计，也不负责定义仓库规则。
-
-## 2. 阶段模型
-
-Loom 当前按以下阶段推进：
-
-### Phase 1：建立上游内核
-
-目标：
-
-- 建立仓库内核与目录骨架
-- 建立多仓提取台账与落点映射
-- 建立治理、harness、templates、adoption 的最小规范
-- 建立第一版初始化入口
-
-进入条件：
-
-- Loom 作为独立仓库启动
-
-退出条件：
-
-- 最小规则、最小模板、最小 harness 合同和第一轮入口验证已经入库
-
-对应 issue：
-
-- `#1` 已关闭
-
-### Phase 2：固化能力组件与接入策略
-
-目标：
-
-- 把已验证能力收敛成更稳定的组件
-- 明确不同仓库场景下的默认接入策略
-- 区分轻量接入和更重接入，不让它们混在一起
-
-进入条件：
-
-- Phase 1 已完成
-
-退出条件：
-
-- 至少有一条稳定的小型既有仓库默认接入策略
-- 能把能力组件与阶段性状态区分存放
-
-对应 issue：
-
-- `#11` 进行中
-
-### 后续阶段
-
-后续阶段暂不在本文件中过早细化。
-
-只有当当前阶段目标和退出条件已经稳定后，再新增下一阶段。
-
-## 3. 当前阶段
-
-当前阶段是：
-
-- `Phase 2：固化能力组件与接入策略`
-
-当前阶段的重点不是继续堆入口，而是：
-
-- 稳定能力组件
-- 稳定小型既有仓库的默认接入方式
-- 为后续更复杂仓库验证建立清晰基线
-
-## 4. 与 GitHub 的关系
-
-阶段路线图由本文件承接。
-
-执行真相由 GitHub issues 承接：
-
-- 阶段 issue 承接阶段目标
-- 子 issue 承接具体推进事项
-
-如果 roadmap 与 issue 状态冲突，以 issue 的执行状态为准，并及时回写本文件。
+Loom 是一套把治理规则、执行支撑、结构化模板、入口装配和多仓证据连成闭环的项目运行系统。

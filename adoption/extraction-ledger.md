@@ -90,6 +90,16 @@
 3. 教训与反模式清单
    - Loom 设计时必须主动避免什么
 
+本文件只维护稳定提取结论。
+
+动态执行信息，例如：
+
+- 待补充来源
+- 下一步采集动作
+- 当前轮推进顺序
+
+不在本文件中维护，应由 `docs/roadmap.md` 或对应 GitHub issues 承接。
+
 补充约束：
 
 - `WebEnvoy` 不是只提供反模式的样本仓库。
@@ -135,30 +145,8 @@
 | EXT-0031 | `mail-listener/AGENTS.md`, `mail-listener/WORKFLOW.md`, `mail-listener/code_review.md`, `mail-listener/spec_review.md` | `mail-listener` | `lesson` | 对已有工程基线但缺完整治理闭环的小型真实仓库，Loom 的首轮 adoption 应优先补最小治理入口，而不是一次性装完整 harness。 | `mail-listener` 已有清晰边界、CI、测试与 agent 规则，但通过最小 adoption 只补 `WORKFLOW`、review 合同、条件化 spec 路径和 PR 模板，即可形成可执行闭环。 | `general` | `adoption` | `keep` | 这说明 Loom 对小型真实仓库的默认入口应更轻，先验证不过装，再决定是否追加 recovery/work-item/status-surface。 |
 | EXT-0032 | `mail-listener/AGENTS.md`, `mail-listener/WORKFLOW.md` | `mail-listener` | `lesson` | 当下游仓库已经有稳定的项目边界文档时，Loom adoption 应采用“伴随文档接入”而不是重写根规则文档。 | `mail-listener` 保留原有 `AGENTS.md` 的项目边界与工程规则，只追加治理伴随文档的读取顺序与职责映射，即完成接入。 | `general` | `skills` | `keep` | `loom-init` 应先判断仓库是否已有清晰根规则；若已有，优先补 companion docs，而不是重写根级规则。 |
 | EXT-0033 | `mail-listener/WORKFLOW.md`, `mail-listener/.github/PULL_REQUEST_TEMPLATE.md` | `mail-listener` | `lesson` | 对低复杂度仓库，`build checkpoint` 可以先寄存在 issue 或 PR 描述中，不必第一轮就引入独立 `exec-plan`。 | `mail-listener` 的第一轮 adoption 在不引入 `exec-plan` 的前提下，仍为跨多轮事项定义了停点、下一步和阻断项的最小记录方式。 | `configurable` | `harness` | `keep` | Loom 的轻量 adoption 路径应允许 `checkpoint-lite`，把恢复事实先寄存在现有载体中。 |
-
-## 待补充来源
-
-- `Syvert`
-  - `AGENTS.md`
-  - `WORKFLOW.md`
-  - `docs/process/**`
-  - `spec_review.md`
-  - `code_review.md`
-  - `docs/decisions/**`
-  - `docs/exec-plans/**`
-- `WebEnvoy`
-  - 治理主文档
-  - `docs/dev/AGENTS.md`
-  - 审查规则
-  - PR 模板
-  - 相关脚本和门禁
-  - `/Users/mc/.codex/sessions/2026/04/15/rollout-2026-04-15T13-27-25-019d8f9b-cc9d-7083-81eb-812a817b0899.jsonl`
-- `mail-listener`
-  - 真实 adoption 后的使用反馈
-  - 第一轮真实边界路径事项验证
-
-## 下一步
-
-- 继续补充来自 `Syvert` 的机制与工件级条目。
-- 继续正式读取 `WebEnvoy` 仓库中的治理文件、模板与脚本，而不只依赖会话摘要。
-- 将 `keep` / `adapt` 的条目拆分映射到 `governance/`、`harness/`、`skills/`、`adoption/` 的具体落点。
+| EXT-0034 | `OpenAI harness engineering` | `article` | `principle` | 面向 agent 的知识不应塞进一个超大 `AGENTS.md`，而应进入可持续维护、可被机械检查的仓库知识结构。 | OpenAI 明确建议把短 `AGENTS.md` 当成目录，将知识沉淀到仓库文档中，并配合 linters、CI jobs、文档清理 agent 保持知识库可用。 | `general` | `governance` | `keep` | Loom 应把“短入口 + 深知识库 + 可机械校验”定义为目标能力，而不是只停留在文档分层口号。 |
+| EXT-0035 | `OpenAI harness engineering` | `article` | `mechanism` | Harness 应提供对 agent 友好的运行时可见性和可验证性，包括按工作现场启动应用、直接读取日志/指标/trace、以及用浏览器自动化验证 UI。 | OpenAI 文中强调 per-worktree app、Chrome DevTools、可观察性栈和 agent legibility，说明运行时可见性本身是 harness 能力。 | `general` | `harness` | `keep` | Loom 需要把“运行时可见性”明确成能力目标，而不是只讨论 checkpoint 和规则。 |
+| EXT-0036 | `OpenAI harness engineering` | `article` | `mechanism` | 仓库知识结构、规则模板和执行支撑应具备机械化校验能力，而不是只靠人工记得去维护。 | OpenAI 文中明确提到 linters、CI jobs、文档清理 agent，说明知识库新鲜度、交叉链接和结构完整性应能被自动化检查。 | `general` | `harness` | `keep` | Loom 的自动化前置应扩展到知识库与模板层，而不只检查代码或 PR 纯度。 |
+| EXT-0037 | `Anthropic effective harnesses for long-running agents` | `article` | `mechanism` | 长时运行 harness 的核心不是更多说明，而是 initializer 先产出结构化执行环境：特性清单、初始化脚本、进度文件和初始 clean state。 | Anthropic 文中把 initializer 作为首轮 agent，先写 `feature list`、`init.sh`、`progress file`，并建立初始 git 提交，为后续多轮 agent 执行提供稳定起点。 | `general` | `harness` | `keep` | Loom 的初始化能力应把这些产物定义成目标能力，而不是只停留在“判断装什么”。 |
+| EXT-0038 | `Anthropic effective harnesses for long-running agents` | `article` | `mechanism` | 长时运行 agent 应以单特性增量推进，每轮先读 progress 与 git 历史，再只推进一个清晰单元，并在结束时回写进度。 | Anthropic 文中强调 one feature at a time、每轮开始读 `progress file` 和 `git log`，结束时更新进度并提交代码，以避免上下文漂移。 | `general` | `harness` | `keep` | Loom 的 checkpoint / resume 机制应把“每轮读取与每轮回写”定义为正式能力，而不只描述静态结构。 |
