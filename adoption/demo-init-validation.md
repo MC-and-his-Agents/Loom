@@ -58,3 +58,49 @@
 - Loom 的第一阶段能力可以被装配成清晰的初始化入口
 - 初始化决策不需要先引入 profile
 - `SKILL` 可以围绕现有文档直接生成首批工件与事项顺序
+
+## 场景二：既有小型真实仓库 `mail-listener`
+
+目标仓库具备以下特点：
+
+- 已有清晰项目边界与工程规则
+- 已有 CI 与基础测试
+- 缺少完整治理入口、review 合同与条件化 spec 路径
+- 当前没有明显长任务恢复痛点
+
+## 初始化判断
+
+`loom-init` 在该场景下应得出以下判断：
+
+- 这是既有仓库 retrofit，不是从零初始化
+- 不应重写原有 `AGENTS.md`
+- 应采用 companion docs 接入
+- 第一轮只装最小治理包，不默认引入 recovery/work-item/status-surface
+
+## 推荐装配
+
+第一批推荐装配应包含：
+
+- `WORKFLOW.md`
+- `code_review.md`
+- `spec_review.md`
+- 最小 PR 模板
+- 条件化 `spec.md` / `plan.md` 模板
+
+## 暂不引入
+
+第一轮不应引入：
+
+- recovery 模型
+- work item 合同
+- 状态面
+- profile 分层
+- 重 harness
+
+## 验证结论
+
+该场景证明：
+
+- Loom 对真实外部仓库的第一轮 adoption 可以比 Loom 自举更轻
+- 伴随文档接入比重写根规则更适合已有边界清晰的小仓库
+- `build checkpoint` 可以先以 `checkpoint-lite` 形式寄存在 issue / PR 描述中

@@ -132,6 +132,9 @@
 | EXT-0028 | `WebEnvoy/.github/PULL_REQUEST_TEMPLATE.md` | `webenvoy` | `artifact` | PR 模板可以作为结构化事实承载体，前提是区分“必填最小事实”和“条件触发块”。 | `WebEnvoy` 的 PR 模板把 integration、gate applicability、live evidence、回滚和执行现场都结构化了，说明模板可以承载高质量事实；问题在于当前默认负担过重。 | `general` | `template` | `adapt` | Loom 不应否定结构化 PR 模板本身，而应把它拆成基础块加条件块。 |
 | EXT-0029 | `WebEnvoy/scripts/check-pr-purity.sh`, `docs/dev/AGENTS.md` | `webenvoy` | `mechanism` | 分支职责纯度和 PR 范围纯度适合前置到脚本，而不是只在 review 时发现。 | `WebEnvoy` 明确提出纯度预检门禁，并提供对应脚本入口，说明“职责漂移”可以部分自动化前移。 | `general` | `harness` | `keep` | 这是 Loom 值得吸收的正向机制，和“自动化前置”结论一致。 |
 | EXT-0030 | `Syvert/spec_review.md`, `WebEnvoy/spec_review.md`, `WebEnvoy/code_review.md` | `both` | `lesson` | merge 前 review 过载的根因不是“有 guardian”，而是 admission/build checkpoint 没有同样稳定地承担高质量语义判断。 | 两仓都存在较强的 merge 前审查；但当前移 checkpoint 未稳定生效时，merge review 会被迫兼任阶段审查与终审。 | `general` | `adoption` | `keep` | 这是 Loom 设计 checkpoint 体系时应明确写入的结构性教训。 |
+| EXT-0031 | `mail-listener/AGENTS.md`, `mail-listener/WORKFLOW.md`, `mail-listener/code_review.md`, `mail-listener/spec_review.md` | `mail-listener` | `lesson` | 对已有工程基线但缺完整治理闭环的小型真实仓库，Loom 的首轮 adoption 应优先补最小治理入口，而不是一次性装完整 harness。 | `mail-listener` 已有清晰边界、CI、测试与 agent 规则，但通过最小 adoption 只补 `WORKFLOW`、review 合同、条件化 spec 路径和 PR 模板，即可形成可执行闭环。 | `general` | `adoption` | `keep` | 这说明 Loom 对小型真实仓库的默认入口应更轻，先验证不过装，再决定是否追加 recovery/work-item/status-surface。 |
+| EXT-0032 | `mail-listener/AGENTS.md`, `mail-listener/WORKFLOW.md` | `mail-listener` | `lesson` | 当下游仓库已经有稳定的项目边界文档时，Loom adoption 应采用“伴随文档接入”而不是重写根规则文档。 | `mail-listener` 保留原有 `AGENTS.md` 的项目边界与工程规则，只追加治理伴随文档的读取顺序与职责映射，即完成接入。 | `general` | `skills` | `keep` | `loom-init` 应先判断仓库是否已有清晰根规则；若已有，优先补 companion docs，而不是重写根级规则。 |
+| EXT-0033 | `mail-listener/WORKFLOW.md`, `mail-listener/.github/PULL_REQUEST_TEMPLATE.md` | `mail-listener` | `lesson` | 对低复杂度仓库，`build checkpoint` 可以先寄存在 issue 或 PR 描述中，不必第一轮就引入独立 `exec-plan`。 | `mail-listener` 的第一轮 adoption 在不引入 `exec-plan` 的前提下，仍为跨多轮事项定义了停点、下一步和阻断项的最小记录方式。 | `configurable` | `harness` | `keep` | Loom 的轻量 adoption 路径应允许 `checkpoint-lite`，把恢复事实先寄存在现有载体中。 |
 
 ## 待补充来源
 
@@ -150,6 +153,9 @@
   - PR 模板
   - 相关脚本和门禁
   - `/Users/mc/.codex/sessions/2026/04/15/rollout-2026-04-15T13-27-25-019d8f9b-cc9d-7083-81eb-812a817b0899.jsonl`
+- `mail-listener`
+  - 真实 adoption 后的使用反馈
+  - 第一轮真实边界路径事项验证
 
 ## 下一步
 

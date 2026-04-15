@@ -22,7 +22,7 @@
 - `adoption/`
   - 采用动机、事项分流、checkpoint 策略、候选模式
 - `skills/`
-  - 当前没有直接从 ledger 提取出的独立核心条目；先承接上面四区的装配入口职责
+  - 初始化与采用装配入口职责
 
 ## Item Map
 
@@ -58,3 +58,6 @@
 | EXT-0028 | `adapt` | `templates/pull-request.md` | `candidate` | 结构化 PR 模板按条件展开 |
 | EXT-0029 | `keep` | `harness/workspace-and-purity.md` | `core` | 纯度预检与范围前置 |
 | EXT-0030 | `keep` | `adoption/rationale.md` | `core` | merge 前 review 过载的结构性根因 |
+| EXT-0031 | `keep` | `adoption/routing-and-checkpoints.md` | `core` | 小型真实仓库先补最小治理入口 |
+| EXT-0032 | `keep` | `skills/loom-init/SKILL.md` | `core` | 既有根规则仓库优先 companion docs 接入 |
+| EXT-0033 | `keep` | `harness/recovery-model.md` | `core` | 低复杂度仓库允许 checkpoint-lite |
