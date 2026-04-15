@@ -11,6 +11,7 @@
 - 总落点映射：[landing-map.md](./landing-map.md)
 - 采用动机与上游边界：[rationale.md](./rationale.md)
 - 事项分流、checkpoint 与入口策略：[routing-and-checkpoints.md](./routing-and-checkpoints.md)
+- 小型既有仓库的默认 retrofit 策略：[lightweight-retrofit-default.md](./lightweight-retrofit-default.md)
 - 暂不固化、待继续验证的候选模式：[candidate-patterns.md](./candidate-patterns.md)
 - 初始化 `SKILL` 模拟验证：[demo-init-validation.md](./demo-init-validation.md)
 
