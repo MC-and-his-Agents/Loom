@@ -15,7 +15,8 @@
     "required_fields": [
       "task_is_initialization_or_retrofit",
       "target_repository",
-      "adoption_scope"
+      "adoption_scope",
+      "write_intent"
     ]
   },
   "output_contract": {
@@ -23,8 +24,10 @@
     "required_sections": [
       "scenario_judgment",
       "enabled_capabilities",
+      "deferred_capabilities",
       "first_artifacts",
       "first_work_items",
+      "fact_chain",
       "validation_entry"
     ]
   },
