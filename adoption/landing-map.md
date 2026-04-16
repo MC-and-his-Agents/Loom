@@ -22,7 +22,7 @@
 - `adoption/`
   - 采用动机、事项分流、checkpoint 策略、默认 retrofit 路径、候选模式
 - `skills/`
-  - 初始化与采用装配入口职责
+  - root entry、场景 skills、分发合同与场景路由入口职责
 
 ## Entry Contract Map
 
@@ -33,8 +33,13 @@
   - 入口消费：`skills/loom-init/SKILL.md`
 - `loom-init` 输入信号合同
   - 稳定落点：`skills/loom-init/references/intake-signals.md`
+- root route matrix
+  - 稳定落点：`skills/route-matrix.md`
+  - 入口消费：`skills/loom-init/SKILL.md`
 - `loom-init` 输出合同
   - 稳定落点：`skills/loom-init/references/output-contract.md`
+- 场景 skill 验证记录
+  - 稳定落点：`adoption/validation-skill-loom-adopt.md`; `adoption/validation-skill-loom-resume.md`; `adoption/validation-skill-loom-pre-review.md`; `adoption/validation-skill-loom-handoff.md`; `adoption/validation-skill-loom-retire.md`; `adoption/validation-skill-loom-merge-ready.md`
 - 真实 adoption 验证记录合同
   - 稳定落点：`adoption/validation-record-contract.md`
 - 经验回流机制
