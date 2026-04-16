@@ -85,6 +85,13 @@ Loom 采用语义版本：
 
 - `bootstrap/root contract` 的最小职责变化
 - 安装、发现、升级、版本识别或 adapter 失败可见性合同变化
+- `root_entry`、多 entry registry、隐式路由优先级或场景 skill 角色合同变化
+
+以下变化通常构成 `minor`：
+
+- 新增稳定场景 skill
+- 新增不破坏兼容的聚合 flow，并被场景 skill 正式消费
+- `skills/registry.json` 增加可发现 entry，但不改变既有 entry 的最小职责
 
 ### 5.5 `adoption`
 
@@ -114,7 +121,37 @@ Loom 采用语义版本：
 
 `skills` 的安装、发现、升级与 adapter 合同，由 [../skills/distribution-and-adapter-contract.md](../skills/distribution-and-adapter-contract.md) 承接。
 
-当前仓库中，`skills/upgrade-contract.json` 承接最小机读升级协议；它不替代本文的版本对象定义，只负责把显式升级与版本可见性落成可读取工件。
+当前仓库中：
+
+- `skills/registry.json`
+  - 承接 root entry、场景 entry、角色与合同版本的机读声明
+- `skills/upgrade-contract.json`
+  - 承接最小机读升级协议，声明宿主必须重新读取 `registry/manifest/executable/referenced_resources`
+
+它们不替代本文的版本对象定义，只负责把显式升级与版本可见性落成可读取工件。
+
+## 8. 场景 SKILLS 第一波的升级语义
+
+第一波稳定场景 skills 为：
+
+- `loom-adopt`
+- `loom-resume`
+- `loom-pre-review`
+- `loom-handoff`
+- `loom-retire`
+- `loom-merge-ready`
+
+这一波属于 `minor` 升级，原因是：
+
+- `loom-init` 仍保留唯一 root entry 身份
+- 既有 `bootstrap/verify/fact-chain` 语义未被破坏
+- 新增的是显式场景入口、root 隐式路由与聚合 flow，而不是替换旧入口
+
+下游升级时至少应确认：
+
+- 宿主能重新发现 7 个已注册 entries
+- 宿主知道 `loom-init route` 与 6 个显式场景 skill 的入口关系
+- 宿主刷新 `registry/manifest/executable/referenced_resources`
 
 本文只定义版本对象与升级说明格式，不重复宿主适配细节。
 
