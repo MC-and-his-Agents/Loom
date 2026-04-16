@@ -21,13 +21,23 @@
   "output_contract": {
     "reference": "references/output-contract.md",
     "required_sections": [
+      "item",
+      "result",
+      "summary",
+      "missing_inputs",
+      "fallback_to",
+      "workspace",
+      "checkpoint",
+      "state_check",
+      "steps",
       "recovery_entry",
       "status_surface",
       "current_stop",
       "next_step",
       "blockers",
       "latest_validation_summary",
-      "fallback_target"
+      "fallback_target",
+      "writeback_fields"
     ]
   },
   "routing": {
