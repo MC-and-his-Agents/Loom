@@ -119,7 +119,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
 
     flow = subparsers.add_parser("flow", help="Run a bundled high-frequency Loom flow")
-    flow.add_argument("operation", choices=("pre-review",))
+    flow.add_argument("operation", choices=("pre-review", "resume"))
     flow.add_argument("--target", required=True, help="Target repository root")
     flow.add_argument("--item", help="Expected current item id")
     flow.add_argument(
@@ -1222,7 +1222,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             }
         )
 
-    if args.operation != "pre-review":
+    if args.operation not in {"pre-review", "resume"}:
         return emit(
             {
                 "command": "flow",
@@ -1235,8 +1235,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             }
         )
 
-    steps: list[dict[str, Any]] = []
-    steps.append(
+    steps: list[dict[str, Any]] = [
         {
             "name": "fact-chain",
             "result": "pass",
@@ -1244,9 +1243,23 @@ def handle_flow(args: argparse.Namespace) -> int:
             "missing_inputs": [],
             "fallback_to": None,
         }
-    )
+    ]
 
     state_payload = state_check_payload(context)
+    locate_payload = base_workspace_payload(context, "locate")
+    locate_result = "pass" if not locate_payload["purity"]["hard_failures"] else "block"
+    locate_step = {
+        "name": "workspace-locate",
+        "result": locate_result,
+        "summary": (
+            "workspace is location-resolved and execution-ready."
+            if locate_result == "pass"
+            else "workspace is location-resolved but not execution-ready."
+        ),
+        "missing_inputs": list(locate_payload["purity"]["hard_failures"]),
+        "fallback_to": "admission" if locate_payload["purity"]["hard_failures"] else None,
+    }
+
     steps.append(
         {
             "name": "state-check",
@@ -1257,49 +1270,38 @@ def handle_flow(args: argparse.Namespace) -> int:
         }
     )
 
-    runtime_fields, runtime_missing = runtime_evidence_from_report(context["report"])
-    runtime_result = "pass" if not runtime_missing else "block"
-    steps.append(
-        {
-            "name": "runtime-evidence",
-            "result": runtime_result,
-            "summary": (
-                "runtime evidence entries are readable."
-                if runtime_result == "pass"
-                else "runtime evidence entries are incomplete or inconsistent."
-            ),
-            "missing_inputs": runtime_missing,
-            "fallback_to": "admission" if runtime_missing else None,
-            "runtime_evidence": runtime_fields,
-        }
-    )
+    if args.operation == "resume":
+        steps.append(locate_step)
+    else:
+        runtime_fields, runtime_missing = runtime_evidence_from_report(context["report"])
+        runtime_result = "pass" if not runtime_missing else "block"
+        steps.append(
+            {
+                "name": "runtime-evidence",
+                "result": runtime_result,
+                "summary": (
+                    "runtime evidence entries are readable."
+                    if runtime_result == "pass"
+                    else "runtime evidence entries are incomplete or inconsistent."
+                ),
+                "missing_inputs": runtime_missing,
+                "fallback_to": "admission" if runtime_missing else None,
+                "runtime_evidence": runtime_fields,
+            }
+        )
 
-    admission_payload = checkpoint_payload("admission", context)
-    steps.append(
-        {
-            "name": "checkpoint-admission",
-            "result": admission_payload["result"],
-            "summary": admission_payload["summary"],
-            "missing_inputs": admission_payload["missing_inputs"],
-            "fallback_to": admission_payload["fallback_to"],
-        }
-    )
+        admission_payload = checkpoint_payload("admission", context)
+        steps.append(
+            {
+                "name": "checkpoint-admission",
+                "result": admission_payload["result"],
+                "summary": admission_payload["summary"],
+                "missing_inputs": admission_payload["missing_inputs"],
+                "fallback_to": admission_payload["fallback_to"],
+            }
+        )
 
-    locate_payload = base_workspace_payload(context, "locate")
-    locate_result = "pass" if not locate_payload["purity"]["hard_failures"] else "block"
-    steps.append(
-        {
-            "name": "workspace-locate",
-            "result": locate_result,
-            "summary": (
-                "workspace is location-resolved and execution-ready."
-                if locate_result == "pass"
-                else "workspace is location-resolved but not execution-ready."
-            ),
-            "missing_inputs": list(locate_payload["purity"]["hard_failures"]),
-            "fallback_to": "admission" if locate_payload["purity"]["hard_failures"] else None,
-        }
-    )
+        steps.append(locate_step)
 
     result = "pass"
     fallback_to: str | None = None
@@ -1313,11 +1315,18 @@ def handle_flow(args: argparse.Namespace) -> int:
             result = "block"
             fallback_to = step.get("fallback_to")
 
-    summary = (
-        "pre-review flow is ready to proceed."
-        if result == "pass"
-        else "pre-review flow found blocking signals before review."
-    )
+    if args.operation == "resume":
+        summary = (
+            "resume flow rebuilt the current execution context and next step."
+            if result == "pass"
+            else "resume flow rebuilt context but found blocking signals before execution can continue."
+        )
+    else:
+        summary = (
+            "pre-review flow is ready to proceed."
+            if result == "pass"
+            else "pre-review flow found blocking signals before review."
+        )
     missing_inputs: list[str] = []
     for step in steps:
         if step["result"] in {"block", "fallback"}:
@@ -1328,7 +1337,7 @@ def handle_flow(args: argparse.Namespace) -> int:
     return emit(
         {
             "command": "flow",
-            "operation": "pre-review",
+            "operation": args.operation,
             "item": {
                 "id": context["item_id"],
                 "goal": context["goal"],
@@ -1340,6 +1349,35 @@ def handle_flow(args: argparse.Namespace) -> int:
             "missing_inputs": missing_inputs,
             "fallback_to": fallback_to,
             "steps": steps,
+            **(
+                {
+                    "workspace": {
+                        "entry": locate_payload["workspace"]["entry"],
+                        "path": locate_payload["workspace"]["path"],
+                        "exists": locate_payload["workspace"]["exists"],
+                    },
+                    "recovery": {
+                        "path": locate_payload["recovery"]["path"],
+                        "current_stop": locate_payload["recovery"]["current_stop"],
+                        "next_step": context["next_step"],
+                        "blockers": context["blockers"],
+                        "latest_validation_summary": context["latest_validation_summary"],
+                    },
+                    "checkpoint": {
+                        "raw": context["current_checkpoint_raw"],
+                        "normalized": context["current_checkpoint"],
+                    },
+                    "state_check": {
+                        "result": state_payload["result"],
+                        "summary": state_payload["summary"],
+                        "missing_inputs": state_payload["missing_inputs"],
+                        "fallback_to": state_payload["fallback_to"],
+                        "checks": state_payload["checks"],
+                    },
+                }
+                if args.operation == "resume"
+                else {}
+            ),
         }
     )
 

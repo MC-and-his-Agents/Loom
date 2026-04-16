@@ -17,7 +17,7 @@
 | `fact-chain` | `python3 tools/loom_flow.py fact-chain --target <repo> [--item <id>]` | 单一事实链 | `pass` / `block` | 日常统一读取入口 |
 | `pre-review`（统一高频入口） | `python3 tools/loom_flow.py flow pre-review --target <repo> [--item <id>]` | fact-chain + state-check + runtime evidence + admission + workspace locate | `pass` / `block` / `fallback` | 第一版聚焦 review 前高频检查流 |
 | `checkpoint` | `python3 tools/loom_flow.py checkpoint <admission\\|build\\|merge> --target <repo> [--item <id>]` | fact-chain + purity + merge 放行材料 | `pass` / `block` / `fallback` | `merge` 可额外消费 PR 模板 |
-| `resume` | 恢复主入口 + execution-context 读取顺序 | work item + recovery entry + status-surface | 可继续执行的下一步上下文 | 语义落点在 `recovery-model.md` |
+| `resume` | `python3 tools/loom_flow.py flow resume --target <repo> [--item <id>]` | fact-chain + state-check + workspace locate + recovery 的 `next_step` / `blockers` / `checkpoint` | `pass` / `block` | 只输出恢复摘要，不回写任何载体 |
 | `handoff` | 恢复主入口回写 + 状态面同步 | 当前停点/下一步/阻断项/验证摘要 | 可移交的恢复状态 | 不新增第二套 authored 状态 |
 | `review` | `spec_review` / `code_review` + merge checkpoint 输入 | 最小必要上下文 + 前置检查结果 | `allow` / `block` / `fallback` | reviewer 负责语义判断，脚本负责机械判断 |
 | `merge` | `merge checkpoint` + 仓库平台合并动作 | build 结果 + 风险回滚 + 验证摘要 | 放行或阻断 | Loom 不替代宿主平台合并接口 |
