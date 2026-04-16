@@ -19,6 +19,8 @@
 - `adoption/`
   - 稳定 adoption 路径、经验回流、验证记录合同、版本化与升级路径
   - 执行入口兼容说明与完整执行内核复验记录
+- 发布说明
+  - `docs/complete-kernel-release.md`
 
 这些内容共同形成 Loom 的最小上游发布面。
 
