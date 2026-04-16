@@ -128,11 +128,11 @@ Loom 当前按五个区域组织：
 - `skills/`
   - 初始化、执行、审查、收口等场景化入口
 
-当前已经具备：
+仓库内当前的主要交付物包括：
 
 - 初始化 `SKILL` 第一版
 - 第一轮模拟 adoption 验证
-- 三类 `Phase E` 真实 adoption 验证记录
+- 新项目、小型既有仓库、复杂既有仓库三类真实 adoption 验证记录
 - 经验回流、版本化与上游交付面文档
 - `loom-check` 仓库自检入口与 CI 工作流
 - `loom-init` 最小可执行 bootstrap CLI
@@ -154,10 +154,17 @@ Loom 适合这些场景：
 - 你需要长任务能 checkpoint、恢复和交接
 - 你希望治理能力独立于单一业务仓库持续演进
 
-## 当前状态
+## 目标中的执行内核
 
-Loom 当前处于基础阶段，已经从“纯规则仓库”推进到“最小可执行内核仓库”：
+Loom 的执行内核目标，不是长期停留在“最小可执行”层面，而是形成可被下游直接消费的完整执行内核：
 
 - 仓库自检可通过 `make loom-check` 运行
 - 初始化入口可通过 `python3 tools/loom_init.py bootstrap --target <repo>` 运行
 - 新项目 demo 可通过 `make loom-demo-new-project` 复验
+
+完整目标还包括：
+
+- `admission checkpoint`、`build checkpoint`、`merge checkpoint` 的工程化承接
+- 工作现场生命周期与纯度治理的稳定入口
+- 运行时可见性、验证入口与 gate 输入的稳定脚本面
+- 日常执行动作的统一入口，而不是依赖会话解释补齐
