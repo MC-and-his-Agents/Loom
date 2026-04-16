@@ -1,12 +1,13 @@
 {
   "schema_version": "loom-skill-upgrade/v1",
-  "registry_version": "1.1.0",
+  "registry_version": "1.2.0",
   "root_entry": "loom-init",
-  "current_contract_version": "1.1.0",
+  "current_contract_version": "1.2.0",
   "upgrade_policy": {
     "mode": "explicit",
     "version_source": "skills/registry.json",
     "refresh_required": [
+      "registry",
       "root_entry",
       "manifest",
       "executable",
@@ -16,8 +17,9 @@
   },
   "compatibility_questions": [
     "Which root entry is current?",
-    "Which contract version is installed?",
+    "Which contract versions are installed for each declared entry?",
     "Which executable path should the host invoke?",
-    "Does the host need to refresh referenced resources after upgrade?"
+    "Does the host need to refresh referenced resources after upgrade?",
+    "Did the registry gain or retire scenario entries that the host must rediscover?"
   ]
 }

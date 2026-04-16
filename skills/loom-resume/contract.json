@@ -1,0 +1,39 @@
+{
+  "id": "loom-resume",
+  "role": "scenario/resume",
+  "contract_version": "1.2.0",
+  "display_name": "Loom Resume",
+  "description": "Rebuild execution context from the fact chain, state check, workspace locate, and the current next step.",
+  "root_entry": false,
+  "entrypoint": {
+    "skill_markdown": "SKILL.md",
+    "adapter_metadata": "agents/openai.yaml",
+    "orchestration_cli": "../../tools/loom_flow.py"
+  },
+  "input_contract": {
+    "reference": "references/input-signals.md",
+    "required_fields": [
+      "target_repository",
+      "current_item_or_active_item",
+      "resume_intent"
+    ]
+  },
+  "output_contract": {
+    "reference": "references/output-contract.md",
+    "required_sections": [
+      "active_item",
+      "workspace_entry",
+      "current_checkpoint",
+      "next_step",
+      "blockers"
+    ]
+  },
+  "routing": {
+    "reference": "../route-matrix.md",
+    "explicit_name": "loom-resume"
+  },
+  "installation": {
+    "registry": "../registry.json",
+    "upgrade_contract": "../upgrade-contract.json"
+  }
+}

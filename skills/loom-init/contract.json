@@ -1,17 +1,18 @@
 {
   "id": "loom-init",
   "role": "bootstrap/root",
-  "contract_version": "1.1.0",
+  "contract_version": "1.2.0",
   "display_name": "Loom Init",
-  "description": "Analyze a target repository, select the right Loom adoption path, and produce the first executable initialization output.",
+  "description": "Bootstrap Loom into a target repository and route operators to the right scenario skill when the task is not a fresh initialization request.",
   "root_entry": true,
   "entrypoint": {
     "skill_markdown": "SKILL.md",
     "adapter_metadata": "agents/openai.yaml",
-    "bootstrap_cli": "../../tools/loom_init.py"
+    "bootstrap_cli": "../../tools/loom_init.py",
+    "route_cli": "../../tools/loom_init.py"
   },
   "input_contract": {
-    "reference": "references/intake-signals.md",
+    "reference": "references/input-signals.md",
     "required_fields": [
       "repository_type",
       "root_boundary_docs",
@@ -36,6 +37,15 @@
       "validation_and_closing"
     ]
   },
+  "routing": {
+    "reference": "../route-matrix.md",
+    "priority_order": [
+      "explicit skill name",
+      "task signal routing",
+      "fallback to loom-init with missing inputs"
+    ],
+    "fallback_entry": "loom-init"
+  },
   "artifact_mapping": {
     "rules": [
       "../governance",
@@ -44,6 +54,7 @@
       "../adoption"
     ],
     "skill_refs": [
+      "references/input-signals.md",
       "references/intake-signals.md",
       "references/output-contract.md"
     ],

@@ -14,8 +14,8 @@ from pathlib import Path
 from fact_chain_support import inspect_fact_chain
 
 ROOT = Path(__file__).resolve().parent.parent
-TOOL_VERSION = "1.1.0"
-CONTRACT_VERSION = "1.1.0"
+TOOL_VERSION = "1.2.0"
+CONTRACT_VERSION = "1.2.0"
 WORK_ITEM_ID = "INIT-0001"
 
 ROOT_BOUNDARY_FILES = (
@@ -43,6 +43,61 @@ GENERATED_ROOT_ENTRY = (
     "Read `.loom/README.md` first, then `.loom/bootstrap/init-result.json` "
     "for the current initialization truth.\n"
 )
+
+SKILL_SIGNAL_RULES: dict[str, tuple[str, ...]] = {
+    "loom-adopt": (
+        "初始化",
+        "新项目",
+        "retrofit",
+        "adopt",
+        "adoption",
+        "bootstrap",
+        "接入 loom",
+        "引入 loom",
+    ),
+    "loom-resume": (
+        "恢复上下文",
+        "接手当前事项",
+        "继续推进",
+        "问下一步",
+        "resume",
+        "continue",
+        "next step",
+    ),
+    "loom-pre-review": (
+        "review 前",
+        "进入 review",
+        "pre-review",
+        "pre review",
+        "可 review",
+        "review readiness",
+    ),
+    "loom-handoff": (
+        "交接",
+        "回写停点",
+        "移交当前事项",
+        "handoff",
+        "hand off",
+        "transfer",
+    ),
+    "loom-retire": (
+        "清理现场",
+        "退休现场",
+        "结束当前事项现场",
+        "retire",
+        "cleanup",
+        "clean up",
+    ),
+    "loom-merge-ready": (
+        "merge-ready",
+        "merge ready",
+        "最终放行前预检",
+        "可合并",
+        "merge 前",
+        "pre-merge",
+        "pre merge",
+    ),
+}
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -88,6 +143,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=".loom/bootstrap/init-result.json",
     )
 
+    route = subparsers.add_parser("route", help="Route a Loom task to the root or a scenario skill")
+    route.add_argument("--target", required=True, help="Target repository root")
+    mode = route.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--skill", help="Explicit skill id to use")
+    mode.add_argument("--task", help="Task text used for implicit routing")
+
     return parser.parse_args(argv)
 
 
@@ -120,6 +181,57 @@ def write_json(path: Path, payload: object, force: bool) -> bool:
 
 def file_exists(root: Path, relative_path: str) -> bool:
     return (root / relative_path).exists()
+
+
+def available_skill_ids() -> tuple[str, ...]:
+    registry_path = ROOT / "skills/registry.json"
+    if registry_path.exists():
+        try:
+            registry = read_json(registry_path)
+        except json.JSONDecodeError:
+            registry = {}
+        entries = registry.get("entries")
+        if isinstance(entries, list):
+            skill_ids = [
+                entry.get("id")
+                for entry in entries
+                if isinstance(entry, dict) and isinstance(entry.get("id"), str) and entry.get("id")
+            ]
+            if skill_ids:
+                return tuple(skill_ids)
+    return ("loom-init", *SKILL_SIGNAL_RULES.keys())
+
+
+def match_route_signals(task: str) -> dict[str, list[str]]:
+    lowered = task.lower()
+    matches: dict[str, list[str]] = {}
+    for skill_id, keywords in SKILL_SIGNAL_RULES.items():
+        matched = [keyword for keyword in keywords if keyword in lowered]
+        if matched:
+            matches[skill_id] = matched
+    return matches
+
+
+def route_payload(
+    *,
+    result: str,
+    selected_skill: str,
+    mode: str,
+    matched_signals: list[str],
+    summary: str,
+    missing_inputs: list[str],
+    fallback_to: str,
+) -> dict[str, object]:
+    return {
+        "command": "route",
+        "result": result,
+        "selected_skill": selected_skill,
+        "mode": mode,
+        "matched_signals": matched_signals,
+        "summary": summary,
+        "missing_inputs": missing_inputs,
+        "fallback_to": fallback_to,
+    }
 
 
 @lru_cache(maxsize=None)
@@ -1175,13 +1287,105 @@ def fact_chain(args: argparse.Namespace) -> int:
     return 0
 
 
+def route(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    if not target_root.exists():
+        print(f"loom-init: target does not exist: {target_root}", file=sys.stderr)
+        return 2
+    if not target_root.is_dir():
+        print(f"loom-init: target is not a directory: {target_root}", file=sys.stderr)
+        return 2
+
+    known_skills = set(available_skill_ids())
+    if args.skill:
+        if args.skill not in known_skills:
+            print(
+                json.dumps(
+                    route_payload(
+                        result="block",
+                        selected_skill="loom-init",
+                        mode="explicit",
+                        matched_signals=[],
+                        summary=f"unknown skill `{args.skill}`",
+                        missing_inputs=["a known skill id from skills/registry.json"],
+                        fallback_to="loom-init",
+                    ),
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return 1
+        print(
+            json.dumps(
+                route_payload(
+                    result="pass",
+                    selected_skill=args.skill,
+                    mode="explicit",
+                    matched_signals=[],
+                    summary=f"explicit skill `{args.skill}` selected",
+                    missing_inputs=[],
+                    fallback_to="loom-init",
+                ),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
+
+    matches = match_route_signals(args.task)
+    if len(matches) == 1:
+        selected_skill, matched = next(iter(matches.items()))
+        print(
+            json.dumps(
+                route_payload(
+                    result="pass",
+                    selected_skill=selected_skill,
+                    mode="implicit",
+                    matched_signals=matched,
+                    summary=f"task signals route to `{selected_skill}`",
+                    missing_inputs=[],
+                    fallback_to="loom-init",
+                ),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
+
+    if not matches:
+        payload = route_payload(
+            result="fallback",
+            selected_skill="loom-init",
+            mode="fallback",
+            matched_signals=[],
+            summary="task signals are insufficient for stable routing",
+            missing_inputs=["one stable scenario signal such as adopt, resume, pre-review, handoff, retire, or merge-ready"],
+            fallback_to="loom-init",
+        )
+    else:
+        all_matches = sorted({signal for matched in matches.values() for signal in matched})
+        payload = route_payload(
+            result="fallback",
+            selected_skill="loom-init",
+            mode="fallback",
+            matched_signals=all_matches,
+            summary=f"task signals matched multiple scenario skills: {', '.join(sorted(matches))}",
+            missing_inputs=["a single dominant scenario signal or an explicit --skill"],
+            fallback_to="loom-init",
+        )
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
     if args.command == "bootstrap":
         return bootstrap(args)
     if args.command == "verify":
         return verify(args)
-    return fact_chain(args)
+    if args.command == "fact-chain":
+        return fact_chain(args)
+    return route(args)
 
 
 if __name__ == "__main__":

@@ -2,9 +2,9 @@
   "schema_version": "loom-init-output/v1",
   "generator": {
     "tool": "tools/loom_init.py",
-    "tool_version": "1.1.0",
+    "tool_version": "1.2.0",
     "root_entry": "loom-init",
-    "contract_version": "1.1.0"
+    "contract_version": "1.2.0"
   },
   "run": {
     "target": "/Users/mc/dev/Loom/examples/new-project",

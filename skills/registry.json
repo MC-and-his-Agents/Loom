@@ -1,14 +1,56 @@
 {
-  "registry_version": "1.1.0",
+  "registry_version": "1.2.0",
   "root_entry": "loom-init",
   "upgrade_contract": "upgrade-contract.json",
   "entries": [
     {
       "id": "loom-init",
       "role": "bootstrap/root",
-      "contract_version": "1.1.0",
+      "contract_version": "1.2.0",
       "manifest": "loom-init/contract.json",
       "executable": "../tools/loom_init.py"
+    },
+    {
+      "id": "loom-adopt",
+      "role": "scenario/adopt",
+      "contract_version": "1.2.0",
+      "manifest": "loom-adopt/contract.json",
+      "executable": "../tools/loom_init.py"
+    },
+    {
+      "id": "loom-resume",
+      "role": "scenario/resume",
+      "contract_version": "1.2.0",
+      "manifest": "loom-resume/contract.json",
+      "executable": "../tools/loom_flow.py"
+    },
+    {
+      "id": "loom-pre-review",
+      "role": "scenario/pre-review",
+      "contract_version": "1.2.0",
+      "manifest": "loom-pre-review/contract.json",
+      "executable": "../tools/loom_flow.py"
+    },
+    {
+      "id": "loom-handoff",
+      "role": "scenario/handoff",
+      "contract_version": "1.2.0",
+      "manifest": "loom-handoff/contract.json",
+      "executable": "../tools/loom_flow.py"
+    },
+    {
+      "id": "loom-retire",
+      "role": "scenario/retire",
+      "contract_version": "1.2.0",
+      "manifest": "loom-retire/contract.json",
+      "executable": "../tools/loom_flow.py"
+    },
+    {
+      "id": "loom-merge-ready",
+      "role": "scenario/merge-ready",
+      "contract_version": "1.2.0",
+      "manifest": "loom-merge-ready/contract.json",
+      "executable": "../tools/loom_flow.py"
     }
   ]
 }
