@@ -20,6 +20,12 @@
 - 既有仓库反例验证：[validation-devskills.md](./validation-devskills.md)
 - 复杂既有仓库真实验证：[validation-hotcp.md](./validation-hotcp.md)
 - 事实链消费验证：[validation-fact-chain-mail-listener.md](./validation-fact-chain-mail-listener.md)
+- checkpoint 链路复验：[validation-checkpoints-hotcp.md](./validation-checkpoints-hotcp.md)
+- 运行时证据复验：[validation-runtime-evidence-hotcp.md](./validation-runtime-evidence-hotcp.md)
+- automation-frontload 复验：[validation-automation-frontload-hotcp.md](./validation-automation-frontload-hotcp.md)
+- 执行入口兼容与操作流：[execution-entry-compatibility.md](./execution-entry-compatibility.md)
+- 新项目完整执行内核复验：[validation-complete-kernel-new-project.md](./validation-complete-kernel-new-project.md)
+- 既有仓库完整执行内核复验：[validation-complete-kernel-existing-repos.md](./validation-complete-kernel-existing-repos.md)
 - 版本化与升级路径：[versioning-and-upgrades.md](./versioning-and-upgrades.md)
 - 上游交付面：[upstream-delivery-surface.md](./upstream-delivery-surface.md)
 

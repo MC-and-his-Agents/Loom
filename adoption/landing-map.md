@@ -43,9 +43,13 @@
   - 稳定落点：`adoption/versioning-and-upgrades.md`
 - 上游交付面
   - 稳定落点：`adoption/upstream-delivery-surface.md`
+- 执行入口兼容与操作流
+  - 稳定落点：`adoption/execution-entry-compatibility.md`
 - `skills` 分发与适配合同
   - 稳定落点：`skills/distribution-and-adapter-contract.md`
   - 入口消费：`skills/README.md`
+- 完整执行内核复验（新项目 / 既有仓库）
+  - 稳定落点：`adoption/validation-complete-kernel-new-project.md`; `adoption/validation-complete-kernel-existing-repos.md`
 
 ## Item Map
 

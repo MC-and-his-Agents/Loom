@@ -66,3 +66,24 @@
 - 当前仍保留在宿主适配层的部分：
   - 具体 observability 产品与 browser automation 工具链
   - 宿主平台如何把这些入口投放到 UI 或 CI
+
+## 8. 再次验证（2026-04-16）
+
+为关闭 `#54`，在临时副本 `/tmp/loom-val-hotcp` 复验运行时证据入口：
+
+| 命令 | 结果 |
+| --- | --- |
+| `.loom/bin/loom_flow.py runtime-evidence` | `pass` |
+| `.loom/bin/loom_flow.py fact-chain` | `pass` |
+| `.loom/bin/loom_init.py verify` | `ok: true` |
+
+复验要点：
+
+- 五字段 `Run/Logs/Diagnostics/Verification/Lane` 全部可读
+- `present` 与 `not_applicable` 语义可区分，未出现“缺字段代替不适用”
+- `runtime-evidence` 入口可直接被 `flow pre-review` 消费，不需要口头补充
+
+结论：
+
+- 复杂样本中的运行时证据入口具备稳定可读性与可验证性
+- `#54` 的复杂仓库复验目标已满足
