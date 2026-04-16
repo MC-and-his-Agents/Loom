@@ -56,6 +56,7 @@ CORE_DOCS = (
     "harness/fact-chain-contract.md",
     "harness/execution-context.md",
     "harness/execution-chain.md",
+    "harness/daily-entry-matrix.md",
     "harness/checkpoint-model.md",
     "harness/workspace-model.md",
     "harness/workspace-lifecycle.md",
@@ -115,6 +116,7 @@ AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT = (
     "harness/work-item-contract.md",
     "harness/execution-context.md",
     "harness/execution-chain.md",
+    "harness/daily-entry-matrix.md",
     "harness/checkpoint-model.md",
     "harness/workspace-model.md",
     "harness/workspace-lifecycle.md",
@@ -624,6 +626,20 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     f"`{label}` returned unexpected result `{result}`",
                 )
             )
+        if label == "purity":
+            purity = payload.get("purity")
+            if not isinstance(purity, dict):
+                failures.append(Failure("daily-execution-cli", "`purity` output must include a `purity` object"))
+                continue
+            scope_assessment = purity.get("scope_assessment")
+            if not isinstance(scope_assessment, dict):
+                failures.append(Failure("daily-execution-cli", "`purity` output must include `scope_assessment`"))
+                continue
+            mode = scope_assessment.get("mode")
+            if mode not in {"constrained", "unconstrained"}:
+                failures.append(
+                    Failure("daily-execution-cli", "`scope_assessment.mode` must be `constrained` or `unconstrained`")
+                )
 
     with tempfile.TemporaryDirectory(prefix="loom-check-flow-") as tmp:
         lifecycle_target = Path(tmp) / "new-project"
