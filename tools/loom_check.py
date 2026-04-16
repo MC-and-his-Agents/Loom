@@ -49,6 +49,7 @@ CORE_DOCS = (
     ".github/workflows/loom-check.yml",
     "docs/roadmap.md",
     "docs/demo-new-project.md",
+    "docs/complete-kernel-release.md",
     "governance/principles.md",
     "governance/review-model.md",
     "governance/maturity-and-closing.md",

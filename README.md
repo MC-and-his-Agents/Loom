@@ -138,6 +138,7 @@ Loom 当前按五个区域组织：
 - `loom-init` 最小可执行 bootstrap CLI
 - 可直接投放的 `spec.md`、`plan.md` 与 PR 模板实体
 - 新项目 bootstrap demo 复验链路
+- 完整执行内核发布与升级说明（[docs/complete-kernel-release.md](./docs/complete-kernel-release.md)）
 
 当前上游交付面已经明确包括：
 

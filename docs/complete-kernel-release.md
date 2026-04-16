@@ -1,0 +1,68 @@
+# Complete Kernel Release (2026-04-16)
+
+本文是 Loom 完整执行内核的上游发布与升级说明。
+
+对应 Loom issue：`#63`
+
+## 1. 已发布的稳定能力面
+
+本次发布将以下能力收敛为稳定交付面：
+
+- 单一事实链读取与一致性校验
+  - `loom_init fact-chain`
+  - `loom_flow fact-chain`
+- 三类 checkpoint 工程化入口
+  - `loom_flow checkpoint admission|build|merge`
+- workspace 生命周期与纯度治理入口
+  - `loom_flow workspace create|locate|cleanup|retire`
+  - `loom_flow purity-check`
+- 运行时证据入口与语义校验
+  - `loom_flow runtime-evidence`
+- 活跃状态/完整性检查与高频统一入口
+  - `loom_flow state-check`
+  - `loom_flow flow pre-review`
+- gate 入口
+  - `loom_check`
+  - `loom_init verify`
+
+## 2. 下游升级路径
+
+### 2.1 新项目
+
+1. `loom_init bootstrap --write --verify`
+2. 使用 `fact-chain/state-check/flow pre-review` 建立日常读取与前置检查
+3. 按 checkpoint 链路推进（admission -> build -> merge）
+
+### 2.2 既有仓库（轻量到完整）
+
+1. 先接入 `bootstrap + verify + fact-chain`
+2. 接入 `checkpoint` 与 `workspace` 入口
+3. 接入 `runtime-evidence` 与 `state-check`
+4. 在 review 前统一走 `flow pre-review`
+
+### 2.3 兼容原则
+
+- 新增入口不替代旧入口语义
+- 单命令入口与聚合入口并存
+- gate 与 verify 复用同一入口，不维护第二套检查命令
+
+详见：[adoption/execution-entry-compatibility.md](../adoption/execution-entry-compatibility.md)
+
+## 3. 复验覆盖
+
+本次发布前已完成以下复验并回写到版本控制：
+
+- 事实链复验：`mail-listener`
+- checkpoint 复验：`hotcp`
+- 运行时证据复验：`hotcp`
+- automation-frontload 复验：`hotcp`
+- 新项目完整内核复验：`loom-adoption-new-project`
+- 既有仓库完整内核复验：`mail-listener` + `hotcp`
+
+验证记录位于 `adoption/validation-*.md`。
+
+## 4. 发布后操作建议
+
+- 下游仓库先执行 `verify + flow pre-review`，再进入 review/merge
+- 如遇 `state-check` 或 `checkpoint` 阻断，先回退补齐事实链/范围/证据，不要绕过入口
+- 仅在宿主适配层补平台细节，避免反向污染 Loom 内核合同
