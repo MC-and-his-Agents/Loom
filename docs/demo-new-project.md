@@ -53,6 +53,8 @@ python3 .loom/bin/loom_init.py verify --target .
 python3 .loom/bin/loom_init.py fact-chain --target .
 python3 .loom/bin/loom_flow.py fact-chain --target . --item INIT-0001
 python3 .loom/bin/loom_flow.py runtime-evidence --target . --item INIT-0001
+python3 .loom/bin/loom_flow.py state-check --target . --item INIT-0001
+python3 .loom/bin/loom_flow.py flow pre-review --target . --item INIT-0001
 python3 .loom/bin/loom_flow.py checkpoint admission --target . --item INIT-0001
 python3 .loom/bin/loom_flow.py workspace locate --target . --item INIT-0001
 python3 .loom/bin/loom_flow.py purity-check --target . --item INIT-0001
@@ -65,6 +67,6 @@ python3 .loom/bin/loom_flow.py purity-check --target . --item INIT-0001
 - `bootstrap` 命令退出码为 `0`
 - `verify` 命令退出码为 `0`
 - `fact-chain` 命令退出码为 `0`
-- `loom_flow.py` 的 `fact-chain`、`runtime-evidence`、`checkpoint admission`、`workspace locate`、`purity-check` 命令都可读取当前样例
+- `loom_flow.py` 的 `fact-chain`、`runtime-evidence`、`state-check`、`flow pre-review`、`checkpoint admission`、`workspace locate`、`purity-check` 命令都可读取当前样例
 - `init-result.json` 含有 7 个必需区块
 - 首批 work item、recovery entry、状态面与 spec/plan 工件都已落位

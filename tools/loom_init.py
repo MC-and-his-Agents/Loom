@@ -1023,6 +1023,19 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
                         {"pass", "block", "fallback"},
                     ),
                     (
+                        "loom-flow state-check",
+                        [
+                            "python3",
+                            ".loom/bin/loom_flow.py",
+                            "state-check",
+                            "--target",
+                            ".",
+                            "--item",
+                            current_item_id,
+                        ],
+                        {"pass"},
+                    ),
+                    (
                         "loom-flow workspace locate",
                         [
                             "python3",
@@ -1035,6 +1048,20 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
                             current_item_id,
                         ],
                         {"pass", "block"},
+                    ),
+                    (
+                        "loom-flow flow pre-review",
+                        [
+                            "python3",
+                            ".loom/bin/loom_flow.py",
+                            "flow",
+                            "pre-review",
+                            "--target",
+                            ".",
+                            "--item",
+                            current_item_id,
+                        ],
+                        {"pass", "block", "fallback"},
                     ),
                 ]
             )

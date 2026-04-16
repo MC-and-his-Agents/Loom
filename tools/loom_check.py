@@ -524,6 +524,8 @@ def check_demo_assets(root: Path) -> list[Failure]:
         ".loom/bin/loom_init.py fact-chain",
         ".loom/bin/loom_flow.py fact-chain",
         ".loom/bin/loom_flow.py runtime-evidence",
+        ".loom/bin/loom_flow.py state-check",
+        ".loom/bin/loom_flow.py flow pre-review",
         ".loom/bin/loom_flow.py checkpoint admission",
         ".loom/bin/loom_flow.py workspace locate",
         ".loom/bin/loom_flow.py purity-check",
@@ -586,6 +588,25 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 "INIT-0001",
             ],
             {"pass"},
+        ),
+        (
+            "state-check",
+            ["python3", "tools/loom_flow.py", "state-check", "--target", "examples/new-project", "--item", "INIT-0001"],
+            {"pass"},
+        ),
+        (
+            "flow-pre-review",
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "flow",
+                "pre-review",
+                "--target",
+                "examples/new-project",
+                "--item",
+                "INIT-0001",
+            ],
+            {"pass", "block", "fallback"},
         ),
         (
             "admission",
@@ -723,6 +744,27 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     Failure(
                         "daily-execution-cli",
                         f"`purity-check` negative sample must block, got `{payload.get('result')}`",
+                    )
+                )
+            state_payload, error = load_command_json(
+                root,
+                [
+                    "python3",
+                    "tools/loom_flow.py",
+                    "state-check",
+                    "--target",
+                    str(dirty_target),
+                    "--item",
+                    "INIT-0001",
+                ],
+            )
+            if error:
+                failures.append(Failure("daily-execution-cli", f"`state-check` negative sample failed: {error}"))
+            elif state_payload.get("result") != "block":
+                failures.append(
+                    Failure(
+                        "daily-execution-cli",
+                        f"`state-check` negative sample must block, got `{state_payload.get('result')}`",
                     )
                 )
 
