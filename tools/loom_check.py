@@ -807,6 +807,20 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             {"pass", "block"},
         ),
         (
+            "flow-merge-ready",
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "flow",
+                "merge-ready",
+                "--target",
+                "examples/new-project",
+                "--item",
+                "INIT-0001",
+            ],
+            {"pass", "block", "fallback"},
+        ),
+        (
             "admission",
             ["python3", "tools/loom_flow.py", "checkpoint", "admission", "--target", "examples/new-project", "--item", "INIT-0001"],
             {"pass"},
@@ -918,12 +932,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(Failure("daily-execution-cli", "`flow handoff` must include `missing_inputs`"))
             if payload.get("fallback_to") not in {None, "admission"}:
                 failures.append(Failure("daily-execution-cli", "`flow handoff` fallback must be `null` or `admission`"))
-            for key in (
-                "item",
-                "workspace",
-                "checkpoint",
-                "state_check",
-            ):
+            for key in ("item", "workspace", "checkpoint", "state_check"):
                 if not isinstance(payload.get(key), dict):
                     failures.append(Failure("daily-execution-cli", f"`flow handoff` must include `{key}`"))
             for key in (
@@ -972,6 +981,88 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     )
                 if not isinstance(state_check.get("checks"), dict):
                     failures.append(Failure("daily-execution-cli", "`flow handoff` must include `state_check.checks`"))
+        if label == "flow-merge-ready":
+            if payload.get("command") != "flow":
+                failures.append(Failure("daily-execution-cli", "`flow merge-ready` must report `command: flow`"))
+            if payload.get("operation") != "merge-ready":
+                failures.append(Failure("daily-execution-cli", "`flow merge-ready` must report `operation: merge-ready`"))
+            if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+                failures.append(Failure("daily-execution-cli", "`flow merge-ready` must include a non-empty `summary`"))
+            if not isinstance(payload.get("missing_inputs"), list):
+                failures.append(Failure("daily-execution-cli", "`flow merge-ready` must include `missing_inputs`"))
+            if payload.get("fallback_to") not in {None, "admission", "build", "merge", "retired"}:
+                failures.append(
+                    Failure(
+                        "daily-execution-cli",
+                        "`flow merge-ready` fallback must be `null` or a known checkpoint",
+                    )
+                )
+            for key in (
+                "item",
+                "state_check",
+                "runtime_evidence",
+                "build_checkpoint",
+                "merge_checkpoint",
+                "current_checkpoint",
+            ):
+                if not isinstance(payload.get(key), dict):
+                    failures.append(Failure("daily-execution-cli", f"`flow merge-ready` must include `{key}`"))
+            if not isinstance(payload.get("current_lane"), str) or not payload.get("current_lane"):
+                failures.append(Failure("daily-execution-cli", "`flow merge-ready` must include `current_lane`"))
+            if not isinstance(payload.get("latest_validation_summary"), str) or not payload.get("latest_validation_summary"):
+                failures.append(
+                    Failure("daily-execution-cli", "`flow merge-ready` must include `latest_validation_summary`")
+                )
+            steps = payload.get("steps")
+            if not isinstance(steps, list):
+                failures.append(Failure("daily-execution-cli", "`flow merge-ready` must include `steps`"))
+                continue
+            step_names = [step.get("name") for step in steps if isinstance(step, dict)]
+            if step_names != [
+                "fact-chain",
+                "state-check",
+                "runtime-evidence",
+                "checkpoint-build",
+                "checkpoint-merge",
+            ]:
+                failures.append(
+                    Failure(
+                        "daily-execution-cli",
+                        "`flow merge-ready` must run fact-chain, state-check, runtime-evidence, checkpoint-build, and checkpoint-merge in order",
+                    )
+                )
+            state_check = payload.get("state_check")
+            if isinstance(state_check, dict):
+                if state_check.get("result") not in {"pass", "block"}:
+                    failures.append(
+                        Failure("daily-execution-cli", "`flow merge-ready` state_check.result must be `pass` or `block`")
+                    )
+                if not isinstance(state_check.get("checks"), dict):
+                    failures.append(Failure("daily-execution-cli", "`flow merge-ready` must include `state_check.checks`"))
+            runtime_evidence = payload.get("runtime_evidence")
+            if isinstance(runtime_evidence, dict):
+                for field in ("run_entry", "logs_entry", "diagnostics_entry", "verification_entry", "lane_entry"):
+                    if not isinstance(runtime_evidence.get(field), dict):
+                        failures.append(
+                            Failure("daily-execution-cli", f"`flow merge-ready` must include runtime evidence field `{field}`")
+                        )
+            for key in ("build_checkpoint", "merge_checkpoint"):
+                checkpoint = payload.get(key)
+                if isinstance(checkpoint, dict):
+                    if checkpoint.get("result") not in {"pass", "block", "fallback"}:
+                        failures.append(
+                            Failure(
+                                "daily-execution-cli",
+                                f"`flow merge-ready` {key}.result must be `pass`, `block`, or `fallback`",
+                            )
+                        )
+                    if not isinstance(checkpoint.get("missing_inputs"), list):
+                        failures.append(
+                            Failure("daily-execution-cli", f"`flow merge-ready` {key} must include `missing_inputs`")
+                        )
+            merge_checkpoint = payload.get("merge_checkpoint")
+            if isinstance(merge_checkpoint, dict) and not isinstance(merge_checkpoint.get("pr_template"), dict):
+                failures.append(Failure("daily-execution-cli", "`flow merge-ready` must include `merge_checkpoint.pr_template`"))
 
     with tempfile.TemporaryDirectory(prefix="loom-check-flow-") as tmp:
         lifecycle_target = Path(tmp) / "new-project"

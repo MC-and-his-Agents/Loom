@@ -119,7 +119,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
 
     flow = subparsers.add_parser("flow", help="Run a bundled high-frequency Loom flow")
-    flow.add_argument("operation", choices=("pre-review", "resume", "handoff"))
+    flow.add_argument("operation", choices=("pre-review", "resume", "handoff", "merge-ready"))
     flow.add_argument("--target", required=True, help="Target repository root")
     flow.add_argument("--item", help="Expected current item id")
     flow.add_argument(
@@ -1222,7 +1222,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             }
         )
 
-    if args.operation not in {"pre-review", "resume", "handoff"}:
+    if args.operation not in {"pre-review", "resume", "handoff", "merge-ready"}:
         return emit(
             {
                 "command": "flow",
@@ -1246,20 +1246,6 @@ def handle_flow(args: argparse.Namespace) -> int:
     ]
 
     state_payload = state_check_payload(context)
-    locate_payload = base_workspace_payload(context, "locate")
-    locate_result = "pass" if not locate_payload["purity"]["hard_failures"] else "block"
-    locate_step = {
-        "name": "workspace-locate",
-        "result": locate_result,
-        "summary": (
-            "workspace is location-resolved and execution-ready."
-            if locate_result == "pass"
-            else "workspace is location-resolved but not execution-ready."
-        ),
-        "missing_inputs": list(locate_payload["purity"]["hard_failures"]),
-        "fallback_to": "admission" if locate_payload["purity"]["hard_failures"] else None,
-    }
-
     steps.append(
         {
             "name": "state-check",
@@ -1271,6 +1257,19 @@ def handle_flow(args: argparse.Namespace) -> int:
     )
 
     if args.operation in {"resume", "handoff"}:
+        locate_payload = base_workspace_payload(context, "locate")
+        locate_result = "pass" if not locate_payload["purity"]["hard_failures"] else "block"
+        locate_step = {
+            "name": "workspace-locate",
+            "result": locate_result,
+            "summary": (
+                "workspace is location-resolved and execution-ready."
+                if locate_result == "pass"
+                else "workspace is location-resolved but not execution-ready."
+            ),
+            "missing_inputs": list(locate_payload["purity"]["hard_failures"]),
+            "fallback_to": "admission" if locate_payload["purity"]["hard_failures"] else None,
+        }
         steps.append(locate_step)
     else:
         runtime_fields, runtime_missing = runtime_evidence_from_report(context["report"])
@@ -1289,19 +1288,52 @@ def handle_flow(args: argparse.Namespace) -> int:
                 "runtime_evidence": runtime_fields,
             }
         )
-
-        admission_payload = checkpoint_payload("admission", context)
-        steps.append(
-            {
-                "name": "checkpoint-admission",
-                "result": admission_payload["result"],
-                "summary": admission_payload["summary"],
-                "missing_inputs": admission_payload["missing_inputs"],
-                "fallback_to": admission_payload["fallback_to"],
+        if args.operation == "merge-ready":
+            build_payload = checkpoint_payload("build", context)
+            merge_payload = checkpoint_payload("merge", context)
+            steps.extend(
+                [
+                    {
+                        "name": "checkpoint-build",
+                        "result": build_payload["result"],
+                        "summary": build_payload["summary"],
+                        "missing_inputs": build_payload["missing_inputs"],
+                        "fallback_to": build_payload["fallback_to"],
+                    },
+                    {
+                        "name": "checkpoint-merge",
+                        "result": merge_payload["result"],
+                        "summary": merge_payload["summary"],
+                        "missing_inputs": merge_payload["missing_inputs"],
+                        "fallback_to": merge_payload["fallback_to"],
+                    },
+                ]
+            )
+        else:
+            admission_payload = checkpoint_payload("admission", context)
+            locate_payload = base_workspace_payload(context, "locate")
+            locate_result = "pass" if not locate_payload["purity"]["hard_failures"] else "block"
+            locate_step = {
+                "name": "workspace-locate",
+                "result": locate_result,
+                "summary": (
+                    "workspace is location-resolved and execution-ready."
+                    if locate_result == "pass"
+                    else "workspace is location-resolved but not execution-ready."
+                ),
+                "missing_inputs": list(locate_payload["purity"]["hard_failures"]),
+                "fallback_to": "admission" if locate_payload["purity"]["hard_failures"] else None,
             }
-        )
-
-        steps.append(locate_step)
+            steps.append(
+                {
+                    "name": "checkpoint-admission",
+                    "result": admission_payload["result"],
+                    "summary": admission_payload["summary"],
+                    "missing_inputs": admission_payload["missing_inputs"],
+                    "fallback_to": admission_payload["fallback_to"],
+                }
+            )
+            steps.append(locate_step)
 
     result = "pass"
     fallback_to: str | None = None
@@ -1326,6 +1358,12 @@ def handle_flow(args: argparse.Namespace) -> int:
             "handoff flow produced the minimum writeback checklist and locator set."
             if result == "pass"
             else "handoff flow produced the minimum writeback checklist, but blocking signals remain before transfer."
+        )
+    elif args.operation == "merge-ready":
+        summary = (
+            "merge-ready flow found the required evidence and checkpoint state for host merge."
+            if result == "pass"
+            else "merge-ready flow found fallback or blocking signals before host merge."
         )
     else:
         summary = (
@@ -1407,6 +1445,39 @@ def handle_flow(args: argparse.Namespace) -> int:
                     ],
                 }
                 if args.operation == "handoff"
+                else {}
+            ),
+            **(
+                {
+                    "state_check": {
+                        "result": state_payload["result"],
+                        "summary": state_payload["summary"],
+                        "missing_inputs": state_payload["missing_inputs"],
+                        "fallback_to": state_payload["fallback_to"],
+                        "checks": state_payload["checks"],
+                    },
+                    "runtime_evidence": runtime_fields,
+                    "build_checkpoint": {
+                        "result": build_payload["result"],
+                        "summary": build_payload["summary"],
+                        "missing_inputs": build_payload["missing_inputs"],
+                        "fallback_to": build_payload["fallback_to"],
+                    },
+                    "merge_checkpoint": {
+                        "result": merge_payload["result"],
+                        "summary": merge_payload["summary"],
+                        "missing_inputs": merge_payload["missing_inputs"],
+                        "fallback_to": merge_payload["fallback_to"],
+                        "pr_template": merge_payload.get("pr_template"),
+                    },
+                    "current_checkpoint": {
+                        "raw": context["current_checkpoint_raw"],
+                        "normalized": context["current_checkpoint"],
+                    },
+                    "current_lane": context["current_lane"],
+                    "latest_validation_summary": context["latest_validation_summary"],
+                }
+                if args.operation == "merge-ready"
                 else {}
             ),
         }

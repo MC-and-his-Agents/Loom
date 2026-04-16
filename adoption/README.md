@@ -23,7 +23,11 @@
 - 场景 skill `loom-resume` 验证：[validation-skill-loom-resume.md](./validation-skill-loom-resume.md)
 - 场景 skill `loom-pre-review` 验证：[validation-skill-loom-pre-review.md](./validation-skill-loom-pre-review.md)
 - 场景 skill `loom-handoff` 验证：[validation-skill-loom-handoff.md](./validation-skill-loom-handoff.md)
+<<<<<<< HEAD
 - 场景 skill `loom-retire` 验证：[validation-skill-loom-retire.md](./validation-skill-loom-retire.md)
+=======
+- 场景 skill `loom-merge-ready` 验证：[validation-skill-loom-merge-ready.md](./validation-skill-loom-merge-ready.md)
+>>>>>>> 3205fdc (feat: 完成 loom-merge-ready 场景入口)
 - 事实链消费验证：[validation-fact-chain-mail-listener.md](./validation-fact-chain-mail-listener.md)
 - checkpoint 链路复验：[validation-checkpoints-hotcp.md](./validation-checkpoints-hotcp.md)
 - 运行时证据复验：[validation-runtime-evidence-hotcp.md](./validation-runtime-evidence-hotcp.md)
