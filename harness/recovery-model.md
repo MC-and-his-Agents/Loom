@@ -21,6 +21,8 @@
 - `handoff`
 - 每轮结束后的状态回写
 
+字段归属见 [fact-chain-contract.md](./fact-chain-contract.md)。
+
 ## 2. 唯一恢复主入口
 
 每个正式事项必须有唯一恢复主入口。
@@ -43,6 +45,7 @@
 - 已验证了什么
 - 当前阻断项是什么
 - 最近一次稳定提交点或等价回退边界是什么
+- 当前 lane 是什么
 
 `handoff` 还应额外指明：
 
@@ -83,5 +86,6 @@ Loom 默认承认两种恢复形态：
 
 - 不得只依赖聊天记录、分支名或个人记忆恢复
 - 不得在多个文档中并行维护“下一步”
+- 恢复主入口是动态执行真相的唯一主入口；状态面与 merge checkpoint 只允许派生消费
 - `exec-plan` 或等价恢复工件只承接执行与恢复，不替代正式需求真相
 - 本文件不重复定义回写后如何进入验证汇总与放行；该顺序由 [execution-chain.md](./execution-chain.md) 与 [merge-checkpoint.md](./merge-checkpoint.md) 承接

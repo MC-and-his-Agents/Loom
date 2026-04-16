@@ -11,9 +11,11 @@ import sys
 from functools import lru_cache
 from pathlib import Path
 
+from fact_chain_support import inspect_fact_chain
+
 ROOT = Path(__file__).resolve().parent.parent
-TOOL_VERSION = "1.0.0"
-CONTRACT_VERSION = "1.0.0"
+TOOL_VERSION = "1.1.0"
+CONTRACT_VERSION = "1.1.0"
 WORK_ITEM_ID = "INIT-0001"
 
 ROOT_BOUNDARY_FILES = (
@@ -73,6 +75,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     verify = subparsers.add_parser("verify", help="Verify Loom bootstrap artifacts in a target repo")
     verify.add_argument("--target", required=True, help="Target repository root")
     verify.add_argument(
+        "--output",
+        help="Expected init-result.json path relative to target root",
+        default=".loom/bootstrap/init-result.json",
+    )
+
+    fact_chain = subparsers.add_parser("fact-chain", help="Read and validate the Loom fact chain in a target repo")
+    fact_chain.add_argument("--target", required=True, help="Target repository root")
+    fact_chain.add_argument(
         "--output",
         help="Expected init-result.json path relative to target root",
         default=".loom/bootstrap/init-result.json",
@@ -473,11 +483,13 @@ def deferred_capabilities(scenario: str) -> list[dict[str, str]]:
 
 
 def initial_work_items(scenario: str, target_root: Path) -> list[dict[str, object]]:
-    checkpoint = "commit checkpoint" if scenario != "complex-existing" else "build checkpoint"
     artifacts = [
         ".loom/bootstrap/init-result.json",
         ".loom/work-items/INIT-0001.md",
         ".loom/progress/INIT-0001.md",
+        ".loom/status/current.md",
+        ".loom/bin/loom_init.py",
+        ".loom/bin/fact_chain_support.py",
         ".loom/specs/INIT-0001/spec.md",
         ".loom/specs/INIT-0001/plan.md",
     ]
@@ -489,9 +501,11 @@ def initial_work_items(scenario: str, target_root: Path) -> list[dict[str, objec
             "goal": "Bootstrap the first executable Loom path for this repository",
             "scope": "Establish rule entry, first work item, progress carrier, spec/plan, and verification entry",
             "execution_path": "bootstrap/root",
+            "workspace_entry": ".",
+            "recovery_entry": ".loom/progress/INIT-0001.md",
+            "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
             "artifacts": artifacts,
-            "closing_condition": "The generated entry, work item, progress carrier, and templates are readable and verified",
-            "checkpoint": checkpoint,
+            "closing_condition": "The generated entry, work item, recovery entry, and templates are readable and verified",
             "post_build_continuation": "Promote the first real downstream issue after the bootstrap artifacts are accepted",
             "owner_for_checkpoint_lite": "repository owner or current bootstrap operator",
         }
@@ -544,6 +558,16 @@ def initial_artifacts(target_root: Path, install_pr_template: bool) -> list[dict
             "path": ".loom/status/current.md",
             "kind": "status-surface",
             "source": "generated",
+        },
+        {
+            "path": ".loom/bin/loom_init.py",
+            "kind": "loom-tool",
+            "source": "tools/loom_init.py",
+        },
+        {
+            "path": ".loom/bin/fact_chain_support.py",
+            "kind": "loom-tool-support",
+            "source": "tools/fact_chain_support.py",
         },
         {
             "path": ".loom/specs/INIT-0001/spec.md",
@@ -613,10 +637,20 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
             "capabilities": rule_refs_for_capabilities(scenario),
         },
         "deferred_capabilities": deferred_capabilities(scenario),
+        "fact_chain": {
+            "mode": "work-item + recovery-entry + derived status-surface",
+            "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
+            "entry_points": {
+                "current_item_id": WORK_ITEM_ID,
+                "work_item": ".loom/work-items/INIT-0001.md",
+                "recovery_entry": ".loom/progress/INIT-0001.md",
+                "status_surface": ".loom/status/current.md",
+            },
+        },
         "initial_artifacts": initial_artifacts(target_root, install_pr_template),
         "initial_work_items": initial_work_items(scenario, target_root),
         "validation_and_closing": {
-            "validation_entry": "python3 tools/loom_init.py verify --target <repo> && make loom-check",
+            "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
             "checkpoint_relationship": [
                 "commit checkpoint confirms the bootstrap work item and first artifacts are readable",
                 "build checkpoint confirms generated carriers and templates are internally consistent",
@@ -673,57 +707,66 @@ def render_capability_map(result: dict[str, object]) -> str:
 
 def render_work_item(result: dict[str, object]) -> str:
     item = result["initial_work_items"][0]
-    run = result["run"]
     return (
         f"# {item['id']}\n\n"
-        "## Goal\n\n"
-        f"- {item['goal']}\n\n"
-        "## Scope\n\n"
-        f"- {item['scope']}\n\n"
-        "## Execution Path\n\n"
-        f"- {item['execution_path']}\n"
-        f"- Integration mode: {run['integration_mode']}\n"
-        f"- Recovery mode: {run['recovery_mode']}\n\n"
+        "## Static Facts\n\n"
+        f"- Item ID: {item['id']}\n"
+        f"- Goal: {item['goal']}\n"
+        f"- Scope: {item['scope']}\n"
+        f"- Execution Path: {item['execution_path']}\n"
+        f"- Workspace Entry: {item['workspace_entry']}\n"
+        f"- Recovery Entry: {item['recovery_entry']}\n"
+        f"- Validation Entry: {item['validation_entry']}\n"
+        f"- Closing Condition: {item['closing_condition']}\n\n"
         "## Associated Artifacts\n\n"
         + "\n".join(f"- `{artifact}`" for artifact in item["artifacts"])
-        + "\n\n## Checkpoint Status\n\n"
-        f"- Current checkpoint: {item['checkpoint']}\n"
-        f"- Continue after build checkpoint: {item['post_build_continuation']}\n\n"
-        "## Closing Condition\n\n"
-        f"- {item['closing_condition']}\n"
+        + "\n"
     )
 
 
 def render_progress(result: dict[str, object]) -> str:
-    item = result["initial_work_items"][0]
+    checkpoint = "commit checkpoint" if result["run"]["scenario_key"] != "complex-existing" else "build checkpoint"
     return (
-        f"# {item['id']} Progress\n\n"
-        "## Current Stop\n\n"
-        "- Bootstrap artifacts have been generated and are awaiting downstream review.\n\n"
-        "## Next Step\n\n"
-        "- Accept the generated Loom entry and promote the first real repository work item.\n\n"
-        "## Checkpoint\n\n"
-        f"- Current checkpoint: {item['checkpoint']}\n\n"
-        "## Verified Facts\n\n"
-        "- Bootstrap manifest exists.\n"
-        "- Init-result JSON can be read mechanically.\n"
-        "- The first work item, status surface, and spec/plan artifacts exist.\n\n"
-        "## Blockers\n\n"
-        "- None recorded yet.\n\n"
-        "## Recovery Boundary\n\n"
-        "- Bootstrap result: `.loom/bootstrap/init-result.json`\n"
-        "- Bootstrap manifest: `.loom/bootstrap/manifest.json`\n"
+        f"# {WORK_ITEM_ID} Progress\n\n"
+        "## Dynamic Facts\n\n"
+        f"- Item ID: {WORK_ITEM_ID}\n"
+        f"- Current Checkpoint: {checkpoint}\n"
+        "- Current Stop: Bootstrap artifacts have been generated and are awaiting downstream review.\n"
+        "- Next Step: Accept the generated Loom entry and promote the first real repository work item.\n"
+        "- Blockers: None recorded.\n"
+        "- Latest Validation Summary: Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist.\n"
+        "- Recovery Boundary: Bootstrap result at `.loom/bootstrap/init-result.json`; bootstrap manifest at `.loom/bootstrap/manifest.json`.\n"
+        "- Current Lane: bootstrap verification only\n"
     )
 
 
 def render_status(result: dict[str, object]) -> str:
-    run = result["run"]
+    item = result["initial_work_items"][0]
+    fact_chain = result["fact_chain"]
+    checkpoint = "commit checkpoint" if result["run"]["scenario_key"] != "complex-existing" else "build checkpoint"
     return (
         "# Current Status\n\n"
-        f"- Scenario: {run['scenario']}\n"
-        "- Runtime evidence: not_applicable\n"
-        "- Validation lane: bootstrap verification only\n"
-        "- Latest recovery source: `.loom/progress/INIT-0001.md`\n"
+        "## Derived Fact Chain View\n\n"
+        f"- Item ID: {item['id']}\n"
+        f"- Goal: {item['goal']}\n"
+        f"- Scope: {item['scope']}\n"
+        f"- Execution Path: {item['execution_path']}\n"
+        f"- Workspace Entry: {item['workspace_entry']}\n"
+        f"- Recovery Entry: {item['recovery_entry']}\n"
+        f"- Validation Entry: {item['validation_entry']}\n"
+        f"- Closing Condition: {item['closing_condition']}\n"
+        f"- Current Checkpoint: {checkpoint}\n"
+        "- Current Stop: Bootstrap artifacts have been generated and are awaiting downstream review.\n"
+        "- Next Step: Accept the generated Loom entry and promote the first real repository work item.\n"
+        "- Blockers: None recorded.\n"
+        "- Latest Validation Summary: Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist.\n"
+        "- Recovery Boundary: Bootstrap result at `.loom/bootstrap/init-result.json`; bootstrap manifest at `.loom/bootstrap/manifest.json`.\n"
+        "- Current Lane: bootstrap verification only\n\n"
+        "## Sources\n\n"
+        f"- Static Truth: {fact_chain['entry_points']['work_item']}\n"
+        f"- Dynamic Truth: {fact_chain['entry_points']['recovery_entry']}\n"
+        "- Locator Truth: .loom/bootstrap/init-result.json\n"
+        f"- Fact Chain CLI: {fact_chain['read_entry']}\n"
     )
 
 
@@ -773,6 +816,8 @@ def scaffold_target(
             touched.append(str(path.relative_to(target_root)))
 
     for source, destination in (
+        (ROOT / "tools/loom_init.py", target_root / ".loom/bin/loom_init.py"),
+        (ROOT / "tools/fact_chain_support.py", target_root / ".loom/bin/fact_chain_support.py"),
         (ROOT / "templates/scaffold/spec.md", target_root / ".loom/specs/INIT-0001/spec.md"),
         (ROOT / "templates/scaffold/plan.md", target_root / ".loom/specs/INIT-0001/plan.md"),
     ):
@@ -806,6 +851,8 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
         ".loom/work-items/INIT-0001.md",
         ".loom/progress/INIT-0001.md",
         ".loom/status/current.md",
+        ".loom/bin/loom_init.py",
+        ".loom/bin/fact_chain_support.py",
         ".loom/specs/INIT-0001/spec.md",
         ".loom/specs/INIT-0001/plan.md",
     ]
@@ -824,6 +871,7 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
             "project_judgment",
             "recommended_adoption",
             "deferred_capabilities",
+            "fact_chain",
             "initial_artifacts",
             "initial_work_items",
             "validation_and_closing",
@@ -843,15 +891,57 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
                 if not (target_root / artifact_path).exists():
                     errors.append(f"declared initial artifact is missing on disk: {artifact_path}")
         initial_work_items = result.get("initial_work_items")
+        validated_work_items: list[dict[str, object]] = []
         if isinstance(initial_work_items, list):
             for work_item in initial_work_items:
                 if not isinstance(work_item, dict):
                     errors.append("every initial work item must be an object")
                     continue
-                for field in ("id", "goal", "scope", "execution_path", "closing_condition", "checkpoint"):
+                for field in (
+                    "id",
+                    "goal",
+                    "scope",
+                    "execution_path",
+                    "workspace_entry",
+                    "recovery_entry",
+                    "validation_entry",
+                    "closing_condition",
+                ):
                     value = work_item.get(field)
                     if not isinstance(value, str) or not value:
                         errors.append(f"initial work item is missing required field: {field}")
+                validated_work_items.append(work_item)
+
+    fact_chain_report, fact_chain_errors = inspect_fact_chain(
+        target_root,
+        str(output_path.relative_to(target_root)),
+    )
+    if fact_chain_errors:
+        errors.extend(f"fact-chain: {message}" for message in fact_chain_errors)
+    elif not fact_chain_report:
+        errors.append("fact-chain: no report was produced")
+    elif output_path.exists():
+        current_item_id = fact_chain_report["fact_chain"]["entry_points"]["current_item_id"]
+        matching_work_item = None
+        for work_item in validated_work_items:
+            if work_item.get("id") == current_item_id:
+                matching_work_item = work_item
+                break
+        if matching_work_item is None:
+            errors.append(f"init-result is missing the current work item `{current_item_id}`")
+        else:
+            expected_init_fields = {
+                "recovery_entry": fact_chain_report["fact_chain"]["entry_points"]["recovery_entry"],
+                "validation_entry": fact_chain_report["facts"]["validation_entry"]["value"],
+                "workspace_entry": fact_chain_report["facts"]["workspace_entry"]["value"],
+            }
+            for field, expected_value in expected_init_fields.items():
+                actual_value = matching_work_item.get(field)
+                if actual_value != expected_value:
+                    errors.append(
+                        f"init-result work item `{current_item_id}` has inconsistent `{field}`: "
+                        f"expected `{expected_value}`, got `{actual_value}`"
+                    )
 
     pr_template = target_root / ".github/PULL_REQUEST_TEMPLATE.md"
     if pr_template.exists():
@@ -926,11 +1016,29 @@ def verify(args: argparse.Namespace) -> int:
     return 0
 
 
+def fact_chain(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    try:
+        output_path = resolve_output_path(target_root, args.output)
+    except RuntimeError as exc:
+        print(f"loom-init: {exc}", file=sys.stderr)
+        return 2
+
+    report, errors = inspect_fact_chain(target_root, str(output_path.relative_to(target_root)))
+    if errors:
+        print(json.dumps({"ok": False, "errors": errors}, ensure_ascii=False, indent=2))
+        return 1
+    print(json.dumps({"ok": True, **report}, ensure_ascii=False, indent=2))
+    return 0
+
+
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
     if args.command == "bootstrap":
         return bootstrap(args)
-    return verify(args)
+    if args.command == "verify":
+        return verify(args)
+    return fact_chain(args)
 
 
 if __name__ == "__main__":

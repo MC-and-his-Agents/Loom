@@ -9,6 +9,8 @@
 
 - [work-item-contract.md](./work-item-contract.md)
   - 定义进入正式执行前必须存在的事项与初始化产物合同
+- [fact-chain-contract.md](./fact-chain-contract.md)
+  - 定义静态真相、动态真相与派生读面的唯一归属关系
 - [execution-context.md](./execution-context.md)
   - 定义每轮正式执行必须绑定和读取的最小上下文语义
 - [execution-chain.md](./execution-chain.md)

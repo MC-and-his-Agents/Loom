@@ -26,6 +26,7 @@ merge checkpoint 只消费这些结果，不把它们扩写成第一次高质量
 | 纯度/越界信号 | 明显脏现场、无关改动、范围越界信号 | 当前执行材料不适合继续叠加或放行 | 不替代 reviewer 的语义审查 | 视严重度而定 |
 | 执行支撑入口存在性 | work item、恢复入口、验证入口、运行入口等是否可定位 | 仓库无法形成最小执行闭环 | 不判断入口实现强度是否已达最佳 | 是 |
 | 基础状态一致性 | checkpoint、下一步、阻断项、验证摘要是否相互对齐 | 当前状态不可读，恢复与放行会消费到冲突事实 | 不判断事项目标本身是否值得做 | 是 |
+| 事实链唯一性 | 静态真相、动态真相与派生读面是否各守边界 | 仓库出现并行记账或事实链断裂 | 不替代 reviewer 的方案判断 | 是 |
 
 这里的“执行支撑”包括初始化入口、恢复入口、验证入口、运行入口或其他被正式规则要求的机械支撑。
 
@@ -49,6 +50,7 @@ Loom 仓库当前通过以下入口承接最小 core 前置检查：
 - `make loom-check`
 - `python3 tools/loom_check.py`
 - `python3 tools/loom_init.py verify --target <repo>`
+- `python3 tools/loom_init.py fact-chain --target <repo>`
 
 当前脚本至少覆盖：
 
@@ -58,6 +60,7 @@ Loom 仓库当前通过以下入口承接最小 core 前置检查：
 - Markdown 交叉引用可解析
 - `skills` 机读 root 合同的最小一致性
 - `skills` 升级协议与 bootstrap CLI 入口的一致性
+- demo 事实链 carrier 的唯一性与一致性
 
 GitHub Actions 工作流会复用同一入口，而不是维护第二套命令。
 
@@ -86,3 +89,4 @@ Loom 的自动化前置必须区分两类事情：
 - 把可自动判断事项长期留给人工重复执行
 - 把需要语义判断的事项伪装成硬编码脚本结果
 - 把 `skills` 候选回归面误当成 Loom 默认 core 检查面
+- 允许 `work item`、恢复入口、状态面并行 authored 同一事实

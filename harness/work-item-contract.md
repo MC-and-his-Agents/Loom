@@ -14,6 +14,7 @@ work item 是进入正式执行的入口。
 若项目使用 `exec-plan` 或等价工件，它只承接执行与恢复。
 
 本文件同时定义初始化后至少应落位哪些执行产物。
+字段归属见 [fact-chain-contract.md](./fact-chain-contract.md)。
 
 ## 2. work item 最小合同
 
@@ -23,8 +24,9 @@ work item 是进入正式执行的入口。
 - 目标
 - 范围
 - 当前执行路径
-- 当前 checkpoint 状态
 - 关联工件
+- 工作现场入口
+- 恢复主入口路径
 - 当前验证入口
 - 关闭条件
 
@@ -79,3 +81,9 @@ work item / `exec-plan` 至少要能被以下环节消费：
   - work item 应关联 `spec.md` 与 `plan.md`
 
 无论路径轻重，都必须能被 [execution-context.md](./execution-context.md)、[recovery-model.md](./recovery-model.md) 与 [merge-checkpoint.md](./merge-checkpoint.md) 消费。
+
+## 6. 事实链约束
+
+- `work item` 只承接静态执行真相，不并行 authored 当前停点、下一步、阻断项或最近验证摘要
+- 当前 checkpoint 属于恢复主入口，而不是 `work item`
+- 状态面若展示 `goal`、`scope`、`execution_path` 等字段，必须从 `work item` 派生

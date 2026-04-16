@@ -18,6 +18,7 @@ merge checkpoint 是执行侧的最终放行层。
 - 当前自动检查、验证摘要与运行证据是否支持放行
 
 它不承担第一次高质量语义判断，也不替代 governance 的前置准入与 reviewer 的审查职责。
+字段归属以 [fact-chain-contract.md](./fact-chain-contract.md) 为准。
 
 ## 2. 放行前必读输入
 
@@ -38,6 +39,15 @@ merge checkpoint 是执行侧的最终放行层。
 - [recovery-model.md](./recovery-model.md)
 - [status-surface.md](./status-surface.md)
 - [automation-frontload.md](./automation-frontload.md)
+
+其中：
+
+- 范围、目标、执行路径、验证入口定位
+  - 只能从 `work item` 读取
+- 当前 checkpoint、停点、下一步、阻断项、最近验证摘要、回退边界
+  - 只能从恢复主入口读取
+- 状态面
+  - 只允许作为派生汇总读面，不得替代上述主真相
 
 ## 3. 唯一允许结果
 
@@ -69,4 +79,5 @@ merge checkpoint 只允许输出以下三类结果：
 
 - merge checkpoint 消费 reviewer、自动检查和运行证据的结果，不重新发明第二套审查体系
 - merge checkpoint 不负责定义成熟度、关闭语义或事项是否值得做；这些属于 `governance/`
+- merge checkpoint 不得补读另一份 authored 状态摘要来替代恢复主入口
 - 本文件不规定宿主平台的按钮、合并策略或 CI 产品，只定义 Loom 必须承接的最小放行语义

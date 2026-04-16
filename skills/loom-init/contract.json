@@ -1,7 +1,7 @@
 {
   "id": "loom-init",
   "role": "bootstrap/root",
-  "contract_version": "1.0.0",
+  "contract_version": "1.1.0",
   "display_name": "Loom Init",
   "description": "Analyze a target repository, select the right Loom adoption path, and produce the first executable initialization output.",
   "root_entry": true,
@@ -30,6 +30,7 @@
       "project_judgment",
       "recommended_adoption",
       "deferred_capabilities",
+      "fact_chain",
       "initial_artifacts",
       "initial_work_items",
       "validation_and_closing"
@@ -50,6 +51,7 @@
       ".loom/bootstrap/init-result.json",
       ".loom/work-items/INIT-0001.md",
       ".loom/progress/INIT-0001.md",
+      ".loom/status/current.md",
       ".loom/specs/INIT-0001/spec.md",
       ".loom/specs/INIT-0001/plan.md"
     ]

@@ -19,6 +19,7 @@
 - 新项目真实验证：[validation-new-project.md](./validation-new-project.md)
 - 既有仓库反例验证：[validation-devskills.md](./validation-devskills.md)
 - 复杂既有仓库真实验证：[validation-hotcp.md](./validation-hotcp.md)
+- 事实链消费验证：[validation-fact-chain-mail-listener.md](./validation-fact-chain-mail-listener.md)
 - 版本化与升级路径：[versioning-and-upgrades.md](./versioning-and-upgrades.md)
 - 上游交付面：[upstream-delivery-surface.md](./upstream-delivery-surface.md)
 

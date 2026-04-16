@@ -2,9 +2,9 @@
   "schema_version": "loom-init-output/v1",
   "generator": {
     "tool": "tools/loom_init.py",
-    "tool_version": "1.0.0",
+    "tool_version": "1.1.0",
     "root_entry": "loom-init",
-    "contract_version": "1.0.0"
+    "contract_version": "1.1.0"
   },
   "run": {
     "target": "/Users/mc/dev/Loom/examples/new-project",
@@ -73,6 +73,16 @@
       "upgrade_trigger": "multiple contributors or repeated merge reviews begin to consume the same facts"
     }
   ],
+  "fact_chain": {
+    "mode": "work-item + recovery-entry + derived status-surface",
+    "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
+    "entry_points": {
+      "current_item_id": "INIT-0001",
+      "work_item": ".loom/work-items/INIT-0001.md",
+      "recovery_entry": ".loom/progress/INIT-0001.md",
+      "status_surface": ".loom/status/current.md"
+    }
+  },
   "initial_artifacts": [
     {
       "path": "AGENTS.md",
@@ -120,6 +130,16 @@
       "source": "generated"
     },
     {
+      "path": ".loom/bin/loom_init.py",
+      "kind": "loom-tool",
+      "source": "tools/loom_init.py"
+    },
+    {
+      "path": ".loom/bin/fact_chain_support.py",
+      "kind": "loom-tool-support",
+      "source": "tools/fact_chain_support.py"
+    },
+    {
       "path": ".loom/specs/INIT-0001/spec.md",
       "kind": "spec",
       "source": "templates/scaffold/spec.md"
@@ -141,21 +161,26 @@
       "goal": "Bootstrap the first executable Loom path for this repository",
       "scope": "Establish rule entry, first work item, progress carrier, spec/plan, and verification entry",
       "execution_path": "bootstrap/root",
+      "workspace_entry": ".",
+      "recovery_entry": ".loom/progress/INIT-0001.md",
+      "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
       "artifacts": [
         ".loom/bootstrap/init-result.json",
         ".loom/work-items/INIT-0001.md",
         ".loom/progress/INIT-0001.md",
+        ".loom/status/current.md",
+        ".loom/bin/loom_init.py",
+        ".loom/bin/fact_chain_support.py",
         ".loom/specs/INIT-0001/spec.md",
         ".loom/specs/INIT-0001/plan.md"
       ],
-      "closing_condition": "The generated entry, work item, progress carrier, and templates are readable and verified",
-      "checkpoint": "commit checkpoint",
+      "closing_condition": "The generated entry, work item, recovery entry, and templates are readable and verified",
       "post_build_continuation": "Promote the first real downstream issue after the bootstrap artifacts are accepted",
       "owner_for_checkpoint_lite": "repository owner or current bootstrap operator"
     }
   ],
   "validation_and_closing": {
-    "validation_entry": "python3 tools/loom_init.py verify --target <repo> && make loom-check",
+    "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
     "checkpoint_relationship": [
       "commit checkpoint confirms the bootstrap work item and first artifacts are readable",
       "build checkpoint confirms generated carriers and templates are internally consistent",

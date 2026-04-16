@@ -13,6 +13,7 @@ description: 分析一个新项目或既有仓库的协作场景，选择适合�
 
 - `python3 tools/loom_init.py bootstrap --target <repo>`
 - `python3 tools/loom_init.py verify --target <repo>`
+- `python3 tools/loom_init.py fact-chain --target <repo>`
 
 ## 1. 读取顺序
 
@@ -30,6 +31,7 @@ description: 分析一个新项目或既有仓库的协作场景，选择适合�
   - `adoption/routing-and-checkpoints.md`
   - `adoption/lightweight-retrofit-default.md`
 - `harness/recovery-model.md`
+- `harness/fact-chain-contract.md`
 - `harness/status-surface.md`
 - `harness/work-item-contract.md`
 - `harness/workspace-model.md`
@@ -139,6 +141,7 @@ description: 分析一个新项目或既有仓库的协作场景，选择适合�
 - 恢复形态
 - 首批执行入口
 - 验证入口
+- 事实链 carrier 定位
 - 初始 clean state
 - 本轮暂不装配能力的承接方式
 

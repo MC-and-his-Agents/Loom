@@ -116,6 +116,7 @@ Loom 将以下能力视为治理内核：
 更细的稳定组件合同，见：
 
 - [harness/work-item-contract.md](./harness/work-item-contract.md)
+- [harness/fact-chain-contract.md](./harness/fact-chain-contract.md)
 - [harness/execution-context.md](./harness/execution-context.md)
 - [harness/execution-chain.md](./harness/execution-chain.md)
 - [harness/workspace-model.md](./harness/workspace-model.md)
@@ -144,6 +145,8 @@ Loom 将以下能力视为 harness 内核：
 - 稳定组件
   - `work-item-contract`
     - 正式执行单元与 `exec-plan` 职责
+  - `fact-chain-contract`
+    - 静态执行真相、动态执行真相与派生读面的唯一归属
   - `execution-context`
     - 当前事项、路径、目标、范围、工作现场、恢复入口、当前 checkpoint、验证入口
   - `execution-chain`

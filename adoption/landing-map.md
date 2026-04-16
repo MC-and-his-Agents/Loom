@@ -88,7 +88,7 @@
 | EXT-0035 | `keep` | `harness/status-surface.md`; `skills/loom-init/references/output-contract.md` | `core` | 运行时可见性、日志指标 trace 与 agent 可验证性 |
 | EXT-0036 | `keep` | `harness/automation-frontload.md` | `core` | 知识库、模板与执行支撑的机械化校验能力 |
 | EXT-0037 | `keep` | `harness/work-item-contract.md`; `harness/workspace-model.md`; `harness/execution-chain.md`; `harness-design.md`; `skills/loom-init/references/output-contract.md` | `core` | initializer 产物、初始 progress 与 clean state |
-| EXT-0038 | `keep` | `harness/execution-context.md`; `harness/work-item-contract.md`; `harness/recovery-model.md`; `harness/execution-chain.md`; `skills/loom-init/references/output-contract.md` | `core` | 每轮读取与回写、单单元增量推进 |
+| EXT-0038 | `keep` | `harness/fact-chain-contract.md`; `harness/execution-context.md`; `harness/work-item-contract.md`; `harness/recovery-model.md`; `harness/execution-chain.md`; `skills/loom-init/references/output-contract.md` | `core` | 每轮读取与回写、单单元增量推进 |
 | EXT-0039 | `adapt` | `skills/distribution-and-adapter-contract.md` | `candidate` | `skills` 的安装、发现与升级合同 |
 | EXT-0040 | `adapt` | `skills/distribution-and-adapter-contract.md` | `candidate` | 薄 `bootstrap/root contract` 与深知识引用关系 |
 | EXT-0041 | `adapt` | `harness/automation-frontload.md`; `skills/distribution-and-adapter-contract.md` | `candidate` | 入口层触发与行为回归测试 |

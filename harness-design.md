@@ -21,6 +21,7 @@
 | --- | --- | --- |
 | 初始化与装配 | `harness-design.md` | 定义初始化场景、初始化产物强度与初始 clean state |
 | work item / `exec-plan` | `harness/work-item-contract.md` | 定义正式执行单元；本文只定义它在完整方案中的装配位置 |
+| 单一事实链 | `harness/fact-chain-contract.md` | 定义静态真相、动态真相与派生读面的归属关系 |
 | 执行上下文 | `harness/execution-context.md` | 定义上下文合同；本文只要求每轮正式执行必须绑定 |
 | 最小执行链路 | `harness/execution-chain.md` | 定义阶段顺序、主入口与回退去向；本文只说明它如何与初始化和强度模型组合 |
 | 工作现场 | `harness/workspace-model.md` | 定义隔离现场与恢复定位；本文只定义它与纯度和恢复的组合关系 |
@@ -101,6 +102,7 @@ Loom 默认支持三种初始化场景：
 - 进入正式执行前，必须先有 work item、恢复入口、验证入口和工作现场入口
 - 每轮执行的阶段顺序与回退去向，以 [harness/execution-chain.md](./harness/execution-chain.md) 为准
 - 状态读取、运行证据、自动化前置和 merge checkpoint 都应消费同一组执行真相，不制造并行真相源
+- 字段 authored 权限与派生边界，以 [harness/fact-chain-contract.md](./harness/fact-chain-contract.md) 为准
 - merge checkpoint 的执行语义以 [harness/merge-checkpoint.md](./harness/merge-checkpoint.md) 为准；本文不再重复定义输入集和结果枚举
 
 ## 7. Harness 强度模型

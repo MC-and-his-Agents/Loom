@@ -11,6 +11,8 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
+from fact_chain_support import inspect_fact_chain
+
 TOP_LEVEL_DIRS = (
     "adoption",
     "docs",
@@ -48,6 +50,7 @@ CORE_DOCS = (
     "governance/review-model.md",
     "governance/maturity-and-closing.md",
     "harness/work-item-contract.md",
+    "harness/fact-chain-contract.md",
     "harness/execution-context.md",
     "harness/execution-chain.md",
     "harness/workspace-model.md",
@@ -70,6 +73,7 @@ CORE_DOCS = (
     "adoption/validation-new-project.md",
     "adoption/validation-devskills.md",
     "adoption/validation-hotcp.md",
+    "adoption/validation-fact-chain-mail-listener.md",
     "adoption/versioning-and-upgrades.md",
     "adoption/upstream-delivery-surface.md",
     "skills/distribution-and-adapter-contract.md",
@@ -117,6 +121,9 @@ DEMO_ASSETS = (
     "examples/new-project/.loom/bootstrap/manifest.json",
     "examples/new-project/.loom/work-items/INIT-0001.md",
     "examples/new-project/.loom/progress/INIT-0001.md",
+    "examples/new-project/.loom/status/current.md",
+    "examples/new-project/.loom/bin/loom_init.py",
+    "examples/new-project/.loom/bin/fact_chain_support.py",
     "examples/new-project/.loom/specs/INIT-0001/spec.md",
     "examples/new-project/.loom/specs/INIT-0001/plan.md",
 )
@@ -464,7 +471,12 @@ def check_demo_assets(root: Path) -> list[Failure]:
         return failures
 
     text = demo_doc.read_text(encoding="utf-8")
-    for needle in ("make loom-demo-new-project", "tools/loom_init.py bootstrap", "tools/loom_init.py verify"):
+    for needle in (
+        "make loom-demo-new-project",
+        "tools/loom_init.py bootstrap",
+        ".loom/bin/loom_init.py verify",
+        ".loom/bin/loom_init.py fact-chain",
+    ):
         if needle not in text:
             failures.append(Failure("demo-assets", f"`docs/demo-new-project.md` is missing `{needle}`"))
 
@@ -481,6 +493,20 @@ def check_demo_assets(root: Path) -> list[Failure]:
         run = init_result.get("run")
         if not isinstance(run, dict) or run.get("scenario_key") != "new":
             failures.append(Failure("demo-assets", "demo init-result must keep `scenario_key` as `new`"))
+    return failures
+
+
+def check_demo_fact_chain(root: Path) -> list[Failure]:
+    target = root / "examples/new-project"
+    if not target.exists():
+        return []
+
+    report, errors = inspect_fact_chain(target)
+    failures: list[Failure] = []
+    for detail in errors:
+        failures.append(Failure("demo-fact-chain", detail))
+    if report and report.get("fact_chain", {}).get("entry_points", {}).get("status_surface") != ".loom/status/current.md":
+        failures.append(Failure("demo-fact-chain", "demo fact chain must point status_surface to `.loom/status/current.md`"))
     return failures
 
 
@@ -511,12 +537,13 @@ def collect_failures(root: Path) -> list[Failure]:
     )
     failures.extend(check_skill_manifests(root))
     failures.extend(check_demo_assets(root))
+    failures.extend(check_demo_fact_chain(root))
     failures.extend(check_markdown_links(root))
     return failures
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 10
+    categories_checked = 11
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")

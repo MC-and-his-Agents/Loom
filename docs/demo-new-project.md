@@ -39,6 +39,7 @@ python3 tools/loom_init.py bootstrap \
 - `examples/new-project/.loom/bootstrap/manifest.json`
 - `examples/new-project/.loom/work-items/INIT-0001.md`
 - `examples/new-project/.loom/progress/INIT-0001.md`
+- `examples/new-project/.loom/status/current.md`
 - `examples/new-project/.loom/specs/INIT-0001/spec.md`
 - `examples/new-project/.loom/specs/INIT-0001/plan.md`
 - `examples/new-project/.github/PULL_REQUEST_TEMPLATE.md`
@@ -46,7 +47,9 @@ python3 tools/loom_init.py bootstrap \
 随后可继续执行：
 
 ```bash
-python3 tools/loom_init.py verify --target examples/new-project
+cd examples/new-project
+python3 .loom/bin/loom_init.py verify --target .
+python3 .loom/bin/loom_init.py fact-chain --target .
 ```
 
 ## 收口判断
@@ -55,5 +58,6 @@ python3 tools/loom_init.py verify --target examples/new-project
 
 - `bootstrap` 命令退出码为 `0`
 - `verify` 命令退出码为 `0`
-- `init-result.json` 含有 6 个必需区块
-- 首批 work item、progress 与 spec/plan 工件都已落位
+- `fact-chain` 命令退出码为 `0`
+- `init-result.json` 含有 7 个必需区块
+- 首批 work item、recovery entry、状态面与 spec/plan 工件都已落位

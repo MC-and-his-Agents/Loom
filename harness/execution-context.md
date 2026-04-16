@@ -20,6 +20,7 @@
 - `handoff`、review 与放行前的事实对齐
 
 它不负责保存恢复内容本身；恢复内容由 [recovery-model.md](./recovery-model.md) 承接。
+字段归属见 [fact-chain-contract.md](./fact-chain-contract.md)。
 
 ## 2. 最小语义集合
 
@@ -36,6 +37,7 @@
 - 当前环境 lane 是什么
 
 Loom 固化的是语义集合，不固化字段名、编号格式或平台来源。
+这些语义本身属于派生读取，不是独立 authored 真相。
 
 ## 3. 每轮读取最小事实集
 
@@ -64,5 +66,6 @@ Loom 固化的是语义集合，不固化字段名、编号格式或平台来源
 
 - 不得只靠 issue 编号、分支名或聊天上下文识别当前事项
 - 不得让执行、恢复、review 与 merge checkpoint 分别使用不同的上下文基线
+- 不得在执行上下文载体中并行 authored `goal`、`next_step` 或 `blockers`
 - 若某字段只是下游仓库局部便利，不得提升为 Loom 固定字段
 - 本文件不重复定义执行阶段顺序；阶段顺序以 [execution-chain.md](./execution-chain.md) 为准

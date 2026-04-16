@@ -10,6 +10,7 @@
 ## 1. 能力定位
 
 Loom 的 harness 不是若干孤立规则，而是一条从初始化产物到 merge checkpoint 放行的最小执行链路。
+字段归属与派生边界见 [fact-chain-contract.md](./fact-chain-contract.md)。
 
 本文件只定义链路本身：
 
