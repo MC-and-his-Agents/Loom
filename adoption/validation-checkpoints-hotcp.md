@@ -64,3 +64,28 @@
 - 当前仍未进入 Loom 默认内核的部分：
   - 宿主特定 PR / review / CI 集成细节
   - 复杂仓库内部更细的 checkpoint profile 分层
+
+## 8. 再次验证（2026-04-16）
+
+为关闭 `#48`，在临时副本 `/tmp/loom-val-hotcp` 完成 checkpoint 承接链路复验：
+
+1. `python3 tools/loom_init.py bootstrap --target /tmp/loom-val-hotcp --write --force --verify --install-pr-template`
+2. 提交 bootstrap 基线后执行三类 checkpoint 命令
+
+复验结果：
+
+| 命令 | 结果 | 说明 |
+| --- | --- | --- |
+| `.loom/bin/loom_flow.py checkpoint admission` | `pass` | 事实链与 admission 输入可消费 |
+| `.loom/bin/loom_flow.py checkpoint build` | `pass` | build 输入完整且状态链一致 |
+| `.loom/bin/loom_flow.py checkpoint merge` | `fallback` | 当前停点仍在 build 前阶段，符合预期回退语义 |
+
+补充结果：
+
+- `.loom/bin/loom_flow.py state-check`：`pass`
+- `.loom/bin/loom_flow.py flow pre-review`：`pass`
+
+结论：
+
+- 三类 checkpoint 的承接链路可被真实样本稳定读取
+- `merge` 不再承担第一次系统性语义判断，回退语义可机械复核

@@ -88,3 +88,27 @@
 - issue #35 要求的“至少一个真实 adoption 样本验证该事实链可被消费”已满足
 - `mail-listener` 证明 Loom 可以在 `checkpoint-lite` 路径下把静态真相、动态真相和 merge 输入收成单一事实链
 - `hotcp` 继续保留为复杂路径升级样本，而不是本 issue 的直接消费样本
+
+## 8. 再次验证（2026-04-16）
+
+为关闭 `#45`，在临时副本 `/tmp/loom-val-mail` 完成一次完整脚本复验：
+
+1. `python3 tools/loom_init.py bootstrap --target /tmp/loom-val-mail --write --force --verify --install-pr-template`
+2. 提交 bootstrap 基线，消除“未分流改动”噪声后复验入口
+
+入口复验结果：
+
+| 命令 | 结果 |
+| --- | --- |
+| `.loom/bin/loom_init.py verify` | `ok: true` |
+| `.loom/bin/loom_flow.py fact-chain` | `pass` |
+| `.loom/bin/loom_flow.py runtime-evidence` | `pass` |
+| `.loom/bin/loom_flow.py state-check` | `pass` |
+| `.loom/bin/loom_flow.py flow pre-review` | `pass` |
+| `.loom/bin/loom_flow.py checkpoint admission` | `pass` |
+| `.loom/bin/loom_flow.py workspace locate` | `pass` |
+
+结论：
+
+- 单一事实链不仅可被说明层消费，也可被统一脚本入口机械消费
+- `#45` 的“真实 adoption 样本复验单一事实链”已完成并进入版本控制
