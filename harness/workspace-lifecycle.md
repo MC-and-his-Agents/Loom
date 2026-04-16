@@ -187,3 +187,15 @@ Loom 当前日常执行 CLI 至少提供以下入口：
 - PR purity
 
 这些项可以作为后续宿主适配扩展接入，但当前不改变生命周期命令的硬失败口径。
+
+## 8. 执行入口与 gate 对齐
+
+生命周期入口固定为：
+
+- `python3 tools/loom_flow.py workspace create --target <repo> --item <id>`
+- `python3 tools/loom_flow.py workspace locate --target <repo> --item <id>`
+- `python3 tools/loom_flow.py workspace cleanup --target <repo> --item <id>`
+- `python3 tools/loom_flow.py workspace retire --target <repo> --item <id>`
+- `python3 tools/loom_flow.py purity-check --target <repo> [--item <id>]`
+
+`loom_init verify` 与 `loom_check` 会复用同一组入口验证结果语义。

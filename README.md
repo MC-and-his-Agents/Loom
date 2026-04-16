@@ -161,6 +161,8 @@ Loom 的执行内核目标，不是长期停留在“最小可执行”层面，
 - 仓库自检可通过 `make loom-check` 运行
 - 初始化入口可通过 `python3 tools/loom_init.py bootstrap --target <repo>` 运行
 - 事实链读取入口可通过 `python3 tools/loom_init.py fact-chain --target <repo>` 运行
+- 日常事实读取入口可通过 `python3 tools/loom_flow.py fact-chain --target <repo>` 运行
+- 运行时证据读取入口可通过 `python3 tools/loom_flow.py runtime-evidence --target <repo>` 运行
 - 日常执行入口可通过 `python3 tools/loom_flow.py <...>` 运行
 - 新项目 demo 可通过 `make loom-demo-new-project` 复验
 

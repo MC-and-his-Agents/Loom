@@ -54,6 +54,8 @@ Loom 仓库当前通过以下入口承接最小 core 前置检查：
 - `python3 tools/loom_check.py`
 - `python3 tools/loom_init.py verify --target <repo>`
 - `python3 tools/loom_init.py fact-chain --target <repo>`
+- `python3 tools/loom_flow.py fact-chain --target <repo> [--item <id>]`
+- `python3 tools/loom_flow.py runtime-evidence --target <repo> [--item <id>]`
 - `python3 tools/loom_flow.py checkpoint <admission|build|merge> --target <repo> [--item <id>]`
 - `python3 tools/loom_flow.py workspace <create|locate|cleanup|retire> --target <repo> --item <id>`
 - `python3 tools/loom_flow.py purity-check --target <repo> [--item <id>]`

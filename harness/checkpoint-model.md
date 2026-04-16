@@ -138,3 +138,13 @@ Loom 当前的 checkpoint 顺序固定为：
   - 范围或纯度信号显示当前阶段不应继续放行
 - `fallback_required`
   - 当前阶段已无法在本阶段收口，必须回退前序
+
+## 7. 执行入口与 gate 对齐
+
+三类 checkpoint 的执行入口固定为：
+
+- `python3 tools/loom_flow.py checkpoint admission --target <repo> [--item <id>]`
+- `python3 tools/loom_flow.py checkpoint build --target <repo> [--item <id>]`
+- `python3 tools/loom_flow.py checkpoint merge --target <repo> [--item <id>]`
+
+`loom_init verify` 与 `loom_check` 会复用同一脚本面读取结果，不维护第二套 checkpoint 入口。
