@@ -779,6 +779,20 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             {"pass", "block", "fallback"},
         ),
         (
+            "flow-resume",
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "flow",
+                "resume",
+                "--target",
+                "examples/new-project",
+                "--item",
+                "INIT-0001",
+            ],
+            {"pass"},
+        ),
+        (
             "admission",
             ["python3", "tools/loom_flow.py", "checkpoint", "admission", "--target", "examples/new-project", "--item", "INIT-0001"],
             {"pass"},
@@ -831,6 +845,54 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(
                     Failure("daily-execution-cli", "`scope_assessment.mode` must be `constrained` or `unconstrained`")
                 )
+        if label == "flow-resume":
+            if payload.get("command") != "flow":
+                failures.append(Failure("daily-execution-cli", "`flow resume` must report `command: flow`"))
+            if payload.get("operation") != "resume":
+                failures.append(Failure("daily-execution-cli", "`flow resume` must report `operation: resume`"))
+            if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+                failures.append(Failure("daily-execution-cli", "`flow resume` must include a non-empty `summary`"))
+            if not isinstance(payload.get("missing_inputs"), list):
+                failures.append(Failure("daily-execution-cli", "`flow resume` must include `missing_inputs`"))
+            if payload.get("fallback_to") not in {None, "admission"}:
+                failures.append(Failure("daily-execution-cli", "`flow resume` fallback must be `null` or `admission`"))
+            for key in ("item", "workspace", "recovery", "checkpoint", "state_check"):
+                if not isinstance(payload.get(key), dict):
+                    failures.append(Failure("daily-execution-cli", f"`flow resume` must include `{key}`"))
+            steps = payload.get("steps")
+            if not isinstance(steps, list):
+                failures.append(Failure("daily-execution-cli", "`flow resume` must include `steps`"))
+                continue
+            step_names = [step.get("name") for step in steps if isinstance(step, dict)]
+            if step_names != ["fact-chain", "state-check", "workspace-locate"]:
+                failures.append(
+                    Failure(
+                        "daily-execution-cli",
+                        "`flow resume` must run fact-chain, state-check, and workspace-locate in order",
+                    )
+                )
+            recovery = payload.get("recovery")
+            if isinstance(recovery, dict):
+                for field in ("current_stop", "next_step", "blockers", "latest_validation_summary"):
+                    value = recovery.get(field)
+                    if not isinstance(value, str) or not value:
+                        failures.append(
+                            Failure("daily-execution-cli", f"`flow resume` recovery must include non-empty `{field}`")
+                        )
+            checkpoint = payload.get("checkpoint")
+            if isinstance(checkpoint, dict):
+                if checkpoint.get("normalized") not in {"admission", "build", "merge", "retired"}:
+                    failures.append(
+                        Failure("daily-execution-cli", "`flow resume` checkpoint must include a known normalized value")
+                    )
+            state_check = payload.get("state_check")
+            if isinstance(state_check, dict):
+                if state_check.get("result") not in {"pass", "block"}:
+                    failures.append(
+                        Failure("daily-execution-cli", "`flow resume` state_check.result must be `pass` or `block`")
+                    )
+                if not isinstance(state_check.get("checks"), dict):
+                    failures.append(Failure("daily-execution-cli", "`flow resume` must include `state_check.checks`"))
 
     with tempfile.TemporaryDirectory(prefix="loom-check-flow-") as tmp:
         lifecycle_target = Path(tmp) / "new-project"

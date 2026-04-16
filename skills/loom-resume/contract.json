@@ -3,7 +3,7 @@
   "role": "scenario/resume",
   "contract_version": "1.2.0",
   "display_name": "Loom Resume",
-  "description": "Rebuild execution context from the fact chain, state check, workspace locate, and the current next step.",
+  "description": "Rebuild a continuation summary from the fact chain, state check, workspace locate, and the current recovery signals.",
   "root_entry": false,
   "entrypoint": {
     "skill_markdown": "SKILL.md",
@@ -21,13 +21,16 @@
   "output_contract": {
     "reference": "references/output-contract.md",
     "required_sections": [
-      "active_item",
-      "workspace_entry",
-      "recovery_entry",
-      "current_checkpoint",
-      "next_step",
-      "blockers",
-      "latest_validation_summary"
+      "item",
+      "result",
+      "summary",
+      "missing_inputs",
+      "fallback_to",
+      "workspace",
+      "recovery",
+      "checkpoint",
+      "state_check",
+      "steps"
     ]
   },
   "routing": {
