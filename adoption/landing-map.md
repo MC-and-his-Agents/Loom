@@ -89,12 +89,12 @@
 | EXT-0036 | `keep` | `harness/automation-frontload.md` | `core` | 知识库、模板与执行支撑的机械化校验能力 |
 | EXT-0037 | `keep` | `harness/work-item-contract.md`; `harness/workspace-model.md`; `harness/execution-chain.md`; `harness-design.md`; `skills/loom-init/references/output-contract.md` | `core` | initializer 产物、初始 progress 与 clean state |
 | EXT-0038 | `keep` | `harness/execution-context.md`; `harness/work-item-contract.md`; `harness/recovery-model.md`; `harness/execution-chain.md`; `skills/loom-init/references/output-contract.md` | `core` | 每轮读取与回写、单单元增量推进 |
-| EXT-0039 | `keep` | `skills/distribution-and-adapter-contract.md` | `core` | `skills` 的安装、发现与升级合同 |
-| EXT-0040 | `keep` | `skills/distribution-and-adapter-contract.md` | `core` | 薄 `bootstrap/root contract` 与深知识引用关系 |
+| EXT-0039 | `adapt` | `skills/distribution-and-adapter-contract.md` | `candidate` | `skills` 的安装、发现与升级合同 |
+| EXT-0040 | `adapt` | `skills/distribution-and-adapter-contract.md` | `candidate` | 薄 `bootstrap/root contract` 与深知识引用关系 |
 | EXT-0041 | `adapt` | `harness/automation-frontload.md`; `skills/distribution-and-adapter-contract.md` | `candidate` | 入口层触发与行为回归测试 |
 | EXT-0042 | `keep` | `skills/distribution-and-adapter-contract.md` | `core` | 宿主特定细节收敛在 adapter 层 |
 | EXT-0043 | `needs_validation` | `adoption/candidate-patterns.md` | `parking` | 父事项 / 子事项关系作为平台无关能力需求 |
 | EXT-0044 | `adapt` | `skills/loom-init/SKILL.md`; `skills/loom-init/references/intake-signals.md` | `candidate` | 空仓新项目先建立最小入口与升级边界 |
 | EXT-0045 | `keep` | `adoption/lightweight-retrofit-default.md`; `skills/loom-init/references/intake-signals.md`; `skills/loom-init/SKILL.md` | `core` | 轻量 retrofit 需要仓库级验证入口，且不适用于共享 contract / skill 仓库 |
-| EXT-0046 | `keep` | `skills/loom-init/references/intake-signals.md`; `harness/recovery-model.md`; `harness/status-surface.md` | `core` | 复杂既有仓库应从第一轮 adoption 起进入更完整装配 |
+| EXT-0046 | `adapt` | `skills/loom-init/references/intake-signals.md`; `harness/recovery-model.md`; `harness/status-surface.md` | `candidate` | 复杂既有仓库应从第一轮 adoption 起进入更完整装配 |
 | EXT-0047 | `adapt` | `skills/loom-init/references/intake-signals.md`; `harness/recovery-model.md`; `harness/status-surface.md` | `candidate` | 现行规则入口与历史入口并存本身是恢复与状态升级信号 |
