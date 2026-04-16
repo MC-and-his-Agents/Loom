@@ -294,6 +294,36 @@ def dirty_paths_by_owner(target_root: Path) -> tuple[list[str], list[str]]:
     return owned, foreign
 
 
+def declared_scope_paths(scope_text: str) -> list[str]:
+    candidates: list[str] = []
+    for raw in re.findall(r"`([^`]+)`", scope_text):
+        token = raw.strip()
+        if not token:
+            continue
+        if token.startswith("/"):
+            token = token.lstrip("/")
+        if token.startswith("./"):
+            token = token[2:]
+        if token in {".", ""}:
+            continue
+        if "/" not in token and not token.endswith(".md"):
+            continue
+        candidates.append(token.rstrip("/"))
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        deduped.append(candidate)
+    return deduped
+
+
+def path_in_scope(path: str, scope_paths: list[str]) -> bool:
+    return any(path == scope_path or path.startswith(f"{scope_path}/") for scope_path in scope_paths)
+
+
 def load_context(target_root: Path, output_relative: str, expected_item: str | None) -> tuple[dict[str, Any], list[str]]:
     report, errors = load_fact_chain_report(target_root, output_relative)
     if errors:
@@ -557,6 +587,16 @@ def purity_report_from_context(context: dict[str, Any], fact_chain_errors: list[
         preview = ", ".join(sorted(owned_dirty)[:5])
         hard_failures.append(f"loom-owned temporary residue is still present: {preview}")
 
+    scope_paths = declared_scope_paths(context["scope"])
+    out_of_scope_changes: list[str] = []
+    if scope_paths:
+        for path in foreign_dirty:
+            if not path_in_scope(path, scope_paths):
+                out_of_scope_changes.append(path)
+        if out_of_scope_changes:
+            preview = ", ".join(sorted(out_of_scope_changes)[:5])
+            hard_failures.append(f"scope overflow detected: {preview}")
+
     conflicts = active_workspace_conflicts(target_root, item_id, workspace_entry)
     if conflicts:
         hard_failures.append(
@@ -576,6 +616,11 @@ def purity_report_from_context(context: dict[str, Any], fact_chain_errors: list[
         "state": state,
         "workspace_entry": workspace_entry,
         "workspace_path": workspace_relative,
+        "scope_assessment": {
+            "mode": "constrained" if scope_paths else "unconstrained",
+            "declared_paths": scope_paths,
+            "out_of_scope_changes": sorted(out_of_scope_changes),
+        },
         "hard_failures": hard_failures,
         "report_only": report_only,
     }

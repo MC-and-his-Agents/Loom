@@ -46,3 +46,18 @@ Loom 当前至少要求以下纯度：
 
 纯度和明显范围越界信号应尽量前置暴露。
 但是否需要新建事项、拆分 PR 或调整目标，仍属于执行与治理决策，不由纯度脚本单独裁决。
+
+## 6. `purity-check` 最小输出语义
+
+`python3 tools/loom_flow.py purity-check --target <repo> [--item <id>]` 的输出至少包含：
+
+- `hard_failures`
+  - 第一版硬失败项，包含事实链断裂、现场冲突、残留未分流、明显多事项共享现场等
+- `report_only`
+  - 第一版只报告不阻断项，当前包含 branch purity 与 PR purity
+- `scope_assessment`
+  - `mode: constrained | unconstrained`
+  - `declared_paths`
+  - `out_of_scope_changes`
+
+当 `scope_assessment.mode` 为 `constrained` 且出现 `out_of_scope_changes` 时，应视为范围越界阻断信号。

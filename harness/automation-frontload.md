@@ -33,6 +33,24 @@ merge checkpoint 只消费这些结果，不把它们扩写成第一次高质量
 
 这里的“执行支撑”包括初始化入口、恢复入口、验证入口、运行入口、checkpoint 入口以及 workspace lifecycle 入口等被正式规则要求的机械支撑。
 
+## 2.1 失败分类与阻断语义
+
+为避免“失败但不可读”，前置检查至少要归类为以下失败类型：
+
+| 失败分类 | 典型触发 | 默认阻断语义 | 回退去向 |
+| --- | --- | --- | --- |
+| `fact_chain_broken` | 主真相载体缺失、断链、并行记账 | 阻断 | 回到事实链修复 |
+| `active_state_conflict` | 当前事项与恢复入口冲突、多活跃事项共享现场 | 阻断 | 回到恢复入口/现场治理 |
+| `checkpoint_gap` | checkpoint 入口缺失、阶段输入缺失、结果语义异常 | 阻断 | 回到 admission/build 补齐 |
+| `scope_overflow` | 变更明显超出当前事项范围或单目标边界 | 阻断 | 回到范围收敛与分流 |
+| `runtime_evidence_gap` | 运行时证据字段缺失或 `present/not_applicable` 冲突 | 阻断 | 回到验证入口补证据 |
+| `workspace_residue` | Loom-owned 残留未清理、无关改动未分流 | 视严重度阻断 | 回到 cleanup/purity-check |
+
+非目标保持不变：
+
+- 不把 reviewer 的方案判断改写成脚本硬编码结论
+- 不把宿主特定流程细节上移为 Loom 默认前置
+
 ## 3. `skills` 触发与行为回归的候选矩阵
 
 `skills` 入口层的触发正确性与行为退化，属于 Loom 在 `EXT-0041` 下承接的候选型前置 / 回归验证面，不与通用 core 检查混写。
@@ -70,6 +88,8 @@ Loom 仓库当前通过以下入口承接最小 core 前置检查：
 - `skills` 升级协议与 bootstrap CLI 入口的一致性
 - demo 事实链 carrier 的唯一性与一致性
 - checkpoint 入口存在性与最小结果语义
+- 活跃状态冲突与 checkpoint 缺口暴露
+- 范围越界与 workspace residue 的 purity 预检
 - 运行时证据五字段可读性与 `not_applicable` 判定
 - workspace lifecycle / purity-check 入口存在性
 

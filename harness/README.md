@@ -15,6 +15,8 @@
   - 定义每轮正式执行必须绑定和读取的最小上下文语义
 - [execution-chain.md](./execution-chain.md)
   - 定义从初始化产物到 merge checkpoint 放行的最小执行链路
+- `daily-entry-matrix.md`
+  - 定义 `skills` / CLI / gate 在日常高频动作上的入口矩阵与职责边界
 - `checkpoint-model.md`
   - 定义 `admission` / `build` checkpoint 的输入、输出、失败语义与回退去向
 - [workspace-model.md](./workspace-model.md)
