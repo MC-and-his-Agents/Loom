@@ -1,6 +1,6 @@
 .PHONY: loom-check check loom-demo-new-project
 
-loom-check:
+loom-check: loom-demo-new-project
 	python3 tools/loom_check.py
 
 check: loom-check
