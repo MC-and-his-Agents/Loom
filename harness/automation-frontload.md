@@ -25,10 +25,13 @@ merge checkpoint 只消费这些结果，不把它们扩写成第一次高质量
 | 交叉引用 | 关键文档与入口链接是否可达 | 执行链路在仓库中断裂，读取路径不可达 | 不判断引用后的内容质量 | 是 |
 | 纯度/越界信号 | 明显脏现场、无关改动、范围越界信号 | 当前执行材料不适合继续叠加或放行 | 不替代 reviewer 的语义审查 | 视严重度而定 |
 | 执行支撑入口存在性 | work item、恢复入口、验证入口、运行入口等是否可定位 | 仓库无法形成最小执行闭环 | 不判断入口实现强度是否已达最佳 | 是 |
+| checkpoint 入口存在性 | `admission`、`build`、`merge` 三类 checkpoint 入口是否可调用 | 放行链路不完整，无法按阶段消费事实链 | 不替代 checkpoint 的语义审查 | 是 |
+| 运行时证据可读性 | `Runtime Evidence` 五字段是否可读且可区分 `not_applicable` | 验证摘要不可复核，merge 消费不到稳定证据 | 不判断证据内容是否已经最优 | 是 |
+| workspace lifecycle 入口存在性 | `create`、`locate`、`cleanup`、`retire` 与 `purity-check` 是否可调用 | 现场治理不可机械执行，恢复与交接风险升高 | 不替代现场治理策略设计 | 是 |
 | 基础状态一致性 | checkpoint、下一步、阻断项、验证摘要是否相互对齐 | 当前状态不可读，恢复与放行会消费到冲突事实 | 不判断事项目标本身是否值得做 | 是 |
 | 事实链唯一性 | 静态真相、动态真相与派生读面是否各守边界 | 仓库出现并行记账或事实链断裂 | 不替代 reviewer 的方案判断 | 是 |
 
-这里的“执行支撑”包括初始化入口、恢复入口、验证入口、运行入口或其他被正式规则要求的机械支撑。
+这里的“执行支撑”包括初始化入口、恢复入口、验证入口、运行入口、checkpoint 入口以及 workspace lifecycle 入口等被正式规则要求的机械支撑。
 
 ## 3. `skills` 触发与行为回归的候选矩阵
 
@@ -51,6 +54,9 @@ Loom 仓库当前通过以下入口承接最小 core 前置检查：
 - `python3 tools/loom_check.py`
 - `python3 tools/loom_init.py verify --target <repo>`
 - `python3 tools/loom_init.py fact-chain --target <repo>`
+- `python3 tools/loom_flow.py checkpoint <admission|build|merge> --target <repo> [--item <id>]`
+- `python3 tools/loom_flow.py workspace <create|locate|cleanup|retire> --target <repo> --item <id>`
+- `python3 tools/loom_flow.py purity-check --target <repo> [--item <id>]`
 
 当前脚本至少覆盖：
 
@@ -61,6 +67,9 @@ Loom 仓库当前通过以下入口承接最小 core 前置检查：
 - `skills` 机读 root 合同的最小一致性
 - `skills` 升级协议与 bootstrap CLI 入口的一致性
 - demo 事实链 carrier 的唯一性与一致性
+- checkpoint 入口存在性与最小结果语义
+- 运行时证据五字段可读性与 `not_applicable` 判定
+- workspace lifecycle / purity-check 入口存在性
 
 GitHub Actions 工作流会复用同一入口，而不是维护第二套命令。
 

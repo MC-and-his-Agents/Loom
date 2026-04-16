@@ -141,7 +141,7 @@ Loom 的知识库模型采用两层结构：
 
 治理层必须有三个正式 checkpoint：
 
-- `commit checkpoint`
+- `admission checkpoint`
   - 确认事项路径与准入条件
 - `build checkpoint`
   - 在实现中纠偏并识别边界变化

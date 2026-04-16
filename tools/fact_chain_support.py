@@ -58,6 +58,14 @@ STATUS_SOURCE_FIELDS = {
     "Fact Chain CLI": "read_entry",
 }
 
+RUNTIME_EVIDENCE_FIELDS = {
+    "Run Entry": "run_entry",
+    "Logs Entry": "logs_entry",
+    "Diagnostics Entry": "diagnostics_entry",
+    "Verification Entry": "verification_entry",
+    "Lane Entry": "lane_entry",
+}
+
 FORBIDDEN_DYNAMIC_KEYS = {
     "current_checkpoint",
     "current_stop",
@@ -194,7 +202,23 @@ def parse_recovery_entry(path: Path, root: Path) -> tuple[dict[str, str], list[s
     return dynamic_facts, errors
 
 
-def parse_status_surface(path: Path, root: Path) -> tuple[dict[str, str], dict[str, str], list[str]]:
+def validate_runtime_evidence(runtime_evidence: dict[str, str], relative_path: str) -> list[str]:
+    errors: list[str] = []
+    for label, canonical in RUNTIME_EVIDENCE_FIELDS.items():
+        if canonical not in runtime_evidence:
+            continue
+        value = runtime_evidence.get(canonical)
+        if not isinstance(value, str) or not value:
+            errors.append(f"{relative_path}: `{label}` in `Runtime Evidence` must be a non-empty string")
+            continue
+        if value == "not_applicable":
+            continue
+        if not value.strip():
+            errors.append(f"{relative_path}: `{label}` in `Runtime Evidence` must not be blank")
+    return errors
+
+
+def parse_status_surface(path: Path, root: Path) -> tuple[dict[str, str], dict[str, str], dict[str, str], list[str]]:
     relative_path = _relative(path, root)
     sections = markdown_sections(path)
     status_facts, errors = parse_key_value_section(
@@ -203,9 +227,17 @@ def parse_status_surface(path: Path, root: Path) -> tuple[dict[str, str], dict[s
         STATUS_FIELDS,
         relative_path,
     )
+    runtime_evidence, runtime_errors = parse_key_value_section(
+        sections,
+        "Runtime Evidence",
+        RUNTIME_EVIDENCE_FIELDS,
+        relative_path,
+    )
+    errors.extend(runtime_errors)
+    errors.extend(validate_runtime_evidence(runtime_evidence, relative_path))
     sources, source_errors = parse_key_value_section(sections, "Sources", STATUS_SOURCE_FIELDS, relative_path)
     errors.extend(source_errors)
-    return status_facts, sources, errors
+    return status_facts, runtime_evidence, sources, errors
 
 
 def _normalize_json_key(key: str) -> str:
@@ -316,7 +348,7 @@ def inspect_fact_chain(
 
     work_item, work_item_errors = parse_work_item(work_item_path, target_root)
     recovery_entry, recovery_errors = parse_recovery_entry(recovery_path, target_root)
-    status_surface, status_sources, status_errors = parse_status_surface(status_path, target_root)
+    status_surface, runtime_evidence, status_sources, status_errors = parse_status_surface(status_path, target_root)
     errors.extend(work_item_errors)
     errors.extend(recovery_errors)
     errors.extend(status_errors)
@@ -361,6 +393,20 @@ def inspect_fact_chain(
                 "status surface source mismatch for "
                 f"`{source_key}`: expected `{expected_value}`, got `{actual_value}`"
             )
+
+    runtime_evidence_report = {
+        field_name: {
+            "value": value,
+            "status": "not_applicable" if value == "not_applicable" else "present",
+            "source": {
+                "carrier": "status_surface",
+                "path": str(status_ref),
+                "field": label,
+            },
+        }
+        for label, field_name in RUNTIME_EVIDENCE_FIELDS.items()
+        for value in (runtime_evidence[field_name],)
+    }
 
     report = {
         "target": str(target_root),
@@ -444,9 +490,11 @@ def inspect_fact_chain(
                 "source": {"carrier": "recovery_entry", "path": str(recovery_ref), "field": "Current Lane"},
             },
         },
+        "runtime_evidence": runtime_evidence_report,
         "derived_status_surface": {
             "path": str(status_ref),
             "values": expected_status,
+            "runtime_evidence": runtime_evidence,
             "sources": expected_sources,
         },
     }

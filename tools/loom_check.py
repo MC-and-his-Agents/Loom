@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import unicodedata
 import json
 from collections import Counter, defaultdict
@@ -53,7 +56,9 @@ CORE_DOCS = (
     "harness/fact-chain-contract.md",
     "harness/execution-context.md",
     "harness/execution-chain.md",
+    "harness/checkpoint-model.md",
     "harness/workspace-model.md",
+    "harness/workspace-lifecycle.md",
     "harness/recovery-model.md",
     "harness/status-surface.md",
     "harness/automation-frontload.md",
@@ -74,6 +79,10 @@ CORE_DOCS = (
     "adoption/validation-devskills.md",
     "adoption/validation-hotcp.md",
     "adoption/validation-fact-chain-mail-listener.md",
+    "adoption/validation-checkpoints-hotcp.md",
+    "adoption/validation-workspace-lifecycle-hotcp.md",
+    "adoption/validation-workspace-lifecycle-mail-listener.md",
+    "adoption/validation-runtime-evidence-hotcp.md",
     "adoption/versioning-and-upgrades.md",
     "adoption/upstream-delivery-surface.md",
     "skills/distribution-and-adapter-contract.md",
@@ -86,6 +95,7 @@ CORE_DOCS = (
     "templates/scaffold/spec.md",
     "templates/scaffold/plan.md",
     "tools/loom_init.py",
+    "tools/loom_flow.py",
 )
 
 AUTOMATION_FRONTLOAD_TEMPLATES = (
@@ -105,7 +115,9 @@ AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT = (
     "harness/work-item-contract.md",
     "harness/execution-context.md",
     "harness/execution-chain.md",
+    "harness/checkpoint-model.md",
     "harness/workspace-model.md",
+    "harness/workspace-lifecycle.md",
     "harness/recovery-model.md",
     "harness/status-surface.md",
     "harness/automation-frontload.md",
@@ -124,6 +136,7 @@ DEMO_ASSETS = (
     "examples/new-project/.loom/status/current.md",
     "examples/new-project/.loom/bin/loom_init.py",
     "examples/new-project/.loom/bin/fact_chain_support.py",
+    "examples/new-project/.loom/bin/loom_flow.py",
     "examples/new-project/.loom/specs/INIT-0001/spec.md",
     "examples/new-project/.loom/specs/INIT-0001/plan.md",
 )
@@ -296,6 +309,37 @@ def check_markdown_links(root: Path) -> list[Failure]:
 def load_json_file(path: Path) -> object:
     with path.open(encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def run_command(root: Path, args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        args,
+        cwd=cwd or root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def load_command_json(
+    root: Path,
+    args: list[str],
+    *,
+    cwd: Path | None = None,
+) -> tuple[dict[str, object] | None, str | None]:
+    result = run_command(root, args, cwd=cwd)
+    if not result.stdout.strip():
+        detail = "command produced no JSON output"
+        if result.stderr.strip():
+            detail += f": {result.stderr.strip()}"
+        return None, detail
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        return None, f"invalid JSON output: {exc.msg}"
+    if not isinstance(payload, dict):
+        return None, "command output must be a JSON object"
+    return payload, None
 
 
 def check_skill_manifests(root: Path) -> list[Failure]:
@@ -476,6 +520,9 @@ def check_demo_assets(root: Path) -> list[Failure]:
         "tools/loom_init.py bootstrap",
         ".loom/bin/loom_init.py verify",
         ".loom/bin/loom_init.py fact-chain",
+        ".loom/bin/loom_flow.py checkpoint admission",
+        ".loom/bin/loom_flow.py workspace locate",
+        ".loom/bin/loom_flow.py purity-check",
     ):
         if needle not in text:
             failures.append(Failure("demo-assets", f"`docs/demo-new-project.md` is missing `{needle}`"))
@@ -510,6 +557,142 @@ def check_demo_fact_chain(root: Path) -> list[Failure]:
     return failures
 
 
+def check_daily_execution_cli(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    example_target = root / "examples/new-project"
+    tool_path = root / "tools/loom_flow.py"
+    if not tool_path.exists() or not example_target.exists():
+        return failures
+
+    demo_commands = [
+        (
+            "admission",
+            ["python3", "tools/loom_flow.py", "checkpoint", "admission", "--target", "examples/new-project", "--item", "INIT-0001"],
+            {"pass"},
+        ),
+        (
+            "build",
+            ["python3", "tools/loom_flow.py", "checkpoint", "build", "--target", "examples/new-project", "--item", "INIT-0001"],
+            {"pass", "block", "fallback"},
+        ),
+        (
+            "merge",
+            ["python3", "tools/loom_flow.py", "checkpoint", "merge", "--target", "examples/new-project", "--item", "INIT-0001"],
+            {"pass", "block", "fallback"},
+        ),
+        (
+            "locate",
+            ["python3", "tools/loom_flow.py", "workspace", "locate", "--target", "examples/new-project", "--item", "INIT-0001"],
+            {"pass"},
+        ),
+        (
+            "purity",
+            ["python3", "tools/loom_flow.py", "purity-check", "--target", "examples/new-project", "--item", "INIT-0001"],
+            {"pass"},
+        ),
+    ]
+    for label, args, allowed_results in demo_commands:
+        payload, error = load_command_json(root, args)
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`{label}` command failed: {error}"))
+            continue
+        result = payload.get("result")
+        if result not in allowed_results:
+            failures.append(
+                Failure(
+                    "daily-execution-cli",
+                    f"`{label}` returned unexpected result `{result}`",
+                )
+            )
+
+    with tempfile.TemporaryDirectory(prefix="loom-check-flow-") as tmp:
+        lifecycle_target = Path(tmp) / "new-project"
+        shutil.copytree(example_target, lifecycle_target)
+        temp_root = lifecycle_target / ".loom/flow/tmp"
+        temp_root.mkdir(parents=True, exist_ok=True)
+        (temp_root / "sentinel.txt").write_text("temp\n", encoding="utf-8")
+
+        for operation in ("create", "cleanup", "retire"):
+            payload, error = load_command_json(
+                root,
+                [
+                    "python3",
+                    "tools/loom_flow.py",
+                    "workspace",
+                    operation,
+                    "--target",
+                    str(lifecycle_target),
+                    "--item",
+                    "INIT-0001",
+                ],
+            )
+            if error:
+                failures.append(Failure("daily-execution-cli", f"`workspace {operation}` failed: {error}"))
+                continue
+            if payload.get("result") != "pass":
+                failures.append(
+                    Failure(
+                        "daily-execution-cli",
+                        f"`workspace {operation}` must pass on a clean temp copy, got `{payload.get('result')}`",
+                    )
+                )
+
+        locate_payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "workspace",
+                "locate",
+                "--target",
+                str(lifecycle_target),
+                "--item",
+                "INIT-0001",
+            ],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`workspace locate` after retire failed: {error}"))
+        elif (
+            not isinstance(locate_payload.get("checkpoint"), dict)
+            or locate_payload["checkpoint"].get("normalized") != "retired"
+        ):
+            failures.append(Failure("daily-execution-cli", "`workspace retire` must leave the copied sample in `retired` state"))
+
+    if shutil.which("git") is not None:
+        with tempfile.TemporaryDirectory(prefix="loom-check-purity-") as tmp:
+            dirty_target = Path(tmp) / "new-project"
+            shutil.copytree(example_target, dirty_target)
+            run_command(root, ["git", "init"], cwd=dirty_target)
+            run_command(root, ["git", "config", "user.email", "loom-check@example.com"], cwd=dirty_target)
+            run_command(root, ["git", "config", "user.name", "loom-check"], cwd=dirty_target)
+            run_command(root, ["git", "add", "."], cwd=dirty_target)
+            run_command(root, ["git", "commit", "-m", "baseline"], cwd=dirty_target)
+            (dirty_target / "untriaged.txt").write_text("pending\n", encoding="utf-8")
+            payload, error = load_command_json(
+                root,
+                [
+                    "python3",
+                    "tools/loom_flow.py",
+                    "purity-check",
+                    "--target",
+                    str(dirty_target),
+                    "--item",
+                    "INIT-0001",
+                ],
+            )
+            if error:
+                failures.append(Failure("daily-execution-cli", f"`purity-check` negative sample failed: {error}"))
+            elif payload.get("result") != "block":
+                failures.append(
+                    Failure(
+                        "daily-execution-cli",
+                        f"`purity-check` negative sample must block, got `{payload.get('result')}`",
+                    )
+                )
+
+    return failures
+
+
 def is_within(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
@@ -538,12 +721,13 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_skill_manifests(root))
     failures.extend(check_demo_assets(root))
     failures.extend(check_demo_fact_chain(root))
+    failures.extend(check_daily_execution_cli(root))
     failures.extend(check_markdown_links(root))
     return failures
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 11
+    categories_checked = 12
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")

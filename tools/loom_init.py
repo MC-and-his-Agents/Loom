@@ -490,6 +490,7 @@ def initial_work_items(scenario: str, target_root: Path) -> list[dict[str, objec
         ".loom/status/current.md",
         ".loom/bin/loom_init.py",
         ".loom/bin/fact_chain_support.py",
+        ".loom/bin/loom_flow.py",
         ".loom/specs/INIT-0001/spec.md",
         ".loom/specs/INIT-0001/plan.md",
     ]
@@ -568,6 +569,11 @@ def initial_artifacts(target_root: Path, install_pr_template: bool) -> list[dict
             "path": ".loom/bin/fact_chain_support.py",
             "kind": "loom-tool-support",
             "source": "tools/fact_chain_support.py",
+        },
+        {
+            "path": ".loom/bin/loom_flow.py",
+            "kind": "loom-tool",
+            "source": "tools/loom_flow.py",
         },
         {
             "path": ".loom/specs/INIT-0001/spec.md",
@@ -652,7 +658,7 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
         "validation_and_closing": {
             "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
             "checkpoint_relationship": [
-                "commit checkpoint confirms the bootstrap work item and first artifacts are readable",
+                "admission checkpoint confirms the bootstrap work item and first artifacts are readable",
                 "build checkpoint confirms generated carriers and templates are internally consistent",
                 "merge checkpoint should only pass after downstream repo truth, docs, and delivery state align",
             ],
@@ -682,6 +688,7 @@ def render_loom_readme(result: dict[str, object]) -> str:
         "- First work item: `.loom/work-items/INIT-0001.md`\n"
         "- Progress carrier: `.loom/progress/INIT-0001.md`\n"
         "- Status surface: `.loom/status/current.md`\n"
+        "- Daily execution CLI: `.loom/bin/loom_flow.py`\n"
     )
 
 
@@ -725,7 +732,7 @@ def render_work_item(result: dict[str, object]) -> str:
 
 
 def render_progress(result: dict[str, object]) -> str:
-    checkpoint = "commit checkpoint" if result["run"]["scenario_key"] != "complex-existing" else "build checkpoint"
+    checkpoint = "admission checkpoint" if result["run"]["scenario_key"] != "complex-existing" else "build checkpoint"
     return (
         f"# {WORK_ITEM_ID} Progress\n\n"
         "## Dynamic Facts\n\n"
@@ -740,10 +747,22 @@ def render_progress(result: dict[str, object]) -> str:
     )
 
 
+def default_runtime_evidence(result: dict[str, object]) -> dict[str, str]:
+    item = result["initial_work_items"][0]
+    return {
+        "run_entry": "not_applicable",
+        "logs_entry": "not_applicable",
+        "diagnostics_entry": "not_applicable",
+        "verification_entry": str(item["validation_entry"]),
+        "lane_entry": "not_applicable",
+    }
+
+
 def render_status(result: dict[str, object]) -> str:
     item = result["initial_work_items"][0]
     fact_chain = result["fact_chain"]
-    checkpoint = "commit checkpoint" if result["run"]["scenario_key"] != "complex-existing" else "build checkpoint"
+    checkpoint = "admission checkpoint" if result["run"]["scenario_key"] != "complex-existing" else "build checkpoint"
+    runtime_evidence = default_runtime_evidence(result)
     return (
         "# Current Status\n\n"
         "## Derived Fact Chain View\n\n"
@@ -762,6 +781,12 @@ def render_status(result: dict[str, object]) -> str:
         "- Latest Validation Summary: Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist.\n"
         "- Recovery Boundary: Bootstrap result at `.loom/bootstrap/init-result.json`; bootstrap manifest at `.loom/bootstrap/manifest.json`.\n"
         "- Current Lane: bootstrap verification only\n\n"
+        "## Runtime Evidence\n\n"
+        f"- Run Entry: {runtime_evidence['run_entry']}\n"
+        f"- Logs Entry: {runtime_evidence['logs_entry']}\n"
+        f"- Diagnostics Entry: {runtime_evidence['diagnostics_entry']}\n"
+        f"- Verification Entry: {runtime_evidence['verification_entry']}\n"
+        f"- Lane Entry: {runtime_evidence['lane_entry']}\n\n"
         "## Sources\n\n"
         f"- Static Truth: {fact_chain['entry_points']['work_item']}\n"
         f"- Dynamic Truth: {fact_chain['entry_points']['recovery_entry']}\n"
@@ -818,6 +843,7 @@ def scaffold_target(
     for source, destination in (
         (ROOT / "tools/loom_init.py", target_root / ".loom/bin/loom_init.py"),
         (ROOT / "tools/fact_chain_support.py", target_root / ".loom/bin/fact_chain_support.py"),
+        (ROOT / "tools/loom_flow.py", target_root / ".loom/bin/loom_flow.py"),
         (ROOT / "templates/scaffold/spec.md", target_root / ".loom/specs/INIT-0001/spec.md"),
         (ROOT / "templates/scaffold/plan.md", target_root / ".loom/specs/INIT-0001/plan.md"),
     ):
@@ -853,6 +879,7 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
         ".loom/status/current.md",
         ".loom/bin/loom_init.py",
         ".loom/bin/fact_chain_support.py",
+        ".loom/bin/loom_flow.py",
         ".loom/specs/INIT-0001/spec.md",
         ".loom/specs/INIT-0001/plan.md",
     ]
@@ -922,6 +949,19 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
         errors.append("fact-chain: no report was produced")
     elif output_path.exists():
         current_item_id = fact_chain_report["fact_chain"]["entry_points"]["current_item_id"]
+        runtime_evidence_report = fact_chain_report.get("runtime_evidence")
+        if not isinstance(runtime_evidence_report, dict):
+            errors.append("fact-chain: missing runtime_evidence report")
+        else:
+            for field in (
+                "run_entry",
+                "logs_entry",
+                "diagnostics_entry",
+                "verification_entry",
+                "lane_entry",
+            ):
+                if field not in runtime_evidence_report:
+                    errors.append(f"fact-chain: runtime_evidence is missing `{field}`")
         matching_work_item = None
         for work_item in validated_work_items:
             if work_item.get("id") == current_item_id:

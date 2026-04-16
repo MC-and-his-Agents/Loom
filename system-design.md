@@ -82,7 +82,7 @@ Loom 将以下能力视为治理内核：
 - 规格准入
   - 高影响改动先收口再实现
 - 三个正式 checkpoint
-  - `commit checkpoint`
+  - `admission checkpoint`
   - `build checkpoint`
   - `merge checkpoint`
 - 审查职责分层

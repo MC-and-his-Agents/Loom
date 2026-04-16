@@ -37,21 +37,41 @@ Loom 当前至少要求状态面能展示：
 - `当前工作现场`、`当前恢复主入口`、`验证入口`
   - 从 `work item` 与 `init-result` 的 carrier 定位派生
 
-## 3. 运行时证据入口
+## 3. `Runtime Evidence` 固定区块
 
-若事项涉及可运行系统，状态面还应提供可读取的运行时证据入口。
+状态面若承接运行时证据，必须提供固定标题区块 `Runtime Evidence`。
 
-最小证据类别包括：
+该区块固定为以下 5 个字段，字段不得缺失：
 
-- 当前工作现场对应的运行入口
-- 日志或等价运行输出入口
-- 指标、trace 或其他等价诊断入口至少一种
-- UI、接口或端到端结果中的至少一种 agent 可验证入口
-- 当前环境 lane 对应的诊断入口
+- `Run Entry`
+- `Logs Entry`
+- `Diagnostics Entry`
+- `Verification Entry`
+- `Lane Entry`
+
+每个字段的值只能是：
+
+- locator 字符串
+- `not_applicable`
+
+## 4. 运行时证据入口语义
+
+最小证据类别对应如下：
+
+- `Run Entry`
+  - 当前工作现场对应的运行入口
+- `Logs Entry`
+  - 日志或等价运行输出入口
+- `Diagnostics Entry`
+  - 指标、trace 或其他等价诊断入口至少一种
+- `Verification Entry`
+  - UI、接口或端到端结果中的至少一种 agent 可验证入口
+- `Lane Entry`
+  - 当前环境 lane 对应的诊断或读取入口
 
 Loom 固化的是“可读取、可验证”的能力目标，不固化具体可观测工具栈。
 
-## 4. `not_applicable` 语义
+## 5. `not_applicable` 语义
 
 若事项不涉及可运行系统，状态面应明确标出运行时证据为 `not_applicable`，而不是伪造运行入口。
 
@@ -61,11 +81,19 @@ Loom 固化的是“可读取、可验证”的能力目标，不固化具体可
 - 纯治理规则调整
 - 仅结构整理、尚无运行载体的事项
 
-`not_applicable` 只说明该类证据当前不适用，不说明验证已自动通过。
+`not_applicable` 可以按字段逐项声明。
 
-## 5. 边界约束
+例如：
+
+- `Verification Entry` 可读
+- `Run Entry`、`Logs Entry`、`Diagnostics Entry`、`Lane Entry` 为 `not_applicable`
+
+`not_applicable` 只说明该字段当前不适用，不说明验证已自动通过。
+
+## 6. 边界约束
 
 - 禁止手工维护第二套平行真相
 - 状态面负责读取，不重复承接正式规则定义
 - 状态面若展示的 `next_step`、`blockers`、`latest_validation_summary` 与恢复主入口不一致，应视为事实链断裂
+- `Runtime Evidence` 的 5 个字段必须全部出现；不允许用“缺字段”表达不适用
 - 运行时证据入口不等于完整 observability 平台设计；本文件只要求最小可读入口

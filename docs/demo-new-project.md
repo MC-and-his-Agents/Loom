@@ -40,6 +40,7 @@ python3 tools/loom_init.py bootstrap \
 - `examples/new-project/.loom/work-items/INIT-0001.md`
 - `examples/new-project/.loom/progress/INIT-0001.md`
 - `examples/new-project/.loom/status/current.md`
+- `examples/new-project/.loom/bin/loom_flow.py`
 - `examples/new-project/.loom/specs/INIT-0001/spec.md`
 - `examples/new-project/.loom/specs/INIT-0001/plan.md`
 - `examples/new-project/.github/PULL_REQUEST_TEMPLATE.md`
@@ -50,6 +51,9 @@ python3 tools/loom_init.py bootstrap \
 cd examples/new-project
 python3 .loom/bin/loom_init.py verify --target .
 python3 .loom/bin/loom_init.py fact-chain --target .
+python3 .loom/bin/loom_flow.py checkpoint admission --target . --item INIT-0001
+python3 .loom/bin/loom_flow.py workspace locate --target . --item INIT-0001
+python3 .loom/bin/loom_flow.py purity-check --target . --item INIT-0001
 ```
 
 ## 收口判断
@@ -59,5 +63,6 @@ python3 .loom/bin/loom_init.py fact-chain --target .
 - `bootstrap` 命令退出码为 `0`
 - `verify` 命令退出码为 `0`
 - `fact-chain` 命令退出码为 `0`
+- `loom_flow.py` 的 `checkpoint admission`、`workspace locate`、`purity-check` 命令都可读取当前样例
 - `init-result.json` 含有 7 个必需区块
 - 首批 work item、recovery entry、状态面与 spec/plan 工件都已落位

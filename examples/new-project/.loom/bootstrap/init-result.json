@@ -140,6 +140,11 @@
       "source": "tools/fact_chain_support.py"
     },
     {
+      "path": ".loom/bin/loom_flow.py",
+      "kind": "loom-tool",
+      "source": "tools/loom_flow.py"
+    },
+    {
       "path": ".loom/specs/INIT-0001/spec.md",
       "kind": "spec",
       "source": "templates/scaffold/spec.md"
@@ -171,6 +176,7 @@
         ".loom/status/current.md",
         ".loom/bin/loom_init.py",
         ".loom/bin/fact_chain_support.py",
+        ".loom/bin/loom_flow.py",
         ".loom/specs/INIT-0001/spec.md",
         ".loom/specs/INIT-0001/plan.md"
       ],
@@ -182,7 +188,7 @@
   "validation_and_closing": {
     "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
     "checkpoint_relationship": [
-      "commit checkpoint confirms the bootstrap work item and first artifacts are readable",
+      "admission checkpoint confirms the bootstrap work item and first artifacts are readable",
       "build checkpoint confirms generated carriers and templates are internally consistent",
       "merge checkpoint should only pass after downstream repo truth, docs, and delivery state align"
     ],

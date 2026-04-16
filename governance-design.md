@@ -61,7 +61,7 @@ Loom 默认采用三类事项分流：
 
 治理层固定三个正式 checkpoint：
 
-- `commit checkpoint`
+- `admission checkpoint`
 - `build checkpoint`
 - `merge checkpoint`
 

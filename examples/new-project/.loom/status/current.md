@@ -10,13 +10,21 @@
 - Recovery Entry: .loom/progress/INIT-0001.md
 - Validation Entry: python3 .loom/bin/loom_init.py verify --target .
 - Closing Condition: The generated entry, work item, recovery entry, and templates are readable and verified
-- Current Checkpoint: commit checkpoint
+- Current Checkpoint: admission checkpoint
 - Current Stop: Bootstrap artifacts have been generated and are awaiting downstream review.
 - Next Step: Accept the generated Loom entry and promote the first real repository work item.
 - Blockers: None recorded.
 - Latest Validation Summary: Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist.
 - Recovery Boundary: Bootstrap result at `.loom/bootstrap/init-result.json`; bootstrap manifest at `.loom/bootstrap/manifest.json`.
 - Current Lane: bootstrap verification only
+
+## Runtime Evidence
+
+- Run Entry: not_applicable
+- Logs Entry: not_applicable
+- Diagnostics Entry: not_applicable
+- Verification Entry: python3 .loom/bin/loom_init.py verify --target .
+- Lane Entry: not_applicable
 
 ## Sources
 

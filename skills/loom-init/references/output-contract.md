@@ -49,6 +49,12 @@
 - progress / checkpoint 载体是什么
 - 验证入口是什么
 - 状态读取入口是什么
+- `Runtime Evidence` 区块的落位方式是什么，且至少覆盖：
+  - `Run Entry`
+  - `Logs Entry`
+  - `Diagnostics Entry`
+  - `Verification Entry`
+  - `Lane Entry`
 - 初始 clean state 的定义是什么
 - 首个稳定提交或等价回退边界是什么
 - 事实链 carrier 如何定位
@@ -63,6 +69,8 @@
 若本轮不装配标准恢复或状态面，也必须写清现有载体如何承接这些职责。
 
 `init-result` 只允许承接 locator-only 信息，不并行复制实时停点、下一步、阻断项或最近验证摘要。
+
+`Runtime Evidence` 的五个字段必须逐项给出 locator 或 `not_applicable`，不得留空；若使用 `not_applicable`，必须给出可复核原因。
 
 ### 5. 首批事项
 
@@ -83,7 +91,7 @@
 至少说明：
 
 - 如何验证初始化输出已经可直接承接执行
-- 三个 checkpoint 的承接关系是什么
+- 三个 checkpoint 的承接关系是什么（固定命名为 `admission -> build -> merge`，不再使用 `commit checkpoint` 命名）
 - 什么状态算“说明已清楚”
 - 什么状态算“已进入主干并收口”
 - 何时 issue 可以关闭
