@@ -520,6 +520,8 @@ def check_demo_assets(root: Path) -> list[Failure]:
         "tools/loom_init.py bootstrap",
         ".loom/bin/loom_init.py verify",
         ".loom/bin/loom_init.py fact-chain",
+        ".loom/bin/loom_flow.py fact-chain",
+        ".loom/bin/loom_flow.py runtime-evidence",
         ".loom/bin/loom_flow.py checkpoint admission",
         ".loom/bin/loom_flow.py workspace locate",
         ".loom/bin/loom_flow.py purity-check",
@@ -565,6 +567,24 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         return failures
 
     demo_commands = [
+        (
+            "fact-chain",
+            ["python3", "tools/loom_flow.py", "fact-chain", "--target", "examples/new-project", "--item", "INIT-0001"],
+            {"pass"},
+        ),
+        (
+            "runtime-evidence",
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "runtime-evidence",
+                "--target",
+                "examples/new-project",
+                "--item",
+                "INIT-0001",
+            ],
+            {"pass"},
+        ),
         (
             "admission",
             ["python3", "tools/loom_flow.py", "checkpoint", "admission", "--target", "examples/new-project", "--item", "INIT-0001"],

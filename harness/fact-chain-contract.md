@@ -141,6 +141,11 @@ Loom 的执行真相只允许沿一条事实链流动：
 
 不允许跳过主真相，直接把状态面或 merge checkpoint 输入当成 authored 真相。
 
+当前仓库中的统一读取入口包括：
+
+- `python3 tools/loom_init.py fact-chain --target <repo>`
+- `python3 tools/loom_flow.py fact-chain --target <repo> [--item <id>]`
+
 ## 6. 边界约束
 
 - Loom 固化的是字段归属与派生关系，不固化具体文件名或宿主平台字段名

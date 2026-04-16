@@ -888,6 +888,7 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
         if not (target_root / relative).exists():
             errors.append(f"missing required artifact: {relative}")
 
+    current_item_id: str | None = None
     if output_path.exists():
         try:
             result = read_json(output_path)
@@ -989,6 +990,81 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
         for needle in ("## Summary", "## Validation", "## Risks And Follow-ups", "## Related Work"):
             if needle not in text:
                 errors.append(f"PR template is missing section: {needle}")
+
+    flow_tool = target_root / ".loom/bin/loom_flow.py"
+    if flow_tool.exists():
+        commands: list[tuple[str, list[str], set[str]]] = [
+            (
+                "loom-flow fact-chain",
+                ["python3", ".loom/bin/loom_flow.py", "fact-chain", "--target", "."],
+                {"pass"},
+            ),
+            (
+                "loom-flow runtime-evidence",
+                ["python3", ".loom/bin/loom_flow.py", "runtime-evidence", "--target", "."],
+                {"pass"},
+            ),
+        ]
+        if current_item_id:
+            commands.extend(
+                [
+                    (
+                        "loom-flow checkpoint admission",
+                        [
+                            "python3",
+                            ".loom/bin/loom_flow.py",
+                            "checkpoint",
+                            "admission",
+                            "--target",
+                            ".",
+                            "--item",
+                            current_item_id,
+                        ],
+                        {"pass", "block", "fallback"},
+                    ),
+                    (
+                        "loom-flow workspace locate",
+                        [
+                            "python3",
+                            ".loom/bin/loom_flow.py",
+                            "workspace",
+                            "locate",
+                            "--target",
+                            ".",
+                            "--item",
+                            current_item_id,
+                        ],
+                        {"pass", "block"},
+                    ),
+                ]
+            )
+
+        for label, command, allowed in commands:
+            result = subprocess.run(
+                command,
+                cwd=target_root,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            output = result.stdout.strip()
+            if not output:
+                detail = result.stderr.strip() or "no JSON output"
+                errors.append(f"{label} failed: {detail}")
+                continue
+            try:
+                payload = json.loads(output)
+            except json.JSONDecodeError as exc:
+                errors.append(f"{label} returned invalid JSON: {exc.msg}")
+                continue
+            if not isinstance(payload, dict):
+                errors.append(f"{label} must return a JSON object")
+                continue
+            command_result = payload.get("result")
+            if command_result not in allowed:
+                errors.append(
+                    f"{label} returned unexpected result `{command_result}` (allowed: {', '.join(sorted(allowed))})"
+                )
 
     return errors
 

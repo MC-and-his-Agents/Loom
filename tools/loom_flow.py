@@ -46,6 +46,14 @@ TERMINAL_CHECKPOINTS = {
     "archived",
 }
 
+RUNTIME_EVIDENCE_FIELDS = (
+    "run_entry",
+    "logs_entry",
+    "diagnostics_entry",
+    "verification_entry",
+    "lane_entry",
+)
+
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Loom daily execution checks against a target repository.")
@@ -75,6 +83,24 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     purity.add_argument("--target", required=True, help="Target repository root")
     purity.add_argument("--item", help="Expected current item id")
     purity.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+
+    fact_chain = subparsers.add_parser("fact-chain", help="Read and validate the Loom fact chain")
+    fact_chain.add_argument("--target", required=True, help="Target repository root")
+    fact_chain.add_argument("--item", help="Expected current item id")
+    fact_chain.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+
+    runtime = subparsers.add_parser("runtime-evidence", help="Read runtime evidence from the Loom fact chain")
+    runtime.add_argument("--target", required=True, help="Target repository root")
+    runtime.add_argument("--item", help="Expected current item id")
+    runtime.add_argument(
         "--output",
         default=".loom/bootstrap/init-result.json",
         help="Init-result path relative to the target root",
@@ -269,13 +295,9 @@ def dirty_paths_by_owner(target_root: Path) -> tuple[list[str], list[str]]:
 
 
 def load_context(target_root: Path, output_relative: str, expected_item: str | None) -> tuple[dict[str, Any], list[str]]:
-    report, errors = inspect_fact_chain(target_root, output_relative)
-    if errors and all("Runtime Evidence" in message for message in errors):
-        report, errors = inspect_fact_chain_legacy(target_root, output_relative)
+    report, errors = load_fact_chain_report(target_root, output_relative)
     if errors:
         return {}, errors
-    if not report:
-        return {}, ["no fact-chain report was produced"]
 
     item_id = report["fact_chain"]["entry_points"]["current_item_id"]
     if expected_item and expected_item != item_id:
@@ -315,6 +337,17 @@ def load_context(target_root: Path, output_relative: str, expected_item: str | N
         "read_entry": str(report["fact_chain"]["read_entry"]),
     }
     return context, []
+
+
+def load_fact_chain_report(target_root: Path, output_relative: str) -> tuple[dict[str, Any], list[str]]:
+    report, errors = inspect_fact_chain(target_root, output_relative)
+    if errors and all("Runtime Evidence" in message for message in errors):
+        report, errors = inspect_fact_chain_legacy(target_root, output_relative)
+    if errors:
+        return {}, errors
+    if not report:
+        return {}, ["no fact-chain report was produced"]
+    return report, []
 
 
 def inspect_fact_chain_legacy(target_root: Path, output_relative: str) -> tuple[dict[str, Any], list[str]]:
@@ -901,8 +934,122 @@ def handle_purity(args: argparse.Namespace) -> int:
     return emit(payload)
 
 
+def handle_fact_chain(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    report, errors = load_fact_chain_report(target_root, args.output)
+    if errors:
+        return emit(
+            {
+                "command": "fact-chain",
+                "result": "block",
+                "summary": "fact-chain command could not read a valid Loom fact chain.",
+                "missing_inputs": [f"fact-chain: {message}" for message in errors],
+                "fallback_to": "admission",
+            }
+        )
+
+    item_id = report["fact_chain"]["entry_points"]["current_item_id"]
+    if args.item and args.item != item_id:
+        return emit(
+            {
+                "command": "fact-chain",
+                "result": "block",
+                "summary": "fact-chain command found an item mismatch.",
+                "missing_inputs": [f"current item mismatch: expected `{args.item}`, got `{item_id}`"],
+                "fallback_to": "admission",
+            }
+        )
+
+    return emit(
+        {
+            "command": "fact-chain",
+            "result": "pass",
+            "summary": "fact chain can be read and validated from a single entry.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "report": report,
+        }
+    )
+
+
+def handle_runtime_evidence(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    report, errors = load_fact_chain_report(target_root, args.output)
+    if errors:
+        return emit(
+            {
+                "command": "runtime-evidence",
+                "result": "block",
+                "summary": "runtime-evidence command could not read a valid Loom fact chain.",
+                "missing_inputs": [f"fact-chain: {message}" for message in errors],
+                "fallback_to": "admission",
+            }
+        )
+
+    item_id = report["fact_chain"]["entry_points"]["current_item_id"]
+    if args.item and args.item != item_id:
+        return emit(
+            {
+                "command": "runtime-evidence",
+                "result": "block",
+                "summary": "runtime-evidence command found an item mismatch.",
+                "missing_inputs": [f"current item mismatch: expected `{args.item}`, got `{item_id}`"],
+                "fallback_to": "admission",
+            }
+        )
+
+    runtime_evidence = report.get("runtime_evidence")
+    missing_inputs: list[str] = []
+    fields: dict[str, Any] = {}
+    if not isinstance(runtime_evidence, dict):
+        missing_inputs.append("runtime_evidence is missing from fact-chain report")
+    else:
+        for key in RUNTIME_EVIDENCE_FIELDS:
+            entry = runtime_evidence.get(key)
+            if not isinstance(entry, dict):
+                missing_inputs.append(f"runtime_evidence.{key} is missing")
+                continue
+            value = entry.get("value")
+            status = entry.get("status")
+            if not isinstance(value, str) or not value.strip():
+                missing_inputs.append(f"runtime_evidence.{key}.value must be a non-empty string")
+            if status not in {"present", "not_applicable"}:
+                missing_inputs.append(f"runtime_evidence.{key}.status must be `present` or `not_applicable`")
+            elif status == "present" and value == "not_applicable":
+                missing_inputs.append(f"runtime_evidence.{key} is `present` but uses `not_applicable`")
+            elif status == "not_applicable" and value != "not_applicable":
+                missing_inputs.append(f"runtime_evidence.{key} is `not_applicable` but value is `{value}`")
+            fields[key] = {
+                "value": value,
+                "status": status,
+                "source": entry.get("source"),
+            }
+
+    result = "pass" if not missing_inputs else "block"
+    summary = (
+        "runtime evidence entries are readable and distinguish `present` from `not_applicable`."
+        if result == "pass"
+        else "runtime evidence entries are incomplete or inconsistent."
+    )
+    return emit(
+        {
+            "command": "runtime-evidence",
+            "item_id": item_id,
+            "result": result,
+            "summary": summary,
+            "missing_inputs": missing_inputs,
+            "fallback_to": "admission" if missing_inputs else None,
+            "runtime_evidence": fields,
+        }
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
+    if args.command == "fact-chain":
+        return handle_fact_chain(args)
+    if args.command == "runtime-evidence":
+        return handle_runtime_evidence(args)
     if args.command == "checkpoint":
         return handle_checkpoint(args)
     if args.command == "workspace":

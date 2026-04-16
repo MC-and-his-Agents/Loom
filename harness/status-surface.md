@@ -113,3 +113,8 @@ Loom 固化的是“可读取、可验证”的能力目标，不固化具体可
 - 状态面若展示的 `next_step`、`blockers`、`latest_validation_summary` 与恢复主入口不一致，应视为事实链断裂
 - `Runtime Evidence` 的 5 个字段必须全部出现；不允许用“缺字段”表达不适用
 - 运行时证据入口不等于完整 observability 平台设计；本文件只要求最小可读入口
+
+当前仓库中的统一读取入口包括：
+
+- `python3 tools/loom_init.py fact-chain --target <repo>`
+- `python3 tools/loom_flow.py runtime-evidence --target <repo> [--item <id>]`
