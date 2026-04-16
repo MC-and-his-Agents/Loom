@@ -15,6 +15,7 @@
 | `bootstrap` | `python3 tools/loom_init.py bootstrap --target <repo>` | intake + 仓库信号 | 初始化结果 JSON + 首批工件 | `skills/loom-init` 负责路由，CLI 负责落盘 |
 | `verify` | `python3 tools/loom_init.py verify --target <repo>` | init-result + fact-chain + flow 子命令 | `ok` / `errors` | 核验初始化产物与入口可读性 |
 | `fact-chain` | `python3 tools/loom_flow.py fact-chain --target <repo> [--item <id>]` | 单一事实链 | `pass` / `block` | 日常统一读取入口 |
+| `pre-review`（统一高频入口） | `python3 tools/loom_flow.py flow pre-review --target <repo> [--item <id>]` | fact-chain + state-check + runtime evidence + admission + workspace locate | `pass` / `block` / `fallback` | 第一版聚焦 review 前高频检查流 |
 | `checkpoint` | `python3 tools/loom_flow.py checkpoint <admission\\|build\\|merge> --target <repo> [--item <id>]` | fact-chain + purity + merge 放行材料 | `pass` / `block` / `fallback` | `merge` 可额外消费 PR 模板 |
 | `resume` | 恢复主入口 + execution-context 读取顺序 | work item + recovery entry + status-surface | 可继续执行的下一步上下文 | 语义落点在 `recovery-model.md` |
 | `handoff` | 恢复主入口回写 + 状态面同步 | 当前停点/下一步/阻断项/验证摘要 | 可移交的恢复状态 | 不新增第二套 authored 状态 |

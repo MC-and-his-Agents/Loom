@@ -106,6 +106,28 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Init-result path relative to the target root",
     )
 
+    state = subparsers.add_parser(
+        "state-check",
+        help="Check active-state consistency, checkpoint completeness, and scope overflow signals",
+    )
+    state.add_argument("--target", required=True, help="Target repository root")
+    state.add_argument("--item", help="Expected current item id")
+    state.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+
+    flow = subparsers.add_parser("flow", help="Run a bundled high-frequency Loom flow")
+    flow.add_argument("operation", choices=("pre-review",))
+    flow.add_argument("--target", required=True, help="Target repository root")
+    flow.add_argument("--item", help="Expected current item id")
+    flow.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+
     return parser.parse_args(argv)
 
 
@@ -1017,6 +1039,37 @@ def handle_fact_chain(args: argparse.Namespace) -> int:
     )
 
 
+def runtime_evidence_from_report(report: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    runtime_evidence = report.get("runtime_evidence")
+    missing_inputs: list[str] = []
+    fields: dict[str, Any] = {}
+    if not isinstance(runtime_evidence, dict):
+        missing_inputs.append("runtime_evidence is missing from fact-chain report")
+        return fields, missing_inputs
+
+    for key in RUNTIME_EVIDENCE_FIELDS:
+        entry = runtime_evidence.get(key)
+        if not isinstance(entry, dict):
+            missing_inputs.append(f"runtime_evidence.{key} is missing")
+            continue
+        value = entry.get("value")
+        status = entry.get("status")
+        if not isinstance(value, str) or not value.strip():
+            missing_inputs.append(f"runtime_evidence.{key}.value must be a non-empty string")
+        if status not in {"present", "not_applicable"}:
+            missing_inputs.append(f"runtime_evidence.{key}.status must be `present` or `not_applicable`")
+        elif status == "present" and value == "not_applicable":
+            missing_inputs.append(f"runtime_evidence.{key} is `present` but uses `not_applicable`")
+        elif status == "not_applicable" and value != "not_applicable":
+            missing_inputs.append(f"runtime_evidence.{key} is `not_applicable` but value is `{value}`")
+        fields[key] = {
+            "value": value,
+            "status": status,
+            "source": entry.get("source"),
+        }
+    return fields, missing_inputs
+
+
 def handle_runtime_evidence(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
     report, errors = load_fact_chain_report(target_root, args.output)
@@ -1043,32 +1096,7 @@ def handle_runtime_evidence(args: argparse.Namespace) -> int:
             }
         )
 
-    runtime_evidence = report.get("runtime_evidence")
-    missing_inputs: list[str] = []
-    fields: dict[str, Any] = {}
-    if not isinstance(runtime_evidence, dict):
-        missing_inputs.append("runtime_evidence is missing from fact-chain report")
-    else:
-        for key in RUNTIME_EVIDENCE_FIELDS:
-            entry = runtime_evidence.get(key)
-            if not isinstance(entry, dict):
-                missing_inputs.append(f"runtime_evidence.{key} is missing")
-                continue
-            value = entry.get("value")
-            status = entry.get("status")
-            if not isinstance(value, str) or not value.strip():
-                missing_inputs.append(f"runtime_evidence.{key}.value must be a non-empty string")
-            if status not in {"present", "not_applicable"}:
-                missing_inputs.append(f"runtime_evidence.{key}.status must be `present` or `not_applicable`")
-            elif status == "present" and value == "not_applicable":
-                missing_inputs.append(f"runtime_evidence.{key} is `present` but uses `not_applicable`")
-            elif status == "not_applicable" and value != "not_applicable":
-                missing_inputs.append(f"runtime_evidence.{key} is `not_applicable` but value is `{value}`")
-            fields[key] = {
-                "value": value,
-                "status": status,
-                "source": entry.get("source"),
-            }
+    fields, missing_inputs = runtime_evidence_from_report(report)
 
     result = "pass" if not missing_inputs else "block"
     summary = (
@@ -1089,12 +1117,243 @@ def handle_runtime_evidence(args: argparse.Namespace) -> int:
     )
 
 
+def state_check_payload(context: dict[str, Any]) -> dict[str, Any]:
+    purity = purity_report_from_context(context)
+    active_state_failures: list[str] = []
+    checkpoint_failures: list[str] = []
+    scope_failures: list[str] = []
+
+    current_checkpoint = context["current_checkpoint"]
+    if current_checkpoint in TERMINAL_CHECKPOINTS:
+        active_state_failures.append(f"current checkpoint is terminal: `{current_checkpoint}`")
+
+    active_conflicts = active_workspace_conflicts(context["target_root"], context["item_id"], context["workspace_entry"])
+    if active_conflicts:
+        active_state_failures.append(
+            "workspace is shared by multiple active items: " + ", ".join(sorted(active_conflicts))
+        )
+
+    known_checkpoints = {"admission", "build", "merge", "retired"} | TERMINAL_CHECKPOINTS
+    if current_checkpoint not in known_checkpoints:
+        checkpoint_failures.append(f"unknown checkpoint value: `{context['current_checkpoint_raw']}`")
+    if current_checkpoint in {"admission", "build", "merge"}:
+        for field_name in ("current_stop", "next_step", "latest_validation_summary", "recovery_boundary", "current_lane"):
+            value = str(context[field_name]).strip()
+            if not value:
+                checkpoint_failures.append(f"checkpoint integrity missing `{field_name}`")
+
+    scope_assessment = purity.get("scope_assessment")
+    if isinstance(scope_assessment, dict):
+        out_of_scope_changes = scope_assessment.get("out_of_scope_changes")
+        if isinstance(out_of_scope_changes, list) and out_of_scope_changes:
+            preview = ", ".join(out_of_scope_changes[:5])
+            scope_failures.append(f"out-of-scope changes detected: {preview}")
+
+    missing_inputs: list[str] = []
+    for collection in (purity["hard_failures"], active_state_failures, checkpoint_failures, scope_failures):
+        for message in collection:
+            if message not in missing_inputs:
+                missing_inputs.append(message)
+
+    result = "pass" if not missing_inputs else "block"
+    summary = (
+        "active state, checkpoint integrity, and scope signals are consistent."
+        if result == "pass"
+        else "state-check found active-state conflicts, checkpoint gaps, or scope overflow signals."
+    )
+    return {
+        "command": "state-check",
+        "item": {
+            "id": context["item_id"],
+            "goal": context["goal"],
+            "scope": context["scope"],
+            "execution_path": context["execution_path"],
+        },
+        "checkpoint": {
+            "raw": context["current_checkpoint_raw"],
+            "normalized": current_checkpoint,
+        },
+        "workspace": {
+            "entry": context["workspace_entry"],
+            "path": relative_to_root(context["workspace_path"], context["target_root"]),
+        },
+        "checks": {
+            "active_state_failures": active_state_failures,
+            "checkpoint_failures": checkpoint_failures,
+            "scope_failures": scope_failures,
+        },
+        "purity": purity,
+        "result": result,
+        "summary": summary,
+        "missing_inputs": missing_inputs,
+        "fallback_to": "admission" if missing_inputs else None,
+    }
+
+
+def handle_state_check(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    context, errors = load_context(target_root, args.output, args.item)
+    if errors:
+        return emit(
+            {
+                "command": "state-check",
+                "result": "block",
+                "summary": "state-check could not read a valid Loom fact chain.",
+                "missing_inputs": [f"fact-chain: {message}" for message in errors],
+                "fallback_to": "admission",
+            }
+        )
+    return emit(state_check_payload(context))
+
+
+def handle_flow(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    context, errors = load_context(target_root, args.output, args.item)
+    if errors:
+        return emit(
+            {
+                "command": "flow",
+                "operation": args.operation,
+                "result": "block",
+                "summary": "flow command could not read a valid Loom fact chain.",
+                "missing_inputs": [f"fact-chain: {message}" for message in errors],
+                "fallback_to": "admission",
+                "steps": [],
+            }
+        )
+
+    if args.operation != "pre-review":
+        return emit(
+            {
+                "command": "flow",
+                "operation": args.operation,
+                "result": "block",
+                "summary": f"unsupported flow operation: {args.operation}",
+                "missing_inputs": [f"unsupported operation: {args.operation}"],
+                "fallback_to": None,
+                "steps": [],
+            }
+        )
+
+    steps: list[dict[str, Any]] = []
+    steps.append(
+        {
+            "name": "fact-chain",
+            "result": "pass",
+            "summary": "fact chain is readable from a single entry.",
+            "missing_inputs": [],
+            "fallback_to": None,
+        }
+    )
+
+    state_payload = state_check_payload(context)
+    steps.append(
+        {
+            "name": "state-check",
+            "result": state_payload["result"],
+            "summary": state_payload["summary"],
+            "missing_inputs": state_payload["missing_inputs"],
+            "fallback_to": state_payload["fallback_to"],
+        }
+    )
+
+    runtime_fields, runtime_missing = runtime_evidence_from_report(context["report"])
+    runtime_result = "pass" if not runtime_missing else "block"
+    steps.append(
+        {
+            "name": "runtime-evidence",
+            "result": runtime_result,
+            "summary": (
+                "runtime evidence entries are readable."
+                if runtime_result == "pass"
+                else "runtime evidence entries are incomplete or inconsistent."
+            ),
+            "missing_inputs": runtime_missing,
+            "fallback_to": "admission" if runtime_missing else None,
+            "runtime_evidence": runtime_fields,
+        }
+    )
+
+    admission_payload = checkpoint_payload("admission", context)
+    steps.append(
+        {
+            "name": "checkpoint-admission",
+            "result": admission_payload["result"],
+            "summary": admission_payload["summary"],
+            "missing_inputs": admission_payload["missing_inputs"],
+            "fallback_to": admission_payload["fallback_to"],
+        }
+    )
+
+    locate_payload = base_workspace_payload(context, "locate")
+    locate_result = "pass" if not locate_payload["purity"]["hard_failures"] else "block"
+    steps.append(
+        {
+            "name": "workspace-locate",
+            "result": locate_result,
+            "summary": (
+                "workspace is location-resolved and execution-ready."
+                if locate_result == "pass"
+                else "workspace is location-resolved but not execution-ready."
+            ),
+            "missing_inputs": list(locate_payload["purity"]["hard_failures"]),
+            "fallback_to": "admission" if locate_payload["purity"]["hard_failures"] else None,
+        }
+    )
+
+    result = "pass"
+    fallback_to: str | None = None
+    for step in steps:
+        step_result = step["result"]
+        if step_result == "fallback":
+            result = "fallback"
+            fallback_to = step.get("fallback_to") or "admission"
+            break
+        if step_result == "block" and result == "pass":
+            result = "block"
+            fallback_to = step.get("fallback_to")
+
+    summary = (
+        "pre-review flow is ready to proceed."
+        if result == "pass"
+        else "pre-review flow found blocking signals before review."
+    )
+    missing_inputs: list[str] = []
+    for step in steps:
+        if step["result"] in {"block", "fallback"}:
+            for message in step.get("missing_inputs", []):
+                if message not in missing_inputs:
+                    missing_inputs.append(message)
+
+    return emit(
+        {
+            "command": "flow",
+            "operation": "pre-review",
+            "item": {
+                "id": context["item_id"],
+                "goal": context["goal"],
+                "scope": context["scope"],
+                "execution_path": context["execution_path"],
+            },
+            "result": result,
+            "summary": summary,
+            "missing_inputs": missing_inputs,
+            "fallback_to": fallback_to,
+            "steps": steps,
+        }
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     if args.command == "fact-chain":
         return handle_fact_chain(args)
     if args.command == "runtime-evidence":
         return handle_runtime_evidence(args)
+    if args.command == "state-check":
+        return handle_state_check(args)
+    if args.command == "flow":
+        return handle_flow(args)
     if args.command == "checkpoint":
         return handle_checkpoint(args)
     if args.command == "workspace":

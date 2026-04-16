@@ -61,3 +61,5 @@ Loom 当前至少要求以下纯度：
   - `out_of_scope_changes`
 
 当 `scope_assessment.mode` 为 `constrained` 且出现 `out_of_scope_changes` 时，应视为范围越界阻断信号。
+
+`python3 tools/loom_flow.py state-check --target <repo> [--item <id>]` 会复用同一纯度结果，并额外检查活跃状态与 checkpoint 完整性。

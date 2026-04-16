@@ -163,6 +163,8 @@ Loom 的执行内核目标，不是长期停留在“最小可执行”层面，
 - 事实链读取入口可通过 `python3 tools/loom_init.py fact-chain --target <repo>` 运行
 - 日常事实读取入口可通过 `python3 tools/loom_flow.py fact-chain --target <repo>` 运行
 - 运行时证据读取入口可通过 `python3 tools/loom_flow.py runtime-evidence --target <repo>` 运行
+- 状态一致性检查入口可通过 `python3 tools/loom_flow.py state-check --target <repo>` 运行
+- 高频预检统一入口可通过 `python3 tools/loom_flow.py flow pre-review --target <repo>` 运行
 - 日常执行入口可通过 `python3 tools/loom_flow.py <...>` 运行
 - 新项目 demo 可通过 `make loom-demo-new-project` 复验
 
