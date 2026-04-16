@@ -8,7 +8,6 @@
     "version_source": "skills/registry.json",
     "refresh_required": [
       "registry",
-      "root_entry",
       "manifest",
       "executable",
       "referenced_resources"

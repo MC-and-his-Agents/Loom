@@ -22,7 +22,8 @@
     "required_sections": [
       "result",
       "blocking_reasons",
-      "fallback_target"
+      "fallback_target",
+      "latest_validation_summary"
     ]
   },
   "routing": {

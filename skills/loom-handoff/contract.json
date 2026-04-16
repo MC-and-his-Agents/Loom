@@ -26,7 +26,8 @@
       "current_stop",
       "next_step",
       "blockers",
-      "latest_validation_summary"
+      "latest_validation_summary",
+      "fallback_target"
     ]
   },
   "routing": {

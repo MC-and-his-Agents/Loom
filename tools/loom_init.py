@@ -51,7 +51,8 @@ SKILL_SIGNAL_RULES: dict[str, tuple[str, ...]] = {
         "retrofit",
         "adopt",
         "adoption",
-        "bootstrap",
+        "bootstrap loom",
+        "bootstrap the repo",
         "接入 loom",
         "引入 loom",
     ),
@@ -61,7 +62,8 @@ SKILL_SIGNAL_RULES: dict[str, tuple[str, ...]] = {
         "继续推进",
         "问下一步",
         "resume",
-        "continue",
+        "resume the current item",
+        "continue the current item",
         "next step",
     ),
     "loom-pre-review": (
@@ -78,15 +80,15 @@ SKILL_SIGNAL_RULES: dict[str, tuple[str, ...]] = {
         "移交当前事项",
         "handoff",
         "hand off",
-        "transfer",
+        "transfer the current item",
     ),
     "loom-retire": (
         "清理现场",
         "退休现场",
         "结束当前事项现场",
         "retire",
-        "cleanup",
-        "clean up",
+        "cleanup the workspace",
+        "clean up the workspace",
     ),
     "loom-merge-ready": (
         "merge-ready",
@@ -96,6 +98,8 @@ SKILL_SIGNAL_RULES: dict[str, tuple[str, ...]] = {
         "merge 前",
         "pre-merge",
         "pre merge",
+        "合并前检查",
+        "可以合并",
     ),
 }
 
@@ -189,7 +193,7 @@ def available_skill_ids() -> tuple[str, ...]:
         try:
             registry = read_json(registry_path)
         except json.JSONDecodeError:
-            registry = {}
+            return ("loom-init",)
         entries = registry.get("entries")
         if isinstance(entries, list):
             skill_ids = [

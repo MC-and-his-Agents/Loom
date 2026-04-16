@@ -355,6 +355,15 @@ def load_command_json(
 
 def check_skill_manifests(root: Path) -> list[Failure]:
     failures: list[Failure] = []
+    expected_entries = {
+        "loom-init": "bootstrap/root",
+        "loom-adopt": "scenario/adopt",
+        "loom-resume": "scenario/resume",
+        "loom-pre-review": "scenario/pre-review",
+        "loom-handoff": "scenario/handoff",
+        "loom-retire": "scenario/retire",
+        "loom-merge-ready": "scenario/merge-ready",
+    }
     registry_path = root / "skills/registry.json"
     upgrade_contract_path = root / "skills/upgrade-contract.json"
 
@@ -410,6 +419,11 @@ def check_skill_manifests(root: Path) -> list[Failure]:
         seen_ids.add(entry_id)
         if entry_id == root_entry:
             root_registry_entry = entry
+        expected_role = expected_entries.get(entry_id)
+        if expected_role is None:
+            failures.append(Failure("skill-manifests", f"registry declares unexpected entry `{entry_id}`"))
+        elif entry.get("role") != expected_role:
+            failures.append(Failure("skill-manifests", f"registry entry `{entry_id}` must declare role `{expected_role}`"))
 
         for field in ("role", "contract_version", "manifest", "executable"):
             value = entry.get(field)
@@ -498,6 +512,13 @@ def check_skill_manifests(root: Path) -> list[Failure]:
     if root_registry_entry is None:
         failures.append(Failure("skill-manifests", f"`skills/registry.json` root entry `{root_entry}` does not match any declared entry"))
         return failures
+    if seen_ids != set(expected_entries):
+        missing = sorted(set(expected_entries) - seen_ids)
+        extra = sorted(seen_ids - set(expected_entries))
+        if missing:
+            failures.append(Failure("skill-manifests", f"registry is missing first-wave entries: {', '.join(missing)}"))
+        if extra:
+            failures.append(Failure("skill-manifests", f"registry contains unexpected first-wave entries: {', '.join(extra)}"))
     if upgrade_reference != "upgrade-contract.json":
         failures.append(Failure("skill-manifests", "`skills/registry.json` must point to `upgrade-contract.json`"))
 
@@ -518,8 +539,8 @@ def check_skill_manifests(root: Path) -> list[Failure]:
                 "`skills/upgrade-contract.json` current contract version must match the registry entry version",
             )
         )
-    if not isinstance(upgrade_policy, dict):
-        failures.append(Failure("skill-manifests", "`skills/upgrade-contract.json` must declare `upgrade_policy`"))
+        if not isinstance(upgrade_policy, dict):
+            failures.append(Failure("skill-manifests", "`skills/upgrade-contract.json` must declare `upgrade_policy`"))
     else:
         if upgrade_policy.get("mode") != "explicit":
             failures.append(Failure("skill-manifests", "`upgrade_policy.mode` must be `explicit`"))
@@ -527,9 +548,9 @@ def check_skill_manifests(root: Path) -> list[Failure]:
         if not isinstance(refresh_required, list) or not refresh_required:
             failures.append(Failure("skill-manifests", "`upgrade_policy.refresh_required` must be a non-empty list"))
         else:
-            required = {"registry", "root_entry", "manifest", "executable", "referenced_resources"}
+            required = {"registry", "manifest", "executable", "referenced_resources"}
             if not required.issubset(set(refresh_required)):
-                failures.append(Failure("skill-manifests", "`upgrade_policy.refresh_required` must cover registry, root_entry, manifest, executable, and referenced_resources"))
+                failures.append(Failure("skill-manifests", "`upgrade_policy.refresh_required` must cover registry, manifest, executable, and referenced_resources"))
 
     return failures
 
@@ -541,15 +562,17 @@ def check_skill_routing(root: Path) -> list[Failure]:
     if not tool_path.exists() or not target.exists():
         return failures
 
-    explicit_skills = (
-        "loom-init",
-        "loom-adopt",
-        "loom-resume",
-        "loom-pre-review",
-        "loom-handoff",
-        "loom-retire",
-        "loom-merge-ready",
-    )
+    registry = load_json_file(root / "skills/registry.json")
+    if not isinstance(registry, dict):
+        return failures
+    entries = registry.get("entries")
+    if not isinstance(entries, list):
+        return failures
+    explicit_skills = [
+        entry.get("id")
+        for entry in entries
+        if isinstance(entry, dict) and isinstance(entry.get("id"), str) and entry.get("id")
+    ]
     for skill_id in explicit_skills:
         payload, error = load_command_json(
             root,
@@ -558,12 +581,22 @@ def check_skill_routing(root: Path) -> list[Failure]:
         if error:
             failures.append(Failure("skill-routing", f"explicit route for `{skill_id}` failed: {error}"))
             continue
+        if payload.get("command") != "route":
+            failures.append(Failure("skill-routing", f"explicit route for `{skill_id}` must report `command: route`"))
         if payload.get("result") != "pass":
             failures.append(Failure("skill-routing", f"explicit route for `{skill_id}` must pass"))
         if payload.get("selected_skill") != skill_id:
             failures.append(Failure("skill-routing", f"explicit route for `{skill_id}` selected `{payload.get('selected_skill')}`"))
         if payload.get("mode") != "explicit":
             failures.append(Failure("skill-routing", f"explicit route for `{skill_id}` must report `mode: explicit`"))
+        if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+            failures.append(Failure("skill-routing", f"explicit route for `{skill_id}` must include `summary`"))
+        if not isinstance(payload.get("matched_signals"), list):
+            failures.append(Failure("skill-routing", f"explicit route for `{skill_id}` must include `matched_signals`"))
+        if not isinstance(payload.get("missing_inputs"), list):
+            failures.append(Failure("skill-routing", f"explicit route for `{skill_id}` must include `missing_inputs`"))
+        if payload.get("fallback_to") != "loom-init":
+            failures.append(Failure("skill-routing", f"explicit route for `{skill_id}` must keep `fallback_to: loom-init`"))
 
     implicit_cases = (
         ("请初始化这个新项目并接入 Loom", "loom-adopt"),
@@ -581,12 +614,20 @@ def check_skill_routing(root: Path) -> list[Failure]:
         if error:
             failures.append(Failure("skill-routing", f"implicit route for `{skill_id}` failed: {error}"))
             continue
+        if payload.get("command") != "route":
+            failures.append(Failure("skill-routing", f"implicit route for `{skill_id}` must report `command: route`"))
         if payload.get("result") != "pass":
             failures.append(Failure("skill-routing", f"implicit route for `{skill_id}` must pass"))
         if payload.get("selected_skill") != skill_id:
             failures.append(Failure("skill-routing", f"implicit route for `{skill_id}` selected `{payload.get('selected_skill')}`"))
         if payload.get("mode") != "implicit":
             failures.append(Failure("skill-routing", f"implicit route for `{skill_id}` must report `mode: implicit`"))
+        if not isinstance(payload.get("matched_signals"), list) or not payload.get("matched_signals"):
+            failures.append(Failure("skill-routing", f"implicit route for `{skill_id}` must include matched signals"))
+        if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+            failures.append(Failure("skill-routing", f"implicit route for `{skill_id}` must include `summary`"))
+        if payload.get("fallback_to") != "loom-init":
+            failures.append(Failure("skill-routing", f"implicit route for `{skill_id}` must keep `fallback_to: loom-init`"))
 
     fallback_payload, error = load_command_json(
         root,
@@ -599,6 +640,42 @@ def check_skill_routing(root: Path) -> list[Failure]:
             failures.append(Failure("skill-routing", "ambiguous task must return `fallback`"))
         if fallback_payload.get("selected_skill") != "loom-init":
             failures.append(Failure("skill-routing", "fallback route must select `loom-init`"))
+        if not isinstance(fallback_payload.get("missing_inputs"), list) or not fallback_payload.get("missing_inputs"):
+            failures.append(Failure("skill-routing", "fallback route must include `missing_inputs`"))
+
+    ambiguous_payload, error = load_command_json(
+        root,
+        [
+            "python3",
+            "tools/loom_init.py",
+            "route",
+            "--target",
+            "examples/new-project",
+            "--task",
+            "请接手当前事项并在 review 前检查",
+        ],
+    )
+    if error:
+        failures.append(Failure("skill-routing", f"ambiguous route failed: {error}"))
+    else:
+        if ambiguous_payload.get("result") != "fallback":
+            failures.append(Failure("skill-routing", "multi-match task must return `fallback`"))
+        if ambiguous_payload.get("selected_skill") != "loom-init":
+            failures.append(Failure("skill-routing", "multi-match route must select `loom-init`"))
+        if not isinstance(ambiguous_payload.get("matched_signals"), list) or len(ambiguous_payload.get("matched_signals", [])) < 2:
+            failures.append(Failure("skill-routing", "multi-match route must expose matched signals"))
+
+    unknown_payload, error = load_command_json(
+        root,
+        ["python3", "tools/loom_init.py", "route", "--target", "examples/new-project", "--skill", "not-a-skill"],
+    )
+    if error:
+        failures.append(Failure("skill-routing", f"unknown explicit route failed: {error}"))
+    else:
+        if unknown_payload.get("result") != "block":
+            failures.append(Failure("skill-routing", "unknown explicit skill must block"))
+        if unknown_payload.get("selected_skill") != "loom-init":
+            failures.append(Failure("skill-routing", "unknown explicit skill must fall back to `loom-init`"))
 
     return failures
 

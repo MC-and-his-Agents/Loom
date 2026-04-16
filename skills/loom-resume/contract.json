@@ -23,9 +23,11 @@
     "required_sections": [
       "active_item",
       "workspace_entry",
+      "recovery_entry",
       "current_checkpoint",
       "next_step",
-      "blockers"
+      "blockers",
+      "latest_validation_summary"
     ]
   },
   "routing": {
