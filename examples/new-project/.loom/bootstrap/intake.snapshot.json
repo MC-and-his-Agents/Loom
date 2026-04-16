@@ -1,0 +1,13 @@
+{
+  "schema_version": "loom-init-intake/v1",
+  "repository_type": "new",
+  "root_boundary_docs": "missing",
+  "ci_or_basic_tests": false,
+  "repository_level_validation_entry": false,
+  "primary_gap_category": "governance",
+  "long_running_recovery_pain": false,
+  "shared_contract_or_high_risk_boundary": false,
+  "purity_or_scope_signals": "clean",
+  "merge_review_semantic_overload": false,
+  "notes": "autodetected by loom_init.py"
+}

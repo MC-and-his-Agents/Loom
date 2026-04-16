@@ -1,0 +1,63 @@
+{
+  "id": "loom-init",
+  "role": "bootstrap/root",
+  "contract_version": "1.1.0",
+  "display_name": "Loom Init",
+  "description": "Analyze a target repository, select the right Loom adoption path, and produce the first executable initialization output.",
+  "root_entry": true,
+  "entrypoint": {
+    "skill_markdown": "SKILL.md",
+    "adapter_metadata": "agents/openai.yaml",
+    "bootstrap_cli": "../../tools/loom_init.py"
+  },
+  "input_contract": {
+    "reference": "references/intake-signals.md",
+    "required_fields": [
+      "repository_type",
+      "root_boundary_docs",
+      "ci_or_basic_tests",
+      "repository_level_validation_entry",
+      "primary_gap_category",
+      "long_running_recovery_pain",
+      "shared_contract_or_high_risk_boundary",
+      "purity_or_scope_signals",
+      "merge_review_semantic_overload"
+    ]
+  },
+  "output_contract": {
+    "reference": "references/output-contract.md",
+    "required_sections": [
+      "project_judgment",
+      "recommended_adoption",
+      "deferred_capabilities",
+      "fact_chain",
+      "initial_artifacts",
+      "initial_work_items",
+      "validation_and_closing"
+    ]
+  },
+  "artifact_mapping": {
+    "rules": [
+      "../governance",
+      "../harness",
+      "../templates",
+      "../adoption"
+    ],
+    "skill_refs": [
+      "references/intake-signals.md",
+      "references/output-contract.md"
+    ],
+    "default_targets": [
+      ".loom/bootstrap/init-result.json",
+      ".loom/work-items/INIT-0001.md",
+      ".loom/progress/INIT-0001.md",
+      ".loom/status/current.md",
+      ".loom/specs/INIT-0001/spec.md",
+      ".loom/specs/INIT-0001/plan.md"
+    ]
+  },
+  "installation": {
+    "registry": "../registry.json",
+    "upgrade_contract": "../upgrade-contract.json"
+  }
+}

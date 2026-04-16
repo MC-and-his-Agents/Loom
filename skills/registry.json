@@ -1,0 +1,14 @@
+{
+  "registry_version": "1.1.0",
+  "root_entry": "loom-init",
+  "upgrade_contract": "upgrade-contract.json",
+  "entries": [
+    {
+      "id": "loom-init",
+      "role": "bootstrap/root",
+      "contract_version": "1.1.0",
+      "manifest": "loom-init/contract.json",
+      "executable": "../tools/loom_init.py"
+    }
+  ]
+}

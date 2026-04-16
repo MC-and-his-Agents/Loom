@@ -1,0 +1,101 @@
+# Automation Frontload
+
+本文件定义 Loom 当前最小自动化前置规则。
+
+本文件当前承接：
+
+- `EXT-0009`
+- `EXT-0036`
+- `EXT-0041` 的 Loom 内核消费边界
+
+## 1. 能力定位
+
+能稳定机械判断的规则，应尽量前置到脚本、CI 或等价自动化入口。
+
+自动化前置负责降低重复人工判断，不负责替代语义审查。
+merge checkpoint 只消费这些结果，不把它们扩写成第一次高质量判断。
+
+## 2. 通用 core 检查矩阵
+
+| 检查类别 | 检查对象 | 失败含义 | 非目标 | 是否阻断 merge checkpoint |
+| --- | --- | --- | --- | --- |
+| 结构完整性 | 目录、命名、必备分区是否落位 | 当前仓库结构不满足 Loom 最小执行前提 | 不判断结构是否最优 | 是 |
+| 规则落点 | 关键规则是否存在唯一主落点 | 读者无法定位规则真相，或出现重复承接 | 不判断规则内容是否已经最优 | 是 |
+| 模板存在性 | 正式模板与必要字段是否存在 | 正式事项缺少承载结构，后续无法稳定消费 | 不判断模板示例是否覆盖全部业务场景 | 是 |
+| 交叉引用 | 关键文档与入口链接是否可达 | 执行链路在仓库中断裂，读取路径不可达 | 不判断引用后的内容质量 | 是 |
+| 纯度/越界信号 | 明显脏现场、无关改动、范围越界信号 | 当前执行材料不适合继续叠加或放行 | 不替代 reviewer 的语义审查 | 视严重度而定 |
+| 执行支撑入口存在性 | work item、恢复入口、验证入口、运行入口等是否可定位 | 仓库无法形成最小执行闭环 | 不判断入口实现强度是否已达最佳 | 是 |
+| checkpoint 入口存在性 | `admission`、`build`、`merge` 三类 checkpoint 入口是否可调用 | 放行链路不完整，无法按阶段消费事实链 | 不替代 checkpoint 的语义审查 | 是 |
+| 运行时证据可读性 | `Runtime Evidence` 五字段是否可读且可区分 `not_applicable` | 验证摘要不可复核，merge 消费不到稳定证据 | 不判断证据内容是否已经最优 | 是 |
+| workspace lifecycle 入口存在性 | `create`、`locate`、`cleanup`、`retire` 与 `purity-check` 是否可调用 | 现场治理不可机械执行，恢复与交接风险升高 | 不替代现场治理策略设计 | 是 |
+| 基础状态一致性 | checkpoint、下一步、阻断项、验证摘要是否相互对齐 | 当前状态不可读，恢复与放行会消费到冲突事实 | 不判断事项目标本身是否值得做 | 是 |
+| 事实链唯一性 | 静态真相、动态真相与派生读面是否各守边界 | 仓库出现并行记账或事实链断裂 | 不替代 reviewer 的方案判断 | 是 |
+
+这里的“执行支撑”包括初始化入口、恢复入口、验证入口、运行入口、checkpoint 入口以及 workspace lifecycle 入口等被正式规则要求的机械支撑。
+
+## 3. `skills` 触发与行为回归的候选矩阵
+
+`skills` 入口层的触发正确性与行为退化，属于 Loom 在 `EXT-0041` 下承接的候选型前置 / 回归验证面，不与通用 core 检查混写。
+
+| 候选检查面 | 最小目标 | 不进入 Loom 内核的内容 |
+| --- | --- | --- |
+| 显式触发 | 指定 skill 时能命中正确入口或 adapter | 宿主 CI 中的完整端到端脚本矩阵 |
+| 隐式触发 | 典型场景能路由到正确入口层能力 | 宿主特定 prompt 路由细节 |
+| 行为退化 | 入口层输出仍满足声明的最小职责 | 下游仓库的完整业务回归用例 |
+| adapter 失败可见性 | 失败时能暴露可读取错误入口 | 宿主内部监控产品或告警平台 |
+
+Loom 内核只定义这些检查面的边界，不内置宿主特定 CI、测试框架或 adapter 实现。
+
+## 3.1 当前仓库中的最小执行入口
+
+Loom 仓库当前通过以下入口承接最小 core 前置检查：
+
+- `make loom-check`
+- `python3 tools/loom_check.py`
+- `python3 tools/loom_init.py verify --target <repo>`
+- `python3 tools/loom_init.py fact-chain --target <repo>`
+- `python3 tools/loom_flow.py checkpoint <admission|build|merge> --target <repo> [--item <id>]`
+- `python3 tools/loom_flow.py workspace <create|locate|cleanup|retire> --target <repo> --item <id>`
+- `python3 tools/loom_flow.py purity-check --target <repo> [--item <id>]`
+
+当前脚本至少覆盖：
+
+- 结构完整性
+- 规则与核心落点存在性
+- 模板与入口资产存在性
+- Markdown 交叉引用可解析
+- `skills` 机读 root 合同的最小一致性
+- `skills` 升级协议与 bootstrap CLI 入口的一致性
+- demo 事实链 carrier 的唯一性与一致性
+- checkpoint 入口存在性与最小结果语义
+- 运行时证据五字段可读性与 `not_applicable` 判定
+- workspace lifecycle / purity-check 入口存在性
+
+GitHub Actions 工作流会复用同一入口，而不是维护第二套命令。
+
+最小接入 demo 则通过以下入口复验：
+
+- `make loom-demo-new-project`
+
+## 4. 不应错误前置的判断
+
+以下判断不应被伪装成全自动结论：
+
+- 目标是否值得做
+- 方案是否正确
+- 风险是否真正收口
+- 当前实现是否解决了正确问题
+
+## 5. 边界约束
+
+Loom 的自动化前置必须区分两类事情：
+
+- 机械判断交给机器
+- 语义判断保留给人、reviewer 或其他正式治理角色
+
+不允许：
+
+- 把可自动判断事项长期留给人工重复执行
+- 把需要语义判断的事项伪装成硬编码脚本结果
+- 把 `skills` 候选回归面误当成 Loom 默认 core 检查面
+- 允许 `work item`、恢复入口、状态面并行 authored 同一事实

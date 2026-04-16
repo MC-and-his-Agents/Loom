@@ -1,0 +1,202 @@
+{
+  "schema_version": "loom-init-output/v1",
+  "generator": {
+    "tool": "tools/loom_init.py",
+    "tool_version": "1.1.0",
+    "root_entry": "loom-init",
+    "contract_version": "1.1.0"
+  },
+  "run": {
+    "target": "/Users/mc/dev/Loom/examples/new-project",
+    "scenario": "新项目",
+    "scenario_key": "new",
+    "integration_mode": "root",
+    "recovery_mode": "checkpoint-lite"
+  },
+  "intake": {
+    "schema_version": "loom-init-intake/v1",
+    "repository_type": "new",
+    "root_boundary_docs": "missing",
+    "ci_or_basic_tests": false,
+    "repository_level_validation_entry": false,
+    "primary_gap_category": "governance",
+    "long_running_recovery_pain": false,
+    "shared_contract_or_high_risk_boundary": false,
+    "purity_or_scope_signals": "clean",
+    "merge_review_semantic_overload": false,
+    "notes": "autodetected by loom_init.py"
+  },
+  "project_judgment": {
+    "scenario": "新项目",
+    "intensity": "轻量",
+    "primary_structural_problem": "the repository has no controlled Loom entry yet",
+    "why_this_path": "the repo is still establishing its first baseline, so the bootstrap should create the smallest stable entry and first artifacts"
+  },
+  "recommended_adoption": {
+    "path": "minimal-bootstrap",
+    "integration_mode": "root",
+    "recovery_mode": "checkpoint-lite",
+    "capabilities": [
+      {
+        "name": "bootstrap/root",
+        "rules": [
+          "skills/loom-init/SKILL.md",
+          "skills/loom-init/references/intake-signals.md",
+          "skills/loom-init/references/output-contract.md"
+        ]
+      },
+      {
+        "name": "formal-templates",
+        "rules": [
+          "templates/spec-suite.md",
+          "templates/pull-request.md"
+        ]
+      },
+      {
+        "name": "minimal-governance-entry",
+        "rules": [
+          "governance/principles.md",
+          "governance/review-model.md"
+        ]
+      }
+    ]
+  },
+  "deferred_capabilities": [
+    {
+      "name": "full-status-surface",
+      "reason": "no runnable system or multi-lane environment is visible yet",
+      "upgrade_trigger": "a runtime lane, logs, metrics, or UI verification path becomes required"
+    },
+    {
+      "name": "merge-checkpoint-hardening",
+      "reason": "implementation has not entered regular merge flow yet",
+      "upgrade_trigger": "multiple contributors or repeated merge reviews begin to consume the same facts"
+    }
+  ],
+  "fact_chain": {
+    "mode": "work-item + recovery-entry + derived status-surface",
+    "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
+    "entry_points": {
+      "current_item_id": "INIT-0001",
+      "work_item": ".loom/work-items/INIT-0001.md",
+      "recovery_entry": ".loom/progress/INIT-0001.md",
+      "status_surface": ".loom/status/current.md"
+    }
+  },
+  "initial_artifacts": [
+    {
+      "path": "AGENTS.md",
+      "kind": "root-entry",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/README.md",
+      "kind": "rule-entry",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/bootstrap/intake.snapshot.json",
+      "kind": "intake",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/bootstrap/init-result.json",
+      "kind": "init-result",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/bootstrap/manifest.json",
+      "kind": "manifest",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/bootstrap/capability-map.md",
+      "kind": "capability-map",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/work-items/INIT-0001.md",
+      "kind": "work-item",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/progress/INIT-0001.md",
+      "kind": "progress",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/status/current.md",
+      "kind": "status-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/bin/loom_init.py",
+      "kind": "loom-tool",
+      "source": "tools/loom_init.py"
+    },
+    {
+      "path": ".loom/bin/fact_chain_support.py",
+      "kind": "loom-tool-support",
+      "source": "tools/fact_chain_support.py"
+    },
+    {
+      "path": ".loom/bin/loom_flow.py",
+      "kind": "loom-tool",
+      "source": "tools/loom_flow.py"
+    },
+    {
+      "path": ".loom/specs/INIT-0001/spec.md",
+      "kind": "spec",
+      "source": "templates/scaffold/spec.md"
+    },
+    {
+      "path": ".loom/specs/INIT-0001/plan.md",
+      "kind": "plan",
+      "source": "templates/scaffold/plan.md"
+    },
+    {
+      "path": ".github/PULL_REQUEST_TEMPLATE.md",
+      "kind": "pr-template",
+      "source": ".github/PULL_REQUEST_TEMPLATE.md"
+    }
+  ],
+  "initial_work_items": [
+    {
+      "id": "INIT-0001",
+      "goal": "Bootstrap the first executable Loom path for this repository",
+      "scope": "Establish rule entry, first work item, progress carrier, spec/plan, and verification entry",
+      "execution_path": "bootstrap/root",
+      "workspace_entry": ".",
+      "recovery_entry": ".loom/progress/INIT-0001.md",
+      "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
+      "artifacts": [
+        ".loom/bootstrap/init-result.json",
+        ".loom/work-items/INIT-0001.md",
+        ".loom/progress/INIT-0001.md",
+        ".loom/status/current.md",
+        ".loom/bin/loom_init.py",
+        ".loom/bin/fact_chain_support.py",
+        ".loom/bin/loom_flow.py",
+        ".loom/specs/INIT-0001/spec.md",
+        ".loom/specs/INIT-0001/plan.md"
+      ],
+      "closing_condition": "The generated entry, work item, recovery entry, and templates are readable and verified",
+      "post_build_continuation": "Promote the first real downstream issue after the bootstrap artifacts are accepted",
+      "owner_for_checkpoint_lite": "repository owner or current bootstrap operator"
+    }
+  ],
+  "validation_and_closing": {
+    "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
+    "checkpoint_relationship": [
+      "admission checkpoint confirms the bootstrap work item and first artifacts are readable",
+      "build checkpoint confirms generated carriers and templates are internally consistent",
+      "merge checkpoint should only pass after downstream repo truth, docs, and delivery state align"
+    ],
+    "clean_state": "all generated Loom artifacts are readable, verified, and free of conflicting duplicates",
+    "close_when": [
+      "the target repo has a readable root or companion Loom entry",
+      "the first work item, progress carrier, and spec/plan artifacts exist",
+      "the bootstrap manifest and init-result are verifiable"
+    ]
+  }
+}

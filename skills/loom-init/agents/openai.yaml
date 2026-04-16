@@ -1,0 +1,4 @@
+interface:
+  display_name: "Loom Init"
+  short_description: "根据项目场景装配 Loom 的初始治理能力与首批工件"
+  default_prompt: "分析当前项目场景，并输出推荐的 Loom 治理、harness、模板与首批事项装配方案。"
