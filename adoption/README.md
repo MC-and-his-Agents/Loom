@@ -21,6 +21,7 @@
 - 复杂既有仓库真实验证：[validation-hotcp.md](./validation-hotcp.md)
 - 场景 skill `loom-adopt` 验证：[validation-skill-loom-adopt.md](./validation-skill-loom-adopt.md)
 - 场景 skill `loom-resume` 验证：[validation-skill-loom-resume.md](./validation-skill-loom-resume.md)
+- 场景 skill `loom-pre-review` 验证：[validation-skill-loom-pre-review.md](./validation-skill-loom-pre-review.md)
 - 事实链消费验证：[validation-fact-chain-mail-listener.md](./validation-fact-chain-mail-listener.md)
 - checkpoint 链路复验：[validation-checkpoints-hotcp.md](./validation-checkpoints-hotcp.md)
 - 运行时证据复验：[validation-runtime-evidence-hotcp.md](./validation-runtime-evidence-hotcp.md)
