@@ -9,7 +9,7 @@
 - [loom-init/SKILL.md](./loom-init/SKILL.md)
   - 根据项目场景选择应引入的 Loom 能力、首批工件与首批事项
 - [distribution-and-adapter-contract.md](./distribution-and-adapter-contract.md)
-  - 约束 `skills/` 作为入口层时的最小分发、发现、升级与宿主适配边界
+  - 约束 `skills/` 作为入口层时的最小分发、发现、升级、版本识别与宿主适配边界
 
 当前 `skills/` 的职责包括：
 
@@ -25,6 +25,7 @@
 - 隐式触发是否正确
 - 行为是否出现退化
 - adapter 失败是否可见
+- 版本变化是否可见
 
 这些验证面的最小边界由 [distribution-and-adapter-contract.md](./distribution-and-adapter-contract.md) 承接；宿主完整测试矩阵与 CI 产品细节不进入 Loom 内核。
 
