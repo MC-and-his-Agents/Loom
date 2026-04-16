@@ -15,10 +15,10 @@
 - `templates/`
   - 最小正式规约模板与最小 PR 模板
 - `skills/`
-  - 稳定入口合同与 `loom-init` 的输入 / 输出合同
+  - 稳定入口合同、`loom-init` root 路由、6 个场景 skills、`registry.json`、`upgrade-contract.json` 与 `route-matrix.md`
 - `adoption/`
   - 稳定 adoption 路径、经验回流、验证记录合同、版本化与升级路径
-  - 执行入口兼容说明与完整执行内核复验记录
+  - 执行入口兼容说明、6 个场景 skill 验证记录与完整执行内核复验记录
 - 发布说明
   - `docs/complete-kernel-release.md`
 
@@ -42,7 +42,7 @@ Loom 对下游交付的对象不是单个文件，而是以下组合：
 
 - 一组稳定规则真相
 - 一组最小模板
-- 一组可升级的入口合同
+- 一组可升级的入口合同与 root/scene 路由入口
 - 一组 adoption / upgrade 说明
 
 下游不应被要求复制候选材料，才能消费 Loom 的核心能力。
