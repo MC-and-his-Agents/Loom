@@ -187,23 +187,25 @@ def file_exists(root: Path, relative_path: str) -> bool:
     return (root / relative_path).exists()
 
 
-def available_skill_ids() -> tuple[str, ...]:
+def load_registry_skill_ids() -> tuple[tuple[str, ...] | None, str | None]:
     registry_path = ROOT / "skills/registry.json"
-    if registry_path.exists():
-        try:
-            registry = read_json(registry_path)
-        except json.JSONDecodeError:
-            return ("loom-init",)
-        entries = registry.get("entries")
-        if isinstance(entries, list):
-            skill_ids = [
-                entry.get("id")
-                for entry in entries
-                if isinstance(entry, dict) and isinstance(entry.get("id"), str) and entry.get("id")
-            ]
-            if skill_ids:
-                return tuple(skill_ids)
-    return ("loom-init", *SKILL_SIGNAL_RULES.keys())
+    if not registry_path.exists():
+        return None, "skills/registry.json is missing"
+    try:
+        registry = read_json(registry_path)
+    except json.JSONDecodeError as exc:
+        return None, f"skills/registry.json is invalid JSON: {exc.msg}"
+    entries = registry.get("entries")
+    if not isinstance(entries, list) or not entries:
+        return None, "skills/registry.json must declare a non-empty entries list"
+    skill_ids = [
+        entry.get("id")
+        for entry in entries
+        if isinstance(entry, dict) and isinstance(entry.get("id"), str) and entry.get("id")
+    ]
+    if not skill_ids:
+        return None, "skills/registry.json must declare at least one valid skill id"
+    return tuple(skill_ids), None
 
 
 def match_route_signals(task: str) -> dict[str, list[str]]:
@@ -1300,7 +1302,26 @@ def route(args: argparse.Namespace) -> int:
         print(f"loom-init: target is not a directory: {target_root}", file=sys.stderr)
         return 2
 
-    known_skills = set(available_skill_ids())
+    registry_skill_ids, registry_error = load_registry_skill_ids()
+    if registry_error:
+        print(
+            json.dumps(
+                route_payload(
+                    result="block",
+                    selected_skill="loom-init",
+                    mode="fallback",
+                    matched_signals=[],
+                    summary=f"cannot route because {registry_error}",
+                    missing_inputs=["a valid skills/registry.json"],
+                    fallback_to="loom-init",
+                ),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 1
+
+    known_skills = set(registry_skill_ids or ())
     if args.skill:
         if args.skill not in known_skills:
             print(
@@ -1339,6 +1360,23 @@ def route(args: argparse.Namespace) -> int:
     matches = match_route_signals(args.task)
     if len(matches) == 1:
         selected_skill, matched = next(iter(matches.items()))
+        if selected_skill not in known_skills:
+            print(
+                json.dumps(
+                    route_payload(
+                        result="block",
+                        selected_skill="loom-init",
+                        mode="implicit",
+                        matched_signals=matched,
+                        summary=f"route table resolved to unknown registry skill `{selected_skill}`",
+                        missing_inputs=["a registry entry aligned with skills/route-matrix.md"],
+                        fallback_to="loom-init",
+                    ),
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return 1
         print(
             json.dumps(
                 route_payload(
