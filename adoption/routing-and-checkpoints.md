@@ -50,12 +50,39 @@ Loom 当前至少应支持三类正式判断点：
 - `merge checkpoint`
   - 判断当前 head 是否满足进入主干的条件
 
+其中：
+
+- 本文保留三类 checkpoint 的治理与采用语义
+- 执行侧的最小承接链路见 [../harness/execution-chain.md](../harness/execution-chain.md)
+- `merge checkpoint` 的执行侧输入、结果与回退去向见 [../harness/merge-checkpoint.md](../harness/merge-checkpoint.md)
+
+`admission checkpoint` 在 adoption 语义上表达“进入实现承诺前的正式判断”。
+治理内核中的稳定命名与审查分工，见 [../governance/review-model.md](../governance/review-model.md)。
+
 ## 5. Loom 当前约束
 
 - 不允许只有 `merge checkpoint` 足够强，而前两者长期虚化
 - 不允许 merge 前 review 承担第一次高质量语义判断
 - 不允许中等事项长期在“轻量事项”和“正式规约事项”之间无明确入口
+- 不允许把三类 checkpoint 的执行侧输入、回写和放行规则继续留给读者自行拼装
 
 ## 6. 与 `skills/` 的关系
 
 这些分流和 checkpoint 规则，最终应由初始化 `SKILL` 转化成实际提问、决策与装配逻辑。
+
+## 7. 与 `harness/` 的关系
+
+`adoption/` 只保留：
+
+- 为什么需要三类 checkpoint
+- 哪类事项默认进入哪条路径
+- checkpoint 之间的治理不变量
+
+以下执行侧细节不再由本文展开：
+
+- 初始化产物如何进入正式执行
+- 每轮开始前必须读取哪些事实
+- 每轮结束后必须回写哪些事实
+- merge checkpoint 放行前必须可读取哪些验证与状态事实
+
+这些内容统一由 `harness/` 中的稳定合同承接。

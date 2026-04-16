@@ -1,10 +1,12 @@
 # Work Item Contract
 
-本文件定义 Loom 当前最小 work item / exec-plan 合同。
+本文件定义 Loom 当前最小 work item / `exec-plan` 合同。
 
 本文件当前承接：
 
 - `EXT-0037` 的初始化产物模型
+
+完整执行顺序见 [execution-chain.md](./execution-chain.md)。
 
 ## 1. 能力定位
 
@@ -23,6 +25,7 @@ work item 是进入正式执行的入口。
 - 当前执行路径
 - 当前 checkpoint 状态
 - 关联工件
+- 当前验证入口
 - 关闭条件
 
 一个 work item 对应一个清晰目标，不得承载多个无关正式事项。
@@ -32,8 +35,9 @@ work item 是进入正式执行的入口。
 当 Loom 初始化一个仓库或一条正式执行链路时，最小产物应包括：
 
 - 可进入执行的首批 work item 或等价事项清单
-- 至少一个 progress / checkpoint 载体
-- 与事项关联的恢复入口约定
+- 至少一个 `progress` / `checkpoint` 载体
+- 与事项关联的唯一恢复主入口约定
+- 可定位的执行路径与工作现场入口
 - 后续验证或执行支撑的入口约定
 
 Loom 不固化这些产物的具体文件名，但要求它们在初始化完成后已可读取、可回写、可继续执行。
@@ -54,7 +58,15 @@ Loom 不固化这些产物的具体文件名，但要求它们在初始化完成
 - 用 `exec-plan` 替代长期状态真相
 - 用 `exec-plan` 吞并多个无关事项
 
-## 5. 与分流路径的关系
+## 5. 与执行链路的关系
+
+work item / `exec-plan` 至少要能被以下环节消费：
+
+- 每轮读取
+- 工作现场定位
+- 每轮回写
+- 验证汇总
+- merge checkpoint 放行
 
 不同执行路径可以有不同最小输入强度：
 
@@ -65,4 +77,4 @@ Loom 不固化这些产物的具体文件名，但要求它们在初始化完成
 - 正式规约事项
   - work item 应关联 `spec.md` 与 `plan.md`
 
-无论路径轻重，都必须能被 checkpoint、resume 与状态读取机制消费。
+无论路径轻重，都必须能被 [execution-context.md](./execution-context.md)、[recovery-model.md](./recovery-model.md) 与 [merge-checkpoint.md](./merge-checkpoint.md) 消费。

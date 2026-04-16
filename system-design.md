@@ -110,61 +110,65 @@ Loom 将以下能力视为治理内核：
 该文档负责定义：
 
 - 初始化与装配
-- 稳定组件之间如何组成执行闭环
+- 稳定组件之间如何组成执行支撑系统
 - harness 强度模型
-- merge gate 的方案级边界
 
 更细的稳定组件合同，见：
 
 - [harness/work-item-contract.md](./harness/work-item-contract.md)
 - [harness/execution-context.md](./harness/execution-context.md)
+- [harness/execution-chain.md](./harness/execution-chain.md)
 - [harness/workspace-model.md](./harness/workspace-model.md)
 - [harness/recovery-model.md](./harness/recovery-model.md)
 - [harness/status-surface.md](./harness/status-surface.md)
 - [harness/automation-frontload.md](./harness/automation-frontload.md)
+- [harness/merge-checkpoint.md](./harness/merge-checkpoint.md)
 - [harness/workspace-and-purity.md](./harness/workspace-and-purity.md)
 
-当某项能力已经下沉到稳定组件时，以对应组件文档为准；`harness-design.md` 不重复字段级规则。
+当某项能力已经下沉到稳定组件时，以对应组件文档为准；`harness-design.md` 不重复字段级规则、执行阶段顺序或放行输入细节。
 
 `harness` 负责定义：
 
 - 仓库如何初始化到可执行 clean state
 - 正式事项如何以 work item 进入执行
-- 执行上下文、工作现场和恢复入口如何在单轮执行中协同
+- 每轮读取、隔离现场推进、回写、验证汇总与 merge checkpoint 如何形成闭环
 - 当前状态和运行事实如何被读取
 - 哪些检查应前置到脚本或 CI
-- merge gate 在执行侧如何放行
+- merge checkpoint 在执行侧如何承接放行与回退
 
 Loom 将以下能力视为 harness 内核：
 
 - 方案级能力
   - 初始化场景、初始化产物和初始 clean state
   - 稳定组件的装配关系与强度模型
-  - merge gate 与 governance 的边界
 - 稳定组件
   - `work-item-contract`
     - 正式执行单元与 `exec-plan` 职责
   - `execution-context`
-    - 当前事项、路径、目标、工作现场、恢复入口、当前 checkpoint
+    - 当前事项、路径、目标、范围、工作现场、恢复入口、当前 checkpoint、验证入口
+  - `execution-chain`
+    - 从初始化产物到 merge checkpoint 放行的最小执行链路
   - `workspace-model` 与 `workspace-and-purity`
     - 隔离现场、单现场单事项与纯度预检
   - `recovery-model`
     - `checkpoint`、`resume`、`handoff` 与唯一恢复主入口
   - `status-surface`
-    - 当前事项、停点、下一步、阻断项与最近验证摘要
+    - 当前事项、停点、下一步、阻断项、最近验证摘要与运行时证据入口
   - `automation-frontload`
-    - 结构、模板、知识结构与明显越界信号的前置检查
+    - 结构、规则落点、模板、交叉引用、纯度信号与执行支撑入口的前置检查
+  - `merge-checkpoint`
+    - 放行输入、结果语义与回退承接
 
 总图中特别强调的能力包括：
 
 - `EXT-0035`
-  - 由 [harness/status-surface.md](./harness/status-surface.md) 与 [harness-design.md](./harness-design.md) 共同承接运行时可见性与 agent 可验证性
+  - 由 [harness/status-surface.md](./harness/status-surface.md) 与 [skills/loom-init/references/output-contract.md](./skills/loom-init/references/output-contract.md) 共同承接状态读取与运行时可见性
 - `EXT-0036`
-  - 由 [harness/automation-frontload.md](./harness/automation-frontload.md) 与 [harness-design.md](./harness-design.md) 共同承接 harness 侧机械化校验
+  - 由 [harness/automation-frontload.md](./harness/automation-frontload.md) 承接 harness 侧机械化校验边界
 - `EXT-0037`
-  - 由 [harness-design.md](./harness-design.md)、[harness/work-item-contract.md](./harness/work-item-contract.md) 与 [harness/workspace-model.md](./harness/workspace-model.md) 共同承接 initializer 产物、初始 progress 与 clean state
+  - 由 [harness/work-item-contract.md](./harness/work-item-contract.md)、[harness/workspace-model.md](./harness/workspace-model.md)、[harness/execution-chain.md](./harness/execution-chain.md)、[harness-design.md](./harness-design.md) 与 [skills/loom-init/references/output-contract.md](./skills/loom-init/references/output-contract.md) 共同承接 initializer 产物、初始 `progress` 与 clean state
 - `EXT-0038`
-  - 由 [harness/execution-context.md](./harness/execution-context.md)、[harness/work-item-contract.md](./harness/work-item-contract.md)、[harness/recovery-model.md](./harness/recovery-model.md) 与 [harness-design.md](./harness-design.md) 共同承接每轮读取、回写和单单元推进
+  - 由 [harness/execution-chain.md](./harness/execution-chain.md)、[harness/execution-context.md](./harness/execution-context.md)、[harness/work-item-contract.md](./harness/work-item-contract.md)、[harness/recovery-model.md](./harness/recovery-model.md) 与 [skills/loom-init/references/output-contract.md](./skills/loom-init/references/output-contract.md) 共同承接每轮读取、回写和单单元推进
 
 ## 5. Templates 子系统
 

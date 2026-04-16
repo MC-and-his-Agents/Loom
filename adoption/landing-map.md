@@ -20,9 +20,24 @@
 - `templates/`
   - 正式规约模板、PR 模板
 - `adoption/`
-  - 采用动机、事项分流、checkpoint 策略、候选模式
+  - 采用动机、事项分流、checkpoint 策略、默认 retrofit 路径、候选模式
 - `skills/`
   - 初始化与采用装配入口职责
+
+## Entry Contract Map
+
+以下关系用于表达 adoption 结论如何被入口层直接消费：
+
+- 小型既有仓库默认 retrofit 策略
+  - 稳定落点：`adoption/lightweight-retrofit-default.md`
+  - 入口消费：`skills/loom-init/SKILL.md`
+- `loom-init` 输入信号合同
+  - 稳定落点：`skills/loom-init/references/intake-signals.md`
+- `loom-init` 输出合同
+  - 稳定落点：`skills/loom-init/references/output-contract.md`
+- `skills` 分发与适配合同
+  - 稳定落点：`skills/distribution-and-adapter-contract.md`
+  - 入口消费：`skills/README.md`
 
 ## Item Map
 
@@ -49,7 +64,7 @@
 | EXT-0019 | `adapt` | `adoption/routing-and-checkpoints.md` | `candidate` | 分流思想保留，但不先固化分层 |
 | EXT-0020 | `needs_validation` | `adoption/candidate-patterns.md` | `parking` | Spike / 标准 / 高风险分层 |
 | EXT-0021 | `keep` | `adoption/rationale.md` | `core` | 实现前 checkpoint 需工程化 |
-| EXT-0022 | `adapt` | `adoption/routing-and-checkpoints.md` | `candidate` | 三类 checkpoint 模型 |
+| EXT-0022 | `keep` | `adoption/routing-and-checkpoints.md`; `harness/execution-chain.md`; `harness/merge-checkpoint.md` | `core` | 三类 checkpoint 的治理语义与执行侧承接已收成稳定合同 |
 | EXT-0023 | `keep` | `governance/principles.md` | `core` | 载体职责分离 |
 | EXT-0024 | `keep` | `adoption/routing-and-checkpoints.md` | `core` | 中等事项设计说明通道 |
 | EXT-0025 | `keep` | `harness/workspace-model.md` | `core` | 单现场单事项 |
@@ -59,10 +74,15 @@
 | EXT-0029 | `keep` | `harness/workspace-and-purity.md` | `core` | 纯度预检与范围前置 |
 | EXT-0030 | `keep` | `adoption/rationale.md` | `core` | merge 前 review 过载的结构性根因 |
 | EXT-0031 | `keep` | `adoption/routing-and-checkpoints.md` | `core` | 小型真实仓库先补最小治理入口 |
-| EXT-0032 | `keep` | `skills/loom-init/SKILL.md` | `core` | 既有根规则仓库优先 companion docs 接入 |
-| EXT-0033 | `keep` | `harness/recovery-model.md` | `core` | 低复杂度仓库允许 checkpoint-lite |
+| EXT-0032 | `keep` | `skills/loom-init/SKILL.md` | `core` | 既有根规则仓库优先 companion docs 接入，并直接消费轻量 retrofit 默认策略 |
+| EXT-0033 | `keep` | `harness/recovery-model.md`; `skills/loom-init/SKILL.md`; `skills/loom-init/references/output-contract.md` | `core` | 低复杂度仓库允许 checkpoint-lite，并由入口层明确承接方式 |
 | EXT-0034 | `keep` | `governance-design.md` | `core` | 短入口文档、深知识库与可机械校验的知识结构 |
-| EXT-0035 | `keep` | `harness/status-surface.md`; `harness-design.md` | `core` | 运行时可见性、日志指标 trace 与 agent 可验证性 |
-| EXT-0036 | `keep` | `harness/automation-frontload.md`; `harness-design.md` | `core` | 知识库、模板与执行支撑的机械化校验能力 |
-| EXT-0037 | `keep` | `harness/work-item-contract.md`; `harness/workspace-model.md`; `harness-design.md` | `core` | initializer 产物、初始 progress 与 clean state |
-| EXT-0038 | `keep` | `harness/execution-context.md`; `harness/work-item-contract.md`; `harness/recovery-model.md`; `harness-design.md` | `core` | 每轮读取与回写、单单元增量推进 |
+| EXT-0035 | `keep` | `harness/status-surface.md`; `skills/loom-init/references/output-contract.md` | `core` | 运行时可见性、日志指标 trace 与 agent 可验证性 |
+| EXT-0036 | `keep` | `harness/automation-frontload.md` | `core` | 知识库、模板与执行支撑的机械化校验能力 |
+| EXT-0037 | `keep` | `harness/work-item-contract.md`; `harness/workspace-model.md`; `harness/execution-chain.md`; `harness-design.md`; `skills/loom-init/references/output-contract.md` | `core` | initializer 产物、初始 progress 与 clean state |
+| EXT-0038 | `keep` | `harness/execution-context.md`; `harness/work-item-contract.md`; `harness/recovery-model.md`; `harness/execution-chain.md`; `skills/loom-init/references/output-contract.md` | `core` | 每轮读取与回写、单单元增量推进 |
+| EXT-0039 | `adapt` | `skills/distribution-and-adapter-contract.md` | `candidate` | `skills` 的安装、发现与升级合同 |
+| EXT-0040 | `adapt` | `skills/distribution-and-adapter-contract.md` | `candidate` | 薄 `bootstrap/root contract` 与深知识引用关系 |
+| EXT-0041 | `adapt` | `harness/automation-frontload.md`; `skills/distribution-and-adapter-contract.md` | `candidate` | 入口层触发与行为回归测试 |
+| EXT-0042 | `adapt` | `skills/distribution-and-adapter-contract.md` | `candidate` | 宿主特定细节收敛在 adapter 层 |
+| EXT-0043 | `needs_validation` | `adoption/candidate-patterns.md` | `parking` | 父事项 / 子事项关系作为平台无关能力需求 |
