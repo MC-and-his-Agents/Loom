@@ -16,11 +16,11 @@
 - [execution-chain.md](./execution-chain.md)
   - 定义从初始化产物到 merge checkpoint 放行的最小执行链路
 - `checkpoint-model.md`
-  - 定义 `admission` / `build` checkpoint 的输入、输出、失败语义与回退去向（并行任务落位后作为稳定入口）
+  - 定义 `admission` / `build` checkpoint 的输入、输出、失败语义与回退去向
 - [workspace-model.md](./workspace-model.md)
   - 定义执行现场的隔离、定位与 clean state 要求
 - `workspace-lifecycle.md`
-  - 定义 `create`、`locate`、`cleanup`、`retire` 与 `purity-check` 的生命周期合同（并行任务落位后作为稳定入口）
+  - 定义 `create`、`locate`、`cleanup`、`retire` 与 `purity-check` 的生命周期合同
 - [recovery-model.md](./recovery-model.md)
   - 定义唯一恢复主入口、`checkpoint`、`resume`、`handoff` 与每轮回写合同
 - [status-surface.md](./status-surface.md)
