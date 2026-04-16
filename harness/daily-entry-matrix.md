@@ -18,7 +18,7 @@
 | `pre-review`（统一高频入口） | `python3 tools/loom_flow.py flow pre-review --target <repo> [--item <id>]` | fact-chain + state-check + runtime evidence + admission + workspace locate | `pass` / `block` / `fallback` | 第一版聚焦 review 前高频检查流 |
 | `checkpoint` | `python3 tools/loom_flow.py checkpoint <admission\\|build\\|merge> --target <repo> [--item <id>]` | fact-chain + purity + merge 放行材料 | `pass` / `block` / `fallback` | `merge` 可额外消费 PR 模板 |
 | `resume` | `python3 tools/loom_flow.py flow resume --target <repo> [--item <id>]` | fact-chain + state-check + workspace locate + recovery 的 `next_step` / `blockers` / `checkpoint` | `pass` / `block` | 只输出恢复摘要，不回写任何载体 |
-| `handoff` | 恢复主入口回写 + 状态面同步 | 当前停点/下一步/阻断项/验证摘要 | 可移交的恢复状态 | 不新增第二套 authored 状态 |
+| `handoff` | `python3 tools/loom_flow.py flow handoff --target <repo> [--item <id>]` | fact-chain + state-check + workspace locate + recovery/status locator + handoff writeback fields | `pass` / `block` | 只输出最小回写清单与载体定位，不直接写 authored 状态 |
 | `review` | `spec_review` / `code_review` + merge checkpoint 输入 | 最小必要上下文 + 前置检查结果 | `allow` / `block` / `fallback` | reviewer 负责语义判断，脚本负责机械判断 |
 | `merge` | `merge checkpoint` + 仓库平台合并动作 | build 结果 + 风险回滚 + 验证摘要 | 放行或阻断 | Loom 不替代宿主平台合并接口 |
 | `retire` | `python3 tools/loom_flow.py workspace retire --target <repo> --item <id>` | cleanup 结果 + recovery 主入口 | checkpoint 终态 `retired` | 不默认删除现场目录 |

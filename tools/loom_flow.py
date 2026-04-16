@@ -119,7 +119,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
 
     flow = subparsers.add_parser("flow", help="Run a bundled high-frequency Loom flow")
-    flow.add_argument("operation", choices=("pre-review", "resume"))
+    flow.add_argument("operation", choices=("pre-review", "resume", "handoff"))
     flow.add_argument("--target", required=True, help="Target repository root")
     flow.add_argument("--item", help="Expected current item id")
     flow.add_argument(
@@ -1222,7 +1222,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             }
         )
 
-    if args.operation not in {"pre-review", "resume"}:
+    if args.operation not in {"pre-review", "resume", "handoff"}:
         return emit(
             {
                 "command": "flow",
@@ -1270,7 +1270,7 @@ def handle_flow(args: argparse.Namespace) -> int:
         }
     )
 
-    if args.operation == "resume":
+    if args.operation in {"resume", "handoff"}:
         steps.append(locate_step)
     else:
         runtime_fields, runtime_missing = runtime_evidence_from_report(context["report"])
@@ -1321,6 +1321,12 @@ def handle_flow(args: argparse.Namespace) -> int:
             if result == "pass"
             else "resume flow rebuilt context but found blocking signals before execution can continue."
         )
+    elif args.operation == "handoff":
+        summary = (
+            "handoff flow produced the minimum writeback checklist and locator set."
+            if result == "pass"
+            else "handoff flow produced the minimum writeback checklist, but blocking signals remain before transfer."
+        )
     else:
         summary = (
             "pre-review flow is ready to proceed."
@@ -1356,13 +1362,6 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "path": locate_payload["workspace"]["path"],
                         "exists": locate_payload["workspace"]["exists"],
                     },
-                    "recovery": {
-                        "path": locate_payload["recovery"]["path"],
-                        "current_stop": locate_payload["recovery"]["current_stop"],
-                        "next_step": context["next_step"],
-                        "blockers": context["blockers"],
-                        "latest_validation_summary": context["latest_validation_summary"],
-                    },
                     "checkpoint": {
                         "raw": context["current_checkpoint_raw"],
                         "normalized": context["current_checkpoint"],
@@ -1375,7 +1374,39 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "checks": state_payload["checks"],
                     },
                 }
+                if args.operation in {"resume", "handoff"}
+                else {}
+            ),
+            **(
+                {
+                    "recovery": {
+                        "path": locate_payload["recovery"]["path"],
+                        "current_stop": locate_payload["recovery"]["current_stop"],
+                        "next_step": context["next_step"],
+                        "blockers": context["blockers"],
+                        "latest_validation_summary": context["latest_validation_summary"],
+                    },
+                }
                 if args.operation == "resume"
+                else {}
+            ),
+            **(
+                {
+                    "recovery_entry": str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"]),
+                    "status_surface": str(context["report"]["fact_chain"]["entry_points"]["status_surface"]),
+                    "current_stop": context["current_stop"],
+                    "next_step": context["next_step"],
+                    "blockers": context["blockers"],
+                    "latest_validation_summary": context["latest_validation_summary"],
+                    "fallback_target": fallback_to,
+                    "writeback_fields": [
+                        "current_stop",
+                        "next_step",
+                        "blockers",
+                        "latest_validation_summary",
+                    ],
+                }
+                if args.operation == "handoff"
                 else {}
             ),
         }
