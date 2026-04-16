@@ -1,0 +1,22 @@
+{
+  "schema_version": "loom-bootstrap-manifest/v1",
+  "tool": "tools/loom_init.py",
+  "tool_version": "1.0.0",
+  "root_entry": "loom-init",
+  "contract_version": "1.0.0",
+  "output": ".loom/bootstrap/init-result.json",
+  "artifacts": [
+    "AGENTS.md",
+    ".loom/README.md",
+    ".loom/bootstrap/intake.snapshot.json",
+    ".loom/bootstrap/init-result.json",
+    ".loom/bootstrap/manifest.json",
+    ".loom/bootstrap/capability-map.md",
+    ".loom/work-items/INIT-0001.md",
+    ".loom/progress/INIT-0001.md",
+    ".loom/status/current.md",
+    ".loom/specs/INIT-0001/spec.md",
+    ".loom/specs/INIT-0001/plan.md",
+    ".github/PULL_REQUEST_TEMPLATE.md"
+  ]
+}

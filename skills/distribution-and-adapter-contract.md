@@ -107,6 +107,12 @@ Loom 对宿主只要求最小合同，不要求统一实现形态。
 - 若升级涉及引用关系变化，宿主能够重新解析引用而不是继续使用旧缓存
 - 升级失败时，不应伪装为已完成升级
 
+Loom 当前仓库内以机读工件承接这组最小合同：
+
+- `skills/registry.json`
+- `skills/loom-init/contract.json`
+- `skills/upgrade-contract.json`
+
 Loom 在此层不规定包管理器、注册中心、目录布局或分发协议；这些属于宿主实现，而不是 Loom 内核。
 
 最小兼容信息至少应能回答：

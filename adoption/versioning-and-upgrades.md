@@ -114,4 +114,6 @@ Loom 采用语义版本：
 
 `skills` 的安装、发现、升级与 adapter 合同，由 [../skills/distribution-and-adapter-contract.md](../skills/distribution-and-adapter-contract.md) 承接。
 
+当前仓库中，`skills/upgrade-contract.json` 承接最小机读升级协议；它不替代本文的版本对象定义，只负责把显式升级与版本可见性落成可读取工件。
+
 本文只定义版本对象与升级说明格式，不重复宿主适配细节。

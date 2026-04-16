@@ -134,6 +134,10 @@ Loom 当前按五个区域组织：
 - 第一轮模拟 adoption 验证
 - 三类 `Phase E` 真实 adoption 验证记录
 - 经验回流、版本化与上游交付面文档
+- `loom-check` 仓库自检入口与 CI 工作流
+- `loom-init` 最小可执行 bootstrap CLI
+- 可直接投放的 `spec.md`、`plan.md` 与 PR 模板实体
+- 新项目 bootstrap demo 复验链路
 
 当前上游交付面已经明确包括：
 
@@ -152,4 +156,8 @@ Loom 适合这些场景：
 
 ## 当前状态
 
-Loom 当前处于基础阶段，正在把真实项目中验证过的治理模式、执行 harness 和 `SKILLS` 入口抽象成上游可复用能力。
+Loom 当前处于基础阶段，已经从“纯规则仓库”推进到“最小可执行内核仓库”：
+
+- 仓库自检可通过 `make loom-check` 运行
+- 初始化入口可通过 `python3 tools/loom_init.py bootstrap --target <repo>` 运行
+- 新项目 demo 可通过 `make loom-demo-new-project` 复验

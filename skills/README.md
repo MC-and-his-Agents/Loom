@@ -6,8 +6,14 @@
 
 当前已落以下入口与入口合同：
 
+- [registry.json](./registry.json)
+  - 仓库内机读入口注册表，声明 root 入口与合同版本
+- [upgrade-contract.json](./upgrade-contract.json)
+  - 仓库内机读升级协议，声明显式升级、版本可见与刷新要求
 - [loom-init/SKILL.md](./loom-init/SKILL.md)
   - 根据项目场景选择应引入的 Loom 能力、首批工件与首批事项
+- [loom-init/contract.json](./loom-init/contract.json)
+  - `loom-init` 的机读 root 合同，声明输入 / 输出合同与引用关系
 - [distribution-and-adapter-contract.md](./distribution-and-adapter-contract.md)
   - 约束 `skills/` 作为入口层时的最小分发、发现、升级、版本识别与宿主适配边界
 
@@ -18,6 +24,7 @@
 - 读取 `harness/` 中的执行现场与恢复能力
 - 读取 `templates/` 中的模板约束
 - 将这些能力装配成初始化、执行、审查与收口入口
+- 暴露可被宿主直接调用的执行入口，例如 `tools/loom_init.py`
 
 对入口层自身，Loom 当前至少要求能表达以下验证面：
 

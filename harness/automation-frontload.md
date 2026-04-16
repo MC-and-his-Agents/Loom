@@ -42,6 +42,29 @@ merge checkpoint 只消费这些结果，不把它们扩写成第一次高质量
 
 Loom 内核只定义这些检查面的边界，不内置宿主特定 CI、测试框架或 adapter 实现。
 
+## 3.1 当前仓库中的最小执行入口
+
+Loom 仓库当前通过以下入口承接最小 core 前置检查：
+
+- `make loom-check`
+- `python3 tools/loom_check.py`
+- `python3 tools/loom_init.py verify --target <repo>`
+
+当前脚本至少覆盖：
+
+- 结构完整性
+- 规则与核心落点存在性
+- 模板与入口资产存在性
+- Markdown 交叉引用可解析
+- `skills` 机读 root 合同的最小一致性
+- `skills` 升级协议与 bootstrap CLI 入口的一致性
+
+GitHub Actions 工作流会复用同一入口，而不是维护第二套命令。
+
+最小接入 demo 则通过以下入口复验：
+
+- `make loom-demo-new-project`
+
 ## 4. 不应错误前置的判断
 
 以下判断不应被伪装成全自动结论：

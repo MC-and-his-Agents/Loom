@@ -9,6 +9,11 @@ description: 分析一个新项目或既有仓库的协作场景，选择适合�
 
 先判断当前项目真正需要哪些能力，再决定引入哪些 Loom 工件。不要先套完整分层，也不要把所有模板一次性压进仓库。
 
+当前仓库中的最小可执行入口为：
+
+- `python3 tools/loom_init.py bootstrap --target <repo>`
+- `python3 tools/loom_init.py verify --target <repo>`
+
 ## 1. 读取顺序
 
 按以下顺序读取材料：
