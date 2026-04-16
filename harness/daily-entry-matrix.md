@@ -20,6 +20,7 @@
 | `resume` | `python3 tools/loom_flow.py flow resume --target <repo> [--item <id>]` | fact-chain + state-check + workspace locate + recovery 的 `next_step` / `blockers` / `checkpoint` | `pass` / `block` | 只输出恢复摘要，不回写任何载体 |
 | `handoff` | `python3 tools/loom_flow.py flow handoff --target <repo> [--item <id>]` | fact-chain + state-check + workspace locate + recovery/status locator + handoff writeback fields | `pass` / `block` | 只输出最小回写清单与载体定位，不直接写 authored 状态 |
 | `review` | `spec_review` / `code_review` + merge checkpoint 输入 | 最小必要上下文 + 前置检查结果 | `allow` / `block` / `fallback` | reviewer 负责语义判断，脚本负责机械判断 |
+| `merge-ready` | `python3 tools/loom_flow.py flow merge-ready --target <repo> [--item <id>]` | fact-chain + state-check + runtime evidence + build checkpoint + merge checkpoint | `pass` / `block` / `fallback` | 只输出统一放行摘要，不替代宿主平台 merge |
 | `merge` | `merge checkpoint` + 仓库平台合并动作 | build 结果 + 风险回滚 + 验证摘要 | 放行或阻断 | Loom 不替代宿主平台合并接口 |
 | `retire` | `python3 tools/loom_flow.py purity-check --target <repo> [--item <id>]` -> `workspace cleanup` -> `workspace retire` | purity 结果 + cleanup 结果 + recovery 主入口 | checkpoint 终态 `retired` | 默认先解释 retire 前置条件，不默认删除现场目录 |
 
@@ -39,4 +40,4 @@
 
 - 不把宿主特定 UI/按钮/平台命令写成 Loom 内核默认入口
 - 不把 `review` 结论伪装成脚本可自动生成的语义判断
-- 不把 `resume`/`handoff` 另写为并行真相文件
+- 不把 `resume`/`handoff`/`merge-ready` 另写为并行真相文件

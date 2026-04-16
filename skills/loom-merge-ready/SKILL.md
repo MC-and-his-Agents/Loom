@@ -11,6 +11,12 @@ description: 负责 merge 前统一放行。Use when Codex needs to confirm whet
 
 - `python3 tools/loom_flow.py flow merge-ready --target <repo> [--item <id>]`
 
+执行要求：
+
+- 固定按 `fact-chain -> state-check -> runtime-evidence -> checkpoint build -> checkpoint merge` 编排
+- 只输出 merge 前统一放行摘要，不替代宿主平台 merge 动作
+- 不新建 authored 真相源，也不直接执行平台合并
+
 输入信号与输出合同见：
 
 - [references/input-signals.md](./references/input-signals.md)

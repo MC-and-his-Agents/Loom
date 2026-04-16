@@ -21,10 +21,19 @@
   "output_contract": {
     "reference": "references/output-contract.md",
     "required_sections": [
+      "item",
       "result",
+      "summary",
+      "missing_inputs",
+      "fallback_to",
+      "state_check",
+      "steps",
       "runtime_evidence",
       "build_checkpoint",
-      "merge_checkpoint"
+      "merge_checkpoint",
+      "current_checkpoint",
+      "current_lane",
+      "latest_validation_summary"
     ]
   },
   "routing": {
