@@ -21,7 +21,7 @@
 | `handoff` | 恢复主入口回写 + 状态面同步 | 当前停点/下一步/阻断项/验证摘要 | 可移交的恢复状态 | 不新增第二套 authored 状态 |
 | `review` | `spec_review` / `code_review` + merge checkpoint 输入 | 最小必要上下文 + 前置检查结果 | `allow` / `block` / `fallback` | reviewer 负责语义判断，脚本负责机械判断 |
 | `merge` | `merge checkpoint` + 仓库平台合并动作 | build 结果 + 风险回滚 + 验证摘要 | 放行或阻断 | Loom 不替代宿主平台合并接口 |
-| `retire` | `python3 tools/loom_flow.py workspace retire --target <repo> --item <id>` | cleanup 结果 + recovery 主入口 | checkpoint 终态 `retired` | 不默认删除现场目录 |
+| `retire` | `python3 tools/loom_flow.py purity-check --target <repo> [--item <id>]` -> `workspace cleanup` -> `workspace retire` | purity 结果 + cleanup 结果 + recovery 主入口 | checkpoint 终态 `retired` | 默认先解释 retire 前置条件，不默认删除现场目录 |
 
 ## 2. 分层边界
 

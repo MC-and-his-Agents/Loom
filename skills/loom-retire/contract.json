@@ -21,10 +21,12 @@
   "output_contract": {
     "reference": "references/output-contract.md",
     "required_sections": [
+      "preconditions",
       "purity_result",
       "cleanup_result",
       "retire_result",
-      "final_checkpoint"
+      "final_checkpoint",
+      "workspace_policy"
     ]
   },
   "routing": {

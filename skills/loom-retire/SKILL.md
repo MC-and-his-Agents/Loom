@@ -13,6 +13,12 @@ description: 负责清理并退休当前事项现场。Use when Codex needs to c
 - `python3 tools/loom_flow.py workspace cleanup --target <repo> --item <id>`
 - `python3 tools/loom_flow.py workspace retire --target <repo> --item <id>`
 
+执行要求：
+
+- 默认先解释 retire 前置条件，再按 `purity-check -> workspace cleanup -> workspace retire` 顺序执行
+- 不自动丢弃用户改动，不默认删除现场目录
+- 退休完成后，以 recovery 主入口的 `current_checkpoint: retired` 作为终态依据
+
 输入信号与输出合同见：
 
 - [references/input-signals.md](./references/input-signals.md)
