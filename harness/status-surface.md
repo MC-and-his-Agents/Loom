@@ -54,6 +54,22 @@ Loom 当前至少要求状态面能展示：
 - locator 字符串
 - `not_applicable`
 
+## 3.1 字段合同矩阵
+
+| 字段 | 最小语义 | 允许值 | `not_applicable` 允许条件 |
+| --- | --- | --- | --- |
+| `Run Entry` | 告诉执行者去哪启动当前事项运行面 | locator / `not_applicable` | 事项不涉及可运行系统 |
+| `Logs Entry` | 告诉执行者去哪看运行输出或日志 | locator / `not_applicable` | 无运行进程或无日志载体 |
+| `Diagnostics Entry` | 指向指标、trace 或等价诊断入口 | locator / `not_applicable` | 当前事项没有诊断面 |
+| `Verification Entry` | 指向 UI/API/E2E 等可验证入口 | locator / `not_applicable` | 事项不涉及可验证运行结果 |
+| `Lane Entry` | 指向当前 lane 的运行/诊断读取入口 | locator / `not_applicable` | 事项没有 lane 区分 |
+
+判定规则：
+
+- 字段缺失始终是错误，不等同于 `not_applicable`。
+- `not_applicable` 必须按字段判断，不能整组一刀切。
+- 若某字段标记 `not_applicable`，应与 `current_lane`、`execution_path`、`latest_validation_summary` 等事实不冲突。
+
 ## 4. 运行时证据入口语义
 
 最小证据类别对应如下：

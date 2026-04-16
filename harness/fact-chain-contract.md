@@ -71,6 +71,36 @@ Loom 的执行真相只允许沿一条事实链流动：
 
 它不得并行复制当前停点、下一步、阻断项、最近验证摘要或当前 checkpoint。
 
+## 2.4 标准事实模型与字段来源矩阵
+
+以下矩阵是 Loom 完整执行内核当前稳定的最小事实模型。
+
+| 字段 | 主来源 | 类型 | 允许消费方 |
+| --- | --- | --- | --- |
+| `item_id` | `work item` | authored | execution-context、status-surface、checkpoint、merge-checkpoint |
+| `goal` | `work item` | authored | execution-context、checkpoint、merge-checkpoint |
+| `scope` | `work item` | authored | execution-context、checkpoint、purity-check |
+| `execution_path` | `work item` | authored | execution-context、checkpoint |
+| `workspace_entry` | `work item` | authored | workspace-lifecycle、purity-check、status-surface |
+| `recovery_entry` | `work item` | authored | execution-context、workspace-lifecycle、checkpoint |
+| `validation_entry` | `work item` | authored | checkpoint、merge-checkpoint、verify |
+| `closing_condition` | `work item` | authored | checkpoint、merge-checkpoint |
+| `current_checkpoint` | recovery 主入口 | authored | status-surface、checkpoint、workspace-lifecycle |
+| `current_stop` | recovery 主入口 | authored | execution-context、checkpoint |
+| `next_step` | recovery 主入口 | authored | execution-context、status-surface、checkpoint |
+| `blockers` | recovery 主入口 | authored | execution-context、status-surface、checkpoint |
+| `latest_validation_summary` | recovery 主入口 | authored | status-surface、checkpoint、merge-checkpoint |
+| `recovery_boundary` | recovery 主入口 | authored | checkpoint、merge-checkpoint |
+| `current_lane` | recovery 主入口 | authored | status-surface、checkpoint、runtime-evidence |
+| `read_entry` | `init-result` | locator | verify、fact-chain、daily CLI |
+| `status_surface` locator | `init-result` + `work item` 派生 | derived | fact-chain、verify、checkpoint、workspace-lifecycle |
+| `runtime_evidence.*` | status-surface `Runtime Evidence` | derived | fact-chain、verify、merge-checkpoint、loom-check |
+
+约束：
+
+- `authored` 字段只能在主来源中维护。
+- `derived` 字段只能由读取脚本从主来源计算或映射，不得手工改写为第二真相。
+
 ## 3. 派生读面
 
 以下载体只允许派生读取，不允许独立 authored 字段覆盖主真相：

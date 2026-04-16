@@ -25,6 +25,20 @@ Loom 当前日常执行 CLI 至少提供以下入口：
 
 它们不得新增第二套执行状态真相。
 
+## 1.1 生命周期合同矩阵
+
+| 阶段 | 输入重点 | 输出重点 | 失败默认语义 | 回退去向 |
+| --- | --- | --- | --- | --- |
+| `create` | `workspace_entry`、当前事项、当前 checkpoint | 现场已建立或已确认可用 | `block` | 回到 `workspace_entry` / 事实链修复 |
+| `locate` | 当前事项、`workspace_entry`、`recovery_entry` | 现场定位、恢复入口、checkpoint、purity 快照 | `block` | 回到 `create` 或事实链修复 |
+| `resume`（由恢复模型承接） | `locate` 输出 + recovery 主入口 | 下一步执行上下文 | `block` | 回到 recovery 回写修复 |
+| `cleanup` | Loom-owned 残留路径、现场纯度 | 仅 Loom 残留被清理 | `block` | 回到人工分流与纯度修复 |
+| `retire` | `cleanup` 结果 + recovery 主入口 | `current_checkpoint: retired` | `block` / `fallback` | 回到 `cleanup` 或 recovery 回写 |
+
+说明：
+
+- `resume` 的入口语义由 [recovery-model.md](./recovery-model.md) 承接，本文件只定义它与 `locate` 的边界关系。
+
 ## 2. 统一输入与输出
 
 ### 2.1 输入
@@ -94,6 +108,13 @@ Loom 当前日常执行 CLI 至少提供以下入口：
 - 恢复入口 `recovery`
 - 当前 checkpoint `checkpoint`
 - 当前 purity `purity`
+
+定位规则固定为：
+
+- 先用 `init-result` 找到当前事项与 carrier locator
+- 再由 `work item.workspace_entry` 定位现场
+- 再用 `work item.recovery_entry` 读取动态状态
+- 最后以 status-surface 给出派生汇总，不反向覆盖 recovery authored 值
 
 ### 4.2 失败语义
 
@@ -166,4 +187,3 @@ Loom 当前日常执行 CLI 至少提供以下入口：
 - PR purity
 
 这些项可以作为后续宿主适配扩展接入，但当前不改变生命周期命令的硬失败口径。
-

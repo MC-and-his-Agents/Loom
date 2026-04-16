@@ -22,6 +22,19 @@ Loom 当前的 checkpoint 顺序固定为：
 - `merge checkpoint`
   - 只承接最终放行，见 [merge-checkpoint.md](./merge-checkpoint.md)
 
+## 1.1 统一合同矩阵
+
+| checkpoint | 读取重点 | 允许结果 | 默认回退去向 |
+| --- | --- | --- | --- |
+| `admission` | 事项目标/范围、事项绑定、恢复入口可读性 | `pass` / `block` / `fallback` | `admission` |
+| `build` | admission 已成立前提下的验证入口、状态链与 lane 一致性 | `pass` / `block` / `fallback` | `admission`（仅 admission 输入失真时） |
+| `merge` | build 结果、放行输入、风险/回滚与阻断项 | `allow` / `block` / `fallback` | `build` 或 `admission`（见 merge 合同） |
+
+说明：
+
+- `merge` 的结果词在执行侧仍以 [merge-checkpoint.md](./merge-checkpoint.md) 为准，本表只表达三类 checkpoint 的回退关系。
+- PR 模板可作为 `merge` 放行材料之一，但不会成为长期 authored 真相。
+
 ## 2. 统一读取基线
 
 任一 checkpoint 的机械读取都必须按以下顺序进行：
@@ -113,3 +126,15 @@ Loom 当前的 checkpoint 顺序固定为：
 - `merge checkpoint` 可以额外消费 PR 模板、reviewer 结论与运行证据，但这些都不是长期真相源
 - PR 模板只能作为 merge 放行的补充输入，不得反向覆盖 `work item`、恢复主入口或状态面的 authored 事实
 
+## 6. 失败分类最小语义
+
+为避免把失败原因混成单一“未通过”，三类 checkpoint 至少要能区分：
+
+- `missing_inputs`
+  - 必填输入缺失或不可定位
+- `inconsistent_facts`
+  - 字段可读但跨载体冲突
+- `scope_or_purity_risk`
+  - 范围或纯度信号显示当前阶段不应继续放行
+- `fallback_required`
+  - 当前阶段已无法在本阶段收口，必须回退前序
