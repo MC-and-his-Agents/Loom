@@ -78,3 +78,29 @@
 - review 前仍先执行 `flow pre-review`，再进入语义 review 或 merge
 - 如遇 `state-check` 或 `checkpoint` 阻断，先回退补齐事实链/范围/证据，不要绕过入口
 - 仅在宿主适配层补平台细节，避免反向污染 Loom 内核合同
+
+## 5. 第一波场景 SKILLS 收口依据
+
+`#71` 的 Done When 现已由以下仓库真相共同覆盖：
+
+- 6 个场景 skills 均已注册、可发现、可显式调用
+  - 以 `skills/registry.json`、各 skill `contract.json` 与 `skills/route-matrix.md` 为准
+- `loom-init` 可按任务信号隐式导向这 6 个场景
+  - 以 `loom_init route`、`skills/route-matrix.md` 与 `loom_check` 路由校验为准
+- CLI / gate / docs / validation / GitHub 状态一致
+  - CLI：`loom_flow flow resume|pre-review|handoff|merge-ready`
+  - gate：`loom_check`
+  - docs：`skills/README.md`、`adoption/execution-entry-compatibility.md`、`adoption/versioning-and-upgrades.md`
+  - validation：`adoption/validation-skill-*.md`
+  - GitHub：父子 issue 树与对应 PR 已收口到主干
+
+## 5. 第一波场景 SKILLS 收口状态
+
+本次发布已完成以下收口条件：
+
+- `loom-init` 继续作为唯一 root entry，6 个场景 skill 均已注册、可发现、可显式调用
+- `loom-init route`、`flow resume`、`flow handoff`、`flow merge-ready` 已与既有入口一起纳入 `loom_check`
+- 6 个场景 skill 的验证记录、升级说明、交付面说明与发布说明已全部回写到版本控制
+- GitHub issue / sub-issue、CLI、gate、文档与 adoption 记录已对齐到同一条仓库真相
+
+对应总父 issue：`#71`
