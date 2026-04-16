@@ -110,7 +110,9 @@ Loom 对宿主只要求最小合同，不要求统一实现形态。
 Loom 当前仓库内以机读工件承接这组最小合同：
 
 - `skills/registry.json`
+- `skills/route-matrix.md`
 - `skills/loom-init/contract.json`
+- `skills/<scenario>/contract.json`
 - `skills/upgrade-contract.json`
 
 Loom 在此层不规定包管理器、注册中心、目录布局或分发协议；这些属于宿主实现，而不是 Loom 内核。

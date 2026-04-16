@@ -94,8 +94,10 @@ CORE_DOCS = (
     "skills/distribution-and-adapter-contract.md",
     "skills/registry.json",
     "skills/upgrade-contract.json",
+    "skills/route-matrix.md",
     "skills/loom-init/SKILL.md",
     "skills/loom-init/contract.json",
+    "skills/loom-init/references/input-signals.md",
     "skills/loom-init/references/intake-signals.md",
     "skills/loom-init/references/output-contract.md",
     "templates/scaffold/spec.md",
@@ -112,7 +114,9 @@ AUTOMATION_FRONTLOAD_TEMPLATES = (
 AUTOMATION_FRONTLOAD_SKILLS = (
     "skills/README.md",
     "skills/distribution-and-adapter-contract.md",
+    "skills/route-matrix.md",
     "skills/loom-init/SKILL.md",
+    "skills/loom-init/references/input-signals.md",
     "skills/loom-init/references/intake-signals.md",
     "skills/loom-init/references/output-contract.md",
 )
@@ -351,11 +355,19 @@ def load_command_json(
 
 def check_skill_manifests(root: Path) -> list[Failure]:
     failures: list[Failure] = []
+    expected_entries = {
+        "loom-init": "bootstrap/root",
+        "loom-adopt": "scenario/adopt",
+        "loom-resume": "scenario/resume",
+        "loom-pre-review": "scenario/pre-review",
+        "loom-handoff": "scenario/handoff",
+        "loom-retire": "scenario/retire",
+        "loom-merge-ready": "scenario/merge-ready",
+    }
     registry_path = root / "skills/registry.json"
-    contract_path = root / "skills/loom-init/contract.json"
     upgrade_contract_path = root / "skills/upgrade-contract.json"
 
-    for candidate in (registry_path, contract_path, upgrade_contract_path):
+    for candidate in (registry_path, upgrade_contract_path):
         if not candidate.exists():
             return failures
 
@@ -365,11 +377,6 @@ def check_skill_manifests(root: Path) -> list[Failure]:
         return [Failure("skill-manifests", f"`skills/registry.json` is invalid JSON: {exc.msg}")]
 
     try:
-        contract = load_json_file(contract_path)
-    except json.JSONDecodeError as exc:
-        return [Failure("skill-manifests", f"`skills/loom-init/contract.json` is invalid JSON: {exc.msg}")]
-
-    try:
         upgrade_contract = load_json_file(upgrade_contract_path)
     except json.JSONDecodeError as exc:
         return [Failure("skill-manifests", f"`skills/upgrade-contract.json` is invalid JSON: {exc.msg}")]
@@ -377,114 +384,143 @@ def check_skill_manifests(root: Path) -> list[Failure]:
     if not isinstance(registry, dict):
         failures.append(Failure("skill-manifests", "`skills/registry.json` must be a JSON object"))
         return failures
-    if not isinstance(contract, dict):
-        failures.append(Failure("skill-manifests", "`skills/loom-init/contract.json` must be a JSON object"))
-        return failures
     if not isinstance(upgrade_contract, dict):
         failures.append(Failure("skill-manifests", "`skills/upgrade-contract.json` must be a JSON object"))
         return failures
 
+    registry_version = registry.get("registry_version")
     root_entry = registry.get("root_entry")
     entries = registry.get("entries")
     upgrade_reference = registry.get("upgrade_contract")
+    if registry_version != upgrade_contract.get("registry_version"):
+        failures.append(Failure("skill-manifests", "`skills/upgrade-contract.json` registry version must match `skills/registry.json`"))
     if not isinstance(root_entry, str) or not root_entry:
         failures.append(Failure("skill-manifests", "`skills/registry.json` must declare a non-empty `root_entry`"))
         return failures
     if not isinstance(entries, list) or not entries:
         failures.append(Failure("skill-manifests", "`skills/registry.json` must declare at least one entry"))
         return failures
+    if root_entry != "loom-init":
+        failures.append(Failure("skill-manifests", "`skills/registry.json` root entry must remain `loom-init`"))
 
-    matching_entry = None
+    root_registry_entry: dict[str, object] | None = None
+    seen_ids: set[str] = set()
     for entry in entries:
-        if isinstance(entry, dict) and entry.get("id") == root_entry:
-            matching_entry = entry
-            break
-    if matching_entry is None:
-        failures.append(
-            Failure(
-                "skill-manifests",
-                f"`skills/registry.json` root entry `{root_entry}` does not match any declared entry",
-            )
-        )
-        return failures
+        if not isinstance(entry, dict):
+            failures.append(Failure("skill-manifests", "every registry entry must be an object"))
+            continue
+        entry_id = entry.get("id")
+        if not isinstance(entry_id, str) or not entry_id:
+            failures.append(Failure("skill-manifests", "every registry entry must declare a non-empty `id`"))
+            continue
+        if entry_id in seen_ids:
+            failures.append(Failure("skill-manifests", f"registry declares duplicate entry `{entry_id}`"))
+            continue
+        seen_ids.add(entry_id)
+        if entry_id == root_entry:
+            root_registry_entry = entry
+        expected_role = expected_entries.get(entry_id)
+        if expected_role is None:
+            failures.append(Failure("skill-manifests", f"registry declares unexpected entry `{entry_id}`"))
+        elif entry.get("role") != expected_role:
+            failures.append(Failure("skill-manifests", f"registry entry `{entry_id}` must declare role `{expected_role}`"))
 
-    manifest_path = matching_entry.get("manifest")
-    if not isinstance(manifest_path, str) or not manifest_path:
-        failures.append(
-            Failure("skill-manifests", f"registry entry `{root_entry}` must declare a non-empty `manifest`")
-        )
-        return failures
+        for field in ("role", "contract_version", "manifest", "executable"):
+            value = entry.get(field)
+            if not isinstance(value, str) or not value:
+                failures.append(Failure("skill-manifests", f"registry entry `{entry_id}` must declare `{field}`"))
 
-    if manifest_path != "loom-init/contract.json":
-        failures.append(
-            Failure(
-                "skill-manifests",
-                f"registry entry `{root_entry}` points to unexpected manifest `{manifest_path}`",
-            )
-        )
-    executable_path = matching_entry.get("executable")
-    if not isinstance(executable_path, str) or not executable_path:
-        failures.append(
-            Failure("skill-manifests", f"registry entry `{root_entry}` must declare a non-empty `executable`")
-        )
-    elif not (registry_path.parent / executable_path).resolve().exists():
-        failures.append(
-            Failure(
-                "skill-manifests",
-                f"registry entry `{root_entry}` points to missing executable `{executable_path}`",
-            )
-        )
+        manifest_path = entry.get("manifest")
+        if not isinstance(manifest_path, str) or not manifest_path:
+            continue
+        manifest_file = registry_path.parent / manifest_path
+        if not manifest_file.exists():
+            failures.append(Failure("skill-manifests", f"registry entry `{entry_id}` points to missing manifest `{manifest_path}`"))
+            continue
+        executable_path = entry.get("executable")
+        if isinstance(executable_path, str) and executable_path:
+            if not (registry_path.parent / executable_path).resolve().exists():
+                failures.append(
+                    Failure("skill-manifests", f"registry entry `{entry_id}` points to missing executable `{executable_path}`")
+                )
+
+        try:
+            contract = load_json_file(manifest_file)
+        except json.JSONDecodeError as exc:
+            failures.append(Failure("skill-manifests", f"`{manifest_path}` is invalid JSON: {exc.msg}"))
+            continue
+        if not isinstance(contract, dict):
+            failures.append(Failure("skill-manifests", f"`{manifest_path}` must be a JSON object"))
+            continue
+
+        if contract.get("id") != entry_id:
+            failures.append(Failure("skill-manifests", f"`{manifest_path}` id must match registry entry `{entry_id}`"))
+        if contract.get("role") != entry.get("role"):
+            failures.append(Failure("skill-manifests", f"`{manifest_path}` role must match registry entry `{entry_id}`"))
+        if contract.get("contract_version") != entry.get("contract_version"):
+            failures.append(Failure("skill-manifests", f"`{manifest_path}` contract version must match registry entry `{entry_id}`"))
+
+        contract_root = contract.get("root_entry")
+        if entry_id == root_entry:
+            if contract_root is not True:
+                failures.append(Failure("skill-manifests", f"`{manifest_path}` must declare `root_entry: true`"))
+        elif contract_root is not False:
+            failures.append(Failure("skill-manifests", f"`{manifest_path}` must declare `root_entry: false`"))
+
+        entrypoint = contract.get("entrypoint")
+        if not isinstance(entrypoint, dict):
+            failures.append(Failure("skill-manifests", f"`{manifest_path}` must declare `entrypoint`"))
+        else:
+            required_entrypoint_keys = {"skill_markdown", "adapter_metadata"}
+            if entry_id == "loom-init":
+                required_entrypoint_keys.add("bootstrap_cli")
+                required_entrypoint_keys.add("route_cli")
+            else:
+                required_entrypoint_keys.add("orchestration_cli")
+            for key in required_entrypoint_keys:
+                value = entrypoint.get(key)
+                if not isinstance(value, str) or not value:
+                    failures.append(Failure("skill-manifests", f"`{manifest_path}` missing `entrypoint.{key}`"))
+                    continue
+                if not (manifest_file.parent / value).exists():
+                    failures.append(Failure("skill-manifests", f"`{manifest_path}` points `entrypoint.{key}` to missing `{value}`"))
+
+        for section in ("input_contract", "output_contract", "routing"):
+            value = contract.get(section)
+            if not isinstance(value, dict):
+                failures.append(Failure("skill-manifests", f"`{manifest_path}` must declare `{section}`"))
+                continue
+            reference = value.get("reference")
+            if not isinstance(reference, str) or not reference:
+                failures.append(Failure("skill-manifests", f"`{manifest_path}` must declare `{section}.reference`"))
+                continue
+            if not (manifest_file.parent / reference).exists():
+                failures.append(Failure("skill-manifests", f"`{manifest_path}` points `{section}.reference` to missing `{reference}`"))
+
+        installation = contract.get("installation")
+        if not isinstance(installation, dict):
+            failures.append(Failure("skill-manifests", f"`{manifest_path}` must declare `installation`"))
+        else:
+            for field in ("registry", "upgrade_contract"):
+                value = installation.get(field)
+                if not isinstance(value, str) or not value:
+                    failures.append(Failure("skill-manifests", f"`{manifest_path}` must declare `installation.{field}`"))
+                    continue
+                if not (manifest_file.parent / value).exists():
+                    failures.append(Failure("skill-manifests", f"`{manifest_path}` points `installation.{field}` to missing `{value}`"))
+
+    if root_registry_entry is None:
+        failures.append(Failure("skill-manifests", f"`skills/registry.json` root entry `{root_entry}` does not match any declared entry"))
+        return failures
+    if seen_ids != set(expected_entries):
+        missing = sorted(set(expected_entries) - seen_ids)
+        extra = sorted(seen_ids - set(expected_entries))
+        if missing:
+            failures.append(Failure("skill-manifests", f"registry is missing first-wave entries: {', '.join(missing)}"))
+        if extra:
+            failures.append(Failure("skill-manifests", f"registry contains unexpected first-wave entries: {', '.join(extra)}"))
     if upgrade_reference != "upgrade-contract.json":
         failures.append(Failure("skill-manifests", "`skills/registry.json` must point to `upgrade-contract.json`"))
-
-    contract_id = contract.get("id")
-    contract_root = contract.get("root_entry")
-    entrypoint = contract.get("entrypoint")
-    input_contract = contract.get("input_contract")
-    output_contract = contract.get("output_contract")
-
-    if contract_id != root_entry:
-        failures.append(
-            Failure(
-                "skill-manifests",
-                f"`skills/loom-init/contract.json` id `{contract_id}` does not match registry root `{root_entry}`",
-            )
-        )
-    if contract_root is not True:
-        failures.append(Failure("skill-manifests", "`skills/loom-init/contract.json` must declare `root_entry: true`"))
-    if not isinstance(entrypoint, dict):
-        failures.append(Failure("skill-manifests", "`skills/loom-init/contract.json` must declare `entrypoint`"))
-    else:
-        for key in ("skill_markdown", "adapter_metadata", "bootstrap_cli"):
-            value = entrypoint.get(key)
-            if not isinstance(value, str) or not value:
-                failures.append(Failure("skill-manifests", f"`entrypoint.{key}` must be a non-empty string"))
-                continue
-            if not (contract_path.parent / value).exists():
-                failures.append(Failure("skill-manifests", f"`entrypoint.{key}` points to missing `{value}`"))
-
-    for key, value in (("input_contract", input_contract), ("output_contract", output_contract)):
-        if not isinstance(value, dict):
-            failures.append(Failure("skill-manifests", f"`{key}` must be an object"))
-            continue
-        reference = value.get("reference")
-        if not isinstance(reference, str) or not reference:
-            failures.append(Failure("skill-manifests", f"`{key}.reference` must be a non-empty string"))
-            continue
-        if not (contract_path.parent / reference).exists():
-            failures.append(Failure("skill-manifests", f"`{key}.reference` points to missing `{reference}`"))
-
-    installation = contract.get("installation")
-    if not isinstance(installation, dict):
-        failures.append(Failure("skill-manifests", "`installation` must be an object"))
-    else:
-        for key in ("registry", "upgrade_contract"):
-            value = installation.get(key)
-            if not isinstance(value, str) or not value:
-                failures.append(Failure("skill-manifests", f"`installation.{key}` must be a non-empty string"))
-                continue
-            if not (contract_path.parent / value).exists():
-                failures.append(Failure("skill-manifests", f"`installation.{key}` points to missing `{value}`"))
 
     upgrade_root = upgrade_contract.get("root_entry")
     current_contract_version = upgrade_contract.get("current_contract_version")
@@ -496,21 +532,150 @@ def check_skill_manifests(root: Path) -> list[Failure]:
                 f"`skills/upgrade-contract.json` root entry `{upgrade_root}` does not match registry root `{root_entry}`",
             )
         )
-    if current_contract_version != matching_entry.get("contract_version"):
+    if current_contract_version != root_registry_entry.get("contract_version"):
         failures.append(
             Failure(
                 "skill-manifests",
                 "`skills/upgrade-contract.json` current contract version must match the registry entry version",
             )
         )
-    if not isinstance(upgrade_policy, dict):
-        failures.append(Failure("skill-manifests", "`skills/upgrade-contract.json` must declare `upgrade_policy`"))
+        if not isinstance(upgrade_policy, dict):
+            failures.append(Failure("skill-manifests", "`skills/upgrade-contract.json` must declare `upgrade_policy`"))
     else:
         if upgrade_policy.get("mode") != "explicit":
             failures.append(Failure("skill-manifests", "`upgrade_policy.mode` must be `explicit`"))
         refresh_required = upgrade_policy.get("refresh_required")
         if not isinstance(refresh_required, list) or not refresh_required:
             failures.append(Failure("skill-manifests", "`upgrade_policy.refresh_required` must be a non-empty list"))
+        else:
+            required = {"registry", "manifest", "executable", "referenced_resources"}
+            if not required.issubset(set(refresh_required)):
+                failures.append(Failure("skill-manifests", "`upgrade_policy.refresh_required` must cover registry, manifest, executable, and referenced_resources"))
+
+    return failures
+
+
+def check_skill_routing(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    target = root / "examples/new-project"
+    tool_path = root / "tools/loom_init.py"
+    if not tool_path.exists() or not target.exists():
+        return failures
+
+    registry = load_json_file(root / "skills/registry.json")
+    if not isinstance(registry, dict):
+        return failures
+    entries = registry.get("entries")
+    if not isinstance(entries, list):
+        return failures
+    explicit_skills = [
+        entry.get("id")
+        for entry in entries
+        if isinstance(entry, dict) and isinstance(entry.get("id"), str) and entry.get("id")
+    ]
+    for skill_id in explicit_skills:
+        payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_init.py", "route", "--target", "examples/new-project", "--skill", skill_id],
+        )
+        if error:
+            failures.append(Failure("skill-routing", f"explicit route for `{skill_id}` failed: {error}"))
+            continue
+        if payload.get("command") != "route":
+            failures.append(Failure("skill-routing", f"explicit route for `{skill_id}` must report `command: route`"))
+        if payload.get("result") != "pass":
+            failures.append(Failure("skill-routing", f"explicit route for `{skill_id}` must pass"))
+        if payload.get("selected_skill") != skill_id:
+            failures.append(Failure("skill-routing", f"explicit route for `{skill_id}` selected `{payload.get('selected_skill')}`"))
+        if payload.get("mode") != "explicit":
+            failures.append(Failure("skill-routing", f"explicit route for `{skill_id}` must report `mode: explicit`"))
+        if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+            failures.append(Failure("skill-routing", f"explicit route for `{skill_id}` must include `summary`"))
+        if not isinstance(payload.get("matched_signals"), list):
+            failures.append(Failure("skill-routing", f"explicit route for `{skill_id}` must include `matched_signals`"))
+        if not isinstance(payload.get("missing_inputs"), list):
+            failures.append(Failure("skill-routing", f"explicit route for `{skill_id}` must include `missing_inputs`"))
+        if payload.get("fallback_to") != "loom-init":
+            failures.append(Failure("skill-routing", f"explicit route for `{skill_id}` must keep `fallback_to: loom-init`"))
+
+    implicit_cases = (
+        ("请初始化这个新项目并接入 Loom", "loom-adopt"),
+        ("请接手当前事项并恢复上下文后继续推进", "loom-resume"),
+        ("请在进入 review 前做统一检查", "loom-pre-review"),
+        ("请准备交接并回写停点", "loom-handoff"),
+        ("请清理并 retire 当前事项现场", "loom-retire"),
+        ("请确认这个事项是否 merge-ready", "loom-merge-ready"),
+    )
+    for task, skill_id in implicit_cases:
+        payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_init.py", "route", "--target", "examples/new-project", "--task", task],
+        )
+        if error:
+            failures.append(Failure("skill-routing", f"implicit route for `{skill_id}` failed: {error}"))
+            continue
+        if payload.get("command") != "route":
+            failures.append(Failure("skill-routing", f"implicit route for `{skill_id}` must report `command: route`"))
+        if payload.get("result") != "pass":
+            failures.append(Failure("skill-routing", f"implicit route for `{skill_id}` must pass"))
+        if payload.get("selected_skill") != skill_id:
+            failures.append(Failure("skill-routing", f"implicit route for `{skill_id}` selected `{payload.get('selected_skill')}`"))
+        if payload.get("mode") != "implicit":
+            failures.append(Failure("skill-routing", f"implicit route for `{skill_id}` must report `mode: implicit`"))
+        if not isinstance(payload.get("matched_signals"), list) or not payload.get("matched_signals"):
+            failures.append(Failure("skill-routing", f"implicit route for `{skill_id}` must include matched signals"))
+        if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+            failures.append(Failure("skill-routing", f"implicit route for `{skill_id}` must include `summary`"))
+        if payload.get("fallback_to") != "loom-init":
+            failures.append(Failure("skill-routing", f"implicit route for `{skill_id}` must keep `fallback_to: loom-init`"))
+
+    fallback_payload, error = load_command_json(
+        root,
+        ["python3", "tools/loom_init.py", "route", "--target", "examples/new-project", "--task", "请帮我看看这个仓库"],
+    )
+    if error:
+        failures.append(Failure("skill-routing", f"fallback route failed: {error}"))
+    else:
+        if fallback_payload.get("result") != "fallback":
+            failures.append(Failure("skill-routing", "ambiguous task must return `fallback`"))
+        if fallback_payload.get("selected_skill") != "loom-init":
+            failures.append(Failure("skill-routing", "fallback route must select `loom-init`"))
+        if not isinstance(fallback_payload.get("missing_inputs"), list) or not fallback_payload.get("missing_inputs"):
+            failures.append(Failure("skill-routing", "fallback route must include `missing_inputs`"))
+
+    ambiguous_payload, error = load_command_json(
+        root,
+        [
+            "python3",
+            "tools/loom_init.py",
+            "route",
+            "--target",
+            "examples/new-project",
+            "--task",
+            "请接手当前事项并在 review 前检查",
+        ],
+    )
+    if error:
+        failures.append(Failure("skill-routing", f"ambiguous route failed: {error}"))
+    else:
+        if ambiguous_payload.get("result") != "fallback":
+            failures.append(Failure("skill-routing", "multi-match task must return `fallback`"))
+        if ambiguous_payload.get("selected_skill") != "loom-init":
+            failures.append(Failure("skill-routing", "multi-match route must select `loom-init`"))
+        if not isinstance(ambiguous_payload.get("matched_signals"), list) or len(ambiguous_payload.get("matched_signals", [])) < 2:
+            failures.append(Failure("skill-routing", "multi-match route must expose matched signals"))
+
+    unknown_payload, error = load_command_json(
+        root,
+        ["python3", "tools/loom_init.py", "route", "--target", "examples/new-project", "--skill", "not-a-skill"],
+    )
+    if error:
+        failures.append(Failure("skill-routing", f"unknown explicit route failed: {error}"))
+    else:
+        if unknown_payload.get("result") != "block":
+            failures.append(Failure("skill-routing", "unknown explicit skill must block"))
+        if unknown_payload.get("selected_skill") != "loom-init":
+            failures.append(Failure("skill-routing", "unknown explicit skill must fall back to `loom-init`"))
 
     return failures
 
@@ -802,6 +967,7 @@ def collect_failures(root: Path) -> list[Failure]:
         )
     )
     failures.extend(check_skill_manifests(root))
+    failures.extend(check_skill_routing(root))
     failures.extend(check_demo_assets(root))
     failures.extend(check_demo_fact_chain(root))
     failures.extend(check_daily_execution_cli(root))
@@ -810,7 +976,7 @@ def collect_failures(root: Path) -> list[Failure]:
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 12
+    categories_checked = 13
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")

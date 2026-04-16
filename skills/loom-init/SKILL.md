@@ -1,19 +1,48 @@
 ---
 name: loom-init
-description: 分析一个新项目或既有仓库的协作场景，选择适合的 Loom 治理、harness、templates 与 adoption 组合，并输出初始化步骤、首批工件与后续事项拆解。Use when Codex needs to start a repository on top of Loom, retrofit Loom into an existing repo, or decide which Loom capabilities should be adopted first.
+description: Loom 的 root entry。负责初始化新项目或既有仓库，并在非初始化任务下根据任务信号把执行者路由到正确场景 skill。Use when Codex needs to start a repository on top of Loom, retrofit Loom into an existing repo, or route a Loom operator to the right scenario skill.
 ---
 
 # Loom Init
 
-使用本 skill 为新项目或既有仓库装配 Loom 的第一批能力。
+使用本 skill 作为 Loom 的唯一 root entry。
 
-先判断当前项目真正需要哪些能力，再决定引入哪些 Loom 工件。不要先套完整分层，也不要把所有模板一次性压进仓库。
+它承担两类职责：
+
+- 初始化或 retrofit Loom
+- 在没有显式指定场景 skill 时，根据任务信号做路由
+
+先判断当前任务究竟属于初始化还是日常执行场景，再决定进入哪个入口。不要把 root skill 继续扩成第二套事实真相源。
 
 当前仓库中的最小可执行入口为：
 
 - `python3 tools/loom_init.py bootstrap --target <repo>`
 - `python3 tools/loom_init.py verify --target <repo>`
 - `python3 tools/loom_init.py fact-chain --target <repo>`
+- `python3 tools/loom_init.py route --target <repo> [--skill <id>] [--task "<request>"]`
+
+场景路由规则见：
+
+- [../route-matrix.md](../route-matrix.md)
+
+显式指定 skill 时，显式调用优先。
+
+未显式指定 skill 时，按任务信号做隐式路由：
+
+- 初始化 / retrofit / 新项目接入
+  - 路由到 `loom-adopt`
+- 接手事项 / 恢复上下文 / 继续推进
+  - 路由到 `loom-resume`
+- review 前检查 / 进入 review 前预检
+  - 路由到 `loom-pre-review`
+- 交接 / 回写停点 / 移交当前事项
+  - 路由到 `loom-handoff`
+- 清理现场 / retire 当前事项
+  - 路由到 `loom-retire`
+- merge-ready / 最终放行前预检
+  - 路由到 `loom-merge-ready`
+
+如果信号不足或同时命中多个场景，不要猜测。回退到 `loom-init`，并要求最小补充信号。
 
 ## 1. 读取顺序
 
@@ -35,12 +64,13 @@ description: 分析一个新项目或既有仓库的协作场景，选择适合�
 - `harness/status-surface.md`
 - `harness/work-item-contract.md`
 - `harness/workspace-model.md`
+- `skills/route-matrix.md`
+- `skills/loom-init/references/input-signals.md`
 - `harness/automation-frontload.md`
 - `harness/workspace-and-purity.md`
 - `harness/execution-context.md`
 - `templates/spec-suite.md`
 - `templates/pull-request.md`
-- `skills/loom-init/references/intake-signals.md`
 - `skills/loom-init/references/output-contract.md`
 
 只有在事项带有明显不确定性、需要进一步分层时，才补读：
@@ -51,7 +81,7 @@ description: 分析一个新项目或既有仓库的协作场景，选择适合�
 
 优先从仓库现状推断答案，只在关键信息缺失时再问用户。
 
-使用 [references/intake-signals.md](./references/intake-signals.md) 组织问诊。必须先完成最小必判字段的收集，再做路径判断。
+使用 [references/input-signals.md](./references/input-signals.md) 组织问诊。必须先完成最小必判字段的收集，再做路径判断。
 
 问诊结果必须收成以下结论，而不是停留在零散观察：
 
