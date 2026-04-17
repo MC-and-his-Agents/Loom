@@ -140,6 +140,7 @@ DEMO_ASSETS = (
     "examples/new-project/.gitkeep",
     "docs/demo-new-project.md",
     "examples/new-project/AGENTS.md",
+    "examples/new-project/.github/PULL_REQUEST_TEMPLATE.md",
     "examples/new-project/.loom/bootstrap/init-result.json",
     "examples/new-project/.loom/bootstrap/manifest.json",
     "examples/new-project/.loom/work-items/INIT-0001.md",
@@ -733,6 +734,34 @@ def check_demo_fact_chain(root: Path) -> list[Failure]:
     return failures
 
 
+def check_demo_repo_local_cli(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    target = root / "examples/new-project"
+    if not target.exists():
+        return failures
+
+    repo_local_commands = [
+        (
+            "repo-local-verify",
+            ["python3", ".loom/bin/loom_init.py", "verify", "--target", "."],
+            "ok",
+        ),
+        (
+            "repo-local-fact-chain",
+            ["python3", ".loom/bin/loom_init.py", "fact-chain", "--target", "."],
+            "ok",
+        ),
+    ]
+    for label, args, expected_key in repo_local_commands:
+        payload, error = load_command_json(root, args, cwd=target)
+        if error:
+            failures.append(Failure("demo-repo-local-cli", f"`{label}` failed: {error}"))
+            continue
+        if payload.get(expected_key) is not True:
+            failures.append(Failure("demo-repo-local-cli", f"`{label}` must report `{expected_key}: true`"))
+    return failures
+
+
 def check_daily_execution_cli(root: Path) -> list[Failure]:
     failures: list[Failure] = []
     example_target = root / "examples/new-project"
@@ -1063,6 +1092,14 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             merge_checkpoint = payload.get("merge_checkpoint")
             if isinstance(merge_checkpoint, dict) and not isinstance(merge_checkpoint.get("pr_template"), dict):
                 failures.append(Failure("daily-execution-cli", "`flow merge-ready` must include `merge_checkpoint.pr_template`"))
+            if payload.get("result") != "fallback":
+                failures.append(Failure("daily-execution-cli", "`flow merge-ready` must return `fallback` for the bootstrap demo"))
+            if payload.get("fallback_to") != "admission":
+                failures.append(Failure("daily-execution-cli", "`flow merge-ready` must fall back to `admission` for the bootstrap demo"))
+            if isinstance(payload.get("build_checkpoint"), dict) and payload["build_checkpoint"].get("fallback_to") != "admission":
+                failures.append(Failure("daily-execution-cli", "`flow merge-ready` build checkpoint must fall back to `admission` for the bootstrap demo"))
+            if isinstance(payload.get("merge_checkpoint"), dict) and payload["merge_checkpoint"].get("fallback_to") != "admission":
+                failures.append(Failure("daily-execution-cli", "`flow merge-ready` merge checkpoint must fall back to `admission` for the bootstrap demo"))
 
     with tempfile.TemporaryDirectory(prefix="loom-check-flow-") as tmp:
         lifecycle_target = Path(tmp) / "new-project"
@@ -1202,6 +1239,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_skill_routing(root))
     failures.extend(check_demo_assets(root))
     failures.extend(check_demo_fact_chain(root))
+    failures.extend(check_demo_repo_local_cli(root))
     failures.extend(check_daily_execution_cli(root))
     failures.extend(check_markdown_links(root))
     return failures

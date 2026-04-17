@@ -97,6 +97,14 @@ Loom 仓库当前通过以下入口承接最小 core 前置检查：
 
 GitHub Actions 工作流会复用同一入口，而不是维护第二套命令。
 
+对于 Loom 自身仓库，默认 gate 不应退化成单一 job 的自证通过路径。
+最小执行面至少应把以下检查拆成可单独读取的失败面：
+
+- 入口脚本可编译
+- demo bootstrap 可重建
+- repo-local demo CLI 可真实执行
+- `loom_check` 仓库自检可通过
+
 最小接入 demo 则通过以下入口复验：
 
 - `make loom-demo-new-project`

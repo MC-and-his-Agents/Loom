@@ -3,8 +3,51 @@ name: loom-check
 on:
   push:
   pull_request:
+  merge_group:
 
 jobs:
+  py-compile:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Compile Loom entrypoints
+        run: python3 -m py_compile tools/loom_init.py tools/loom_flow.py tools/loom_check.py
+
+  demo-bootstrap:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Rebuild demo bootstrap
+        run: make loom-demo-new-project
+
+  repo-local-cli:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Rebuild demo bootstrap
+        run: make loom-demo-new-project
+      - name: Run repo-local demo CLI
+        run: |
+          cd examples/new-project
+          python3 .loom/bin/loom_init.py verify --target .
+          python3 .loom/bin/loom_init.py fact-chain --target .
+          python3 .loom/bin/loom_flow.py fact-chain --target . --item INIT-0001
+          python3 .loom/bin/loom_flow.py runtime-evidence --target . --item INIT-0001
+          python3 .loom/bin/loom_flow.py state-check --target . --item INIT-0001
+          python3 .loom/bin/loom_flow.py flow pre-review --target . --item INIT-0001
+          python3 .loom/bin/loom_flow.py checkpoint admission --target . --item INIT-0001
+          python3 .loom/bin/loom_flow.py workspace locate --target . --item INIT-0001
+          python3 .loom/bin/loom_flow.py purity-check --target . --item INIT-0001
+
   loom-check:
     runs-on: ubuntu-latest
     permissions:
