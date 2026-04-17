@@ -344,6 +344,19 @@ def gh_json_list(root: Path, args: list[str], key: str) -> tuple[list[dict[str, 
     return [entry for entry in value if isinstance(entry, dict)], []
 
 
+def gh_graphql(root: Path, query: str, variables: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
+    args = ["api", "graphql", "-f", f"query={query}"]
+    for key, value in variables.items():
+        args.extend(["-F", f"{key}={value}"])
+    payload, errors = gh_json(root, args)
+    if errors or payload is None:
+        return None, errors
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return None, ["gh api graphql is missing `data`"]
+    return data, []
+
+
 def git_dirty_entries(root: Path) -> list[dict[str, str]]:
     result = run_git(root, ["status", "--porcelain=v1"])
     if result is None or result.returncode != 0:
@@ -1757,6 +1770,74 @@ def find_project_item(items: list[dict[str, Any]], number: int, kind: str) -> di
     return None
 
 
+def project_item_for_issue(root: Path, issue_id: str, project_number: int) -> tuple[dict[str, Any] | None, list[str]]:
+    query = """
+query($id: ID!) {
+  node(id: $id) {
+    ... on Issue {
+      projectItems(first: 50) {
+        nodes {
+          id
+          project {
+            number
+          }
+          fieldValues(first: 20) {
+            nodes {
+              ... on ProjectV2ItemFieldSingleSelectValue {
+                field {
+                  ... on ProjectV2SingleSelectField {
+                    name
+                  }
+                }
+                name
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+    data, errors = gh_graphql(root, query, {"id": issue_id})
+    if errors or data is None:
+        return None, errors
+    node = data.get("node")
+    if not isinstance(node, dict):
+        return None, ["issue graphql payload is missing `node`"]
+    project_items = node.get("projectItems")
+    if not isinstance(project_items, dict):
+        return None, ["issue graphql payload is missing `projectItems`"]
+    nodes = project_items.get("nodes")
+    if not isinstance(nodes, list):
+        return None, ["issue graphql payload is missing `projectItems.nodes`"]
+    for entry in nodes:
+        if not isinstance(entry, dict):
+            continue
+        project = entry.get("project")
+        if not isinstance(project, dict) or project.get("number") != project_number:
+            continue
+        status_name = None
+        field_values = entry.get("fieldValues")
+        if isinstance(field_values, dict):
+            values = field_values.get("nodes")
+            if isinstance(values, list):
+                for value in values:
+                    if not isinstance(value, dict):
+                        continue
+                    field = value.get("field")
+                    if isinstance(field, dict) and field.get("name") == "Status":
+                        name = value.get("name")
+                        if isinstance(name, str) and name:
+                            status_name = name
+        return {
+            "id": entry.get("id"),
+            "content": {"number": None, "type": "Issue"},
+            "status": status_name,
+        }, []
+    return None, []
+
+
 def set_project_item_done(root: Path, project_id: str, item_id: str, status_field_id: str, done_option_id: str) -> list[str]:
     result = run_process(
         [
@@ -1801,13 +1882,18 @@ def closeout_payload(
             missing_inputs.append("loom_check")
 
     issue_payload: dict[str, Any] | None = None
+    issue_id: str | None = None
     if issue_number is not None:
         issue_payload, issue_errors = gh_json(
             target_root,
-            ["issue", "view", str(issue_number), "--repo", f"{owner}/{repo_name}", "--json", "number,state,title,url"],
+            ["issue", "view", str(issue_number), "--repo", f"{owner}/{repo_name}", "--json", "id,number,state,title,url"],
         )
         if issue_errors:
             missing_inputs.extend(f"issue: {message}" for message in issue_errors)
+        elif issue_payload is not None:
+            raw_issue_id = issue_payload.get("id")
+            if isinstance(raw_issue_id, str) and raw_issue_id:
+                issue_id = raw_issue_id
 
     pr_payload: dict[str, Any] | None = None
     merge_commit_sha: str | None = None
@@ -1848,6 +1934,10 @@ def closeout_payload(
         else:
             items = project_context["items"]
             issue_item = find_project_item(items, issue_number, "issue") if issue_number is not None else None
+            if issue_item is None and issue_id is not None and issue_number is not None:
+                issue_item, issue_item_errors = project_item_for_issue(target_root, issue_id, project_number)
+                if issue_item_errors:
+                    missing_inputs.extend(f"project: {message}" for message in issue_item_errors)
             pr_item = find_project_item(items, pr_number, "pr") if pr_number is not None else None
             if issue_number is not None and issue_item is None:
                 missing_inputs.append("issue is missing from project")
