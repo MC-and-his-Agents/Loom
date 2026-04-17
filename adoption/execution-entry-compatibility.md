@@ -14,6 +14,7 @@
 | 日常读取与检查 | `loom_flow fact-chain/runtime-evidence/state-check` | 输出保持 JSON 结果语义（`result/summary/missing_inputs/fallback_to`） |
 | checkpoint 执行 | `loom_flow checkpoint admission/build/merge` | 三阶段语义与回退关系保持不变 |
 | 现场与纯度治理 | `loom_flow workspace <create/locate/cleanup/retire>` + `purity-check` | 生命周期动作与失败语义保持不变 |
+| 宿主边界与 closeout | `loom_flow host-lifecycle` + `closeout check|sync` | Loom 明确边界与控制面对齐，但不接管宿主 branch/PR/worktree 生命周期 |
 | 高频组合入口 | `loom_flow flow pre-review/review/resume/handoff/merge-ready` | 聚合入口扩张不破坏单命令入口，统一保持 JSON 结果语义 |
 | 场景 skills | `loom-adopt/resume/pre-review/review/handoff/retire/merge-ready` | 场景 skill 只做入口编排，不新增第二套事实真相源 |
 
@@ -44,6 +45,8 @@
 13. `loom_flow flow merge-ready`
 14. `loom_flow checkpoint admission/build/merge`
 15. `loom_flow workspace locate/cleanup/retire`
+16. `loom_flow host-lifecycle`
+17. `loom_flow closeout check`
 
 预期：
 

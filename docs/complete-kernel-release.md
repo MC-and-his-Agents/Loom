@@ -20,6 +20,7 @@
 - workspace 生命周期与纯度治理入口
   - `loom_flow workspace create|locate|cleanup|retire`
   - `loom_flow purity-check`
+  - `loom_flow host-lifecycle`
 - 运行时证据入口与语义校验
   - `loom_flow runtime-evidence`
 - 活跃状态/完整性检查与高频统一入口
@@ -35,6 +36,7 @@
 - gate 入口
   - `loom_check`
   - `loom_init verify`
+  - `loom_flow closeout check|sync`
 
 ## 2. 下游升级路径
 

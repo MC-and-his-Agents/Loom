@@ -49,3 +49,5 @@ Loom 当前不固化：
 - 具体目录命名格式
 - 是否必须使用 worktree
 - 具体命令、脚本或平台命名约定
+
+branch、PR 与 git worktree 的宿主边界见 [host-lifecycle-boundary.md](./host-lifecycle-boundary.md)。

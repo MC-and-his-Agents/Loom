@@ -61,11 +61,13 @@ CORE_DOCS = (
     "harness/checkpoint-model.md",
     "harness/workspace-model.md",
     "harness/workspace-lifecycle.md",
+    "harness/host-lifecycle-boundary.md",
     "harness/recovery-model.md",
     "harness/review-execution.md",
     "harness/status-surface.md",
     "harness/automation-frontload.md",
     "harness/merge-checkpoint.md",
+    "harness/closeout-gate.md",
     "harness/workspace-and-purity.md",
     "templates/spec-suite.md",
     "templates/pull-request.md",
@@ -82,6 +84,7 @@ CORE_DOCS = (
     "adoption/validation-devskills.md",
     "adoption/validation-hotcp.md",
     "adoption/validation-review-and-authoring.md",
+    "adoption/validation-host-lifecycle-and-closeout.md",
     "adoption/validation-fact-chain-mail-listener.md",
     "adoption/validation-checkpoints-hotcp.md",
     "adoption/validation-workspace-lifecycle-hotcp.md",
@@ -712,6 +715,8 @@ def check_demo_assets(root: Path) -> list[Failure]:
         ".loom/bin/loom_flow.py review record",
         ".loom/bin/loom_flow.py recovery writeback",
         ".loom/bin/loom_flow.py work-item create",
+        ".loom/bin/loom_flow.py host-lifecycle",
+        ".loom/bin/loom_flow.py closeout check",
         ".loom/bin/loom_flow.py checkpoint admission",
         ".loom/bin/loom_flow.py workspace locate",
         ".loom/bin/loom_flow.py purity-check",
@@ -904,6 +909,21 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             {"pass"},
         ),
         (
+            "host-lifecycle",
+            ["python3", "tools/loom_flow.py", "host-lifecycle", "--target", "examples/new-project", "--item", "INIT-0001"],
+            {"pass"},
+        ),
+        (
+            "closeout-check",
+            ["python3", "tools/loom_flow.py", "closeout", "check", "--target", ".", "--skip-gate"],
+            {"pass"},
+        ),
+        (
+            "closeout-sync",
+            ["python3", "tools/loom_flow.py", "closeout", "sync", "--target", ".", "--skip-gate"],
+            {"pass"},
+        ),
+        (
             "purity",
             ["python3", "tools/loom_flow.py", "purity-check", "--target", "examples/new-project", "--item", "INIT-0001"],
             {"pass"},
@@ -1080,6 +1100,32 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(Failure("daily-execution-cli", "`review read` must include a `review` object"))
             elif not isinstance(review.get("record"), dict):
                 failures.append(Failure("daily-execution-cli", "`review read` must include `review.record`"))
+        if label == "host-lifecycle":
+            if payload.get("command") != "host-lifecycle":
+                failures.append(Failure("daily-execution-cli", "`host-lifecycle` must report `command: host-lifecycle`"))
+            objects = payload.get("objects")
+            if not isinstance(objects, dict):
+                failures.append(Failure("daily-execution-cli", "`host-lifecycle` must include `objects`"))
+            else:
+                for key in ("workspace", "branch", "pr", "worktree"):
+                    if not isinstance(objects.get(key), dict):
+                        failures.append(Failure("daily-execution-cli", f"`host-lifecycle` must include `{key}`"))
+        if label in {"closeout-check", "closeout-sync"}:
+            if payload.get("command") != "closeout":
+                failures.append(Failure("daily-execution-cli", f"`{label}` must report `command: closeout`"))
+            expected_operation = "check" if label == "closeout-check" else "sync"
+            if payload.get("operation") != expected_operation:
+                failures.append(
+                    Failure("daily-execution-cli", f"`{label}` must report `operation: {expected_operation}`")
+                )
+            repo = payload.get("repo")
+            if not isinstance(repo, dict):
+                failures.append(Failure("daily-execution-cli", f"`{label}` must include `repo`"))
+            else:
+                if not isinstance(repo.get("owner"), str) or not repo.get("owner"):
+                    failures.append(Failure("daily-execution-cli", f"`{label}` must include `repo.owner`"))
+                if not isinstance(repo.get("name"), str) or not repo.get("name"):
+                    failures.append(Failure("daily-execution-cli", f"`{label}` must include `repo.name`"))
         if label == "flow-merge-ready":
             if payload.get("command") != "flow":
                 failures.append(Failure("daily-execution-cli", "`flow merge-ready` must report `command: flow`"))
