@@ -1,9 +1,9 @@
 # Loom
 
-Loom 是一个面向智能体优先项目的治理、harness 与 `SKILLS` 上游底座。
+Loom 是一个面向智能体优先项目的上游治理真相、harness 编排与可执行 `SKILLS` 仓库。
 
 它不是业务模板，也不是单纯的文档集合。  
-它解决的是另一类问题：为什么很多项目代码可以持续产出，但执行秩序、审查质量、长任务连续性和交付收口总是反复失控。
+它解决的是另一类问题：为什么很多项目代码可以持续产出，但 issue / project / PR / review / CI / merge / closeout 这些执行对象仍然缺少统一控制面，导致执行秩序、审查质量、长任务连续性和交付收口反复失控。
 
 ## Loom 试图解决什么问题
 
@@ -81,16 +81,16 @@ Loom 是一个面向智能体优先项目的治理、harness 与 `SKILLS` 上游
 ## Loom 的答案
 
 Loom 不试图替项目做业务决策。  
-Loom 试图提供一套可复用的项目运行结构，让团队和智能体一开始就有稳定的工作方式。
+Loom 试图把治理真相、宿主编排和场景化执行入口收敛成同一套上游能力，让团队和智能体从一开始就有稳定的工作方式。
 
-它由三层组成：
+Loom 当前冻结的三层目标态是：
 
-- `governance`
-  - 定义事项如何分层、真相源在哪里、谁负责什么、什么叫 ready、什么叫 done
-- `harness`
-  - 提供工作现场、checkpoint、resume、状态面、审查门禁、合并门禁和受控入口
-- `SKILLS`
-  - 提供人和智能体的实际使用入口，把规则和机制转成可以直接执行的工作流
+- `governance truth`
+  - 定义事项如何分层、真相源在哪里、状态机如何推进、checkpoint / review / closeout 的职责如何划分
+- `harness orchestration`
+  - 提供 repo-local 执行语义与宿主能力编排，把工作现场、恢复、review、merge-ready、merge、closeout，以及 GitHub / CI / `git worktree` / `gh` 等宿主表面纳入统一控制面
+- `executable SKILLS`
+  - 提供人和智能体的场景化可执行入口，让 adopt、resume、pre-review、handoff、retire、merge-ready 等动作可以直接启动，而不是临场拼装流程
 
 ## Loom 提供的价值
 
@@ -99,9 +99,10 @@ Loom 试图提供一套可复用的项目运行结构，让团队和智能体一
 - 受控的执行入口，而不是随意开工
 - 清晰的状态分层，而不是多处并行记账
 - 对长任务友好的恢复机制，而不是依赖聊天上下文
-- 分层审查与门禁，而不是把所有把关动作混在一起
+- 以 `merge-ready` 为中心的分层审查与门禁，而不是把所有把关动作混在一起
+- 对 GitHub / PR / review / CI / merge / closeout 的统一编排，而不是每轮都重新约定宿主动作
 - 更可复验的收口，而不是“代码合了就算完”
-- 可版本化升级的治理与 harness，而不是每个项目各改各的
+- 可版本化升级的治理、harness 与 `SKILLS`，而不是每个项目各改各的
 
 ## Loom 不是什么
 
@@ -110,23 +111,25 @@ Loom 不是：
 - 业务代码模板
 - 通用代码生成器
 - 只输出 Markdown 的文档仓库
-- GitHub、CI 或代码审查的替代品
+- 从零重写 GitHub、CI、代码审查引擎、`git worktree` 或 `gh` 的底层产品
 - 把所有项目强行约束成同一目录结构的僵硬框架
+
+但 Loom 的目标职责，正是把这些宿主能力统一纳入一致的治理与执行编排，而不是把它们排除在体系外。
 
 ## 仓库将包含什么
 
 Loom 当前按五个区域组织：
 
 - `governance/`
-  - 治理原则、事项模型、审查标准、成熟度与关闭语义
+  - 治理真相、事项模型、状态机、审查职责、成熟度与关闭语义
 - `harness/`
-  - 执行上下文、工作现场、恢复模型、checkpoint、纯度与自动化前置
+  - repo-local 执行语义、工作现场、恢复模型、checkpoint、宿主编排、纯度与自动化前置
 - `templates/`
   - 正式规约模板、PR 模板和其他结构化工件
 - `adoption/`
   - 提取台账、落点映射、采用动机、事项分流与候选模式
 - `skills/`
-  - 初始化、执行、审查、收口等场景化入口
+  - 初始化、接手、审查、交接、merge-ready、收口等场景化可执行入口
 
 仓库内当前的主要交付物包括：
 
@@ -143,7 +146,7 @@ Loom 当前按五个区域组织：
 当前上游交付面已经明确包括：
 
 - `governance`、`harness`、`templates` 的稳定核心合同
-- `skills` 的稳定入口与分发 / 适配合同
+- `SKILLS` 的稳定可执行入口、路由与适配合同
 - `adoption` 中的验证记录合同、经验回流、升级路径与上游交付面说明
 
 ## 适合谁
@@ -155,9 +158,12 @@ Loom 适合这些场景：
 - 你需要长任务能 checkpoint、恢复和交接
 - 你希望治理能力独立于单一业务仓库持续演进
 
-## 目标中的执行内核
+## Loom 2.0 的执行目标
 
-Loom 的执行内核目标，不是长期停留在“最小可执行”层面，而是形成可被下游直接消费的完整执行内核：
+Loom 当前已经具备一批 repo-local CLI、gate 与 `SKILLS` 入口。  
+在这个基础上，Loom 2.0 的目标不是停在“最小可执行”层面，而是形成一套以 `merge-ready` 为中心、可被下游直接消费的完整执行编排面。
+
+当前已经稳定的 repo-local 入口包括：
 
 - 仓库自检可通过 `make loom-check` 运行
 - 初始化入口可通过 `python3 tools/loom_init.py bootstrap --target <repo>` 运行
@@ -169,10 +175,16 @@ Loom 的执行内核目标，不是长期停留在“最小可执行”层面，
 - 日常执行入口可通过 `python3 tools/loom_flow.py <...>` 运行
 - 新项目 demo 可通过 `make loom-demo-new-project` 复验
 
-完整目标还包括：
+继续收敛的目标还包括：
 
+- 根 `SKILL` 与场景 `SKILLS` 形成稳定路由，让 agent 可以直接启动 adopt / resume / pre-review / handoff / retire / merge-ready
+- review、guardian、CI、merge gate、closeout 在不同层级提前暴露问题，而不是把 final review 当作第一次系统性发现问题的地方
 - `admission checkpoint`、`build checkpoint`、`merge checkpoint` 的工程化承接
 - 工作现场生命周期与纯度治理的稳定入口
 - 运行时可见性、验证入口与 gate 输入的稳定脚本面
+- issue / project / PR / 状态面 / closeout 的真相同步与宿主控制面编排
+- branch / PR / `git worktree` / CI / review engine 等宿主对象的边界与承接方式明确
 - 日常执行动作的统一入口，而不是依赖会话解释补齐
-- `skills` / CLI / gate 的日常入口矩阵与职责边界
+- `SKILLS` / CLI / gate 的日常入口矩阵与职责边界
+
+本仓当前先冻结这一目标态与职责边界；具体实现拆分、脚本补齐、门禁接线与验证回合由后续 issue / PR 承接。
