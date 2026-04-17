@@ -53,6 +53,16 @@ def safe_read_json(path: Path) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
+def command_prefix(root: Path, tool_name: str) -> str:
+    loom_tool = root / ".loom/bin" / tool_name
+    repo_tool = root / "tools" / tool_name
+    if loom_tool.exists():
+        return f"python3 .loom/bin/{tool_name}"
+    if repo_tool.exists():
+        return f"python3 tools/{tool_name}"
+    return f"python3 tools/{tool_name}"
+
+
 def git_remote_origin(root: Path) -> str | None:
     result = run_process(["git", "remote", "get-url", "origin"], root)
     if result.returncode != 0:
@@ -191,7 +201,7 @@ def detect_execution_entry(root: Path, loom_state: str, *, bootstrap_mode: bool)
     if bootstrap_mode:
         return "python3 .loom/bin/loom_flow.py flow resume --target . --item INIT-0001"
     if loom_state == "active":
-        return f"python3 tools/loom_flow.py flow resume --target {root} --item INIT-0001"
+        return f"{command_prefix(root, 'loom_flow.py')} flow resume --target . --item INIT-0001"
     if loom_state == "partial":
         return "python3 tools/loom_init.py route --target <repo> --task \"请接手当前事项并恢复上下文后继续推进\""
     return "unknown"
@@ -201,7 +211,7 @@ def detect_validation_entry(loom_state: str, *, bootstrap_mode: bool) -> str:
     if bootstrap_mode:
         return "python3 .loom/bin/loom_init.py verify --target ."
     if loom_state == "active":
-        return "python3 tools/loom_check.py"
+        return "python3 .loom/bin/loom_init.py verify --target ."
     if loom_state == "partial":
         return "python3 tools/loom_init.py verify --target <repo>"
     return "unknown"
@@ -216,7 +226,7 @@ def detect_review_merge_surface(root: Path, loom_state: str, *, bootstrap_mode: 
     if bootstrap_mode:
         merge_surface = "python3 .loom/bin/loom_flow.py checkpoint merge --target . --item INIT-0001"
     elif loom_state == "active":
-        merge_surface = "python3 tools/loom_flow.py checkpoint merge --target <repo> [--item <id>]"
+        merge_surface = f"{command_prefix(root, 'loom_flow.py')} checkpoint merge --target . [--item <id>]"
     else:
         merge_surface = "unknown"
     return {
