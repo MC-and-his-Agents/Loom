@@ -13,6 +13,7 @@ closeout gate 用来回答两件事：
 
 - `python3 tools/loom_flow.py closeout check --target <repo> [--issue <n>] [--pr <n>] [--project <n>]`
 - `python3 tools/loom_flow.py closeout sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>]`
+- `python3 tools/loom_flow.py reconciliation sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>] [--comment-file <path>] [--dry-run]`
 
 ## 3. `check` 最小检查面
 
@@ -36,10 +37,20 @@ closeout gate 用来回答两件事：
 
 ## 4. `sync` 最小动作
 
-`closeout sync` 只做控制面对齐动作：
+本阶段的正式写路径是 `reconciliation sync`。它只做控制面对齐动作：
 
+- 先消费同范围的 `reconciliation audit` 结果，再生成可执行 sync 计划
 - 在条件满足时关闭 issue
 - 在 project 中把对应 item 状态设为 `Done`
+
+约束：
+
+- 若 `reconciliation audit` 出现任一 `block` finding，`sync` 必须直接返回 `block`，且不做任何写入
+- `sync` 只允许对 `fix-needed` finding 做机械修复；`warn` 仅保留提示，不触发写入
+- `--dry-run` 只输出基于 audit 的计划，不修改 GitHub 控制面
+- `--comment-file` 与 `--comment` 二选一，只为当前 issue closeout comment 提供正文来源
+
+`closeout sync` 仍保持既有 closeout 控制面对齐入口；`#179` 再把 `reconciliation audit/sync` 正式接进 gate 与 closeout。
 
 若 parent issue 通过 child issue 的 `closed_out` / `absorbed` 结果完成自身 closeout 判断，`sync` 只负责把这一已成立结论写回控制面，不替代 parent 对剩余缺口的判断。
 
@@ -55,3 +66,4 @@ closeout gate 用来回答两件事：
 - 不在 Loom 内核里固化 GitHub UI、按钮或 ruleset 细节
 - 不把 project 中不存在的 PR item 强行当作阻断
 - 不让 closeout sync 绕过 gate 或 merge 事实
+- 不把 reconciliation sync 扩展成 `#179` gate 接入或 `#162` 验证自动化
