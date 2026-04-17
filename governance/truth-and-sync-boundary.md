@@ -50,7 +50,7 @@ Loom 当前固定四层：
 - recovery 主入口
   - 现在停在哪、下一步是什么、有什么阻断
 - review record
-  - 正式 review 给出的结论是什么
+  - 正式 review 给出的结论、权威 findings、rebuttal 与 disposition 是什么
 
 ## 4. Host Control Truth
 
@@ -99,6 +99,8 @@ Loom 当前固定四层：
 
 - review 结论
   - 回写到 review record
+- review findings / disposition
+  - 仍回写到同一 review record，不新增第二 authored truth object 或状态机
 - 动态停点与下一步
   - 回写到 recovery 主入口
 

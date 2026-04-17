@@ -33,6 +33,12 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
 - `python3 tools/loom_flow.py flow review --target <repo> [--item <id>]`
 - `python3 tools/loom_flow.py review record --target <repo> [--item <id>] --decision <allow|block|fallback> --kind <general_review|code_review|spec_review> --summary <text> --reviewer <id>`
 
+补充约束：
+
+- 若需要写入结构化 findings / disposition，使用 `--findings-file <path>`
+- `--blocking-issue` / `--follow-up` 仅保留兼容 authored 入口，不得与 `--findings-file` 混用
+- 无论通过哪种入口，最终都只允许写回单一 `review_entry` 指向的 review record
+
 这个 skill 先用 `flow review` 读取正式 review 的机械基线，再用 `review record` 把审查结论写成可消费载体。
 
 ## 3. 固定编排
@@ -60,6 +66,7 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
 - review 机械基线结果
 - build checkpoint 是否允许进入正式审查
 - review artifact 的定位与已记录结论
+- review record 中的权威 findings / disposition 摘要
 - 审查结论（`allow` / `block` / `fallback`）
 - 若当前不能继续，应回退到哪里
 
@@ -71,6 +78,7 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
 - 审查执行严格以 `flow review` 为前置，而不是绕过预检
 - 输出 JSON 与 review record 都能直接支撑 merge checkpoint 消费
 - skill 不创建第二 authored 真相源，不替代 merge-ready 聚合
+- review/disposition contract 只扩展 review record 内部字段，不新增第二 artifact 或新状态机
 
 输入信号与输出合同见：
 

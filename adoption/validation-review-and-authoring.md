@@ -23,7 +23,31 @@ python3 tools/loom_check.py
 python3 tools/loom_flow.py recovery writeback --target <temp-copy> --item INIT-0001 --current-stop "Bootstrap review has started." --next-step "Record the first formal review conclusion." --latest-validation-summary "Bootstrap artifacts verified and ready for semantic review."
 python3 tools/loom_flow.py work-item create --target <temp-copy> --item NEXT-0001 --goal "Validate work item authoring" --scope "Limit changes to `.loom/` artifacts for this temp check" --execution-path execution/support --workspace-entry . --validation-entry "python3 .loom/bin/loom_init.py verify --target ." --closing-condition "The authored work item can be activated and read mechanically." --init-recovery --activate
 python3 tools/loom_flow.py work-item update --target <temp-copy> --item NEXT-0001 --scope "Keep the temp authoring check constrained to `.loom/` files"
-python3 tools/loom_flow.py review record --target <temp-copy> --item NEXT-0001 --decision fallback --kind code_review --summary "Formal review has not approved the item yet." --reviewer loom-check --fallback-to admission
+cat > <temp-copy>/.loom/review-findings.json <<'JSON'
+[
+  {
+    "id": "block-1",
+    "summary": "Formal review has not approved the item yet.",
+    "severity": "block",
+    "rebuttal": null,
+    "disposition": {
+      "status": "rejected",
+      "summary": "The missing approval signal still blocks the review."
+    }
+  },
+  {
+    "id": "warn-1",
+    "summary": "Re-run formal review after the missing approval signal is resolved.",
+    "severity": "warn",
+    "rebuttal": "The follow-up review will be recorded after the blocking item is cleared.",
+    "disposition": {
+      "status": "deferred",
+      "summary": "This follow-up remains open until the next formal review."
+    }
+  }
+]
+JSON
+python3 tools/loom_flow.py review record --target <temp-copy> --item NEXT-0001 --decision fallback --kind code_review --summary "Formal review has not approved the item yet." --reviewer loom-check --fallback-to admission --findings-file .loom/review-findings.json
 ```
 
 ## 结果
@@ -38,9 +62,24 @@ python3 tools/loom_flow.py review record --target <temp-copy> --item NEXT-0001 -
 - `work-item create/update`
   - 只写静态字段；`--activate` 才切换当前 locator truth
 - `review record`
-  - 能写出 merge checkpoint 可机械消费的正式 review 结论
+  - 能在单一 `review_entry` 中写出 merge checkpoint 可机械消费的正式 review 结论
+  - `findings` 成为权威数组，逐条承接 `id`、`severity`、`rebuttal`、`disposition`
+  - `blocking_issues` / `follow_ups` 只保留兼容投影
 - `loom_check`
   - 已把 `flow review`、`review read|record`、`recovery writeback`、`work-item create|update` 纳入 gate
+
+## 对齐复核
+
+- `host action`
+  - 主定义继续落在 [../harness/host-action-contract.md](../harness/host-action-contract.md)
+- `review record`
+  - 主定义继续落在 [../harness/review-execution.md](../harness/review-execution.md)
+- `rebuttal` / `disposition`
+  - 只进入 review record 的权威 `findings` 数组，不迁移到 PR comments、closeout 或 reconciliation
+- `review comments` / `guardian output`
+  - 继续只作为 evidence，不升级为 authored truth
+- `closeout` / `reconciliation sync`
+  - 继续只承接 host control-plane drift 与 sync，不承接 review rebuttal 真相
 
 ## 结论
 
