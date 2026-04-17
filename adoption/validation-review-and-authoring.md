@@ -68,6 +68,19 @@ python3 tools/loom_flow.py review record --target <temp-copy> --item NEXT-0001 -
 - `loom_check`
   - 已把 `flow review`、`review read|record`、`recovery writeback`、`work-item create|update` 纳入 gate
 
+## 对齐复核
+
+- `host action`
+  - 主定义继续落在 [../harness/host-action-contract.md](../harness/host-action-contract.md)
+- `review record`
+  - 主定义继续落在 [../harness/review-execution.md](../harness/review-execution.md)
+- `rebuttal` / `disposition`
+  - 只进入 review record 的权威 `findings` 数组，不迁移到 PR comments、closeout 或 reconciliation
+- `review comments` / `guardian output`
+  - 继续只作为 evidence，不升级为 authored truth
+- `closeout` / `reconciliation sync`
+  - 继续只承接 host control-plane drift 与 sync，不承接 review rebuttal 真相
+
 ## 结论
 
 `pre-review -> review -> merge-ready -> merge checkpoint` 已形成明确分层；同时 recovery writeback 与 work item authoring 也已有稳定脚本面，不再只停留在规则层。
