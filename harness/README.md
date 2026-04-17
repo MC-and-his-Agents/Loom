@@ -25,6 +25,8 @@
   - 定义 `create`、`locate`、`cleanup`、`retire` 与 `purity-check` 的生命周期合同
 - [host-lifecycle-boundary.md](./host-lifecycle-boundary.md)
   - 定义 Loom 与宿主 branch / PR / git worktree 生命周期的边界
+- [host-issue-binding.md](./host-issue-binding.md)
+  - 定义 Loom 消费 `active issue` 与 branch / git worktree / PR / merge commit 的绑定合同
 - [recovery-model.md](./recovery-model.md)
   - 定义唯一恢复主入口、`checkpoint`、`resume`、`handoff` 与每轮回写合同
 - [review-execution.md](./review-execution.md)

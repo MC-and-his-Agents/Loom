@@ -15,6 +15,7 @@
 - 事项何时可以关闭
 
 稳定状态名与转移规则见 [state-machine.md](./state-machine.md)。
+issue 类型、激活规则与 `absorbed` 的消费边界见 [issue-model.md](./issue-model.md)。
 
 ## 2. 成熟度先于关闭
 
@@ -39,6 +40,7 @@
 
 - 当前执行侧入口见 [../harness/closeout-gate.md](../harness/closeout-gate.md)
 - GitHub 与仓内真相如何同步，见 [truth-and-sync-boundary.md](./truth-and-sync-boundary.md)
+- parent / child issue 如何消费 closeout，见 [issue-model.md](./issue-model.md)
 
 ## 5. 规约完成与实现完成的分离语义
 

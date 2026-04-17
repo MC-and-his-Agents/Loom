@@ -21,10 +21,18 @@ closeout gate 用来回答两件事：
 - 本地 gate 结果
 - issue 状态
 - PR 是否已 merged
+- 事项对应实现是否已达到 `absorbed`
 - merged PR 是否已进入 `origin/main`
 - project 中对应 issue 的状态
 
 若这些事实不一致，结果必须返回 `block`。
+
+这里的 `absorbed` 只表示 host merge 后可证明的实现吸收结论，不等于 `closed_out`。
+因此，`closeout check` 至少要能区分：
+
+- 该 issue 已由其对应实现进入 `closed_out`
+- 该 issue 的实现已被其他 merged work `absorbed`，但控制面尚未完成 closeout sync
+- 该 issue 仍保留独立剩余缺口，不能被视为 `absorbed`
 
 ## 4. `sync` 最小动作
 
@@ -33,9 +41,12 @@ closeout gate 用来回答两件事：
 - 在条件满足时关闭 issue
 - 在 project 中把对应 item 状态设为 `Done`
 
+若 parent issue 通过 child issue 的 `closed_out` / `absorbed` 结果完成自身 closeout 判断，`sync` 只负责把这一已成立结论写回控制面，不替代 parent 对剩余缺口的判断。
+
 它不替代：
 
 - PR merge 动作
+- `absorbed` 证明本身
 - review 执行层
 - recovery writeback
 
