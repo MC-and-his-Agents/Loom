@@ -2363,6 +2363,19 @@ def reconciliation_sync_plan(audit_payload: dict[str, Any]) -> tuple[list[dict[s
     return plan, skipped_actions
 
 
+def closeout_reconciliation_result(
+    audit_payload: dict[str, Any] | None,
+) -> tuple[str | None, str | None]:
+    if not isinstance(audit_payload, dict):
+        return None, None
+    result = audit_payload.get("result")
+    if result == "fix-needed":
+        return "reconciliation-sync", "closeout requires reconciliation sync before it can pass."
+    if result == "block":
+        return "manual-reconciliation", "closeout requires manual reconciliation because the audit itself is blocked."
+    return None, None
+
+
 def closeout_payload(
     *,
     target_root: Path,
@@ -2382,6 +2395,27 @@ def closeout_payload(
         gate["stdout"] = gate_result.stdout.strip()
         if gate_result.returncode != 0:
             missing_inputs.append("loom_check")
+
+    reconciliation_payload: dict[str, Any] | None = None
+    closeout_fallback: str | None = None
+    closeout_summary_override: str | None = None
+    if issue_number is not None or pr_number is not None or project_number is not None:
+        reconciliation_payload, reconciliation_errors = reconciliation_audit_payload(
+            target_root=target_root,
+            issue_number=issue_number,
+            pr_number=pr_number,
+            project_number=project_number,
+            owner=owner,
+            repo_name=repo_name,
+        )
+        if reconciliation_errors:
+            missing_inputs.extend(f"reconciliation: {message}" for message in reconciliation_errors)
+        else:
+            closeout_fallback, closeout_summary_override = closeout_reconciliation_result(reconciliation_payload)
+            if closeout_fallback == "reconciliation-sync":
+                missing_inputs.append("reconciliation audit requires sync")
+            if closeout_fallback == "manual-reconciliation":
+                missing_inputs.append("reconciliation audit is blocked")
 
     issue_payload: dict[str, Any] | None = None
     issue_id: str | None = None
@@ -2462,23 +2496,31 @@ def closeout_payload(
         missing_inputs.append("issue is not closed")
 
     result = "pass" if not missing_inputs else "block"
+    summary = (
+        "closeout state is consistent across gate, GitHub issue/PR, project, and main."
+        if result == "pass"
+        else "closeout state is not yet consistent across gate, GitHub issue/PR, project, and main."
+    )
+    fallback_to = None if result == "pass" else "merge"
+    if result == "block" and closeout_summary_override is not None:
+        summary = closeout_summary_override
+        fallback_to = closeout_fallback
+    elif result == "pass" and isinstance(reconciliation_payload, dict) and reconciliation_payload.get("result") == "warn":
+        summary = "closeout state is consistent, but reconciliation audit reported non-blocking warnings that still need review."
     return (
         {
             "command": "closeout",
             "operation": "check",
             "result": result,
-            "summary": (
-                "closeout state is consistent across gate, GitHub issue/PR, project, and main."
-                if result == "pass"
-                else "closeout state is not yet consistent across gate, GitHub issue/PR, project, and main."
-            ),
+            "summary": summary,
             "missing_inputs": missing_inputs,
-            "fallback_to": None if result == "pass" else "merge",
+            "fallback_to": fallback_to,
             "repo": {"owner": owner, "name": repo_name},
             "gate": gate,
             "issue": issue_payload,
             "pr": pr_payload,
             "project": project_payload,
+            **({"reconciliation": reconciliation_payload} if reconciliation_payload is not None else {}),
         },
         [],
     )
@@ -2527,6 +2569,24 @@ def handle_closeout(args: argparse.Namespace) -> int:
 
     if args.operation == "check":
         return emit(payload)
+
+    reconciliation = payload.get("reconciliation")
+    if isinstance(reconciliation, dict):
+        reconciliation_result = reconciliation.get("result")
+        if reconciliation_result in {"fix-needed", "block"}:
+            return emit(
+                {
+                    **payload,
+                    "operation": "sync",
+                    "result": "block",
+                    "summary": (
+                        "closeout sync is blocked until reconciliation sync repairs the audited drift."
+                        if reconciliation_result == "fix-needed"
+                        else "closeout sync is blocked because reconciliation audit could not complete."
+                    ),
+                    "fallback_to": "reconciliation-sync" if reconciliation_result == "fix-needed" else "manual-reconciliation",
+                }
+            )
 
     sync_missing: list[str] = []
     if args.issue is not None:
