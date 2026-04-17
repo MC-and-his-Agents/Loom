@@ -24,31 +24,21 @@
 
 ## 3. 最小成熟度阶段
 
-Loom 当前至少保留以下四阶段：
+稳定状态名、进入条件、允许转移与回退路径，全部唯一落在 [state-machine.md](./state-machine.md)。
 
-- 说明已清楚
-  - 目标、边界、准入条件与验证方式已收口
-- 实现进行中
-  - 正在实现并持续产出实现级证据
-- 合并就绪
-  - 当前实现达到 merge checkpoint 质量线
-- 已进入主干并收口
-  - 必要实现已进入主干，事项状态与文档状态一致
+本文件不再并行重述四阶段名称，只保留总原则：
 
-项目可以细化命名，但不得跳过上述语义区分，也不得破坏 [state-machine.md](./state-machine.md) 中的稳定状态机语义。
+- 不得跳过“说明已清楚 -> 实现进行中 -> 合并就绪 -> 已进入主干并收口”的语义顺序
+- 项目可以细化显示名，但不得破坏 [state-machine.md](./state-machine.md) 的稳定状态机语义
 
 ## 4. 关闭一致性条件
 
-只有以下条件同时成立，事项才应关闭：
+关闭条件的稳定定义也唯一落在 [state-machine.md](./state-machine.md) 中的 `closed_out` 语义。
 
-- 事项目标已达成
-- 必要实现已进入主干
-- 验证结论可追踪
-- 风险与回滚信息已交代
-- 相关文档与主干状态一致
+这里仅补充两个边界：
 
-当前执行侧入口见 [../harness/closeout-gate.md](../harness/closeout-gate.md)。
-GitHub 与仓内真相如何同步，见 [truth-and-sync-boundary.md](./truth-and-sync-boundary.md)。
+- 当前执行侧入口见 [../harness/closeout-gate.md](../harness/closeout-gate.md)
+- GitHub 与仓内真相如何同步，见 [truth-and-sync-boundary.md](./truth-and-sync-boundary.md)
 
 ## 5. 规约完成与实现完成的分离语义
 

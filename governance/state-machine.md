@@ -102,6 +102,8 @@ Loom 当前固定四个成熟度状态：
   - 当范围、关闭条件或准入条件被推翻时
 - `merge_ready -> implementing`
   - 当 review、验证或 checkpoint 结论要求回退时
+- `merge_ready -> clarified`
+  - 当晚暴露的问题已经回到 admission / 说明层，例如共享契约、运行模型或事项边界本身失真
 
 不允许：
 
@@ -135,7 +137,7 @@ Loom 当前固定四个成熟度状态：
 - `spec` 已通过
 - PR 已创建
 - `merge_ready`
-- merge checkpoint 已 `pass`
+- merge checkpoint 已允许放行
 
 关闭动作必须以 `closed_out` 为前提，而不是以“代码改完了”或“PR 绿了”为前提。
 

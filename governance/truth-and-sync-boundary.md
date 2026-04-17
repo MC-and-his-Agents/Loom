@@ -109,7 +109,9 @@ Loom 所说的 `sync`，不是把所有信息复制两份。
 Loom 当前只允许以下同步：
 
 - repo execution truth -> host control truth
-  - 例如 closeout 时把应关闭的 issue / project / PR 状态推进到一致结果
+  - 例如 closeout 时把应关闭的 issue / project 状态推进到一致结果
+- repo execution truth -> derived read surfaces
+  - 例如从 `work item` 与 recovery 主入口重渲染状态面、resume 摘要或其他统一读取面
 - host control truth -> derived read surfaces
   - 例如把 PR / checks 状态汇总到 merge-ready 或 closeout 读面
 
