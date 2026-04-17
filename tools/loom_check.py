@@ -64,6 +64,7 @@ CORE_DOCS = (
     "harness/checkpoint-model.md",
     "harness/workspace-model.md",
     "harness/workspace-lifecycle.md",
+    "harness/host-action-contract.md",
     "harness/host-lifecycle-boundary.md",
     "harness/reconciliation-audit.md",
     "harness/recovery-model.md",
@@ -390,6 +391,118 @@ def require_governance_surface(
     governance_surface = payload.get("governance_surface")
     if not isinstance(governance_surface, dict):
         failures.append(Failure(category, f"{context} must include `governance_surface` as an object"))
+        return
+
+    required_keys = (
+        "repository_mode",
+        "loom_state",
+        "carrier_summary",
+        "execution_entry",
+        "validation_entry",
+        "review_merge_surface",
+        "github_control_plane",
+        "summary",
+        "missing_inputs",
+    )
+    for key in required_keys:
+        if key not in governance_surface:
+            failures.append(Failure(category, f"{context} governance_surface must include `{key}`"))
+
+    for key in ("repository_mode", "loom_state", "execution_entry", "validation_entry", "summary"):
+        if key in governance_surface and (not isinstance(governance_surface.get(key), str) or not governance_surface.get(key)):
+            failures.append(Failure(category, f"{context} governance_surface `{key}` must be a non-empty string"))
+
+    missing_inputs = governance_surface.get("missing_inputs")
+    if missing_inputs is not None and not isinstance(missing_inputs, list):
+        failures.append(Failure(category, f"{context} governance_surface `missing_inputs` must be a list"))
+
+    carrier_summary = governance_surface.get("carrier_summary")
+    if not isinstance(carrier_summary, dict):
+        failures.append(Failure(category, f"{context} governance_surface must include `carrier_summary`"))
+    else:
+        required_carriers = ("work_item", "recovery", "review", "status_surface", "spec_path", "plan_path")
+        for carrier in required_carriers:
+            entry = carrier_summary.get(carrier)
+            if not isinstance(entry, dict):
+                failures.append(Failure(category, f"{context} governance_surface carrier `{carrier}` must be an object"))
+                continue
+            if entry.get("status") not in {"present", "missing", "planned"}:
+                failures.append(
+                    Failure(category, f"{context} governance_surface carrier `{carrier}` status must stay within the stable contract")
+                )
+            for field in ("locator", "source"):
+                value = entry.get(field)
+                if not isinstance(value, str) or not value:
+                    failures.append(
+                        Failure(category, f"{context} governance_surface carrier `{carrier}` must include non-empty `{field}`")
+                    )
+
+    for key in ("review_merge_surface", "github_control_plane"):
+        value = governance_surface.get(key)
+        if value is not None and not isinstance(value, dict):
+            failures.append(Failure(category, f"{context} governance_surface `{key}` must be an object"))
+
+
+def require_host_lifecycle_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: dict[str, object],
+) -> None:
+    if payload.get("result") not in {"pass", "block"}:
+        failures.append(Failure(category, f"{context} must return `pass` or `block`"))
+    if payload.get("fallback_to") not in {None, "admission"}:
+        failures.append(Failure(category, f"{context} fallback must be `null` or `admission`"))
+    if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+        failures.append(Failure(category, f"{context} must include a non-empty `summary`"))
+    if not isinstance(payload.get("missing_inputs"), list):
+        failures.append(Failure(category, f"{context} must include `missing_inputs`"))
+
+    objects = payload.get("objects")
+    if not isinstance(objects, dict):
+        failures.append(Failure(category, f"{context} must include `objects`"))
+        return
+
+    workspace = objects.get("workspace")
+    branch = objects.get("branch")
+    pr = objects.get("pr")
+    worktree = objects.get("worktree")
+    for key, value in (("workspace", workspace), ("branch", branch), ("pr", pr), ("worktree", worktree)):
+        if not isinstance(value, dict):
+            failures.append(Failure(category, f"{context} must include `{key}`"))
+    if not isinstance(workspace, dict) or not isinstance(branch, dict) or not isinstance(pr, dict) or not isinstance(worktree, dict):
+        return
+
+    if workspace.get("ownership") != "loom":
+        failures.append(Failure(category, f"{context} workspace ownership must stay `loom`"))
+    for field in ("entry", "path", "lifecycle_entry"):
+        value = workspace.get(field)
+        if not isinstance(value, str) or not value:
+            failures.append(Failure(category, f"{context} workspace must include non-empty `{field}`"))
+
+    if branch.get("ownership") != "host":
+        failures.append(Failure(category, f"{context} branch ownership must stay `host`"))
+    if branch.get("purity_status") not in {"report_only", "host_managed_without_local_branch"}:
+        failures.append(Failure(category, f"{context} branch purity_status must stay within the stable contract"))
+    if not isinstance(branch.get("next_action"), str) or not branch.get("next_action"):
+        failures.append(Failure(category, f"{context} branch must include non-empty `next_action`"))
+
+    if pr.get("ownership") != "host":
+        failures.append(Failure(category, f"{context} PR ownership must stay `host`"))
+    if pr.get("purity_status") != "report_only":
+        failures.append(Failure(category, f"{context} PR purity_status must stay `report_only`"))
+    if not isinstance(pr.get("next_action"), str) or not pr.get("next_action"):
+        failures.append(Failure(category, f"{context} PR must include non-empty `next_action`"))
+
+    if worktree.get("ownership") != "host":
+        failures.append(Failure(category, f"{context} worktree ownership must stay `host`"))
+    if worktree.get("status") != "host_managed":
+        failures.append(Failure(category, f"{context} worktree status must stay `host_managed`"))
+    for field in ("cwd_within_repo", "next_action"):
+        value = worktree.get(field)
+        if not isinstance(value, str) or not value:
+            failures.append(Failure(category, f"{context} worktree must include non-empty `{field}`"))
 
 
 def require_reconciliation_payload(
@@ -1243,13 +1356,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         if label == "host-lifecycle":
             if payload.get("command") != "host-lifecycle":
                 failures.append(Failure("daily-execution-cli", "`host-lifecycle` must report `command: host-lifecycle`"))
-            objects = payload.get("objects")
-            if not isinstance(objects, dict):
-                failures.append(Failure("daily-execution-cli", "`host-lifecycle` must include `objects`"))
-            else:
-                for key in ("workspace", "branch", "pr", "worktree"):
-                    if not isinstance(objects.get(key), dict):
-                        failures.append(Failure("daily-execution-cli", f"`host-lifecycle` must include `{key}`"))
+            require_host_lifecycle_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`host-lifecycle`",
+                payload=payload,
+            )
         if label in {"closeout-check", "closeout-sync"}:
             if payload.get("command") != "closeout":
                 failures.append(Failure("daily-execution-cli", f"`{label}` must report `command: closeout`"))

@@ -1,6 +1,6 @@
 # Validation: Host Lifecycle Boundary And Closeout Gate
 
-本文记录 `#133` / `#135` / `#162` 的最小复验。
+本文记录 `#133` / `#135` / `#162` / `#167` 的最小复验。
 
 ## 样本
 
@@ -24,21 +24,25 @@ python3 tools/loom_check.py
 - `host-lifecycle`
   - 明确 `workspace` 由 Loom 执行层承接
   - 明确 branch / PR / git worktree 继续由宿主平台承接
+  - 在事实链可读时返回 `pass`，不把宿主边界缺口伪装成顶层 `fallback`
   - 不再把 branch purity / PR purity 留成无去向的 report-only 结论
 - `closeout check`
   - 能同时读取 gate、issue、PR、project、`origin/main`
   - 对 `#131` / `#138` 返回 `pass`
   - 在输出中挂回同范围 `reconciliation audit` payload
+  - 普通 closeout 缺口继续指向 `merge`；`fix-needed` drift 指向 `reconciliation-sync`；`block` drift 指向 `manual-reconciliation`
 - `closeout sync`
   - 在状态已一致时保持幂等
   - 若 `reconciliation` 仍是 `fix-needed` / `block`，会拒绝继续 closeout 写入
+  - 只返回 `pass` / `block`，不额外发明新的 host action 结果词表
 - `reconciliation audit`
   - 对干净样本返回 `pass`
   - 负样本类型稳定收敛为 `absorbed_but_open`、`parent_drift`、`project_drift`
+  - `warn` / `fix-needed` / `block` 继续只停留在 audit 这一层，不被 closeout 改写成 `fallback`
 - `reconciliation sync --dry-run`
   - 只输出计划动作，不伪装成已经完成控制面对齐
 - `loom_check`
-  - 已纳入 `host-lifecycle`、`reconciliation audit`、`closeout` 消费边界的 CLI 契约验证
+  - 已纳入 `host-action-contract`、`host-lifecycle`、`reconciliation audit`、`closeout` 消费边界的 CLI 契约验证
   - 用合成负样本固定验证以下 fail-closed 纪律：
     - `closeout-fix-needed-fail-open`
     - `closeout-block-fallback-drift`
@@ -59,3 +63,5 @@ python3 tools/loom_check.py
 ## 结论
 
 Loom 现在已经把“执行现场抽象”和“宿主 Git/GitHub 对象生命周期”明确分层，同时把 post-merge 的 closeout 检查链路收敛成稳定命令。`#162` 进一步把负向 closeout 验证写入版本控制，证明 `fix-needed` / `block` drift 不会再被 fail-open 地放过，而 `warn` 仍保持显式展示但不默认阻断。
+
+`#167` 则把既有 `host-lifecycle`、`merge-ready`、`reconciliation`、`closeout` 收敛到 [../harness/host-action-contract.md](../harness/host-action-contract.md) 这一唯一主落点，冻结 host-facing actions 的结果与 `fallback_to` 纪律，而不新增新的宿主入口。

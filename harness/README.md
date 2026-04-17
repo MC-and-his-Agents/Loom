@@ -23,6 +23,8 @@
   - 定义执行现场的隔离、定位与 clean state 要求
 - `workspace-lifecycle.md`
   - 定义 `create`、`locate`、`cleanup`、`retire` 与 `purity-check` 的生命周期合同
+- [host-action-contract.md](./host-action-contract.md)
+  - 定义现有 host-facing actions 的统一结果、`fallback_to` 与 ownership 合同
 - [host-lifecycle-boundary.md](./host-lifecycle-boundary.md)
   - 定义 Loom 与宿主 branch / PR / git worktree 生命周期的边界
 - [host-issue-binding.md](./host-issue-binding.md)
@@ -45,7 +47,7 @@
   - 定义现场职责纯度、分支纯度与范围控制边界
 
 这些文件共同表达的不是零散脚本集合，而是从 work item / fact-chain 到 review / merge / closeout 的统一编排链路。
-当 Loom 需要调用 GitHub、CI、review engine、`git worktree` 或其他宿主能力时，也应通过这里定义的责任边界进入，而不是在外部再复制一套真相。
+当 Loom 需要调用 GitHub、CI、review engine、`git worktree` 或其他宿主能力时，也应先通过 [host-action-contract.md](./host-action-contract.md) 收口结果与去向，再由各专题文件承接细节，而不是在外部再复制一套真相。
 
 ## 目录约束
 
