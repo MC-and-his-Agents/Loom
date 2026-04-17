@@ -1,7 +1,7 @@
 {
   "id": "loom-resume",
   "role": "scenario/resume",
-  "contract_version": "1.2.0",
+  "contract_version": "1.3.0",
   "display_name": "Loom Resume",
   "description": "Rebuild a continuation summary from the fact chain, state check, workspace locate, and the current recovery signals.",
   "root_entry": false,
@@ -26,6 +26,7 @@
       "summary",
       "missing_inputs",
       "fallback_to",
+      "governance_surface",
       "workspace",
       "recovery",
       "checkpoint",

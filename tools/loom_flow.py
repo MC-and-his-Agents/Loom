@@ -22,6 +22,7 @@ from fact_chain_support import (
     parse_recovery_entry,
     parse_work_item,
 )
+from governance_surface import build_governance_surface
 
 PR_TEMPLATE_SECTIONS = (
     "## Summary",
@@ -2662,6 +2663,7 @@ def handle_flow(args: argparse.Namespace) -> int:
     )
 
     review_payload: dict[str, Any] | None = None
+    governance_surface = build_governance_surface(target_root)
 
     if args.operation in {"resume", "handoff"}:
         locate_payload = base_workspace_payload(context, "locate")
@@ -2824,6 +2826,10 @@ def handle_flow(args: argparse.Namespace) -> int:
             for message in step.get("missing_inputs", []):
                 if message not in missing_inputs:
                     missing_inputs.append(message)
+    if args.operation == "resume":
+        for message in governance_surface.get("missing_inputs", []):
+            if message not in missing_inputs:
+                missing_inputs.append(message)
 
     return emit(
         {
@@ -2840,6 +2846,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             "missing_inputs": missing_inputs,
             "fallback_to": fallback_to,
             "steps": steps,
+            **({"governance_surface": governance_surface} if args.operation == "resume" else {}),
             **(
                 {
                     "workspace": {

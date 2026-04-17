@@ -179,6 +179,17 @@ class Failure:
     detail: str
 
 
+GOVERNANCE_SURFACE_ROUTE_SKILLS = {
+    "loom-adopt",
+    "loom-resume",
+}
+
+GOVERNANCE_SURFACE_CONTRACT_SKILLS = {
+    "loom-adopt",
+    "loom-resume",
+}
+
+
 def repo_root_from_argv(argv: list[str]) -> Path:
     if len(argv) > 2:
         raise SystemExit("usage: loom_check.py [repo-root]")
@@ -368,6 +379,18 @@ def load_command_json(
     return payload, None
 
 
+def require_governance_surface(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: dict[str, object],
+) -> None:
+    governance_surface = payload.get("governance_surface")
+    if not isinstance(governance_surface, dict):
+        failures.append(Failure(category, f"{context} must include `governance_surface` as an object"))
+
+
 def check_skill_manifests(root: Path) -> list[Failure]:
     failures: list[Failure] = []
     expected_entries = {
@@ -513,6 +536,19 @@ def check_skill_manifests(root: Path) -> list[Failure]:
             if not (manifest_file.parent / reference).exists():
                 failures.append(Failure("skill-manifests", f"`{manifest_path}` points `{section}.reference` to missing `{reference}`"))
 
+        output_contract = contract.get("output_contract")
+        if isinstance(output_contract, dict) and entry_id in GOVERNANCE_SURFACE_CONTRACT_SKILLS:
+            required_sections = output_contract.get("required_sections")
+            if not isinstance(required_sections, list):
+                failures.append(Failure("skill-manifests", f"`{manifest_path}` must declare `output_contract.required_sections`"))
+            elif "governance_surface" not in required_sections:
+                failures.append(
+                    Failure(
+                        "skill-manifests",
+                        f"`{manifest_path}` must require `governance_surface` in `output_contract.required_sections`",
+                    )
+                )
+
         installation = contract.get("installation")
         if not isinstance(installation, dict):
             failures.append(Failure("skill-manifests", f"`{manifest_path}` must declare `installation`"))
@@ -613,6 +649,13 @@ def check_skill_routing(root: Path) -> list[Failure]:
             failures.append(Failure("skill-routing", f"explicit route for `{skill_id}` must include `missing_inputs`"))
         if payload.get("fallback_to") != "loom-init":
             failures.append(Failure("skill-routing", f"explicit route for `{skill_id}` must keep `fallback_to: loom-init`"))
+        if skill_id in GOVERNANCE_SURFACE_ROUTE_SKILLS and payload.get("result") == "pass":
+            require_governance_surface(
+                failures,
+                category="skill-routing",
+                context=f"explicit route for `{skill_id}`",
+                payload=payload,
+            )
 
     implicit_cases = (
         ("请初始化这个新项目并接入 Loom", "loom-adopt"),
@@ -645,6 +688,13 @@ def check_skill_routing(root: Path) -> list[Failure]:
             failures.append(Failure("skill-routing", f"implicit route for `{skill_id}` must include `summary`"))
         if payload.get("fallback_to") != "loom-init":
             failures.append(Failure("skill-routing", f"implicit route for `{skill_id}` must keep `fallback_to: loom-init`"))
+        if skill_id in GOVERNANCE_SURFACE_ROUTE_SKILLS and payload.get("result") == "pass":
+            require_governance_surface(
+                failures,
+                category="skill-routing",
+                context=f"implicit route for `{skill_id}`",
+                payload=payload,
+            )
 
     fallback_payload, error = load_command_json(
         root,
@@ -973,6 +1023,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             for key in ("item", "workspace", "recovery", "checkpoint", "state_check"):
                 if not isinstance(payload.get(key), dict):
                     failures.append(Failure("daily-execution-cli", f"`flow resume` must include `{key}`"))
+            require_governance_surface(
+                failures,
+                category="daily-execution-cli",
+                context="`flow resume`",
+                payload=payload,
+            )
             steps = payload.get("steps")
             if not isinstance(steps, list):
                 failures.append(Failure("daily-execution-cli", "`flow resume` must include `steps`"))

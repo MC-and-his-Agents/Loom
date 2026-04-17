@@ -1,7 +1,7 @@
 {
   "id": "loom-adopt",
   "role": "scenario/adopt",
-  "contract_version": "1.2.0",
+  "contract_version": "1.3.0",
   "display_name": "Loom Adopt",
   "description": "Route initialization and retrofit work to the existing Loom bootstrap, verify, and fact-chain entry points.",
   "root_entry": false,
@@ -27,6 +27,7 @@
       "deferred_capabilities",
       "first_artifacts",
       "first_work_items",
+      "governance_surface",
       "fact_chain",
       "validation_entry"
     ]

@@ -12,6 +12,36 @@
   - 当前阻断所需补齐的信息；无阻断时为空数组
 - `fallback_to`
   - 若当前不能继续执行，应回退到哪个 checkpoint；无回退时为 `null`
+- `governance_surface`
+  - 当前治理承接面的稳定摘要，只回答当前仓库的治理载体与宿主控制面如何落位
+  - 至少固定给出：
+    - `repository_mode`
+      - `new | small-existing | complex-existing`
+    - `loom_state`
+      - `absent | partial | active`
+    - `carrier_summary`
+      - `work_item`
+      - `recovery`
+      - `review`
+      - `status_surface`
+      - `spec_path`
+      - `plan_path`
+      - 每项固定为 `{status, locator, source}`
+    - `execution_entry`
+    - `validation_entry`
+    - `review_merge_surface`
+      - `pr_template`
+      - `validation_surface`
+      - `merge_surface`
+    - `github_control_plane`
+      - `repository`
+      - `default_branch`
+      - `branch_protection`
+      - `required_checks`
+      - `pr_reviews`
+    - `summary`
+    - `missing_inputs`
+  - 这个区块只做 locator + 控制面摘要，不复制实时 authored 状态
 - `workspace`
   - `workspace_entry`、解析后的现场路径、现场是否存在
 - `recovery`
