@@ -30,6 +30,7 @@
 - 读取的是哪一个 `review_entry`
 - review record 中的 `decision`
 - review record 中的权威 `findings`
+- 每条 finding 的 `id`、`severity`、`rebuttal` 与 `disposition`
 - `blocking_issues` / `follow_ups` 只是兼容字段，而不是第二份审查工件
 
 这个 skill 负责正式 review 执行层，不替代 `loom-pre-review` 的机械预检，也不替代 `loom-merge-ready` 的 merge 前聚合放行判断。

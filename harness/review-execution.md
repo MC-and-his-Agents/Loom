@@ -51,9 +51,10 @@ review record 至少应包含：
 其中：
 
 - `findings` 是正式审查结论的权威数组
-- 每条 finding 至少应包含 `summary`、`severity`、`disposition`
-- `severity` 当前稳定值为 `warn`、`fix-needed`、`block`
-- `disposition` 当前稳定值为 `blocking_issue`、`follow_up`
+- 每条 finding 至少应包含 `id`、`summary`、`severity`、`rebuttal`、`disposition`
+- `severity` 当前稳定值为 `warn`、`block`
+- `rebuttal` 当前稳定值为 `null` 或非空字符串
+- `disposition` 当前稳定值为 `null` 或对象；对象内的 `status` 只允许 `accepted`、`rejected`、`deferred`
 - `blocking_issues` / `follow_ups` 只是从 `findings` 投影出的兼容字段，不构成第二真相源
 
 ## 4. 与 merge checkpoint 的边界

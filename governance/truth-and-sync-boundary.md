@@ -50,7 +50,7 @@ Loom 当前固定四层：
 - recovery 主入口
   - 现在停在哪、下一步是什么、有什么阻断
 - review record
-  - 正式 review 给出的结论、权威 findings 与 disposition 是什么
+  - 正式 review 给出的结论、权威 findings、rebuttal 与 disposition 是什么
 
 ## 4. Host Control Truth
 

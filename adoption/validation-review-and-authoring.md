@@ -26,14 +26,24 @@ python3 tools/loom_flow.py work-item update --target <temp-copy> --item NEXT-000
 cat > <temp-copy>/.loom/review-findings.json <<'JSON'
 [
   {
+    "id": "block-1",
     "summary": "Formal review has not approved the item yet.",
-    "severity": "fix-needed",
-    "disposition": "blocking_issue"
+    "severity": "block",
+    "rebuttal": null,
+    "disposition": {
+      "status": "rejected",
+      "summary": "The missing approval signal still blocks the review."
+    }
   },
   {
+    "id": "warn-1",
     "summary": "Re-run formal review after the missing approval signal is resolved.",
     "severity": "warn",
-    "disposition": "follow_up"
+    "rebuttal": "The follow-up review will be recorded after the blocking item is cleared.",
+    "disposition": {
+      "status": "deferred",
+      "summary": "This follow-up remains open until the next formal review."
+    }
   }
 ]
 JSON
@@ -53,7 +63,8 @@ python3 tools/loom_flow.py review record --target <temp-copy> --item NEXT-0001 -
   - 只写静态字段；`--activate` 才切换当前 locator truth
 - `review record`
   - 能在单一 `review_entry` 中写出 merge checkpoint 可机械消费的正式 review 结论
-  - `findings` 成为权威数组，`blocking_issues` / `follow_ups` 只保留兼容投影
+  - `findings` 成为权威数组，逐条承接 `id`、`severity`、`rebuttal`、`disposition`
+  - `blocking_issues` / `follow_ups` 只保留兼容投影
 - `loom_check`
   - 已把 `flow review`、`review read|record`、`recovery writeback`、`work-item create|update` 纳入 gate
 

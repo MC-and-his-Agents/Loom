@@ -191,8 +191,8 @@ GOVERNANCE_SURFACE_CONTRACT_SKILLS = {
     "loom-resume",
 }
 
-REVIEW_FINDING_SEVERITIES = {"warn", "fix-needed", "block"}
-REVIEW_FINDING_DISPOSITIONS = {"blocking_issue", "follow_up"}
+REVIEW_FINDING_SEVERITIES = {"warn", "block"}
+REVIEW_FINDING_DISPOSITION_STATUSES = {"accepted", "rejected", "deferred"}
 
 
 def repo_root_from_argv(argv: list[str]) -> Path:
@@ -604,14 +604,26 @@ def require_review_record_contract(
         if not isinstance(finding, dict):
             failures.append(Failure(category, f"{context} review findings must be JSON objects"))
             continue
+        if not isinstance(finding.get("id"), str) or not finding.get("id"):
+            failures.append(Failure(category, f"{context} review findings must include non-empty `id`"))
         if not isinstance(finding.get("summary"), str) or not finding.get("summary"):
             failures.append(Failure(category, f"{context} review findings must include non-empty `summary`"))
         if finding.get("severity") not in REVIEW_FINDING_SEVERITIES:
             failures.append(Failure(category, f"{context} review finding severity must stay within the stable contract"))
-        if finding.get("disposition") not in REVIEW_FINDING_DISPOSITIONS:
+        rebuttal = finding.get("rebuttal")
+        if rebuttal is not None and (not isinstance(rebuttal, str) or not rebuttal):
             failures.append(
-                Failure(category, f"{context} review finding disposition must stay within the stable contract")
+                Failure(category, f"{context} review finding `rebuttal` must be `null` or a non-empty string")
             )
+        disposition = finding.get("disposition")
+        if disposition is not None:
+            if not isinstance(disposition, dict):
+                failures.append(Failure(category, f"{context} review finding disposition must be `null` or an object"))
+                continue
+            if disposition.get("status") not in REVIEW_FINDING_DISPOSITION_STATUSES:
+                failures.append(Failure(category, f"{context} review finding disposition status must stay within the stable contract"))
+            if not isinstance(disposition.get("summary"), str) or not disposition.get("summary"):
+                failures.append(Failure(category, f"{context} review finding disposition must include non-empty `summary`"))
 
 
 def check_skill_manifests(root: Path) -> list[Failure]:
@@ -1676,14 +1688,24 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             json.dumps(
                 [
                     {
+                        "id": "compat-block-1",
                         "summary": "Formal review has not approved the item yet.",
-                        "severity": "fix-needed",
-                        "disposition": "blocking_issue",
+                        "severity": "block",
+                        "rebuttal": None,
+                        "disposition": {
+                            "status": "rejected",
+                            "summary": "The finding remains open until the missing approval signal is resolved."
+                        },
                     },
                     {
+                        "id": "compat-warn-1",
                         "summary": "Re-run formal review after the missing approval signal is resolved.",
                         "severity": "warn",
-                        "disposition": "follow_up",
+                        "rebuttal": "A follow-up review will be recorded after the blocking issue is resolved.",
+                        "disposition": {
+                            "status": "deferred",
+                            "summary": "This follow-up stays open until the next formal review."
+                        },
                     },
                 ],
                 ensure_ascii=False,

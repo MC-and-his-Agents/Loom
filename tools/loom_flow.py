@@ -78,8 +78,8 @@ WORK_ITEM_FIELD_LABELS = {
 
 REVIEW_DECISIONS = {"allow", "block", "fallback"}
 REVIEW_KINDS = {"general_review", "code_review", "spec_review"}
-REVIEW_FINDING_SEVERITIES = {"warn", "fix-needed", "block"}
-REVIEW_FINDING_DISPOSITIONS = {"blocking_issue", "follow_up"}
+REVIEW_FINDING_SEVERITIES = {"warn", "block"}
+REVIEW_FINDING_DISPOSITION_STATUSES = {"accepted", "rejected", "deferred"}
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -590,23 +590,33 @@ def compat_findings_from_lists(
     decision: str | None,
     blocking_issues: list[str],
     follow_ups: list[str],
-) -> list[dict[str, str]]:
-    findings: list[dict[str, str]] = []
-    blocking_severity = "block" if decision == "block" else "fix-needed"
-    for summary in blocking_issues:
+) -> list[dict[str, Any]]:
+    del decision
+    findings: list[dict[str, Any]] = []
+    for index, summary in enumerate(blocking_issues, start=1):
         findings.append(
             {
+                "id": f"compat-block-{index}",
                 "summary": summary,
-                "severity": blocking_severity,
-                "disposition": "blocking_issue",
+                "severity": "block",
+                "rebuttal": None,
+                "disposition": {
+                    "status": "rejected",
+                    "summary": "Projected from compatibility `blocking_issues`.",
+                },
             }
         )
-    for summary in follow_ups:
+    for index, summary in enumerate(follow_ups, start=1):
         findings.append(
             {
+                "id": f"compat-follow-up-{index}",
                 "summary": summary,
                 "severity": "warn",
-                "disposition": "follow_up",
+                "rebuttal": None,
+                "disposition": {
+                    "status": "deferred",
+                    "summary": "Projected from compatibility `follow_ups`.",
+                },
             }
         )
     return findings
@@ -619,9 +629,9 @@ def compat_lists_from_findings(findings: list[dict[str, Any]]) -> tuple[list[str
         summary = finding.get("summary")
         if not isinstance(summary, str) or not summary.strip():
             continue
-        if finding.get("disposition") == "blocking_issue":
+        if finding.get("severity") == "block":
             blocking_issues.append(summary.strip())
-        elif finding.get("disposition") == "follow_up":
+        elif finding.get("severity") == "warn":
             follow_ups.append(summary.strip())
     return blocking_issues, follow_ups
 
@@ -637,9 +647,15 @@ def normalize_review_findings(raw_findings: Any, *, relative: str) -> tuple[list
             errors.append(f"review artifact `{relative}` findings[{index}] must be a JSON object")
             continue
         normalized = dict(finding)
+        finding_id = normalized.get("id")
         summary = normalized.get("summary")
         severity = normalized.get("severity")
+        rebuttal = normalized.get("rebuttal")
         disposition = normalized.get("disposition")
+        if not isinstance(finding_id, str) or not finding_id.strip():
+            errors.append(f"review artifact `{relative}` findings[{index}] must include non-empty `id`")
+        else:
+            normalized["id"] = finding_id.strip()
         if not isinstance(summary, str) or not summary.strip():
             errors.append(f"review artifact `{relative}` findings[{index}] must include non-empty `summary`")
         else:
@@ -649,11 +665,32 @@ def normalize_review_findings(raw_findings: Any, *, relative: str) -> tuple[list
                 f"review artifact `{relative}` findings[{index}] severity must be one of "
                 f"{', '.join(sorted(REVIEW_FINDING_SEVERITIES))}"
             )
-        if disposition not in REVIEW_FINDING_DISPOSITIONS:
-            errors.append(
-                f"review artifact `{relative}` findings[{index}] disposition must be one of "
-                f"{', '.join(sorted(REVIEW_FINDING_DISPOSITIONS))}"
-            )
+        if rebuttal is not None:
+            if not isinstance(rebuttal, str) or not rebuttal.strip():
+                errors.append(f"review artifact `{relative}` findings[{index}] `rebuttal` must be null or a non-empty string")
+            else:
+                normalized["rebuttal"] = rebuttal.strip()
+        if disposition is not None:
+            if not isinstance(disposition, dict):
+                errors.append(f"review artifact `{relative}` findings[{index}] `disposition` must be null or an object")
+            else:
+                status = disposition.get("status")
+                disposition_summary = disposition.get("summary")
+                if status not in REVIEW_FINDING_DISPOSITION_STATUSES:
+                    errors.append(
+                        f"review artifact `{relative}` findings[{index}] disposition status must be one of "
+                        f"{', '.join(sorted(REVIEW_FINDING_DISPOSITION_STATUSES))}"
+                    )
+                if not isinstance(disposition_summary, str) or not disposition_summary.strip():
+                    errors.append(
+                        f"review artifact `{relative}` findings[{index}] disposition must include non-empty `summary`"
+                    )
+                else:
+                    normalized["disposition"] = {
+                        **disposition,
+                        "status": status,
+                        "summary": disposition_summary.strip(),
+                    }
         findings.append(normalized)
     return findings, errors
 
@@ -3402,14 +3439,24 @@ def handle_work_item(args: argparse.Namespace) -> int:
                     "fallback_to": "admission",
                     "findings": [
                         {
+                            "id": "scaffolded-block-1",
                             "summary": "Review artifact scaffolded but not yet concluded.",
-                            "severity": "fix-needed",
-                            "disposition": "blocking_issue",
+                            "severity": "block",
+                            "rebuttal": None,
+                            "disposition": {
+                                "status": "rejected",
+                                "summary": "Scaffold placeholder must be replaced by a real formal review conclusion.",
+                            },
                         },
                         {
+                            "id": "scaffolded-warn-1",
                             "summary": "Record a real review before asking merge checkpoint to consume it.",
                             "severity": "warn",
-                            "disposition": "follow_up",
+                            "rebuttal": None,
+                            "disposition": {
+                                "status": "deferred",
+                                "summary": "This follow-up stays open until a real review is recorded.",
+                            },
                         },
                     ],
                     "blocking_issues": ["Review artifact scaffolded but not yet concluded."],
