@@ -157,3 +157,4 @@ Loom 的执行真相只允许沿一条事实链流动：
 - 若某仓库还停留在 `checkpoint-lite`，也必须明确唯一动态事实承载面
 - 本文件不重复定义字段如何呈现在 Markdown、JSON 或其他载体；只定义谁拥有 authored 权限
 - issue / project / PR / checks 等 host control truth 不在本文件内定义 authored 归属
+- `active issue` 与 branch / `git worktree` / PR / merge commit 的绑定关系只可被本事实链消费，不进入仓内 authored 真相；其最小绑定合同见 [host-issue-binding.md](./host-issue-binding.md)

@@ -16,6 +16,7 @@
 
 字段载体与同步边界由 [truth-and-sync-boundary.md](./truth-and-sync-boundary.md) 承接。
 执行侧 closeout 入口由 [../harness/closeout-gate.md](../harness/closeout-gate.md) 承接。
+issue 类型与激活语义由 [issue-model.md](./issue-model.md) 承接。
 
 ## 2. 稳定状态
 
@@ -121,11 +122,14 @@ Loom 当前固定四个成熟度状态：
   - 必须退回前一成熟度状态或前一执行链路
 - `retired`
   - 属于现场或恢复入口的终态，不等于事项已 `closed_out`
+- `absorbed`
+  - 属于 closeout 可消费结论，不等于事项成熟度状态
 
 换句话说：
 
 - `block` / `fallback` 是转移结果
 - `retired` 是执行现场状态
+- `absorbed` 是 closeout 可消费语义
 - 事项成熟度仍只落在四个稳定状态中
 
 ## 6. 关闭语义

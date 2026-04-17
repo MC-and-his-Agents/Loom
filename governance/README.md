@@ -11,6 +11,8 @@
 
 当前承接的核心条目：
 
+- [issue-model.md](./issue-model.md)
+  - `#175`
 - [principles.md](./principles.md)
   - `EXT-0001` `EXT-0002` `EXT-0006` `EXT-0023`
 - [review-model.md](./review-model.md)
