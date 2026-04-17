@@ -63,6 +63,16 @@
 - 仍未解除的阻断项
 - 在需要时形成明确提交点或等价可恢复边界
 
+当前稳定回写入口为：
+
+- `python3 tools/loom_flow.py recovery writeback --target <repo> [--item <id>] ...`
+
+边界固定如下：
+
+- `resume` / `handoff` 只读，不得隐式写 recovery authored 字段
+- `recovery writeback` 只写恢复主入口，再同步重渲染状态面
+- 状态面不接受独立 authored 修改
+
 ## 5. `checkpoint-lite` 与标准恢复形态
 
 Loom 默认承认两种恢复形态：

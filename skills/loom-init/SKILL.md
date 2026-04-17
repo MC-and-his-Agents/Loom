@@ -35,6 +35,8 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
   - 路由到 `loom-resume`
 - review 前检查 / 进入 review 前预检
   - 路由到 `loom-pre-review`
+- 正式 review / 语义审查 / review 结论
+  - 路由到 `loom-review`
 - 交接 / 回写停点 / 移交当前事项
   - 路由到 `loom-handoff`
 - 清理现场 / retire 当前事项

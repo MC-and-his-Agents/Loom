@@ -62,6 +62,7 @@ CORE_DOCS = (
     "harness/workspace-model.md",
     "harness/workspace-lifecycle.md",
     "harness/recovery-model.md",
+    "harness/review-execution.md",
     "harness/status-surface.md",
     "harness/automation-frontload.md",
     "harness/merge-checkpoint.md",
@@ -80,6 +81,7 @@ CORE_DOCS = (
     "adoption/validation-new-project.md",
     "adoption/validation-devskills.md",
     "adoption/validation-hotcp.md",
+    "adoption/validation-review-and-authoring.md",
     "adoption/validation-fact-chain-mail-listener.md",
     "adoption/validation-checkpoints-hotcp.md",
     "adoption/validation-workspace-lifecycle-hotcp.md",
@@ -100,6 +102,11 @@ CORE_DOCS = (
     "skills/loom-init/references/input-signals.md",
     "skills/loom-init/references/intake-signals.md",
     "skills/loom-init/references/output-contract.md",
+    "skills/loom-review/SKILL.md",
+    "skills/loom-review/contract.json",
+    "skills/loom-review/references/input-signals.md",
+    "skills/loom-review/references/output-contract.md",
+    "templates/review-record.md",
     "templates/scaffold/spec.md",
     "templates/scaffold/plan.md",
     "tools/loom_init.py",
@@ -145,6 +152,7 @@ DEMO_ASSETS = (
     "examples/new-project/.loom/bootstrap/manifest.json",
     "examples/new-project/.loom/work-items/INIT-0001.md",
     "examples/new-project/.loom/progress/INIT-0001.md",
+    "examples/new-project/.loom/reviews/INIT-0001.json",
     "examples/new-project/.loom/status/current.md",
     "examples/new-project/.loom/bin/loom_init.py",
     "examples/new-project/.loom/bin/fact_chain_support.py",
@@ -361,6 +369,7 @@ def check_skill_manifests(root: Path) -> list[Failure]:
         "loom-adopt": "scenario/adopt",
         "loom-resume": "scenario/resume",
         "loom-pre-review": "scenario/pre-review",
+        "loom-review": "scenario/review",
         "loom-handoff": "scenario/handoff",
         "loom-retire": "scenario/retire",
         "loom-merge-ready": "scenario/merge-ready",
@@ -603,6 +612,7 @@ def check_skill_routing(root: Path) -> list[Failure]:
         ("请初始化这个新项目并接入 Loom", "loom-adopt"),
         ("请接手当前事项并恢复上下文后继续推进", "loom-resume"),
         ("请在进入 review 前做统一检查", "loom-pre-review"),
+        ("请对当前事项做正式 review 并给出审查结论", "loom-review"),
         ("请准备交接并回写停点", "loom-handoff"),
         ("请清理并 retire 当前事项现场", "loom-retire"),
         ("请确认这个事项是否 merge-ready", "loom-merge-ready"),
@@ -697,6 +707,11 @@ def check_demo_assets(root: Path) -> list[Failure]:
         ".loom/bin/loom_flow.py runtime-evidence",
         ".loom/bin/loom_flow.py state-check",
         ".loom/bin/loom_flow.py flow pre-review",
+        ".loom/bin/loom_flow.py flow review",
+        ".loom/bin/loom_flow.py review read",
+        ".loom/bin/loom_flow.py review record",
+        ".loom/bin/loom_flow.py recovery writeback",
+        ".loom/bin/loom_flow.py work-item create",
         ".loom/bin/loom_flow.py checkpoint admission",
         ".loom/bin/loom_flow.py workspace locate",
         ".loom/bin/loom_flow.py purity-check",
@@ -808,6 +823,20 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             {"pass", "block", "fallback"},
         ),
         (
+            "flow-review",
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "flow",
+                "review",
+                "--target",
+                "examples/new-project",
+                "--item",
+                "INIT-0001",
+            ],
+            {"pass", "block", "fallback"},
+        ),
+        (
             "flow-resume",
             [
                 "python3",
@@ -867,6 +896,11 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         (
             "locate",
             ["python3", "tools/loom_flow.py", "workspace", "locate", "--target", "examples/new-project", "--item", "INIT-0001"],
+            {"pass"},
+        ),
+        (
+            "review-read",
+            ["python3", "tools/loom_flow.py", "review", "read", "--target", "examples/new-project", "--item", "INIT-0001"],
             {"pass"},
         ),
         (
@@ -1010,6 +1044,42 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     )
                 if not isinstance(state_check.get("checks"), dict):
                     failures.append(Failure("daily-execution-cli", "`flow handoff` must include `state_check.checks`"))
+        if label == "flow-review":
+            if payload.get("command") != "flow":
+                failures.append(Failure("daily-execution-cli", "`flow review` must report `command: flow`"))
+            if payload.get("operation") != "review":
+                failures.append(Failure("daily-execution-cli", "`flow review` must report `operation: review`"))
+            for key in ("item", "state_check", "runtime_evidence", "build_checkpoint", "review", "current_checkpoint"):
+                if not isinstance(payload.get(key), dict):
+                    failures.append(Failure("daily-execution-cli", f"`flow review` must include `{key}`"))
+            steps = payload.get("steps")
+            if not isinstance(steps, list):
+                failures.append(Failure("daily-execution-cli", "`flow review` must include `steps`"))
+                continue
+            step_names = [step.get("name") for step in steps if isinstance(step, dict)]
+            if step_names != [
+                "fact-chain",
+                "state-check",
+                "runtime-evidence",
+                "checkpoint-build",
+                "review-entry",
+            ]:
+                failures.append(
+                    Failure(
+                        "daily-execution-cli",
+                        "`flow review` must run fact-chain, state-check, runtime-evidence, checkpoint-build, and review-entry in order",
+                    )
+                )
+        if label == "review-read":
+            if payload.get("command") != "review":
+                failures.append(Failure("daily-execution-cli", "`review read` must report `command: review`"))
+            if payload.get("operation") != "read":
+                failures.append(Failure("daily-execution-cli", "`review read` must report `operation: read`"))
+            review = payload.get("review")
+            if not isinstance(review, dict):
+                failures.append(Failure("daily-execution-cli", "`review read` must include a `review` object"))
+            elif not isinstance(review.get("record"), dict):
+                failures.append(Failure("daily-execution-cli", "`review read` must include `review.record`"))
         if label == "flow-merge-ready":
             if payload.get("command") != "flow":
                 failures.append(Failure("daily-execution-cli", "`flow merge-ready` must report `command: flow`"))
@@ -1153,6 +1223,116 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             or locate_payload["checkpoint"].get("normalized") != "retired"
         ):
             failures.append(Failure("daily-execution-cli", "`workspace retire` must leave the copied sample in `retired` state"))
+
+    with tempfile.TemporaryDirectory(prefix="loom-check-authoring-") as tmp:
+        authoring_target = Path(tmp) / "new-project"
+        shutil.copytree(example_target, authoring_target)
+
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "recovery",
+                "writeback",
+                "--target",
+                str(authoring_target),
+                "--item",
+                "INIT-0001",
+                "--current-stop",
+                "Bootstrap review has started.",
+                "--next-step",
+                "Record the first formal review conclusion.",
+                "--latest-validation-summary",
+                "Bootstrap artifacts verified and ready for semantic review.",
+            ],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`recovery writeback` failed: {error}"))
+        elif payload.get("result") != "pass":
+            failures.append(Failure("daily-execution-cli", "`recovery writeback` must pass on a clean temp copy"))
+
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "work-item",
+                "create",
+                "--target",
+                str(authoring_target),
+                "--item",
+                "NEXT-0001",
+                "--goal",
+                "Validate work item authoring",
+                "--scope",
+                "Limit changes to `.loom/` artifacts for this temp check",
+                "--execution-path",
+                "execution/support",
+                "--workspace-entry",
+                ".",
+                "--validation-entry",
+                "python3 .loom/bin/loom_init.py verify --target .",
+                "--closing-condition",
+                "The authored work item can be activated and read mechanically.",
+                "--init-recovery",
+                "--activate",
+            ],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`work-item create` failed: {error}"))
+        elif payload.get("result") != "pass":
+            failures.append(Failure("daily-execution-cli", "`work-item create --activate` must pass on a clean temp copy"))
+
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "work-item",
+                "update",
+                "--target",
+                str(authoring_target),
+                "--item",
+                "NEXT-0001",
+                "--scope",
+                "Keep the temp authoring check constrained to `.loom/` files",
+                "--add-artifact",
+                ".loom/reviews/NEXT-0001.json",
+            ],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`work-item update` failed: {error}"))
+        elif payload.get("result") != "pass":
+            failures.append(Failure("daily-execution-cli", "`work-item update` must pass on a clean temp copy"))
+
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "record",
+                "--target",
+                str(authoring_target),
+                "--item",
+                "NEXT-0001",
+                "--decision",
+                "fallback",
+                "--kind",
+                "code_review",
+                "--summary",
+                "Formal review has not approved the item yet.",
+                "--reviewer",
+                "loom-check",
+                "--fallback-to",
+                "admission",
+            ],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review record` failed: {error}"))
+        elif payload.get("result") != "pass":
+            failures.append(Failure("daily-execution-cli", "`review record` must pass for an authored fallback decision"))
 
     if shutil.which("git") is not None:
         with tempfile.TemporaryDirectory(prefix="loom-check-purity-") as tmp:

@@ -8,6 +8,7 @@
 - Execution Path: bootstrap/root
 - Workspace Entry: .
 - Recovery Entry: .loom/progress/INIT-0001.md
+- Review Entry: .loom/reviews/INIT-0001.json
 - Validation Entry: python3 .loom/bin/loom_init.py verify --target .
 - Closing Condition: The generated entry, work item, recovery entry, and templates are readable and verified
 - Current Checkpoint: admission checkpoint

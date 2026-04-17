@@ -27,6 +27,7 @@ work item 是进入正式执行的入口。
 - 关联工件
 - 工作现场入口
 - 恢复主入口路径
+- review 结论入口
 - 当前验证入口
 - 关闭条件
 
@@ -85,5 +86,19 @@ work item / `exec-plan` 至少要能被以下环节消费：
 ## 6. 事实链约束
 
 - `work item` 只承接静态执行真相，不并行 authored 当前停点、下一步、阻断项或最近验证摘要
+- `work item` 可以 authored `review_entry` 这类 locator，但不得 authored review 结论本身
 - 当前 checkpoint 属于恢复主入口，而不是 `work item`
 - 状态面若展示 `goal`、`scope`、`execution_path` 等字段，必须从 `work item` 派生
+
+## 7. 最小 author/update 入口
+
+静态事项 authoring 由日常 CLI 显式承接：
+
+- `python3 tools/loom_flow.py work-item create --target <repo> --item <id> ...`
+- `python3 tools/loom_flow.py work-item update --target <repo> --item <id> ...`
+
+边界固定如下：
+
+- `create` / `update` 只写静态字段与关联工件
+- 是否切换为当前活跃事项，必须显式使用 `--activate`
+- `--activate` 只允许改 locator truth，不得顺手写 recovery 动态字段

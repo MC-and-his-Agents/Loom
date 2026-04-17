@@ -13,7 +13,7 @@
   - `loom_flow fact-chain`
 - root + 场景 SKILLS 入口层
   - root entry：`loom-init`
-  - 场景 skills：`loom-adopt`、`loom-resume`、`loom-pre-review`、`loom-handoff`、`loom-retire`、`loom-merge-ready`
+  - 场景 skills：`loom-adopt`、`loom-resume`、`loom-pre-review`、`loom-review`、`loom-handoff`、`loom-retire`、`loom-merge-ready`
   - 路由与升级工件：`skills/registry.json`、`skills/upgrade-contract.json`、`skills/route-matrix.md`
 - 三类 checkpoint 工程化入口
   - `loom_flow checkpoint admission|build|merge`
@@ -25,9 +25,13 @@
 - 活跃状态/完整性检查与高频统一入口
   - `loom_flow state-check`
   - `loom_flow flow pre-review`
+  - `loom_flow flow review`
+  - `loom_flow review read|record`
   - `loom_flow flow resume`
   - `loom_flow flow handoff`
   - `loom_flow flow merge-ready`
+  - `loom_flow recovery writeback`
+  - `loom_flow work-item create|update`
 - gate 入口
   - `loom_check`
   - `loom_init verify`
@@ -38,15 +42,15 @@
 
 1. `loom_init bootstrap --write --verify`
 2. 让 root entry 或显式 skill 调用把执行者路由到正确场景
-3. 使用 `fact-chain/state-check/flow resume|pre-review|merge-ready` 建立日常读取、恢复、review 前检查与 merge 前放行
+3. 使用 `fact-chain/state-check/flow resume|pre-review|review|merge-ready` 建立日常读取、恢复、正式审查与 merge 前放行
 4. 按 checkpoint 链路推进（admission -> build -> merge）
 
 ### 2.2 既有仓库（轻量到完整）
 
 1. 先接入 `bootstrap + verify + fact-chain`
 2. 接入 `checkpoint` 与 `workspace` 入口
-3. 接入 `runtime-evidence`、`state-check` 与 3 个聚合 flow：`resume` / `handoff` / `merge-ready`
-4. 在 review 前统一走 `flow pre-review`
+3. 接入 `runtime-evidence`、`state-check` 与 4 个聚合 flow：`resume` / `handoff` / `review` / `merge-ready`
+4. 在 review 前统一走 `flow pre-review`，正式审查使用 `flow review` + `review record`
 5. 让宿主刷新 `skills/registry.json`、`skills/upgrade-contract.json`、skill manifests 与引用资源
 
 ### 2.3 兼容原则
@@ -75,7 +79,7 @@
 
 - 下游仓库先执行 `verify`，再通过 root route 或显式 skill 调用进入对应场景
 - 日常恢复优先走 `flow resume`，交接优先走 `flow handoff`，merge 前统一走 `flow merge-ready`
-- review 前仍先执行 `flow pre-review`，再进入语义 review 或 merge
+- review 前仍先执行 `flow pre-review`，正式审查改为 `flow review` + `review record`
 - 如遇 `state-check` 或 `checkpoint` 阻断，先回退补齐事实链/范围/证据，不要绕过入口
 - 仅在宿主适配层补平台细节，避免反向污染 Loom 内核合同
 
@@ -83,12 +87,12 @@
 
 `#71` 的 Done When 现已由以下仓库真相共同覆盖：
 
-- 6 个场景 skills 均已注册、可发现、可显式调用
+- 7 个场景 skills 均已注册、可发现、可显式调用
   - 以 `skills/registry.json`、各 skill `contract.json` 与 `skills/route-matrix.md` 为准
-- `loom-init` 可按任务信号隐式导向这 6 个场景
+- `loom-init` 可按任务信号隐式导向这 7 个场景
   - 以 `loom_init route`、`skills/route-matrix.md` 与 `loom_check` 路由校验为准
 - CLI / gate / docs / validation / GitHub 状态一致
-  - CLI：`loom_flow flow resume|pre-review|handoff|merge-ready`
+  - CLI：`loom_flow flow resume|pre-review|review|handoff|merge-ready`
   - gate：`loom_check`
   - docs：`skills/README.md`、`adoption/execution-entry-compatibility.md`、`adoption/versioning-and-upgrades.md`
   - validation：`adoption/validation-skill-*.md`
@@ -98,9 +102,9 @@
 
 本次发布已完成以下收口条件：
 
-- `loom-init` 继续作为唯一 root entry，6 个场景 skill 均已注册、可发现、可显式调用
-- `loom-init route`、`flow resume`、`flow handoff`、`flow merge-ready` 已与既有入口一起纳入 `loom_check`
-- 6 个场景 skill 的验证记录、升级说明、交付面说明与发布说明已全部回写到版本控制
+- `loom-init` 继续作为唯一 root entry，7 个场景 skill 均已注册、可发现、可显式调用
+- `loom-init route`、`flow resume`、`flow review`、`flow handoff`、`flow merge-ready` 已与既有入口一起纳入 `loom_check`
+- 7 个场景 skill 的验证记录、升级说明、交付面说明与发布说明已全部回写到版本控制
 - GitHub issue / sub-issue、CLI、gate、文档与 adoption 记录已对齐到同一条仓库真相
 
 对应总父 issue：`#71`
