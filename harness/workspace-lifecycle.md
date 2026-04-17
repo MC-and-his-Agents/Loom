@@ -186,7 +186,7 @@ Loom 当前日常执行 CLI 至少提供以下入口：
 - branch purity
 - PR purity
 
-这些项可以作为后续宿主适配扩展接入，但当前不改变生命周期命令的硬失败口径。
+这些项继续由宿主平台拥有生命周期；Loom 只通过 [host-lifecycle-boundary.md](./host-lifecycle-boundary.md) 与 `merge-ready` / closeout 入口消费其边界结果，不改变生命周期命令的硬失败口径。
 
 ## 8. 执行入口与 gate 对齐
 

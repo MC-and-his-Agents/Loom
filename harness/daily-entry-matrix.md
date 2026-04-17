@@ -22,9 +22,11 @@
 | `handoff` | `python3 tools/loom_flow.py flow handoff --target <repo> [--item <id>]` | fact-chain + state-check + workspace locate + recovery/status locator + handoff writeback fields | `pass` / `block` | 只输出最小回写清单与载体定位，不直接写 authored 状态 |
 | `recovery writeback` | `python3 tools/loom_flow.py recovery writeback --target <repo> [--item <id>] ...` | 当前 fact-chain + recovery authored 字段 | `pass` / `block` | 只写 recovery 主入口，再同步状态面 |
 | `work item authoring` | `python3 tools/loom_flow.py work-item create|update --target <repo> --item <id> ... [--activate]` | init-result locator + work item static fields | `pass` / `block` | `--activate` 只切当前 locator，不隐式写动态状态 |
+| `host lifecycle boundary` | `python3 tools/loom_flow.py host-lifecycle --target <repo> [--item <id>]` | fact-chain + purity + 当前 branch/worktree 观测 | `pass` / `block` | 明确 workspace 由 Loom 管，branch/PR/worktree 由宿主管 |
 | `merge-ready` | `python3 tools/loom_flow.py flow merge-ready --target <repo> [--item <id>]` | fact-chain + state-check + runtime evidence + build checkpoint + merge checkpoint | `pass` / `block` / `fallback` | 只输出统一放行摘要，不替代宿主平台 merge |
 | `merge` | `merge checkpoint` + 仓库平台合并动作 | build 结果 + 风险回滚 + 验证摘要 | 放行或阻断 | Loom 不替代宿主平台合并接口 |
 | `retire` | `python3 tools/loom_flow.py purity-check --target <repo> [--item <id>]` -> `workspace cleanup` -> `workspace retire` | purity 结果 + cleanup 结果 + recovery 主入口 | checkpoint 终态 `retired` | 默认先解释 retire 前置条件，不默认删除现场目录 |
+| `closeout` | `python3 tools/loom_flow.py closeout check|sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>]` | loom_check + issue/PR/project/main | `pass` / `block` | 只对齐 closeout 控制面，不替代 merge |
 
 ## 2. 分层边界
 

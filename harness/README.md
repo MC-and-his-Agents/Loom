@@ -23,6 +23,8 @@
   - 定义执行现场的隔离、定位与 clean state 要求
 - `workspace-lifecycle.md`
   - 定义 `create`、`locate`、`cleanup`、`retire` 与 `purity-check` 的生命周期合同
+- [host-lifecycle-boundary.md](./host-lifecycle-boundary.md)
+  - 定义 Loom 与宿主 branch / PR / git worktree 生命周期的边界
 - [recovery-model.md](./recovery-model.md)
   - 定义唯一恢复主入口、`checkpoint`、`resume`、`handoff` 与每轮回写合同
 - [review-execution.md](./review-execution.md)
@@ -33,6 +35,8 @@
   - 定义适合机械化前置的检查矩阵与覆盖边界
 - [merge-checkpoint.md](./merge-checkpoint.md)
   - 定义执行侧放行输入、结果语义与回退承接
+- [closeout-gate.md](./closeout-gate.md)
+  - 定义 closeout check / sync 与 GitHub 控制面对齐的最小执行链路
 - [workspace-and-purity.md](./workspace-and-purity.md)
   - 定义现场职责纯度、分支纯度与范围控制边界
 

@@ -84,6 +84,7 @@ merge checkpoint 只允许输出以下三类结果：
 ## 5. 边界约束
 
 - merge checkpoint 消费 reviewer、自动检查和运行证据的结果，不重新发明第二套审查体系
+- merge checkpoint 只回答“是否可进入 host merge”，进入主干后的 issue / project / main 收口由 [closeout-gate.md](./closeout-gate.md) 承接
 - merge checkpoint 不负责定义成熟度、关闭语义或事项是否值得做；这些属于 `governance/`
 - merge checkpoint 不得补读另一份 authored 状态摘要来替代恢复主入口
 - 本文件不规定宿主平台的按钮、合并策略或 CI 产品，只定义 Loom 必须承接的最小放行语义

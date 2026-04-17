@@ -45,6 +45,8 @@ Loom 当前至少保留以下四阶段：
 - 风险与回滚信息已交代
 - 相关文档与主干状态一致
 
+当前执行侧入口见 [../harness/closeout-gate.md](../harness/closeout-gate.md)。
+
 ## 5. 规约完成与实现完成的分离语义
 
 默认语义边界：

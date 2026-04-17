@@ -199,6 +199,26 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     work_item.add_argument("--activate", action="store_true", help="Activate this item in the current fact chain")
     work_item.add_argument("--init-recovery", action="store_true", help="Initialize the recovery entry when creating")
 
+    host = subparsers.add_parser("host-lifecycle", help="Classify host objects against Loom lifecycle boundaries")
+    host.add_argument("--target", required=True, help="Target repository root")
+    host.add_argument("--item", help="Expected current item id")
+    host.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+
+    closeout = subparsers.add_parser("closeout", help="Check or sync Loom closeout state with GitHub control plane")
+    closeout.add_argument("operation", choices=("check", "sync"))
+    closeout.add_argument("--target", required=True, help="Target repository root")
+    closeout.add_argument("--issue", type=int, help="GitHub issue number to validate or sync")
+    closeout.add_argument("--pr", type=int, help="GitHub pull request number to validate or sync")
+    closeout.add_argument("--project", type=int, help="GitHub project number to validate or sync")
+    closeout.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
+    closeout.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    closeout.add_argument("--comment", help="Optional closeout comment for issue sync")
+    closeout.add_argument("--skip-gate", action="store_true", help="Skip local loom_check execution during closeout")
+
     flow = subparsers.add_parser("flow", help="Run a bundled high-frequency Loom flow")
     flow.add_argument("operation", choices=("pre-review", "review", "resume", "handoff", "merge-ready"))
     flow.add_argument("--target", required=True, help="Target repository root")
@@ -256,6 +276,16 @@ def run_git(root: Path, args: list[str]) -> subprocess.CompletedProcess[str] | N
         return None
 
 
+def run_process(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        args,
+        cwd=cwd,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
 def git_branch(root: Path) -> str | None:
     result = run_git(root, ["rev-parse", "--abbrev-ref", "HEAD"])
     if result is None or result.returncode != 0:
@@ -270,6 +300,48 @@ def git_head_sha(root: Path) -> str | None:
         return None
     sha = result.stdout.strip()
     return sha or None
+
+
+def git_remote_origin(root: Path) -> str | None:
+    result = run_git(root, ["remote", "get-url", "origin"])
+    if result is None or result.returncode != 0:
+        return None
+    remote = result.stdout.strip()
+    return remote or None
+
+
+def detect_github_repo(root: Path) -> tuple[str | None, str | None]:
+    remote = git_remote_origin(root)
+    if not remote:
+        return None, None
+    match = re.search(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/.]+)(?:\.git)?$", remote)
+    if not match:
+        return None, None
+    return match.group("owner"), match.group("repo")
+
+
+def gh_json(root: Path, args: list[str]) -> tuple[dict[str, Any] | None, list[str]]:
+    result = run_process(["gh", *args], root)
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "gh command failed"
+        return None, [detail]
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        return None, [f"invalid JSON from gh {' '.join(args)}: {exc.msg}"]
+    if not isinstance(payload, dict):
+        return None, [f"gh {' '.join(args)} did not return a JSON object"]
+    return payload, []
+
+
+def gh_json_list(root: Path, args: list[str], key: str) -> tuple[list[dict[str, Any]], list[str]]:
+    payload, errors = gh_json(root, args)
+    if errors or payload is None:
+        return [], errors
+    value = payload.get(key)
+    if not isinstance(value, list):
+        return [], [f"gh {' '.join(args)} is missing `{key}`"]
+    return [entry for entry in value if isinstance(entry, dict)], []
 
 
 def git_dirty_entries(root: Path) -> list[dict[str, str]]:
@@ -928,11 +1000,11 @@ def purity_report_from_context(context: dict[str, Any], fact_chain_errors: list[
 
     branch = git_branch(target_root)
     if branch:
-        report_only.append(f"branch purity is report-only in v1: current branch `{branch}`")
+        report_only.append(f"branch purity is host-managed and reported via host-lifecycle: current branch `{branch}`")
     else:
-        report_only.append("branch purity is report-only in v1: no branch information available")
+        report_only.append("branch purity is host-managed and reported via host-lifecycle: no branch information available")
 
-    report_only.append("PR purity is report-only in v1")
+    report_only.append("PR purity is host-managed and reported via host-lifecycle")
 
     state = "failed" if hard_failures else "clean"
     return {
@@ -1548,6 +1620,389 @@ def handle_state_check(args: argparse.Namespace) -> int:
             }
         )
     return emit(state_check_payload(context))
+
+
+def host_lifecycle_payload(context: dict[str, Any]) -> dict[str, Any]:
+    branch = git_branch(context["target_root"])
+    purity = purity_report_from_context(context)
+    worktree_root = current_cwd_relative(context["target_root"])
+    branch_status = "report_only" if branch else "host_managed_without_local_branch"
+    pr_status = "report_only"
+    worktree_status = "host_managed"
+    missing_inputs: list[str] = []
+    if worktree_root is None:
+        worktree_observation = "current process is outside the target repository"
+    else:
+        worktree_observation = worktree_root
+    if any(message.startswith("branch purity") for message in purity["report_only"]):
+        branch_next = "keep branch lifecycle on the host platform; Loom only reports purity and closeout dependencies."
+    else:
+        branch_next = "branch lifecycle remains host-managed."
+    return {
+        "command": "host-lifecycle",
+        "item": {
+            "id": context["item_id"],
+            "goal": context["goal"],
+            "scope": context["scope"],
+            "execution_path": context["execution_path"],
+        },
+        "result": "pass",
+        "summary": "workspace is Loom-managed; branch, PR, and git worktree lifecycles remain host-managed with explicit boundary checks.",
+        "missing_inputs": missing_inputs,
+        "fallback_to": None,
+        "objects": {
+            "workspace": {
+                "ownership": "loom",
+                "entry": context["workspace_entry"],
+                "path": relative_to_root(context["workspace_path"], context["target_root"]),
+                "lifecycle_entry": "python3 tools/loom_flow.py workspace create|locate|cleanup|retire",
+            },
+            "branch": {
+                "ownership": "host",
+                "current_branch": branch,
+                "purity_status": branch_status,
+                "next_action": branch_next,
+            },
+            "pr": {
+                "ownership": "host",
+                "purity_status": pr_status,
+                "next_action": "use host PR lifecycle; Loom only consumes PR template, required checks, and closeout sync state.",
+            },
+            "worktree": {
+                "ownership": "host",
+                "cwd_within_repo": worktree_observation,
+                "next_action": "Loom models execution workspace semantics and does not create or retire git worktrees itself.",
+                "status": worktree_status,
+            },
+        },
+        "purity": purity,
+    }
+
+
+def handle_host_lifecycle(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    context, errors = load_context(target_root, args.output, args.item)
+    if errors:
+        return emit(
+            {
+                "command": "host-lifecycle",
+                "result": "block",
+                "summary": "host-lifecycle could not read a valid Loom fact chain.",
+                "missing_inputs": [f"fact-chain: {message}" for message in errors],
+                "fallback_to": "admission",
+            }
+        )
+    return emit(host_lifecycle_payload(context))
+
+
+def project_status_context(root: Path, owner: str, project_number: int) -> tuple[dict[str, Any], list[str]]:
+    project_view, view_errors = gh_json(root, ["project", "view", str(project_number), "--owner", owner, "--format", "json"])
+    if view_errors or project_view is None:
+        return {}, view_errors
+    field_list_payload, field_errors = gh_json(root, ["project", "field-list", str(project_number), "--owner", owner, "--format", "json"])
+    if field_errors or field_list_payload is None:
+        return {}, field_errors
+    fields = field_list_payload.get("fields")
+    if not isinstance(fields, list):
+        return {}, ["project field list is missing `fields`"]
+    status_field_id: str | None = None
+    done_option_id: str | None = None
+    for field in fields:
+        if not isinstance(field, dict):
+            continue
+        if field.get("name") != "Status":
+            continue
+        status_field_id = str(field.get("id"))
+        options = field.get("options")
+        if isinstance(options, list):
+            for option in options:
+                if isinstance(option, dict) and option.get("name") == "Done":
+                    done_option_id = str(option.get("id"))
+    project_id = project_view.get("id")
+    if not isinstance(project_id, str) or not project_id:
+        return {}, ["project view is missing `id`"]
+    if not status_field_id or not done_option_id:
+        return {}, ["project is missing a `Status` field with a `Done` option"]
+    item_list = run_process(["gh", "project", "item-list", str(project_number), "--owner", owner, "--format", "json"], root)
+    if item_list.returncode != 0:
+        detail = item_list.stderr.strip() or item_list.stdout.strip() or "gh project item-list failed"
+        return {}, [detail]
+    try:
+        payload = json.loads(item_list.stdout)
+    except json.JSONDecodeError as exc:
+        return {}, [f"invalid JSON from gh project item-list: {exc.msg}"]
+    items = payload.get("items")
+    if not isinstance(items, list):
+        return {}, ["project item list is missing `items`"]
+    return {
+        "project_id": project_id,
+        "status_field_id": status_field_id,
+        "done_option_id": done_option_id,
+        "items": items,
+    }, []
+
+
+def find_project_item(items: list[dict[str, Any]], number: int, kind: str) -> dict[str, Any] | None:
+    for item in items:
+        content = item.get("content")
+        if not isinstance(content, dict):
+            continue
+        if content.get("number") != number:
+            continue
+        item_type = content.get("type")
+        if kind == "issue" and item_type == "Issue":
+            return item
+        if kind == "pr" and item_type == "PullRequest":
+            return item
+    return None
+
+
+def set_project_item_done(root: Path, project_id: str, item_id: str, status_field_id: str, done_option_id: str) -> list[str]:
+    result = run_process(
+        [
+            "gh",
+            "project",
+            "item-edit",
+            "--id",
+            item_id,
+            "--project-id",
+            project_id,
+            "--field-id",
+            status_field_id,
+            "--single-select-option-id",
+            done_option_id,
+        ],
+        root,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "gh project item-edit failed"
+        return [detail]
+    return []
+
+
+def closeout_payload(
+    *,
+    target_root: Path,
+    issue_number: int | None,
+    pr_number: int | None,
+    project_number: int | None,
+    owner: str,
+    repo_name: str,
+    skip_gate: bool,
+) -> tuple[dict[str, Any], list[str]]:
+    missing_inputs: list[str] = []
+    gate: dict[str, Any] = {"skipped": skip_gate}
+    if not skip_gate:
+        gate_result = run_process(["python3", "tools/loom_check.py"], target_root)
+        gate["command"] = "python3 tools/loom_check.py"
+        gate["exit_code"] = gate_result.returncode
+        gate["stdout"] = gate_result.stdout.strip()
+        if gate_result.returncode != 0:
+            missing_inputs.append("loom_check")
+
+    issue_payload: dict[str, Any] | None = None
+    if issue_number is not None:
+        issue_payload, issue_errors = gh_json(
+            target_root,
+            ["issue", "view", str(issue_number), "--repo", f"{owner}/{repo_name}", "--json", "number,state,title,url"],
+        )
+        if issue_errors:
+            missing_inputs.extend(f"issue: {message}" for message in issue_errors)
+
+    pr_payload: dict[str, Any] | None = None
+    merge_commit_sha: str | None = None
+    if pr_number is not None:
+        pr_payload, pr_errors = gh_json(
+            target_root,
+            [
+                "pr",
+                "view",
+                str(pr_number),
+                "--repo",
+                f"{owner}/{repo_name}",
+                "--json",
+                "number,state,isDraft,mergedAt,mergeCommit,url",
+            ],
+        )
+        if pr_errors:
+            missing_inputs.extend(f"pr: {message}" for message in pr_errors)
+        elif pr_payload is not None:
+            merge_commit = pr_payload.get("mergeCommit")
+            if isinstance(merge_commit, dict):
+                oid = merge_commit.get("oid")
+                if isinstance(oid, str) and oid:
+                    merge_commit_sha = oid
+            if pr_payload.get("state") != "MERGED":
+                missing_inputs.append("pr is not merged")
+            if merge_commit_sha:
+                run_git(target_root, ["fetch", "origin", "main"])
+                contains = run_git(target_root, ["merge-base", "--is-ancestor", merge_commit_sha, "origin/main"])
+                if contains is None or contains.returncode != 0:
+                    missing_inputs.append("origin/main does not contain the merged PR commit")
+
+    project_payload: dict[str, Any] | None = None
+    if project_number is not None:
+        project_context, project_errors = project_status_context(target_root, owner, project_number)
+        if project_errors:
+            missing_inputs.extend(f"project: {message}" for message in project_errors)
+        else:
+            items = project_context["items"]
+            issue_item = find_project_item(items, issue_number, "issue") if issue_number is not None else None
+            pr_item = find_project_item(items, pr_number, "pr") if pr_number is not None else None
+            if issue_number is not None and issue_item is None:
+                missing_inputs.append("issue is missing from project")
+            project_payload = {
+                "number": project_number,
+                "project_id": project_context["project_id"],
+                "status_field_id": project_context["status_field_id"],
+                "done_option_id": project_context["done_option_id"],
+                "issue_item": issue_item,
+                "pr_item": pr_item,
+            }
+            for label, item in (("issue", issue_item), ("pr", pr_item)):
+                if item is None:
+                    continue
+                status = item.get("status")
+                if isinstance(status, str) and status != "Done":
+                    missing_inputs.append(f"{label} project status is not Done")
+
+    if issue_payload is not None and issue_payload.get("state") != "CLOSED":
+        missing_inputs.append("issue is not closed")
+
+    result = "pass" if not missing_inputs else "block"
+    return (
+        {
+            "command": "closeout",
+            "operation": "check",
+            "result": result,
+            "summary": (
+                "closeout state is consistent across gate, GitHub issue/PR, project, and main."
+                if result == "pass"
+                else "closeout state is not yet consistent across gate, GitHub issue/PR, project, and main."
+            ),
+            "missing_inputs": missing_inputs,
+            "fallback_to": None if result == "pass" else "merge",
+            "repo": {"owner": owner, "name": repo_name},
+            "gate": gate,
+            "issue": issue_payload,
+            "pr": pr_payload,
+            "project": project_payload,
+        },
+        [],
+    )
+
+
+def handle_closeout(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    owner = args.owner
+    repo_name = args.repo_name
+    if not owner or not repo_name:
+        detected_owner, detected_repo = detect_github_repo(target_root)
+        owner = owner or detected_owner
+        repo_name = repo_name or detected_repo
+    if not owner or not repo_name:
+        return emit(
+            {
+                "command": "closeout",
+                "operation": args.operation,
+                "result": "block",
+                "summary": "closeout could not determine the GitHub repository.",
+                "missing_inputs": ["owner/repo"],
+                "fallback_to": "merge",
+            }
+        )
+
+    payload, errors = closeout_payload(
+        target_root=target_root,
+        issue_number=args.issue,
+        pr_number=args.pr,
+        project_number=args.project,
+        owner=owner,
+        repo_name=repo_name,
+        skip_gate=args.skip_gate,
+    )
+    if errors:
+        return emit(
+            {
+                "command": "closeout",
+                "operation": args.operation,
+                "result": "block",
+                "summary": "closeout command hit an unexpected internal error.",
+                "missing_inputs": errors,
+                "fallback_to": "merge",
+            }
+        )
+
+    if args.operation == "check":
+        return emit(payload)
+
+    sync_missing: list[str] = []
+    if args.issue is not None:
+        issue = payload.get("issue")
+        if isinstance(issue, dict) and issue.get("state") != "CLOSED":
+            if args.comment:
+                comment_result = run_process(
+                    [
+                        "gh",
+                        "issue",
+                        "comment",
+                        str(args.issue),
+                        "--repo",
+                        f"{owner}/{repo_name}",
+                        "--body",
+                        args.comment,
+                    ],
+                    target_root,
+                )
+                if comment_result.returncode != 0:
+                    sync_missing.append(comment_result.stderr.strip() or "failed to comment on issue")
+            close_result = run_process(
+                ["gh", "issue", "close", str(args.issue), "--repo", f"{owner}/{repo_name}"],
+                target_root,
+            )
+            if close_result.returncode != 0:
+                sync_missing.append(close_result.stderr.strip() or "failed to close issue")
+
+    if args.project is not None:
+        project = payload.get("project")
+        if isinstance(project, dict):
+            for key in ("issue_item", "pr_item"):
+                item = project.get(key)
+                if not isinstance(item, dict):
+                    continue
+                status = item.get("status")
+                item_id = item.get("id")
+                if not isinstance(item_id, str) or not item_id:
+                    continue
+                if status != "Done":
+                    sync_missing.extend(
+                        set_project_item_done(
+                            target_root,
+                            project["project_id"],
+                            item_id,
+                            project["status_field_id"],
+                            project["done_option_id"],
+                        )
+                    )
+
+    refreshed_payload, errors = closeout_payload(
+        target_root=target_root,
+        issue_number=args.issue,
+        pr_number=args.pr,
+        project_number=args.project,
+        owner=owner,
+        repo_name=repo_name,
+        skip_gate=args.skip_gate,
+    )
+    if errors:
+        sync_missing.extend(errors)
+    refreshed_payload["operation"] = "sync"
+    if sync_missing:
+        refreshed_payload["result"] = "block"
+        refreshed_payload["summary"] = "closeout sync could not fully align GitHub control-plane state."
+        refreshed_payload["missing_inputs"] = list(dict.fromkeys(sync_missing + list(refreshed_payload.get("missing_inputs", []))))
+        refreshed_payload["fallback_to"] = "merge"
+    return emit(refreshed_payload)
 
 
 def handle_review(args: argparse.Namespace) -> int:
@@ -2425,6 +2880,10 @@ def main(argv: list[str] | None = None) -> int:
         return handle_recovery(args)
     if args.command == "work-item":
         return handle_work_item(args)
+    if args.command == "host-lifecycle":
+        return handle_host_lifecycle(args)
+    if args.command == "closeout":
+        return handle_closeout(args)
     if args.command == "flow":
         return handle_flow(args)
     if args.command == "checkpoint":
