@@ -11,14 +11,14 @@
 - `governance/`
   - 核心原则、审查模型、成熟度与关闭语义
 - `harness/`
-  - 核心执行合同、恢复模型、状态面、纯度、宿主生命周期边界、closeout gate 与自动化前置
+  - 核心执行合同、恢复模型、状态面、纯度、宿主生命周期边界、closeout gate、reconciliation sync 写回约束与自动化前置
 - `templates/`
   - 最小正式规约模板与最小 PR 模板
 - `skills/`
   - 稳定入口合同、`loom-init` root 路由、7 个场景 skills、`registry.json`、`upgrade-contract.json` 与 `route-matrix.md`
 - `adoption/`
   - 稳定 adoption 路径、经验回流、验证记录合同、版本化与升级路径
-  - 执行入口兼容说明、7 个场景 skill 验证记录与完整执行内核复验记录
+  - 执行入口兼容说明、reconciliation audit/sync 兼容边界、7 个场景 skill 验证记录与完整执行内核复验记录
 - 发布说明
   - `docs/complete-kernel-release.md`
 

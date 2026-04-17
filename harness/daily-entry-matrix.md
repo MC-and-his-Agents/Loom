@@ -24,10 +24,11 @@
 | `work item authoring` | `python3 tools/loom_flow.py work-item create|update --target <repo> --item <id> ... [--activate]` | init-result locator + work item static fields | `pass` / `block` | `--activate` 只切当前 locator，不隐式写动态状态 |
 | `host lifecycle boundary` | `python3 tools/loom_flow.py host-lifecycle --target <repo> [--item <id>]` | fact-chain + purity + 当前 branch/worktree 观测 | `pass` / `block` | 明确 workspace 由 Loom 管，branch/PR/worktree 由宿主管 |
 | `reconciliation audit` | `python3 tools/loom_flow.py reconciliation audit --target <repo> [--issue <n>] [--pr <n>] [--project <n>]` | issue tree + PR merge事实 + Project 状态 | `pass` / `warn` / `fix-needed` / `block` | 只报出 drift，不修改 GitHub 控制面 |
+| `reconciliation sync` | `python3 tools/loom_flow.py reconciliation sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>] [--comment-file <path>] [--dry-run]` | 同范围 reconciliation audit + issue/PR/project 控制面 | `pass` / `block` | 只修机械可证明的 `fix-needed` drift；`block` 零写入，`warn` 仅保留提示 |
 | `merge-ready` | `python3 tools/loom_flow.py flow merge-ready --target <repo> [--item <id>]` | fact-chain + state-check + runtime evidence + build checkpoint + merge checkpoint | `pass` / `block` / `fallback` | 只输出统一放行摘要，不替代宿主平台 merge |
 | `merge` | `merge checkpoint` + 仓库平台合并动作 | build 结果 + 风险回滚 + 验证摘要 | 放行或阻断 | Loom 不替代宿主平台合并接口 |
 | `retire` | `python3 tools/loom_flow.py purity-check --target <repo> [--item <id>]` -> `workspace cleanup` -> `workspace retire` | purity 结果 + cleanup 结果 + recovery 主入口 | checkpoint 终态 `retired` | 默认先解释 retire 前置条件，不默认删除现场目录 |
-| `closeout` | `python3 tools/loom_flow.py closeout check|sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>]` | loom_check + issue/PR/project/main | `pass` / `block` | 只对齐 closeout 控制面，不替代 merge |
+| `closeout` | `python3 tools/loom_flow.py closeout check|sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>]` | loom_check + issue/PR/project/main | `pass` / `block` | 仍是 closeout 控制面对齐入口；`#179` 再接入 reconciliation 结果 |
 
 ## 2. 分层边界
 
@@ -40,6 +41,9 @@
 - `reconciliation audit`
   - 负责把 GitHub drift 显式化
   - 不替代后续 sync
+- `reconciliation sync`
+  - 必须先消费同范围 `reconciliation audit`
+  - 不绕过 `block` finding，不伪造实现完成
 - gate (`loom_check` / CI)
   - 负责复用同一 CLI 入口做机械阻断
   - 不维护第二套检查口径
