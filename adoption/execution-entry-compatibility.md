@@ -16,6 +16,7 @@
 | checkpoint 执行 | `loom_flow checkpoint admission/build/merge` | 三阶段语义与回退关系保持不变 |
 | 现场与纯度治理 | `loom_flow workspace <create/locate/cleanup/retire>` + `purity-check` | 生命周期动作与失败语义保持不变 |
 | 宿主边界与 closeout | `loom_flow host-lifecycle` + `closeout check|sync` | Loom 明确边界与控制面对齐，但不接管宿主 branch/PR/worktree 生命周期 |
+| drift 审计 | `loom_flow reconciliation audit` | 只生成 absorbed-but-open / parent drift / project drift 审计结论，不直接修改 GitHub 控制面 |
 | 高频组合入口 | `loom_flow flow pre-review/review/resume/handoff/merge-ready` | 聚合入口扩张不破坏单命令入口，统一保持 JSON 结果语义 |
 | 场景 skills | `loom-adopt/resume/pre-review/review/handoff/retire/merge-ready` | 场景 skill 只做入口编排，不新增第二套事实真相源 |
 
@@ -48,7 +49,8 @@
 14. `loom_flow checkpoint admission/build/merge`
 15. `loom_flow workspace locate/cleanup/retire`
 16. `loom_flow host-lifecycle`
-17. `loom_flow closeout check`
+17. `loom_flow reconciliation audit`
+18. `loom_flow closeout check`
 
 预期：
 
@@ -68,5 +70,6 @@
 - `flow resume/pre-review/review/handoff/merge-ready`：均可返回稳定 JSON 结果
 - `review record`、`recovery writeback`、`work-item create|update`：可显式回写 authored 结果而不引入第二真相
 - `checkpoint merge` 在当前样本阶段按预期返回 `fallback`
+- `reconciliation audit` 会把 GitHub drift 显式化，但不提前执行 sync
 
 因此，下游仓库可以按 root skill 或显式场景 skill 消费完整执行内核，不再依赖手工拼接散落流程说明。

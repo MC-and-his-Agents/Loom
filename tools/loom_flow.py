@@ -220,6 +220,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     closeout.add_argument("--comment", help="Optional closeout comment for issue sync")
     closeout.add_argument("--skip-gate", action="store_true", help="Skip local loom_check execution during closeout")
 
+    reconciliation = subparsers.add_parser("reconciliation", help="Audit Loom GitHub drift before closeout reconciliation")
+    reconciliation.add_argument("operation", choices=("audit",))
+    reconciliation.add_argument("--target", required=True, help="Target repository root")
+    reconciliation.add_argument("--issue", type=int, help="GitHub issue number to audit")
+    reconciliation.add_argument("--pr", type=int, help="GitHub pull request number to audit")
+    reconciliation.add_argument("--project", type=int, help="GitHub project number to audit")
+    reconciliation.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
+    reconciliation.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+
     flow = subparsers.add_parser("flow", help="Run a bundled high-frequency Loom flow")
     flow.add_argument("operation", choices=("pre-review", "review", "resume", "handoff", "merge-ready"))
     flow.add_argument("--target", required=True, help="Target repository root")
@@ -1862,6 +1871,346 @@ def set_project_item_done(root: Path, project_id: str, item_id: str, status_fiel
     return []
 
 
+def issue_tree_payload(root: Path, owner: str, repo_name: str, issue_number: int) -> tuple[dict[str, Any] | None, list[str]]:
+    query = """
+query($owner:String!, $name:String!, $number:Int!) {
+  repository(owner:$owner, name:$name) {
+    issue(number:$number) {
+      id
+      number
+      title
+      state
+      url
+      parent {
+        id
+        number
+        title
+        state
+        url
+        subIssues(first:50) {
+          nodes {
+            id
+            number
+            title
+            state
+            url
+          }
+        }
+      }
+      subIssues(first:50) {
+        nodes {
+          id
+          number
+          title
+          state
+          url
+        }
+      }
+    }
+  }
+}
+"""
+    data, errors = gh_graphql(root, query, {"owner": owner, "name": repo_name, "number": issue_number})
+    if errors or data is None:
+        return None, errors
+    repository = data.get("repository")
+    if not isinstance(repository, dict):
+        return None, ["issue tree graphql payload is missing `repository`"]
+    issue = repository.get("issue")
+    if not isinstance(issue, dict):
+        return None, [f"issue #{issue_number} is missing from GraphQL payload"]
+    return issue, []
+
+
+def contains_merged_commit(root: Path, merge_commit_sha: str) -> bool:
+    run_git(root, ["fetch", "origin", "main"])
+    contains = run_git(root, ["merge-base", "--is-ancestor", merge_commit_sha, "origin/main"])
+    return contains is not None and contains.returncode == 0
+
+
+def make_reconciliation_finding(
+    *,
+    kind: str,
+    severity: str,
+    subject: str,
+    evidence: dict[str, Any],
+    recommended_action: str,
+) -> dict[str, Any]:
+    return {
+        "kind": kind,
+        "severity": severity,
+        "subject": subject,
+        "evidence": evidence,
+        "recommended_action": recommended_action,
+    }
+
+
+def reconciliation_result(findings: list[dict[str, Any]]) -> str:
+    if not findings:
+        return "pass"
+    rank = {"warn": 1, "fix-needed": 2, "block": 3}
+    highest = max(rank.get(str(finding.get("severity")), 0) for finding in findings)
+    if highest == 3:
+        return "block"
+    if highest == 2:
+        return "fix-needed"
+    return "warn"
+
+
+def reconciliation_audit_payload(
+    *,
+    target_root: Path,
+    issue_number: int | None,
+    pr_number: int | None,
+    project_number: int | None,
+    owner: str,
+    repo_name: str,
+) -> tuple[dict[str, Any], list[str]]:
+    missing_inputs: list[str] = []
+    findings: list[dict[str, Any]] = []
+
+    if issue_number is None and pr_number is None and project_number is None:
+        missing_inputs.append("issue/pr/project")
+
+    issue_payload: dict[str, Any] | None = None
+    issue_id: str | None = None
+    parent_payload: dict[str, Any] | None = None
+    if issue_number is not None:
+        issue_payload, issue_errors = issue_tree_payload(target_root, owner, repo_name, issue_number)
+        if issue_errors:
+            missing_inputs.extend(f"issue: {message}" for message in issue_errors)
+        elif issue_payload is not None:
+            raw_issue_id = issue_payload.get("id")
+            if isinstance(raw_issue_id, str) and raw_issue_id:
+                issue_id = raw_issue_id
+            parent = issue_payload.get("parent")
+            if isinstance(parent, dict):
+                parent_payload = parent
+
+    pr_payload: dict[str, Any] | None = None
+    merge_commit_sha: str | None = None
+    merge_commit_in_main = False
+    if pr_number is not None:
+        pr_payload, pr_errors = gh_json(
+            target_root,
+            [
+                "pr",
+                "view",
+                str(pr_number),
+                "--repo",
+                f"{owner}/{repo_name}",
+                "--json",
+                "number,state,isDraft,mergedAt,mergeCommit,url,title",
+            ],
+        )
+        if pr_errors:
+            missing_inputs.extend(f"pr: {message}" for message in pr_errors)
+        elif pr_payload is not None:
+            merge_commit = pr_payload.get("mergeCommit")
+            if isinstance(merge_commit, dict):
+                oid = merge_commit.get("oid")
+                if isinstance(oid, str) and oid:
+                    merge_commit_sha = oid
+                    merge_commit_in_main = contains_merged_commit(target_root, merge_commit_sha)
+
+    absorbed_issue = False
+    if issue_payload is not None and pr_payload is not None:
+        if issue_payload.get("state") == "OPEN" and pr_payload.get("state") == "MERGED" and merge_commit_sha and merge_commit_in_main:
+            absorbed_issue = True
+            findings.append(
+                make_reconciliation_finding(
+                    kind="absorbed_but_open",
+                    severity="fix-needed",
+                    subject=f"issue #{issue_number}",
+                    evidence={
+                        "issue_state": issue_payload.get("state"),
+                        "pr_number": pr_number,
+                        "pr_state": pr_payload.get("state"),
+                        "merge_commit": merge_commit_sha,
+                        "merge_commit_in_main": merge_commit_in_main,
+                    },
+                    recommended_action="close the absorbed issue or run reconciliation sync after reviewing the evidence.",
+                )
+            )
+
+    parent_scope: dict[str, Any] | None = None
+    if parent_payload is not None:
+        parent_scope = parent_payload
+    elif isinstance(issue_payload, dict):
+        sub_issues = issue_payload.get("subIssues")
+        if isinstance(sub_issues, dict) and isinstance(sub_issues.get("nodes"), list) and sub_issues.get("nodes"):
+            parent_scope = issue_payload
+
+    if parent_scope is not None:
+        raw_children = parent_scope.get("subIssues")
+        child_nodes = raw_children.get("nodes") if isinstance(raw_children, dict) else None
+        unresolved_children: list[dict[str, Any]] = []
+        resolved_children: list[dict[str, Any]] = []
+        if isinstance(child_nodes, list):
+            for child in child_nodes:
+                if not isinstance(child, dict):
+                    continue
+                child_number = child.get("number")
+                child_state = child.get("state")
+                if child_state == "CLOSED":
+                    resolved_children.append(child)
+                    continue
+                if child_number == issue_number and absorbed_issue:
+                    resolved_children.append(child)
+                    continue
+                unresolved_children.append(child)
+        parent_number = parent_scope.get("number")
+        parent_state = parent_scope.get("state")
+        if parent_state == "CLOSED" and unresolved_children:
+            findings.append(
+                make_reconciliation_finding(
+                    kind="parent_drift",
+                    severity="block",
+                    subject=f"parent issue #{parent_number}",
+                    evidence={
+                        "parent_state": parent_state,
+                        "unresolved_children": [
+                            {"number": child.get("number"), "state": child.get("state"), "title": child.get("title")}
+                            for child in unresolved_children
+                        ],
+                    },
+                    recommended_action="reopen the parent issue or finish the unresolved child issues before treating the parent as closed out.",
+                )
+            )
+        elif parent_state == "OPEN" and child_nodes and not unresolved_children:
+            findings.append(
+                make_reconciliation_finding(
+                    kind="parent_drift",
+                    severity="fix-needed",
+                    subject=f"parent issue #{parent_number}",
+                    evidence={
+                        "parent_state": parent_state,
+                        "resolved_children": [
+                            {"number": child.get("number"), "state": child.get("state"), "title": child.get("title")}
+                            for child in resolved_children
+                        ],
+                    },
+                    recommended_action="reconcile the parent issue because all child gaps are already closed or absorbed.",
+                )
+            )
+
+    project_payload: dict[str, Any] | None = None
+    project_drift_details: list[dict[str, Any]] = []
+    if project_number is not None:
+        project_context, project_errors = project_status_context(target_root, owner, project_number)
+        if project_errors:
+            missing_inputs.extend(f"project: {message}" for message in project_errors)
+        else:
+            items = project_context["items"]
+            issue_item = find_project_item(items, issue_number, "issue") if issue_number is not None else None
+            if issue_item is None and issue_id is not None and issue_number is not None:
+                issue_item, issue_item_errors = project_item_for_issue(target_root, issue_id, project_number)
+                if issue_item_errors:
+                    missing_inputs.extend(f"project: {message}" for message in issue_item_errors)
+            pr_item = find_project_item(items, pr_number, "pr") if pr_number is not None else None
+            project_payload = {
+                "number": project_number,
+                "project_id": project_context["project_id"],
+                "status_field_id": project_context["status_field_id"],
+                "done_option_id": project_context["done_option_id"],
+                "issue_item": issue_item,
+                "pr_item": pr_item,
+            }
+
+            if issue_number is not None:
+                expected_done = issue_payload is not None and (issue_payload.get("state") == "CLOSED" or absorbed_issue)
+                if issue_item is None:
+                    project_drift_details.append(
+                        {
+                            "subject": f"issue #{issue_number}",
+                            "reason": "issue is missing from project",
+                            "expected_done": expected_done,
+                        }
+                    )
+                else:
+                    status = issue_item.get("status")
+                    if expected_done and status != "Done":
+                        project_drift_details.append(
+                            {
+                                "subject": f"issue #{issue_number}",
+                                "reason": "issue project status is not Done",
+                                "expected_done": True,
+                                "actual_status": status,
+                            }
+                        )
+                    if not expected_done and status == "Done":
+                        project_drift_details.append(
+                            {
+                                "subject": f"issue #{issue_number}",
+                                "reason": "issue project status is Done while the issue still has an open gap",
+                                "expected_done": False,
+                                "actual_status": status,
+                            }
+                        )
+
+            if pr_number is not None:
+                expected_done = pr_payload is not None and pr_payload.get("state") == "MERGED"
+                if pr_item is not None:
+                    status = pr_item.get("status")
+                    if expected_done and status != "Done":
+                        project_drift_details.append(
+                            {
+                                "subject": f"pr #{pr_number}",
+                                "reason": "pr project status is not Done",
+                                "expected_done": True,
+                                "actual_status": status,
+                            }
+                        )
+                    if not expected_done and status == "Done":
+                        project_drift_details.append(
+                            {
+                                "subject": f"pr #{pr_number}",
+                                "reason": "pr project status is Done while the PR is not merged",
+                                "expected_done": False,
+                                "actual_status": status,
+                            }
+                        )
+
+    if project_drift_details:
+        findings.append(
+            make_reconciliation_finding(
+                kind="project_drift",
+                severity="fix-needed",
+                subject=f"project {project_number}",
+                evidence={"drifts": project_drift_details},
+                recommended_action="align the project items with the audited issue/PR state before closeout.",
+            )
+        )
+
+    if missing_inputs:
+        result = "block"
+        summary = "reconciliation audit could not complete because required GitHub inputs were missing."
+    else:
+        result = reconciliation_result(findings)
+        summary = (
+            "reconciliation audit found no absorbed-but-open, parent-drift, or project-drift findings."
+            if result == "pass"
+            else "reconciliation audit found GitHub drift that must be reviewed before closeout."
+        )
+    return (
+        {
+            "command": "reconciliation",
+            "operation": "audit",
+            "result": result,
+            "summary": summary,
+            "missing_inputs": missing_inputs,
+            "fallback_to": None if result == "pass" else "manual-reconciliation",
+            "repo": {"owner": owner, "name": repo_name},
+            "issue": issue_payload,
+            "parent": parent_payload,
+            "pr": pr_payload,
+            "project": project_payload,
+            "findings": findings,
+        },
+        [],
+    )
+
+
 def closeout_payload(
     *,
     target_root: Path,
@@ -2094,6 +2443,48 @@ def handle_closeout(args: argparse.Namespace) -> int:
         refreshed_payload["missing_inputs"] = list(dict.fromkeys(sync_missing + list(refreshed_payload.get("missing_inputs", []))))
         refreshed_payload["fallback_to"] = "merge"
     return emit(refreshed_payload)
+
+
+def handle_reconciliation(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    owner = args.owner
+    repo_name = args.repo_name
+    if not owner or not repo_name:
+        detected_owner, detected_repo = detect_github_repo(target_root)
+        owner = owner or detected_owner
+        repo_name = repo_name or detected_repo
+    if not owner or not repo_name:
+        return emit(
+            {
+                "command": "reconciliation",
+                "operation": args.operation,
+                "result": "block",
+                "summary": "reconciliation could not determine the GitHub repository.",
+                "missing_inputs": ["owner/repo"],
+                "fallback_to": "manual-reconciliation",
+            }
+        )
+
+    payload, errors = reconciliation_audit_payload(
+        target_root=target_root,
+        issue_number=args.issue,
+        pr_number=args.pr,
+        project_number=args.project,
+        owner=owner,
+        repo_name=repo_name,
+    )
+    if errors:
+        return emit(
+            {
+                "command": "reconciliation",
+                "operation": args.operation,
+                "result": "block",
+                "summary": "reconciliation command hit an unexpected internal error.",
+                "missing_inputs": errors,
+                "fallback_to": "manual-reconciliation",
+            }
+        )
+    return emit(payload)
 
 
 def handle_review(args: argparse.Namespace) -> int:
@@ -2981,6 +3372,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_host_lifecycle(args)
     if args.command == "closeout":
         return handle_closeout(args)
+    if args.command == "reconciliation":
+        return handle_reconciliation(args)
     if args.command == "flow":
         return handle_flow(args)
     if args.command == "checkpoint":

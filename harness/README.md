@@ -27,6 +27,8 @@
   - 定义 Loom 与宿主 branch / PR / git worktree 生命周期的边界
 - [host-issue-binding.md](./host-issue-binding.md)
   - 定义 Loom 消费 `active issue` 与 branch / git worktree / PR / merge commit 的绑定合同
+- [reconciliation-audit.md](./reconciliation-audit.md)
+  - 定义 Loom 发现 absorbed-but-open / parent drift / project drift 的审计合同
 - [recovery-model.md](./recovery-model.md)
   - 定义唯一恢复主入口、`checkpoint`、`resume`、`handoff` 与每轮回写合同
 - [review-execution.md](./review-execution.md)

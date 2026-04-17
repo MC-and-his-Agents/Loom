@@ -129,6 +129,11 @@ Loom 当前只允许以下同步：
 - 明确报出 drift
 - 通过专门 sync 入口修复
 
+当前执行面上：
+
+- drift 审计由 `reconciliation audit` 承接
+- control-plane 对齐由后续专门 sync 入口承接
+
 不允许：
 
 - 静默选择其中一边
