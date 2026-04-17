@@ -78,6 +78,8 @@ WORK_ITEM_FIELD_LABELS = {
 
 REVIEW_DECISIONS = {"allow", "block", "fallback"}
 REVIEW_KINDS = {"general_review", "code_review", "spec_review"}
+REVIEW_FINDING_SEVERITIES = {"warn", "fix-needed", "block"}
+REVIEW_FINDING_DISPOSITIONS = {"blocking_issue", "follow_up"}
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -158,6 +160,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     review.add_argument("--summary", help="Stable review conclusion summary")
     review.add_argument("--reviewer", help="Reviewer identity")
     review.add_argument("--fallback-to", choices=("admission", "build", "merge"))
+    review.add_argument("--findings-file", help="Optional findings JSON path relative to the target root")
     review.add_argument("--blocking-issue", action="append", default=[], help="Blocking review finding")
     review.add_argument("--follow-up", action="append", default=[], help="Follow-up item recorded by the review")
 
@@ -582,6 +585,106 @@ def default_review_path(item_id: str) -> str:
     return f".loom/reviews/{item_id}.json"
 
 
+def compat_findings_from_lists(
+    *,
+    decision: str | None,
+    blocking_issues: list[str],
+    follow_ups: list[str],
+) -> list[dict[str, str]]:
+    findings: list[dict[str, str]] = []
+    blocking_severity = "block" if decision == "block" else "fix-needed"
+    for summary in blocking_issues:
+        findings.append(
+            {
+                "summary": summary,
+                "severity": blocking_severity,
+                "disposition": "blocking_issue",
+            }
+        )
+    for summary in follow_ups:
+        findings.append(
+            {
+                "summary": summary,
+                "severity": "warn",
+                "disposition": "follow_up",
+            }
+        )
+    return findings
+
+
+def compat_lists_from_findings(findings: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
+    blocking_issues: list[str] = []
+    follow_ups: list[str] = []
+    for finding in findings:
+        summary = finding.get("summary")
+        if not isinstance(summary, str) or not summary.strip():
+            continue
+        if finding.get("disposition") == "blocking_issue":
+            blocking_issues.append(summary.strip())
+        elif finding.get("disposition") == "follow_up":
+            follow_ups.append(summary.strip())
+    return blocking_issues, follow_ups
+
+
+def normalize_review_findings(raw_findings: Any, *, relative: str) -> tuple[list[dict[str, Any]], list[str]]:
+    if not isinstance(raw_findings, list):
+        return [], [f"review artifact `{relative}` `findings` must be a list"]
+
+    findings: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for index, finding in enumerate(raw_findings, start=1):
+        if not isinstance(finding, dict):
+            errors.append(f"review artifact `{relative}` findings[{index}] must be a JSON object")
+            continue
+        normalized = dict(finding)
+        summary = normalized.get("summary")
+        severity = normalized.get("severity")
+        disposition = normalized.get("disposition")
+        if not isinstance(summary, str) or not summary.strip():
+            errors.append(f"review artifact `{relative}` findings[{index}] must include non-empty `summary`")
+        else:
+            normalized["summary"] = summary.strip()
+        if severity not in REVIEW_FINDING_SEVERITIES:
+            errors.append(
+                f"review artifact `{relative}` findings[{index}] severity must be one of "
+                f"{', '.join(sorted(REVIEW_FINDING_SEVERITIES))}"
+            )
+        if disposition not in REVIEW_FINDING_DISPOSITIONS:
+            errors.append(
+                f"review artifact `{relative}` findings[{index}] disposition must be one of "
+                f"{', '.join(sorted(REVIEW_FINDING_DISPOSITIONS))}"
+            )
+        findings.append(normalized)
+    return findings, errors
+
+
+def target_relative_label(target_root: Path, path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(target_root.resolve()))
+    except ValueError:
+        return str(path.resolve())
+
+
+def load_findings_file(target_root: Path, findings_file: str) -> tuple[list[dict[str, Any]] | None, list[str]]:
+    findings_path = Path(findings_file).expanduser()
+    if not findings_path.is_absolute():
+        findings_path = (target_root / findings_path).resolve()
+
+    label = target_relative_label(target_root, findings_path)
+    try:
+        payload = json.loads(findings_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, [f"invalid findings file `{label}`: {exc}"]
+
+    if isinstance(payload, dict):
+        payload = payload.get("findings")
+
+    findings, errors = normalize_review_findings(payload, relative=label)
+    if errors:
+        return None, errors
+    return findings, []
+
+
 def load_review_record(
     target_root: Path,
     item_id: str,
@@ -595,6 +698,8 @@ def load_review_record(
         payload = load_json_file(review_path)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         return None, relative, [f"invalid review artifact `{relative}`: {exc}"]
+    if not isinstance(payload, dict):
+        return None, relative, [f"review artifact `{relative}` must be a JSON object"]
     errors: list[str] = []
     for field in ("item_id", "decision", "kind", "summary", "reviewer", "reviewed_head", "reviewed_validation_summary"):
         value = payload.get(field)
@@ -609,11 +714,37 @@ def load_review_record(
     fallback_to = payload.get("fallback_to")
     if fallback_to not in {None, "admission", "build", "merge"}:
         errors.append(f"review artifact `{relative}` fallback_to must be null, admission, build, or merge")
+    compatibility_lists: dict[str, list[str]] = {}
     for list_field in ("blocking_issues", "follow_ups"):
         value = payload.get(list_field)
         if value is not None and not isinstance(value, list):
             errors.append(f"review artifact `{relative}` `{list_field}` must be a list when present")
-    return payload, relative, errors
+            continue
+        entries: list[str] = []
+        for index, entry in enumerate(value or [], start=1):
+            if not isinstance(entry, str) or not entry.strip():
+                errors.append(f"review artifact `{relative}` `{list_field}`[{index}] must be a non-empty string")
+                continue
+            entries.append(entry.strip())
+        compatibility_lists[list_field] = entries
+
+    findings_value = payload.get("findings")
+    if findings_value is None:
+        findings = compat_findings_from_lists(
+            decision=payload.get("decision") if isinstance(payload.get("decision"), str) else None,
+            blocking_issues=compatibility_lists.get("blocking_issues", []),
+            follow_ups=compatibility_lists.get("follow_ups", []),
+        )
+    else:
+        findings, finding_errors = normalize_review_findings(findings_value, relative=relative)
+        errors.extend(finding_errors)
+
+    blocking_issues, follow_ups = compat_lists_from_findings(findings)
+    normalized_payload = dict(payload)
+    normalized_payload["findings"] = findings
+    normalized_payload["blocking_issues"] = blocking_issues
+    normalized_payload["follow_ups"] = follow_ups
+    return normalized_payload, relative, errors
 
 
 def render_work_item(data: dict[str, Any]) -> str:
@@ -2960,6 +3091,18 @@ def handle_review(args: argparse.Namespace) -> int:
             }
         )
 
+    if args.findings_file and (args.blocking_issue or args.follow_up):
+        return emit(
+            {
+                "command": "review",
+                "operation": "record",
+                "result": "block",
+                "summary": "review record must not mix `--findings-file` with compatibility finding flags.",
+                "missing_inputs": ["choose either `--findings-file` or compatibility finding flags"],
+                "fallback_to": "build",
+            }
+        )
+
     build_payload = checkpoint_payload("build", context)
     if args.decision == "allow" and build_payload["result"] != "pass":
         missing = list(build_payload["missing_inputs"])
@@ -2975,6 +3118,31 @@ def handle_review(args: argparse.Namespace) -> int:
             }
         )
 
+    findings: list[dict[str, Any]]
+    findings_errors: list[str] = []
+    if args.findings_file:
+        findings, findings_errors = load_findings_file(target_root, args.findings_file)
+        if findings is None:
+            findings = []
+    else:
+        findings = compat_findings_from_lists(
+            decision=args.decision,
+            blocking_issues=[entry.strip() for entry in args.blocking_issue if entry.strip()],
+            follow_ups=[entry.strip() for entry in args.follow_up if entry.strip()],
+        )
+    if findings_errors:
+        return emit(
+            {
+                "command": "review",
+                "operation": "record",
+                "result": "block",
+                "summary": "review record could not load a valid authoritative findings file.",
+                "missing_inputs": findings_errors,
+                "fallback_to": "build",
+            }
+        )
+
+    blocking_issues, follow_ups = compat_lists_from_findings(findings)
     review_payload = {
         "schema_version": "loom-review/v1",
         "item_id": context["item_id"],
@@ -2985,8 +3153,9 @@ def handle_review(args: argparse.Namespace) -> int:
         "reviewed_head": git_head_sha(target_root) or "unknown",
         "reviewed_validation_summary": context["latest_validation_summary"],
         "fallback_to": args.fallback_to,
-        "blocking_issues": args.blocking_issue,
-        "follow_ups": args.follow_up,
+        "findings": findings,
+        "blocking_issues": blocking_issues,
+        "follow_ups": follow_ups,
         "consumed_inputs": {
             "work_item": str(context["report"]["fact_chain"]["entry_points"]["work_item"]),
             "recovery_entry": str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"]),
@@ -3231,6 +3400,18 @@ def handle_work_item(args: argparse.Namespace) -> int:
                     "reviewed_head": git_head_sha(target_root) or "unknown",
                     "reviewed_validation_summary": "No validation recorded yet.",
                     "fallback_to": "admission",
+                    "findings": [
+                        {
+                            "summary": "Review artifact scaffolded but not yet concluded.",
+                            "severity": "fix-needed",
+                            "disposition": "blocking_issue",
+                        },
+                        {
+                            "summary": "Record a real review before asking merge checkpoint to consume it.",
+                            "severity": "warn",
+                            "disposition": "follow_up",
+                        },
+                    ],
                     "blocking_issues": ["Review artifact scaffolded but not yet concluded."],
                     "follow_ups": ["Record a real review before asking merge checkpoint to consume it."],
                 },

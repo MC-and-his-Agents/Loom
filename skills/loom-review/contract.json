@@ -3,7 +3,7 @@
   "role": "scenario/review",
   "contract_version": "1.2.0",
   "display_name": "Loom Review",
-  "description": "Run the formal semantic review layer on top of pre-review and return findings plus a review verdict without replacing merge-ready.",
+  "description": "Run the formal semantic review layer on top of pre-review and return authoritative review findings plus a verdict without replacing merge-ready.",
   "root_entry": false,
   "entrypoint": {
     "skill_markdown": "SKILL.md",

@@ -191,6 +191,9 @@ GOVERNANCE_SURFACE_CONTRACT_SKILLS = {
     "loom-resume",
 }
 
+REVIEW_FINDING_SEVERITIES = {"warn", "fix-needed", "block"}
+REVIEW_FINDING_DISPOSITIONS = {"blocking_issue", "follow_up"}
+
 
 def repo_root_from_argv(argv: list[str]) -> Path:
     if len(argv) > 2:
@@ -578,6 +581,37 @@ def require_closeout_reconciliation_contract(
             failures.append(Failure(category, f"{context} must block when reconciliation returns `block`"))
         if fallback_to != "manual-reconciliation":
             failures.append(Failure(category, f"{context} must point blocked reconciliation drift to `manual-reconciliation`"))
+
+
+def require_review_record_contract(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must include a review record object"))
+        return
+    findings = payload.get("findings")
+    if not isinstance(findings, list):
+        failures.append(Failure(category, f"{context} must include review `findings` as a list"))
+        return
+    for list_field in ("blocking_issues", "follow_ups"):
+        if not isinstance(payload.get(list_field), list):
+            failures.append(Failure(category, f"{context} must include review `{list_field}` as a list"))
+    for finding in findings:
+        if not isinstance(finding, dict):
+            failures.append(Failure(category, f"{context} review findings must be JSON objects"))
+            continue
+        if not isinstance(finding.get("summary"), str) or not finding.get("summary"):
+            failures.append(Failure(category, f"{context} review findings must include non-empty `summary`"))
+        if finding.get("severity") not in REVIEW_FINDING_SEVERITIES:
+            failures.append(Failure(category, f"{context} review finding severity must stay within the stable contract"))
+        if finding.get("disposition") not in REVIEW_FINDING_DISPOSITIONS:
+            failures.append(
+                Failure(category, f"{context} review finding disposition must stay within the stable contract")
+            )
 
 
 def check_skill_manifests(root: Path) -> list[Failure]:
@@ -1343,6 +1377,14 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         "`flow review` must run fact-chain, state-check, runtime-evidence, checkpoint-build, and review-entry in order",
                     )
                 )
+            review = payload.get("review")
+            if isinstance(review, dict):
+                require_review_record_contract(
+                    failures,
+                    category="daily-execution-cli",
+                    context="`flow review` review.record",
+                    payload=review.get("record"),
+                )
         if label == "review-read":
             if payload.get("command") != "review":
                 failures.append(Failure("daily-execution-cli", "`review read` must report `command: review`"))
@@ -1353,6 +1395,13 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(Failure("daily-execution-cli", "`review read` must include a `review` object"))
             elif not isinstance(review.get("record"), dict):
                 failures.append(Failure("daily-execution-cli", "`review read` must include `review.record`"))
+            else:
+                require_review_record_contract(
+                    failures,
+                    category="daily-execution-cli",
+                    context="`review read` review.record",
+                    payload=review.get("record"),
+                )
         if label == "host-lifecycle":
             if payload.get("command") != "host-lifecycle":
                 failures.append(Failure("daily-execution-cli", "`host-lifecycle` must report `command: host-lifecycle`"))
@@ -1621,6 +1670,29 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         elif payload.get("result") != "pass":
             failures.append(Failure("daily-execution-cli", "`work-item update` must pass on a clean temp copy"))
 
+        findings_path = authoring_target / ".loom" / "review-findings.json"
+        findings_path.parent.mkdir(parents=True, exist_ok=True)
+        findings_path.write_text(
+            json.dumps(
+                [
+                    {
+                        "summary": "Formal review has not approved the item yet.",
+                        "severity": "fix-needed",
+                        "disposition": "blocking_issue",
+                    },
+                    {
+                        "summary": "Re-run formal review after the missing approval signal is resolved.",
+                        "severity": "warn",
+                        "disposition": "follow_up",
+                    },
+                ],
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
         payload, error = load_command_json(
             root,
             [
@@ -1642,12 +1714,23 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 "loom-check",
                 "--fallback-to",
                 "admission",
+                "--findings-file",
+                ".loom/review-findings.json",
             ],
         )
         if error:
             failures.append(Failure("daily-execution-cli", f"`review record` failed: {error}"))
         elif payload.get("result") != "pass":
             failures.append(Failure("daily-execution-cli", "`review record` must pass for an authored fallback decision"))
+        else:
+            review = payload.get("review")
+            if isinstance(review, dict):
+                require_review_record_contract(
+                    failures,
+                    category="daily-execution-cli",
+                    context="`review record` review.record",
+                    payload=review.get("record"),
+                )
 
     if shutil.which("git") is not None:
         with tempfile.TemporaryDirectory(prefix="loom-check-purity-") as tmp:

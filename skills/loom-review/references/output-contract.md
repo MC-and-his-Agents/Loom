@@ -21,8 +21,15 @@
 - `build_checkpoint`
   - build checkpoint 的结果、摘要、缺失输入与回退语义
 - `review`
-  - 正式 review artifact 的定位与已记录结论
+  - 唯一 `review_entry` review record 的定位、已记录结论，以及权威 findings / disposition 摘要
 - `current_checkpoint`
   - 当前 recovery checkpoint 的原始值与归一化值
+
+`review` 段至少应让执行者读出：
+
+- 读取的是哪一个 `review_entry`
+- review record 中的 `decision`
+- review record 中的权威 `findings`
+- `blocking_issues` / `follow_ups` 只是兼容字段，而不是第二份审查工件
 
 这个 skill 负责正式 review 执行层，不替代 `loom-pre-review` 的机械预检，也不替代 `loom-merge-ready` 的 merge 前聚合放行判断。

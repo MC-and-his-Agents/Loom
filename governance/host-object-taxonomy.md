@@ -103,7 +103,7 @@ Loom 当前固定四类对象：
 例如：
 
 - `review record`
-  - 是真相对象
+  - 是真相对象，内部承接正式 review 的 findings / disposition contract
 - `review comments`
   - 是证据对象
 
@@ -118,7 +118,7 @@ Loom 当前固定以下命名规则：
 - issue activation
   - 只表示宿主 issue 已进入当前执行，不等于 `work-item --activate`
 - `review record`
-  - 只表示正式 review 真相
+  - 只表示正式 review 真相，包含同一载体内的 findings / disposition authored 字段
 - `PR`
   - 只表示宿主实现载体
 - `merge-ready`

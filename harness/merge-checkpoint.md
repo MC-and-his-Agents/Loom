@@ -50,6 +50,7 @@ merge checkpoint 是执行侧的最终放行层。
   - 只能从恢复主入口读取
 - 正式 review 结论
   - 只能从 `work item.review_entry` 指向的 review record 读取
+  - 其中 `findings` 是 review/disposition 的权威字段；`blocking_issues` / `follow_ups` 只作兼容投影
 - 状态面
   - 只允许作为派生汇总读面，不得替代上述主真相
 
@@ -84,6 +85,7 @@ merge checkpoint 只允许输出以下三类结果：
 ## 5. 边界约束
 
 - merge checkpoint 消费 reviewer、自动检查和运行证据的结果，不重新发明第二套审查体系
+- merge checkpoint 只消费单一 review record，不为 findings / disposition 再引入第二 authored artifact
 - merge checkpoint 只回答“是否可进入 host merge”，进入主干后的 issue / project / main 收口由 [closeout-gate.md](./closeout-gate.md) 承接
 - merge checkpoint 不负责定义成熟度、关闭语义或事项是否值得做；这些属于 `governance/`
 - merge checkpoint 不得补读另一份 authored 状态摘要来替代恢复主入口

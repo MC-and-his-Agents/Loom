@@ -23,7 +23,21 @@ python3 tools/loom_check.py
 python3 tools/loom_flow.py recovery writeback --target <temp-copy> --item INIT-0001 --current-stop "Bootstrap review has started." --next-step "Record the first formal review conclusion." --latest-validation-summary "Bootstrap artifacts verified and ready for semantic review."
 python3 tools/loom_flow.py work-item create --target <temp-copy> --item NEXT-0001 --goal "Validate work item authoring" --scope "Limit changes to `.loom/` artifacts for this temp check" --execution-path execution/support --workspace-entry . --validation-entry "python3 .loom/bin/loom_init.py verify --target ." --closing-condition "The authored work item can be activated and read mechanically." --init-recovery --activate
 python3 tools/loom_flow.py work-item update --target <temp-copy> --item NEXT-0001 --scope "Keep the temp authoring check constrained to `.loom/` files"
-python3 tools/loom_flow.py review record --target <temp-copy> --item NEXT-0001 --decision fallback --kind code_review --summary "Formal review has not approved the item yet." --reviewer loom-check --fallback-to admission
+cat > <temp-copy>/.loom/review-findings.json <<'JSON'
+[
+  {
+    "summary": "Formal review has not approved the item yet.",
+    "severity": "fix-needed",
+    "disposition": "blocking_issue"
+  },
+  {
+    "summary": "Re-run formal review after the missing approval signal is resolved.",
+    "severity": "warn",
+    "disposition": "follow_up"
+  }
+]
+JSON
+python3 tools/loom_flow.py review record --target <temp-copy> --item NEXT-0001 --decision fallback --kind code_review --summary "Formal review has not approved the item yet." --reviewer loom-check --fallback-to admission --findings-file .loom/review-findings.json
 ```
 
 ## 结果
@@ -38,7 +52,8 @@ python3 tools/loom_flow.py review record --target <temp-copy> --item NEXT-0001 -
 - `work-item create/update`
   - 只写静态字段；`--activate` 才切换当前 locator truth
 - `review record`
-  - 能写出 merge checkpoint 可机械消费的正式 review 结论
+  - 能在单一 `review_entry` 中写出 merge checkpoint 可机械消费的正式 review 结论
+  - `findings` 成为权威数组，`blocking_issues` / `follow_ups` 只保留兼容投影
 - `loom_check`
   - 已把 `flow review`、`review read|record`、`recovery writeback`、`work-item create|update` 纳入 gate
 
