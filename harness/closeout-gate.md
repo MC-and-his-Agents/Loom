@@ -2,6 +2,8 @@
 
 本文件定义 Loom 当前最小 closeout 执行链路。
 
+宿主动作统一结果词表与 `fallback_to` 纪律见 [host-action-contract.md](./host-action-contract.md)。本文件只承接 closeout 专有的 fail-closed 顺序与同步边界。
+
 ## 1. 能力定位
 
 closeout gate 用来回答两件事：
@@ -29,6 +31,17 @@ closeout gate 用来回答两件事：
 - project 中对应 issue 的状态
 
 若这些事实不一致，结果必须返回 `block`。
+
+`closeout check` 只允许返回 `pass` 或 `block`：
+
+- 普通 closeout 缺口
+  - 返回 `block`，并把 `fallback_to` 指向 `merge`
+- reconciliation 返回 `fix-needed`
+  - 返回 `block`，并把 `fallback_to` 指向 `reconciliation-sync`
+- reconciliation 返回 `block`
+  - 返回 `block`，并把 `fallback_to` 指向 `manual-reconciliation`
+
+`closeout` 不把 drift 或控制面缺口伪装成顶层 `fallback` 结果。
 
 `closeout check` 内部消费 `reconciliation audit` 时，阻断纪律如下：
 
@@ -60,6 +73,8 @@ closeout gate 用来回答两件事：
 - `--comment-file` 与 `--comment` 二选一，只为当前 issue closeout comment 提供正文来源
 
 `closeout sync` 仍保持 closeout 控制面对齐入口，但不得绕过已显式暴露的 reconciliation 结果。
+
+`closeout sync` 也只允许返回 `pass` 或 `block`。若同步前置不满足，或同步后仍无法把控制面对齐，必须继续显式指向 `reconciliation-sync`、`manual-reconciliation` 或 `merge`，而不是产出新的 host action 结果词表。
 
 若 parent issue 通过 child issue 的 `closed_out` / `absorbed` 结果完成自身 closeout 判断，`sync` 只负责把这一已成立结论写回控制面，不替代 parent 对剩余缺口的判断。
 

@@ -11,7 +11,7 @@
 - `governance/`
   - 核心原则、审查模型、成熟度与关闭语义
 - `harness/`
-  - 核心执行合同、恢复模型、状态面、纯度、宿主生命周期边界、closeout gate、reconciliation sync 写回约束与自动化前置
+  - 核心执行合同、恢复模型、状态面、纯度、[宿主动作主合同](../harness/host-action-contract.md)、宿主生命周期边界、closeout gate、reconciliation sync 写回约束与自动化前置
 - `templates/`
   - 最小正式规约模板与最小 PR 模板
 - `skills/`

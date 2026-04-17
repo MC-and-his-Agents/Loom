@@ -15,7 +15,7 @@
 | 日常读取与检查 | `loom_flow fact-chain/runtime-evidence/state-check` | 输出保持 JSON 结果语义（`result/summary/missing_inputs/fallback_to`） |
 | checkpoint 执行 | `loom_flow checkpoint admission/build/merge` | 三阶段语义与回退关系保持不变 |
 | 现场与纯度治理 | `loom_flow workspace <create/locate/cleanup/retire>` + `purity-check` | 生命周期动作与失败语义保持不变 |
-| 宿主边界与 closeout | `loom_flow host-lifecycle` + `closeout check|sync` | Loom 明确边界与控制面对齐，但不接管宿主 branch/PR/worktree 生命周期；`closeout` 仍保持原有收口控制面职责 |
+| 宿主动作与 closeout | [../harness/host-action-contract.md](../harness/host-action-contract.md) + `loom_flow host-lifecycle` + `reconciliation audit|sync` + `closeout check|sync` | 新增统一主落点，不改变现有 CLI；Loom 冻结 host-facing actions 的结果与去向，但不接管宿主 branch/PR/worktree 生命周期 |
 | drift 审计与 sync | `loom_flow reconciliation audit|sync` | `audit` 只生成 absorbed-but-open / parent drift / project drift；`sync` 只消费这些 finding 做机械写回，不扩展为新的 gate/验证入口 |
 | 高频组合入口 | `loom_flow flow pre-review/review/resume/handoff/merge-ready` | 聚合入口扩张不破坏单命令入口，统一保持 JSON 结果语义 |
 | 场景 skills | `loom-adopt/resume/pre-review/review/handoff/retire/merge-ready` | 场景 skill 只做入口编排，不新增第二套事实真相源 |
@@ -26,6 +26,7 @@
 - 新增聚合入口（如 `flow pre-review`、`flow merge-ready`）不替换单命令入口
 - 新增 authored 入口（如 `review record`、`recovery writeback`、`work-item create|update`）不把只读 flow 变成隐式写入
 - 新增场景 skill 入口不替代 `loom-init` 的 root 身份，只补显式入口与隐式路由
+- 新增 [../harness/host-action-contract.md](../harness/host-action-contract.md) 只收口既有 host-facing actions 的合同，不新增 umbrella CLI，也不改写既有命令输出结构
 - `governance_surface` 只允许扩充 locator 或职责说明，不允许更名、拆成并行字段或复制实时 authored 状态
 - gate 与 verify 始终复用同一 CLI，不维护第二套检查命令
 
@@ -58,6 +59,7 @@
 - 前 1-9 步提供“该进入哪个入口/可继续执行/需阻断/是否应回退”的统一判断
 - `loom-init`、`loom-adopt`、`loom-resume` 对外公开的治理读面保持同一字段名 `governance_surface`
 - merge 阶段可按状态返回 `fallback`，而不是伪装成通过
+- host-facing actions 继续复用既有命令，但 `fallback` 只保留给 Loom 内部 checkpoint / merge control；closeout 与 reconciliation 不把 drift 伪装成 `fallback`
 - 操作流既可拆分执行，也可通过聚合入口执行高频路径
 
 ## 4. 验证结论
@@ -71,6 +73,7 @@
 - `flow resume/pre-review/review/handoff/merge-ready`：均可返回稳定 JSON 结果
 - `review record`、`recovery writeback`、`work-item create|update`：可显式回写 authored 结果而不引入第二真相
 - `checkpoint merge` 在当前样本阶段按预期返回 `fallback`
+- `host-action-contract` 把 `host-lifecycle`、`reconciliation`、`closeout` 的结果与 `fallback_to` 收到唯一主落点，而不改写既有 CLI 入口
 - `reconciliation audit` 会把 GitHub drift 显式化，但不提前执行 sync
 - `reconciliation sync` 必须先消费同范围 audit；若出现任一 `block` finding，则返回 `block` 且不写控制面
 - `reconciliation sync --dry-run` 只输出计划，不伪装成已经完成 closeout
