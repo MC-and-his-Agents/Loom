@@ -716,6 +716,7 @@ def check_demo_assets(root: Path) -> list[Failure]:
         ".loom/bin/loom_flow.py recovery writeback",
         ".loom/bin/loom_flow.py work-item create",
         ".loom/bin/loom_flow.py host-lifecycle",
+        ".loom/bin/loom_flow.py closeout check",
         ".loom/bin/loom_flow.py checkpoint admission",
         ".loom/bin/loom_flow.py workspace locate",
         ".loom/bin/loom_flow.py purity-check",
@@ -913,6 +914,16 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             {"pass"},
         ),
         (
+            "closeout-check",
+            ["python3", "tools/loom_flow.py", "closeout", "check", "--target", ".", "--skip-gate"],
+            {"pass"},
+        ),
+        (
+            "closeout-sync",
+            ["python3", "tools/loom_flow.py", "closeout", "sync", "--target", ".", "--skip-gate"],
+            {"pass"},
+        ),
+        (
             "purity",
             ["python3", "tools/loom_flow.py", "purity-check", "--target", "examples/new-project", "--item", "INIT-0001"],
             {"pass"},
@@ -1099,6 +1110,22 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 for key in ("workspace", "branch", "pr", "worktree"):
                     if not isinstance(objects.get(key), dict):
                         failures.append(Failure("daily-execution-cli", f"`host-lifecycle` must include `{key}`"))
+        if label in {"closeout-check", "closeout-sync"}:
+            if payload.get("command") != "closeout":
+                failures.append(Failure("daily-execution-cli", f"`{label}` must report `command: closeout`"))
+            expected_operation = "check" if label == "closeout-check" else "sync"
+            if payload.get("operation") != expected_operation:
+                failures.append(
+                    Failure("daily-execution-cli", f"`{label}` must report `operation: {expected_operation}`")
+                )
+            repo = payload.get("repo")
+            if not isinstance(repo, dict):
+                failures.append(Failure("daily-execution-cli", f"`{label}` must include `repo`"))
+            else:
+                if not isinstance(repo.get("owner"), str) or not repo.get("owner"):
+                    failures.append(Failure("daily-execution-cli", f"`{label}` must include `repo.owner`"))
+                if not isinstance(repo.get("name"), str) or not repo.get("name"):
+                    failures.append(Failure("daily-execution-cli", f"`{label}` must include `repo.name`"))
         if label == "flow-merge-ready":
             if payload.get("command") != "flow":
                 failures.append(Failure("daily-execution-cli", "`flow merge-ready` must report `command: flow`"))
