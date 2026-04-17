@@ -21,8 +21,10 @@ Loom 的执行真相只允许沿一条事实链流动：
 - merge checkpoint
   - 只消费上述真相，不补读第二套状态来源
 
-本文件只定义字段归属、派生关系与禁止事项。
+本文件只定义 repo execution truth 内部的字段归属、派生关系与禁止事项。
 字段的最低表达要求，仍以各组件文档为准。
+
+跨 repo 与 GitHub 控制面的真相分层，见 [../governance/truth-and-sync-boundary.md](../governance/truth-and-sync-boundary.md)。
 
 ## 2. 主真相载体
 
@@ -154,3 +156,4 @@ Loom 的执行真相只允许沿一条事实链流动：
 - Loom 固化的是字段归属与派生关系，不固化具体文件名或宿主平台字段名
 - 若某仓库还停留在 `checkpoint-lite`，也必须明确唯一动态事实承载面
 - 本文件不重复定义字段如何呈现在 Markdown、JSON 或其他载体；只定义谁拥有 authored 权限
+- issue / project / PR / checks 等 host control truth 不在本文件内定义 authored 归属

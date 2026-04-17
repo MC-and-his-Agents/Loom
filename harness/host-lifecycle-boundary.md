@@ -2,16 +2,18 @@
 
 本文件定义 Loom 与宿主平台在 `workspace`、branch、PR、git worktree 之间的生命周期边界。
 
+稳定命名与对象分类见 [../governance/host-object-taxonomy.md](../governance/host-object-taxonomy.md)。
+
 ## 1. 结论
 
 - `workspace`
-  - 进入 Loom 执行层
+  - 属于 Loom execution object，进入 Loom 执行层
 - branch
-  - 保留给宿主平台
+  - 属于 host control object，保留给宿主平台
 - PR
-  - 保留给宿主平台
+  - 属于 host control object，保留给宿主平台
 - git worktree
-  - 保留给宿主平台
+  - 属于 host control object，保留给宿主平台
 
 ## 2. Loom 承接什么
 

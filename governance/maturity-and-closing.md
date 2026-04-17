@@ -14,6 +14,8 @@
 - 每个阶段的语义边界
 - 事项何时可以关闭
 
+稳定状态名与转移规则见 [state-machine.md](./state-machine.md)。
+
 ## 2. 成熟度先于关闭
 
 关闭语义必须与事项成熟度一致，不得提前制造“已完成”状态。
@@ -33,7 +35,7 @@ Loom 当前至少保留以下四阶段：
 - 已进入主干并收口
   - 必要实现已进入主干，事项状态与文档状态一致
 
-项目可以细化命名，但不得跳过上述语义区分。
+项目可以细化命名，但不得跳过上述语义区分，也不得破坏 [state-machine.md](./state-machine.md) 中的稳定状态机语义。
 
 ## 4. 关闭一致性条件
 
@@ -46,6 +48,7 @@ Loom 当前至少保留以下四阶段：
 - 相关文档与主干状态一致
 
 当前执行侧入口见 [../harness/closeout-gate.md](../harness/closeout-gate.md)。
+GitHub 与仓内真相如何同步，见 [truth-and-sync-boundary.md](./truth-and-sync-boundary.md)。
 
 ## 5. 规约完成与实现完成的分离语义
 

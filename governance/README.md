@@ -17,3 +17,9 @@
   - `EXT-0004` `EXT-0014` `EXT-0018`
 - [maturity-and-closing.md](./maturity-and-closing.md)
   - `EXT-0026`
+- [state-machine.md](./state-machine.md)
+  - `#157`
+- [truth-and-sync-boundary.md](./truth-and-sync-boundary.md)
+  - `#158`
+- [host-object-taxonomy.md](./host-object-taxonomy.md)
+  - `#153`
