@@ -12,6 +12,8 @@ from functools import lru_cache
 from pathlib import Path
 
 from fact_chain_support import inspect_fact_chain
+from governance_surface import build_governance_surface
+from loom_flow import detect_github_repo, gh_json
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOL_VERSION = "1.2.0"
@@ -236,8 +238,9 @@ def route_payload(
     summary: str,
     missing_inputs: list[str],
     fallback_to: str,
+    governance_surface: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    return {
+    payload = {
         "command": "route",
         "result": result,
         "selected_skill": selected_skill,
@@ -247,6 +250,9 @@ def route_payload(
         "missing_inputs": missing_inputs,
         "fallback_to": fallback_to,
     }
+    if governance_surface is not None:
+        payload["governance_surface"] = governance_surface
+    return payload
 
 
 @lru_cache(maxsize=None)
@@ -618,6 +624,7 @@ def initial_work_items(scenario: str, target_root: Path) -> list[dict[str, objec
         ".loom/status/current.md",
         ".loom/bin/loom_init.py",
         ".loom/bin/fact_chain_support.py",
+        ".loom/bin/governance_surface.py",
         ".loom/bin/loom_flow.py",
         ".loom/specs/INIT-0001/spec.md",
         ".loom/specs/INIT-0001/plan.md",
@@ -703,6 +710,11 @@ def initial_artifacts(target_root: Path, install_pr_template: bool) -> list[dict
             "path": ".loom/bin/fact_chain_support.py",
             "kind": "loom-tool-support",
             "source": "tools/fact_chain_support.py",
+        },
+        {
+            "path": ".loom/bin/governance_surface.py",
+            "kind": "loom-tool-support",
+            "source": "tools/governance_surface.py",
         },
         {
             "path": ".loom/bin/loom_flow.py",
@@ -803,6 +815,11 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
                 "the bootstrap manifest and init-result are verifiable",
             ],
         },
+        "governance_surface": build_governance_surface(
+            target_root,
+            bootstrap_mode=True,
+            scenario_override=scenario,
+        ),
     }
     return result
 
@@ -1002,6 +1019,7 @@ def scaffold_target(
     for source, destination in (
         (ROOT / "tools/loom_init.py", target_root / ".loom/bin/loom_init.py"),
         (ROOT / "tools/fact_chain_support.py", target_root / ".loom/bin/fact_chain_support.py"),
+        (ROOT / "tools/governance_surface.py", target_root / ".loom/bin/governance_surface.py"),
         (ROOT / "tools/loom_flow.py", target_root / ".loom/bin/loom_flow.py"),
         (ROOT / "templates/scaffold/spec.md", target_root / ".loom/specs/INIT-0001/spec.md"),
         (ROOT / "templates/scaffold/plan.md", target_root / ".loom/specs/INIT-0001/plan.md"),
@@ -1039,6 +1057,7 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
         ".loom/status/current.md",
         ".loom/bin/loom_init.py",
         ".loom/bin/fact_chain_support.py",
+        ".loom/bin/governance_surface.py",
         ".loom/bin/loom_flow.py",
         ".loom/specs/INIT-0001/spec.md",
         ".loom/specs/INIT-0001/plan.md",
@@ -1292,6 +1311,11 @@ def bootstrap(args: argparse.Namespace) -> int:
             "written_files": written,
             "touched": touched,
         }
+        result["governance_surface"] = build_governance_surface(
+            target_root,
+            bootstrap_mode=True,
+            scenario_override=scenario,
+        )
         if args.verify:
             errors = verify_target(target_root, output_path)
             result["verification"] = {"ok": not errors, "errors": errors}
@@ -1365,6 +1389,13 @@ def route(args: argparse.Namespace) -> int:
         return 1
 
     known_skills = set(registry_skill_ids or ())
+    governance_surface: dict[str, object] | None = None
+    if target_root.exists() and target_root.is_dir():
+        try:
+            governance_surface = build_governance_surface(target_root)
+        except OSError:
+            governance_surface = None
+
     if args.skill:
         if args.skill not in known_skills:
             print(
@@ -1393,6 +1424,7 @@ def route(args: argparse.Namespace) -> int:
                     summary=f"explicit skill `{args.skill}` selected",
                     missing_inputs=[],
                     fallback_to="loom-init",
+                    governance_surface=governance_surface if args.skill in {"loom-adopt", "loom-resume"} else None,
                 ),
                 ensure_ascii=False,
                 indent=2,
@@ -1430,6 +1462,7 @@ def route(args: argparse.Namespace) -> int:
                     summary=f"task signals route to `{selected_skill}`",
                     missing_inputs=[],
                     fallback_to="loom-init",
+                    governance_surface=governance_surface if selected_skill in {"loom-adopt", "loom-resume"} else None,
                 ),
                 ensure_ascii=False,
                 indent=2,
@@ -1446,6 +1479,7 @@ def route(args: argparse.Namespace) -> int:
             summary="task signals are insufficient for stable routing",
             missing_inputs=["one stable scenario signal such as adopt, resume, pre-review, handoff, retire, or merge-ready"],
             fallback_to="loom-init",
+            governance_surface=governance_surface if governance_surface is not None else None,
         )
     else:
         all_matches = sorted({signal for matched in matches.values() for signal in matched})
@@ -1457,6 +1491,7 @@ def route(args: argparse.Namespace) -> int:
             summary=f"task signals matched multiple scenario skills: {', '.join(sorted(matches))}",
             missing_inputs=["a single dominant scenario signal or an explicit --skill"],
             fallback_to="loom-init",
+            governance_surface=governance_surface if governance_surface is not None else None,
         )
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0

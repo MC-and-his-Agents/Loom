@@ -20,7 +20,34 @@
 | 清理 / retire | 清理现场、退休现场、结束当前事项现场 | `loom-retire` | `python3 tools/loom_flow.py workspace cleanup\|retire` |
 | merge 前放行 | merge-ready、最终放行前预检、确认是否可合并 | `loom-merge-ready` | `python3 tools/loom_flow.py flow merge-ready` |
 
-## 3. fallback 语义
+## 3. `governance_surface` 公共合同
+
+以下三类入口对外暴露的公共治理读面固定命名为 `governance_surface`：
+
+- `loom-init`
+  - 输出初始化后的治理承接面，说明 Issue、PR、规则、规格、执行工件分别由谁承接
+- `loom-adopt`
+  - 不另造新合同，直接复用 `loom-init` 的 `governance_surface`
+- `loom-resume`
+  - 输出当前事项的治理承接面摘要，但不回写或复制 authored 真相
+
+稳定约束：
+
+- 只读，不新增第二套治理状态源
+- 字段名保持：
+  - `repository_mode`
+  - `loom_state`
+  - `carrier_summary`
+  - `execution_entry`
+  - `validation_entry`
+  - `review_merge_surface`
+  - `github_control_plane`
+  - `summary`
+  - `missing_inputs`
+- `carrier_summary` 子项固定为 `work_item`、`recovery`、`review`、`status_surface`、`spec_path`、`plan_path`
+- 只回答 locator 与职责边界，不复制实时停点、下一步、阻断项、验证摘要
+
+## 4. fallback 语义
 
 出现以下任一情况时，root skill 不做猜测，直接回退到 `loom-init`：
 

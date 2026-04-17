@@ -47,10 +47,12 @@
 
 - `flow resume` 固定按 `fact-chain -> state-check -> workspace-locate` 顺序编排
 - 输出会稳定带出当前事项、现场入口、恢复入口、checkpoint、下一步、阻断项与最近验证摘要
+- `flow resume` 对外公开的治理读面固定命名为 `governance_surface`，只摘要当前治理承接面，不复制 authored 真相
 - 该 flow 不回写任何载体，也不创建新的状态源
 
 ## 6. 关闭依据
 
 - `loom-resume` 已从 skeleton 提升为正式场景入口
 - 显式触发、隐式路由与 `flow resume` 下游消费均已有验证记录
+- `governance_surface` 已作为 resume 场景的稳定公共字段写入合同，不与恢复摘要其他字段并行记账
 - gate 已把 `flow resume` 的最小 JSON 语义纳入机械校验
