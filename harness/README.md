@@ -25,6 +25,8 @@
   - 定义 `create`、`locate`、`cleanup`、`retire` 与 `purity-check` 的生命周期合同
 - [recovery-model.md](./recovery-model.md)
   - 定义唯一恢复主入口、`checkpoint`、`resume`、`handoff` 与每轮回写合同
+- [review-execution.md](./review-execution.md)
+  - 定义正式 review 执行层、review record 与 merge checkpoint 的对接边界
 - [status-surface.md](./status-surface.md)
   - 定义状态读取字段、运行时证据入口与 `not_applicable` 语义
 - [automation-frontload.md](./automation-frontload.md)

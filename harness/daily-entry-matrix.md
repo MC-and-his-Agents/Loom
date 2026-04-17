@@ -16,10 +16,12 @@
 | `verify` | `python3 tools/loom_init.py verify --target <repo>` | init-result + fact-chain + flow 子命令 | `ok` / `errors` | 核验初始化产物与入口可读性 |
 | `fact-chain` | `python3 tools/loom_flow.py fact-chain --target <repo> [--item <id>]` | 单一事实链 | `pass` / `block` | 日常统一读取入口 |
 | `pre-review`（统一高频入口） | `python3 tools/loom_flow.py flow pre-review --target <repo> [--item <id>]` | fact-chain + state-check + runtime evidence + admission + workspace locate | `pass` / `block` / `fallback` | 第一版聚焦 review 前高频检查流 |
+| `review` | `python3 tools/loom_flow.py flow review --target <repo> [--item <id>]` -> `python3 tools/loom_flow.py review record --target <repo> [--item <id>] ...` | fact-chain + state-check + runtime evidence + build checkpoint + review record | `pass` / `block` / `fallback` | 正式 review 先读基线，再显式记录 reviewer 结论 |
 | `checkpoint` | `python3 tools/loom_flow.py checkpoint <admission\\|build\\|merge> --target <repo> [--item <id>]` | fact-chain + purity + merge 放行材料 | `pass` / `block` / `fallback` | `merge` 可额外消费 PR 模板 |
 | `resume` | `python3 tools/loom_flow.py flow resume --target <repo> [--item <id>]` | fact-chain + state-check + workspace locate + recovery 的 `next_step` / `blockers` / `checkpoint` | `pass` / `block` | 只输出恢复摘要，不回写任何载体 |
 | `handoff` | `python3 tools/loom_flow.py flow handoff --target <repo> [--item <id>]` | fact-chain + state-check + workspace locate + recovery/status locator + handoff writeback fields | `pass` / `block` | 只输出最小回写清单与载体定位，不直接写 authored 状态 |
-| `review` | `spec_review` / `code_review` + merge checkpoint 输入 | 最小必要上下文 + 前置检查结果 | `allow` / `block` / `fallback` | reviewer 负责语义判断，脚本负责机械判断 |
+| `recovery writeback` | `python3 tools/loom_flow.py recovery writeback --target <repo> [--item <id>] ...` | 当前 fact-chain + recovery authored 字段 | `pass` / `block` | 只写 recovery 主入口，再同步状态面 |
+| `work item authoring` | `python3 tools/loom_flow.py work-item create|update --target <repo> --item <id> ... [--activate]` | init-result locator + work item static fields | `pass` / `block` | `--activate` 只切当前 locator，不隐式写动态状态 |
 | `merge-ready` | `python3 tools/loom_flow.py flow merge-ready --target <repo> [--item <id>]` | fact-chain + state-check + runtime evidence + build checkpoint + merge checkpoint | `pass` / `block` / `fallback` | 只输出统一放行摘要，不替代宿主平台 merge |
 | `merge` | `merge checkpoint` + 仓库平台合并动作 | build 结果 + 风险回滚 + 验证摘要 | 放行或阻断 | Loom 不替代宿主平台合并接口 |
 | `retire` | `python3 tools/loom_flow.py purity-check --target <repo> [--item <id>]` -> `workspace cleanup` -> `workspace retire` | purity 结果 + cleanup 结果 + recovery 主入口 | checkpoint 终态 `retired` | 默认先解释 retire 前置条件，不默认删除现场目录 |

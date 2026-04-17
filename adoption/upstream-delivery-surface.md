@@ -15,10 +15,10 @@
 - `templates/`
   - 最小正式规约模板与最小 PR 模板
 - `skills/`
-  - 稳定入口合同、`loom-init` root 路由、6 个场景 skills、`registry.json`、`upgrade-contract.json` 与 `route-matrix.md`
+  - 稳定入口合同、`loom-init` root 路由、7 个场景 skills、`registry.json`、`upgrade-contract.json` 与 `route-matrix.md`
 - `adoption/`
   - 稳定 adoption 路径、经验回流、验证记录合同、版本化与升级路径
-  - 执行入口兼容说明、6 个场景 skill 验证记录与完整执行内核复验记录
+  - 执行入口兼容说明、7 个场景 skill 验证记录与完整执行内核复验记录
 - 发布说明
   - `docs/complete-kernel-release.md`
 

@@ -27,6 +27,7 @@ merge checkpoint 是执行侧的最终放行层。
 - 当前变更范围与目标
 - 关联事项、规格或等价正式工件
 - 自动检查结果
+- 正式 review record
 - 最近验证摘要
 - 运行时证据或 `not_applicable` 声明
 - 风险与回滚边界
@@ -38,6 +39,7 @@ merge checkpoint 是执行侧的最终放行层。
 - [work-item-contract.md](./work-item-contract.md)
 - [recovery-model.md](./recovery-model.md)
 - [status-surface.md](./status-surface.md)
+- [review-execution.md](./review-execution.md)
 - [automation-frontload.md](./automation-frontload.md)
 
 其中：
@@ -46,6 +48,8 @@ merge checkpoint 是执行侧的最终放行层。
   - 只能从 `work item` 读取
 - 当前 checkpoint、停点、下一步、阻断项、最近验证摘要、回退边界
   - 只能从恢复主入口读取
+- 正式 review 结论
+  - 只能从 `work item.review_entry` 指向的 review record 读取
 - 状态面
   - 只允许作为派生汇总读面，不得替代上述主真相
 
@@ -70,6 +74,8 @@ merge checkpoint 只允许输出以下三类结果：
   - 回到 [automation-frontload.md](./automation-frontload.md) 对应检查面
 - 缺验证摘要、运行证据或 `not_applicable` 声明
   - 回到 [status-surface.md](./status-surface.md) 与实际验证入口
+- 缺 formal review、review stale 或 reviewer 明确要求回退
+  - 回到 [review-execution.md](./review-execution.md) 或 `build checkpoint`
 - 缺停点、下一步、风险或回滚边界
   - 回到 [recovery-model.md](./recovery-model.md)
 - head 已超出批准范围或事项边界失真

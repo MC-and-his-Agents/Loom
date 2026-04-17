@@ -125,6 +125,11 @@
       "source": "generated"
     },
     {
+      "path": ".loom/reviews/INIT-0001.json",
+      "kind": "review-entry",
+      "source": "generated"
+    },
+    {
       "path": ".loom/status/current.md",
       "kind": "status-surface",
       "source": "generated"
@@ -168,11 +173,13 @@
       "execution_path": "bootstrap/root",
       "workspace_entry": ".",
       "recovery_entry": ".loom/progress/INIT-0001.md",
+      "review_entry": ".loom/reviews/INIT-0001.json",
       "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
       "artifacts": [
         ".loom/bootstrap/init-result.json",
         ".loom/work-items/INIT-0001.md",
         ".loom/progress/INIT-0001.md",
+        ".loom/reviews/INIT-0001.json",
         ".loom/status/current.md",
         ".loom/bin/loom_init.py",
         ".loom/bin/fact_chain_support.py",

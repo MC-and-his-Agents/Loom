@@ -32,6 +32,13 @@
       "executable": "../tools/loom_flow.py"
     },
     {
+      "id": "loom-review",
+      "role": "scenario/review",
+      "contract_version": "1.2.0",
+      "manifest": "loom-review/contract.json",
+      "executable": "../tools/loom_flow.py"
+    },
+    {
       "id": "loom-handoff",
       "role": "scenario/handoff",
       "contract_version": "1.2.0",

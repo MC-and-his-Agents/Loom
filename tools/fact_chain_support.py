@@ -18,6 +18,7 @@ STATIC_FACT_FIELDS = {
     "Execution Path": "execution_path",
     "Workspace Entry": "workspace_entry",
     "Recovery Entry": "recovery_entry",
+    "Review Entry": "review_entry",
     "Validation Entry": "validation_entry",
     "Closing Condition": "closing_condition",
 }
@@ -40,6 +41,7 @@ STATUS_FIELDS = {
     "Execution Path": "execution_path",
     "Workspace Entry": "workspace_entry",
     "Recovery Entry": "recovery_entry",
+    "Review Entry": "review_entry",
     "Validation Entry": "validation_entry",
     "Closing Condition": "closing_condition",
     "Current Checkpoint": "current_checkpoint",
@@ -82,6 +84,7 @@ FORBIDDEN_STATIC_KEYS = {
     "execution_path",
     "workspace_entry",
     "recovery_entry",
+    "review_entry",
     "validation_entry",
     "closing_condition",
 }
@@ -271,6 +274,7 @@ def expected_status_values(
         "execution_path": str(work_item["execution_path"]),
         "workspace_entry": str(work_item["workspace_entry"]),
         "recovery_entry": str(work_item["recovery_entry"]),
+        "review_entry": str(work_item["review_entry"]),
         "validation_entry": str(work_item["validation_entry"]),
         "closing_condition": str(work_item["closing_condition"]),
         "current_checkpoint": recovery_entry["current_checkpoint"],
@@ -448,6 +452,10 @@ def inspect_fact_chain(
             "recovery_entry": {
                 "value": str(work_item["recovery_entry"]),
                 "source": {"carrier": "work_item", "path": str(work_item_ref), "field": "Recovery Entry"},
+            },
+            "review_entry": {
+                "value": str(work_item["review_entry"]),
+                "source": {"carrier": "work_item", "path": str(work_item_ref), "field": "Review Entry"},
             },
             "validation_entry": {
                 "value": str(work_item["validation_entry"]),

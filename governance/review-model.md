@@ -40,7 +40,7 @@ Loom 默认把审查职责分成四类角色：
 
 ## 3. 三个 checkpoint 的审查分工
 
-### 3.1 Commit checkpoint
+### 3.1 Admission checkpoint
 
 回答：
 
@@ -75,10 +75,12 @@ Loom 默认把审查职责分成四类角色：
 
 最小上下文建议：
 
-- Commit checkpoint
+- Admission checkpoint
   - 事项目标、边界、路径判定依据、所需准入工件
 - Build checkpoint
   - 当前变更、阶段结论、风险变化、必要验证证据
+- 正式 review
+  - `flow review` 输出、review record、必要 findings 与 reviewer 结论
 - Merge checkpoint
   - 最终变更集、验证结论、风险与回滚信息、未完成事项
 

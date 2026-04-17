@@ -33,6 +33,7 @@ Loom 的 harness 不是若干孤立规则，而是一条从初始化产物到 `a
 | 验证汇总 | 自动检查结果、人工验证、运行证据入口 | 最近验证摘要、未决阻断项、是否可进 checkpoint | [status-surface.md](./status-surface.md) | 回到验证入口继续补验证或声明 `not_applicable` |
 | admission checkpoint | 最新事实链、事项范围、入口完整性、关键阻断项 | `pass`、`block` 或 `fallback`（回退前序） | `checkpoint-model.md`（admission） | 回到 work item / recovery 回写补齐输入或收敛范围 |
 | build checkpoint | admission 结果、构建/测试结论、运行时证据可读性 | `pass`、`block` 或 `fallback`（回退 admission） | `checkpoint-model.md`（build） | 回到 admission 或验证入口补齐缺失证据 |
+| 正式 review | pre-review / review 基线、build 结果、review record | reviewer 结论可被 merge checkpoint 消费 | [review-execution.md](./review-execution.md) | 回到 build / recovery 回写 / review record |
 | merge checkpoint 放行 | build 结果、最新 head、验证摘要、风险与回滚、未决项 | `允许放行`、`阻断待补` 或 `退回前序 checkpoint` | [merge-checkpoint.md](./merge-checkpoint.md) | 按结果回退到 build / admission / 验证阶段继续补材料 |
 
 ## 3. `checkpoint-lite` 升级条件在链路中的位置

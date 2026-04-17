@@ -1,0 +1,45 @@
+{
+  "id": "loom-review",
+  "role": "scenario/review",
+  "contract_version": "1.2.0",
+  "display_name": "Loom Review",
+  "description": "Run the formal semantic review layer on top of pre-review and return findings plus a review verdict without replacing merge-ready.",
+  "root_entry": false,
+  "entrypoint": {
+    "skill_markdown": "SKILL.md",
+    "adapter_metadata": "agents/openai.yaml",
+    "orchestration_cli": "../../tools/loom_flow.py"
+  },
+  "input_contract": {
+    "reference": "references/input-signals.md",
+    "required_fields": [
+      "target_repository",
+      "current_item_or_active_item",
+      "review_intent"
+    ]
+  },
+  "output_contract": {
+    "reference": "references/output-contract.md",
+    "required_sections": [
+      "item",
+      "result",
+      "summary",
+      "missing_inputs",
+      "fallback_to",
+      "steps",
+      "state_check",
+      "runtime_evidence",
+      "build_checkpoint",
+      "review",
+      "current_checkpoint"
+    ]
+  },
+  "routing": {
+    "reference": "../route-matrix.md",
+    "explicit_name": "loom-review"
+  },
+  "installation": {
+    "registry": "../registry.json",
+    "upgrade_contract": "../upgrade-contract.json"
+  }
+}

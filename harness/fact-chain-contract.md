@@ -37,6 +37,7 @@ Loom 的执行真相只允许沿一条事实链流动：
 - `associated_artifacts`
 - `workspace_entry`
 - `recovery_entry`
+- `review_entry`
 - `validation_entry`
 - `closing_condition`
 
@@ -83,6 +84,7 @@ Loom 的执行真相只允许沿一条事实链流动：
 | `execution_path` | `work item` | authored | execution-context、checkpoint |
 | `workspace_entry` | `work item` | authored | workspace-lifecycle、purity-check、status-surface |
 | `recovery_entry` | `work item` | authored | execution-context、workspace-lifecycle、checkpoint |
+| `review_entry` | `work item` | authored | review-execution、merge-checkpoint |
 | `validation_entry` | `work item` | authored | checkpoint、merge-checkpoint、verify |
 | `closing_condition` | `work item` | authored | checkpoint、merge-checkpoint |
 | `current_checkpoint` | recovery 主入口 | authored | status-surface、checkpoint、workspace-lifecycle |
@@ -100,6 +102,7 @@ Loom 的执行真相只允许沿一条事实链流动：
 
 - `authored` 字段只能在主来源中维护。
 - `derived` 字段只能由读取脚本从主来源计算或映射，不得手工改写为第二真相。
+- `--activate` 只能显式切换当前 locator，不得通过 `resume`、`handoff` 或其他只读 flow 隐式改写活跃事项。
 
 ## 3. 派生读面
 

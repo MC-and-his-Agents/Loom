@@ -8,10 +8,11 @@
 
 - 1 个 root entry
   - `loom-init`
-- 6 个场景 skills
+- 7 个场景 skills
   - `loom-adopt`
   - `loom-resume`
   - `loom-pre-review`
+  - `loom-review`
   - `loom-handoff`
   - `loom-retire`
   - `loom-merge-ready`

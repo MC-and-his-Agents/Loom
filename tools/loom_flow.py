@@ -54,6 +54,30 @@ RUNTIME_EVIDENCE_FIELDS = (
     "lane_entry",
 )
 
+RECOVERY_FIELD_LABELS = {
+    "current_checkpoint": "Current Checkpoint",
+    "current_stop": "Current Stop",
+    "next_step": "Next Step",
+    "blockers": "Blockers",
+    "latest_validation_summary": "Latest Validation Summary",
+    "recovery_boundary": "Recovery Boundary",
+    "current_lane": "Current Lane",
+}
+
+WORK_ITEM_FIELD_LABELS = {
+    "item_id": "Item ID",
+    "goal": "Goal",
+    "scope": "Scope",
+    "execution_path": "Execution Path",
+    "workspace_entry": "Workspace Entry",
+    "recovery_entry": "Recovery Entry",
+    "validation_entry": "Validation Entry",
+    "closing_condition": "Closing Condition",
+}
+
+REVIEW_DECISIONS = {"allow", "block", "fallback"}
+REVIEW_KINDS = {"general_review", "code_review", "spec_review"}
+
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Loom daily execution checks against a target repository.")
@@ -118,8 +142,65 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Init-result path relative to the target root",
     )
 
+    review = subparsers.add_parser("review", help="Read or record a Loom formal review artifact")
+    review.add_argument("operation", choices=("read", "record"))
+    review.add_argument("--target", required=True, help="Target repository root")
+    review.add_argument("--item", help="Expected current item id")
+    review.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+    review.add_argument("--review-file", help="Optional review artifact path relative to the target root")
+    review.add_argument("--decision", choices=tuple(sorted(REVIEW_DECISIONS)))
+    review.add_argument("--kind", choices=tuple(sorted(REVIEW_KINDS)))
+    review.add_argument("--summary", help="Stable review conclusion summary")
+    review.add_argument("--reviewer", help="Reviewer identity")
+    review.add_argument("--fallback-to", choices=("admission", "build", "merge"))
+    review.add_argument("--blocking-issue", action="append", default=[], help="Blocking review finding")
+    review.add_argument("--follow-up", action="append", default=[], help="Follow-up item recorded by the review")
+
+    recovery = subparsers.add_parser("recovery", help="Write the authored Loom recovery entry")
+    recovery.add_argument("operation", choices=("writeback",))
+    recovery.add_argument("--target", required=True, help="Target repository root")
+    recovery.add_argument("--item", help="Expected current item id")
+    recovery.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+    recovery.add_argument("--current-checkpoint", help="Updated checkpoint value")
+    recovery.add_argument("--current-stop", help="Updated current stop")
+    recovery.add_argument("--next-step", help="Updated next step")
+    recovery.add_argument("--blockers", help="Updated blockers summary")
+    recovery.add_argument("--latest-validation-summary", help="Updated validation summary")
+    recovery.add_argument("--recovery-boundary", help="Updated recovery boundary")
+    recovery.add_argument("--current-lane", help="Updated current lane")
+
+    work_item = subparsers.add_parser("work-item", help="Create or update a Loom work item")
+    work_item.add_argument("operation", choices=("create", "update"))
+    work_item.add_argument("--target", required=True, help="Target repository root")
+    work_item.add_argument("--item", required=True, help="Work item id")
+    work_item.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+    work_item.add_argument("--goal", help="Static goal")
+    work_item.add_argument("--scope", help="Static scope")
+    work_item.add_argument("--execution-path", help="Execution path")
+    work_item.add_argument("--workspace-entry", help="Workspace entry")
+    work_item.add_argument("--recovery-entry", help="Recovery entry path relative to the target root")
+    work_item.add_argument("--validation-entry", help="Validation entry command")
+    work_item.add_argument("--closing-condition", help="Closing condition")
+    work_item.add_argument("--artifact", action="append", default=[], help="Associated artifact for create")
+    work_item.add_argument("--add-artifact", action="append", default=[], help="Associated artifact to append")
+    work_item.add_argument("--remove-artifact", action="append", default=[], help="Associated artifact to remove")
+    work_item.add_argument("--activate", action="store_true", help="Activate this item in the current fact chain")
+    work_item.add_argument("--init-recovery", action="store_true", help="Initialize the recovery entry when creating")
+
     flow = subparsers.add_parser("flow", help="Run a bundled high-frequency Loom flow")
-    flow.add_argument("operation", choices=("pre-review", "resume", "handoff", "merge-ready"))
+    flow.add_argument("operation", choices=("pre-review", "review", "resume", "handoff", "merge-ready"))
     flow.add_argument("--target", required=True, help="Target repository root")
     flow.add_argument("--item", help="Expected current item id")
     flow.add_argument(
@@ -183,6 +264,14 @@ def git_branch(root: Path) -> str | None:
     return branch or None
 
 
+def git_head_sha(root: Path) -> str | None:
+    result = run_git(root, ["rev-parse", "HEAD"])
+    if result is None or result.returncode != 0:
+        return None
+    sha = result.stdout.strip()
+    return sha or None
+
+
 def git_dirty_entries(root: Path) -> list[dict[str, str]]:
     result = run_git(root, ["status", "--porcelain=v1"])
     if result is None or result.returncode != 0:
@@ -242,6 +331,215 @@ def update_markdown_bullet(path: Path, label: str, value: str) -> None:
     if count != 1:
         raise RuntimeError(f"unable to update `{label}` in {path}")
     path.write_text(updated, encoding="utf-8")
+
+
+def replace_markdown_section(path: Path, section_name: str, new_lines: list[str]) -> None:
+    text = path.read_text(encoding="utf-8")
+    pattern = re.compile(
+        rf"(?ms)(^## {re.escape(section_name)}\n\n)(.*?)(?=^## |\Z)"
+    )
+    replacement = "\\1" + "\n".join(new_lines).rstrip() + "\n\n"
+    updated, count = pattern.subn(replacement, text, count=1)
+    if count != 1:
+        raise RuntimeError(f"unable to update `{section_name}` in {path}")
+    path.write_text(updated, encoding="utf-8")
+
+
+def render_status_surface(report: dict[str, Any], runtime_evidence: dict[str, dict[str, Any]]) -> str:
+    facts = report["facts"]
+    status_path = report["fact_chain"]["entry_points"]["status_surface"]
+    return (
+        "# Current Status\n\n"
+        "## Derived Fact Chain View\n\n"
+        f"- Item ID: {facts['item_id']['value']}\n"
+        f"- Goal: {facts['goal']['value']}\n"
+        f"- Scope: {facts['scope']['value']}\n"
+        f"- Execution Path: {facts['execution_path']['value']}\n"
+        f"- Workspace Entry: {facts['workspace_entry']['value']}\n"
+        f"- Recovery Entry: {facts['recovery_entry']['value']}\n"
+        f"- Review Entry: {facts['review_entry']['value']}\n"
+        f"- Validation Entry: {facts['validation_entry']['value']}\n"
+        f"- Closing Condition: {facts['closing_condition']['value']}\n"
+        f"- Current Checkpoint: {facts['current_checkpoint']['value']}\n"
+        f"- Current Stop: {facts['current_stop']['value']}\n"
+        f"- Next Step: {facts['next_step']['value']}\n"
+        f"- Blockers: {facts['blockers']['value']}\n"
+        f"- Latest Validation Summary: {facts['latest_validation_summary']['value']}\n"
+        f"- Recovery Boundary: {facts['recovery_boundary']['value']}\n"
+        f"- Current Lane: {facts['current_lane']['value']}\n\n"
+        "## Runtime Evidence\n\n"
+        f"- Run Entry: {runtime_evidence['run_entry']['value']}\n"
+        f"- Logs Entry: {runtime_evidence['logs_entry']['value']}\n"
+        f"- Diagnostics Entry: {runtime_evidence['diagnostics_entry']['value']}\n"
+        f"- Verification Entry: {runtime_evidence['verification_entry']['value']}\n"
+        f"- Lane Entry: {runtime_evidence['lane_entry']['value']}\n\n"
+        "## Sources\n\n"
+        f"- Static Truth: {report['fact_chain']['entry_points']['work_item']}\n"
+        f"- Dynamic Truth: {report['fact_chain']['entry_points']['recovery_entry']}\n"
+        "- Locator Truth: .loom/bootstrap/init-result.json\n"
+        f"- Fact Chain CLI: {report['fact_chain']['read_entry']}\n"
+    )
+
+
+def sync_status_surface(target_root: Path, output_relative: str, runtime_evidence: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], list[str]]:
+    output_path = target_root / output_relative
+    try:
+        init_result = load_json_file(output_path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return {}, [f"invalid init-result JSON: {exc}"]
+
+    fact_chain = init_result.get("fact_chain")
+    if not isinstance(fact_chain, dict):
+        return {}, ["init-result is missing required section: fact_chain"]
+    entry_points = fact_chain.get("entry_points")
+    if not isinstance(entry_points, dict):
+        return {}, ["init-result.fact_chain.entry_points must be an object"]
+
+    work_item_ref = str(entry_points.get("work_item", ""))
+    recovery_ref = str(entry_points.get("recovery_entry", ""))
+    status_ref = str(entry_points.get("status_surface", ""))
+    work_item_path = target_root / work_item_ref
+    recovery_path = target_root / recovery_ref
+    status_path = target_root / status_ref
+    if not work_item_path.exists() or not recovery_path.exists():
+        return {}, ["fact-chain carrier is missing during status sync"]
+    work_item, work_item_errors = parse_work_item(work_item_path, target_root)
+    recovery_entry, recovery_errors = parse_recovery_entry(recovery_path, target_root)
+    errors = [*work_item_errors, *recovery_errors]
+    if errors:
+        return {}, errors
+    pseudo_report = {
+        "fact_chain": {
+            "read_entry": str(fact_chain.get("read_entry", "python3 .loom/bin/loom_init.py fact-chain --target .")),
+            "entry_points": {
+                "work_item": work_item_ref,
+                "recovery_entry": recovery_ref,
+                "status_surface": status_ref,
+            },
+        },
+        "facts": {
+            "item_id": {"value": str(work_item["item_id"])},
+            "goal": {"value": str(work_item["goal"])},
+            "scope": {"value": str(work_item["scope"])},
+            "execution_path": {"value": str(work_item["execution_path"])},
+            "workspace_entry": {"value": str(work_item["workspace_entry"])},
+            "recovery_entry": {"value": str(work_item["recovery_entry"])},
+            "review_entry": {"value": str(work_item["review_entry"])},
+            "validation_entry": {"value": str(work_item["validation_entry"])},
+            "closing_condition": {"value": str(work_item["closing_condition"])},
+            "current_checkpoint": {"value": recovery_entry["current_checkpoint"]},
+            "current_stop": {"value": recovery_entry["current_stop"]},
+            "next_step": {"value": recovery_entry["next_step"]},
+            "blockers": {"value": recovery_entry["blockers"]},
+            "latest_validation_summary": {"value": recovery_entry["latest_validation_summary"]},
+            "recovery_boundary": {"value": recovery_entry["recovery_boundary"]},
+            "current_lane": {"value": recovery_entry["current_lane"]},
+        },
+    }
+    status_path.write_text(render_status_surface(pseudo_report, runtime_evidence), encoding="utf-8")
+    refreshed, refresh_errors = load_fact_chain_report(target_root, output_relative)
+    if refresh_errors:
+        return {}, refresh_errors
+    return refreshed, []
+
+
+def read_runtime_evidence(target_root: Path, status_relative: str) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    status_path = target_root / status_relative
+    if not status_path.exists():
+        return {}, [f"missing status surface: {status_relative}"]
+    sections = markdown_sections(status_path)
+    values, errors = parse_key_value_section(
+        sections,
+        "Runtime Evidence",
+        {
+            "Run Entry": "run_entry",
+            "Logs Entry": "logs_entry",
+            "Diagnostics Entry": "diagnostics_entry",
+            "Verification Entry": "verification_entry",
+            "Lane Entry": "lane_entry",
+        },
+        status_relative,
+    )
+    if errors:
+        return {}, errors
+    return {
+        key: {
+            "value": values[key],
+            "status": "not_applicable" if values[key] == "not_applicable" else "present",
+        }
+        for key in RUNTIME_EVIDENCE_FIELDS
+    }, []
+
+
+def default_review_path(item_id: str) -> str:
+    return f".loom/reviews/{item_id}.json"
+
+
+def load_review_record(
+    target_root: Path,
+    item_id: str,
+    review_file: str | None = None,
+) -> tuple[dict[str, Any] | None, str, list[str]]:
+    relative = review_file or default_review_path(item_id)
+    review_path = target_root / relative
+    if not review_path.exists():
+        return None, relative, []
+    try:
+        payload = load_json_file(review_path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return None, relative, [f"invalid review artifact `{relative}`: {exc}"]
+    errors: list[str] = []
+    for field in ("item_id", "decision", "kind", "summary", "reviewer", "reviewed_head", "reviewed_validation_summary"):
+        value = payload.get(field)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"review artifact `{relative}` is missing `{field}`")
+    if payload.get("item_id") != item_id:
+        errors.append(f"review artifact `{relative}` item_id does not match `{item_id}`")
+    if payload.get("decision") not in REVIEW_DECISIONS:
+        errors.append(f"review artifact `{relative}` decision must be one of {', '.join(sorted(REVIEW_DECISIONS))}")
+    if payload.get("kind") not in REVIEW_KINDS:
+        errors.append(f"review artifact `{relative}` kind must be one of {', '.join(sorted(REVIEW_KINDS))}")
+    fallback_to = payload.get("fallback_to")
+    if fallback_to not in {None, "admission", "build", "merge"}:
+        errors.append(f"review artifact `{relative}` fallback_to must be null, admission, build, or merge")
+    for list_field in ("blocking_issues", "follow_ups"):
+        value = payload.get(list_field)
+        if value is not None and not isinstance(value, list):
+            errors.append(f"review artifact `{relative}` `{list_field}` must be a list when present")
+    return payload, relative, errors
+
+
+def render_work_item(data: dict[str, Any]) -> str:
+    return (
+        f"# {data['item_id']}\n\n"
+        "## Static Facts\n\n"
+        f"- Item ID: {data['item_id']}\n"
+        f"- Goal: {data['goal']}\n"
+        f"- Scope: {data['scope']}\n"
+        f"- Execution Path: {data['execution_path']}\n"
+        f"- Workspace Entry: {data['workspace_entry']}\n"
+        f"- Recovery Entry: {data['recovery_entry']}\n"
+        f"- Review Entry: {data['review_entry']}\n"
+        f"- Validation Entry: {data['validation_entry']}\n"
+        f"- Closing Condition: {data['closing_condition']}\n\n"
+        "## Associated Artifacts\n\n"
+        + "".join(f"- `{artifact}`\n" for artifact in data["associated_artifacts"])
+    )
+
+
+def render_recovery_entry(item_id: str, values: dict[str, str]) -> str:
+    return (
+        f"# {item_id} Progress\n\n"
+        "## Dynamic Facts\n\n"
+        f"- Item ID: {item_id}\n"
+        f"- Current Checkpoint: {values['current_checkpoint']}\n"
+        f"- Current Stop: {values['current_stop']}\n"
+        f"- Next Step: {values['next_step']}\n"
+        f"- Blockers: {values['blockers']}\n"
+        f"- Latest Validation Summary: {values['latest_validation_summary']}\n"
+        f"- Recovery Boundary: {values['recovery_boundary']}\n"
+        f"- Current Lane: {values['current_lane']}\n"
+    )
 
 
 def check_pr_template(target_root: Path) -> tuple[dict[str, Any], list[str]]:
@@ -374,6 +672,7 @@ def load_context(target_root: Path, output_relative: str, expected_item: str | N
         "workspace_entry": workspace_entry,
         "workspace_path": workspace_path,
         "validation_entry": str(facts["validation_entry"]["value"]),
+        "review_entry": str(facts["review_entry"]["value"]),
         "current_checkpoint_raw": str(facts["current_checkpoint"]["value"]),
         "current_checkpoint": normalize_checkpoint(str(facts["current_checkpoint"]["value"])),
         "goal": str(facts["goal"]["value"]),
@@ -501,6 +800,7 @@ def inspect_fact_chain_legacy(target_root: Path, output_relative: str) -> tuple[
         "execution_path": str(work_item["execution_path"]),
         "workspace_entry": str(work_item["workspace_entry"]),
         "recovery_entry": str(work_item["recovery_entry"]),
+        "review_entry": str(work_item["review_entry"]),
         "validation_entry": str(work_item["validation_entry"]),
         "closing_condition": str(work_item["closing_condition"]),
         "current_checkpoint": recovery_entry["current_checkpoint"],
@@ -555,6 +855,7 @@ def inspect_fact_chain_legacy(target_root: Path, output_relative: str) -> tuple[
             "associated_artifacts": {"value": list(work_item["associated_artifacts"])},
             "workspace_entry": {"value": str(work_item["workspace_entry"])},
             "recovery_entry": {"value": str(work_item["recovery_entry"])},
+            "review_entry": {"value": str(work_item["review_entry"])},
             "validation_entry": {"value": str(work_item["validation_entry"])},
             "closing_condition": {"value": str(work_item["closing_condition"])},
             "current_checkpoint": {"value": recovery_entry["current_checkpoint"]},
@@ -722,6 +1023,7 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
             ("execution_path", context["execution_path"]),
             ("workspace_entry", context["workspace_entry"]),
             ("recovery_entry", str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"])),
+            ("review_entry", context["review_entry"]),
             ("status_surface", str(context["report"]["fact_chain"]["entry_points"]["status_surface"])),
             ("validation_entry", context["validation_entry"]),
             ("latest_validation_summary", context["latest_validation_summary"]),
@@ -750,12 +1052,46 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
         result = "block" if result == "pass" else result
 
     pr_template: dict[str, Any] | None = None
+    review_record: dict[str, Any] | None = None
+    review_path: str | None = None
     if stage == "merge":
         pr_template, pr_template_errors = check_pr_template(context["target_root"])
         if pr_template_errors:
             missing_inputs.extend(pr_template_errors)
             if result == "pass":
                 result = "block"
+        review_record, review_path, review_errors = load_review_record(
+            context["target_root"],
+            context["item_id"],
+            context["review_entry"],
+        )
+        if review_errors:
+            missing_inputs.extend(review_errors)
+            if result == "pass":
+                result = "block"
+        elif review_record is None:
+            missing_inputs.append(f"missing review artifact: {review_path}")
+            if result == "pass":
+                result = "block"
+        else:
+            decision = review_record["decision"]
+            if review_record.get("reviewed_validation_summary") != context["latest_validation_summary"]:
+                missing_inputs.append("review artifact does not match the latest validation summary")
+                if result == "pass":
+                    result = "block"
+            current_head = git_head_sha(context["target_root"])
+            reviewed_head = review_record.get("reviewed_head")
+            if current_head and reviewed_head != current_head:
+                missing_inputs.append("review artifact was recorded against a different HEAD")
+                if result == "pass":
+                    result = "block"
+            if decision == "block":
+                if result == "pass":
+                    result = "block"
+                missing_inputs.append(f"review decision is blocking: {review_record['summary']}")
+            elif decision == "fallback":
+                result = "fallback"
+                fallback_to = review_record.get("fallback_to") or "build"
 
     if missing_inputs and result == "pass":
         result = "block"
@@ -789,6 +1125,9 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
             "latest_validation_summary": context["latest_validation_summary"],
             "current_lane": context["current_lane"],
         },
+        "review": {
+            "path": context["review_entry"],
+        },
         "purity": purity,
         "result": result,
         "summary": summary,
@@ -797,6 +1136,11 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
     }
     if pr_template is not None:
         payload["pr_template"] = pr_template
+    if review_path is not None:
+        payload["review"] = {
+            "path": review_path,
+            "record": review_record,
+        }
     return payload
 
 
@@ -1206,6 +1550,522 @@ def handle_state_check(args: argparse.Namespace) -> int:
     return emit(state_check_payload(context))
 
 
+def handle_review(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    context, errors = load_context(target_root, args.output, args.item)
+    if errors:
+        return emit(
+            {
+                "command": "review",
+                "operation": args.operation,
+                "result": "block",
+                "summary": "review command could not read a valid Loom fact chain.",
+                "missing_inputs": [f"fact-chain: {message}" for message in errors],
+                "fallback_to": "admission",
+            }
+        )
+
+    review_record, review_path, review_errors = load_review_record(
+        target_root,
+        context["item_id"],
+        args.review_file or context["review_entry"],
+    )
+    if args.operation == "read":
+        missing_inputs = list(review_errors)
+        if review_record is None and not review_errors:
+            missing_inputs.append(f"missing review artifact: {review_path}")
+        result = "pass" if not missing_inputs else "block"
+        return emit(
+            {
+                "command": "review",
+                "operation": "read",
+                "item": {"id": context["item_id"]},
+                "result": result,
+                "summary": (
+                    "review artifact is readable and can be consumed by merge checkpoint."
+                    if result == "pass"
+                    else "review artifact is missing or invalid."
+                ),
+                "missing_inputs": missing_inputs,
+                "fallback_to": "build" if missing_inputs else None,
+                "review": {"path": review_path, "record": review_record},
+            }
+        )
+
+    missing_inputs: list[str] = []
+    for field in ("decision", "kind", "summary", "reviewer"):
+        value = getattr(args, field.replace("-", "_"), None)
+        if not isinstance(value, str) or not value.strip():
+            missing_inputs.append(field)
+    if args.decision == "fallback" and args.fallback_to is None:
+        missing_inputs.append("fallback-to")
+    if missing_inputs:
+        return emit(
+            {
+        "command": "review",
+            "operation": "record",
+                "result": "block",
+                "summary": "review record command is missing required authored fields.",
+                "missing_inputs": missing_inputs,
+                "fallback_to": "build",
+            }
+        )
+
+    build_payload = checkpoint_payload("build", context)
+    if args.decision == "allow" and build_payload["result"] != "pass":
+        missing = list(build_payload["missing_inputs"])
+        return emit(
+            {
+                "command": "review",
+                "operation": "record",
+                "result": "block",
+                "summary": "review cannot be recorded as `allow` before build checkpoint passes.",
+                "missing_inputs": missing,
+                "fallback_to": build_payload["fallback_to"] or "build",
+                "build_checkpoint": build_payload,
+            }
+        )
+
+    review_payload = {
+        "schema_version": "loom-review/v1",
+        "item_id": context["item_id"],
+        "decision": args.decision,
+        "kind": args.kind,
+        "summary": args.summary,
+        "reviewer": args.reviewer,
+        "reviewed_head": git_head_sha(target_root) or "unknown",
+        "reviewed_validation_summary": context["latest_validation_summary"],
+        "fallback_to": args.fallback_to,
+        "blocking_issues": args.blocking_issue,
+        "follow_ups": args.follow_up,
+        "consumed_inputs": {
+            "work_item": str(context["report"]["fact_chain"]["entry_points"]["work_item"]),
+            "recovery_entry": str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"]),
+            "status_surface": str(context["report"]["fact_chain"]["entry_points"]["status_surface"]),
+            "build_checkpoint": build_payload["result"],
+        },
+    }
+    review_abs = target_root / review_path
+    review_abs.parent.mkdir(parents=True, exist_ok=True)
+    review_abs.write_text(json.dumps(review_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    verified_record, _, verified_errors = load_review_record(target_root, context["item_id"], review_path)
+    if verified_errors or verified_record is None:
+        return emit(
+            {
+                "command": "review",
+                "operation": "record",
+                "result": "block",
+                "summary": "review artifact was written but could not be re-read cleanly.",
+                "missing_inputs": verified_errors or [f"missing review artifact: {review_path}"],
+                "fallback_to": "build",
+            }
+        )
+
+    return emit(
+        {
+            "command": "review",
+            "operation": "record",
+            "item": {"id": context["item_id"]},
+            "result": "pass",
+            "summary": "formal review conclusion was recorded and is ready for merge checkpoint consumption.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "review": {"path": review_path, "record": verified_record},
+            "build_checkpoint": {
+                "result": build_payload["result"],
+                "summary": build_payload["summary"],
+            },
+        }
+    )
+
+
+def handle_recovery(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    context, errors = load_context(target_root, args.output, args.item)
+    if errors:
+        return emit(
+            {
+                "command": "recovery",
+                "operation": args.operation,
+                "result": "block",
+                "summary": "recovery command could not read a valid Loom fact chain.",
+                "missing_inputs": [f"fact-chain: {message}" for message in errors],
+                "fallback_to": "admission",
+            }
+        )
+
+    updates = {
+        "current_checkpoint": args.current_checkpoint,
+        "current_stop": args.current_stop,
+        "next_step": args.next_step,
+        "blockers": args.blockers,
+        "latest_validation_summary": args.latest_validation_summary,
+        "recovery_boundary": args.recovery_boundary,
+        "current_lane": args.current_lane,
+    }
+    provided = {field: value for field, value in updates.items() if isinstance(value, str) and value.strip()}
+    if not provided:
+        return emit(
+            {
+                "command": "recovery",
+                "operation": "writeback",
+                "result": "block",
+                "summary": "recovery writeback requires at least one authored field.",
+                "missing_inputs": ["current-stop | next-step | blockers | latest-validation-summary | current-checkpoint | recovery-boundary | current-lane"],
+                "fallback_to": "admission",
+            }
+        )
+
+    status_relative = str(context["report"]["fact_chain"]["entry_points"]["status_surface"])
+    runtime_evidence, runtime_errors = read_runtime_evidence(target_root, status_relative)
+    if runtime_errors:
+        return emit(
+            {
+                "command": "recovery",
+                "operation": "writeback",
+                "result": "block",
+                "summary": "recovery writeback could not read runtime evidence for status sync.",
+                "missing_inputs": runtime_errors,
+                "fallback_to": "admission",
+            }
+        )
+
+    for field_name, value in provided.items():
+        if field_name == "current_checkpoint":
+            value = normalize_checkpoint(value) if value.strip().lower() == "retired" else value
+        update_markdown_bullet(context["recovery_path"], RECOVERY_FIELD_LABELS[field_name], value)
+
+    refreshed, refresh_errors = sync_status_surface(target_root, args.output, runtime_evidence)
+    if refresh_errors:
+        return emit(
+            {
+                "command": "recovery",
+                "operation": "writeback",
+                "result": "block",
+                "summary": "recovery writeback updated the recovery entry, but fact-chain verification failed during status sync.",
+                "missing_inputs": refresh_errors,
+                "fallback_to": "admission",
+            }
+        )
+
+    return emit(
+        {
+            "command": "recovery",
+            "operation": "writeback",
+            "item": {"id": context["item_id"]},
+            "result": "pass",
+            "summary": "recovery authored fields were updated and the derived status surface was resynchronized.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "updated_fields": sorted(provided),
+            "recovery_entry": str(refreshed["fact_chain"]["entry_points"]["recovery_entry"]),
+            "status_surface": str(refreshed["fact_chain"]["entry_points"]["status_surface"]),
+        }
+    )
+
+
+def update_active_entry_points(
+    target_root: Path,
+    output_relative: str,
+    *,
+    item_id: str,
+    work_item: str,
+    recovery_entry: str,
+    status_surface: str,
+) -> None:
+    output_path = target_root / output_relative
+    payload = load_json_file(output_path)
+    fact_chain = payload.get("fact_chain")
+    if not isinstance(fact_chain, dict):
+        raise RuntimeError("init-result is missing `fact_chain`")
+    entry_points = fact_chain.get("entry_points")
+    if not isinstance(entry_points, dict):
+        raise RuntimeError("init-result.fact_chain is missing `entry_points`")
+    entry_points["current_item_id"] = item_id
+    entry_points["work_item"] = work_item
+    entry_points["recovery_entry"] = recovery_entry
+    entry_points["status_surface"] = status_surface
+    output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def handle_work_item(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    output_path = target_root / args.output
+    if not output_path.exists():
+        return emit(
+            {
+                "command": "work-item",
+                "operation": args.operation,
+                "result": "block",
+                "summary": "work-item command requires an existing init-result fact-chain locator.",
+                "missing_inputs": [f"missing init-result: {args.output}"],
+                "fallback_to": "admission",
+            }
+        )
+
+    work_item_relative = f".loom/work-items/{args.item}.md"
+    work_item_path = target_root / work_item_relative
+    recovery_relative = args.recovery_entry or f".loom/progress/{args.item}.md"
+    recovery_path = target_root / recovery_relative
+    review_relative = default_review_path(args.item)
+    status_relative = ".loom/status/current.md"
+    runtime_evidence: dict[str, dict[str, Any]] | None = None
+
+    if args.operation == "create":
+        required_fields = {
+            "goal": args.goal,
+            "scope": args.scope,
+            "execution_path": args.execution_path,
+            "workspace_entry": args.workspace_entry,
+            "validation_entry": args.validation_entry,
+            "closing_condition": args.closing_condition,
+        }
+        missing = [field for field, value in required_fields.items() if not isinstance(value, str) or not value.strip()]
+        if missing:
+            return emit(
+                {
+                    "command": "work-item",
+                    "operation": "create",
+                    "result": "block",
+                    "summary": "work-item create is missing required static fields.",
+                    "missing_inputs": missing,
+                    "fallback_to": "admission",
+                }
+            )
+        if work_item_path.exists():
+            return emit(
+                {
+                    "command": "work-item",
+                    "operation": "create",
+                    "result": "block",
+                    "summary": "work-item create refused to overwrite an existing work item.",
+                    "missing_inputs": [f"work item already exists: {work_item_relative}"],
+                    "fallback_to": "admission",
+                }
+            )
+
+        artifacts = [work_item_relative, recovery_relative, review_relative, status_relative, *args.artifact]
+        deduped_artifacts: list[str] = []
+        seen: set[str] = set()
+        for artifact in artifacts:
+            if artifact in seen:
+                continue
+            seen.add(artifact)
+            deduped_artifacts.append(artifact)
+
+        work_item_payload = {
+            "item_id": args.item,
+            "goal": args.goal,
+            "scope": args.scope,
+            "execution_path": args.execution_path,
+            "workspace_entry": args.workspace_entry,
+            "recovery_entry": recovery_relative,
+            "review_entry": review_relative,
+            "validation_entry": args.validation_entry,
+            "closing_condition": args.closing_condition,
+            "associated_artifacts": deduped_artifacts,
+        }
+        work_item_path.parent.mkdir(parents=True, exist_ok=True)
+        work_item_path.write_text(render_work_item(work_item_payload), encoding="utf-8")
+        review_path = target_root / review_relative
+        review_path.parent.mkdir(parents=True, exist_ok=True)
+        review_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": "loom-review/v1",
+                    "item_id": args.item,
+                    "decision": "fallback",
+                    "kind": "general_review",
+                    "summary": "Formal review has not been recorded yet.",
+                    "reviewer": "not yet assigned",
+                    "reviewed_head": git_head_sha(target_root) or "unknown",
+                    "reviewed_validation_summary": "No validation recorded yet.",
+                    "fallback_to": "admission",
+                    "blocking_issues": ["Review artifact scaffolded but not yet concluded."],
+                    "follow_ups": ["Record a real review before asking merge checkpoint to consume it."],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        if args.init_recovery:
+            recovery_path.parent.mkdir(parents=True, exist_ok=True)
+            recovery_path.write_text(
+                render_recovery_entry(
+                    args.item,
+                    {
+                        "current_checkpoint": "admission checkpoint",
+                        "current_stop": "Work item scaffolded and waiting for the first execution pass.",
+                        "next_step": "Write the first recovery update for this work item.",
+                        "blockers": "None recorded.",
+                        "latest_validation_summary": "No validation recorded yet.",
+                        "recovery_boundary": f"Work item scaffolded at `{work_item_relative}`.",
+                        "current_lane": "not yet assigned",
+                    },
+                ),
+                encoding="utf-8",
+            )
+
+    else:
+        if not work_item_path.exists():
+            return emit(
+                {
+                    "command": "work-item",
+                    "operation": "update",
+                    "result": "block",
+                    "summary": "work-item update requires an existing work item file.",
+                    "missing_inputs": [f"missing work item: {work_item_relative}"],
+                    "fallback_to": "admission",
+                }
+            )
+        parsed_work_item, parse_errors = parse_work_item(work_item_path, target_root)
+        if parse_errors:
+            return emit(
+                {
+                    "command": "work-item",
+                    "operation": "update",
+                    "result": "block",
+                    "summary": "work-item update could not parse the current work item.",
+                    "missing_inputs": parse_errors,
+                    "fallback_to": "admission",
+                }
+            )
+        work_item_payload = {
+            "item_id": args.item,
+            "goal": args.goal or str(parsed_work_item["goal"]),
+            "scope": args.scope or str(parsed_work_item["scope"]),
+            "execution_path": args.execution_path or str(parsed_work_item["execution_path"]),
+            "workspace_entry": args.workspace_entry or str(parsed_work_item["workspace_entry"]),
+            "recovery_entry": args.recovery_entry or str(parsed_work_item["recovery_entry"]),
+            "review_entry": str(parsed_work_item["review_entry"]),
+            "validation_entry": args.validation_entry or str(parsed_work_item["validation_entry"]),
+            "closing_condition": args.closing_condition or str(parsed_work_item["closing_condition"]),
+            "associated_artifacts": list(parsed_work_item["associated_artifacts"]),
+        }
+        for artifact in args.add_artifact:
+            if artifact not in work_item_payload["associated_artifacts"]:
+                work_item_payload["associated_artifacts"].append(artifact)
+        for artifact in args.remove_artifact:
+            work_item_payload["associated_artifacts"] = [
+                entry for entry in work_item_payload["associated_artifacts"] if entry != artifact
+            ]
+        recovery_relative = work_item_payload["recovery_entry"]
+        recovery_path = target_root / recovery_relative
+        work_item_path.write_text(render_work_item(work_item_payload), encoding="utf-8")
+
+    if args.activate:
+        if not recovery_path.exists():
+            return emit(
+                {
+                    "command": "work-item",
+                    "operation": args.operation,
+                    "result": "block",
+                    "summary": "work-item activation requires an existing recovery entry.",
+                    "missing_inputs": [f"missing recovery entry: {recovery_relative}"],
+                    "fallback_to": "admission",
+                }
+            )
+        runtime_evidence, runtime_errors = read_runtime_evidence(target_root, status_relative)
+        if runtime_errors:
+            return emit(
+                {
+                    "command": "work-item",
+                    "operation": args.operation,
+                    "result": "block",
+                    "summary": "work-item activation could not read runtime evidence from the current status surface.",
+                    "missing_inputs": runtime_errors,
+                    "fallback_to": "admission",
+                }
+            )
+        update_active_entry_points(
+            target_root,
+            args.output,
+            item_id=args.item,
+            work_item=work_item_relative,
+            recovery_entry=recovery_relative,
+            status_surface=status_relative,
+        )
+        _, sync_errors = sync_status_surface(target_root, args.output, runtime_evidence)
+        if sync_errors:
+            return emit(
+                {
+                    "command": "work-item",
+                    "operation": args.operation,
+                    "result": "block",
+                    "summary": "work-item activation updated the locator truth, but fact-chain sync failed.",
+                    "missing_inputs": sync_errors,
+                    "fallback_to": "admission",
+                }
+            )
+    else:
+        init_result = load_json_file(output_path)
+        fact_chain = init_result.get("fact_chain")
+        entry_points = fact_chain.get("entry_points") if isinstance(fact_chain, dict) else None
+        if isinstance(entry_points, dict) and entry_points.get("current_item_id") == args.item:
+            runtime_evidence, runtime_errors = read_runtime_evidence(target_root, status_relative)
+            if runtime_errors:
+                return emit(
+                    {
+                        "command": "work-item",
+                        "operation": args.operation,
+                        "result": "block",
+                        "summary": "work-item authoring updated the active item, but runtime evidence could not be read for status sync.",
+                        "missing_inputs": runtime_errors,
+                        "fallback_to": "admission",
+                    }
+                )
+            _, sync_errors = sync_status_surface(target_root, args.output, runtime_evidence)
+            if sync_errors:
+                return emit(
+                    {
+                        "command": "work-item",
+                        "operation": args.operation,
+                        "result": "block",
+                        "summary": "work-item authoring updated the active item, but fact-chain sync failed.",
+                        "missing_inputs": sync_errors,
+                        "fallback_to": "admission",
+                    }
+                )
+
+    context, context_errors = load_context(target_root, args.output, args.item if args.activate else None)
+    payload: dict[str, Any] = {
+        "command": "work-item",
+        "operation": args.operation,
+        "result": "pass",
+        "summary": (
+            "work item was authored successfully."
+            if not args.activate
+            else "work item was authored and activated as the current Loom fact chain entry."
+        ),
+        "missing_inputs": [],
+        "fallback_to": None,
+        "work_item": {
+            "id": args.item,
+            "path": work_item_relative,
+            "recovery_entry": recovery_relative,
+            "review_entry": review_relative if args.operation == "create" else work_item_payload["review_entry"],
+            "activated": args.activate,
+        },
+    }
+    if context_errors:
+        payload["result"] = "block"
+        payload["summary"] = "work-item authoring completed, but the fact chain no longer reads cleanly."
+        payload["missing_inputs"] = context_errors
+        payload["fallback_to"] = "admission"
+    else:
+        payload["current_fact_chain"] = {
+            "current_item_id": context["item_id"],
+            "work_item": str(context["report"]["fact_chain"]["entry_points"]["work_item"]),
+            "recovery_entry": str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"]),
+            "status_surface": str(context["report"]["fact_chain"]["entry_points"]["status_surface"]),
+        }
+    return emit(payload)
+
+
 def handle_flow(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
     context, errors = load_context(target_root, args.output, args.item)
@@ -1222,7 +2082,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             }
         )
 
-    if args.operation not in {"pre-review", "resume", "handoff", "merge-ready"}:
+    if args.operation not in {"pre-review", "review", "resume", "handoff", "merge-ready"}:
         return emit(
             {
                 "command": "flow",
@@ -1255,6 +2115,8 @@ def handle_flow(args: argparse.Namespace) -> int:
             "fallback_to": state_payload["fallback_to"],
         }
     )
+
+    review_payload: dict[str, Any] | None = None
 
     if args.operation in {"resume", "handoff"}:
         locate_payload = base_workspace_payload(context, "locate")
@@ -1309,6 +2171,40 @@ def handle_flow(args: argparse.Namespace) -> int:
                     },
                 ]
             )
+        elif args.operation == "review":
+            build_payload = checkpoint_payload("build", context)
+            review_record, review_path, review_errors = load_review_record(
+                target_root,
+                context["item_id"],
+                context["review_entry"],
+            )
+            review_step = {
+                "name": "review-entry",
+                "result": "pass" if review_record and not review_errors else "block",
+                "summary": (
+                    "formal review artifact is readable."
+                    if review_record and not review_errors
+                    else "formal review artifact is missing or invalid."
+                ),
+                "missing_inputs": review_errors or ([] if review_record else [f"missing review artifact: {review_path}"]),
+                "fallback_to": "build" if (review_errors or review_record is None) else None,
+            }
+            steps.extend(
+                [
+                    {
+                        "name": "checkpoint-build",
+                        "result": build_payload["result"],
+                        "summary": build_payload["summary"],
+                        "missing_inputs": build_payload["missing_inputs"],
+                        "fallback_to": build_payload["fallback_to"],
+                    },
+                    review_step,
+                ]
+            )
+            review_payload = {
+                "path": review_path,
+                "record": review_record,
+            }
         else:
             admission_payload = checkpoint_payload("admission", context)
             locate_payload = base_workspace_payload(context, "locate")
@@ -1364,6 +2260,12 @@ def handle_flow(args: argparse.Namespace) -> int:
             "merge-ready flow found the required evidence and checkpoint state for host merge."
             if result == "pass"
             else "merge-ready flow found fallback or blocking signals before host merge."
+        )
+    elif args.operation == "review":
+        summary = (
+            "review flow prepared the semantic review context and exposed the formal review artifact."
+            if result == "pass"
+            else "review flow found missing review material or earlier blocking signals."
         )
     else:
         summary = (
@@ -1463,6 +2365,31 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "missing_inputs": build_payload["missing_inputs"],
                         "fallback_to": build_payload["fallback_to"],
                     },
+                    "review": review_payload,
+                    "current_checkpoint": {
+                        "raw": context["current_checkpoint_raw"],
+                        "normalized": context["current_checkpoint"],
+                    },
+                }
+                if args.operation == "review"
+                else {}
+            ),
+            **(
+                {
+                    "state_check": {
+                        "result": state_payload["result"],
+                        "summary": state_payload["summary"],
+                        "missing_inputs": state_payload["missing_inputs"],
+                        "fallback_to": state_payload["fallback_to"],
+                        "checks": state_payload["checks"],
+                    },
+                    "runtime_evidence": runtime_fields,
+                    "build_checkpoint": {
+                        "result": build_payload["result"],
+                        "summary": build_payload["summary"],
+                        "missing_inputs": build_payload["missing_inputs"],
+                        "fallback_to": build_payload["fallback_to"],
+                    },
                     "merge_checkpoint": {
                         "result": merge_payload["result"],
                         "summary": merge_payload["summary"],
@@ -1492,6 +2419,12 @@ def main(argv: list[str] | None = None) -> int:
         return handle_runtime_evidence(args)
     if args.command == "state-check":
         return handle_state_check(args)
+    if args.command == "review":
+        return handle_review(args)
+    if args.command == "recovery":
+        return handle_recovery(args)
+    if args.command == "work-item":
+        return handle_work_item(args)
     if args.command == "flow":
         return handle_flow(args)
     if args.command == "checkpoint":

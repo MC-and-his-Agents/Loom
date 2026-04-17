@@ -74,6 +74,15 @@ SKILL_SIGNAL_RULES: dict[str, tuple[str, ...]] = {
         "可 review",
         "review readiness",
     ),
+    "loom-review": (
+        "正式 review",
+        "formal review",
+        "code review",
+        "spec review",
+        "语义审查",
+        "做审查",
+        "review 结论",
+    ),
     "loom-handoff": (
         "交接",
         "回写停点",
@@ -605,6 +614,7 @@ def initial_work_items(scenario: str, target_root: Path) -> list[dict[str, objec
         ".loom/bootstrap/init-result.json",
         ".loom/work-items/INIT-0001.md",
         ".loom/progress/INIT-0001.md",
+        ".loom/reviews/INIT-0001.json",
         ".loom/status/current.md",
         ".loom/bin/loom_init.py",
         ".loom/bin/fact_chain_support.py",
@@ -622,6 +632,7 @@ def initial_work_items(scenario: str, target_root: Path) -> list[dict[str, objec
             "execution_path": "bootstrap/root",
             "workspace_entry": ".",
             "recovery_entry": ".loom/progress/INIT-0001.md",
+            "review_entry": ".loom/reviews/INIT-0001.json",
             "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
             "artifacts": artifacts,
             "closing_condition": "The generated entry, work item, recovery entry, and templates are readable and verified",
@@ -671,6 +682,11 @@ def initial_artifacts(target_root: Path, install_pr_template: bool) -> list[dict
         {
             "path": ".loom/progress/INIT-0001.md",
             "kind": "progress",
+            "source": "generated",
+        },
+        {
+            "path": ".loom/reviews/INIT-0001.json",
+            "kind": "review-entry",
             "source": "generated",
         },
         {
@@ -841,6 +857,7 @@ def render_work_item(result: dict[str, object]) -> str:
         f"- Execution Path: {item['execution_path']}\n"
         f"- Workspace Entry: {item['workspace_entry']}\n"
         f"- Recovery Entry: {item['recovery_entry']}\n"
+        f"- Review Entry: {item['review_entry']}\n"
         f"- Validation Entry: {item['validation_entry']}\n"
         f"- Closing Condition: {item['closing_condition']}\n\n"
         "## Associated Artifacts\n\n"
@@ -863,6 +880,28 @@ def render_progress(result: dict[str, object]) -> str:
         "- Recovery Boundary: Bootstrap result at `.loom/bootstrap/init-result.json`; bootstrap manifest at `.loom/bootstrap/manifest.json`.\n"
         "- Current Lane: bootstrap verification only\n"
     )
+
+
+def render_review_entry(result: dict[str, object]) -> str:
+    item = result["initial_work_items"][0]
+    payload = {
+        "schema_version": "loom-review/v1",
+        "item_id": item["id"],
+        "decision": "fallback",
+        "kind": "general_review",
+        "summary": "Bootstrap has not entered formal review yet.",
+        "reviewer": "not yet assigned",
+        "reviewed_head": "bootstrap-placeholder",
+        "reviewed_validation_summary": "Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist.",
+        "fallback_to": "admission",
+        "blocking_issues": [
+            "Formal review starts only after downstream work replaces the bootstrap placeholder item."
+        ],
+        "follow_ups": [
+            "Record the first real semantic review before asking merge checkpoint to consume reviewer judgment."
+        ],
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
 
 
 def default_runtime_evidence(result: dict[str, object]) -> dict[str, str]:
@@ -890,6 +929,7 @@ def render_status(result: dict[str, object]) -> str:
         f"- Execution Path: {item['execution_path']}\n"
         f"- Workspace Entry: {item['workspace_entry']}\n"
         f"- Recovery Entry: {item['recovery_entry']}\n"
+        f"- Review Entry: {item['review_entry']}\n"
         f"- Validation Entry: {item['validation_entry']}\n"
         f"- Closing Condition: {item['closing_condition']}\n"
         f"- Current Checkpoint: {checkpoint}\n"
@@ -949,6 +989,7 @@ def scaffold_target(
         (target_root / ".loom/bootstrap/capability-map.md", render_capability_map(result), "text"),
         (target_root / ".loom/work-items/INIT-0001.md", render_work_item(result), "text"),
         (target_root / ".loom/progress/INIT-0001.md", render_progress(result), "text"),
+        (target_root / ".loom/reviews/INIT-0001.json", render_review_entry(result), "text"),
         (target_root / ".loom/status/current.md", render_status(result), "text"),
     ]
 
@@ -994,6 +1035,7 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
         ".loom/bootstrap/capability-map.md",
         ".loom/work-items/INIT-0001.md",
         ".loom/progress/INIT-0001.md",
+        ".loom/reviews/INIT-0001.json",
         ".loom/status/current.md",
         ".loom/bin/loom_init.py",
         ".loom/bin/fact_chain_support.py",
@@ -1050,6 +1092,7 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
                     "execution_path",
                     "workspace_entry",
                     "recovery_entry",
+                    "review_entry",
                     "validation_entry",
                     "closing_condition",
                 ):

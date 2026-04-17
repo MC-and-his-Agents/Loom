@@ -39,6 +39,7 @@ python3 tools/loom_init.py bootstrap \
 - `examples/new-project/.loom/bootstrap/manifest.json`
 - `examples/new-project/.loom/work-items/INIT-0001.md`
 - `examples/new-project/.loom/progress/INIT-0001.md`
+- `examples/new-project/.loom/reviews/INIT-0001.json`
 - `examples/new-project/.loom/status/current.md`
 - `examples/new-project/.loom/bin/loom_flow.py`
 - `examples/new-project/.loom/specs/INIT-0001/spec.md`
@@ -55,6 +56,11 @@ python3 .loom/bin/loom_flow.py fact-chain --target . --item INIT-0001
 python3 .loom/bin/loom_flow.py runtime-evidence --target . --item INIT-0001
 python3 .loom/bin/loom_flow.py state-check --target . --item INIT-0001
 python3 .loom/bin/loom_flow.py flow pre-review --target . --item INIT-0001
+python3 .loom/bin/loom_flow.py flow review --target . --item INIT-0001
+python3 .loom/bin/loom_flow.py review read --target . --item INIT-0001
+python3 .loom/bin/loom_flow.py review record --target . --item INIT-0001 --decision fallback --kind general_review --summary "Bootstrap is not merge-ready." --reviewer demo --fallback-to admission
+python3 .loom/bin/loom_flow.py recovery writeback --target . --item INIT-0001 --current-stop "Bootstrap review has started." --next-step "Replace the bootstrap placeholder item."
+python3 .loom/bin/loom_flow.py work-item create --target . --item NEXT-0001 --goal "Promote the first real work item." --scope "Limit the demo to `.loom/` artifacts." --execution-path execution/support --workspace-entry . --validation-entry "python3 .loom/bin/loom_init.py verify --target ." --closing-condition "The authored work item reads cleanly." --init-recovery
 python3 .loom/bin/loom_flow.py checkpoint admission --target . --item INIT-0001
 python3 .loom/bin/loom_flow.py workspace locate --target . --item INIT-0001
 python3 .loom/bin/loom_flow.py purity-check --target . --item INIT-0001
@@ -67,6 +73,6 @@ python3 .loom/bin/loom_flow.py purity-check --target . --item INIT-0001
 - `bootstrap` 命令退出码为 `0`
 - `verify` 命令退出码为 `0`
 - `fact-chain` 命令退出码为 `0`
-- `loom_flow.py` 的 `fact-chain`、`runtime-evidence`、`state-check`、`flow pre-review`、`checkpoint admission`、`workspace locate`、`purity-check` 命令都可读取当前样例
+- `loom_flow.py` 的 `fact-chain`、`runtime-evidence`、`state-check`、`flow pre-review`、`flow review`、`review read`、`review record`、`recovery writeback`、`work-item create`、`checkpoint admission`、`workspace locate`、`purity-check` 命令都可读取或更新当前样例
 - `init-result.json` 含有 7 个必需区块
 - 首批 work item、recovery entry、状态面与 spec/plan 工件都已落位
