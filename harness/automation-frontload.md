@@ -97,6 +97,9 @@ Loom 仓库当前通过以下入口承接最小 core 前置检查：
 
 GitHub Actions 工作流会复用同一入口，而不是维护第二套命令。
 
+对于控制面 drift，自动化前置必须显式暴露同范围 `reconciliation audit` 结果，不能把 `warn` / `fix-needed` / `block` 静默吞掉后继续走 closeout。
+closeout 需要控制面对齐时，顺序必须是先处理 `fix-needed` / `block` drift，再继续 closeout；`warn` 必须保留在输出中，但不默认升级为阻断。
+
 对于 Loom 自身仓库，默认 gate 不应退化成单一 job 的自证通过路径。
 最小执行面至少应把以下检查拆成可单独读取的失败面：
 

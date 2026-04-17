@@ -28,7 +28,7 @@
 | `merge-ready` | `python3 tools/loom_flow.py flow merge-ready --target <repo> [--item <id>]` | fact-chain + state-check + runtime evidence + build checkpoint + merge checkpoint | `pass` / `block` / `fallback` | 只输出统一放行摘要，不替代宿主平台 merge |
 | `merge` | `merge checkpoint` + 仓库平台合并动作 | build 结果 + 风险回滚 + 验证摘要 | 放行或阻断 | Loom 不替代宿主平台合并接口 |
 | `retire` | `python3 tools/loom_flow.py purity-check --target <repo> [--item <id>]` -> `workspace cleanup` -> `workspace retire` | purity 结果 + cleanup 结果 + recovery 主入口 | checkpoint 终态 `retired` | 默认先解释 retire 前置条件，不默认删除现场目录 |
-| `closeout` | `python3 tools/loom_flow.py closeout check|sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>]` | loom_check + issue/PR/project/main | `pass` / `block` | 仍是 closeout 控制面对齐入口；`#179` 再接入 reconciliation 结果 |
+| `closeout` | `python3 tools/loom_flow.py closeout check|sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>]` | loom_check + 同范围 reconciliation audit/sync + issue/PR/project/main | `pass` / `block` | closeout 负责消费 reconciliation 结果；`fix-needed` / `block` 必须先停下并处理，`warn` 只显式展示 |
 
 ## 2. 分层边界
 
@@ -44,6 +44,9 @@
 - `reconciliation sync`
   - 必须先消费同范围 `reconciliation audit`
   - 不绕过 `block` finding，不伪造实现完成
+- `closeout`
+  - 负责把 reconciliation 结果接入 closeout 判定与控制面对齐
+  - 不另写新的 reconciliation 主合同，也不绕过先处理 `fix-needed` / `block` 再 closeout 的顺序
 - gate (`loom_check` / CI)
   - 负责复用同一 CLI 入口做机械阻断
   - 不维护第二套检查口径
