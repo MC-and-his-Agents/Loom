@@ -1,6 +1,21 @@
-# Complete Kernel Release (2026-04-16)
+# Loom v0.2.0 Release
 
-本文是 Loom 完整执行内核与第一波场景 SKILLS 的上游发布与升级说明。
+本文是 Loom `v0.2.0` 的正式发布与升级说明。
+
+发布日期：`2026-04-18`
+
+变更分类：`minor`
+
+受影响能力面：
+
+- `governance`
+- `harness`
+- `templates`
+- `skills`
+- `adoption`
+
+下游是否需要动作：是。
+至少需要重新读取稳定入口、升级说明和场景 skill 注册表，并按本文给出的升级路径确认是否要接入新增的 review / reconciliation / closeout 能力。
 
 对应 Loom issue：`#63`、`#71`
 
