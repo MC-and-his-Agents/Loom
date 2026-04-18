@@ -38,6 +38,13 @@
 - 版本化与升级路径：[versioning-and-upgrades.md](./versioning-and-upgrades.md)
 - 上游交付面：[upstream-delivery-surface.md](./upstream-delivery-surface.md)
 
+Issue -> 验证 / 回写索引：
+
+- `#168` -> [validation-main-path-new-project.md](./validation-main-path-new-project.md)
+- `#170` -> [validation-existing-repo-execution-sync.md](./validation-existing-repo-execution-sync.md)
+- `#180` -> [validation-retrofit-143-tree.md](./validation-retrofit-143-tree.md)
+- `#169` -> [landing-map.md](./landing-map.md); [upstream-delivery-surface.md](./upstream-delivery-surface.md); [versioning-and-upgrades.md](./versioning-and-upgrades.md); [../docs/complete-kernel-release.md](../docs/complete-kernel-release.md)
+
 当前目录对应的主要 `EXT-*` 条目：
 
 - 核心：`EXT-0005`、`EXT-0010`、`EXT-0021`、`EXT-0030`

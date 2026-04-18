@@ -55,6 +55,8 @@
   - 入口消费：`skills/README.md`
 - 完整执行内核复验（新项目 / 既有仓库）
   - 稳定落点：`adoption/validation-complete-kernel-new-project.md`; `adoption/validation-complete-kernel-existing-repos.md`
+- 第一批执行化补充验证与 retrofit closeout 依据
+  - 稳定落点：`adoption/validation-main-path-new-project.md`; `adoption/validation-existing-repo-execution-sync.md`; `adoption/validation-retrofit-143-tree.md`
 
 ## Item Map
 
@@ -102,8 +104,8 @@
 | EXT-0040 | `adapt` | `skills/distribution-and-adapter-contract.md` | `candidate` | 薄 `bootstrap/root contract` 与深知识引用关系 |
 | EXT-0041 | `adapt` | `harness/automation-frontload.md`; `skills/distribution-and-adapter-contract.md` | `candidate` | 入口层触发与行为回归测试 |
 | EXT-0042 | `keep` | `skills/distribution-and-adapter-contract.md` | `core` | 宿主特定细节收敛在 adapter 层 |
-| EXT-0043 | `needs_validation` | `adoption/candidate-patterns.md` | `parking` | 父事项 / 子事项关系作为平台无关能力需求 |
-| EXT-0044 | `adapt` | `skills/loom-init/SKILL.md`; `skills/loom-init/references/intake-signals.md` | `candidate` | 空仓新项目先建立最小入口与升级边界 |
-| EXT-0045 | `keep` | `adoption/lightweight-retrofit-default.md`; `skills/loom-init/references/intake-signals.md`; `skills/loom-init/SKILL.md` | `core` | 轻量 retrofit 需要仓库级验证入口，且不适用于共享 contract / skill 仓库 |
+| EXT-0043 | `needs_validation` | `adoption/candidate-patterns.md` | `parking` | `#180` 已补 Loom 自身 retrofit 证据，但父事项 / 子事项关系仍缺第二宿主或第二仓库样本，继续停在待验证区 |
+| EXT-0044 | `adapt` | `skills/loom-init/SKILL.md`; `skills/loom-init/references/intake-signals.md` | `candidate` | `#168` 已把空仓新项目主路径写成正式验证记录，证明“先建立最小入口与升级边界”可被真实样本消费，但仍未形成第二新项目样本 |
+| EXT-0045 | `keep` | `adoption/lightweight-retrofit-default.md`; `skills/loom-init/references/intake-signals.md`; `skills/loom-init/SKILL.md` | `core` | `#170` 已补既有仓库执行 / 回写 / sync companion 验证，继续支撑“轻量 retrofit 需要仓库级验证入口”的稳定边界 |
 | EXT-0046 | `adapt` | `skills/loom-init/references/intake-signals.md`; `harness/recovery-model.md`; `harness/status-surface.md` | `candidate` | 复杂既有仓库应从第一轮 adoption 起进入更完整装配 |
 | EXT-0047 | `adapt` | `skills/loom-init/references/intake-signals.md`; `harness/recovery-model.md`; `harness/status-surface.md` | `candidate` | 现行规则入口与历史入口并存本身是恢复与状态升级信号 |
