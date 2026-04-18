@@ -17,6 +17,7 @@
 - 真实 adoption 验证记录合同：[validation-record-contract.md](./validation-record-contract.md)
 - 经验回流机制：[experience-feedback-loop.md](./experience-feedback-loop.md)
 - 新项目真实验证：[validation-new-project.md](./validation-new-project.md)
+- 新项目主路径验证：[validation-main-path-new-project.md](./validation-main-path-new-project.md)
 - 既有仓库反例验证：[validation-devskills.md](./validation-devskills.md)
 - 复杂既有仓库真实验证：[validation-hotcp.md](./validation-hotcp.md)
 - 场景 skill `loom-adopt` 验证：[validation-skill-loom-adopt.md](./validation-skill-loom-adopt.md)
