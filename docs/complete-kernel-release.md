@@ -77,6 +77,19 @@
 
 验证记录位于 `adoption/validation-*.md`。
 
+### 3.1 发布后补充验证（2026-04-18）
+
+`#169` 将第一批执行化补充验证统一回写到版本控制，新增收口依据如下：
+
+- 新项目主路径验证：
+  - `adoption/validation-main-path-new-project.md`
+- 既有仓库执行 / 回写 / sync companion 验证：
+  - `adoption/validation-existing-repo-execution-sync.md`
+- Loom 自身 `#143` 树 live retrofit 与 closeout 依据：
+  - `adoption/validation-retrofit-143-tree.md`
+
+其中，`#180` 提供的是 Loom 自身 retrofit / closeout 证据，不单独宣称为新的默认 adoption 路径。
+
 ## 4. 发布后操作建议
 
 - 下游仓库先执行 `verify`，再通过 root route 或显式 skill 调用进入对应场景
@@ -108,5 +121,6 @@
 - `loom-init route`、`flow resume`、`flow review`、`flow handoff`、`flow merge-ready` 已与既有入口一起纳入 `loom_check`
 - 7 个场景 skill 的验证记录、升级说明、交付面说明与发布说明已全部回写到版本控制
 - GitHub issue / sub-issue、CLI、gate、文档与 adoption 记录已对齐到同一条仓库真相
+- `#168/#170/#180` 的补充验证记录已进入 adoption / release 文档，用于支持第一批执行化的最终 closeout
 
 对应总父 issue：`#71`

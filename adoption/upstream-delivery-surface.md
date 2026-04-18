@@ -19,6 +19,12 @@
 - `adoption/`
   - 稳定 adoption 路径、经验回流、验证记录合同、版本化与升级路径
   - 执行入口兼容说明、reconciliation audit/sync 兼容边界、7 个场景 skill 验证记录与完整执行内核复验记录
+  - 第一批执行化补充验证记录：
+    - `adoption/validation-main-path-new-project.md`
+    - `adoption/validation-existing-repo-execution-sync.md`
+  - Loom 自身 `#143` 树 retrofit 记录：
+    - `adoption/validation-retrofit-143-tree.md`
+    - 只作为 Loom 自身 closeout / retrofit 依据，不单独提升为新的默认 adoption 路径
 - 发布说明
   - `docs/complete-kernel-release.md`
 
@@ -29,6 +35,7 @@
 以下内容当前不属于稳定发布面：
 
 - `adoption/candidate-patterns.md`
+- 单靠 `adoption/validation-retrofit-143-tree.md` 推出的新 adoption 默认路径
 - 宿主特定 adapter 实现
 - 宿主完整回归矩阵
 - 未升为 `keep` 的 `EXT-*` 结论
