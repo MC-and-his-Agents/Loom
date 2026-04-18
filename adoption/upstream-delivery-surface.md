@@ -27,6 +27,7 @@
     - 只作为 Loom 自身 closeout / retrofit 依据，不单独提升为新的默认 adoption 路径
 - 发布说明
   - `docs/complete-kernel-release.md`
+  - 当前正式产品版本：`v0.2.0`
 
 这些内容共同形成 Loom 的最小上游发布面。
 

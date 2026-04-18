@@ -4,9 +4,16 @@
 
 它的目标是避免下游仓库只能依赖手工复制或临场比较来获取 Loom 更新。
 
+当前正式产品版本：`v0.2.0`。
+
 ## 1. 版本对象
 
 Loom 的版本对象是“可被下游直接消费的能力面”，而不是单个文件。
+
+当前产品版本的正式落点固定为：
+
+- 仓库根目录的 [`VERSION`](../VERSION)
+- 发布说明 [`../docs/complete-kernel-release.md`](../docs/complete-kernel-release.md)
 
 当前稳定版本边界包括：
 
@@ -17,6 +24,16 @@ Loom 的版本对象是“可被下游直接消费的能力面”，而不是单
 - `adoption` 中面向下游的稳定采用 / 升级规则
 
 候选文档、宿主特定实现和未升为 `keep` 的条目，不自动进入稳定版本边界。
+
+以下内部版本对象不得与产品版本混淆：
+
+- `skills/registry.json` 的 `registry_version`
+- `skills/*/contract.json` 的 `contract_version`
+- `skills/upgrade-contract.json` 的 `schema_version` / `registry_version` / `current_contract_version`
+- `tools/loom_init.py` 的 `TOOL_VERSION` / `CONTRACT_VERSION`
+- bootstrap 示例产物中的 `tool_version` / `contract_version` / `schema_version`
+
+这些字段只表达技能、合同、工具或产物格式的内部演进，不等于 Loom 的正式产品版本号。
 
 ## 2. 版本规则
 
@@ -53,6 +70,13 @@ Loom 采用语义版本：
 - 升级步骤
 - 不兼容点
 - 回退建议
+
+`v0.2.0` 之后，每次正式产品发布都应至少更新：
+
+- [`VERSION`](../VERSION)
+- [`../docs/complete-kernel-release.md`](../docs/complete-kernel-release.md)
+
+必要时再同步更新 README、adoption 索引与上游交付面说明。
 
 ## 5. 能力面与升级动作的对应关系
 

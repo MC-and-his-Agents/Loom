@@ -5,6 +5,8 @@ Loom 是一个面向智能体优先项目的上游治理真相、harness 编排�
 它不是业务模板，也不是单纯的文档集合。  
 它解决的是另一类问题：为什么很多项目代码可以持续产出，但 issue / project / PR / review / CI / merge / closeout 这些执行对象仍然缺少统一控制面，导致执行秩序、审查质量、长任务连续性和交付收口反复失控。
 
+当前正式产品版本：`v0.2.0`。
+
 ## Loom 试图解决什么问题
 
 很多团队在新项目启动时，真正缺的不是代码脚手架，而是下面这些基础能力：
@@ -158,10 +160,10 @@ Loom 适合这些场景：
 - 你需要长任务能 checkpoint、恢复和交接
 - 你希望治理能力独立于单一业务仓库持续演进
 
-## Loom 2.0 的执行目标
+## 当前稳定执行面（v0.2.0）
 
 Loom 当前已经具备一批 repo-local CLI、gate 与 `SKILLS` 入口。  
-在这个基础上，Loom 2.0 的目标不是停在“最小可执行”层面，而是形成一套以 `merge-ready` 为中心、可被下游直接消费的完整执行编排面。
+`v0.2.0` 对外声明的是当前已稳定、可被下游直接消费的执行编排面，而不是一个临时“2.0”代号。
 
 当前已经稳定的 repo-local 入口包括：
 
@@ -175,16 +177,4 @@ Loom 当前已经具备一批 repo-local CLI、gate 与 `SKILLS` 入口。
 - 日常执行入口可通过 `python3 tools/loom_flow.py <...>` 运行
 - 新项目 demo 可通过 `make loom-demo-new-project` 复验
 
-继续收敛的目标还包括：
-
-- 根 `SKILL` 与场景 `SKILLS` 形成稳定路由，让 agent 可以直接启动 adopt / resume / pre-review / handoff / retire / merge-ready
-- review、guardian、CI、merge gate、closeout 在不同层级提前暴露问题，而不是把 final review 当作第一次系统性发现问题的地方
-- `admission checkpoint`、`build checkpoint`、`merge checkpoint` 的工程化承接
-- 工作现场生命周期与纯度治理的稳定入口
-- 运行时可见性、验证入口与 gate 输入的稳定脚本面
-- issue / project / PR / 状态面 / closeout 的真相同步与宿主控制面编排
-- branch / PR / `git worktree` / CI / review engine 等宿主对象的边界与承接方式明确
-- 日常执行动作的统一入口，而不是依赖会话解释补齐
-- `SKILLS` / CLI / gate 的日常入口矩阵与职责边界
-
-本仓当前先冻结这一目标态与职责边界；具体实现拆分、脚本补齐、门禁接线与验证回合由后续 issue / PR 承接。
+未来阶段路线仍由 [docs/roadmap.md](./docs/roadmap.md) 承接；README 不再把路线图目标和当前已发布能力混写。
