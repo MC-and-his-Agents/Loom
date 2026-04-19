@@ -13,16 +13,16 @@ from pathlib import Path
 
 from fact_chain_support import inspect_fact_chain
 from governance_surface import build_governance_surface
-from loom_flow import detect_github_repo, gh_json
 from runtime_paths import registry_path, shared_asset
+from runtime_state import detect_runtime_state
 
 RUNTIME_SOURCE = "skills/shared/scripts/loom_init.py"
 FLOW_RUNTIME_SOURCE = "skills/shared/scripts/loom_flow.py"
 CHECK_RUNTIME_SOURCE = "skills/shared/scripts/loom_check.py"
 FACT_CHAIN_RUNTIME_SOURCE = "skills/shared/scripts/fact_chain_support.py"
 GOVERNANCE_RUNTIME_SOURCE = "skills/shared/scripts/governance_surface.py"
-TOOL_VERSION = "1.2.0"
-CONTRACT_VERSION = "1.2.0"
+TOOL_VERSION = "1.3.0"
+CONTRACT_VERSION = "1.3.0"
 WORK_ITEM_ID = "INIT-0001"
 
 ROOT_BOUNDARY_FILES = (
@@ -163,6 +163,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=".loom/bootstrap/init-result.json",
     )
 
+    runtime_state = subparsers.add_parser("runtime-state", help="Read the Loom runtime scene/carrier state")
+    runtime_state.add_argument("--target", required=True, help="Target repository root")
+
     route = subparsers.add_parser("route", help="Route a Loom task to the root or a scenario skill")
     route.add_argument("--target", required=True, help="Target repository root")
     mode = route.add_mutually_exclusive_group(required=True)
@@ -181,6 +184,10 @@ def resolve_output_path(target_root: Path, raw_output: str) -> Path:
     if output_path.is_absolute():
         raise RuntimeError("--output must be relative to the target root")
     return target_root / output_path
+
+
+def runtime_state_payload(target_root: Path) -> dict[str, object]:
+    return detect_runtime_state(__file__, "loom-init", target_root=target_root)
 
 
 def write_text(path: Path, content: str, force: bool) -> bool:
@@ -284,6 +291,11 @@ def generated_paths(root: Path) -> tuple[str, ...]:
         for artifact in artifacts:
             if isinstance(artifact, str) and artifact:
                 paths.add(artifact)
+                continue
+            if isinstance(artifact, dict):
+                artifact_path = artifact.get("path")
+                if isinstance(artifact_path, str) and artifact_path:
+                    paths.add(artifact_path)
     if file_exists(root, "AGENTS.md"):
         try:
             if (root / "AGENTS.md").read_text(encoding="utf-8") == GENERATED_ROOT_ENTRY:
@@ -737,6 +749,11 @@ def initial_artifacts(target_root: Path, install_pr_template: bool) -> list[dict
             "source": "skills/shared/scripts/runtime_paths.py",
         },
         {
+            "path": ".loom/bin/runtime_state.py",
+            "kind": "loom-tool-support",
+            "source": "skills/shared/scripts/runtime_state.py",
+        },
+        {
             "path": ".loom/bin/loom_check.py",
             "kind": "loom-tool",
             "source": CHECK_RUNTIME_SOURCE,
@@ -835,6 +852,7 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
                 "the bootstrap manifest and init-result are verifiable",
             ],
         },
+        "runtime_state": runtime_state_payload(target_root),
         "governance_surface": build_governance_surface(
             target_root,
             bootstrap_mode=True,
@@ -859,6 +877,7 @@ def render_loom_readme(result: dict[str, object]) -> str:
         "- First work item: `.loom/work-items/INIT-0001.md`\n"
         "- Progress carrier: `.loom/progress/INIT-0001.md`\n"
         "- Status surface: `.loom/status/current.md`\n"
+        "- Runtime-state entry: `.loom/bin/loom_init.py runtime-state --target .`\n"
         "- Daily execution CLI: `.loom/bin/loom_flow.py`\n"
         "- Gate CLI: `.loom/bin/loom_check.py`\n"
     )
@@ -1005,7 +1024,7 @@ def manifest_payload(result: dict[str, object]) -> dict[str, object]:
         "root_entry": "loom-init",
         "contract_version": CONTRACT_VERSION,
         "output": ".loom/bootstrap/init-result.json",
-        "artifacts": [artifact["path"] for artifact in result["initial_artifacts"]],
+        "artifacts": result["initial_artifacts"],
     }
 
 
@@ -1043,6 +1062,7 @@ def scaffold_target(
         (Path(__file__).with_name("governance_surface.py"), target_root / ".loom/bin/governance_surface.py"),
         (Path(__file__).with_name("loom_flow.py"), target_root / ".loom/bin/loom_flow.py"),
         (Path(__file__).with_name("runtime_paths.py"), target_root / ".loom/bin/runtime_paths.py"),
+        (Path(__file__).with_name("runtime_state.py"), target_root / ".loom/bin/runtime_state.py"),
         (Path(__file__).with_name("loom_check.py"), target_root / ".loom/bin/loom_check.py"),
         (shared_asset(__file__, "templates/scaffold/spec.md"), target_root / ".loom/specs/INIT-0001/spec.md"),
         (shared_asset(__file__, "templates/scaffold/plan.md"), target_root / ".loom/specs/INIT-0001/plan.md"),
@@ -1083,11 +1103,15 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
         ".loom/bin/governance_surface.py",
         ".loom/bin/loom_flow.py",
         ".loom/bin/runtime_paths.py",
+        ".loom/bin/runtime_state.py",
         ".loom/bin/loom_check.py",
         ".loom/specs/INIT-0001/spec.md",
         ".loom/specs/INIT-0001/plan.md",
     ]
     errors: list[str] = []
+    runtime_state = runtime_state_payload(target_root)
+    if runtime_state["result"] != "pass":
+        errors.extend(f"runtime-state: {message}" for message in runtime_state["missing_inputs"])
     for relative in required_paths:
         if not (target_root / relative).exists():
             errors.append(f"missing required artifact: {relative}")
@@ -1106,6 +1130,7 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
             "fact_chain",
             "initial_artifacts",
             "initial_work_items",
+            "runtime_state",
             "validation_and_closing",
         ):
             if key not in result:
@@ -1214,6 +1239,11 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
             commands.extend(
                 [
                     (
+                        "loom-init runtime-state",
+                        ["python3", ".loom/bin/loom_init.py", "runtime-state", "--target", "."],
+                        {"pass"},
+                    ),
+                    (
                         "loom-flow checkpoint admission",
                         [
                             "python3",
@@ -1226,6 +1256,19 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
                             current_item_id,
                         ],
                         {"pass", "block", "fallback"},
+                    ),
+                    (
+                        "loom-flow runtime-state",
+                        [
+                            "python3",
+                            ".loom/bin/loom_flow.py",
+                            "runtime-state",
+                            "--target",
+                            ".",
+                            "--item",
+                            current_item_id,
+                        ],
+                        {"pass"},
                     ),
                     (
                         "loom-flow state-check",
@@ -1361,11 +1404,18 @@ def verify(args: argparse.Namespace) -> int:
     except RuntimeError as exc:
         print(f"loom-init: {exc}", file=sys.stderr)
         return 2
+    runtime_state = runtime_state_payload(target_root)
     errors = verify_target(target_root, output_path)
     if errors:
-        print(json.dumps({"ok": False, "errors": errors}, ensure_ascii=False, indent=2))
+        print(json.dumps({"ok": False, "errors": errors, "runtime_state": runtime_state}, ensure_ascii=False, indent=2))
         return 1
-    print(json.dumps({"ok": True, "target": str(target_root)}, ensure_ascii=False, indent=2))
+    print(
+        json.dumps(
+            {"ok": True, "target": str(target_root), "runtime_state": runtime_state},
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
     return 0
 
 
@@ -1383,6 +1433,26 @@ def fact_chain(args: argparse.Namespace) -> int:
         return 1
     print(json.dumps({"ok": True, **report}, ensure_ascii=False, indent=2))
     return 0
+
+
+def runtime_state(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    payload = runtime_state_payload(target_root)
+    print(
+        json.dumps(
+            {
+                "command": "runtime-state",
+                "result": payload["result"],
+                "summary": payload["summary"],
+                "missing_inputs": payload["missing_inputs"],
+                "fallback_to": payload["fallback_to"],
+                "runtime_state": payload,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0 if payload["result"] == "pass" else 1
 
 
 def route(args: argparse.Namespace) -> int:
@@ -1530,6 +1600,8 @@ def main(argv: list[str]) -> int:
         return verify(args)
     if args.command == "fact-chain":
         return fact_chain(args)
+    if args.command == "runtime-state":
+        return runtime_state(args)
     return route(args)
 
 

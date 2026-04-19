@@ -53,8 +53,9 @@ python3 tools/loom_flow.py review record --target <temp-copy> --item NEXT-0001 -
 ## 结果
 
 - `flow review`
-  - 能稳定读取 `fact-chain -> state-check -> runtime-evidence -> checkpoint-build -> review-entry`
+  - 能稳定读取 `runtime-state -> fact-chain -> state-check -> runtime-evidence -> checkpoint-build -> review-entry`
   - 在 bootstrap 样本上按预期返回 `fallback_to: admission`
+  - 输出顶层稳定携带 `runtime_state`，且 `runtime_state.result=block` 时不会继续伪装成可 review
 - `review read`
   - 能稳定读取 `.loom/reviews/INIT-0001.json`
 - `recovery writeback`

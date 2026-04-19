@@ -27,6 +27,7 @@ merge checkpoint 只消费这些结果，不把它们扩写成第一次高质量
 | 执行支撑入口存在性 | work item、恢复入口、验证入口、运行入口等是否可定位 | 仓库无法形成最小执行闭环 | 不判断入口实现强度是否已达最佳 | 是 |
 | checkpoint 入口存在性 | `admission`、`build`、`merge` 三类 checkpoint 入口是否可调用 | 放行链路不完整，无法按阶段消费事实链 | 不替代 checkpoint 的语义审查 | 是 |
 | 运行时证据可读性 | `Runtime Evidence` 五字段是否可读且可区分 `not_applicable` | 验证摘要不可复核，merge 消费不到稳定证据 | 不判断证据内容是否已经最优 | 是 |
+| 运行态识别 | 当前入口是否能稳定区分 `repo-local-demo`、`installed-runtime`、`upgrade-rehearsal` | 安装态 / 升级态被伪装成“入口存在且可运行” | 不替代宿主自己的安装实现 | 是 |
 | workspace lifecycle 入口存在性 | `create`、`locate`、`cleanup`、`retire` 与 `purity-check` 是否可调用 | 现场治理不可机械执行，恢复与交接风险升高 | 不替代现场治理策略设计 | 是 |
 | 基础状态一致性 | checkpoint、下一步、阻断项、验证摘要是否相互对齐 | 当前状态不可读，恢复与放行会消费到冲突事实 | 不判断事项目标本身是否值得做 | 是 |
 | 事实链唯一性 | 静态真相、动态真相与派生读面是否各守边界 | 仓库出现并行记账或事实链断裂 | 不替代 reviewer 的方案判断 | 是 |
@@ -71,8 +72,10 @@ Loom 仓库当前通过以下入口承接最小 core 前置检查：
 - `make loom-check`
 - `python3 shared/scripts/loom_check.py`
 - `python3 loom-init/scripts/loom-init.py verify --target <repo>`
+- `python3 loom-init/scripts/loom-init.py runtime-state --target <repo>`
 - `python3 loom-init/scripts/loom-init.py fact-chain --target <repo>`
 - `python3 shared/scripts/loom_flow.py fact-chain --target <repo> [--item <id>]`
+- `python3 shared/scripts/loom_flow.py runtime-state --target <repo> [--item <id>]`
 - `python3 shared/scripts/loom_flow.py runtime-evidence --target <repo> [--item <id>]`
 - `python3 shared/scripts/loom_flow.py state-check --target <repo> [--item <id>]`
 - `python3 loom-pre-review/scripts/loom-pre-review.py flow pre-review --target <repo> [--item <id>]`

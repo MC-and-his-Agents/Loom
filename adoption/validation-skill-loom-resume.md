@@ -45,9 +45,10 @@
 
 结论：
 
-- `flow resume` 固定按 `fact-chain -> state-check -> workspace-locate` 顺序编排
+- `flow resume` 固定按 `runtime-state -> fact-chain -> state-check -> workspace-locate` 顺序编排
 - 输出会稳定带出当前事项、现场入口、恢复入口、checkpoint、下一步、阻断项与最近验证摘要
 - `flow resume` 对外公开的治理读面固定命名为 `governance_surface`，只摘要当前治理承接面，不复制 authored 真相
+- 输出顶层稳定携带 `runtime_state`，且一旦 `runtime_state.result=block` 就 fail-closed
 - 该 flow 不回写任何载体，也不创建新的状态源
 
 ## 6. 关闭依据

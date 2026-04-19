@@ -62,7 +62,7 @@ description: 负责恢复当前事项的执行入口。Use when Codex needs to t
 只有当以下条件同时满足时，`loom-resume` 才算完成：
 
 - 显式调用 `loom-resume` 与 root 隐式路由都能稳定命中这个场景
-- `flow resume` 的步骤顺序稳定为 `fact-chain -> state-check -> workspace-locate`
+- `flow resume` 的步骤顺序稳定为 `runtime-state -> fact-chain -> state-check -> workspace-locate`
 - 输出 JSON 能直接支撑继续执行，不要求人工再拼装上下文
 - 全链路没有回写新的事实载体或并行状态面
 

@@ -45,8 +45,9 @@
 
 结论：
 
-- `flow pre-review` 固定按 `fact-chain -> state-check -> runtime-evidence -> checkpoint-admission -> workspace-locate` 顺序编排
+- `flow pre-review` 固定按 `runtime-state -> fact-chain -> state-check -> runtime-evidence -> checkpoint-admission -> workspace-locate` 顺序编排
 - 输出会稳定给出统一通过/阻断/回退摘要
+- 输出顶层稳定携带 `runtime_state`，且一旦 `runtime_state.result=block` 就 fail-closed
 - skill 只负责进入 review 前的机械判断，不替代 reviewer 的语义审查
 
 ## 6. 关闭依据

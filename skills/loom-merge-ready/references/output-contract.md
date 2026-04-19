@@ -12,6 +12,8 @@
   - 当前仍阻断放行的缺口列表
 - `fallback_to`
   - 若当前必须回退，应回退到的 checkpoint；无回退时为 `null`
+- `runtime_state`
+  - 当前 Loom 入口自己的 scene / carrier 判定，以及 fail-closed 原因
 - `state_check`
   - `state-check` 的结果、摘要、阻断项与检查分项
 - `runtime_evidence`
@@ -27,6 +29,6 @@
 - `latest_validation_summary`
   - 最近可用验证摘要
 - `steps`
-  - 固定按 `fact-chain -> state-check -> runtime-evidence -> checkpoint-build -> checkpoint-merge` 顺序列出
+  - 固定按 `runtime-state -> fact-chain -> state-check -> runtime-evidence -> checkpoint-build -> checkpoint-merge` 顺序列出
 
 这个 skill 只给出 merge 前统一放行摘要，不替代宿主平台 merge，也不直接执行平台动作。

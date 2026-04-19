@@ -38,8 +38,10 @@ jobs:
       - name: Run repo-local demo CLI
         run: |
           cd examples/new-project
+          python3 .loom/bin/loom_init.py runtime-state --target .
           python3 .loom/bin/loom_init.py verify --target .
           python3 .loom/bin/loom_init.py fact-chain --target .
+          python3 .loom/bin/loom_flow.py runtime-state --target . --item INIT-0001
           python3 .loom/bin/loom_flow.py fact-chain --target . --item INIT-0001
           python3 .loom/bin/loom_flow.py runtime-evidence --target . --item INIT-0001
           python3 .loom/bin/loom_flow.py state-check --target . --item INIT-0001
@@ -47,6 +49,12 @@ jobs:
           python3 .loom/bin/loom_flow.py checkpoint admission --target . --item INIT-0001
           python3 .loom/bin/loom_flow.py workspace locate --target . --item INIT-0001
           python3 .loom/bin/loom_flow.py purity-check --target . --item INIT-0001
+      - name: Runtime-state scene conflict must fail closed
+        run: |
+          if LOOM_SOURCE_REPO_ROOT="$PWD" LOOM_INSTALLED_SKILLS_ROOT="$PWD/skills" LOOM_RUNTIME_SCENE=upgrade-rehearsal python3 skills/shared/scripts/loom_flow.py runtime-state --target examples/new-project --item INIT-0001; then
+            echo "expected runtime-state conflict to fail closed"
+            exit 1
+          fi
 
   loom-check:
     runs-on: ubuntu-latest

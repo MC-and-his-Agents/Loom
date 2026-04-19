@@ -12,8 +12,10 @@
   - 当前阻断正式 review 的缺口；无阻断时为空数组
 - `fallback_to`
   - 若当前不能继续正式 review，应回退到哪个 checkpoint；无回退时为 `null`
+- `runtime_state`
+  - 当前 Loom 入口自己的 scene / carrier 判定，以及 fail-closed 原因
 - `steps`
-  - 固定按 `fact-chain -> state-check -> runtime-evidence -> checkpoint-build -> review-entry` 顺序列出
+  - 固定按 `runtime-state -> fact-chain -> state-check -> runtime-evidence -> checkpoint-build -> review-entry` 顺序列出
 - `state_check`
   - 活跃状态、checkpoint 完整性与范围信号
 - `runtime_evidence`

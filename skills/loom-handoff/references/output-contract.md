@@ -12,6 +12,8 @@
   - 当前仍需补齐的阻断项；无阻断时为空数组
 - `fallback_to`
   - 若当前状态不适合直接移交，应回退到哪个 checkpoint；无回退时为 `null`
+- `runtime_state`
+  - 当前 Loom 入口自己的 scene / carrier 判定，以及 fail-closed 原因
 - `workspace`
   - `workspace_entry`、解析后的现场路径、现场是否存在
 - `checkpoint`
@@ -35,6 +37,6 @@
 - `writeback_fields`
   - 固定为 `current_stop`、`next_step`、`blockers`、`latest_validation_summary`
 - `steps`
-  - 固定按 `fact-chain -> state-check -> workspace-locate` 顺序列出
+  - 固定按 `runtime-state -> fact-chain -> state-check -> workspace-locate` 顺序列出
 
 这个 skill 只生成回写清单和定位，不直接写文件，也不创建新的 authored 真相源。

@@ -24,6 +24,7 @@ from fact_chain_support import (
 )
 from governance_surface import build_governance_surface
 from runtime_paths import shared_script
+from runtime_state import detect_runtime_state
 
 PR_TEMPLATE_SECTIONS = (
     "## Summary",
@@ -129,6 +130,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     runtime.add_argument("--target", required=True, help="Target repository root")
     runtime.add_argument("--item", help="Expected current item id")
     runtime.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+
+    runtime_state = subparsers.add_parser("runtime-state", help="Read the Loom runtime scene/carrier state")
+    runtime_state.add_argument("--target", required=True, help="Target repository root")
+    runtime_state.add_argument("--item", help="Expected current item id")
+    runtime_state.add_argument(
         "--output",
         default=".loom/bootstrap/init-result.json",
         help="Init-result path relative to the target root",
@@ -253,6 +263,10 @@ def emit(payload: dict[str, Any]) -> int:
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     result = payload.get("result")
     return 0 if result == "pass" else 1
+
+
+def runtime_state_payload(target_root: Path) -> dict[str, Any]:
+    return detect_runtime_state(__file__, "loom-flow", target_root=target_root)
 
 
 def normalize_checkpoint(raw: str) -> str:
@@ -1692,6 +1706,18 @@ def runtime_evidence_from_report(report: dict[str, Any]) -> tuple[dict[str, Any]
 
 def handle_runtime_evidence(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
+    runtime_state = runtime_state_payload(target_root)
+    if runtime_state["result"] != "pass":
+        return emit(
+            {
+                "command": "runtime-evidence",
+                "result": "block",
+                "summary": "runtime-evidence is blocked because the Loom runtime state is inconsistent.",
+                "missing_inputs": runtime_state["missing_inputs"],
+                "fallback_to": runtime_state["fallback_to"],
+                "runtime_state": runtime_state,
+            }
+        )
     report, errors = load_fact_chain_report(target_root, args.output)
     if errors:
         return emit(
@@ -1701,6 +1727,7 @@ def handle_runtime_evidence(args: argparse.Namespace) -> int:
                 "summary": "runtime-evidence command could not read a valid Loom fact chain.",
                 "missing_inputs": [f"fact-chain: {message}" for message in errors],
                 "fallback_to": "admission",
+                "runtime_state": runtime_state,
             }
         )
 
@@ -1713,6 +1740,7 @@ def handle_runtime_evidence(args: argparse.Namespace) -> int:
                 "summary": "runtime-evidence command found an item mismatch.",
                 "missing_inputs": [f"current item mismatch: expected `{args.item}`, got `{item_id}`"],
                 "fallback_to": "admission",
+                "runtime_state": runtime_state,
             }
         )
 
@@ -1733,6 +1761,7 @@ def handle_runtime_evidence(args: argparse.Namespace) -> int:
             "missing_inputs": missing_inputs,
             "fallback_to": "admission" if missing_inputs else None,
             "runtime_evidence": fields,
+            "runtime_state": runtime_state,
         }
     )
 
@@ -1812,6 +1841,18 @@ def state_check_payload(context: dict[str, Any]) -> dict[str, Any]:
 
 def handle_state_check(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
+    runtime_state = runtime_state_payload(target_root)
+    if runtime_state["result"] != "pass":
+        return emit(
+            {
+                "command": "state-check",
+                "result": "block",
+                "summary": "state-check is blocked because the Loom runtime state is inconsistent.",
+                "missing_inputs": runtime_state["missing_inputs"],
+                "fallback_to": runtime_state["fallback_to"],
+                "runtime_state": runtime_state,
+            }
+        )
     context, errors = load_context(target_root, args.output, args.item)
     if errors:
         return emit(
@@ -1821,9 +1862,27 @@ def handle_state_check(args: argparse.Namespace) -> int:
                 "summary": "state-check could not read a valid Loom fact chain.",
                 "missing_inputs": [f"fact-chain: {message}" for message in errors],
                 "fallback_to": "admission",
+                "runtime_state": runtime_state,
             }
         )
-    return emit(state_check_payload(context))
+    payload = state_check_payload(context)
+    payload["runtime_state"] = runtime_state
+    return emit(payload)
+
+
+def handle_runtime_state(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    runtime_state = runtime_state_payload(target_root)
+    return emit(
+        {
+            "command": "runtime-state",
+            "result": runtime_state["result"],
+            "summary": runtime_state["summary"],
+            "missing_inputs": runtime_state["missing_inputs"],
+            "fallback_to": runtime_state["fallback_to"],
+            "runtime_state": runtime_state,
+        }
+    )
 
 
 def host_lifecycle_payload(context: dict[str, Any]) -> dict[str, Any]:
@@ -3651,6 +3710,30 @@ def handle_work_item(args: argparse.Namespace) -> int:
 
 def handle_flow(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
+    runtime_state = runtime_state_payload(target_root)
+    steps: list[dict[str, Any]] = [
+        {
+            "name": "runtime-state",
+            "result": runtime_state["result"],
+            "summary": runtime_state["summary"],
+            "missing_inputs": runtime_state["missing_inputs"],
+            "fallback_to": runtime_state["fallback_to"],
+        }
+    ]
+    if runtime_state["result"] != "pass":
+        return emit(
+            {
+                "command": "flow",
+                "operation": args.operation,
+                "result": "block",
+                "summary": "flow command is blocked because the Loom runtime state is inconsistent.",
+                "missing_inputs": runtime_state["missing_inputs"],
+                "fallback_to": runtime_state["fallback_to"],
+                "steps": steps,
+                "runtime_state": runtime_state,
+            }
+        )
+
     context, errors = load_context(target_root, args.output, args.item)
     if errors:
         return emit(
@@ -3661,7 +3744,8 @@ def handle_flow(args: argparse.Namespace) -> int:
                 "summary": "flow command could not read a valid Loom fact chain.",
                 "missing_inputs": [f"fact-chain: {message}" for message in errors],
                 "fallback_to": "admission",
-                "steps": [],
+                "steps": steps,
+                "runtime_state": runtime_state,
             }
         )
 
@@ -3674,11 +3758,12 @@ def handle_flow(args: argparse.Namespace) -> int:
                 "summary": f"unsupported flow operation: {args.operation}",
                 "missing_inputs": [f"unsupported operation: {args.operation}"],
                 "fallback_to": None,
-                "steps": [],
+                "steps": steps,
+                "runtime_state": runtime_state,
             }
         )
 
-    steps: list[dict[str, Any]] = [
+    steps.append(
         {
             "name": "fact-chain",
             "result": "pass",
@@ -3686,7 +3771,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             "missing_inputs": [],
             "fallback_to": None,
         }
-    ]
+    )
 
     state_payload = state_check_payload(context)
     steps.append(
@@ -3883,6 +3968,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             "missing_inputs": missing_inputs,
             "fallback_to": fallback_to,
             "steps": steps,
+            "runtime_state": runtime_state,
             **({"governance_surface": governance_surface} if args.operation == "resume" else {}),
             **(
                 {
@@ -4004,6 +4090,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     if args.command == "fact-chain":
         return handle_fact_chain(args)
+    if args.command == "runtime-state":
+        return handle_runtime_state(args)
     if args.command == "runtime-evidence":
         return handle_runtime_evidence(args)
     if args.command == "state-check":

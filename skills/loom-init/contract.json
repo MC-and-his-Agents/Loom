@@ -1,7 +1,7 @@
 {
   "id": "loom-init",
   "role": "bootstrap/root",
-  "contract_version": "1.2.0",
+  "contract_version": "1.3.0",
   "display_name": "Loom Init",
   "description": "Bootstrap Loom into a target repository and route operators to the right scenario skill when the task is not a fresh initialization request.",
   "root_entry": true,
@@ -34,6 +34,7 @@
       "fact_chain",
       "initial_artifacts",
       "initial_work_items",
+      "runtime_state",
       "validation_and_closing"
     ]
   },

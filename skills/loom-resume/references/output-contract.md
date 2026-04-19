@@ -12,6 +12,8 @@
   - 当前阻断所需补齐的信息；无阻断时为空数组
 - `fallback_to`
   - 若当前不能继续执行，应回退到哪个 checkpoint；无回退时为 `null`
+- `runtime_state`
+  - 当前 Loom 入口自己的 scene / carrier 判定，以及 fail-closed 原因
 - `governance_surface`
   - 当前治理承接面的稳定摘要，只回答当前仓库的治理载体与宿主控制面如何落位
   - 至少固定给出：
@@ -51,6 +53,6 @@
 - `state_check`
   - `state-check` 的结果、摘要、阻断项与检查分项
 - `steps`
-  - 固定按 `fact-chain -> state-check -> workspace-locate` 顺序列出
+  - 固定按 `runtime-state -> fact-chain -> state-check -> workspace-locate` 顺序列出
 
 这个 skill 不回写任何载体；如果恢复链路不可继续，只返回阻断或回退语义。

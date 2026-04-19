@@ -43,7 +43,7 @@ Loom 不是业务模板，也不是一组散落的规则文档。
 | `SKILLS` 入口层 | `loom-init` + 7 个场景 skills，负责让 agent 进入正确动作 |
 | `harness` 执行层 | 读取状态、恢复上下文、组织 review、merge-ready 和 closeout |
 | `governance` 判断层 | 统一回答什么时候能继续、什么时候能 review、什么时候算完成 |
-| Agent 平台接入 | 通过 `skills/registry.json`、`skills/upgrade-contract.json` 和 manifest/executable 进行发现、安装和升级 |
+| Agent 平台接入 | 通过 `skills/registry.json`、`skills/install-layout.json`、`skills/upgrade-contract.json` 和 manifest/executable 进行发现、安装、运行态识别和升级 |
 | 次级 CLI | 为自动化、脚本和调试保留等价入口 |
 
 ## 安装与快速开始
@@ -69,8 +69,9 @@ Loom 不是业务模板，也不是一组散落的规则文档。
    - `shared/assets/`
    - `shared/references/`
 6. 确认 Claude Code / Codex 等 Agent 平台能把 `loom-init` 识别为默认入口
+7. 用 `loom-init runtime-state` 或 `loom_flow runtime-state` 确认当前场景是 `installed-runtime`，而不是 `repo-local-demo`
 
-不要把 repo-local `tools/` 可运行误当成安装成功。`tools/loom_init.py`、`tools/loom_flow.py`、`tools/loom_check.py` 只保留为仓库开发包装层；installed-skills 的正式执行面在 `skills/*/scripts/` 与 `skills/shared/*`。
+不要把 repo-local `tools/` 可运行误当成安装成功。`tools/loom_init.py`、`tools/loom_flow.py`、`tools/loom_check.py` 只保留为仓库开发包装层；installed-skills 的正式执行面在 `skills/*/scripts/` 与 `skills/shared/*`。当前稳定 runtime scene 只允许 `repo-local-demo`、`installed-runtime`、`upgrade-rehearsal`；若缺 shared runtime/resources、layout/registry 漂移或 scene 与 carrier 冲突，Loom 必须 fail-closed 并返回原因。
 
 当前稳定入口包括：
 
@@ -395,7 +396,7 @@ CLI 主要给这些情况使用：
 - `python3 skills/shared/scripts/loom_flow.py checkpoint|state-check|closeout ...`
 - `make loom-check`
 
-其中 `skills/*/scripts/` 与 `skills/shared/scripts/` 才是 installed-skills 的正式 CLI 面；repo-local `tools/` 只用于当前仓库开发和调试，不构成安装态证明。
+其中 `skills/*/scripts/` 与 `skills/shared/scripts/` 才是 installed-skills 的正式 CLI 面；repo-local `tools/` 只用于当前仓库开发和调试，不构成安装态证明。若 `runtime-state` 没有返回 `installed-runtime` 或显式的 `upgrade-rehearsal`，就不能把当前入口宣称为已安装 runtime 成功。
 
 ## 深入阅读
 
