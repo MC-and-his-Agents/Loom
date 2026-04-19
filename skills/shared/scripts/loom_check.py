@@ -91,6 +91,7 @@ CORE_DOCS = (
     "adoption/validation-devskills.md",
     "adoption/validation-hotcp.md",
     "adoption/validation-review-and-authoring.md",
+    "adoption/validation-installed-skills-pre-merge-chain.md",
     "adoption/validation-host-lifecycle-and-closeout.md",
     "adoption/validation-fact-chain-mail-listener.md",
     "adoption/validation-checkpoints-hotcp.md",
@@ -687,6 +688,47 @@ def require_runtime_state_payload(
             failures.append(Failure(category, f"{context} runtime_state check `{key}` returned an unknown status"))
         if not isinstance(check.get("summary"), str) or not check.get("summary"):
             failures.append(Failure(category, f"{context} runtime_state check `{key}` must include non-empty `summary`"))
+
+
+def require_route_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+    expected_skill: str,
+    expected_mode: str,
+    expected_runtime_scene: str | None = None,
+    expected_runtime_carrier: str | None = None,
+    allowed_results: set[str] | None = None,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must return a JSON object"))
+        return
+    if payload.get("command") != "route":
+        failures.append(Failure(category, f"{context} must report `command: route`"))
+    if payload.get("result") not in (allowed_results or {"pass"}):
+        failures.append(Failure(category, f"{context} result must stay within the stable contract"))
+    if payload.get("selected_skill") != expected_skill:
+        failures.append(Failure(category, f"{context} must select `{expected_skill}`"))
+    if payload.get("mode") != expected_mode:
+        failures.append(Failure(category, f"{context} must report `mode: {expected_mode}`"))
+    if not isinstance(payload.get("matched_signals"), list):
+        failures.append(Failure(category, f"{context} must include `matched_signals`"))
+    if not isinstance(payload.get("missing_inputs"), list):
+        failures.append(Failure(category, f"{context} must include `missing_inputs`"))
+    if payload.get("fallback_to") not in {"loom-init", "refresh-install", "rebootstrap-runtime", "manual-runtime-reconciliation", None}:
+        failures.append(Failure(category, f"{context} fallback must stay within the stable contract"))
+    if expected_runtime_scene is not None or expected_runtime_carrier is not None:
+        require_runtime_state_payload(
+            failures,
+            category=category,
+            context=context,
+            payload=payload.get("runtime_state"),
+            expected_scene=expected_runtime_scene,
+            expected_carrier=expected_runtime_carrier,
+            allowed_results={"pass", "block"},
+        )
 
 
 def check_skill_manifests(root: Path) -> list[Failure]:
@@ -2142,6 +2184,588 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             failures.append(Failure("daily-execution-cli", f"`bootstrapped runtime-state` manifest drift failed unexpectedly: {error}"))
         elif payload.get("result") != "block":
             failures.append(Failure("daily-execution-cli", "`bootstrapped runtime-state` must block when the bootstrap manifest drifts"))
+
+    if shutil.which("git") is not None:
+        with tempfile.TemporaryDirectory(prefix="loom-check-installed-pre-merge-") as tmp:
+            tmp_root = Path(tmp)
+            install_root = tmp_root / "installed" / "skills"
+            source_snapshot = tmp_root / "source-snapshot"
+            positive_target = tmp_root / "positive-target"
+            review_fallback_target = tmp_root / "review-fallback-target"
+            shutil.copytree(root / "skills", install_root)
+            shutil.copytree(root, source_snapshot, ignore=shutil.ignore_patterns(".git", ".DS_Store", "__pycache__"))
+
+            def prepare_target(target: Path) -> tuple[str | None, list[str]]:
+                errors: list[str] = []
+                shutil.copytree(source_snapshot, target)
+                for args in (
+                    ["git", "init"],
+                    ["git", "config", "user.email", "loom-check@example.com"],
+                    ["git", "config", "user.name", "loom-check"],
+                ):
+                    result = run_command(root, args, cwd=target)
+                    if result.returncode != 0:
+                        detail = result.stderr.strip() or result.stdout.strip() or "git setup failed"
+                        errors.append(detail)
+                        return None, errors
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-init" / "scripts" / "loom-init.py"),
+                        "bootstrap",
+                        "--target",
+                        str(target),
+                        "--write",
+                        "--force",
+                        "--verify",
+                        "--install-pr-template",
+                    ],
+                )
+                if error:
+                    errors.append(error)
+                    return None, errors
+                verification = payload.get("verification")
+                if not isinstance(verification, dict) or verification.get("ok") is not True:
+                    errors.append("installed bootstrap must verify successfully before the pre-merge chain starts")
+                    return None, errors
+
+                git_add = run_command(root, ["git", "add", "."], cwd=target)
+                if git_add.returncode != 0:
+                    detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
+                    errors.append(detail)
+                    return None, errors
+                git_commit = run_command(root, ["git", "commit", "-m", "bootstrap baseline for #209"], cwd=target)
+                if git_commit.returncode != 0:
+                    detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
+                    errors.append(detail)
+                    return None, errors
+
+                resume_payload, resume_error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-resume" / "scripts" / "loom-resume.py"),
+                        "flow",
+                        "resume",
+                        "--target",
+                        str(target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if resume_error:
+                    errors.append(resume_error)
+                    return None, errors
+                recovery = resume_payload.get("recovery")
+                if not isinstance(recovery, dict):
+                    errors.append("resume payload must include `recovery`")
+                    return None, errors
+                summary = recovery.get("latest_validation_summary")
+                if not isinstance(summary, str) or not summary:
+                    errors.append("resume payload must expose a non-empty `latest_validation_summary`")
+                    return None, errors
+                return summary, errors
+
+            positive_summary, positive_setup_errors = prepare_target(positive_target)
+            if positive_setup_errors:
+                failures.append(
+                    Failure(
+                        "daily-execution-cli",
+                        f"`installed pre-merge chain` setup failed: {'; '.join(positive_setup_errors)}",
+                    )
+                )
+            else:
+                task_signals = {
+                    "resume": "请接手当前事项并恢复上下文后继续推进",
+                    "pre-review": "请在进入 review 前做统一检查",
+                    "review": "请对当前事项做正式 review 并给出审查结论",
+                    "merge-ready": "请做 merge-ready 最终放行前预检并确认是否可以合并",
+                }
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-init" / "scripts" / "loom-init.py"),
+                        "route",
+                        "--target",
+                        str(positive_target),
+                        "--task",
+                        task_signals["resume"],
+                    ],
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed route resume` failed: {error}"))
+                else:
+                    require_route_payload(
+                        failures,
+                        category="daily-execution-cli",
+                        context="`installed route resume`",
+                        payload=payload,
+                        expected_skill="loom-resume",
+                        expected_mode="implicit",
+                        expected_runtime_scene="installed-runtime",
+                        expected_runtime_carrier="installed-skills-root",
+                    )
+
+                resume_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-resume" / "scripts" / "loom-resume.py"),
+                        "flow",
+                        "resume",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed flow resume` failed: {error}"))
+                elif resume_payload.get("result") != "pass":
+                    failures.append(Failure("daily-execution-cli", "`installed flow resume` must pass for the positive chain"))
+                else:
+                    require_runtime_state_payload(
+                        failures,
+                        category="daily-execution-cli",
+                        context="`installed flow resume`",
+                        payload=resume_payload.get("runtime_state"),
+                        expected_scene="installed-runtime",
+                        expected_carrier="installed-skills-root",
+                        allowed_results={"pass"},
+                    )
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-init" / "scripts" / "loom-init.py"),
+                        "route",
+                        "--target",
+                        str(positive_target),
+                        "--task",
+                        task_signals["pre-review"],
+                    ],
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed route pre-review` failed: {error}"))
+                else:
+                    require_route_payload(
+                        failures,
+                        category="daily-execution-cli",
+                        context="`installed route pre-review`",
+                        payload=payload,
+                        expected_skill="loom-pre-review",
+                        expected_mode="implicit",
+                        expected_runtime_scene="installed-runtime",
+                        expected_runtime_carrier="installed-skills-root",
+                    )
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-pre-review" / "scripts" / "loom-pre-review.py"),
+                        "flow",
+                        "pre-review",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed flow pre-review` failed: {error}"))
+                elif payload.get("result") != "pass":
+                    failures.append(Failure("daily-execution-cli", "`installed flow pre-review` must pass for the positive chain"))
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-init" / "scripts" / "loom-init.py"),
+                        "route",
+                        "--target",
+                        str(positive_target),
+                        "--task",
+                        task_signals["review"],
+                    ],
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed route review` failed: {error}"))
+                else:
+                    require_route_payload(
+                        failures,
+                        category="daily-execution-cli",
+                        context="`installed route review`",
+                        payload=payload,
+                        expected_skill="loom-review",
+                        expected_mode="implicit",
+                        expected_runtime_scene="installed-runtime",
+                        expected_runtime_carrier="installed-skills-root",
+                    )
+
+                review_flow_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-review" / "scripts" / "loom-review.py"),
+                        "flow",
+                        "review",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed flow review` failed: {error}"))
+                elif review_flow_payload.get("result") != "pass":
+                    failures.append(Failure("daily-execution-cli", "`installed flow review` must pass for the positive chain"))
+                else:
+                    review = review_flow_payload.get("review")
+                    if isinstance(review, dict):
+                        require_review_record_contract(
+                            failures,
+                            category="daily-execution-cli",
+                            context="`installed flow review` review.record",
+                            payload=review.get("record"),
+                        )
+
+                review_record_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-review" / "scripts" / "loom-review.py"),
+                        "review",
+                        "record",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                        "--decision",
+                        "allow",
+                        "--kind",
+                        "code_review",
+                        "--summary",
+                        "Installed pre-merge chain is ready for merge checkpoint consumption.",
+                        "--reviewer",
+                        "loom-check",
+                    ],
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed review record allow` failed: {error}"))
+                elif review_record_payload.get("result") != "pass":
+                    failures.append(Failure("daily-execution-cli", "`installed review record allow` must pass"))
+                else:
+                    review = review_record_payload.get("review")
+                    if isinstance(review, dict):
+                        require_review_record_contract(
+                            failures,
+                            category="daily-execution-cli",
+                            context="`installed review record allow` review.record",
+                            payload=review.get("record"),
+                        )
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "recovery",
+                        "writeback",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                        "--current-checkpoint",
+                        "merge checkpoint",
+                        "--current-stop",
+                        "Installed review completed and merge-ready validation is next.",
+                        "--next-step",
+                        "Run merge-ready and checkpoint merge from installed skills.",
+                        "--latest-validation-summary",
+                        positive_summary,
+                    ],
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed recovery writeback for merge` failed: {error}"))
+                elif payload.get("result") != "pass":
+                    failures.append(Failure("daily-execution-cli", "`installed recovery writeback for merge` must pass"))
+
+                git_add = run_command(
+                    root,
+                    [
+                        "git",
+                        "add",
+                        ".loom/progress/INIT-0001.md",
+                        ".loom/status/current.md",
+                        ".loom/reviews/INIT-0001.json",
+                    ],
+                    cwd=positive_target,
+                )
+                if git_add.returncode != 0:
+                    detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
+                    failures.append(Failure("daily-execution-cli", f"`installed pre-merge carrier commit` add failed: {detail}"))
+                else:
+                    git_commit = run_command(
+                        root,
+                        ["git", "commit", "-m", "author installed pre-merge carriers for #209"],
+                        cwd=positive_target,
+                    )
+                    if git_commit.returncode != 0:
+                        detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
+                        failures.append(Failure("daily-execution-cli", f"`installed pre-merge carrier commit` failed: {detail}"))
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-init" / "scripts" / "loom-init.py"),
+                        "route",
+                        "--target",
+                        str(positive_target),
+                        "--task",
+                        task_signals["merge-ready"],
+                    ],
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed route merge-ready` failed: {error}"))
+                else:
+                    require_route_payload(
+                        failures,
+                        category="daily-execution-cli",
+                        context="`installed route merge-ready`",
+                        payload=payload,
+                        expected_skill="loom-merge-ready",
+                        expected_mode="implicit",
+                        expected_runtime_scene="installed-runtime",
+                        expected_runtime_carrier="installed-skills-root",
+                    )
+
+                merge_ready_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-merge-ready" / "scripts" / "loom-merge-ready.py"),
+                        "flow",
+                        "merge-ready",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed flow merge-ready` failed: {error}"))
+                elif merge_ready_payload.get("result") != "pass":
+                    failures.append(Failure("daily-execution-cli", "`installed flow merge-ready` must pass for the positive chain"))
+                else:
+                    merge_checkpoint = merge_ready_payload.get("merge_checkpoint")
+                    if not isinstance(merge_checkpoint, dict) or merge_checkpoint.get("result") != "pass":
+                        failures.append(Failure("daily-execution-cli", "`installed flow merge-ready` must expose `merge_checkpoint.result = pass`"))
+
+                checkpoint_merge_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "checkpoint",
+                        "merge",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed checkpoint merge` failed: {error}"))
+                elif checkpoint_merge_payload.get("result") != "pass":
+                    failures.append(Failure("daily-execution-cli", "`installed checkpoint merge` must pass for the positive chain"))
+
+                broken_install = tmp_root / "broken-install" / "skills"
+                shutil.copytree(root / "skills", broken_install)
+                (broken_install / "install-layout.json").unlink()
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(broken_install / "loom-init" / "scripts" / "loom-init.py"),
+                        "route",
+                        "--target",
+                        str(positive_target),
+                        "--task",
+                        task_signals["resume"],
+                    ],
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed route` missing install-layout failed unexpectedly: {error}"))
+                else:
+                    require_route_payload(
+                        failures,
+                        category="daily-execution-cli",
+                        context="`installed route` missing install-layout",
+                        payload=payload,
+                        expected_skill="loom-init",
+                        expected_mode="fallback",
+                        expected_runtime_scene="installed-runtime",
+                        expected_runtime_carrier="installed-skills-root",
+                        allowed_results={"block"},
+                    )
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(broken_install / "loom-pre-review" / "scripts" / "loom-pre-review.py"),
+                        "flow",
+                        "pre-review",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed flow pre-review` missing install-layout failed unexpectedly: {error}"))
+                elif payload.get("result") != "block":
+                    failures.append(Failure("daily-execution-cli", "`installed flow pre-review` must block when install-layout is missing"))
+                else:
+                    require_runtime_state_payload(
+                        failures,
+                        category="daily-execution-cli",
+                        context="`installed flow pre-review` missing install-layout",
+                        payload=payload.get("runtime_state"),
+                        expected_scene="installed-runtime",
+                        expected_carrier="installed-skills-root",
+                        allowed_results={"block"},
+                    )
+
+                review_fallback_summary, review_fallback_errors = prepare_target(review_fallback_target)
+                if review_fallback_errors:
+                    failures.append(
+                        Failure(
+                            "daily-execution-cli",
+                            f"`installed review baseline fallback` setup failed: {'; '.join(review_fallback_errors)}",
+                        )
+                    )
+                else:
+                    payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                            "recovery",
+                            "writeback",
+                            "--target",
+                            str(review_fallback_target),
+                            "--item",
+                            "INIT-0001",
+                            "--current-checkpoint",
+                            "admission checkpoint",
+                            "--current-stop",
+                            "Installed review baseline is still at admission.",
+                            "--next-step",
+                            "Promote the target repo to build checkpoint before review.",
+                            "--latest-validation-summary",
+                            review_fallback_summary,
+                        ],
+                    )
+                    if error:
+                        failures.append(Failure("daily-execution-cli", f"`installed recovery writeback for admission fallback` failed: {error}"))
+                    elif payload.get("result") != "pass":
+                        failures.append(Failure("daily-execution-cli", "`installed recovery writeback for admission fallback` must pass"))
+
+                    git_add = run_command(
+                        root,
+                        ["git", "add", ".loom/progress/INIT-0001.md", ".loom/status/current.md"],
+                        cwd=review_fallback_target,
+                    )
+                    if git_add.returncode != 0:
+                        detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
+                        failures.append(Failure("daily-execution-cli", f"`installed review baseline fallback` add failed: {detail}"))
+                    else:
+                        git_commit = run_command(
+                            root,
+                            ["git", "commit", "-m", "lower checkpoint to admission for #209 fallback"],
+                            cwd=review_fallback_target,
+                        )
+                        if git_commit.returncode != 0:
+                            detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
+                            failures.append(Failure("daily-execution-cli", f"`installed review baseline fallback` commit failed: {detail}"))
+
+                    payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "loom-review" / "scripts" / "loom-review.py"),
+                            "flow",
+                            "review",
+                            "--target",
+                            str(review_fallback_target),
+                            "--item",
+                            "INIT-0001",
+                        ],
+                    )
+                    if error:
+                        failures.append(Failure("daily-execution-cli", f"`installed flow review` admission fallback failed: {error}"))
+                    elif payload.get("result") != "fallback" or payload.get("fallback_to") != "admission":
+                        failures.append(Failure("daily-execution-cli", "`installed flow review` must fall back to `admission` when build checkpoint is missing"))
+
+                    payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "loom-merge-ready" / "scripts" / "loom-merge-ready.py"),
+                            "flow",
+                            "merge-ready",
+                            "--target",
+                            str(review_fallback_target),
+                            "--item",
+                            "INIT-0001",
+                        ],
+                    )
+                    if error:
+                        failures.append(Failure("daily-execution-cli", f"`installed flow merge-ready` review-baseline fallback failed: {error}"))
+                    elif payload.get("result") not in {"fallback", "block"}:
+                        failures.append(Failure("daily-execution-cli", "`installed flow merge-ready` must fail closed when review baseline is missing"))
+
+                readme_path = positive_target / "README.md"
+                readme_path.write_text(readme_path.read_text(encoding="utf-8") + "\n# review-head-drift\n", encoding="utf-8")
+                git_add = run_command(root, ["git", "add", "README.md"], cwd=positive_target)
+                if git_add.returncode != 0:
+                    detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
+                    failures.append(Failure("daily-execution-cli", f"`installed merge-ready drift` add failed: {detail}"))
+                else:
+                    git_commit = run_command(
+                        root,
+                        ["git", "commit", "-m", "introduce non-carrier drift after review for #209"],
+                        cwd=positive_target,
+                    )
+                    if git_commit.returncode != 0:
+                        detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
+                        failures.append(Failure("daily-execution-cli", f"`installed merge-ready drift` commit failed: {detail}"))
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "checkpoint",
+                        "merge",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed checkpoint merge` drift negative failed: {error}"))
+                elif payload.get("result") != "block":
+                    failures.append(Failure("daily-execution-cli", "`installed checkpoint merge` must block when HEAD drifts beyond Loom carriers"))
 
     fail_closed_payloads = [
         (

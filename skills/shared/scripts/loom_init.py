@@ -254,6 +254,7 @@ def route_payload(
     missing_inputs: list[str],
     fallback_to: str,
     governance_surface: dict[str, object] | None = None,
+    runtime_state: dict[str, object] | None = None,
 ) -> dict[str, object]:
     payload = {
         "command": "route",
@@ -267,6 +268,8 @@ def route_payload(
     }
     if governance_surface is not None:
         payload["governance_surface"] = governance_surface
+    if runtime_state is not None:
+        payload["runtime_state"] = runtime_state
     return payload
 
 
@@ -1464,6 +1467,26 @@ def route(args: argparse.Namespace) -> int:
         print(f"loom-init: target is not a directory: {target_root}", file=sys.stderr)
         return 2
 
+    runtime_state = runtime_state_payload(target_root)
+    if runtime_state["result"] != "pass":
+        print(
+            json.dumps(
+                route_payload(
+                    result="block",
+                    selected_skill="loom-init",
+                    mode="fallback",
+                    matched_signals=[],
+                    summary="cannot route because the Loom runtime state is inconsistent.",
+                    missing_inputs=list(runtime_state["missing_inputs"]),
+                    fallback_to=runtime_state["fallback_to"] or "loom-init",
+                    runtime_state=runtime_state,
+                ),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 1
+
     registry_skill_ids, registry_error = load_registry_skill_ids()
     if registry_error:
         print(
@@ -1476,6 +1499,7 @@ def route(args: argparse.Namespace) -> int:
                     summary=f"cannot route because {registry_error}",
                     missing_inputs=["a valid installed registry"],
                     fallback_to="loom-init",
+                    runtime_state=runtime_state,
                 ),
                 ensure_ascii=False,
                 indent=2,
@@ -1503,6 +1527,7 @@ def route(args: argparse.Namespace) -> int:
                         summary=f"unknown skill `{args.skill}`",
                         missing_inputs=["a known skill id from the installed registry"],
                         fallback_to="loom-init",
+                        runtime_state=runtime_state,
                     ),
                     ensure_ascii=False,
                     indent=2,
@@ -1520,6 +1545,7 @@ def route(args: argparse.Namespace) -> int:
                     missing_inputs=[],
                     fallback_to="loom-init",
                     governance_surface=governance_surface if args.skill in {"loom-adopt", "loom-resume"} else None,
+                    runtime_state=runtime_state,
                 ),
                 ensure_ascii=False,
                 indent=2,
@@ -1541,6 +1567,7 @@ def route(args: argparse.Namespace) -> int:
                         summary=f"route table resolved to unknown registry skill `{selected_skill}`",
                         missing_inputs=["a registry entry aligned with skills/route-matrix.md"],
                         fallback_to="loom-init",
+                        runtime_state=runtime_state,
                     ),
                     ensure_ascii=False,
                     indent=2,
@@ -1558,6 +1585,7 @@ def route(args: argparse.Namespace) -> int:
                     missing_inputs=[],
                     fallback_to="loom-init",
                     governance_surface=governance_surface if selected_skill in {"loom-adopt", "loom-resume"} else None,
+                    runtime_state=runtime_state,
                 ),
                 ensure_ascii=False,
                 indent=2,
@@ -1575,6 +1603,7 @@ def route(args: argparse.Namespace) -> int:
             missing_inputs=["one stable scenario signal such as adopt, resume, pre-review, handoff, retire, or merge-ready"],
             fallback_to="loom-init",
             governance_surface=governance_surface if governance_surface is not None else None,
+            runtime_state=runtime_state,
         )
     else:
         all_matches = sorted({signal for matched in matches.values() for signal in matched})
@@ -1587,6 +1616,7 @@ def route(args: argparse.Namespace) -> int:
             missing_inputs=["a single dominant scenario signal or an explicit --skill"],
             fallback_to="loom-init",
             governance_surface=governance_surface if governance_surface is not None else None,
+            runtime_state=runtime_state,
         )
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0

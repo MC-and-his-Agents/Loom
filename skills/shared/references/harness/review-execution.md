@@ -64,6 +64,8 @@ review record 至少应包含：
 - 读取 `work item.review_entry`
 - 校验 `item_id` 是否匹配当前事项
 - 校验 `reviewed_head` 是否仍匹配当前 `HEAD`
+  - 若 `HEAD` 在 review 之后只新增了 Loom 自身的 review / recovery / status carriers 提交，允许继续消费
+  - 一旦 `HEAD` 还包含其他路径漂移，仍按 review stale 处理
 - 校验 `reviewed_validation_summary` 是否仍匹配当前 recovery 的 `latest_validation_summary`
 - `decision: allow` 才算 review 已通过
 - `decision: block` 返回 `block`

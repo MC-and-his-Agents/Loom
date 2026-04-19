@@ -333,6 +333,17 @@ def git_head_sha(root: Path) -> str | None:
     return sha or None
 
 
+def git_changed_paths(root: Path, base: str, head: str) -> tuple[list[str], list[str]]:
+    result = run_git(root, ["diff", "--name-only", "--no-renames", f"{base}..{head}"])
+    if result is None:
+        return [], ["git is unavailable while comparing reviewed HEAD to current HEAD"]
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "git diff failed"
+        return [], [detail]
+    paths = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    return paths, []
+
+
 def git_remote_origin(root: Path) -> str | None:
     result = run_git(root, ["remote", "get-url", "origin"])
     if result is None or result.returncode != 0:
@@ -598,6 +609,14 @@ def read_runtime_evidence(target_root: Path, status_relative: str) -> tuple[dict
 
 def default_review_path(item_id: str) -> str:
     return f".loom/reviews/{item_id}.json"
+
+
+def allowed_post_review_carrier_paths(context: dict[str, Any], review_path: str) -> set[str]:
+    return {
+        review_path,
+        str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"]),
+        str(context["report"]["fact_chain"]["entry_points"]["status_surface"]),
+    }
 
 
 def compat_findings_from_lists(
@@ -1372,9 +1391,18 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
             current_head = git_head_sha(context["target_root"])
             reviewed_head = review_record.get("reviewed_head")
             if current_head and reviewed_head != current_head:
-                missing_inputs.append("review artifact was recorded against a different HEAD")
-                if result == "pass":
-                    result = "block"
+                changed_paths, head_errors = git_changed_paths(context["target_root"], reviewed_head, current_head)
+                if head_errors:
+                    missing_inputs.extend([f"review HEAD comparison failed: {detail}" for detail in head_errors])
+                    if result == "pass":
+                        result = "block"
+                else:
+                    allowed_paths = allowed_post_review_carrier_paths(context, review_path)
+                    disallowed_paths = [path for path in changed_paths if path not in allowed_paths]
+                    if disallowed_paths or not changed_paths:
+                        missing_inputs.append("review artifact was recorded against a different HEAD")
+                        if result == "pass":
+                            result = "block"
             if decision == "block":
                 if result == "pass":
                     result = "block"
