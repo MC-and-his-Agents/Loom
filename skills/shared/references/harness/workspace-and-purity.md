@@ -51,6 +51,10 @@ Loom 当前至少要求以下纯度：
 
 `python3 loom-retire/scripts/loom-retire.py purity-check --target <repo> [--item <id>]` 的输出至少包含：
 
+- `runtime_state`
+  - 当前 Loom 入口自己的 scene / carrier 判定
+  - install layout / shared runtime / shared references 漂移时必须直接 `block`
+
 - `hard_failures`
   - 第一版硬失败项，包含事实链断裂、现场冲突、残留未分流、明显多事项共享现场等
 - `report_only`
@@ -63,5 +67,7 @@ Loom 当前至少要求以下纯度：
 当 `scope_assessment.mode` 为 `constrained` 且出现 `out_of_scope_changes` 时，应视为范围越界阻断信号。
 
 `python3 shared/scripts/loom_flow.py state-check --target <repo> [--item <id>]` 会复用同一纯度结果，并额外检查活跃状态与 checkpoint 完整性。
+
+`python3 shared/scripts/loom_flow.py workspace cleanup|retire --target <repo> [--item <id>]` 同样必须先消费 `runtime-state`；若当前 carrier 不再可执行，不得继续清理或退休现场。
 
 branch / PR purity 的宿主生命周期边界见 [host-lifecycle-boundary.md](./host-lifecycle-boundary.md)。

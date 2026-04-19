@@ -11,6 +11,9 @@ closeout gate 用来回答两件事：
 - 当前事项是否已经达到“进入主干并收口”的最小条件
 - GitHub issue / PR / project / main 是否与仓内结果态一致
 
+在 installed-skills 或 `.loom/bin` carrier 下，`reconciliation audit|sync` 与 `closeout check|sync` 必须先消费 `runtime-state`。
+若 install layout、shared runtime、shared references 或 bootstrap manifest 漂移，入口必须直接 `block`。
+
 ## 2. 稳定入口
 
 - `python3 skills/shared/scripts/loom_flow.py reconciliation audit --target <repo> [--issue <n>] [--pr <n>] [--project <n>]`
@@ -84,6 +87,7 @@ closeout gate 用来回答两件事：
 - `absorbed` 证明本身
 - review 执行层
 - recovery writeback
+- workspace cleanup / retire
 
 ## 5. 非目标
 
