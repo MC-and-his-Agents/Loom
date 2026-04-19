@@ -77,6 +77,7 @@ merge checkpoint 只允许输出以下三类结果：
   - 回到 [status-surface.md](./status-surface.md) 与实际验证入口
 - 缺 formal review、review stale 或 reviewer 明确要求回退
   - 回到 [review-execution.md](./review-execution.md) 或 `build checkpoint`
+  - 若 review 之后只提交了 `review_entry`、recovery 主入口或状态面这类 Loom carrier 更新，不应误判成 stale
 - 缺停点、下一步、风险或回滚边界
   - 回到 [recovery-model.md](./recovery-model.md)
 - head 已超出批准范围或事项边界失真
