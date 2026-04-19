@@ -61,11 +61,16 @@ Loom 不是业务模板，也不是一组散落的规则文档。
 1. 获取这个仓库
 2. 让 Claude Code / Codex 等 Agent 平台读取 [skills/registry.json](./skills/registry.json)
 3. 让 Claude Code / Codex 等 Agent 平台同步 [skills/upgrade-contract.json](./skills/upgrade-contract.json)
-4. 安装或刷新 `loom-init` 与各场景 skill 的：
+4. 让 Claude Code / Codex 等 Agent 平台同步 [skills/install-layout.json](./skills/install-layout.json)
+5. 安装或刷新 `loom-init` 与各场景 skill 的：
    - manifest
-   - executable
-   - referenced resources
-5. 确认 Claude Code / Codex 等 Agent 平台能把 `loom-init` 识别为默认入口
+   - skill-local `scripts/`
+   - `shared/scripts/`
+   - `shared/assets/`
+   - `shared/references/`
+6. 确认 Claude Code / Codex 等 Agent 平台能把 `loom-init` 识别为默认入口
+
+不要把 repo-local `tools/` 可运行误当成安装成功。`tools/loom_init.py`、`tools/loom_flow.py`、`tools/loom_check.py` 只保留为仓库开发包装层；installed-skills 的正式执行面在 `skills/*/scripts/` 与 `skills/shared/*`。
 
 当前稳定入口包括：
 
@@ -83,9 +88,12 @@ Loom 不是业务模板，也不是一组散落的规则文档。
 
 - `skills/registry.json`
 - `skills/upgrade-contract.json`
+- `skills/install-layout.json`
 - 各 skill manifest
-- executable
-- referenced resources
+- skill-local `scripts/`
+- `shared/scripts/`
+- `shared/assets/`
+- `shared/references/`
 
 安装与升级的正式合同见 [skills/distribution-and-adapter-contract.md](./skills/distribution-and-adapter-contract.md)。
 
@@ -100,9 +108,10 @@ Loom 不是业务模板，也不是一组散落的规则文档。
 1. 获取 Loom 仓库
 2. 读取 skills/registry.json
 3. 读取 skills/upgrade-contract.json
-4. 安装或刷新 loom-init 和所有场景 skills 的 manifest、executable、referenced resources
-5. 确认 loom-init 被识别为默认入口
-6. 安装完成后，不要直接开始改代码；先用 loom-init 判断当前项目属于哪个场景，并告诉我下一步应该进入哪个 skill
+4. 读取 skills/install-layout.json
+5. 安装或刷新 loom-init 和所有场景 skills 的 manifest、skill-local scripts、shared/scripts、shared/assets、shared/references
+6. 确认 loom-init 被识别为默认入口
+7. 安装完成后，不要直接开始改代码；先用 loom-init 判断当前项目属于哪个场景，并告诉我下一步应该进入哪个 skill
 
 如果当前 Claude Code / Codex 等 Agent 平台使用的是本地 skills 目录、manifest 注册或等价机制，请按该平台的标准方式完成安装。
 如果安装失败，请明确告诉我卡在哪一步。
@@ -382,9 +391,11 @@ CLI 主要给这些情况使用：
 - `python3 tools/loom_init.py route --target <repo> ...`
 - `python3 tools/loom_flow.py flow resume|pre-review|review|handoff|merge-ready --target <repo>`
 - `python3 tools/loom_flow.py closeout ...`
+- `python3 skills/loom-init/scripts/loom-init.py route --target <repo> ...`
+- `python3 skills/shared/scripts/loom_flow.py checkpoint|state-check|closeout ...`
 - `make loom-check`
 
-CLI 是底层等价入口，不是 Loom 希望 agent 首先记住的交互面。
+其中 `skills/*/scripts/` 与 `skills/shared/scripts/` 才是 installed-skills 的正式 CLI 面；repo-local `tools/` 只用于当前仓库开发和调试，不构成安装态证明。
 
 ## 深入阅读
 

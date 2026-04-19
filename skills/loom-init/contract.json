@@ -8,8 +8,8 @@
   "entrypoint": {
     "skill_markdown": "SKILL.md",
     "adapter_metadata": "agents/openai.yaml",
-    "bootstrap_cli": "../../tools/loom_init.py",
-    "route_cli": "../../tools/loom_init.py"
+    "bootstrap_cli": "scripts/loom-init.py",
+    "route_cli": "scripts/loom-init.py"
   },
   "input_contract": {
     "reference": "references/input-signals.md",
@@ -48,10 +48,10 @@
   },
   "artifact_mapping": {
     "rules": [
-      "../governance",
-      "../harness",
-      "../templates",
-      "../adoption"
+      "../shared/references/governance",
+      "../shared/references/harness",
+      "../shared/references/templates",
+      "../shared/references/adoption"
     ],
     "skill_refs": [
       "references/input-signals.md",
@@ -69,6 +69,7 @@
   },
   "installation": {
     "registry": "../registry.json",
-    "upgrade_contract": "../upgrade-contract.json"
+    "upgrade_contract": "../upgrade-contract.json",
+    "layout_manifest": "../install-layout.json"
   }
 }

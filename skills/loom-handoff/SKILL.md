@@ -9,7 +9,7 @@ description: 负责交接当前事项。Use when Codex needs to prepare a handof
 
 优先入口：
 
-- `python3 tools/loom_flow.py flow handoff --target <repo> [--item <id>]`
+- `python3 scripts/loom-handoff.py flow handoff --target <repo> [--item <id>]`
 
 执行要求：
 

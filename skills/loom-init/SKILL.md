@@ -14,12 +14,12 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 
 先判断当前任务究竟属于初始化还是日常执行场景，再决定进入哪个入口。不要把 root skill 继续扩成第二套事实真相源。
 
-当前仓库中的最小可执行入口为：
+当前安装态中的最小可执行入口为：
 
-- `python3 tools/loom_init.py bootstrap --target <repo>`
-- `python3 tools/loom_init.py verify --target <repo>`
-- `python3 tools/loom_init.py fact-chain --target <repo>`
-- `python3 tools/loom_init.py route --target <repo> [--skill <id>] [--task "<request>"]`
+- `python3 scripts/loom-init.py bootstrap --target <repo>`
+- `python3 scripts/loom-init.py verify --target <repo>`
+- `python3 scripts/loom-init.py fact-chain --target <repo>`
+- `python3 scripts/loom-init.py route --target <repo> [--skill <id>] [--task "<request>"]`
 
 场景路由规则见：
 
@@ -55,29 +55,28 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
   - `AGENTS.md`
   - `README.md`
 - Loom 核心规则：
-  - `governance/principles.md`
-  - `governance/review-model.md`
-  - `governance/maturity-and-closing.md`
-  - `adoption/rationale.md`
-  - `adoption/routing-and-checkpoints.md`
-  - `adoption/lightweight-retrofit-default.md`
-- `harness/recovery-model.md`
-- `harness/fact-chain-contract.md`
-- `harness/status-surface.md`
-- `harness/work-item-contract.md`
-- `harness/workspace-model.md`
+  - `skills/shared/references/governance/principles.md`
+  - `skills/shared/references/governance/review-model.md`
+  - `skills/shared/references/governance/maturity-and-closing.md`
+  - `skills/shared/references/adoption/routing-and-checkpoints.md`
+  - `skills/shared/references/adoption/lightweight-retrofit-default.md`
+- `skills/shared/references/harness/recovery-model.md`
+- `skills/shared/references/harness/fact-chain-contract.md`
+- `skills/shared/references/harness/status-surface.md`
+- `skills/shared/references/harness/work-item-contract.md`
+- `skills/shared/references/harness/workspace-model.md`
 - `skills/route-matrix.md`
 - `skills/loom-init/references/input-signals.md`
-- `harness/automation-frontload.md`
-- `harness/workspace-and-purity.md`
-- `harness/execution-context.md`
-- `templates/spec-suite.md`
-- `templates/pull-request.md`
+- `skills/shared/references/harness/automation-frontload.md`
+- `skills/shared/references/harness/workspace-and-purity.md`
+- `skills/shared/references/harness/execution-context.md`
+- `skills/shared/references/templates/spec-suite.md`
+- `skills/shared/references/templates/pull-request.md`
 - `skills/loom-init/references/output-contract.md`
 
 只有在事项带有明显不确定性、需要进一步分层时，才补读：
 
-- `adoption/candidate-patterns.md`
+- 由宿主额外提供的候选 adoption 材料；不要假设安装态自带候选层全文
 
 ## 2. 建立初始化问诊
 
@@ -122,7 +121,7 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 
 ### 3.2 小型既有仓库
 
-当仓库满足 [adoption/lightweight-retrofit-default.md](../../adoption/lightweight-retrofit-default.md) 的默认条件时，判为 `小型既有仓库`。
+当仓库满足 [../shared/references/adoption/lightweight-retrofit-default.md](../shared/references/adoption/lightweight-retrofit-default.md) 的默认条件时，判为 `小型既有仓库`。
 
 默认动作：
 

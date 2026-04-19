@@ -9,7 +9,7 @@
 本文默认前提：
 
 - `SKILLS` 是入口层，不是事实真相源
-- 治理规则、执行机制、模板约束仍分别落在 `governance/`、`harness/`、`templates/`
+- 治理规则、执行机制、模板约束在安装态由 `skills/shared/references/` 暴露稳定读面；repo-local 源码真相仍分别维护在 `governance/`、`harness/`、`templates/`、`adoption/`
 - 宿主可以不同，但 Loom 对入口层的最小能力边界应保持稳定
 
 ## 零、公开接口
@@ -39,6 +39,8 @@ Loom 当前对 `skills` 的稳定公开接口包括：
   - 明确每个入口依赖哪些 Loom 内核能力，而不是把规则复制进 skill 文本
 - 版本化升级面
   - 允许宿主识别当前入口合同版本，并决定是否需要刷新本地安装物
+- shared runtime / resources
+  - 允许宿主直接安装 skill-local `scripts/` 与 `shared/scripts/assets/references`，而不是把 repo-local `tools/` 当成入口成功
 
 因此，`skills/` 的“发布”不等于发布一批提示词文件；它发布的是可被宿主发现、安装、升级和调用的入口合同集合。
 
@@ -50,7 +52,7 @@ Loom 当前对 `skills` 的稳定公开接口包括：
 
 - 识别当前任务或仓库是否需要进入 Loom 运行模型
 - 判断应装配哪些入口能力与首批落点
-- 把后续工作导向 `governance/`、`harness/`、`templates/`、`adoption/` 与具体 skill 引用
+- 把后续工作导向 `skills/shared/references/` 中稳定暴露的治理/执行/模板/采用读面，以及具体 skill 引用
 - 暴露稳定的最小输入合同与输出合同
 
 深知识库的职责应保留在被引用的规范、规则、模板与参考材料中。两者关系如下：
@@ -60,7 +62,7 @@ Loom 当前对 `skills` 的稳定公开接口包括：
 - `bootstrap/root contract` 可以编排与引用，但不应内联复制大段规则真相
 - 当深知识发生升级时，应优先更新被引用落点，而不是让多个 skill 各自复制一份解释
 
-如果某项知识必须长期维护、需要跨 skill 共享、或会影响治理与执行真相，它不应沉积在 root skill 本体中，而应进入相应内核区域。
+如果某项知识必须长期维护、需要跨 skill 共享、或会影响治理与执行真相，它不应沉积在 root skill 本体中，而应进入 repo-local 内核区域并镜像到安装态所需的 `skills/shared/references/`。
 
 ## 三、宿主适配器职责边界
 
@@ -93,6 +95,7 @@ Loom 对宿主只要求最小合同，不要求统一实现形态。
 - 宿主能够安装一个或多个 Loom 入口
 - 安装物能够声明自身标识与版本
 - 安装物能够定位其 root 入口与被引用资源
+- 安装物能够在 `skills/` 安装根内部定位 skill-local `scripts/` 与 `shared/scripts/assets/references`
 
 最小发现合同至少应满足：
 
@@ -110,6 +113,7 @@ Loom 对宿主只要求最小合同，不要求统一实现形态。
 Loom 当前仓库内以机读工件承接这组最小合同：
 
 - `skills/registry.json`
+- `skills/install-layout.json`
 - `skills/route-matrix.md`
 - `skills/loom-init/contract.json`
 - `skills/<scenario>/contract.json`
@@ -122,6 +126,7 @@ Loom 在此层不规定包管理器、注册中心、目录布局或分发协议
 - 当前入口标识是什么
 - 当前入口合同版本是什么
 - 当前引用关系从哪里解析
+- 当前 shared runtime / assets / references 是否齐备
 - 当前宿主是否识别为可升级状态
 
 ## 五、不应进入内核的宿主特定细节
@@ -148,6 +153,7 @@ Loom 在此层不规定包管理器、注册中心、目录布局或分发协议
   - 升级后入口是否仍能给出同类判断、同类引用关系与同类输出合同，而不是静默漂移
 - 宿主是否能稳定发现 root 入口
 - 安装后引用关系是否仍可解析
+- skill-local `scripts/` 是否仍能解析到 `shared/scripts/assets/references`
 - 升级后版本变化是否可见
 - 宿主适配失败时，是否会被错误宣称为已安装或已升级
   - 失败必须可见，而不是伪装成“入口存在但行为未知”

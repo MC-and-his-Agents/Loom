@@ -9,7 +9,7 @@ description: 负责 merge 前统一放行。Use when Codex needs to confirm whet
 
 优先入口：
 
-- `python3 tools/loom_flow.py flow merge-ready --target <repo> [--item <id>]`
+- `python3 scripts/loom-merge-ready.py flow merge-ready --target <repo> [--item <id>]`
 
 执行要求：
 

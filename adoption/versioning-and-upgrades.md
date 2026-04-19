@@ -153,10 +153,14 @@ Loom 采用语义版本：
 
 - `skills/registry.json`
   - 承接 root entry、场景 entry、角色与合同版本的机读声明
+- `skills/install-layout.json`
+  - 承接 installed-skills 的最小 runtime/resources 布局，声明 skill-local `scripts/` 与 `shared/scripts/assets/references` 的必备面
 - `skills/upgrade-contract.json`
-  - 承接最小机读升级协议，声明宿主必须重新读取 `registry/manifest/executable/referenced_resources`
+  - 承接最小机读升级协议，声明宿主必须重新读取 `registry/manifest/executable/referenced_resources/layout_manifest`
 
 它们不替代本文的版本对象定义，只负责把显式升级与版本可见性落成可读取工件。
+
+`#206` 当前引入的 installed-skills 布局重构，会改变 `skills` 的安装合同与 executable/resource 解析方式。下一次 Loom 正式产品发布若带上这组变更，应按 `major` 处理；在正式发版前，应继续以 issue / PR / install-layout 机读工件维持仓库真相一致。
 
 ## 8. 场景 SKILLS 第一波的升级语义
 
@@ -179,7 +183,7 @@ Loom 采用语义版本：
 
 - 宿主能重新发现 7 个已注册 entries
 - 宿主知道 `loom-init route` 与 6 个显式场景 skill 的入口关系
-- 宿主刷新 `registry/manifest/executable/referenced_resources`
+- 宿主刷新 `registry/manifest/executable/referenced_resources/layout_manifest`
 
 本文只定义版本对象与升级说明格式，不重复宿主适配细节。
 

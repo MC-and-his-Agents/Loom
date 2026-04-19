@@ -14,7 +14,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Compile Loom entrypoints
-        run: python3 -m py_compile tools/loom_init.py tools/loom_flow.py tools/loom_check.py
+        run: python3 -m py_compile tools/loom_init.py tools/loom_flow.py tools/loom_check.py skills/shared/scripts/*.py skills/loom-init/scripts/*.py skills/loom-adopt/scripts/*.py skills/loom-resume/scripts/*.py skills/loom-pre-review/scripts/*.py skills/loom-review/scripts/*.py skills/loom-handoff/scripts/*.py skills/loom-retire/scripts/*.py skills/loom-merge-ready/scripts/*.py
 
   demo-bootstrap:
     runs-on: ubuntu-latest

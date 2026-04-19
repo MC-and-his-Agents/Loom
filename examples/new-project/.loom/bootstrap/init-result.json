@@ -1,7 +1,7 @@
 {
   "schema_version": "loom-init-output/v1",
   "generator": {
-    "tool": "tools/loom_init.py",
+    "tool": "skills/shared/scripts/loom_init.py",
     "tool_version": "1.2.0",
     "root_entry": "loom-init",
     "contract_version": "1.2.0"
@@ -48,15 +48,15 @@
       {
         "name": "formal-templates",
         "rules": [
-          "templates/spec-suite.md",
-          "templates/pull-request.md"
+          "skills/shared/references/templates/spec-suite.md",
+          "skills/shared/references/templates/pull-request.md"
         ]
       },
       {
         "name": "minimal-governance-entry",
         "rules": [
-          "governance/principles.md",
-          "governance/review-model.md"
+          "skills/shared/references/governance/principles.md",
+          "skills/shared/references/governance/review-model.md"
         ]
       }
     ]
@@ -137,32 +137,47 @@
     {
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
-      "source": "tools/loom_init.py"
+      "source": "skills/shared/scripts/loom_init.py"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
       "kind": "loom-tool-support",
-      "source": "tools/fact_chain_support.py"
+      "source": "skills/shared/scripts/fact_chain_support.py"
+    },
+    {
+      "path": ".loom/bin/governance_surface.py",
+      "kind": "loom-tool-support",
+      "source": "skills/shared/scripts/governance_surface.py"
     },
     {
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
-      "source": "tools/loom_flow.py"
+      "source": "skills/shared/scripts/loom_flow.py"
+    },
+    {
+      "path": ".loom/bin/runtime_paths.py",
+      "kind": "loom-tool-support",
+      "source": "skills/shared/scripts/runtime_paths.py"
+    },
+    {
+      "path": ".loom/bin/loom_check.py",
+      "kind": "loom-tool",
+      "source": "skills/shared/scripts/loom_check.py"
     },
     {
       "path": ".loom/specs/INIT-0001/spec.md",
       "kind": "spec",
-      "source": "templates/scaffold/spec.md"
+      "source": "skills/shared/assets/templates/scaffold/spec.md"
     },
     {
       "path": ".loom/specs/INIT-0001/plan.md",
       "kind": "plan",
-      "source": "templates/scaffold/plan.md"
+      "source": "skills/shared/assets/templates/scaffold/plan.md"
     },
     {
       "path": ".github/PULL_REQUEST_TEMPLATE.md",
       "kind": "pr-template",
-      "source": ".github/PULL_REQUEST_TEMPLATE.md"
+      "source": "skills/shared/assets/github/PULL_REQUEST_TEMPLATE.md"
     }
   ],
   "initial_work_items": [
@@ -183,7 +198,10 @@
         ".loom/status/current.md",
         ".loom/bin/loom_init.py",
         ".loom/bin/fact_chain_support.py",
+        ".loom/bin/governance_surface.py",
         ".loom/bin/loom_flow.py",
+        ".loom/bin/runtime_paths.py",
+        ".loom/bin/loom_check.py",
         ".loom/specs/INIT-0001/spec.md",
         ".loom/specs/INIT-0001/plan.md"
       ],
@@ -205,5 +223,62 @@
       "the first work item, progress carrier, and spec/plan artifacts exist",
       "the bootstrap manifest and init-result are verifiable"
     ]
+  },
+  "governance_surface": {
+    "repository_mode": "new",
+    "loom_state": "active",
+    "carrier_summary": {
+      "work_item": {
+        "status": "present",
+        "locator": ".loom/work-items/INIT-0001.md",
+        "source": "repository scan"
+      },
+      "recovery": {
+        "status": "present",
+        "locator": ".loom/progress/INIT-0001.md",
+        "source": "repository scan"
+      },
+      "review": {
+        "status": "present",
+        "locator": ".loom/reviews/INIT-0001.json",
+        "source": "repository scan"
+      },
+      "status_surface": {
+        "status": "present",
+        "locator": ".loom/status/current.md",
+        "source": "repository scan"
+      },
+      "spec_path": {
+        "status": "present",
+        "locator": ".loom/specs/INIT-0001/spec.md",
+        "source": "repository scan"
+      },
+      "plan_path": {
+        "status": "present",
+        "locator": ".loom/specs/INIT-0001/plan.md",
+        "source": "repository scan"
+      }
+    },
+    "execution_entry": "python3 .loom/bin/loom_flow.py flow resume --target . --item INIT-0001",
+    "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
+    "review_merge_surface": {
+      "pr_template": ".github/PULL_REQUEST_TEMPLATE.md",
+      "validation_surface": ".loom/status/current.md",
+      "merge_surface": "python3 .loom/bin/loom_flow.py checkpoint merge --target . --item INIT-0001"
+    },
+    "github_control_plane": {
+      "repository": "MC-and-his-Agents/Loom",
+      "default_branch": "main",
+      "branch_protection": "enabled",
+      "required_checks": [
+        "py-compile",
+        "demo-bootstrap",
+        "repo-local-cli",
+        "loom-check"
+      ],
+      "pr_reviews": "not_required"
+    },
+    "summary": "repository is treated as new; Loom can plan the first governance carriers and bootstrap entrypoints without adding a second truth source.",
+    "missing_inputs": []
   }
 }

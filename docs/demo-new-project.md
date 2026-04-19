@@ -41,7 +41,9 @@ python3 tools/loom_init.py bootstrap \
 - `examples/new-project/.loom/progress/INIT-0001.md`
 - `examples/new-project/.loom/reviews/INIT-0001.json`
 - `examples/new-project/.loom/status/current.md`
+- `examples/new-project/.loom/bin/runtime_paths.py`
 - `examples/new-project/.loom/bin/loom_flow.py`
+- `examples/new-project/.loom/bin/loom_check.py`
 - `examples/new-project/.loom/specs/INIT-0001/spec.md`
 - `examples/new-project/.loom/specs/INIT-0001/plan.md`
 - `examples/new-project/.github/PULL_REQUEST_TEMPLATE.md`
