@@ -269,6 +269,26 @@ def runtime_state_payload(target_root: Path) -> dict[str, Any]:
     return detect_runtime_state(__file__, "loom-flow", target_root=target_root)
 
 
+def runtime_state_block_payload(
+    *,
+    command: str,
+    runtime_state: dict[str, Any],
+    summary: str,
+    operation: str | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "command": command,
+        "result": "block",
+        "summary": summary,
+        "missing_inputs": list(runtime_state.get("missing_inputs", [])),
+        "fallback_to": runtime_state.get("fallback_to"),
+        "runtime_state": runtime_state,
+    }
+    if operation is not None:
+        payload["operation"] = operation
+    return payload
+
+
 def normalize_checkpoint(raw: str) -> str:
     lowered = raw.strip().lower()
     if "commit checkpoint" in lowered or "admission checkpoint" in lowered:
@@ -1481,6 +1501,16 @@ def handle_checkpoint(args: argparse.Namespace) -> int:
 
 def handle_workspace(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
+    runtime_state = runtime_state_payload(target_root)
+    if runtime_state["result"] != "pass":
+        return emit(
+            runtime_state_block_payload(
+                command="workspace",
+                operation=args.operation,
+                runtime_state=runtime_state,
+                summary="workspace lifecycle command is blocked because the Loom runtime state is inconsistent.",
+            )
+        )
     context, errors = load_context(target_root, args.output, args.item)
     if errors:
         return emit(
@@ -1491,8 +1521,13 @@ def handle_workspace(args: argparse.Namespace) -> int:
                 "summary": "workspace lifecycle command could not read a valid Loom fact chain.",
                 "missing_inputs": [f"fact-chain: {message}" for message in errors],
                 "fallback_to": "admission",
+                "runtime_state": runtime_state,
             }
         )
+
+    def emit_workspace(payload: dict[str, Any]) -> int:
+        payload["runtime_state"] = runtime_state
+        return emit(payload)
 
     payload = base_workspace_payload(context, args.operation)
     workspace_path = context["workspace_path"]
@@ -1504,14 +1539,14 @@ def handle_workspace(args: argparse.Namespace) -> int:
         if purity["hard_failures"]:
             payload["summary"] = "workspace location resolved, but the workspace is not execution-ready."
             payload["missing_inputs"] = list(purity["hard_failures"])
-        return emit(payload)
+        return emit_workspace(payload)
 
     if args.operation == "create":
         if purity["hard_failures"] and any("does not exist on disk" not in failure for failure in purity["hard_failures"]):
             payload["result"] = "block"
             payload["summary"] = "workspace creation is blocked until the current workspace state is clean."
             payload["missing_inputs"] = list(purity["hard_failures"])
-            return emit(payload)
+            return emit_workspace(payload)
 
         created = False
         if not workspace_path.exists():
@@ -1523,13 +1558,13 @@ def handle_workspace(args: argparse.Namespace) -> int:
             payload["result"] = "block"
             payload["summary"] = "workspace path was created, but the fact chain could not be reloaded."
             payload["missing_inputs"] = [f"fact-chain: {message}" for message in refresh_errors]
-            return emit(payload)
+            return emit_workspace(payload)
 
         payload = base_workspace_payload(refreshed, args.operation)
         payload["created"] = created
         payload["result"] = "pass"
         payload["summary"] = "workspace semantics are established from `workspace_entry`."
-        return emit(payload)
+        return emit_workspace(payload)
 
     if args.operation == "cleanup":
         owned_dirty, foreign_dirty = dirty_paths_by_owner(target_root)
@@ -1538,7 +1573,7 @@ def handle_workspace(args: argparse.Namespace) -> int:
             payload["result"] = "block"
             payload["summary"] = "cleanup stopped because the workspace contains non-Loom changes."
             payload["missing_inputs"] = [f"non-loom residue: {path}" for path in foreign_dirty]
-            return emit(payload)
+            return emit_workspace(payload)
 
         removed: list[str] = []
         for temp_path in temp_paths:
@@ -1548,7 +1583,7 @@ def handle_workspace(args: argparse.Namespace) -> int:
                 payload["result"] = "block"
                 payload["summary"] = "cleanup refused to delete tracked files from a Loom temporary path."
                 payload["missing_inputs"] = [f"tracked temp path: {relative}"]
-                return emit(payload)
+                return emit_workspace(payload)
             if temp_path.is_dir():
                 shutil.rmtree(temp_path)
                 removed.append(relative)
@@ -1560,13 +1595,13 @@ def handle_workspace(args: argparse.Namespace) -> int:
             payload["result"] = "block"
             payload["summary"] = "cleanup found Loom temporary residue in git status, but no owned temp paths could be removed."
             payload["missing_inputs"] = [f"owned temp residue: {path}" for path in owned_dirty]
-            return emit(payload)
+            return emit_workspace(payload)
 
         payload["removed_paths"] = removed
         payload["result"] = "pass"
         payload["summary"] = "cleanup removed Loom-owned temporary residue." if removed else "cleanup found no Loom-owned temporary residue."
         payload["purity"] = purity_report_from_context(context)
-        return emit(payload)
+        return emit_workspace(payload)
 
     cleanup_payload = base_workspace_payload(context, "cleanup")
     owned_dirty, foreign_dirty = dirty_paths_by_owner(target_root)
@@ -1574,7 +1609,7 @@ def handle_workspace(args: argparse.Namespace) -> int:
         cleanup_payload["result"] = "block"
         cleanup_payload["summary"] = "retire cannot proceed because cleanup is blocked by non-Loom changes."
         cleanup_payload["missing_inputs"] = [f"non-loom residue: {path}" for path in foreign_dirty]
-        return emit(cleanup_payload)
+        return emit_workspace(cleanup_payload)
 
     for temp_path in collect_temp_paths(target_root):
         relative = relative_to_root(temp_path, target_root)
@@ -1583,7 +1618,7 @@ def handle_workspace(args: argparse.Namespace) -> int:
             cleanup_payload["result"] = "block"
             cleanup_payload["summary"] = "retire cannot proceed because cleanup would need to delete tracked files."
             cleanup_payload["missing_inputs"] = [f"tracked temp path: {relative}"]
-            return emit(cleanup_payload)
+            return emit_workspace(cleanup_payload)
         if temp_path.is_dir():
             shutil.rmtree(temp_path)
         else:
@@ -1603,6 +1638,7 @@ def handle_workspace(args: argparse.Namespace) -> int:
                 "summary": "retire wrote `retired`, but the fact chain no longer reads cleanly.",
                 "missing_inputs": [f"fact-chain: {message}" for message in refresh_errors],
                 "fallback_to": "admission",
+                "runtime_state": runtime_state,
             }
         )
 
@@ -1611,11 +1647,20 @@ def handle_workspace(args: argparse.Namespace) -> int:
     payload["summary"] = "workspace was retired by updating the recovery entry checkpoint to `retired`."
     payload["retired"] = True
     payload["removed_paths"] = [path for path in owned_dirty if any(path == root or path.startswith(f"{root}/") for root in OWNED_TEMP_ROOTS)]
-    return emit(payload)
+    return emit_workspace(payload)
 
 
 def handle_purity(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
+    runtime_state = runtime_state_payload(target_root)
+    if runtime_state["result"] != "pass":
+        return emit(
+            runtime_state_block_payload(
+                command="purity-check",
+                runtime_state=runtime_state,
+                summary="purity-check is blocked because the Loom runtime state is inconsistent.",
+            )
+        )
     context, errors = load_context(target_root, args.output, args.item)
     if errors:
         payload = {
@@ -1624,6 +1669,7 @@ def handle_purity(args: argparse.Namespace) -> int:
             "summary": "purity-check could not read a valid Loom fact chain.",
             "missing_inputs": [f"fact-chain: {message}" for message in errors],
             "fallback_to": "admission",
+            "runtime_state": runtime_state,
             "purity": {
                 "state": "failed",
                 "hard_failures": [f"fact-chain: {message}" for message in errors],
@@ -1659,6 +1705,7 @@ def handle_purity(args: argparse.Namespace) -> int:
         "summary": summary,
         "missing_inputs": list(purity["hard_failures"]),
         "fallback_to": "admission" if purity["hard_failures"] else None,
+        "runtime_state": runtime_state,
     }
     return emit(payload)
 
@@ -2789,6 +2836,16 @@ def closeout_payload(
 
 def handle_closeout(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
+    runtime_state = runtime_state_payload(target_root)
+    if runtime_state["result"] != "pass":
+        return emit(
+            runtime_state_block_payload(
+                command="closeout",
+                operation=args.operation,
+                runtime_state=runtime_state,
+                summary="closeout is blocked because the Loom runtime state is inconsistent.",
+            )
+        )
     owner = args.owner
     repo_name = args.repo_name
     if not owner or not repo_name:
@@ -2804,6 +2861,7 @@ def handle_closeout(args: argparse.Namespace) -> int:
                 "summary": "closeout could not determine the GitHub repository.",
                 "missing_inputs": ["owner/repo"],
                 "fallback_to": "merge",
+                "runtime_state": runtime_state,
             }
         )
 
@@ -2825,9 +2883,11 @@ def handle_closeout(args: argparse.Namespace) -> int:
                 "summary": "closeout command hit an unexpected internal error.",
                 "missing_inputs": errors,
                 "fallback_to": "merge",
+                "runtime_state": runtime_state,
             }
         )
 
+    payload["runtime_state"] = runtime_state
     if args.operation == "check":
         return emit(payload)
 
@@ -2846,6 +2906,7 @@ def handle_closeout(args: argparse.Namespace) -> int:
                         else "closeout sync is blocked because reconciliation audit could not complete."
                     ),
                     "fallback_to": "reconciliation-sync" if reconciliation_result == "fix-needed" else "manual-reconciliation",
+                    "runtime_state": runtime_state,
                 }
             )
 
@@ -2916,11 +2977,22 @@ def handle_closeout(args: argparse.Namespace) -> int:
         refreshed_payload["summary"] = "closeout sync could not fully align GitHub control-plane state."
         refreshed_payload["missing_inputs"] = list(dict.fromkeys(sync_missing + list(refreshed_payload.get("missing_inputs", []))))
         refreshed_payload["fallback_to"] = "merge"
+    refreshed_payload["runtime_state"] = runtime_state
     return emit(refreshed_payload)
 
 
 def handle_reconciliation(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
+    runtime_state = runtime_state_payload(target_root)
+    if runtime_state["result"] != "pass":
+        return emit(
+            runtime_state_block_payload(
+                command="reconciliation",
+                operation=args.operation,
+                runtime_state=runtime_state,
+                summary="reconciliation is blocked because the Loom runtime state is inconsistent.",
+            )
+        )
     owner = args.owner
     repo_name = args.repo_name
     if not owner or not repo_name:
@@ -2936,6 +3008,7 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
                 "summary": "reconciliation could not determine the GitHub repository.",
                 "missing_inputs": ["owner/repo"],
                 "fallback_to": "manual-reconciliation",
+                "runtime_state": runtime_state,
             }
         )
 
@@ -2948,6 +3021,7 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
                 "summary": "reconciliation sync accepts either --comment or --comment-file, not both.",
                 "missing_inputs": ["choose one comment source"],
                 "fallback_to": "manual-reconciliation",
+                "runtime_state": runtime_state,
             }
         )
 
@@ -2963,6 +3037,7 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
                     "summary": "reconciliation sync could not read the requested comment file.",
                     "missing_inputs": comment_errors,
                     "fallback_to": "manual-reconciliation",
+                    "runtime_state": runtime_state,
                 }
             )
 
@@ -2983,8 +3058,10 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
                 "summary": "reconciliation command hit an unexpected internal error.",
                 "missing_inputs": errors,
                 "fallback_to": "manual-reconciliation",
+                "runtime_state": runtime_state,
             }
         )
+    payload["runtime_state"] = runtime_state
     if args.operation == "audit":
         return emit(payload)
 
@@ -2997,6 +3074,7 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
                 "applied_actions": [],
                 "skipped_actions": [],
                 "remaining_findings": list(payload.get("findings", [])),
+                "runtime_state": runtime_state,
             }
         )
 
@@ -3029,6 +3107,7 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
                 "remaining_findings": list(payload.get("findings", [])),
                 "dry_run": True,
                 "fallback_to": None if not has_unresolved_fix_needed else "manual-reconciliation",
+                "runtime_state": runtime_state,
             }
         )
 
@@ -3156,6 +3235,7 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
             "skipped_actions": skipped_actions,
             "remaining_findings": remaining_findings,
             "audit": payload,
+            "runtime_state": runtime_state,
         }
     )
 

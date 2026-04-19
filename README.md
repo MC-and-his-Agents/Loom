@@ -398,6 +398,8 @@ CLI 主要给这些情况使用：
 
 其中 `skills/*/scripts/` 与 `skills/shared/scripts/` 才是 installed-skills 的正式 CLI 面；repo-local `tools/` 只用于当前仓库开发和调试，不构成安装态证明。若 `runtime-state` 没有返回 `installed-runtime` 或显式的 `upgrade-rehearsal`，就不能把当前入口宣称为已安装 runtime 成功。
 
+这条 fail-closed 纪律同样覆盖 `purity-check`、`workspace cleanup|retire`、`reconciliation audit|sync`、`closeout check|sync`；安装态 runtime/layout/resources 漂移时，这些入口必须先停下，而不是继续消费宿主控制面。
+
 ## 深入阅读
 
 - [skills/README.md](./skills/README.md)

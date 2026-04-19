@@ -122,4 +122,7 @@ Loom 当前承接：
 - [closeout-gate.md](./closeout-gate.md)
   - 只定义 closeout check / sync 的最小链路与 fail-closed 顺序
 
+这些宿主动作在 installed-skills / `.loom/bin` carrier 下，都必须先消费 `runtime-state`。
+若 runtime/layout/resources 漂移，入口必须直接 `block`，不得继续读取或写入 GitHub 控制面。
+
 这些文件共同表达一条统一宿主动作链路，但本文件是结果词表、`fallback_to` 与 ownership 收口的唯一主落点。

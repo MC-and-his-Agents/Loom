@@ -92,6 +92,7 @@ CORE_DOCS = (
     "adoption/validation-hotcp.md",
     "adoption/validation-review-and-authoring.md",
     "adoption/validation-installed-skills-pre-merge-chain.md",
+    "adoption/validation-installed-skills-post-merge-closeout.md",
     "adoption/validation-host-lifecycle-and-closeout.md",
     "adoption/validation-fact-chain-mail-listener.md",
     "adoption/validation-checkpoints-hotcp.md",
@@ -1470,6 +1471,15 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             if not isinstance(purity, dict):
                 failures.append(Failure("daily-execution-cli", "`purity` output must include a `purity` object"))
                 continue
+            require_runtime_state_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`purity`",
+                payload=payload.get("runtime_state"),
+                expected_scene="repo-local-demo",
+                expected_carrier="repo-local-wrapper",
+                allowed_results={"pass"},
+            )
             scope_assessment = purity.get("scope_assessment")
             if not isinstance(scope_assessment, dict):
                 failures.append(Failure("daily-execution-cli", "`purity` output must include `scope_assessment`"))
@@ -1697,6 +1707,15 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     failures.append(Failure("daily-execution-cli", f"`{label}` must include `repo.owner`"))
                 if not isinstance(repo.get("name"), str) or not repo.get("name"):
                     failures.append(Failure("daily-execution-cli", f"`{label}` must include `repo.name`"))
+            require_runtime_state_payload(
+                failures,
+                category="daily-execution-cli",
+                context=f"`{label}`",
+                payload=payload.get("runtime_state"),
+                expected_scene="repo-local-demo",
+                expected_carrier="repo-local-wrapper",
+                allowed_results={"pass"},
+            )
             require_closeout_reconciliation_contract(
                 failures,
                 category="daily-execution-cli",
@@ -1708,6 +1727,15 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(Failure("daily-execution-cli", "`reconciliation audit` must report `command: reconciliation`"))
             if payload.get("operation") != "audit":
                 failures.append(Failure("daily-execution-cli", "`reconciliation audit` must report `operation: audit`"))
+            require_runtime_state_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`reconciliation audit`",
+                payload=payload.get("runtime_state"),
+                expected_scene="repo-local-demo",
+                expected_carrier="repo-local-wrapper",
+                allowed_results={"pass"},
+            )
             require_reconciliation_payload(
                 failures,
                 category="daily-execution-cli",
@@ -2766,6 +2794,357 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     failures.append(Failure("daily-execution-cli", f"`installed checkpoint merge` drift negative failed: {error}"))
                 elif payload.get("result") != "block":
                     failures.append(Failure("daily-execution-cli", "`installed checkpoint merge` must block when HEAD drifts beyond Loom carriers"))
+
+    gh_auth_ready = shutil.which("gh") is not None and run_command(root, ["gh", "auth", "status"]).returncode == 0
+    if gh_auth_ready:
+        with tempfile.TemporaryDirectory(prefix="loom-check-installed-post-merge-") as tmp:
+            tmp_root = Path(tmp)
+            install_root = tmp_root / "installed" / "skills"
+            retire_target = tmp_root / "retire-target"
+            dirty_target = tmp_root / "dirty-target"
+            broken_install = tmp_root / "broken-install" / "skills"
+            shutil.copytree(root / "skills", install_root)
+
+            for label, args in (
+                (
+                    "installed reconciliation audit",
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "reconciliation",
+                        "audit",
+                        "--target",
+                        str(root),
+                        "--issue",
+                        "131",
+                        "--pr",
+                        "138",
+                        "--project",
+                        "5",
+                    ],
+                ),
+                (
+                    "installed reconciliation sync dry-run",
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "reconciliation",
+                        "sync",
+                        "--target",
+                        str(root),
+                        "--issue",
+                        "131",
+                        "--pr",
+                        "138",
+                        "--project",
+                        "5",
+                        "--dry-run",
+                    ],
+                ),
+                (
+                    "installed closeout check",
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "closeout",
+                        "check",
+                        "--target",
+                        str(root),
+                        "--issue",
+                        "131",
+                        "--pr",
+                        "138",
+                        "--project",
+                        "5",
+                        "--skip-gate",
+                    ],
+                ),
+                (
+                    "installed closeout sync",
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "closeout",
+                        "sync",
+                        "--target",
+                        str(root),
+                        "--issue",
+                        "131",
+                        "--pr",
+                        "138",
+                        "--project",
+                        "5",
+                        "--skip-gate",
+                    ],
+                ),
+            ):
+                payload, error = load_command_json(root, args)
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`{label}` failed: {error}"))
+                    continue
+                if label == "installed reconciliation audit":
+                    if payload.get("result") != "pass":
+                        failures.append(Failure("daily-execution-cli", "`installed reconciliation audit` must pass on the historical closeout sample"))
+                    require_runtime_state_payload(
+                        failures,
+                        category="daily-execution-cli",
+                        context="`installed reconciliation audit`",
+                        payload=payload.get("runtime_state"),
+                        expected_scene="installed-runtime",
+                        expected_carrier="installed-skills-root",
+                        allowed_results={"pass"},
+                    )
+                    require_reconciliation_payload(
+                        failures,
+                        category="daily-execution-cli",
+                        context="`installed reconciliation audit`",
+                        payload=payload,
+                    )
+                elif label == "installed reconciliation sync dry-run":
+                    if payload.get("result") != "pass":
+                        failures.append(Failure("daily-execution-cli", "`installed reconciliation sync --dry-run` must pass on an already aligned sample"))
+                    require_runtime_state_payload(
+                        failures,
+                        category="daily-execution-cli",
+                        context="`installed reconciliation sync --dry-run`",
+                        payload=payload.get("runtime_state"),
+                        expected_scene="installed-runtime",
+                        expected_carrier="installed-skills-root",
+                        allowed_results={"pass"},
+                    )
+                else:
+                    if payload.get("result") != "pass":
+                        failures.append(Failure("daily-execution-cli", f"`{label}` must pass on the historical closeout sample"))
+                    require_runtime_state_payload(
+                        failures,
+                        category="daily-execution-cli",
+                        context=f"`{label}`",
+                        payload=payload.get("runtime_state"),
+                        expected_scene="installed-runtime",
+                        expected_carrier="installed-skills-root",
+                        allowed_results={"pass"},
+                    )
+                    require_closeout_reconciliation_contract(
+                        failures,
+                        category="daily-execution-cli",
+                        context=f"`{label}`",
+                        payload=payload,
+                    )
+
+            for target in (retire_target, dirty_target):
+                shutil.copytree(example_target, target)
+                for args in (
+                    ["git", "init"],
+                    ["git", "config", "user.email", "loom-check@example.com"],
+                    ["git", "config", "user.name", "loom-check"],
+                    ["git", "add", "."],
+                    ["git", "commit", "-m", "baseline"],
+                ):
+                    result = run_command(root, args, cwd=target)
+                    if result.returncode != 0:
+                        detail = result.stderr.strip() or result.stdout.strip() or "git setup failed"
+                        failures.append(Failure("daily-execution-cli", f"`installed retire` setup failed: {detail}"))
+                        break
+
+            purity_payload, error = load_command_json(
+                root,
+                [
+                    "python3",
+                    str(install_root / "loom-retire" / "scripts" / "loom-retire.py"),
+                    "purity-check",
+                    "--target",
+                    str(retire_target),
+                    "--item",
+                    "INIT-0001",
+                ],
+            )
+            if error:
+                failures.append(Failure("daily-execution-cli", f"`installed purity-check` failed: {error}"))
+            elif purity_payload.get("result") != "pass":
+                failures.append(Failure("daily-execution-cli", "`installed purity-check` must pass on a clean retire target"))
+            else:
+                require_runtime_state_payload(
+                    failures,
+                    category="daily-execution-cli",
+                    context="`installed purity-check`",
+                    payload=purity_payload.get("runtime_state"),
+                    expected_scene="installed-runtime",
+                    expected_carrier="installed-skills-root",
+                    allowed_results={"pass"},
+                )
+
+            temp_root = retire_target / ".loom" / ".tmp"
+            temp_root.mkdir(parents=True, exist_ok=True)
+            (temp_root / "sentinel.txt").write_text("temp\n", encoding="utf-8")
+
+            cleanup_payload, error = load_command_json(
+                root,
+                [
+                    "python3",
+                    str(install_root / "loom-retire" / "scripts" / "loom-retire.py"),
+                    "workspace",
+                    "cleanup",
+                    "--target",
+                    str(retire_target),
+                    "--item",
+                    "INIT-0001",
+                ],
+            )
+            if error:
+                failures.append(Failure("daily-execution-cli", f"`installed workspace cleanup` failed: {error}"))
+            elif cleanup_payload.get("result") != "pass":
+                failures.append(Failure("daily-execution-cli", "`installed workspace cleanup` must pass for Loom-owned residue"))
+            else:
+                require_runtime_state_payload(
+                    failures,
+                    category="daily-execution-cli",
+                    context="`installed workspace cleanup`",
+                    payload=cleanup_payload.get("runtime_state"),
+                    expected_scene="installed-runtime",
+                    expected_carrier="installed-skills-root",
+                    allowed_results={"pass"},
+                )
+
+            retire_payload, error = load_command_json(
+                root,
+                [
+                    "python3",
+                    str(install_root / "loom-retire" / "scripts" / "loom-retire.py"),
+                    "workspace",
+                    "retire",
+                    "--target",
+                    str(retire_target),
+                    "--item",
+                    "INIT-0001",
+                ],
+            )
+            if error:
+                failures.append(Failure("daily-execution-cli", f"`installed workspace retire` failed: {error}"))
+            elif retire_payload.get("result") != "pass":
+                failures.append(Failure("daily-execution-cli", "`installed workspace retire` must pass after cleanup"))
+            else:
+                require_runtime_state_payload(
+                    failures,
+                    category="daily-execution-cli",
+                    context="`installed workspace retire`",
+                    payload=retire_payload.get("runtime_state"),
+                    expected_scene="installed-runtime",
+                    expected_carrier="installed-skills-root",
+                    allowed_results={"pass"},
+                )
+                checkpoint = retire_payload.get("checkpoint")
+                if not isinstance(checkpoint, dict) or checkpoint.get("normalized") != "retired":
+                    failures.append(Failure("daily-execution-cli", "`installed workspace retire` must leave the target in `retired` state"))
+
+            (dirty_target / "foreign-residue.txt").write_text("pending\n", encoding="utf-8")
+            dirty_add = run_command(root, ["git", "add", "foreign-residue.txt"], cwd=dirty_target)
+            if dirty_add.returncode != 0:
+                detail = dirty_add.stderr.strip() or dirty_add.stdout.strip() or "git add failed"
+                failures.append(Failure("daily-execution-cli", f"`installed retire` dirty sample setup failed: {detail}"))
+
+            for label, args in (
+                (
+                    "installed purity-check dirty sample",
+                    [
+                        "python3",
+                        str(install_root / "loom-retire" / "scripts" / "loom-retire.py"),
+                        "purity-check",
+                        "--target",
+                        str(dirty_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                ),
+                (
+                    "installed workspace cleanup dirty sample",
+                    [
+                        "python3",
+                        str(install_root / "loom-retire" / "scripts" / "loom-retire.py"),
+                        "workspace",
+                        "cleanup",
+                        "--target",
+                        str(dirty_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                ),
+                (
+                    "installed workspace retire dirty sample",
+                    [
+                        "python3",
+                        str(install_root / "loom-retire" / "scripts" / "loom-retire.py"),
+                        "workspace",
+                        "retire",
+                        "--target",
+                        str(dirty_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                ),
+            ):
+                payload, error = load_command_json(root, args)
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`{label}` failed: {error}"))
+                    continue
+                if payload.get("result") != "block":
+                    failures.append(Failure("daily-execution-cli", f"`{label}` must block when non-Loom residue is present"))
+                require_runtime_state_payload(
+                    failures,
+                    category="daily-execution-cli",
+                    context=f"`{label}`",
+                    payload=payload.get("runtime_state"),
+                    expected_scene="installed-runtime",
+                    expected_carrier="installed-skills-root",
+                    allowed_results={"pass"},
+                )
+
+            shutil.copytree(root / "skills", broken_install)
+            (broken_install / "install-layout.json").unlink()
+            for label, args in (
+                (
+                    "installed closeout check missing install-layout",
+                    [
+                        "python3",
+                        str(broken_install / "shared" / "scripts" / "loom_flow.py"),
+                        "closeout",
+                        "check",
+                        "--target",
+                        str(root),
+                        "--issue",
+                        "131",
+                        "--pr",
+                        "138",
+                        "--skip-gate",
+                    ],
+                ),
+                (
+                    "installed purity-check missing install-layout",
+                    [
+                        "python3",
+                        str(broken_install / "loom-retire" / "scripts" / "loom-retire.py"),
+                        "purity-check",
+                        "--target",
+                        str(retire_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                ),
+            ):
+                payload, error = load_command_json(root, args)
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`{label}` failed unexpectedly: {error}"))
+                    continue
+                if payload.get("result") != "block":
+                    failures.append(Failure("daily-execution-cli", f"`{label}` must block when install-layout is missing"))
+                require_runtime_state_payload(
+                    failures,
+                    category="daily-execution-cli",
+                    context=f"`{label}`",
+                    payload=payload.get("runtime_state"),
+                    expected_scene="installed-runtime",
+                    expected_carrier="installed-skills-root",
+                    allowed_results={"block"},
+                )
 
     fail_closed_payloads = [
         (
