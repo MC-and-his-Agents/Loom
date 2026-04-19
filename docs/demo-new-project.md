@@ -42,6 +42,7 @@ python3 tools/loom_init.py bootstrap \
 - `examples/new-project/.loom/reviews/INIT-0001.json`
 - `examples/new-project/.loom/status/current.md`
 - `examples/new-project/.loom/bin/runtime_paths.py`
+- `examples/new-project/.loom/bin/runtime_state.py`
 - `examples/new-project/.loom/bin/loom_flow.py`
 - `examples/new-project/.loom/bin/loom_check.py`
 - `examples/new-project/.loom/specs/INIT-0001/spec.md`
@@ -53,8 +54,10 @@ python3 tools/loom_init.py bootstrap \
 ```bash
 cd examples/new-project
 python3 .loom/bin/loom_init.py verify --target .
+python3 .loom/bin/loom_init.py runtime-state --target .
 python3 .loom/bin/loom_init.py fact-chain --target .
 python3 .loom/bin/loom_flow.py fact-chain --target . --item INIT-0001
+python3 .loom/bin/loom_flow.py runtime-state --target . --item INIT-0001
 python3 .loom/bin/loom_flow.py runtime-evidence --target . --item INIT-0001
 python3 .loom/bin/loom_flow.py state-check --target . --item INIT-0001
 python3 .loom/bin/loom_flow.py flow pre-review --target . --item INIT-0001
@@ -77,6 +80,6 @@ python3 .loom/bin/loom_flow.py purity-check --target . --item INIT-0001
 - `bootstrap` 命令退出码为 `0`
 - `verify` 命令退出码为 `0`
 - `fact-chain` 命令退出码为 `0`
-- `loom_flow.py` 的 `fact-chain`、`runtime-evidence`、`state-check`、`flow pre-review`、`flow review`、`review read`、`review record`、`recovery writeback`、`work-item create`、`host-lifecycle`、`closeout check`、`checkpoint admission`、`workspace locate`、`purity-check` 命令都可读取或更新当前样例
+- `loom_init.py` 的 `runtime-state`，以及 `loom_flow.py` 的 `runtime-state`、`fact-chain`、`runtime-evidence`、`state-check`、`flow pre-review`、`flow review`、`review read`、`review record`、`recovery writeback`、`work-item create`、`host-lifecycle`、`closeout check`、`checkpoint admission`、`workspace locate`、`purity-check` 命令都可读取或更新当前样例
 - `init-result.json` 含有 7 个必需区块
 - 首批 work item、recovery entry、状态面与 spec/plan 工件都已落位

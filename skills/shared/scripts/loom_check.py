@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unicodedata
 import json
+import os
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -168,6 +169,7 @@ DEMO_ASSETS = (
     "examples/new-project/.loom/bin/loom_init.py",
     "examples/new-project/.loom/bin/fact_chain_support.py",
     "examples/new-project/.loom/bin/runtime_paths.py",
+    "examples/new-project/.loom/bin/runtime_state.py",
     "examples/new-project/.loom/bin/loom_flow.py",
     "examples/new-project/.loom/bin/loom_check.py",
     "examples/new-project/.loom/specs/INIT-0001/spec.md",
@@ -364,13 +366,24 @@ def load_json_file(path: Path) -> object:
         return json.load(handle)
 
 
-def run_command(root: Path, args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+def run_command(
+    root: Path,
+    args: list[str],
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    command_env = os.environ.copy()
+    for key in ("LOOM_SOURCE_REPO_ROOT", "LOOM_INSTALLED_SKILLS_ROOT", "LOOM_RUNTIME_SCENE"):
+        command_env.pop(key, None)
+    if env:
+        command_env.update(env)
     return subprocess.run(
         args,
         cwd=cwd or root,
         check=False,
         capture_output=True,
         text=True,
+        env=command_env,
     )
 
 
@@ -379,8 +392,9 @@ def load_command_json(
     args: list[str],
     *,
     cwd: Path | None = None,
+    env: dict[str, str] | None = None,
 ) -> tuple[dict[str, object] | None, str | None]:
-    result = run_command(root, args, cwd=cwd)
+    result = run_command(root, args, cwd=cwd, env=env)
     if not result.stdout.strip():
         detail = "command produced no JSON output"
         if result.stderr.strip():
@@ -637,6 +651,44 @@ def require_review_record_contract(
                 failures.append(Failure(category, f"{context} review finding disposition must include non-empty `summary`"))
 
 
+def require_runtime_state_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+    expected_scene: str | None = None,
+    expected_carrier: str | None = None,
+    allowed_results: set[str] | None = None,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must include `runtime_state` as an object"))
+        return
+    if payload.get("result") not in (allowed_results or {"pass", "block"}):
+        failures.append(Failure(category, f"{context} runtime_state.result must stay within the stable contract"))
+    if expected_scene is not None and payload.get("scene") != expected_scene:
+        failures.append(Failure(category, f"{context} runtime_state.scene must be `{expected_scene}`"))
+    if expected_carrier is not None and payload.get("carrier") != expected_carrier:
+        failures.append(Failure(category, f"{context} runtime_state.carrier must be `{expected_carrier}`"))
+    if payload.get("entry_family") not in {"loom-init", "loom-flow"}:
+        failures.append(Failure(category, f"{context} runtime_state.entry_family must stay within the stable contract"))
+    if not isinstance(payload.get("runtime_root"), str) or not payload.get("runtime_root"):
+        failures.append(Failure(category, f"{context} runtime_state must include non-empty `runtime_root`"))
+    checks = payload.get("checks")
+    if not isinstance(checks, dict):
+        failures.append(Failure(category, f"{context} runtime_state must include `checks`"))
+        return
+    for key in ("scene_marker", "carrier_layout", "registry_contract", "shared_runtime", "referenced_resources"):
+        check = checks.get(key)
+        if not isinstance(check, dict):
+            failures.append(Failure(category, f"{context} runtime_state must include check `{key}`"))
+            continue
+        if check.get("status") not in {"pass", "block", "not_applicable"}:
+            failures.append(Failure(category, f"{context} runtime_state check `{key}` returned an unknown status"))
+        if not isinstance(check.get("summary"), str) or not check.get("summary"):
+            failures.append(Failure(category, f"{context} runtime_state check `{key}` must include non-empty `summary`"))
+
+
 def check_skill_manifests(root: Path) -> list[Failure]:
     failures: list[Failure] = []
     expected_entries = {
@@ -704,6 +756,18 @@ def check_skill_manifests(root: Path) -> list[Failure]:
                             continue
                         if not (registry_path.parent / relative).exists():
                             failures.append(Failure("skill-manifests", f"`skills/install-layout.json` points to missing path `{relative}`"))
+                runtime_state = candidate_layout.get("runtime_state")
+                if not isinstance(runtime_state, dict):
+                    failures.append(Failure("skill-manifests", "`skills/install-layout.json` must declare `runtime_state`"))
+                else:
+                    recognized_states = runtime_state.get("recognized_states")
+                    if recognized_states != ["installed-runtime", "repo-local-demo", "upgrade-rehearsal"]:
+                        failures.append(
+                            Failure(
+                                "skill-manifests",
+                                "`skills/install-layout.json` runtime_state recognized_states must stay in the stable order",
+                            )
+                        )
     if not isinstance(root_entry, str) or not root_entry:
         failures.append(Failure("skill-manifests", "`skills/registry.json` must declare a non-empty `root_entry`"))
         return failures
@@ -1034,8 +1098,10 @@ def check_demo_assets(root: Path) -> list[Failure]:
         "make loom-demo-new-project",
         "tools/loom_init.py bootstrap",
         ".loom/bin/loom_init.py verify",
+        ".loom/bin/loom_init.py runtime-state",
         ".loom/bin/loom_init.py fact-chain",
         ".loom/bin/loom_flow.py fact-chain",
+        ".loom/bin/loom_flow.py runtime-state",
         ".loom/bin/loom_flow.py runtime-evidence",
         ".loom/bin/loom_flow.py state-check",
         ".loom/bin/loom_flow.py flow pre-review",
@@ -1119,6 +1185,16 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         return failures
 
     demo_commands = [
+        (
+            "runtime-state-init",
+            ["python3", "tools/loom_init.py", "runtime-state", "--target", "."],
+            {"pass"},
+        ),
+        (
+            "runtime-state-flow",
+            ["python3", "tools/loom_flow.py", "runtime-state", "--target", "examples/new-project", "--item", "INIT-0001"],
+            {"pass"},
+        ),
         (
             "fact-chain",
             ["python3", "tools/loom_flow.py", "fact-chain", "--target", "examples/new-project", "--item", "INIT-0001"],
@@ -1276,6 +1352,77 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     f"`{label}` returned unexpected result `{result}`",
                 )
             )
+        if label == "runtime-state-init":
+            if payload.get("command") != "runtime-state":
+                failures.append(Failure("daily-execution-cli", "`loom-init runtime-state` must report `command: runtime-state`"))
+            require_runtime_state_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`loom-init runtime-state`",
+                payload=payload.get("runtime_state"),
+                expected_scene="repo-local-demo",
+                expected_carrier="repo-local-wrapper",
+                allowed_results={"pass"},
+            )
+        if label == "runtime-state-flow":
+            if payload.get("command") != "runtime-state":
+                failures.append(Failure("daily-execution-cli", "`loom-flow runtime-state` must report `command: runtime-state`"))
+            require_runtime_state_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`loom-flow runtime-state`",
+                payload=payload.get("runtime_state"),
+                expected_scene="repo-local-demo",
+                expected_carrier="repo-local-wrapper",
+                allowed_results={"pass"},
+            )
+        if label == "runtime-evidence":
+            require_runtime_state_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`runtime-evidence`",
+                payload=payload.get("runtime_state"),
+                expected_scene="repo-local-demo",
+                expected_carrier="repo-local-wrapper",
+                allowed_results={"pass"},
+            )
+        if label == "state-check":
+            require_runtime_state_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`state-check`",
+                payload=payload.get("runtime_state"),
+                expected_scene="repo-local-demo",
+                expected_carrier="repo-local-wrapper",
+                allowed_results={"pass"},
+            )
+        if label == "flow-pre-review":
+            require_runtime_state_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`flow pre-review`",
+                payload=payload.get("runtime_state"),
+                expected_scene="repo-local-demo",
+                expected_carrier="repo-local-wrapper",
+                allowed_results={"pass"},
+            )
+            steps = payload.get("steps")
+            if isinstance(steps, list):
+                step_names = [step.get("name") for step in steps if isinstance(step, dict)]
+                if step_names != [
+                    "runtime-state",
+                    "fact-chain",
+                    "state-check",
+                    "runtime-evidence",
+                    "checkpoint-admission",
+                    "workspace-locate",
+                ]:
+                    failures.append(
+                        Failure(
+                            "daily-execution-cli",
+                            "`flow pre-review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-admission, and workspace-locate in order",
+                        )
+                    )
         if label == "purity":
             purity = payload.get("purity")
             if not isinstance(purity, dict):
@@ -1304,6 +1451,15 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             for key in ("item", "workspace", "recovery", "checkpoint", "state_check"):
                 if not isinstance(payload.get(key), dict):
                     failures.append(Failure("daily-execution-cli", f"`flow resume` must include `{key}`"))
+            require_runtime_state_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`flow resume`",
+                payload=payload.get("runtime_state"),
+                expected_scene="repo-local-demo",
+                expected_carrier="repo-local-wrapper",
+                allowed_results={"pass"},
+            )
             require_governance_surface(
                 failures,
                 category="daily-execution-cli",
@@ -1315,11 +1471,11 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(Failure("daily-execution-cli", "`flow resume` must include `steps`"))
                 continue
             step_names = [step.get("name") for step in steps if isinstance(step, dict)]
-            if step_names != ["fact-chain", "state-check", "workspace-locate"]:
+            if step_names != ["runtime-state", "fact-chain", "state-check", "workspace-locate"]:
                 failures.append(
                     Failure(
                         "daily-execution-cli",
-                        "`flow resume` must run fact-chain, state-check, and workspace-locate in order",
+                        "`flow resume` must run runtime-state, fact-chain, state-check, and workspace-locate in order",
                     )
                 )
             recovery = payload.get("recovery")
@@ -1358,6 +1514,15 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             for key in ("item", "workspace", "checkpoint", "state_check"):
                 if not isinstance(payload.get(key), dict):
                     failures.append(Failure("daily-execution-cli", f"`flow handoff` must include `{key}`"))
+            require_runtime_state_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`flow handoff`",
+                payload=payload.get("runtime_state"),
+                expected_scene="repo-local-demo",
+                expected_carrier="repo-local-wrapper",
+                allowed_results={"pass"},
+            )
             for key in (
                 "recovery_entry",
                 "status_surface",
@@ -1389,11 +1554,11 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(Failure("daily-execution-cli", "`flow handoff` must include `steps`"))
                 continue
             step_names = [step.get("name") for step in steps if isinstance(step, dict)]
-            if step_names != ["fact-chain", "state-check", "workspace-locate"]:
+            if step_names != ["runtime-state", "fact-chain", "state-check", "workspace-locate"]:
                 failures.append(
                     Failure(
                         "daily-execution-cli",
-                        "`flow handoff` must run fact-chain, state-check, and workspace-locate in order",
+                        "`flow handoff` must run runtime-state, fact-chain, state-check, and workspace-locate in order",
                     )
                 )
             state_check = payload.get("state_check")
@@ -1412,12 +1577,22 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             for key in ("item", "state_check", "runtime_evidence", "build_checkpoint", "review", "current_checkpoint"):
                 if not isinstance(payload.get(key), dict):
                     failures.append(Failure("daily-execution-cli", f"`flow review` must include `{key}`"))
+            require_runtime_state_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`flow review`",
+                payload=payload.get("runtime_state"),
+                expected_scene="repo-local-demo",
+                expected_carrier="repo-local-wrapper",
+                allowed_results={"pass"},
+            )
             steps = payload.get("steps")
             if not isinstance(steps, list):
                 failures.append(Failure("daily-execution-cli", "`flow review` must include `steps`"))
                 continue
             step_names = [step.get("name") for step in steps if isinstance(step, dict)]
             if step_names != [
+                "runtime-state",
                 "fact-chain",
                 "state-check",
                 "runtime-evidence",
@@ -1427,7 +1602,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(
                     Failure(
                         "daily-execution-cli",
-                        "`flow review` must run fact-chain, state-check, runtime-evidence, checkpoint-build, and review-entry in order",
+                        "`flow review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-build, and review-entry in order",
                     )
                 )
             review = payload.get("review")
@@ -1513,16 +1688,18 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         "`flow merge-ready` fallback must be `null` or a known checkpoint",
                     )
                 )
-            for key in (
-                "item",
-                "state_check",
-                "runtime_evidence",
-                "build_checkpoint",
-                "merge_checkpoint",
-                "current_checkpoint",
-            ):
+            for key in ("item", "runtime_state", "state_check", "runtime_evidence", "build_checkpoint", "merge_checkpoint", "current_checkpoint"):
                 if not isinstance(payload.get(key), dict):
                     failures.append(Failure("daily-execution-cli", f"`flow merge-ready` must include `{key}`"))
+            require_runtime_state_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`flow merge-ready`",
+                payload=payload.get("runtime_state"),
+                expected_scene="repo-local-demo",
+                expected_carrier="repo-local-wrapper",
+                allowed_results={"pass"},
+            )
             if not isinstance(payload.get("current_lane"), str) or not payload.get("current_lane"):
                 failures.append(Failure("daily-execution-cli", "`flow merge-ready` must include `current_lane`"))
             if not isinstance(payload.get("latest_validation_summary"), str) or not payload.get("latest_validation_summary"):
@@ -1535,6 +1712,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 continue
             step_names = [step.get("name") for step in steps if isinstance(step, dict)]
             if step_names != [
+                "runtime-state",
                 "fact-chain",
                 "state-check",
                 "runtime-evidence",
@@ -1544,7 +1722,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(
                     Failure(
                         "daily-execution-cli",
-                        "`flow merge-ready` must run fact-chain, state-check, runtime-evidence, checkpoint-build, and checkpoint-merge in order",
+                        "`flow merge-ready` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-build, and checkpoint-merge in order",
                     )
                 )
             state_check = payload.get("state_check")
@@ -1847,6 +2025,123 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         f"`state-check` negative sample must block, got `{state_payload.get('result')}`",
                     )
                 )
+
+    with tempfile.TemporaryDirectory(prefix="loom-check-runtime-state-") as tmp:
+        tmp_root = Path(tmp)
+        install_root = tmp_root / "installed" / "skills"
+        target_root = tmp_root / "target"
+        bootstrap_target = tmp_root / "bootstrapped-target"
+        shutil.copytree(root / "skills", install_root)
+        target_root.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(example_target, bootstrap_target)
+
+        payload, error = load_command_json(
+            root,
+            ["python3", str(install_root / "loom-init" / "scripts" / "loom-init.py"), "runtime-state", "--target", str(target_root)],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`installed loom-init runtime-state` failed: {error}"))
+        else:
+            require_runtime_state_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`installed loom-init runtime-state`",
+                payload=payload.get("runtime_state"),
+                expected_scene="installed-runtime",
+                expected_carrier="installed-skills-root",
+                allowed_results={"pass"},
+            )
+
+        payload, error = load_command_json(
+            root,
+            ["python3", str(install_root / "shared" / "scripts" / "loom_flow.py"), "runtime-state", "--target", str(target_root)],
+            env={"LOOM_RUNTIME_SCENE": "upgrade-rehearsal"},
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`installed loom-flow runtime-state -- rehearsal` failed: {error}"))
+        else:
+            require_runtime_state_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`installed loom-flow runtime-state -- rehearsal`",
+                payload=payload.get("runtime_state"),
+                expected_scene="upgrade-rehearsal",
+                expected_carrier="installed-skills-root",
+                allowed_results={"pass"},
+            )
+
+        broken_install = tmp_root / "broken-install" / "skills"
+        shutil.copytree(root / "skills", broken_install)
+        (broken_install / "shared" / "scripts" / "loom_flow.py").unlink()
+        payload, error = load_command_json(
+            root,
+            ["python3", str(broken_install / "loom-init" / "scripts" / "loom-init.py"), "runtime-state", "--target", str(target_root)],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`installed runtime-state` missing shared runtime failed unexpectedly: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`installed runtime-state` must block when shared runtime is missing"))
+
+        drift_install = tmp_root / "drift-install" / "skills"
+        shutil.copytree(root / "skills", drift_install)
+        (drift_install / "install-layout.json").unlink()
+        payload, error = load_command_json(
+            root,
+            ["python3", str(drift_install / "loom-init" / "scripts" / "loom-init.py"), "runtime-state", "--target", str(target_root)],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`installed runtime-state` missing install-layout failed unexpectedly: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`installed runtime-state` must block when install-layout is missing"))
+
+        payload, error = load_command_json(
+            root,
+            ["python3", str(install_root / "shared" / "scripts" / "loom_flow.py"), "runtime-state", "--target", str(target_root)],
+            env={"LOOM_RUNTIME_SCENE": "repo-local-demo"},
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`installed runtime-state` scene conflict failed unexpectedly: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`installed runtime-state` must block on scene/carrier conflict"))
+
+        payload, error = load_command_json(
+            root,
+            ["python3", ".loom/bin/loom_init.py", "runtime-state", "--target", "."],
+            cwd=bootstrap_target,
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`bootstrapped loom-init runtime-state` failed: {error}"))
+        else:
+            require_runtime_state_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`bootstrapped loom-init runtime-state`",
+                payload=payload.get("runtime_state"),
+                expected_scene="installed-runtime",
+                expected_carrier="bootstrapped-target-runtime",
+                allowed_results={"pass"},
+            )
+
+        broken_bootstrap = tmp_root / "broken-bootstrapped-target"
+        shutil.copytree(example_target, broken_bootstrap)
+        manifest_path = broken_bootstrap / ".loom" / "bootstrap" / "manifest.json"
+        manifest = load_json_file(manifest_path)
+        if isinstance(manifest, dict):
+            artifacts = manifest.get("artifacts")
+            if isinstance(artifacts, list):
+                for artifact in artifacts:
+                    if isinstance(artifact, dict) and artifact.get("path") == ".loom/bin/runtime_state.py":
+                        artifact["source"] = "broken/source.py"
+            manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        payload, error = load_command_json(
+            root,
+            ["python3", ".loom/bin/loom_init.py", "runtime-state", "--target", "."],
+            cwd=broken_bootstrap,
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`bootstrapped runtime-state` manifest drift failed unexpectedly: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`bootstrapped runtime-state` must block when the bootstrap manifest drifts"))
 
     fail_closed_payloads = [
         (

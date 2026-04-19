@@ -59,7 +59,7 @@ description: 负责统一 review 前检查。Use when Codex needs a single pre-r
 只有当以下条件同时满足时，`loom-pre-review` 才算完成：
 
 - 显式调用 `loom-pre-review` 与 root 隐式路由都能稳定命中
-- `flow pre-review` 的步骤顺序稳定为 `fact-chain -> state-check -> runtime-evidence -> checkpoint-admission -> workspace-locate`
+- `flow pre-review` 的步骤顺序稳定为 `runtime-state -> fact-chain -> state-check -> runtime-evidence -> checkpoint-admission -> workspace-locate`
 - 输出 JSON 能直接支撑“是否进入 review 前语义审查”的判断
 - skill 自身不复制治理真相，也不冒充 reviewer 结论
 

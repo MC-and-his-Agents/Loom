@@ -19,6 +19,7 @@ Loom 当前对 `skills` 的稳定公开接口包括：
 - `bootstrap/root contract` 的最小职责
 - 安装合同
 - 发现合同
+- 运行态识别合同
 - 升级合同
 - adapter 职责边界
 - 版本识别与失败可见性
@@ -39,6 +40,8 @@ Loom 当前对 `skills` 的稳定公开接口包括：
   - 明确每个入口依赖哪些 Loom 内核能力，而不是把规则复制进 skill 文本
 - 版本化升级面
   - 允许宿主识别当前入口合同版本，并决定是否需要刷新本地安装物
+- 运行态识别面
+  - 允许宿主区分 `repo-local-demo`、`installed-runtime`、`upgrade-rehearsal`，并在当前入口不可运行时暴露 fail-closed 原因
 - shared runtime / resources
   - 允许宿主直接安装 skill-local `scripts/` 与 `shared/scripts/assets/references`，而不是把 repo-local `tools/` 当成入口成功
 
@@ -96,6 +99,8 @@ Loom 对宿主只要求最小合同，不要求统一实现形态。
 - 安装物能够声明自身标识与版本
 - 安装物能够定位其 root 入口与被引用资源
 - 安装物能够在 `skills/` 安装根内部定位 skill-local `scripts/` 与 `shared/scripts/assets/references`
+- 宿主能够把 installed runtime、repo-local demo 与 upgrade rehearsal 区分为稳定可读状态
+- 若 shared runtime/resources 缺失、合同漂移或运行态冲突，宿主必须 fail-closed，而不是继续报告“可运行”
 
 最小发现合同至少应满足：
 
@@ -127,6 +132,8 @@ Loom 在此层不规定包管理器、注册中心、目录布局或分发协议
 - 当前入口合同版本是什么
 - 当前引用关系从哪里解析
 - 当前 shared runtime / assets / references 是否齐备
+- 当前 runtime_state 是什么
+- 若当前不能继续运行，fail-closed 原因是什么
 - 当前宿主是否识别为可升级状态
 
 ## 五、不应进入内核的宿主特定细节

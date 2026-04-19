@@ -46,8 +46,9 @@
 
 结论：
 
-- `flow merge-ready` 固定按 `fact-chain -> state-check -> runtime-evidence -> checkpoint-build -> checkpoint-merge` 顺序编排
+- `flow merge-ready` 固定按 `runtime-state -> fact-chain -> state-check -> runtime-evidence -> checkpoint-build -> checkpoint-merge` 顺序编排
 - 输出会稳定给出统一放行结论、5 项运行时证据、`build`/`merge` checkpoint 摘要、当前 checkpoint、当前 lane 与最近验证摘要
+- 输出顶层稳定携带 `runtime_state`，且一旦 `runtime_state.result=block` 就 fail-closed
 - 该 flow 只输出 merge 前统一放行摘要，不替代宿主平台 merge 动作
 
 ## 6. 关闭依据

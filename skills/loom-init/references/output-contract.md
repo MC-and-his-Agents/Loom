@@ -90,6 +90,22 @@
 
 `Runtime Evidence` 的五个字段必须逐项给出 locator 或 `not_applicable`，不得留空；若使用 `not_applicable`，必须给出可复核原因。
 
+### 4.1 `runtime_state`
+
+初始化输出还必须显式给出当前 Loom 入口自己的 `runtime_state`，至少包含：
+
+- `scene`
+  - `repo-local-demo | installed-runtime | upgrade-rehearsal`
+- `carrier`
+  - `repo-local-wrapper | installed-skills-root | bootstrapped-target-runtime`
+- `failure_reason`
+  - 当前无法继续运行时的稳定阻断原因数组
+- `evidence`
+  - 判定依据来自 `install-layout.json`、`upgrade-contract.json`、bootstrap manifest 或当前入口解析结果
+
+这里的 `runtime_state` 只回答 Loom 入口自身处于什么安装/运行场景，不是 `governance_surface.loom_state` 的别名。
+`governance_surface.loom_state` 回答的是仓库 Loom 装配程度；`runtime_state` 回答的是当前入口能否被视为 installed runtime 并继续运行。
+
 ### 5. 首批事项
 
 至少拆出：

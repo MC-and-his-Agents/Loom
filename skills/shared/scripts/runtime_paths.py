@@ -42,6 +42,20 @@ def repo_local_root(caller_file: str) -> Path | None:
     return None
 
 
+def bootstrap_runtime_root(caller_file: str) -> Path | None:
+    path = caller_path(caller_file)
+    if path.parent.name == "bin" and path.parent.parent.name == ".loom":
+        return path.parent
+    return None
+
+
+def bootstrap_manifest_path(caller_file: str) -> Path | None:
+    runtime_root = bootstrap_runtime_root(caller_file)
+    if runtime_root is None:
+        return None
+    return runtime_root.parent / "bootstrap" / "manifest.json"
+
+
 def shared_root(caller_file: str) -> Path:
     skills_root = installed_skills_root(caller_file)
     if skills_root is None:
@@ -100,4 +114,3 @@ def installed_skill_script(caller_file: str, skill_id: str) -> Path:
     if not script_path.exists():
         raise RuntimeError(f"installed skill entry script is missing: {script_path}")
     return script_path
-

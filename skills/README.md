@@ -22,9 +22,9 @@
 - [registry.json](./registry.json)
   - 仓库内机读入口注册表，声明 root 入口、场景入口与合同版本
 - [upgrade-contract.json](./upgrade-contract.json)
-  - 仓库内机读升级协议，声明显式升级、多 entry 版本可见与刷新要求
+  - 仓库内机读升级协议，声明显式升级、多 entry 版本可见、runtime-state 兼容问题与刷新要求
 - [install-layout.json](./install-layout.json)
-  - 仓库内机读安装布局合同，声明 installed-skills 最小必须面
+  - 仓库内机读安装布局合同，声明 installed-skills 最小必须面与 installed runtime 判定面
 - [route-matrix.md](./route-matrix.md)
   - root entry 的显式 / 隐式路由矩阵，声明任务信号与目标 skill 的稳定对应关系
 - [loom-init/SKILL.md](./loom-init/SKILL.md)
@@ -50,6 +50,8 @@
 - 将这些能力装配成初始化、执行、审查与收口入口
 - 暴露可被宿主直接调用的执行入口，例如各 skill 的 `scripts/*.py` 与 `shared/scripts/*.py`
 - 让 root entry 在显式调用与隐式信号下，都能导向正确场景 skill
+- 让宿主能读出当前是 `repo-local-demo`、`installed-runtime` 还是 `upgrade-rehearsal`
+- 在 runtime/resources/version drift 时 fail-closed，而不是把“入口存在”伪装成“入口可运行”
 
 对入口层自身，Loom 当前至少要求能表达以下验证面：
 

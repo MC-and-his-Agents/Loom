@@ -45,8 +45,9 @@
 
 结论：
 
-- `flow handoff` 固定按 `fact-chain -> state-check -> workspace-locate` 顺序编排
+- `flow handoff` 固定按 `runtime-state -> fact-chain -> state-check -> workspace-locate` 顺序编排
 - 输出会稳定给出 `recovery_entry`、`status_surface`、`current_stop`、`next_step`、`blockers`、`latest_validation_summary`、`fallback_target`
+- 输出顶层稳定携带 `runtime_state`，且一旦 `runtime_state.result=block` 就 fail-closed
 - 该 flow 只生成最小回写清单与定位，不直接回写任何 authored 载体
 
 ## 6. 关闭依据
