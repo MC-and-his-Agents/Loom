@@ -30,8 +30,8 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
 
 统一入口固定为：
 
-- `python3 tools/loom_flow.py flow review --target <repo> [--item <id>]`
-- `python3 tools/loom_flow.py review record --target <repo> [--item <id>] --decision <allow|block|fallback> --kind <general_review|code_review|spec_review> --summary <text> --reviewer <id>`
+- `python3 scripts/loom-review.py flow review --target <repo> [--item <id>]`
+- `python3 scripts/loom-review.py review record --target <repo> [--item <id>] --decision <allow|block|fallback> --kind <general_review|code_review|spec_review> --summary <text> --reviewer <id>`
 
 补充约束：
 
@@ -47,7 +47,7 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
 
 1. 运行 `flow review`，确认当前事项是否具备进入正式审查的最小条件
 2. 若 `flow review` 非 `pass`，直接返回 `block` 或 `fallback`，不伪造审查结论
-3. 基于 `governance/review-model.md` 执行语义审查
+3. 基于 `skills/shared/references/governance/review-model.md` 执行语义审查
 4. 用 `review record` 写入正式 review 结论，让 merge checkpoint 可机械消费
 
 这个 skill 不做以下事情：

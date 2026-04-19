@@ -1,6 +1,6 @@
 {
   "schema_version": "loom-bootstrap-manifest/v1",
-  "tool": "tools/loom_init.py",
+  "tool": "skills/shared/scripts/loom_init.py",
   "tool_version": "1.2.0",
   "root_entry": "loom-init",
   "contract_version": "1.2.0",
@@ -18,7 +18,10 @@
     ".loom/status/current.md",
     ".loom/bin/loom_init.py",
     ".loom/bin/fact_chain_support.py",
+    ".loom/bin/governance_surface.py",
     ".loom/bin/loom_flow.py",
+    ".loom/bin/runtime_paths.py",
+    ".loom/bin/loom_check.py",
     ".loom/specs/INIT-0001/spec.md",
     ".loom/specs/INIT-0001/plan.md",
     ".github/PULL_REQUEST_TEMPLATE.md"

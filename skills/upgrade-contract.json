@@ -10,7 +10,8 @@
       "registry",
       "manifest",
       "executable",
-      "referenced_resources"
+      "referenced_resources",
+      "layout_manifest"
     ],
     "failure_visibility": "fail closed and keep the previously known-good install state"
   },
@@ -18,6 +19,7 @@
     "Which root entry is current?",
     "Which contract versions are installed for each declared entry?",
     "Which executable path should the host invoke?",
+    "Which install layout manifest defines the minimum bundled runtime/resources?",
     "Does the host need to refresh referenced resources after upgrade?",
     "Did the registry gain or retire scenario entries that the host must rediscover?"
   ]

@@ -31,11 +31,11 @@ description: 负责把仓库接入 Loom 的初始化场景入口。Use when Code
   - `AGENTS.md`
   - `README.md`
 - 初始化相关稳定规则
-  - [../../adoption/lightweight-retrofit-default.md](../../adoption/lightweight-retrofit-default.md)
-  - [../../adoption/routing-and-checkpoints.md](../../adoption/routing-and-checkpoints.md)
-  - [../../harness/fact-chain-contract.md](../../harness/fact-chain-contract.md)
-  - [../../skills/loom-init/references/input-signals.md](../../skills/loom-init/references/input-signals.md)
-  - [../../skills/loom-init/references/output-contract.md](../../skills/loom-init/references/output-contract.md)
+  - [../shared/references/adoption/lightweight-retrofit-default.md](../shared/references/adoption/lightweight-retrofit-default.md)
+  - [../shared/references/adoption/routing-and-checkpoints.md](../shared/references/adoption/routing-and-checkpoints.md)
+  - [../shared/references/harness/fact-chain-contract.md](../shared/references/harness/fact-chain-contract.md)
+  - [../loom-init/references/input-signals.md](../loom-init/references/input-signals.md)
+  - [../loom-init/references/output-contract.md](../loom-init/references/output-contract.md)
 - 本 skill 的场景合同
   - [references/input-signals.md](./references/input-signals.md)
   - [references/output-contract.md](./references/output-contract.md)
@@ -44,9 +44,9 @@ description: 负责把仓库接入 Loom 的初始化场景入口。Use when Code
 
 本 skill 不新增新 CLI，固定复用：
 
-- `python3 tools/loom_init.py bootstrap --target <repo>`
-- `python3 tools/loom_init.py verify --target <repo>`
-- `python3 tools/loom_init.py fact-chain --target <repo>`
+- `python3 scripts/loom-adopt.py bootstrap --target <repo>`
+- `python3 scripts/loom-adopt.py verify --target <repo>`
+- `python3 scripts/loom-adopt.py fact-chain --target <repo>`
 
 执行顺序固定为：
 
@@ -59,7 +59,7 @@ description: 负责把仓库接入 Loom 的初始化场景入口。Use when Code
 
 输出必须直接遵守初始化输出合同，而不是另写一套 adopt 专属真相：
 
-- [../../skills/loom-init/references/output-contract.md](../../skills/loom-init/references/output-contract.md)
+- [../loom-init/references/output-contract.md](../loom-init/references/output-contract.md)
 
 至少要明确：
 

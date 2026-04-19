@@ -8,7 +8,7 @@
   "entrypoint": {
     "skill_markdown": "SKILL.md",
     "adapter_metadata": "agents/openai.yaml",
-    "orchestration_cli": "../../tools/loom_flow.py"
+    "orchestration_cli": "scripts/loom-retire.py"
   },
   "input_contract": {
     "reference": "references/input-signals.md",
@@ -35,6 +35,7 @@
   },
   "installation": {
     "registry": "../registry.json",
-    "upgrade_contract": "../upgrade-contract.json"
+    "upgrade_contract": "../upgrade-contract.json",
+    "layout_manifest": "../install-layout.json"
   }
 }

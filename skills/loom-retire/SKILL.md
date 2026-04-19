@@ -9,9 +9,9 @@ description: 负责清理并退休当前事项现场。Use when Codex needs to c
 
 优先入口：
 
-- `python3 tools/loom_flow.py purity-check --target <repo> [--item <id>]`
-- `python3 tools/loom_flow.py workspace cleanup --target <repo> --item <id>`
-- `python3 tools/loom_flow.py workspace retire --target <repo> --item <id>`
+- `python3 scripts/loom-retire.py purity-check --target <repo> [--item <id>]`
+- `python3 scripts/loom-retire.py workspace cleanup --target <repo> --item <id>`
+- `python3 scripts/loom-retire.py workspace retire --target <repo> --item <id>`
 
 执行要求：
 
