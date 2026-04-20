@@ -1,4 +1,4 @@
-# SKILLS Surface Issue Tree Draft
+# Loom Installable SKILLS Issue Tree Draft
 
 本文把 [skills-surface-delivery-judgment.md](/Users/mc/dev/Loom/docs/skills-surface-delivery-judgment.md) 直接翻成一版可提交的 GitHub issue tree 草案。
 
@@ -8,13 +8,13 @@
 - 5 个 child issue 草案
 - 4 个 PR slice 对应关系
 
-本稿默认用于 Loom 下一轮 `SKILLS` 产品面收敛工作。
+本稿默认用于 Loom 下一轮 `repo-local plugin + repo-local loom CLI + scenario skills + single-skill standard-skill packages` 工作。
 
 ## 1. Parent Issue Draft
 
 ### 标题
 
-`SKILLS surface convergence: from protocol-exposed entry layer to user-facing bundle`
+`冻结 Loom v0.4.0 的 repo-local 交付形态：plugin、loom CLI、scenario skills 与 single-skill standard-skill packages`
 
 ### 类型
 
@@ -23,108 +23,143 @@
 ### 建议正文
 
 ```md
+## Type
+
+`spec / planning issue`
+
 ## Goal
 
-收敛 Loom 当前 `SKILLS` 层的产品面，使其从“协议暴露型入口说明”推进到“用户主路径清晰、宿主边界清楚、但 machine contract 暂不重写的 `SKILLS` bundle”。
+把 Loom 下一轮对外交付面冻结成一组 repo-local 的稳定形态，并把后续实现、验证、release judgment 与 closeout 所需的 GitHub truth 一次性写清。
+
+本树只承接以下四层交付面：
+
+1. `repo-local plugin`
+2. `repo-local loom CLI`
+3. `scenario skills`
+4. `single-skill standard-skill packages`
+
+本树的目标不是继续讨论“用户可见单元到底怎么命名”，而是把这四层各自承接什么公开面、彼此如何装配、以及下一轮为什么按 `v0.4.0` 的 `major but still pre-1` 管理，全部冻结为可直接消费的仓库真相。
 
 ## Why
 
-当前 `skills/` 的主要问题不是能力缺失，而是三层混在了一起：
+`v0.3.0` 已经收清了 Loom 的基础能力面，包括：
 
-- 用户产品面
-- 宿主合同面
-- 内部 runtime 认知面
+- root + 场景入口
+- review / guardian / merge gate / closeout 的分层治理
+- closeout / reconciliation 的 fail-closed 顺序
+- adoption / release / upgrade 的最小版本化公开面
 
-结果是：
+但当前这棵树的 GitHub truth 仍停留在旧 framing：
 
-- 用户先看到安装协议，而不是使用主路径
-- `skills/README.md` 更像协议总览，而不是入口层产品说明
-- `loom-init` 首屏合同密度高于可用性
-- `repo-local-demo` / `installed-runtime` / `upgrade-rehearsal` 等词汇泄漏到首层心智
+- “安装整个 Loom”
+- “单个用户可见 skill 产品单元”
+- `invocation-independent`
+- `shared runtime / shared user understanding`
+
+这组说法已经不足以承接最新共识。
+
+现在需要冻结的新判断是：
+
+- Loom 的 repo-local 默认交付物首先是 `plugin`
+- `loom CLI` 是 repo-local 次级入口，不是新的事实真相源
+- 用户侧执行入口以 `scenario skills` 为准
+- 单 skill 交付不再写成抽象“产品单元”，而是写成 `single-skill standard-skill package`
+- 这一轮会明显改变下游如何安装、识别和理解 Loom，因此应按 `major` 管理
+- 但 Loom 仍处于 pre-1 阶段，这次发布目标仍写作 `v0.4.0`，不伪装成 `v1.0.0`
 
 ## Scope
 
 本树只收以下目标：
 
-1. 顶层 README 的用户主路径收敛
-2. `skills/README.md` 的入口层产品面收敛
-3. `skills/loom-init/SKILL.md` 首屏收敛
-4. `skills` 用户公开面与宿主公开面的边界重述
-5. release goal、版本判断与 closeout basis 收口
+1. 冻结 `repo-local plugin` 的默认入口、首层说明与交付摘要
+2. 冻结 `repo-local loom CLI` 的定位、入口边界与非主路径角色
+3. 冻结 `scenario skills` 与 `single-skill standard-skill packages` 的边界、装配关系与说明合同
+4. 冻结 `v0.4.0` 的 release goal、`major but still pre-1` 判断、major gate、guardian gate 与 closeout basis
+5. 固定 parent / child issue 语义与 PR 顺序，避免后续 PR 再次临场发明边界
 
-## Non-goals
+## Constraints
 
-以下内容不进入本树：
-
-- 重写 `skills/registry.json`
-- 重写 `skills/install-layout.json`
-- 重写 `skills/upgrade-contract.json`
-- 修改 root entry 身份、隐式路由优先级或场景 skill 角色合同
-- 重写 runtime detection 代码语义
-- 重新定义 installed runtime 的 machine evidence
-
-这些工作若进入本树，版本语义将直接升级到 `major`，应另起后续树处理。
+- 不把 `skills` 提升为新的治理真相源
+- 不把 `repo-local plugin` 写成宿主平台特定实现说明
+- 不把 `repo-local loom CLI` 写成用户第一入口
+- 不把单个 `scenario skill` 的 package 误写成“自带整包 Loom 理解前提”
+- 不把某个宿主的 marketplace、路径、按钮、hook 或权限细节直接提升为 Loom 默认规则
+- 不在 child PR 里临场重写 parent 的 release judgment、major gate 或 closeout basis
 
 ## Child Issues
 
-1. `skills-benchmark-and-target-freeze`
-2. `top-level-install-and-readme-surface`
-3. `skills-readme-and-root-entry-surface`
-4. `public-vs-host-surface-boundary`
-5. `skills-surface-validation-release-closeout`
+- `#233` 冻结 `v0.4.0` 的目标边界、版本判断与 major gate
+- `#234` 收 `repo-local plugin` 的默认入口、交付摘要与用户主路径
+- `#235` 收 `repo-local loom CLI` 的定位、入口边界与 repo-local 操作面
+- `#236` 收 `scenario skills` 与 `single-skill standard-skill packages` 的边界、装配关系与说明合同
+- `#237` 最后补 validation、release judgment 与 parent closeout basis
 
 ## Default PR Slices
 
-1. `benchmark + delivery judgment`
-2. `top-level user surface`
-3. `skills surface`
-4. `boundary + release + closeout`
+1. `PR-1`：`#233`
+2. `PR-2`：`#234`
+3. `PR-3`：`#235`
+4. `PR-4`：`#236 + #237`
 
 ## Release Goal
 
-让 Loom 的 `SKILLS` 层从协议暴露型入口说明，收敛为用户主路径清晰、宿主边界清楚、但 machine contract 暂不重写的产品面。
+让 Loom 从 `v0.3.0` 的“稳定 root + scene entry / harness / closeout / release 面”，进入 `v0.4.0` 的 repo-local 交付形态：
 
-默认版本判断：`minor`
+- repo 内默认通过 `plugin` 暴露 Loom
+- repo 内保留 `loom CLI` 作为次级执行与自动化入口
+- 用户可执行面由 `scenario skills` 承接
+- 单 skill 交付通过 `single-skill standard-skill packages` 表达，而不再依赖旧的“单个用户可见 skill 产品单元”表述
 
-若出现以下任一变化，必须升级为 `major`：
+默认版本判断：`major`
 
-- `bootstrap/root contract` 最小职责变化
-- 隐式路由优先级变化
-- 场景 skill 角色合同变化
-- `registry/install-layout/upgrade-contract` 的 machine 语义变化
-- installed/runtime evidence 变化
+版本号目标：`v0.4.0`
+
+这里的 `major` 表示：
+- 安装面、调用面、交付面和升级判断都发生了显著变化
+- 下游必须显式重读 release / upgrade / install truth
+
+这里的 `still pre-1` 表示：
+- Loom 仍未进入 `v1.x` 的稳定承诺阶段
+- 本轮不是伪装成“已经定型”的终局版本，而是 pre-1 阶段的一次重大收敛
 
 ## Done When
 
 只有当以下条件同时满足时，本 issue 才可 closeout：
 
-1. benchmark 与交付判断已进入版本控制
-2. 根 README 已完成用户主路径收敛
-3. `skills/README.md` 已完成入口层产品面收敛
-4. `loom-init` 首屏已完成收敛，深知识已退回 references
-5. `distribution-and-adapter-contract.md`、`upstream-delivery-surface.md`、`versioning-and-upgrades.md` 已对齐新的边界表述
-6. release goal、默认版本判断和 closeout basis 已进入版本控制
-7. parent issue 不再依赖会话解释“为什么这轮不改 machine contract”
+1. 四层 repo-local 交付面已被写成稳定 GitHub truth：
+   - `repo-local plugin`
+   - `repo-local loom CLI`
+   - `scenario skills`
+   - `single-skill standard-skill packages`
+2. `v0.4.0`、`major but still pre-1`、major gate、guardian gate 已被固定，不再依赖会话解释
+3. 后续 PR 不再需要重新争论“这一轮到底在交付什么”
+4. 旧 framing 已退出 parent / child issue 的第一层叙事
+5. parent closeout comment 可以直接说明：
+   - 本轮收了什么
+   - 哪些对象进入 `v0.4.0`
+   - 哪些事项被明确延期
+   - 下一棵树从哪里接续
 
 ## Closeout Basis
 
-parent closeout 时只消费子 issue 已成立真相，不替代子 issue 的独立完成判断。
+parent closeout 只消费 child issue 已成立的真相，不替代 child 的独立完成判断。
 
-closeout comment 至少应写清：
+parent closeout comment 至少要写清：
 
-1. 这轮明确收了什么
-2. 哪些 machine contract 问题被有意延期
-3. 为什么当前版本判断仍是 `minor`
-4. 下一棵树应从哪里接续
+1. `repo-local plugin` 收了什么
+2. `repo-local loom CLI` 收了什么
+3. `scenario skills` 与 `single-skill standard-skill packages` 的边界如何成立
+4. 为什么本轮是 `v0.4.0` 的 `major but still pre-1`
+5. 哪些事项被延期到下一棵树
 ```
 
 ## 2. Child Issue Drafts
 
-### 2.1 `skills-benchmark-and-target-freeze`
+### 2.1 `freeze-installable-skills-major-tree`
 
 #### 标题
 
-`Benchmark and freeze the target boundary for SKILLS surface convergence`
+`冻结 v0.4.0 的目标边界：repo-local delivery shape、major but still pre-1 与 major gate`
 
 #### 类型
 
@@ -133,50 +168,42 @@ closeout comment 至少应写清：
 #### 建议正文
 
 ```md
+Parent issue: #232
+
+## Type
+
+`spec / planning issue`
+
 ## Goal
 
-把外部 benchmark 与 Loom 当前 `SKILLS` 问题收成版本控制中的冻结判断，作为后续 README、root entry、boundary 和 release 工作的统一输入。
+把 `v0.4.0` 这一轮到底收什么、不收什么、为什么按 `major but still pre-1` 管理、以及后续 PR 必须遵守哪些 major gate，全部冻结成 GitHub truth。
 
-## Scope
+## Responsibilities
 
-- 固定 benchmark 样本与调研边界
-- 固定本轮收什么、不收什么
-- 固定默认版本判断
-- 固定 issue tree 与 PR slices
-
-## Inputs
-
-- `adoption/skills-repo-design-checklist.md`
-- `docs/skills-surface-delivery-judgment.md`
-
-## Deliverables
-
-- benchmark 文档
-- delivery judgment 文档
-- 必要的索引补链
+- 冻结 `repo-local plugin + repo-local loom CLI + scenario skills + single-skill standard-skill packages` 这组目标形态
+- 冻结 `v0.4.0` 是下一正式产品版本
+- 冻结这一轮按 `major` 管理，但 Loom 仍处于 pre-1 阶段
+- 冻结默认 PR 顺序、major gate、guardian gate 与 parent closeout basis
+- 明确淘汰旧的“双安装形态 / 单个用户可见 skill 产品单元” framing
+- 明确 child PR 不得临场降写为 `minor` 或 `patch`
 
 ## Done When
 
-1. benchmark 文档已明确：
-   - 样本
-   - 方法
-   - 结论
-   - Loom gap analysis
-2. delivery judgment 已明确：
-   - scope
-   - non-goals
-   - issue tree
-   - PR slices
-   - release goal
-   - version judgment
-3. 后续执行 issue 不再需要重新讨论“本轮为什么不改 machine contract”
+1. 已明确 `v0.4.0` 的 repo-local delivery shape 只承接四层交付面
+2. 已明确本轮默认版本判断是 `major`，但仍是 `pre-1`
+3. 已明确 major gate：
+   - 不得越过 `#233` 重新定义产品形态
+   - 不得把 host-specific 细节伪装成 Loom 默认规则
+   - 不得让 `loom CLI` 变成新的真相源
+4. 已明确 guardian gate 与 closeout basis
+5. 后续执行 issue 不再需要重复解释“为什么旧 framing 已失效、为什么这一轮按 `v0.4.0` 的 `major but still pre-1` 管理”
 ```
 
-### 2.2 `top-level-install-and-readme-surface`
+### 2.2 `loom-plugin-install-surface`
 
 #### 标题
 
-`Converge top-level install story and user-facing README surface`
+`收敛 repo-local plugin 的默认入口、交付摘要与用户主路径`
 
 #### 类型
 
@@ -185,47 +212,44 @@ closeout comment 至少应写清：
 #### 建议正文
 
 ```md
+Parent issue: #232
+
+## Type
+
+`active execution issue`
+
 ## Goal
 
-把根 README 从 adapter/operator-first 的安装叙事，收敛为用户可直接消费的 Loom skills 主路径说明。
+把 Loom 在 repo 内的默认交付形态写成 `repo-local plugin`，回答安装后用户得到什么、默认从哪里开始、以及 plugin 首层应该承接哪些说明。
 
-## Scope
+## Responsibilities
 
-- 重写安装与快速开始主叙事
-- 先讲如何接入和开始使用 Loom skills
-- 保留深层文档入口，但不再让协议工件占据首屏
-
-## Must Preserve
-
-- 不改 machine contract
-- 不改 root entry 身份
-- 不改 executable semantics
-
-## Out of Scope
-
-- `skills/README.md`
-- `skills/loom-init/SKILL.md`
-- `skills/distribution-and-adapter-contract.md`
+- 明确 `repo-local plugin` 是 repo 内默认交付入口
+- 明确 plugin 首层默认暴露什么：
+  - Loom 的默认进入方式
+  - repo-local 的安装 / 接入摘要
+  - `scenario skills` 的可见入口关系
+- 明确 plugin 不替代 Loom 的治理真相与 harness 真相
+- 保留深层合同与宿主适配说明，但退居第二层
+- 对齐根 README、skills 首层说明与 plugin 叙事
 
 ## Done When
 
-1. 新用户只读根 README，就能理解：
-   - 如何安装 / 接入 Loom skills
-   - `loom-init` 是默认入口
-   - 下一步如何开始
-2. README 首屏不再要求用户先理解：
-   - `registry.json`
-   - `install-layout.json`
-   - `upgrade-contract.json`
-   - runtime scene vocabulary
-3. 深层协议文档仍可从 README 进入，但已退居第二层
+1. 用户只看首层说明，就能理解 repo 内默认获得的是 Loom 的 `repo-local plugin`
+2. plugin 首层能回答：
+   - 安装后得到什么
+   - 默认从哪里开始
+   - 与 `scenario skills` 的关系是什么
+3. plugin 不再被写成“宿主细节总览”或“协议文件目录”
+4. 深层宿主 / adapter / contract 文档仍可达，但已退居第二层
+5. `loom-init` 或等价默认进入方式在 plugin 叙事中保持清晰，不再混入旧 framing
 ```
 
-### 2.3 `skills-readme-and-root-entry-surface`
+### 2.3 `loom-cli-and-pilot-skill-wrappers`
 
 #### 标题
 
-`Converge skills README and loom-init root entry surface`
+`收敛 repo-local loom CLI 的定位、入口边界与 repo-local 操作面`
 
 #### 类型
 
@@ -234,44 +258,47 @@ closeout comment 至少应写清：
 #### 建议正文
 
 ```md
+Parent issue: #232
+
+## Type
+
+`active execution issue`
+
 ## Goal
 
-把 `skills/README.md` 与 `skills/loom-init/SKILL.md` 收成真正的入口层产品说明，而不是协议总览或作者合同。
+把 `repo-local loom CLI` 的角色写清楚：它是 repo-local 的次级执行入口、自动化入口和调试入口，不是新的用户第一入口，也不是新的治理真相源。
 
-## Scope
+## Responsibilities
 
-- 重写 `skills/README.md`
-- 收缩 `loom-init` 首屏
-- 把深知识继续压回 references
-
-## Must Preserve
-
-- root entry 仍为 `loom-init`
-- 场景 skill 切分不变
-- route semantics 不变
-
-## Out of Scope
-
-- `registry/install-layout/upgrade-contract` JSON
-- runtime detection 代码
-- release note
+- 明确 `repo-local loom CLI` 的定位：
+  - repo-local automation
+  - verify / debug / orchestration
+  - 与 plugin / skills 等价但次级的执行面
+- 明确 CLI 与 `repo-local plugin`、`scenario skills` 的边界
+- 明确哪些动作优先通过 plugin / skills 理解，哪些动作保留在 CLI
+- 对齐 README、skills、harness 与 release 叙事中的 CLI 角色
 
 ## Done When
 
-1. 只读 `skills/README.md`，不会再先进入 adapter/runtime 词汇
-2. 只读 `loom-init/SKILL.md` 首屏，能先理解：
-   - 什么时候触发
-   - 先判断什么
-   - 会被导向哪些场景
-3. `repo-local-demo` / `installed-runtime` / `upgrade-rehearsal` 不再作为首屏主叙事
-4. 深知识已有清晰 references 落点，不需要再挤回首屏
+1. `repo-local loom CLI` 的定位已明确为次级入口，而不是首层用户入口
+2. 文档已明确 CLI 承接的主要场景：
+   - automation
+   - verification
+   - debugging
+   - host orchestration
+3. 文档已明确 CLI 不替代：
+   - governance truth
+   - plugin 首层安装叙事
+   - scenario skills 的用户执行入口
+4. plugin / CLI / skills 三者关系已经稳定，不再互相越权
+5. 下游读者不会再把 CLI 误解成“必须先学会的一套独立产品”
 ```
 
-### 2.4 `public-vs-host-surface-boundary`
+### 2.4 `remaining-scene-skills-and-boundary-docs`
 
 #### 标题
 
-`Restate public-vs-host boundary for the skills surface`
+`定义 scenario skills 与 single-skill standard-skill packages 的边界、装配关系与说明合同`
 
 #### 类型
 
@@ -280,43 +307,47 @@ closeout comment 至少应写清：
 #### 建议正文
 
 ```md
+Parent issue: #232
+
+## Type
+
+`active execution issue`
+
 ## Goal
 
-重新表述 Loom `SKILLS` 的用户公开面与宿主公开面边界，明确哪些内容属于第一层产品面，哪些内容只给宿主/adapter 消费。
+把 Loom 的用户执行面稳定写成 `scenario skills`，并把单 skill 交付稳定写成 `single-skill standard-skill packages`，同时收清两者之间的边界、装配关系与最小说明合同。
 
-## Scope
+## Responsibilities
 
-- `skills/distribution-and-adapter-contract.md`
-- `adoption/upstream-delivery-surface.md`
-- `adoption/versioning-and-upgrades.md`
-
-## Must Preserve
-
-- adapter 边界原则仍成立
-- machine contract 仍保留
-- 不修改其实际 JSON 语义
-
-## Out of Scope
-
-- runtime script 代码
-- registry/install-layout/upgrade-contract 文件内容
-- 路由或 executable 语义
+- 明确 Loom 的用户执行入口集合以 `scenario skills` 为准
+- 明确单 skill 交付的正式表述为 `single-skill standard-skill packages`
+- 明确单 skill package 与 repo-local plugin 的关系
+- 明确单 skill package 首层必须自解释什么：
+  - 什么时候用
+  - 解决什么问题
+  - 与 Loom 其余入口是什么关系
+- 明确单 skill package 不自动承诺整包 Loom 的默认能力
+- 清理旧的“单个用户可见 skill 产品单元” framing
 
 ## Done When
 
-1. 文档已经明确区分：
-   - 用户公开面
-   - 宿主公开面
-2. `distribution-and-adapter-contract.md` 不再被默认当成首屏用户说明
-3. `upstream-delivery-surface.md` 与 `versioning-and-upgrades.md` 已对齐本轮 `minor` 判断
-4. 后续若要改 machine contract，对外已经有清晰的下一树入口
+1. `scenario skills` 已被稳定写成 Loom 的用户执行面
+2. `single-skill standard-skill packages` 已成为单 skill 交付的正式表述
+3. 单 skill package 的首层说明能独立回答：
+   - 什么时候调用
+   - 解决什么问题
+   - 与 plugin / CLI / 其他 scenario skills 的关系
+4. 文档已明确：
+   - 单 skill package 不等于整包 Loom
+   - 单 skill package 不自动承诺 root routing 或其他 repo-local 默认能力
+5. 旧 framing 已退出首层叙事，不再出现“单个用户可见 skill 产品单元”这类表述
 ```
 
-### 2.5 `skills-surface-validation-release-closeout`
+### 2.5 `installable-skills-validation-release-closeout`
 
 #### 标题
 
-`Validate, release-judge, and close out the skills surface convergence tree`
+`验证、release judgment 与 closeout：收口 v0.4.0 repo-local delivery tree`
 
 #### 类型
 
@@ -325,104 +356,47 @@ closeout comment 至少应写清：
 #### 建议正文
 
 ```md
+Parent issue: #232
+
+## Type
+
+`validation / closeout issue`
+
 ## Goal
 
-为本轮 `SKILLS` 产品面收敛补齐验证记录、release judgment、closeout basis 与对外收口说明。
+补齐 `v0.4.0` 这棵树的验证记录、release judgment、guardian 消费口径与 closeout basis，确保 parent closeout 可以直接消费，不再依赖会话补充。
 
-## Scope
+## Responsibilities
 
-- 验证记录
-- release goal 对账
-- 版本判断对账
-- closeout basis
-
-## Inputs
-
-- parent issue
-- README surface PR
-- skills surface PR
-- boundary PR
+- 验证四层交付面：
+  - `repo-local plugin`
+  - `repo-local loom CLI`
+  - `scenario skills`
+  - `single-skill standard-skill packages`
+- 固化 `v0.4.0`、`major but still pre-1` 与 parent closeout basis
+- 对齐 parent / child issue、PR 顺序、主干结果、guardian 门禁与 closeout comment
+- 写清本轮收了什么、延期了什么、下一棵树从哪里接续
 
 ## Done When
 
-1. 本轮最小验证面已对齐：
-   - 根 README 用户主路径
-   - `skills/README.md` 首屏
-   - `loom-init` 首屏
-   - boundary 文档
-   - release/version 文档
-2. release goal 已进入版本控制
-3. 默认版本判断与实际改动一致
-4. parent closeout comment 已明确：
-   - 本轮收口对象
+1. 已有验证记录覆盖四层 repo-local 交付面
+2. release goal 已进入版本控制，并明确对应 `v0.4.0`
+3. 默认版本判断与实际改动一致，仍为 `major but still pre-1`
+4. guardian 的消费口径与 parent closeout basis 已固定
+5. parent closeout comment 已可直接说明：
+   - 本轮交付对象
    - 延期对象
-   - `minor` 判断依据
    - 下一树接续点
+6. 不再需要靠会话解释为什么旧 framing 已被替换、为什么本轮是 `v0.4.0`
 ```
 
-## 3. PR Slice Mapping
+## 3. PR Slice 对应关系
 
-### PR-1 `benchmark + delivery judgment`
-
-对应 issue：
-
-- `skills-benchmark-and-target-freeze`
-
-建议内容：
-
-- benchmark 文档
-- delivery judgment 文档
-- adoption / docs / README 索引补链
-
-### PR-2 `top-level user surface`
-
-对应 issue：
-
-- `top-level-install-and-readme-surface`
-
-建议内容：
-
-- 根 README 的安装与快速开始收敛
-
-### PR-3 `skills surface`
-
-对应 issue：
-
-- `skills-readme-and-root-entry-surface`
-
-建议内容：
-
-- `skills/README.md`
-- `skills/loom-init/SKILL.md`
-- 必要的 references 摘要调整
-
-### PR-4 `boundary + release + closeout`
-
-对应 issue：
-
-- `public-vs-host-surface-boundary`
-- `skills-surface-validation-release-closeout`
-
-建议内容：
-
-- `skills/distribution-and-adapter-contract.md`
-- `adoption/upstream-delivery-surface.md`
-- `adoption/versioning-and-upgrades.md`
-- release note / closeout 文档
-
-## 4. 使用说明
-
-推荐提交顺序：
-
-1. 先开 parent issue
-2. 再开 5 个 child issue
-3. PR 严格按 4 批推进
-4. parent closeout 只消费 child issue 已成立真相
-
-推荐不要在 issue tree 里提前引入的条目：
-
-- `machine-contract-narrowing`
-- `runtime-evidence-hardening`
-- `entry-behavior-regression-suite`
-
-这些应保留为下一树，而不是在本轮执行期膨胀进来。
+- `PR-1: freeze + issue tree rewrite`
+  - 对应：Parent issue + Child 1
+- `PR-2: loom plugin install surface`
+  - 对应：Child 2
+- `PR-3: loom cli + pilot skills`
+  - 对应：Child 3
+- `PR-4: remaining skills + boundary + release + closeout`
+  - 对应：Child 4 + Child 5

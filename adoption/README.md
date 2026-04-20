@@ -61,7 +61,8 @@ Issue -> 验证 / 回写索引：
 - `#209` -> [validation-installed-skills-pre-merge-chain.md](./validation-installed-skills-pre-merge-chain.md)
 - `#210` -> [validation-installed-skills-post-merge-closeout.md](./validation-installed-skills-post-merge-closeout.md)
 - `#227` -> [validation-skills-surface-convergence.md](./validation-skills-surface-convergence.md)
-- `#223` -> [skills-repo-design-checklist.md](./skills-repo-design-checklist.md); [../docs/skills-surface-delivery-judgment.md](../docs/skills-surface-delivery-judgment.md); [../docs/skills-surface-issue-tree-draft.md](../docs/skills-surface-issue-tree-draft.md)
+- `#223` -> [skills-repo-design-checklist.md](./skills-repo-design-checklist.md)
+- `#233` -> [../docs/skills-surface-delivery-judgment.md](../docs/skills-surface-delivery-judgment.md); [../docs/skills-surface-issue-tree-draft.md](../docs/skills-surface-issue-tree-draft.md)
 - `#226` -> [upstream-delivery-surface.md](./upstream-delivery-surface.md); [versioning-and-upgrades.md](./versioning-and-upgrades.md); [../skills/distribution-and-adapter-contract.md](../skills/distribution-and-adapter-contract.md)
 - `#169` -> [landing-map.md](./landing-map.md); [upstream-delivery-surface.md](./upstream-delivery-surface.md); [versioning-and-upgrades.md](./versioning-and-upgrades.md); [../docs/complete-kernel-release.md](../docs/complete-kernel-release.md)
 
