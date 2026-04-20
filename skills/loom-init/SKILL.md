@@ -5,29 +5,30 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 
 # Loom Init
 
-使用本 skill 作为 Loom 的唯一 root entry。
+把本 skill 作为 Loom 的默认入口。
 
-它承担两类职责：
+在以下情况先进入 `loom-init`：
 
-- 初始化或 retrofit Loom
-- 在没有显式指定场景 skill 时，根据任务信号做路由
+- 你要初始化 Loom，或把 Loom retrofit 进既有仓库
+- 你还不知道当前任务应该进入哪个场景 skill
+- 你希望 Loom 先根据任务信号判断下一步入口
 
-先判断当前任务究竟属于初始化还是日常执行场景，再决定进入哪个入口。不要把 root skill 继续扩成第二套事实真相源。
+不要把 root skill 继续扩成第二套事实真相源。它负责先判断，再导向正确场景。
 
-当前安装态中的最小可执行入口为：
+## Quick Path
 
-- `python3 scripts/loom-init.py bootstrap --target <repo>`
-- `python3 scripts/loom-init.py verify --target <repo>`
-- `python3 scripts/loom-init.py fact-chain --target <repo>`
-- `python3 scripts/loom-init.py route --target <repo> [--skill <id>] [--task "<request>"]`
+1. 先判断当前任务属于初始化 / retrofit，还是已经进入日常执行场景。
+2. 如果用户已经显式指定场景 skill，显式调用优先，直接进入该 skill。
+3. 如果没有显式指定 skill，由 `loom-init` 根据任务信号做路由。
+4. 如果信号不足、冲突，或缺少稳定执行所需的最小输入，保留在 `loom-init`，并要求最小补充信号。
 
-场景路由规则见：
-
-- [../route-matrix.md](../route-matrix.md)
+## Route Summary
 
 显式指定 skill 时，显式调用优先。
 
-未显式指定 skill 时，按任务信号做隐式路由：
+未显式指定 skill 时，`loom-init` 按任务信号做隐式路由。
+
+默认场景对应关系如下：
 
 - 初始化 / retrofit / 新项目接入
   - 路由到 `loom-adopt`
@@ -45,6 +46,17 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
   - 路由到 `loom-merge-ready`
 
 如果信号不足或同时命中多个场景，不要猜测。回退到 `loom-init`，并要求最小补充信号。
+
+完整场景路由规则见 [../route-matrix.md](../route-matrix.md)。
+
+## Installed Entry Surface
+
+当前安装态中的最小可执行入口为：
+
+- `python3 scripts/loom-init.py bootstrap --target <repo>`
+- `python3 scripts/loom-init.py verify --target <repo>`
+- `python3 scripts/loom-init.py fact-chain --target <repo>`
+- `python3 scripts/loom-init.py route --target <repo> [--skill <id>] [--task "<request>"]`
 
 ## 1. 读取顺序
 
