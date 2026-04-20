@@ -17,7 +17,7 @@
 | 现场与纯度治理 | `loom_flow workspace <create/locate/cleanup/retire>` + `purity-check` | 生命周期动作与失败语义保持不变 |
 | 宿主动作与 closeout | [../harness/host-action-contract.md](../harness/host-action-contract.md) + `loom_flow host-lifecycle` + `reconciliation audit|sync` + `closeout check|sync` | 新增统一主落点，不改变现有 CLI；Loom 冻结 host-facing actions 的结果与去向，但不接管宿主 branch/PR/worktree 生命周期 |
 | drift 审计与 sync | `loom_flow reconciliation audit|sync` | `audit` 只生成 absorbed-but-open / parent drift / project drift；`sync` 只消费这些 finding 做机械写回，不扩展为新的 gate/验证入口 |
-| 高频组合入口 | `loom_flow flow pre-review/review/resume/handoff/merge-ready` | 聚合入口扩张不破坏单命令入口，统一保持 JSON 结果语义 |
+| 高频组合入口 | `loom_flow flow pre-review/review/resume/handoff/merge-ready` | 聚合入口扩张不破坏单命令入口，统一保持 JSON 结果语义；`review` / `merge-ready` 只增量暴露 `repo_specific_requirements`，不改 `result/summary/missing_inputs/fallback_to` 顶层纪律 |
 | 场景 skills | `loom-adopt/resume/pre-review/review/handoff/retire/merge-ready` | 场景 skill 只做入口编排，不新增第二套事实真相源 |
 
 ## 2. 升级策略
@@ -60,6 +60,7 @@
 - `loom-init`、`loom-adopt`、`loom-resume` 对外公开的治理读面保持同一字段名 `governance_surface`
 - `governance_surface.repo_interface` 只区分 `absent | companion_docs_only | incomplete | present` 四类机读状态，不把旧式 companion docs 伪装成稳定 repo interface
 - merge 阶段可按状态返回 `fallback`，而不是伪装成通过
+- `flow review`、`flow merge-ready` 与 `closeout check|sync` 只增量暴露 `repo_specific_requirements`；blocking companion requirement 必须显式阻断，advisory requirement 只展示不阻断
 - host-facing actions 继续复用既有命令，但 `fallback` 只保留给 Loom 内部 checkpoint / merge control；closeout 与 reconciliation 不把 drift 伪装成 `fallback`
 - 操作流既可拆分执行，也可通过聚合入口执行高频路径
 
