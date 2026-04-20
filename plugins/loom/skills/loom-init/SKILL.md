@@ -15,6 +15,8 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 
 不要把 root skill 继续扩成第二套事实真相源。它负责先判断，再导向正确场景。
 
+对执行者的首层说明仍应以 `loom-init` 作为 root entry。repo-local 自动化、验证、调试和宿主编排可以统一落到 repo-local `loom CLI`，但这不改变 `loom-init` 的 route 语义，也不把 CLI 升格成用户第一入口。
+
 ## Quick Path
 
 1. 先判断当前任务属于初始化 / retrofit，还是已经进入日常执行场景。
@@ -53,10 +55,12 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 
 当前安装态中的最小可执行入口为：
 
-- `python3 scripts/loom-init.py bootstrap --target <repo>`
-- `python3 scripts/loom-init.py verify --target <repo>`
-- `python3 scripts/loom-init.py fact-chain --target <repo>`
-- `python3 scripts/loom-init.py route --target <repo> [--skill <id>] [--task "<request>"]`
+- `loom init bootstrap --target <repo>`
+- `loom init verify --target <repo>`
+- `loom init fact-chain --target <repo>`
+- `loom route --target <repo> [--skill <id>] [--task "<request>"]`
+
+安装态或 repo-local 开发态可以把这些 `loom ...` 动作映射到底层 `scripts/...` 或 `tools/...` carrier；首层用户入口仍然是 `loom-init` 这个 skill。
 
 ## 1. 读取顺序
 

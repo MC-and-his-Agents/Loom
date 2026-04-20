@@ -45,7 +45,7 @@ Loom 不是业务模板，也不是一组散落的规则文档。
 | `governance` 判断层 | 统一回答什么时候能继续、什么时候能 review、什么时候算完成 |
 | `repo companion` 接入层 | 为既有仓库暴露 locator-only manifest、机读 repo requirements 和 specialized gates，而不把单仓规则抬升为 Loom core |
 | Agent 平台接入 | 把 Loom skills 安装进 Claude Code / Codex 等 Agent 平台，并让 `loom-init` 成为默认入口 |
-| 次级 CLI | 为自动化、脚本和调试保留等价入口 |
+| repo-local `loom CLI` | 次级入口，承接自动化、验证、调试与宿主编排；不替代 plugin 安装主路径或 scene skill 用户入口 |
 
 ## 安装与快速开始
 
@@ -76,7 +76,14 @@ Loom 不是业务模板，也不是一组散落的规则文档。
 - 默认进入方式是 `loom-init`
 - 其余能力由 7 个场景 skills 承接，`loom-init` 会把你导向正确入口
 
-repo-local `loom CLI` 仍保留，但它是次级入口，主要用于自动化、验证、调试和宿主编排，不是安装主路径。
+repo-local `loom CLI` 仍保留，但它是次级入口，主要用于自动化、验证、调试和宿主编排，不是安装主路径，也不替代 `loom-init` 与其余 scene skills 的用户入口。
+
+文档里提到 repo-local `loom CLI` 时，默认是在说统一的 repo-local 操作面，例如：
+
+- `loom init bootstrap --target <repo> --write --verify`
+- `loom flow pre-review --target <repo> --item <id>`
+- `loom review record --target <repo> --item <id> ...`
+- `loom flow closeout check --target <repo>`
 
 如果你需要看每个 skill 的作用和入口分工，读 [skills/README.md](./skills/README.md)。
 
@@ -366,22 +373,24 @@ Loom 在这里做了什么：
 
 Loom 的首选入口是 `SKILLS`。
 
-CLI 主要给这些情况使用：
+repo-local `loom CLI` 主要给这些情况使用：
 
 - 写脚本
-- 做自动化
+- 做自动化 / 验证
 - 调试底层行为
+- 编排 `git`、`gh`、`make` 等宿主动作
 
-最常见的底层命令包括：
+文档中统一把这组 repo-local 操作面写成 `loom ...`，例如：
 
-- `python3 tools/loom_init.py route --target <repo> ...`
-- `python3 tools/loom_flow.py flow resume|pre-review|review|handoff|merge-ready --target <repo>`
-- `python3 tools/loom_flow.py closeout ...`
-- `python3 skills/loom-init/scripts/loom-init.py route --target <repo> ...`
-- `python3 skills/shared/scripts/loom_flow.py checkpoint|state-check|closeout ...`
-- `make loom-check`
+- `loom route --target <repo> [--skill <id>] [--task "<request>"]`
+- `loom flow resume --target <repo> [--item <id>]`
+- `loom flow pre-review --target <repo> [--item <id>]`
+- `loom flow review --target <repo> [--item <id>]`
+- `loom review record --target <repo> [--item <id>] ...`
+- `loom flow closeout check --target <repo>`
+- `loom check <repo>`
 
-其中 `skills/*/scripts/` 与 `skills/shared/scripts/` 是安装态可调用入口；repo-local `tools/` 只用于当前仓库开发和调试。
+在当前 Loom 仓库开发态中，这组 repo-local CLI 动作仍由 `tools/loom_init.py`、`tools/loom_flow.py`、`tools/loom_check.py` 等 carrier 承接；安装态则会映射到对应的 `skills/*/scripts/` 与 `skills/shared/scripts/`。这层统一写法的目的，是让自动化、验证、调试和宿主编排共享同一组操作语义，而不是让用户绕过 `loom-init` 或 scene skills 直接把 CLI 当成首层产品。
 
 安装、升级、运行态识别和失败可见性的正式合同不在本节展开，统一见 [skills/distribution-and-adapter-contract.md](./skills/distribution-and-adapter-contract.md)。
 

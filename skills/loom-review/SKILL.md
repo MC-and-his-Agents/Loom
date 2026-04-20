@@ -13,6 +13,8 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
 - `loom-review` 负责执行正式语义审查并产出审查结论
 - `loom-merge-ready` 负责 merge 前统一放行聚合
 
+对执行者来说，正式 review 的首层入口仍是 `loom-review` 这个场景 skill。repo-local 自动化、验证、调试和宿主编排可以统一调用 repo-local `loom CLI`，但这不替代场景 skill 的用户入口，也不改变 review / merge-ready 的边界。
+
 ## 1. 使用时机
 
 当任务满足以下任一条件时，进入 `loom-review`：
@@ -30,8 +32,8 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
 
 统一入口固定为：
 
-- `python3 scripts/loom-review.py flow review --target <repo> [--item <id>]`
-- `python3 scripts/loom-review.py review record --target <repo> [--item <id>] --decision <allow|block|fallback> --kind <general_review|code_review|spec_review> --summary <text> --reviewer <id>`
+- `loom flow review --target <repo> [--item <id>]`
+- `loom review record --target <repo> [--item <id>] --decision <allow|block|fallback> --kind <general_review|code_review|spec_review> --summary <text> --reviewer <id>`
 
 补充约束：
 
@@ -40,6 +42,8 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
 - 无论通过哪种入口，最终都只允许写回单一 `review_entry` 指向的 review record
 
 这个 skill 先用 `flow review` 读取正式 review 的机械基线，再用 `review record` 把审查结论写成可消费载体。
+
+安装态或 repo-local 开发态可以把这些 `loom ...` 动作映射到底层 `scripts/...` 或共享 runtime carrier；但 `loom-review` 自身的场景合同、进入时机和输出责任保持不变。
 
 ## 3. 固定编排
 
