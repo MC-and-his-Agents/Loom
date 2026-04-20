@@ -12,9 +12,39 @@
 - 治理规则、执行机制、模板约束在安装态由 `skills/shared/references/` 暴露稳定读面；repo-local 源码真相仍分别维护在 `governance/`、`harness/`、`templates/`、`adoption/`
 - 宿主可以不同，但 Loom 对入口层的最小能力边界应保持稳定
 
+## 读者边界
+
+Loom 当前把 `skills` 公开面分成两层：
+
+- 用户首层公开面
+  - 根 `README.md` 的安装与快速开始
+  - `skills/README.md` 的入口层总览
+  - `skills/loom-init/SKILL.md` 的 root entry 首屏
+- 宿主 / adapter 首层公开面
+  - 本文
+  - `registry.json`
+  - `install-layout.json`
+  - `upgrade-contract.json`
+  - `shared/scripts/assets/references`
+
+换句话说：
+
+- 用户先回答“怎么开始用 Loom skills”
+- 宿主 / adapter 再回答“怎么发现、安装、升级、识别运行态并暴露失败”
+
+本文属于第二层。它是宿主公开面，不是默认用户首屏说明。
+
 ## 零、公开接口
 
-Loom 当前对 `skills` 的稳定公开接口包括：
+Loom 当前对 `skills` 的稳定公开接口分成两组。
+
+### 用户公开面
+
+- `loom-init` 作为唯一 root entry 的入口身份
+- 显式进入某个场景 skill，或在未显式指定时由 `loom-init` 做场景路由
+- 7 个场景 skills 的稳定分工
+
+### 宿主 / adapter 公开面
 
 - `bootstrap/root contract` 的最小职责
 - 安装合同
@@ -24,7 +54,7 @@ Loom 当前对 `skills` 的稳定公开接口包括：
 - adapter 职责边界
 - 版本识别与失败可见性
 
-宿主可以用不同机制实现这些接口，但不应改写它们的语义。
+宿主可以用不同机制实现第二组接口，但不应改写它们的语义。
 
 ## 一、分发面
 
