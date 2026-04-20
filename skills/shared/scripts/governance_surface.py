@@ -29,6 +29,14 @@ PLANNED_LOCATORS = {
     "plan_path": ".loom/specs/INIT-0001/plan.md",
 }
 
+REPO_INTERFACE_SURFACES = ("review", "merge_ready", "closeout")
+REPO_INTERFACE_AVAILABILITY = {"absent", "companion_docs_only", "incomplete", "present"}
+REPO_INTERFACE_MANIFEST_SCHEMA = "loom-repo-companion-manifest/v1"
+REPO_INTERFACE_SCHEMA = "loom-repo-interface/v1"
+REPO_INTERFACE_ENFORCEMENT = {"blocking", "advisory"}
+REPO_INTERFACE_MANIFEST_KEYS = {"schema_version", "companion_entry", "repo_interface"}
+REPO_INTERFACE_KEYS = {"schema_version", "companion_entry", "repo_specific_requirements", "specialized_gates"}
+
 
 def run_process(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(args, cwd=cwd, check=False, capture_output=True, text=True)
@@ -163,6 +171,244 @@ def detect_repository_mode(root: Path, loom_state: str, scenario_override: str |
 
 def carrier_entry(status: str, locator: str, source: str) -> dict[str, str]:
     return {"status": status, "locator": locator, "source": source}
+
+
+def has_legacy_companion_docs(root: Path) -> bool:
+    companion_dir = root / ".loom" / "companion"
+    if not companion_dir.exists() or not companion_dir.is_dir():
+        return False
+    for path in companion_dir.iterdir():
+        if path.name in {"manifest.json", "repo-interface.json"}:
+            continue
+        if path.suffix.lower() == ".md":
+            return True
+    return False
+
+
+def relative_locator_from_value(root: Path, raw_locator: object) -> str | None:
+    if not isinstance(raw_locator, str):
+        return None
+    locator = raw_locator.strip()
+    if not locator:
+        return None
+    locator_path = Path(locator)
+    if locator_path.is_absolute():
+        try:
+            return str(locator_path.relative_to(root))
+        except ValueError:
+            return str(locator_path)
+    return str(locator_path)
+
+
+def resolve_locator(root: Path, raw_locator: object) -> tuple[str | None, Path | None]:
+    locator = relative_locator_from_value(root, raw_locator)
+    if locator is None:
+        return None, None
+    return locator, (root / locator).resolve()
+
+
+def locator_status_entry(
+    *,
+    root: Path,
+    raw_locator: object,
+    source: str,
+) -> tuple[dict[str, str], str | None]:
+    locator, target = resolve_locator(root, raw_locator)
+    if locator is None or target is None:
+        return carrier_entry("missing", "unknown", source), f"{source} is missing a valid locator"
+    if not target.exists():
+        return carrier_entry("missing", locator, source), f"{source} points to missing path `{locator}`"
+    return carrier_entry("present", locator, source), None
+
+
+def validate_repo_specific_requirement(
+    *,
+    root: Path,
+    surface: str,
+    entry: object,
+    index: int,
+) -> list[str]:
+    prefix = f"repo_interface.{surface}[{index}]"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"]
+    missing_inputs: list[str] = []
+    for field in ("id", "summary", "locator", "enforcement"):
+        value = entry.get(field)
+        if not isinstance(value, str) or not value.strip():
+            missing_inputs.append(f"{prefix} missing `{field}`")
+    enforcement = entry.get("enforcement")
+    if enforcement not in REPO_INTERFACE_ENFORCEMENT:
+        missing_inputs.append(f"{prefix} enforcement must be `blocking` or `advisory`")
+    locator, target = resolve_locator(root, entry.get("locator"))
+    if locator is None or target is None:
+        missing_inputs.append(f"{prefix} locator must be a non-empty string")
+    elif not target.exists():
+        missing_inputs.append(f"{prefix} locator points to missing path `{locator}`")
+    return missing_inputs
+
+
+def validate_specialized_gate(
+    *,
+    root: Path,
+    entry: object,
+    index: int,
+) -> list[str]:
+    prefix = f"specialized_gates[{index}]"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"]
+    missing_inputs: list[str] = []
+    for field in ("id", "summary", "locator"):
+        value = entry.get(field)
+        if not isinstance(value, str) or not value.strip():
+            missing_inputs.append(f"{prefix} missing `{field}`")
+    locator, target = resolve_locator(root, entry.get("locator"))
+    if locator is None or target is None:
+        missing_inputs.append(f"{prefix} locator must be a non-empty string")
+    elif not target.exists():
+        missing_inputs.append(f"{prefix} locator points to missing path `{locator}`")
+    return missing_inputs
+
+
+def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
+    companion_dir = root / ".loom" / "companion"
+    manifest_path = companion_dir / "manifest.json"
+    repo_interface_path = companion_dir / "repo-interface.json"
+
+    repo_interface_surface: dict[str, Any] = {
+        "availability": "absent",
+        "manifest": carrier_entry("missing", ".loom/companion/manifest.json", "companion manifest"),
+        "companion_entry": carrier_entry("missing", "unknown", "repo companion manifest"),
+        "repo_specific_requirements": carrier_entry("missing", "unknown", "repo companion interface"),
+        "specialized_gates": carrier_entry("missing", "unknown", "repo companion interface"),
+        "summary": "no repo companion interface is declared for this repository.",
+        "missing_inputs": [],
+    }
+    missing_inputs: list[str] = []
+
+    if not manifest_path.exists():
+        if has_legacy_companion_docs(root):
+            repo_interface_surface["availability"] = "companion_docs_only"
+            repo_interface_surface["summary"] = (
+                "legacy companion docs are present, but no machine-readable repo companion manifest is declared."
+            )
+        return repo_interface_surface, missing_inputs
+
+    repo_interface_surface["manifest"] = carrier_entry(
+        "present",
+        ".loom/companion/manifest.json",
+        "repository scan",
+    )
+    manifest = safe_read_json(manifest_path)
+    if manifest is None:
+        missing_inputs.append("repo companion manifest is unreadable")
+        repo_interface_surface["availability"] = "incomplete"
+        repo_interface_surface["summary"] = "repo companion manifest exists, but the machine-readable interface is incomplete."
+        repo_interface_surface["missing_inputs"] = missing_inputs
+        return repo_interface_surface, missing_inputs
+
+    if manifest.get("schema_version") != REPO_INTERFACE_MANIFEST_SCHEMA:
+        missing_inputs.append(
+            f"repo companion manifest schema must be `{REPO_INTERFACE_MANIFEST_SCHEMA}`"
+        )
+    extra_manifest_keys = sorted(set(manifest.keys()) - REPO_INTERFACE_MANIFEST_KEYS)
+    if extra_manifest_keys:
+        missing_inputs.append(
+            "repo companion manifest must stay locator-only: "
+            + ", ".join(extra_manifest_keys)
+        )
+
+    companion_entry, companion_error = locator_status_entry(
+        root=root,
+        raw_locator=manifest.get("companion_entry"),
+        source="repo companion manifest.companion_entry",
+    )
+    repo_interface_surface["companion_entry"] = companion_entry
+    if companion_error:
+        missing_inputs.append(companion_error)
+
+    manifest_repo_interface, manifest_repo_interface_error = locator_status_entry(
+        root=root,
+        raw_locator=manifest.get("repo_interface"),
+        source="repo companion manifest.repo_interface",
+    )
+    repo_interface_surface["repo_specific_requirements"] = manifest_repo_interface
+    repo_interface_surface["specialized_gates"] = manifest_repo_interface.copy()
+    if manifest_repo_interface_error:
+        missing_inputs.append(manifest_repo_interface_error)
+
+    repo_interface_locator, repo_interface_target = resolve_locator(root, manifest.get("repo_interface"))
+    if repo_interface_surface["repo_specific_requirements"]["status"] != "present":
+        if repo_interface_path.exists() and manifest_repo_interface_error:
+            missing_inputs.append("repo companion manifest must point `repo_interface` to `.loom/companion/repo-interface.json`")
+    else:
+        interface_payload = safe_read_json(repo_interface_target or repo_interface_path)
+        if interface_payload is None:
+            missing_inputs.append("repo companion interface is unreadable")
+        else:
+            if interface_payload.get("schema_version") != REPO_INTERFACE_SCHEMA:
+                missing_inputs.append(f"repo companion interface schema must be `{REPO_INTERFACE_SCHEMA}`")
+            extra_interface_keys = sorted(set(interface_payload.keys()) - REPO_INTERFACE_KEYS)
+            if extra_interface_keys:
+                missing_inputs.append(
+                    "repo companion interface contains unexpected top-level fields: "
+                    + ", ".join(extra_interface_keys)
+                )
+            interface_companion_entry, interface_companion_error = locator_status_entry(
+                root=root,
+                raw_locator=interface_payload.get("companion_entry"),
+                source="repo companion interface.companion_entry",
+            )
+            if interface_companion_entry["status"] == "present":
+                repo_interface_surface["companion_entry"] = interface_companion_entry
+            if interface_companion_error:
+                missing_inputs.append(interface_companion_error)
+
+            requirements = interface_payload.get("repo_specific_requirements")
+            if not isinstance(requirements, dict):
+                missing_inputs.append("repo companion interface must include `repo_specific_requirements`")
+            else:
+                for surface in REPO_INTERFACE_SURFACES:
+                    entries = requirements.get(surface)
+                    if not isinstance(entries, list):
+                        missing_inputs.append(
+                            f"repo companion interface surface `{surface}` must be a list"
+                        )
+                        continue
+                    for index, entry in enumerate(entries):
+                        missing_inputs.extend(
+                            validate_repo_specific_requirement(
+                                root=root,
+                                surface=surface,
+                                entry=entry,
+                                index=index,
+                            )
+                        )
+
+            specialized_gates = interface_payload.get("specialized_gates")
+            if not isinstance(specialized_gates, list):
+                missing_inputs.append("repo companion interface must include `specialized_gates` as a list")
+            else:
+                for index, entry in enumerate(specialized_gates):
+                    missing_inputs.extend(
+                        validate_specialized_gate(
+                            root=root,
+                            entry=entry,
+                            index=index,
+                        )
+                    )
+
+    if missing_inputs:
+        repo_interface_surface["availability"] = "incomplete"
+        repo_interface_surface["summary"] = (
+            "repo companion manifest exists, but the machine-readable interface is incomplete."
+        )
+    else:
+        repo_interface_surface["availability"] = "present"
+        repo_interface_surface["summary"] = (
+            "repo companion manifest and machine-readable repo interface are readable."
+        )
+    repo_interface_surface["missing_inputs"] = list(dict.fromkeys(missing_inputs))
+    return repo_interface_surface, list(dict.fromkeys(missing_inputs))
 
 
 def first_match(directory: Path, suffix: str, root: Path) -> str:
@@ -307,6 +553,7 @@ def build_governance_surface(
     execution_entry = detect_execution_entry(root, loom_state, bootstrap_mode=bootstrap_mode)
     validation_entry = detect_validation_entry(loom_state, bootstrap_mode=bootstrap_mode)
     review_merge_surface = detect_review_merge_surface(root, loom_state, bootstrap_mode=bootstrap_mode)
+    repo_interface, repo_interface_missing = detect_repo_interface(root)
 
     missing_inputs: list[str] = []
     if bootstrap_mode and repository_mode == "new":
@@ -317,6 +564,8 @@ def build_governance_surface(
         if not present_carriers:
             missing_inputs.append("no stable Loom carriers are readable yet")
         missing_inputs.extend(github_missing)
+        if repo_interface["availability"] == "incomplete":
+            missing_inputs.extend(repo_interface_missing)
         control_plane_ready = github_control_plane["default_branch"] != "unknown"
         carrier_ready = bool(present_carriers)
         summary = (
@@ -333,6 +582,7 @@ def build_governance_surface(
         "validation_entry": validation_entry,
         "review_merge_surface": review_merge_surface,
         "github_control_plane": github_control_plane,
+        "repo_interface": repo_interface,
         "summary": summary,
         "missing_inputs": list(dict.fromkeys(missing_inputs)),
     }
