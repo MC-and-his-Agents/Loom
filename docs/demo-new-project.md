@@ -4,7 +4,7 @@
 
 ## 目标
 
-验证 `tools/loom_init.py` 能把一个空的新项目目录初始化为最小可执行 Loom 工作现场，而不只是输出说明文字。
+验证 repo-local `loom CLI` 的 `init` / `flow` / `review` / `check` 操作面，能把一个空的新项目目录初始化为最小可执行 Loom 工作现场，而不只是输出说明文字。
 
 ## 演示目录
 
@@ -17,10 +17,17 @@
 在 Loom 仓库根目录执行：
 
 ```bash
-make loom-demo-new-project
+loom init bootstrap \
+  --target examples/new-project \
+  --write \
+  --force \
+  --verify \
+  --install-pr-template
 ```
 
-等价命令：
+本文统一把 repo-local 操作面写成 `loom ...`。当前 Loom 仓库开发态下，这些命令由 `tools/loom_init.py`、`tools/loom_flow.py`、`tools/loom_check.py` 承接；仓库里的 `make loom-demo-new-project` 只是对同一 bootstrap 动作的便捷封装。
+
+当前仓库中的等价 carrier 命令是：
 
 ```bash
 python3 tools/loom_init.py bootstrap \
@@ -53,6 +60,29 @@ python3 tools/loom_init.py bootstrap \
 
 ```bash
 cd examples/new-project
+loom init verify --target .
+loom init runtime-state --target .
+loom init fact-chain --target .
+loom flow fact-chain --target . --item INIT-0001
+loom flow runtime-state --target . --item INIT-0001
+loom flow runtime-evidence --target . --item INIT-0001
+loom flow state-check --target . --item INIT-0001
+loom flow pre-review --target . --item INIT-0001
+loom flow review --target . --item INIT-0001
+loom review read --target . --item INIT-0001
+loom review record --target . --item INIT-0001 --decision fallback --kind general_review --summary "Bootstrap is not merge-ready." --reviewer demo --fallback-to admission
+loom flow recovery writeback --target . --item INIT-0001 --current-stop "Bootstrap review has started." --next-step "Replace the bootstrap placeholder item."
+loom flow work-item create --target . --item NEXT-0001 --goal "Promote the first real work item." --scope "Limit the demo to `.loom/` artifacts." --execution-path execution/support --workspace-entry . --validation-entry "loom init verify --target ." --closing-condition "The authored work item reads cleanly." --init-recovery
+loom flow host-lifecycle --target . --item INIT-0001
+loom flow closeout check --target . --skip-gate
+loom flow checkpoint admission --target . --item INIT-0001
+loom flow workspace locate --target . --item INIT-0001
+loom flow purity-check --target . --item INIT-0001
+```
+
+安装态 `.loom/bin/` carrier 的等价命令仍然保留，方便 gate 与宿主显式核对：
+
+```bash
 python3 .loom/bin/loom_init.py verify --target .
 python3 .loom/bin/loom_init.py runtime-state --target .
 python3 .loom/bin/loom_init.py fact-chain --target .
@@ -80,6 +110,6 @@ python3 .loom/bin/loom_flow.py purity-check --target . --item INIT-0001
 - `bootstrap` 命令退出码为 `0`
 - `verify` 命令退出码为 `0`
 - `fact-chain` 命令退出码为 `0`
-- `loom_init.py` 的 `runtime-state`，以及 `loom_flow.py` 的 `runtime-state`、`fact-chain`、`runtime-evidence`、`state-check`、`flow pre-review`、`flow review`、`review read`、`review record`、`recovery writeback`、`work-item create`、`host-lifecycle`、`closeout check`、`checkpoint admission`、`workspace locate`、`purity-check` 命令都可读取或更新当前样例
+- repo-local `loom CLI` 的 `runtime-state`、`fact-chain`、`runtime-evidence`、`state-check`、`flow pre-review`、`flow review`、`review read`、`review record`、`recovery writeback`、`work-item create`、`host-lifecycle`、`closeout check`、`checkpoint admission`、`workspace locate`、`purity-check` 命令都可读取或更新当前样例
 - `init-result.json` 含有 7 个必需区块
 - 首批 work item、recovery entry、状态面与 spec/plan 工件都已落位

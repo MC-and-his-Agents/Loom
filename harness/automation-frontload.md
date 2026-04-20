@@ -15,6 +15,8 @@
 自动化前置负责降低重复人工判断，不负责替代语义审查。
 merge checkpoint 只消费这些结果，不把它们扩写成第一次高质量判断。
 
+本文统一把 repo-local 自动化与验证入口写成 `loom ...`。这组命令是 repo-local `loom CLI` 的次级操作面，主要服务 CI、自动化、调试和宿主编排；用户首层入口仍是 plugin 安装后的 `loom-init` 与各场景 skill。
+
 ## 2. 通用 core 检查矩阵
 
 | 检查类别 | 检查对象 | 失败含义 | 非目标 | 是否阻断 merge checkpoint |
@@ -68,17 +70,18 @@ Loom 内核只定义这些检查面的边界，不内置宿主特定 CI、测试
 
 Loom 仓库当前通过以下入口承接最小 core 前置检查：
 
-- `make loom-check`
-- `python3 tools/loom_check.py`
-- `python3 tools/loom_init.py verify --target <repo>`
-- `python3 tools/loom_init.py fact-chain --target <repo>`
-- `python3 tools/loom_flow.py fact-chain --target <repo> [--item <id>]`
-- `python3 tools/loom_flow.py runtime-evidence --target <repo> [--item <id>]`
-- `python3 tools/loom_flow.py state-check --target <repo> [--item <id>]`
-- `python3 tools/loom_flow.py flow pre-review --target <repo> [--item <id>]`
-- `python3 tools/loom_flow.py checkpoint <admission|build|merge> --target <repo> [--item <id>]`
-- `python3 tools/loom_flow.py workspace <create|locate|cleanup|retire> --target <repo> --item <id>`
-- `python3 tools/loom_flow.py purity-check --target <repo> [--item <id>]`
+- `loom check <repo>`
+- `loom init verify --target <repo>`
+- `loom init runtime-state --target <repo>`
+- `loom flow fact-chain --target <repo> [--item <id>]`
+- `loom flow runtime-evidence --target <repo> [--item <id>]`
+- `loom flow state-check --target <repo> [--item <id>]`
+- `loom flow pre-review --target <repo> [--item <id>]`
+- `loom flow checkpoint <admission|build|merge> --target <repo> [--item <id>]`
+- `loom flow workspace <create|locate|cleanup|retire> --target <repo> --item <id>`
+- `loom flow purity-check --target <repo> [--item <id>]`
+
+在当前 Loom 仓库开发态中，这些 repo-local `loom CLI` 动作由 `tools/loom_init.py`、`tools/loom_flow.py`、`tools/loom_check.py` 承接；自动化前置关注的是统一命令语义，而不是要求读者先记住底层 carrier 文件名。
 
 当前脚本至少覆盖：
 
@@ -110,7 +113,7 @@ closeout 需要控制面对齐时，顺序必须是先处理 `fix-needed` / `blo
 
 最小接入 demo 则通过以下入口复验：
 
-- `make loom-demo-new-project`
+- `loom init bootstrap --target examples/new-project --write --force --verify --install-pr-template`
 
 ## 4. 不应错误前置的判断
 
