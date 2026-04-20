@@ -15,7 +15,21 @@
 - `templates/`
   - 最小正式规约模板与最小 PR 模板
 - `skills/`
-  - 稳定入口合同、`loom-init` root 路由、7 个场景 skills、`registry.json`、`upgrade-contract.json` 与 `route-matrix.md`
+  - 用户首层入口面：
+    - 根 `README.md` 的安装 / 快速开始
+    - `skills/README.md` 的入口层总览
+    - `skills/loom-init/SKILL.md` 的 root entry 首屏
+  - 宿主 / adapter 公开面：
+    - `skills/distribution-and-adapter-contract.md`
+    - `skills/registry.json`
+    - `skills/install-layout.json`
+    - `skills/upgrade-contract.json`
+    - `skills/route-matrix.md`
+    - `skills/<entry>/contract.json`
+    - `skills/shared/scripts/assets/references`
+  - 上述两层共同承接：
+    - `loom-init` root 路由
+    - 7 个场景 skills
 - `adoption/`
   - 稳定 adoption 路径、经验回流、验证记录合同、版本化与升级路径
   - `repo companion migration` 稳定下游合同
@@ -28,6 +42,8 @@
     - `adoption/reference-companion-spec-syvert.md`
     - `adoption/reference-companion-spec-webenvoy.md`
     - `adoption/validation-repo-companion-interface.md`
+  - `SKILLS` 产品面收敛验证与 closeout：
+    - `adoption/validation-skills-surface-convergence.md`
   - Loom 自身 `#143` 树 retrofit 记录：
     - `adoption/validation-retrofit-143-tree.md`
     - 只作为 Loom 自身 closeout / retrofit 依据，不单独提升为新的默认 adoption 路径
@@ -64,6 +80,7 @@ Loom 对下游交付的对象不是单个文件，而是以下组合：
 
 ## 4. 交付边界约束
 
+- `skills` 的用户首层公开面与宿主 / adapter 公开面必须分层表达
 - 宿主实现细节不进入稳定交付面
 - 单仓验证不足的结论不进入稳定交付面
 - 根入口摘要不重复内核正文；内核正文只保留在唯一主落点

@@ -44,6 +44,7 @@ Loom 采用语义版本：
   - 破坏现有下游采用合同、必备工件、checkpoint 语义、关闭语义或入口合同
 - `minor`
   - 新增可选能力、稳定新入口、扩展不破坏兼容的合同
+  - 或收敛用户公开面 / 宿主公开面边界，只要 machine semantics 不变
 - `patch`
   - 澄清、去歧义、非行为性修订与证据补强
 
@@ -124,6 +125,7 @@ Loom 采用语义版本：
 - 新增稳定场景 skill
 - 新增不破坏兼容的聚合 flow，并被场景 skill 正式消费
 - `skills/registry.json` 增加可发现 entry，但不改变既有 entry 的最小职责
+- 收敛根 README、`skills/README.md`、`loom-init/SKILL.md` 等用户首层产品面，并同步重述用户公开面 / 宿主公开面边界，但不改变 machine contract、route priority、scene role contract 或 runtime evidence
 
 ### 5.5 `adoption`
 
@@ -146,6 +148,7 @@ Loom 采用语义版本：
 
 - 新增一个稳定的宿主无关入口合同说明，但不改变现有下游必须遵守的接口
 - 这属于 `minor`
+- 像 `#226/#227` 所在的 `SKILLS surface convergence` 边界 / closeout 批次，只收用户首层产品面、宿主边界表述、验证记录与 release judgment，而不改 `registry/install-layout/upgrade-contract` 语义、root 最小职责、隐式路由优先级或 runtime evidence，也属于 `minor`
 
 ### `patch` 示例
 
@@ -168,6 +171,13 @@ Loom 采用语义版本：
   - 承接最小机读升级协议，声明宿主必须重新读取 `registry/manifest/executable/referenced_resources/layout_manifest`
 
 它们不替代本文的版本对象定义，只负责把显式升级与版本可见性落成可读取工件。
+
+同样需要保持的边界是：
+
+- 用户首层说明可以收敛或重写
+- 但只要 `registry/install-layout/upgrade-contract` 的 machine 语义不变，它们就仍然只是宿主 / adapter 公开面的版本承载物，不会自动把产品版本升级为 `major`
+
+因此，`#226/#227` 当前这批边界重述与 closeout 回写，默认版本判断仍为 `minor`；只有 machine semantics 实际变化时，才必须升级为 `major`。
 
 `#206` 当前引入的 installed-skills 布局重构，会改变 `skills` 的安装合同与 executable/resource 解析方式。下一次 Loom 正式产品发布若带上这组变更，应按 `major` 处理；在正式发版前，应继续以 issue / PR / install-layout 机读工件维持仓库真相一致。
 

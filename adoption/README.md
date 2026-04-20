@@ -46,6 +46,7 @@
 - checkpoint 链路复验：[validation-checkpoints-hotcp.md](./validation-checkpoints-hotcp.md)
 - 运行时证据复验：[validation-runtime-evidence-hotcp.md](./validation-runtime-evidence-hotcp.md)
 - automation-frontload 复验：[validation-automation-frontload-hotcp.md](./validation-automation-frontload-hotcp.md)
+- `SKILLS` 产品面收敛验证与 closeout：[validation-skills-surface-convergence.md](./validation-skills-surface-convergence.md)
 - 执行入口兼容与操作流：[execution-entry-compatibility.md](./execution-entry-compatibility.md)
 - 新项目完整执行内核复验：[validation-complete-kernel-new-project.md](./validation-complete-kernel-new-project.md)
 - 既有仓库完整执行内核复验：[validation-complete-kernel-existing-repos.md](./validation-complete-kernel-existing-repos.md)
@@ -59,7 +60,9 @@ Issue -> 验证 / 回写索引：
 - `#180` -> [validation-retrofit-143-tree.md](./validation-retrofit-143-tree.md)
 - `#209` -> [validation-installed-skills-pre-merge-chain.md](./validation-installed-skills-pre-merge-chain.md)
 - `#210` -> [validation-installed-skills-post-merge-closeout.md](./validation-installed-skills-post-merge-closeout.md)
+- `#227` -> [validation-skills-surface-convergence.md](./validation-skills-surface-convergence.md)
 - `#223` -> [skills-repo-design-checklist.md](./skills-repo-design-checklist.md); [../docs/skills-surface-delivery-judgment.md](../docs/skills-surface-delivery-judgment.md); [../docs/skills-surface-issue-tree-draft.md](../docs/skills-surface-issue-tree-draft.md)
+- `#226` -> [upstream-delivery-surface.md](./upstream-delivery-surface.md); [versioning-and-upgrades.md](./versioning-and-upgrades.md); [../skills/distribution-and-adapter-contract.md](../skills/distribution-and-adapter-contract.md)
 - `#169` -> [landing-map.md](./landing-map.md); [upstream-delivery-surface.md](./upstream-delivery-surface.md); [versioning-and-upgrades.md](./versioning-and-upgrades.md); [../docs/complete-kernel-release.md](../docs/complete-kernel-release.md)
 
 当前目录对应的主要 `EXT-*` 条目：
