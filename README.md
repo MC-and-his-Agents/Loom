@@ -43,6 +43,7 @@ Loom 不是业务模板，也不是一组散落的规则文档。
 | `SKILLS` 入口层 | `loom-init` + 7 个场景 skills，负责让 agent 进入正确动作 |
 | `harness` 执行层 | 读取状态、恢复上下文、组织 review、merge-ready 和 closeout |
 | `governance` 判断层 | 统一回答什么时候能继续、什么时候能 review、什么时候算完成 |
+| `repo companion` 接入层 | 为既有仓库暴露 locator-only manifest、机读 repo requirements 和 specialized gates，而不把单仓规则抬升为 Loom core |
 | Agent 平台接入 | 通过 `skills/registry.json`、`skills/install-layout.json`、`skills/upgrade-contract.json` 和 manifest/executable 进行发现、安装、运行态识别和升级 |
 | 次级 CLI | 为自动化、脚本和调试保留等价入口 |
 
@@ -197,6 +198,7 @@ Loom 在这里做了什么：
 
 - `loom-adopt` 负责接入场景
 - harness 建立后续执行所需的最小支撑面
+- 对既有仓库，优先通过 `repo companion` 暴露 repo-specific requirements / specialized gates，而不是重写根规则文档
 
 ### 2. 场景识别
 

@@ -1,6 +1,6 @@
 # Host Object Taxonomy
 
-本文件定义 Loom `v0.2.0` 当前稳定的宿主对象 taxonomy 与合同命名。
+本文件定义 Loom `v0.3.0` 当前稳定的宿主对象 taxonomy 与合同命名。
 
 本文件当前承接：
 
