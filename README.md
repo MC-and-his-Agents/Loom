@@ -389,7 +389,9 @@ CLI 主要给这些情况使用：
 - [harness/README.md](./harness/README.md)
 - [skills/distribution-and-adapter-contract.md](./skills/distribution-and-adapter-contract.md)
 - [docs/skills-surface-delivery-judgment.md](./docs/skills-surface-delivery-judgment.md)
+  - 冻结 Loom 下一轮 installable plugin + CLI + skills 的交付判断
 - [docs/skills-surface-issue-tree-draft.md](./docs/skills-surface-issue-tree-draft.md)
+  - 可直接提交的 installable Loom issue tree 草案
 - [VISION.md](./VISION.md)
 - [docs/complete-kernel-release.md](./docs/complete-kernel-release.md)
 - [adoption/versioning-and-upgrades.md](./adoption/versioning-and-upgrades.md)
