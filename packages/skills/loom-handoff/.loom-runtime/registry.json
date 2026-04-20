@@ -1,0 +1,15 @@
+{
+  "entries": [
+    {
+      "contract_version": "1.3.0",
+      "executable": "loom-handoff/scripts/loom-handoff.py",
+      "id": "loom-handoff",
+      "manifest": "loom-handoff/contract.json",
+      "role": "scenario/handoff"
+    }
+  ],
+  "install_layout": "install-layout.json",
+  "registry_version": "1.3.0",
+  "root_entry": "loom-handoff",
+  "upgrade_contract": "upgrade-contract.json"
+}

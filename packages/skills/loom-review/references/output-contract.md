@@ -1,0 +1,38 @@
+# Loom Review Output Contract
+
+输出固定为正式 review 摘要 JSON，至少需要给出：
+
+- `item`
+  - 当前事项编号、目标、范围、执行路径
+- `result`
+  - `pass`、`block` 或 `fallback`
+- `summary`
+  - 当前是否已具备正式 review 条件的单句结论
+- `missing_inputs`
+  - 当前阻断正式 review 的缺口；无阻断时为空数组
+- `fallback_to`
+  - 若当前不能继续正式 review，应回退到哪个 checkpoint；无回退时为 `null`
+- `runtime_state`
+  - 当前 Loom 入口自己的 scene / carrier 判定，以及 fail-closed 原因
+- `steps`
+  - 固定按 `runtime-state -> fact-chain -> state-check -> runtime-evidence -> checkpoint-build -> review-entry` 顺序列出
+- `state_check`
+  - 活跃状态、checkpoint 完整性与范围信号
+- `runtime_evidence`
+  - 当前 review 可读的运行时证据入口
+- `build_checkpoint`
+  - build checkpoint 的结果、摘要、缺失输入与回退语义
+- `review`
+  - 唯一 `review_entry` review record 的定位、已记录结论，以及权威 findings / disposition 摘要
+- `current_checkpoint`
+  - 当前 recovery checkpoint 的原始值与归一化值
+
+`review` 段至少应让执行者读出：
+
+- 读取的是哪一个 `review_entry`
+- review record 中的 `decision`
+- review record 中的权威 `findings`
+- 每条 finding 的 `id`、`severity`、`rebuttal` 与 `disposition`
+- `blocking_issues` / `follow_ups` 只是兼容字段，而不是第二份审查工件
+
+这个 skill 负责正式 review 执行层，不替代 `loom-pre-review` 的机械预检，也不替代 `loom-merge-ready` 的 merge 前聚合放行判断。

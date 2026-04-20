@@ -1,6 +1,6 @@
 {
   "name": "loom",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Loom 的 repo-local plugin 入口，暴露默认 root entry 与 scenario skills。",
   "author": {
     "name": "MC and his Agents",

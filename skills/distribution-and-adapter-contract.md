@@ -2,24 +2,32 @@
 
 ## 定位
 
-本文定义 `skills/` 作为 Loom 入口层时的最小分发与适配合同。
+本文定义 Loom `v0.4.0` 在 `skills/` 层的最小分发与适配合同。
 
-它回答的不是某个宿主如何实现交互，而是 Loom 对外发布时，`SKILLS` 应以什么边界暴露、宿主适配器负责什么、哪些内容不得进入内核。
+它回答的不是某个宿主如何实现交互，而是 Loom 对外发布时，以下四层 repo-local 交付面在 `skills` 维度上如何成立：
+
+- `repo-local plugin`
+- repo-local `loom CLI`
+- `scenario skills`
+- `single-skill standard-skill packages`
 
 本文默认前提：
 
 - `SKILLS` 是入口层，不是事实真相源
 - 治理规则、执行机制、模板约束在安装态由 `skills/shared/references/` 暴露稳定读面；repo-local 源码真相仍分别维护在 `governance/`、`harness/`、`templates/`、`adoption/`
 - 宿主可以不同，但 Loom 对入口层的最小能力边界应保持稳定
+- 当前版本判断是 `major but still pre-1`
 
 ## 读者边界
 
-Loom 当前把 `skills` 公开面分成两层：
+Loom 当前把 `skills` 公开面分成三层：
 
 - 用户首层公开面
-  - 根 `README.md` 的安装与快速开始
+  - 根 `README.md` 的三条 repo-local 路径与安装 / 快速开始
   - `skills/README.md` 的入口层总览
   - `skills/loom-init/SKILL.md` 的 root entry 首屏
+- 单 skill 正式交付面
+  - `single-skill standard-skill package` 的命名对象、边界与最小运行切片
 - 宿主 / adapter 首层公开面
   - 本文
   - `registry.json`
@@ -29,20 +37,56 @@ Loom 当前把 `skills` 公开面分成两层：
 
 换句话说：
 
-- 用户先回答“怎么开始用 Loom skills”
-- 宿主 / adapter 再回答“怎么发现、安装、升级、识别运行态并暴露失败”
+- 用户先回答“完整 Loom 怎么开始用”
+- 单 skill 消费方再回答“某个标准 skill 如何单独正式交付”
+- 宿主 / adapter 最后回答“怎么发现、安装、升级、识别运行态并暴露失败”
 
-本文属于第二层。它是宿主公开面，不是默认用户首屏说明。
+本文属于第三层，也会明确第二层的最小边界。
 
-## 零、公开接口
+## 一、四层交付面在 `skills` 维度上的分工
 
-Loom 当前对 `skills` 的稳定公开接口分成两组。
+### 1. `repo-local plugin`
+
+- 默认安装对象
+- 负责把 `loom-init` 与其余 scenario skills 暴露给宿主
+- 对用户承诺完整 Loom 的入口面，而不是单个 skill 的局部能力
+
+### 2. repo-local `loom CLI`
+
+- 次级执行面
+- 负责统一 `loom ...` 的自动化、验证、调试与宿主编排语义
+- 给 plugin 安装物和单 skill package 提供共同执行语义
+- 不升格成用户第一入口，也不取代 root / scene contract
+
+### 3. `scenario skills`
+
+- 用户执行面
+- 回答“当前该进入哪个动作”
+- 保持 `loom-init` 的唯一 root entry 身份与 7 个 scenario skills 的稳定分工
+
+### 4. `single-skill standard-skill packages`
+
+- 单 skill 的正式交付物
+- 每个 package 只承接一个标准 skill 的场景合同、最小 launcher / shim 与所需私有 runtime / resources
+- 不承诺整包 Loom 默认能力
+- 不伪装成 repo-local `loom` plugin 的完整安装成功
+
+## 二、公开接口
+
+Loom 当前对 `skills` 的稳定公开接口分成三组。
 
 ### 用户公开面
 
 - `loom-init` 作为唯一 root entry 的入口身份
-- 显式进入某个场景 skill，或在未显式指定时由 `loom-init` 做场景路由
-- 7 个场景 skills 的稳定分工
+- 显式进入某个 scenario skill，或在未显式指定时由 `loom-init` 做场景路由
+- 7 个 scenario skills 的稳定分工
+
+### 单 skill package 公开面
+
+- 单个标准 skill 的稳定标识
+- 该 skill 的最小输入 / 输出合同
+- 该 skill 需要的 launcher / shim 与私有 runtime / resources
+- 该 package 明确不承诺的范围
 
 ### 宿主 / adapter 公开面
 
@@ -54,9 +98,9 @@ Loom 当前对 `skills` 的稳定公开接口分成两组。
 - adapter 职责边界
 - 版本识别与失败可见性
 
-宿主可以用不同机制实现第二组接口，但不应改写它们的语义。
+宿主可以用不同机制实现第三组接口，但不应改写它们的语义，也不应把第二组接口误写成“完整 Loom 安装”。
 
-## 一、分发面
+## 三、分发对象
 
 `skills/` 的分发对象，是可被宿主装配和调用的入口合同，而不是一整套宿主产品体验。
 
@@ -64,8 +108,10 @@ Loom 当前对 `skills` 的稳定公开接口分成两组。
 
 - `bootstrap/root contract`
   - 提供进入 Loom 的最小入口，定义初始化时必须识别的输入、必须给出的判断、以及必须产出的后续落点
-- 场景化入口
-  - 例如初始化、执行、审查、收口等入口层能力
+- scenario skills
+  - 初始化、执行、审查、交接、退出、merge-ready 等场景入口层能力
+- single-skill package contract
+  - 明确单个标准 skill 如何单独交付、携带哪些最小资源、不能伪装哪些默认能力
 - 引用关系
   - 明确每个入口依赖哪些 Loom 内核能力，而不是把规则复制进 skill 文本
 - 版本化升级面
@@ -77,7 +123,7 @@ Loom 当前对 `skills` 的稳定公开接口分成两组。
 
 因此，`skills/` 的“发布”不等于发布一批提示词文件；它发布的是可被宿主发现、安装、升级和调用的入口合同集合。
 
-## 二、`bootstrap/root contract` 与深知识库的关系
+## 四、`bootstrap/root contract` 与深知识库的关系
 
 `bootstrap/root contract` 是宿主进入 Loom 的根入口，但它不承担 Loom 全部知识。
 
@@ -85,7 +131,7 @@ Loom 当前对 `skills` 的稳定公开接口分成两组。
 
 - 识别当前任务或仓库是否需要进入 Loom 运行模型
 - 判断应装配哪些入口能力与首批落点
-- 把后续工作导向 `skills/shared/references/` 中稳定暴露的治理/执行/模板/采用读面，以及具体 skill 引用
+- 把后续工作导向 `skills/shared/references/` 中稳定暴露的治理 / 执行 / 模板 / 采用读面，以及具体 skill 引用
 - 暴露稳定的最小输入合同与输出合同
 
 深知识库的职责应保留在被引用的规范、规则、模板与参考材料中。两者关系如下：
@@ -97,13 +143,30 @@ Loom 当前对 `skills` 的稳定公开接口分成两组。
 
 如果某项知识必须长期维护、需要跨 skill 共享、或会影响治理与执行真相，它不应沉积在 root skill 本体中，而应进入 repo-local 内核区域并镜像到安装态所需的 `skills/shared/references/`。
 
-## 三、宿主适配器职责边界
+## 五、单 skill package 的最小合同
+
+`single-skill standard-skill package` 至少应满足：
+
+- package 能稳定声明它交付的是哪个标准 skill
+- package 能暴露该 skill 的最小输入、输出与引用关系
+- package 能定位其 launcher / shim、skill-local `scripts/` 与所需私有 runtime / resources
+- package 能明确说明它不承诺整包 Loom 默认能力
+- package 若缺失所需 shared runtime / resources、合同漂移或运行态冲突，必须 fail-closed
+
+单 skill package 不应：
+
+- 宣称自己等同于 repo-local `loom` plugin
+- 把其余 scenario skills 的可用性伪装成默认能力
+- 复制一份脱离仓库版本控制的 Loom 治理真相
+- 把 repo-local `loom CLI` 的存在误写成“自动获得完整 Loom”
+
+## 六、宿主适配器职责边界
 
 宿主适配器的职责，是把 Loom 的入口合同映射到具体宿主的发现、安装、调用与升级机制。
 
 宿主适配器应负责：
 
-- 让宿主能够发现可安装的 Loom skills
+- 让宿主能够发现可安装的 Loom plugin、scenario skills 或单 skill package
 - 将宿主的调用入口映射到 Loom 定义的 skill 合同
 - 提供必要的引用解析、资源定位与版本识别
 - 在升级时替换或刷新宿主侧安装物，但不擅自改写 Loom 内核语义
@@ -116,26 +179,28 @@ Loom 当前对 `skills` 的稳定公开接口分成两组。
 - 把宿主交互习惯提升为 Loom 默认工作流
 - 将宿主特有状态面充当 Loom 的事实真相源
 - 在 adapter 内复制并长期维护一份脱离仓库版本控制的 Loom 规则
+- 把单 skill package 说成“默认完整安装”
 
 换言之，适配器负责“接上宿主”，不负责“替代 Loom 内核”。
 
-## 四、最小安装、发现与升级合同
+## 七、最小安装、发现与升级合同
 
 Loom 对宿主只要求最小合同，不要求统一实现形态。
 
 最小安装合同至少应满足：
 
-- 宿主能够安装一个或多个 Loom 入口
-- 安装物能够声明自身标识与版本
-- 安装物能够定位其 root 入口与被引用资源
+- 宿主能够安装一个或多个 Loom 入口对象
+- 安装物能够声明自身标识、类型与版本
+- 安装物能够定位其 root 入口或单 skill 入口与被引用资源
 - 安装物能够在 `skills/` 安装根内部定位 skill-local `scripts/` 与 `shared/scripts/assets/references`
 - 宿主能够把 installed runtime、repo-local demo 与 upgrade rehearsal 区分为稳定可读状态
-- 若 shared runtime/resources 缺失、合同漂移或运行态冲突，宿主必须 fail-closed，而不是继续报告“可运行”
+- 若 shared runtime / resources 缺失、合同漂移或运行态冲突，宿主必须 fail-closed，而不是继续报告“可运行”
 
 最小发现合同至少应满足：
 
 - 宿主能够列出当前可用的 Loom 入口
 - 宿主能够识别哪个入口是 `bootstrap/root contract`
+- 宿主能够区分完整 Loom install surface 与单 skill package
 - 宿主能够区分已安装版本与可升级版本
 
 最小升级合同至少应满足：
@@ -159,6 +224,7 @@ Loom 在此层不规定包管理器、注册中心、目录布局或分发协议
 最小兼容信息至少应能回答：
 
 - 当前入口标识是什么
+- 当前入口属于 plugin install、scenario skill 还是单 skill package
 - 当前入口合同版本是什么
 - 当前引用关系从哪里解析
 - 当前 shared runtime / assets / references 是否齐备
@@ -166,7 +232,7 @@ Loom 在此层不规定包管理器、注册中心、目录布局或分发协议
 - 若当前不能继续运行，fail-closed 原因是什么
 - 当前宿主是否识别为可升级状态
 
-## 五、不应进入内核的宿主特定细节
+## 八、不应进入内核的宿主特定细节
 
 以下内容不得直接进入 Loom `skills/` 内核合同：
 
@@ -178,7 +244,7 @@ Loom 在此层不规定包管理器、注册中心、目录布局或分发协议
 
 这些内容可以存在于宿主适配器文档、宿主发行包或宿主实现中，但不应反向污染 Loom 的入口层合同。
 
-## 六、入口层最小验证面
+## 九、入口层最小验证面
 
 对 `skills` 分发与适配合同的验证，至少应覆盖：
 
@@ -186,6 +252,8 @@ Loom 在此层不规定包管理器、注册中心、目录布局或分发协议
   - 当调用者明确请求某个 Loom 入口时，宿主是否能路由到正确入口，而不是触发错误 skill 或无声失败
 - 隐式触发是否正确
   - `bootstrap/root contract` 是否能基于仓库信号与任务信号，导向正确入口或明确不触发
+- 单 skill package 边界是否正确
+  - package 是否只暴露其命名 skill 的合同，而不是暗示整包 Loom 默认能力
 - 行为是否退化
   - 升级后入口是否仍能给出同类判断、同类引用关系与同类输出合同，而不是静默漂移
 - 宿主是否能稳定发现 root 入口
@@ -199,7 +267,7 @@ Loom 在此层不规定包管理器、注册中心、目录布局或分发协议
 
 上述最小验证面当前已经形成稳定接口；宿主完整回归矩阵仍停留在候选层，不进入 Loom 默认 core。
 
-## 七、与 `automation-frontload` 的边界
+## 十、与 `automation-frontload` 的边界
 
 入口层验证与通用前置检查的关系如下：
 
@@ -211,7 +279,7 @@ Loom 在此层不规定包管理器、注册中心、目录布局或分发协议
 
 换言之，Loom 可以定义入口层最小验证面，但不要求每个仓库都立即具备完整宿主矩阵。
 
-## 八、哪些验证不进入 Loom 内核
+## 十一、哪些验证不进入 Loom 内核
 
 若未来需要扩展 `skills/` 分发模型，应优先保持以下顺序：
 

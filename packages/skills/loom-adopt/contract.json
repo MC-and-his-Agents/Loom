@@ -1,0 +1,45 @@
+{
+  "contract_version": "1.4.0",
+  "description": "Route initialization and retrofit work to the existing Loom bootstrap, verify, and fact-chain entry points.",
+  "display_name": "Loom Adopt",
+  "entrypoint": {
+    "adapter_metadata": "agents/openai.yaml",
+    "orchestration_cli": "scripts/loom-adopt.py",
+    "skill_markdown": "SKILL.md"
+  },
+  "id": "loom-adopt",
+  "input_contract": {
+    "reference": "references/input-signals.md",
+    "required_fields": [
+      "task_is_initialization_or_retrofit",
+      "target_repository",
+      "adoption_scope",
+      "write_intent"
+    ]
+  },
+  "installation": {
+    "layout_manifest": ".loom-runtime/install-layout.json",
+    "registry": ".loom-runtime/registry.json",
+    "upgrade_contract": ".loom-runtime/upgrade-contract.json"
+  },
+  "output_contract": {
+    "reference": "references/output-contract.md",
+    "required_sections": [
+      "scenario_judgment",
+      "enabled_capabilities",
+      "deferred_capabilities",
+      "first_artifacts",
+      "first_work_items",
+      "runtime_state",
+      "governance_surface",
+      "fact_chain",
+      "validation_entry"
+    ]
+  },
+  "role": "scenario/adopt",
+  "root_entry": false,
+  "routing": {
+    "explicit_name": "loom-adopt",
+    "reference": "references/route-matrix.md"
+  }
+}
