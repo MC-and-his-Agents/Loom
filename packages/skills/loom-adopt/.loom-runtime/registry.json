@@ -1,0 +1,15 @@
+{
+  "entries": [
+    {
+      "contract_version": "1.4.0",
+      "executable": "loom-adopt/scripts/loom-adopt.py",
+      "id": "loom-adopt",
+      "manifest": "loom-adopt/contract.json",
+      "role": "scenario/adopt"
+    }
+  ],
+  "install_layout": "install-layout.json",
+  "registry_version": "1.3.0",
+  "root_entry": "loom-adopt",
+  "upgrade_contract": "upgrade-contract.json"
+}

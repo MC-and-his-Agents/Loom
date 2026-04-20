@@ -1,0 +1,41 @@
+{
+  "contract_version": "1.3.0",
+  "description": "Run purity-check, cleanup Loom-owned residue, and retire the current workspace without deleting user work by default.",
+  "display_name": "Loom Retire",
+  "entrypoint": {
+    "adapter_metadata": "agents/openai.yaml",
+    "orchestration_cli": "scripts/loom-retire.py",
+    "skill_markdown": "SKILL.md"
+  },
+  "id": "loom-retire",
+  "input_contract": {
+    "reference": "references/input-signals.md",
+    "required_fields": [
+      "target_repository",
+      "current_item_or_active_item",
+      "retire_intent"
+    ]
+  },
+  "installation": {
+    "layout_manifest": ".loom-runtime/install-layout.json",
+    "registry": ".loom-runtime/registry.json",
+    "upgrade_contract": ".loom-runtime/upgrade-contract.json"
+  },
+  "output_contract": {
+    "reference": "references/output-contract.md",
+    "required_sections": [
+      "preconditions",
+      "purity_result",
+      "cleanup_result",
+      "retire_result",
+      "final_checkpoint",
+      "workspace_policy"
+    ]
+  },
+  "role": "scenario/retire",
+  "root_entry": false,
+  "routing": {
+    "explicit_name": "loom-retire",
+    "reference": "references/route-matrix.md"
+  }
+}

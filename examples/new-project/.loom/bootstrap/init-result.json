@@ -329,6 +329,31 @@
       ],
       "pr_reviews": "not_required"
     },
+    "repo_interface": {
+      "availability": "absent",
+      "manifest": {
+        "status": "missing",
+        "locator": ".loom/companion/manifest.json",
+        "source": "companion manifest"
+      },
+      "companion_entry": {
+        "status": "missing",
+        "locator": "unknown",
+        "source": "repo companion manifest"
+      },
+      "repo_specific_requirements": {
+        "status": "missing",
+        "locator": "unknown",
+        "source": "repo companion interface"
+      },
+      "specialized_gates": {
+        "status": "missing",
+        "locator": "unknown",
+        "source": "repo companion interface"
+      },
+      "summary": "no repo companion interface is declared for this repository.",
+      "missing_inputs": []
+    },
     "summary": "repository is treated as new; Loom can plan the first governance carriers and bootstrap entrypoints without adding a second truth source.",
     "missing_inputs": []
   }

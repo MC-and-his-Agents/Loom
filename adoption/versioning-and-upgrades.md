@@ -4,7 +4,9 @@
 
 它的目标是避免下游仓库只能依赖手工复制或临场比较来获取 Loom 更新。
 
-当前正式产品版本：`v0.3.0`。
+当前正式产品版本：`v0.4.0`
+
+当前发布判断：`major but still pre-1`
 
 ## 1. 版本对象
 
@@ -20,7 +22,11 @@ Loom 的版本对象是“可被下游直接消费的能力面”，而不是单
 - `governance` 合同
 - `harness` 合同
 - `templates` 合同
-- `skills` 入口合同
+- 四层 repo-local 交付面：
+  - `repo-local plugin`
+  - repo-local `loom CLI`
+  - `scenario skills`
+  - `single-skill standard-skill packages`
 - `adoption` 中面向下游的稳定采用 / 升级规则
 - `repo companion migration` 稳定下游合同（含 `repo-interface.json`）
 
@@ -36,49 +42,64 @@ Loom 的版本对象是“可被下游直接消费的能力面”，而不是单
 
 这些字段只表达技能、合同、工具或产物格式的内部演进，不等于 Loom 的正式产品版本号。
 
-## 2. 版本规则
+## 2. `major but still pre-1` 的含义
 
-Loom 采用语义版本：
+Loom 当前仍处于 `pre-1` 阶段，因此不会把每次重大收敛都伪装成 `v1.0.0`。
+
+`major but still pre-1` 在 Loom 里的含义是：
+
+- 这是一次足以改变下游安装面、调用面、交付面或升级判断的重大收敛
+- 下游必须显式重读安装、升级与 release truth
+- 但 Loom 仍未进入 `v1.x` 的长期稳定承诺阶段
+- 因此本次正式版本写作 `v0.4.0`，而不是 `v1.0.0`
+
+判断 `major` 看的不是数字写法，而是下游是否必须重新理解公开交付面。
+
+## 3. 版本规则
+
+Loom 继续使用 `major` / `minor` / `patch` 的发布判断，但在 `pre-1` 阶段保留 `v0.x.0` 的正式版本形态。
 
 - `major`
-  - 破坏现有下游采用合同、必备工件、checkpoint 语义、关闭语义或入口合同
+  - 破坏现有下游采用合同、默认安装面、用户执行面、必备工件、checkpoint 语义、关闭语义或入口合同
+  - 或显著重构 repo-local 交付形态，要求下游重读 install / release / upgrade truth
 - `minor`
   - 新增可选能力、稳定新入口、扩展不破坏兼容的合同
-  - 或收敛用户公开面 / 宿主公开面边界，只要 machine semantics 不变
+  - 或在既有交付形态内扩展不破坏兼容的标准能力
 - `patch`
   - 澄清、去歧义、非行为性修订与证据补强
 
-## 3. 下游升级入口
+## 4. 下游升级入口
 
 下游仓库的升级入口至少应包含：
 
 - 当前使用的 Loom 版本
 - 本次可升级到的目标版本
-- 受影响能力面
+- 受影响交付面
 - 是否要求下游显式动作
 - 升级步骤
 - 不兼容点与回退建议
 
 下游升级不要求统一分发协议，但必须是显式可识别动作，而不是静默漂移。
 
-## 4. 升级说明最小格式
+## 5. 升级说明最小格式
 
 每次 Loom 升级至少应公开以下字段：
 
 - 版本号
 - 变更分类：`major` / `minor` / `patch`
-- 受影响能力面
+- 当前是否仍处于 `pre-1`
+- 受影响交付面
 - 下游是否必须动作
 - 升级步骤
 - 不兼容点
 - 回退建议
 
-`v0.3.0` 之后，每次正式产品发布都应至少更新：
+`v0.4.0` 之后，每次正式产品发布都应至少更新：
 
 - [`VERSION`](../VERSION)
 - [`../docs/complete-kernel-release.md`](../docs/complete-kernel-release.md)
 
-必要时再同步更新 README、adoption 索引与上游交付面说明。
+必要时再同步更新 README、`skills/README.md`、上游交付面说明与执行入口兼容说明。
 
 若发布包含 `repo companion migration` 合同变更，还应同步更新：
 
@@ -87,9 +108,9 @@ Loom 采用语义版本：
 - [`reference-companion-spec-webenvoy.md`](./reference-companion-spec-webenvoy.md)
 - [`validation-repo-companion-interface.md`](./validation-repo-companion-interface.md)
 
-## 5. 能力面与升级动作的对应关系
+## 6. 交付面与升级动作的对应关系
 
-### 5.1 `governance`
+### 6.1 `governance`
 
 以下变化通常构成 `major`：
 
@@ -97,7 +118,7 @@ Loom 采用语义版本：
 - 事项入口或真相源语义变化
 - 审查职责分层变化
 
-### 5.2 `harness`
+### 6.2 `harness`
 
 以下变化通常构成 `major`：
 
@@ -105,59 +126,87 @@ Loom 采用语义版本：
 - 恢复主入口的必备要求变化
 - 状态读取或执行现场合同变化
 
-### 5.3 `templates`
+### 6.3 `templates`
 
 以下变化通常构成 `minor` 或 `major`：
 
 - 新增条件块通常为 `minor`
 - 删除必填最小事实或改变正式套件最小要求，通常为 `major`
 
-### 5.4 `skills`
+### 6.4 `repo-local plugin`
+
+以下变化通常构成 `major`：
+
+- 默认安装对象变化
+- plugin 暴露的完整 Loom 入口面变化
+- plugin 安装成功与单 skill 安装成功的边界变化
+
+### 6.5 repo-local `loom CLI`
+
+以下变化通常构成 `major`：
+
+- CLI 的公开命令面、次级入口角色或宿主编排语义变化
+- CLI 被提升成用户第一入口或新的事实真相源
+
+以下变化通常构成 `minor`：
+
+- 在不改变首层角色的前提下扩展兼容子命令或聚合 flow
+
+### 6.6 `scenario skills`
 
 以下变化通常构成 `major`：
 
 - `bootstrap/root contract` 的最小职责变化
-- 安装、发现、升级、版本识别或 adapter 失败可见性合同变化
-- `root_entry`、多 entry registry、隐式路由优先级或场景 skill 角色合同变化
+- `loom-init` 的 root entry 身份变化
+- 隐式路由优先级或场景 skill 角色合同变化
+- 用户执行面从 scenario skills 改写成其他对象
 
 以下变化通常构成 `minor`：
 
-- 新增稳定场景 skill
+- 新增稳定 scenario skill
 - 新增不破坏兼容的聚合 flow，并被场景 skill 正式消费
-- `skills/registry.json` 增加可发现 entry，但不改变既有 entry 的最小职责
-- 收敛根 README、`skills/README.md`、`loom-init/SKILL.md` 等用户首层产品面，并同步重述用户公开面 / 宿主公开面边界，但不改变 machine contract、route priority、scene role contract 或 runtime evidence
+- 收敛根 `README.md`、`skills/README.md`、`loom-init/SKILL.md` 等用户首层产品面，只要不改变 machine contract、route priority、scene role contract 或 runtime evidence
 
-### 5.5 `adoption`
+### 6.7 `single-skill standard-skill packages`
+
+以下变化通常构成 `major`：
+
+- 单 skill package 的正式边界变化
+- 单 skill package 开始或停止承诺完整 Loom 默认能力
+- package 的最小 launcher / shim / 私有 runtime 义务变化
+
+以下变化通常构成 `minor`：
+
+- 新增稳定的单 skill package 交付对象
+- 在不改变边界的前提下扩展某个 package 的兼容说明
+
+### 6.8 `adoption`
 
 以下变化通常构成 `minor` 或 `patch`：
 
 - 新增稳定 adoption 路径通常为 `minor`
 - 新增稳定 `repo companion migration` 合同、但不破坏既有入口语义，通常为 `minor`
 - 对已有路径做澄清或补证据通常为 `patch`
-- 像 `#169` 这样只补验证索引、交付面引用与 closeout 依据回写，而不改 adoption 合同语义，属于 `patch`
-- 像 `#180` 这样只补 Loom 自身 retrofit 证据、但不改变关闭语义或默认 adoption 路径，也属于 `patch`
 
-## 6. 示例
+## 7. `v0.4.0` 的发布判断
 
-### `major` 示例
+`v0.4.0` 本次按 `major but still pre-1` 管理，原因是：
 
-- 将 `checkpoint-lite` 从“允许的轻量过渡形态”改为“所有既有仓库都禁止使用”
-- 这会改变下游恢复路径与首批工件要求，因此属于 `major`
+- Loom 的 repo-local 对外交付形态被正式固定为四层：
+  - `repo-local plugin`
+  - repo-local `loom CLI`
+  - `scenario skills`
+  - `single-skill standard-skill packages`
+- 下游必须显式重读根 `README.md`、`skills/README.md`、`skills/distribution-and-adapter-contract.md`、本文与 release note
+- 单 skill 正式交付物的边界已被重新写清，不再沿用“单个用户可见 skill 产品单元”的旧 framing
 
-### `minor` 示例
+本次仍不进入 `v1.0.0` 的原因是：
 
-- 新增一个稳定的宿主无关入口合同说明，但不改变现有下游必须遵守的接口
-- 这属于 `minor`
-- 像 `#226/#227` 所在的 `SKILLS surface convergence` 边界 / closeout 批次，只收用户首层产品面、宿主边界表述、验证记录与 release judgment，而不改 `registry/install-layout/upgrade-contract` 语义、root 最小职责、隐式路由优先级或 runtime evidence，也属于 `minor`
+- Loom 仍处于 pre-1 阶段
+- 全局发行渠道与宿主完整回归矩阵未进入稳定发布面
+- 机读 runtime contracts 与 shared runtime scripts 没有在本次发布中被重写
 
-### `patch` 示例
-
-- 把“小型既有仓库必须已有 CI / 基础测试”修正为“已有 CI / 基础测试，或等价质量基线”
-- 这属于对既有规则的去歧义与证据补强，因此属于 `patch`
-- 把 `#168/#170/#180` 的验证记录、发布面引用和父 issue 关闭依据统一回写到 adoption / release 文档
-- 这属于验证索引与 closeout 证据补强，不构成新的能力面，因此属于 `patch`
-
-## 7. 与 `skills` 分发合同的关系
+## 8. 与 `skills` 分发合同的关系
 
 `skills` 的安装、发现、升级与 adapter 合同，由 [../skills/distribution-and-adapter-contract.md](../skills/distribution-and-adapter-contract.md) 承接。
 
@@ -166,7 +215,7 @@ Loom 采用语义版本：
 - `skills/registry.json`
   - 承接 root entry、场景 entry、角色与合同版本的机读声明
 - `skills/install-layout.json`
-  - 承接 installed-skills 的最小 runtime/resources 布局，声明 skill-local `scripts/` 与 `shared/scripts/assets/references` 的必备面
+  - 承接 installed-skills 的最小 runtime / resources 布局，声明 skill-local `scripts/` 与 `shared/scripts/assets/references` 的必备面
 - `skills/upgrade-contract.json`
   - 承接最小机读升级协议，声明宿主必须重新读取 `registry/manifest/executable/referenced_resources/layout_manifest`
 
@@ -175,54 +224,7 @@ Loom 采用语义版本：
 同样需要保持的边界是：
 
 - 用户首层说明可以收敛或重写
-- 但只要 `registry/install-layout/upgrade-contract` 的 machine 语义不变，它们就仍然只是宿主 / adapter 公开面的版本承载物，不会自动把产品版本升级为 `major`
-
-因此，`#226/#227` 当前这批边界重述与 closeout 回写，默认版本判断仍为 `minor`；只有 machine semantics 实际变化时，才必须升级为 `major`。
-
-`#206` 当前引入的 installed-skills 布局重构，会改变 `skills` 的安装合同与 executable/resource 解析方式。下一次 Loom 正式产品发布若带上这组变更，应按 `major` 处理；在正式发版前，应继续以 issue / PR / install-layout 机读工件维持仓库真相一致。
-
-## 8. 场景 SKILLS 第一波的升级语义
-
-第一波稳定场景 skills 为：
-
-- `loom-adopt`
-- `loom-resume`
-- `loom-pre-review`
-- `loom-handoff`
-- `loom-retire`
-- `loom-merge-ready`
-
-这一波属于 `minor` 升级，原因是：
-
-- `loom-init` 仍保留唯一 root entry 身份
-- 既有 `bootstrap/verify/fact-chain` 语义未被破坏
-- 新增的是显式场景入口、root 隐式路由与聚合 flow，而不是替换旧入口
-
-下游升级时至少应确认：
-
-- 宿主能重新发现 7 个已注册 entries
-- 宿主知道 `loom-init route` 与 6 个显式场景 skill 的入口关系
-- 宿主刷新 `registry/manifest/executable/referenced_resources/layout_manifest`
-
-本文只定义版本对象与升级说明格式，不重复宿主适配细节。
+- 但只要 `registry/install-layout/upgrade-contract` 的 machine 语义不变，它们就仍然只是宿主 / adapter 公开面的版本承载物
+- 单 skill package 的说明合同可以补齐，但不应把 machine semantics 变化和文案澄清混写
 
 执行入口的兼容边界与操作流验证由 [execution-entry-compatibility.md](./execution-entry-compatibility.md) 承接。
-
-## 9. Repo Companion Interface 批次（默认 `minor`）
-
-本批 `repo companion` 文档化与合同化变更默认按 `minor` 管理，原因是：
-
-- 新增了稳定下游合同面，但未破坏既有 Loom 入口语义
-- 新增的是可选接入能力与机读声明，不是替换现有执行链路
-
-下游新增接入时，最小新增工件为：
-
-- `.loom/companion/manifest.json`
-- `.loom/companion/repo-interface.json`
-
-其中 `repo-interface.json` 当前最小稳定字段为：
-
-- `schema_version`
-- `companion_entry`
-- `repo_specific_requirements`
-- `specialized_gates`

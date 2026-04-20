@@ -45,7 +45,8 @@ Loom 不是业务模板，也不是一组散落的规则文档。
 | `governance` 判断层 | 统一回答什么时候能继续、什么时候能 review、什么时候算完成 |
 | `repo companion` 接入层 | 为既有仓库暴露 locator-only manifest、机读 repo requirements 和 specialized gates，而不把单仓规则抬升为 Loom core |
 | Agent 平台接入 | 把 Loom skills 安装进 Claude Code / Codex 等 Agent 平台，并让 `loom-init` 成为默认入口 |
-| repo-local `loom CLI` | 次级入口，承接自动化、验证、调试与宿主编排；不替代 plugin 安装主路径或 scene skill 用户入口 |
+| repo-local `loom CLI` | 次级入口，承接自动化、验证、调试与宿主编排；不替代 plugin 安装主路径或 scenario skill 用户入口 |
+| `single-skill standard-skill package` | 单个标准 skill 的正式交付物；只承接该 skill 的场景合同与最小运行切片，不承诺整包 Loom 默认能力 |
 
 ## 安装与快速开始
 
@@ -55,6 +56,20 @@ Loom 不是业务模板，也不是一组散落的规则文档。
 - 对 Loom 仓库的访问权限
 - 如需本地验证或调试，需具备 `python3`
 
+### 三条 repo-local 路径
+
+Loom `v0.4.0` 当前对外同时承认三条 repo-local 路径：
+
+| 路径 | 默认角色 | 你会拿到什么 | 不承诺什么 |
+| --- | --- | --- | --- |
+| repo-local `loom` plugin | 默认安装对象 | `loom-init` + 7 个场景 skills 的完整 Loom 入口面 | 不把 `loom CLI` 变成用户第一入口 |
+| repo-local `loom CLI` | 次级执行面 | 统一的 `loom ...` 自动化、验证、调试与宿主编排语义 | 不替代 plugin 安装主路径或 scenario skills 用户入口 |
+| `single-skill standard-skill package` | 单 skill 正式交付物 | 某个标准 skill 的场景合同、最小 launcher / shim 和所需私有资源；当前仓库产物位于 `packages/skills/<skill-id>/` | 不承诺整包 Loom 默认能力，也不自动补齐其余 scenario skills |
+
+如果你要把 Loom 整体接进一个仓库，默认走 repo-local `loom` plugin。
+如果你在写脚本、做自动化、调试或宿主编排，走 repo-local `loom CLI`。
+如果你只需要正式分发一个标准 skill，走 `single-skill standard-skill package`，当前仓库对应产物位于 `packages/skills/<skill-id>/`；但不要把它当作完整 Loom 安装。
+
 ### AI Agent 版
 
 把 Loom 接进 Claude Code / Codex 等 Agent 平台时，repo 内默认安装对象是 repo-local `loom` plugin。
@@ -63,7 +78,7 @@ Loom 不是业务模板，也不是一组散落的规则文档。
 
 1. 获取这个仓库
 2. 按当前 Agent 平台的标准方式发现并安装 repo-local `loom` plugin
-3. 确认默认从 `loom-init` 进入，且其余 Loom scene skills 可用
+3. 确认默认从 `loom-init` 进入，且其余 Loom scenario skills 可用
 
 安装完成后，使用 Loom skills 的顺序是：
 
@@ -76,7 +91,7 @@ Loom 不是业务模板，也不是一组散落的规则文档。
 - 默认进入方式是 `loom-init`
 - 其余能力由 7 个场景 skills 承接，`loom-init` 会把你导向正确入口
 
-repo-local `loom CLI` 仍保留，但它是次级入口，主要用于自动化、验证、调试和宿主编排，不是安装主路径，也不替代 `loom-init` 与其余 scene skills 的用户入口。
+repo-local `loom CLI` 仍保留，但它是次级入口，主要用于自动化、验证、调试和宿主编排，不是安装主路径，也不替代 `loom-init` 与其余 scenario skills 的用户入口。
 
 文档里提到 repo-local `loom CLI` 时，默认是在说统一的 repo-local 操作面，例如：
 
@@ -91,6 +106,8 @@ repo-local `loom CLI` 仍保留，但它是次级入口，主要用于自动化�
 
 如果你需要看版本判断和升级语义，读 [adoption/versioning-and-upgrades.md](./adoption/versioning-and-upgrades.md)。
 
+如果你需要看单个标准 skill 如何被正式交付、以及它为什么不等于整包 Loom，读 [skills/README.md](./skills/README.md)。
+
 ### 给正在开发项目的 Agent 的快速安装
 
 如果你希望 AI Agent 直接把 Loom 装进它正在开发的项目流程里，可以把下面这段提示词直接发给它：
@@ -101,7 +118,7 @@ repo-local `loom CLI` 仍保留，但它是次级入口，主要用于自动化�
 按 https://github.com/MC-and-his-Agents/Loom 操作：
 1. 获取 Loom 仓库
 2. 按当前平台支持的方式发现并安装 repo-local loom plugin
-3. 确认默认从 loom-init 进入，并且其他 Loom scene skills 可用
+3. 确认默认从 loom-init 进入，并且其他 Loom scenario skills 可用
 4. 安装完成后，不要直接开始改代码；先用 loom-init 判断当前项目属于哪个场景，并告诉我下一步应该进入哪个 skill
 
 如果当前 Claude Code / Codex 等 Agent 平台使用的是本地 plugin 目录、marketplace、manifest 注册或等价机制，请按该平台的标准方式完成安装。
@@ -127,6 +144,8 @@ Loom 当前稳定提供 1 个默认入口和 7 个场景 skills。
 | `loom-merge-ready` | 判断是否可合并时 | 现在到底能不能 merge？ |
 
 这些 skill 的作用不是解释原则，而是把 agent 带到正确场景。
+在完整 Loom 安装形态里，用户执行面就是这组 scenario skills。
+若某个标准 skill 被单独交付，它的正式形态是 `single-skill standard-skill package`；该 package 只承接该 skill 的场景合同，不承诺整包 Loom 默认能力。
 
 ## Harness
 
@@ -390,7 +409,7 @@ repo-local `loom CLI` 主要给这些情况使用：
 - `loom flow closeout check --target <repo>`
 - `loom check <repo>`
 
-在当前 Loom 仓库开发态中，这组 repo-local CLI 动作仍由 `tools/loom_init.py`、`tools/loom_flow.py`、`tools/loom_check.py` 等 carrier 承接；安装态则会映射到对应的 `skills/*/scripts/` 与 `skills/shared/scripts/`。这层统一写法的目的，是让自动化、验证、调试和宿主编排共享同一组操作语义，而不是让用户绕过 `loom-init` 或 scene skills 直接把 CLI 当成首层产品。
+在当前 Loom 仓库开发态中，这组 repo-local CLI 动作仍由 `tools/loom_init.py`、`tools/loom_flow.py`、`tools/loom_check.py` 等 carrier 承接；安装态则会映射到对应的 `skills/*/scripts/` 与 `skills/shared/scripts/`。这层统一写法的目的，是让自动化、验证、调试和宿主编排共享同一组操作语义，而不是让用户绕过 `loom-init` 或 scenario skills 直接把 CLI 当成首层产品。
 
 安装、升级、运行态识别和失败可见性的正式合同不在本节展开，统一见 [skills/distribution-and-adapter-contract.md](./skills/distribution-and-adapter-contract.md)。
 

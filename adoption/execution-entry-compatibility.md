@@ -4,67 +4,84 @@
 
 对应 Loom issue：`#60`
 
-## 1. 兼容边界
+当前正式产品版本：`v0.4.0`
 
-当前稳定入口按以下分层兼容：
+当前发布判断：`major but still pre-1`
+
+## 1. 四层交付面的入口兼容
+
+`v0.4.0` 当前稳定入口按以下四层兼容：
+
+| 交付面 | 稳定入口 | 兼容承诺 |
+| --- | --- | --- |
+| `repo-local plugin` | 完整 Loom install surface | 继续作为默认安装对象，暴露 `loom-init` 与其余 scenario skills，不把宿主实现细节抬升为 Loom 真相 |
+| repo-local `loom CLI` | `loom ...` | 继续作为自动化、验证、调试与宿主编排的次级执行面，不替代用户首层入口 |
+| `scenario skills` | `loom-init` + 7 个 scenario skills | 继续作为用户执行面；`loom-init` 保持唯一 root entry 身份 |
+| `single-skill standard-skill packages` | 单个标准 skill 的 package + 最小 launcher / shim | 只承接该 skill 的场景合同与最小运行切片，不承诺整包 Loom 默认能力 |
+
+## 2. 执行内核兼容边界
+
+当前稳定执行入口按以下分层兼容：
 
 | 层级 | 稳定入口 | 兼容承诺 |
 | --- | --- | --- |
-| root 入口与基础验证 | `loom_init bootstrap/verify/fact-chain/route` | `loom-init` 继续作为唯一 root entry，路由能力不替代底层 CLI |
-| 初始化与恢复公共治理读面 | `loom-init` 输出合同 + `loom-adopt` / `loom-resume` 场景合同 | `governance_surface` 作为稳定公共字段存在；其中 `repo_interface` 只承接 `repo companion` locator 与机读 requirements/gates，场景 skill 只能复用或摘要，不新增第二套治理真相 |
-| 日常读取与检查 | `loom_flow fact-chain/runtime-evidence/state-check` | 输出保持 JSON 结果语义（`result/summary/missing_inputs/fallback_to`） |
-| checkpoint 执行 | `loom_flow checkpoint admission/build/merge` | 三阶段语义与回退关系保持不变 |
-| 现场与纯度治理 | `loom_flow workspace <create/locate/cleanup/retire>` + `purity-check` | 生命周期动作与失败语义保持不变 |
-| 宿主动作与 closeout | [../harness/host-action-contract.md](../harness/host-action-contract.md) + `loom_flow host-lifecycle` + `reconciliation audit|sync` + `closeout check|sync` | 新增统一主落点，不改变现有 CLI；Loom 冻结 host-facing actions 的结果与去向，但不接管宿主 branch/PR/worktree 生命周期 |
-| drift 审计与 sync | `loom_flow reconciliation audit|sync` | `audit` 只生成 absorbed-but-open / parent drift / project drift；`sync` 只消费这些 finding 做机械写回，不扩展为新的 gate/验证入口 |
-| 高频组合入口 | `loom_flow flow pre-review/review/resume/handoff/merge-ready` | 聚合入口扩张不破坏单命令入口，统一保持 JSON 结果语义；`review` / `merge-ready` 只增量暴露 `repo_specific_requirements`，不改 `result/summary/missing_inputs/fallback_to` 顶层纪律 |
-| 场景 skills | `loom-adopt/resume/pre-review/review/handoff/retire/merge-ready` | 场景 skill 只做入口编排，不新增第二套事实真相源 |
+| root 入口与基础验证 | `loom route` / `loom init verify` | `loom-init` 继续作为唯一 root entry，路由能力不替代底层 CLI |
+| 初始化与恢复公共治理读面 | `loom-init` 输出合同 + `loom-adopt` / `loom-resume` 场景合同 | `governance_surface` 作为稳定公共字段存在；其中 `repo_interface` 只承接 `repo companion` locator 与机读 requirements / gates，场景 skill 只能复用或摘要，不新增第二套治理真相 |
+| 日常读取与检查 | `loom flow fact-chain` / `loom flow runtime-evidence` / `loom flow state-check` | 输出保持 JSON 结果语义（`result/summary/missing_inputs/fallback_to`） |
+| checkpoint 执行 | `loom flow checkpoint admission/build/merge` | 三阶段语义与回退关系保持不变 |
+| 现场与纯度治理 | `loom flow workspace <create/locate/cleanup/retire>` + `purity-check` | 生命周期动作与失败语义保持不变 |
+| 宿主动作与 closeout | [../harness/host-action-contract.md](../harness/host-action-contract.md) + `loom flow host-lifecycle` + `reconciliation audit|sync` + `closeout check|sync` | 新增统一主落点，不改变现有 CLI；Loom 冻结 host-facing actions 的结果与去向，但不接管宿主 branch / PR / worktree 生命周期 |
+| drift 审计与 sync | `loom flow reconciliation audit|sync` | `audit` 只生成 absorbed-but-open / parent drift / project drift；`sync` 只消费这些 finding 做机械写回，不扩展为新的 gate / 验证入口 |
+| 高频组合入口 | `loom flow pre-review/review/resume/handoff/merge-ready` | 聚合入口扩张不破坏单命令入口，统一保持 JSON 结果语义；`review` / `merge-ready` 只增量暴露 `repo_specific_requirements`，不改 `result/summary/missing_inputs/fallback_to` 顶层纪律 |
+| scenario skills | `loom-adopt/resume/pre-review/review/handoff/retire/merge-ready` | 场景 skill 只做入口编排，不新增第二套事实真相源 |
 
-## 2. 升级策略
+## 3. 升级策略
 
 - 升级优先“加入口，不改旧入口语义”
 - 新增聚合入口（如 `flow pre-review`、`flow merge-ready`）不替换单命令入口
 - 新增 authored 入口（如 `review record`、`recovery writeback`、`work-item create|update`）不把只读 flow 变成隐式写入
 - 新增场景 skill 入口不替代 `loom-init` 的 root 身份，只补显式入口与隐式路由
+- 单 skill package 只补正式交付物，不重写场景 skill 合同
 - 新增 [../harness/host-action-contract.md](../harness/host-action-contract.md) 只收口既有 host-facing actions 的合同，不新增 umbrella CLI，也不改写既有命令输出结构
 - `governance_surface` 只允许扩充 locator 或职责说明，不允许更名、拆成并行字段或复制实时 authored 状态；`repo_interface` 只允许承接 `repo companion` 的 locator、requirements 与 specialized gates 机读摘要
 - gate 与 verify 始终复用同一 CLI，不维护第二套检查命令
 
-## 3. 可复验操作流
+## 4. 可复验操作流
 
 在样本副本中按以下顺序执行：
 
-1. `loom_init route`
-2. `loom_init verify`
-3. `loom_flow fact-chain`
-4. `loom_flow runtime-evidence`
-5. `loom_flow state-check`
-6. `loom_flow flow resume`
-7. `loom_flow flow pre-review`
-8. `loom_flow flow review`
-9. `loom_flow review read|record`
-10. `loom_flow recovery writeback`
-11. `loom_flow work-item create|update`
-12. `loom_flow flow handoff`
-13. `loom_flow flow merge-ready`
-14. `loom_flow checkpoint admission/build/merge`
-15. `loom_flow workspace locate/cleanup/retire`
-16. `loom_flow host-lifecycle`
-17. `loom_flow reconciliation audit`
-18. `loom_flow reconciliation sync --dry-run`
-19. `loom_flow closeout check`
+1. `loom route`
+2. `loom init verify`
+3. `loom flow fact-chain`
+4. `loom flow runtime-evidence`
+5. `loom flow state-check`
+6. `loom flow resume`
+7. `loom flow pre-review`
+8. `loom flow review`
+9. `loom review read|record`
+10. `loom flow recovery writeback`
+11. `loom flow work-item create|update`
+12. `loom flow handoff`
+13. `loom flow merge-ready`
+14. `loom flow checkpoint admission/build/merge`
+15. `loom flow workspace locate/cleanup/retire`
+16. `loom flow host-lifecycle`
+17. `loom flow reconciliation audit`
+18. `loom flow reconciliation sync --dry-run`
+19. `loom flow closeout check`
 
 预期：
 
-- 前 1-9 步提供“该进入哪个入口/可继续执行/需阻断/是否应回退”的统一判断
+- 前 1-9 步提供“该进入哪个入口 / 可继续执行 / 需阻断 / 是否应回退”的统一判断
 - `loom-init`、`loom-adopt`、`loom-resume` 对外公开的治理读面保持同一字段名 `governance_surface`
 - `governance_surface.repo_interface` 只区分 `absent | companion_docs_only | incomplete | present` 四类机读状态，不把旧式 companion docs 伪装成稳定 repo interface
 - merge 阶段可按状态返回 `fallback`，而不是伪装成通过
 - `flow review`、`flow merge-ready` 与 `closeout check|sync` 只增量暴露 `repo_specific_requirements`；blocking companion requirement 必须显式阻断，advisory requirement 只展示不阻断
 - host-facing actions 继续复用既有命令，但 `fallback` 只保留给 Loom 内部 checkpoint / merge control；closeout 与 reconciliation 不把 drift 伪装成 `fallback`
+- 单 skill package 若被单独消费，也只应暴露对应场景合同，不伪装成完整 Loom install surface
 - 操作流既可拆分执行，也可通过聚合入口执行高频路径
 
-## 4. 验证结论
+## 5. 验证结论
 
 基于 `mail-listener`、`hotcp`、`loom-adoption-new-project` 的临时副本复验：
 
@@ -80,4 +97,4 @@
 - `reconciliation sync` 必须先消费同范围 audit；若出现任一 `block` finding，则返回 `block` 且不写控制面
 - `reconciliation sync --dry-run` 只输出计划，不伪装成已经完成 closeout
 
-因此，下游仓库可以按 root skill 或显式场景 skill 消费完整执行内核，不再依赖手工拼接散落流程说明。
+因此，下游仓库可以按 repo-local plugin、显式 scenario skill 或单个 standard-skill package 消费 Loom 的入口层，但单 skill consumption 不应被误读为“已经获得完整 Loom 默认能力”。

@@ -1,10 +1,42 @@
 # Upstream Delivery Surface
 
-本文定义 Loom 作为上游系统时，对下游稳定暴露的交付面。
+本文定义 Loom `v0.4.0` 作为上游系统时，对下游稳定暴露的交付面。
 
 它的目标不是描述某个宿主如何发行，而是明确：哪些内容已经形成 Loom 的稳定发布面，哪些内容仍然属于候选或宿主特定实现。
 
-## 1. 稳定交付面
+当前正式产品版本：`v0.4.0`
+
+当前发布判断：`major but still pre-1`
+
+## 1. 四层 repo-local 稳定交付面
+
+`v0.4.0` 把 Loom 的 repo-local 交付形态固定为四层：
+
+### 1.1 `repo-local plugin`
+
+- 默认安装对象
+- 承接 Agent 平台发现、安装与完整 Loom 入口暴露
+- 对用户首层说明以根 `README.md` 为准
+
+### 1.2 repo-local `loom CLI`
+
+- 次级执行面
+- 承接自动化、验证、调试与宿主编排
+- 不替代 plugin 安装主路径，也不升格成新的事实真相源
+
+### 1.3 `scenario skills`
+
+- 用户执行面
+- 由 `loom-init` root entry 与 7 个 scenario skills 组成
+- 承接“现在该进入哪个动作”的稳定入口语义
+
+### 1.4 `single-skill standard-skill packages`
+
+- 单个标准 skill 的正式交付物
+- 承接某个 skill 的场景合同、最小 launcher / shim 与所需私有资源
+- 不承诺整包 Loom 默认能力，也不自动补齐其余 scenario skills
+
+## 2. 进入稳定交付面的内容
 
 当前稳定交付面包括：
 
@@ -15,10 +47,13 @@
 - `templates/`
   - 最小正式规约模板与最小 PR 模板
 - `skills/`
-  - 用户首层入口面：
-    - 根 `README.md` 的安装 / 快速开始
-    - `skills/README.md` 的入口层总览
+  - 完整 Loom 用户首层公开面：
+    - 根 `README.md` 的三条 repo-local 路径与安装 / 快速开始
+    - `skills/README.md` 的 scenario skills 总览
     - `skills/loom-init/SKILL.md` 的 root entry 首屏
+  - `single-skill standard-skill package` 的边界说明：
+    - `skills/README.md`
+    - `skills/distribution-and-adapter-contract.md`
   - 宿主 / adapter 公开面：
     - `skills/distribution-and-adapter-contract.md`
     - `skills/registry.json`
@@ -27,13 +62,10 @@
     - `skills/route-matrix.md`
     - `skills/<entry>/contract.json`
     - `skills/shared/scripts/assets/references`
-  - 上述两层共同承接：
-    - `loom-init` root 路由
-    - 7 个场景 skills
 - `adoption/`
   - 稳定 adoption 路径、经验回流、验证记录合同、版本化与升级路径
   - `repo companion migration` 稳定下游合同
-  - 执行入口兼容说明、reconciliation audit/sync 兼容边界、7 个场景 skill 验证记录与完整执行内核复验记录
+  - 执行入口兼容说明、reconciliation audit / sync 兼容边界、7 个场景 skill 验证记录与完整执行内核复验记录
   - 第一批执行化补充验证记录：
     - `adoption/validation-main-path-new-project.md`
     - `adoption/validation-existing-repo-execution-sync.md`
@@ -49,11 +81,10 @@
     - 只作为 Loom 自身 closeout / retrofit 依据，不单独提升为新的默认 adoption 路径
 - 发布说明
   - `docs/complete-kernel-release.md`
-  - 当前正式产品版本：`v0.3.0`
 
 这些内容共同形成 Loom 的最小上游发布面。
 
-## 2. 候选交付面
+## 3. 候选交付面
 
 以下内容当前不属于稳定发布面：
 
@@ -61,32 +92,37 @@
 - 单靠 `adoption/validation-retrofit-143-tree.md` 推出的新 adoption 默认路径
 - 宿主特定 adapter 实现
 - 宿主完整回归矩阵
+- 全局发行渠道，例如 npm、pipx、Homebrew
 - 未升为 `keep` 的 `EXT-*` 结论
 - 只在单一宿主或单一仓库成立的安装 / 发布细节
 
 这些内容可以被 Loom 承认，但不应被伪装成默认必须消费的上游接口。
 
-## 3. 交付对象
+## 4. 交付对象
 
 Loom 对下游交付的对象不是单个文件，而是以下组合：
 
 - 一组稳定规则真相
 - 一组最小模板
-- 一组可升级的入口合同与 root/scene 路由入口
-- 一组 adoption / upgrade 说明
+- 一组可升级的 repo-local 安装与执行面
+- 一组稳定的 scenario skill 入口合同
+- 一组可单独正式交付的 standard-skill packages 边界说明
+- 一组 adoption / upgrade / release 说明
 - 一组下游 `repo companion migration` 机读合同（`.loom/companion/manifest.json` 与 `.loom/companion/repo-interface.json`）
 
 下游不应被要求复制候选材料，才能消费 Loom 的核心能力。
 
-## 4. 交付边界约束
+## 5. 交付边界约束
 
-- `skills` 的用户首层公开面与宿主 / adapter 公开面必须分层表达
+- `repo-local plugin`、repo-local `loom CLI`、scenario skills、single-skill standard-skill packages 必须分层表达
+- `skills` 的用户首层公开面、单 skill 交付面与宿主 / adapter 公开面必须分层表达
 - 宿主实现细节不进入稳定交付面
 - 单仓验证不足的结论不进入稳定交付面
 - 根入口摘要不重复内核正文；内核正文只保留在唯一主落点
+- 单 skill package 不得被写成“完整 Loom 默认能力”的同义词
 - 任何想进入稳定交付面的内容，都必须能映射到 `landing-map.md`
 
-## 5. 反例
+## 6. 反例
 
 以下不是稳定交付面：
 
@@ -94,5 +130,6 @@ Loom 对下游交付的对象不是单个文件，而是以下组合：
 - 某个宿主的安装路径
 - 某个仓库的本地 CI 脚本
 - 一条尚未脱离单仓样本的候选方法论
+- 把单个 skill package 描述成“等于整包 Loom”
 
 这些对象可以存在，但只能作为宿主实现或候选材料，不应被下游当作 Loom 默认契约。
