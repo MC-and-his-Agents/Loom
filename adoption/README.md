@@ -24,6 +24,7 @@
 - `repo companion` 接口状态验证：[validation-repo-companion-interface.md](./validation-repo-companion-interface.md)
 - 小型既有仓库的默认 retrofit 策略：[lightweight-retrofit-default.md](./lightweight-retrofit-default.md)
 - 暂不固化、待继续验证的候选模式：[candidate-patterns.md](./candidate-patterns.md)
+- 外部优秀 `SKILLS` 仓库设计清单与 Loom gap analysis：[skills-repo-design-checklist.md](./skills-repo-design-checklist.md)
 - 初始化 `SKILL` 模拟验证：[demo-init-validation.md](./demo-init-validation.md)
 - 真实 adoption 验证记录合同：[validation-record-contract.md](./validation-record-contract.md)
 - 经验回流机制：[experience-feedback-loop.md](./experience-feedback-loop.md)
@@ -58,6 +59,7 @@ Issue -> 验证 / 回写索引：
 - `#180` -> [validation-retrofit-143-tree.md](./validation-retrofit-143-tree.md)
 - `#209` -> [validation-installed-skills-pre-merge-chain.md](./validation-installed-skills-pre-merge-chain.md)
 - `#210` -> [validation-installed-skills-post-merge-closeout.md](./validation-installed-skills-post-merge-closeout.md)
+- `#223` -> [skills-repo-design-checklist.md](./skills-repo-design-checklist.md); [../docs/skills-surface-delivery-judgment.md](../docs/skills-surface-delivery-judgment.md); [../docs/skills-surface-issue-tree-draft.md](../docs/skills-surface-issue-tree-draft.md)
 - `#169` -> [landing-map.md](./landing-map.md); [upstream-delivery-surface.md](./upstream-delivery-surface.md); [versioning-and-upgrades.md](./versioning-and-upgrades.md); [../docs/complete-kernel-release.md](../docs/complete-kernel-release.md)
 
 当前目录对应的主要 `EXT-*` 条目：

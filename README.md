@@ -407,6 +407,8 @@ CLI 主要给这些情况使用：
 - [skills/README.md](./skills/README.md)
 - [harness/README.md](./harness/README.md)
 - [skills/distribution-and-adapter-contract.md](./skills/distribution-and-adapter-contract.md)
+- [docs/skills-surface-delivery-judgment.md](./docs/skills-surface-delivery-judgment.md)
+- [docs/skills-surface-issue-tree-draft.md](./docs/skills-surface-issue-tree-draft.md)
 - [VISION.md](./VISION.md)
 - [docs/complete-kernel-release.md](./docs/complete-kernel-release.md)
 - [adoption/versioning-and-upgrades.md](./adoption/versioning-and-upgrades.md)
