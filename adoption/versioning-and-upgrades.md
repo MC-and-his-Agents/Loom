@@ -22,6 +22,7 @@ Loom 的版本对象是“可被下游直接消费的能力面”，而不是单
 - `templates` 合同
 - `skills` 入口合同
 - `adoption` 中面向下游的稳定采用 / 升级规则
+- `repo companion migration` 稳定下游合同（含 `repo-interface.json`）
 
 候选文档、宿主特定实现和未升为 `keep` 的条目，不自动进入稳定版本边界。
 
@@ -78,6 +79,13 @@ Loom 采用语义版本：
 
 必要时再同步更新 README、adoption 索引与上游交付面说明。
 
+若发布包含 `repo companion migration` 合同变更，还应同步更新：
+
+- [`repo-companion-migration.md`](./repo-companion-migration.md)
+- [`reference-companion-spec-syvert.md`](./reference-companion-spec-syvert.md)
+- [`reference-companion-spec-webenvoy.md`](./reference-companion-spec-webenvoy.md)
+- [`validation-repo-companion-interface.md`](./validation-repo-companion-interface.md)
+
 ## 5. 能力面与升级动作的对应关系
 
 ### 5.1 `governance`
@@ -122,6 +130,7 @@ Loom 采用语义版本：
 以下变化通常构成 `minor` 或 `patch`：
 
 - 新增稳定 adoption 路径通常为 `minor`
+- 新增稳定 `repo companion migration` 合同、但不破坏既有入口语义，通常为 `minor`
 - 对已有路径做澄清或补证据通常为 `patch`
 - 像 `#169` 这样只补验证索引、交付面引用与 closeout 依据回写，而不改 adoption 合同语义，属于 `patch`
 - 像 `#180` 这样只补 Loom 自身 retrofit 证据、但不改变关闭语义或默认 adoption 路径，也属于 `patch`
@@ -188,3 +197,22 @@ Loom 采用语义版本：
 本文只定义版本对象与升级说明格式，不重复宿主适配细节。
 
 执行入口的兼容边界与操作流验证由 [execution-entry-compatibility.md](./execution-entry-compatibility.md) 承接。
+
+## 9. Repo Companion Interface 批次（默认 `minor`）
+
+本批 `repo companion` 文档化与合同化变更默认按 `minor` 管理，原因是：
+
+- 新增了稳定下游合同面，但未破坏既有 Loom 入口语义
+- 新增的是可选接入能力与机读声明，不是替换现有执行链路
+
+下游新增接入时，最小新增工件为：
+
+- `.loom/companion/manifest.json`
+- `.loom/companion/repo-interface.json`
+
+其中 `repo-interface.json` 当前最小稳定字段为：
+
+- `schema_version`
+- `companion_entry`
+- `repo_specific_requirements`
+- `specialized_gates`

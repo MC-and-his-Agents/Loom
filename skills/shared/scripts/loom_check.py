@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from fact_chain_support import inspect_fact_chain
+from governance_surface import build_governance_surface
+from loom_flow import repo_specific_requirements_payload
 from runtime_paths import repo_local_root
 
 TOP_LEVEL_DIRS = (
@@ -83,9 +85,15 @@ CORE_DOCS = (
     "adoption/rationale.md",
     "adoption/routing-and-checkpoints.md",
     "adoption/lightweight-retrofit-default.md",
+    "adoption/repo-companion-contract.md",
+    "adoption/companion-oriented-workflow.md",
+    "adoption/repo-companion-migration.md",
+    "adoption/reference-companion-spec-syvert.md",
+    "adoption/reference-companion-spec-webenvoy.md",
     "adoption/candidate-patterns.md",
     "adoption/demo-init-validation.md",
     "adoption/validation-record-contract.md",
+    "adoption/validation-repo-companion-interface.md",
     "adoption/experience-feedback-loop.md",
     "adoption/validation-new-project.md",
     "adoption/validation-devskills.md",
@@ -202,6 +210,8 @@ GOVERNANCE_SURFACE_CONTRACT_SKILLS = {
 
 REVIEW_FINDING_SEVERITIES = {"warn", "block"}
 REVIEW_FINDING_DISPOSITION_STATUSES = {"accepted", "rejected", "deferred"}
+REPO_INTERFACE_AVAILABILITY = {"absent", "companion_docs_only", "incomplete", "present"}
+REPO_INTERFACE_ENFORCEMENT = {"blocking", "advisory"}
 
 
 def repo_root_from_argv(argv: list[str]) -> Path:
@@ -431,6 +441,7 @@ def require_governance_surface(
         "validation_entry",
         "review_merge_surface",
         "github_control_plane",
+        "repo_interface",
         "summary",
         "missing_inputs",
     )
@@ -441,6 +452,10 @@ def require_governance_surface(
     for key in ("repository_mode", "loom_state", "execution_entry", "validation_entry", "summary"):
         if key in governance_surface and (not isinstance(governance_surface.get(key), str) or not governance_surface.get(key)):
             failures.append(Failure(category, f"{context} governance_surface `{key}` must be a non-empty string"))
+    if governance_surface.get("repository_mode") not in {"new", "small-existing", "complex-existing"}:
+        failures.append(Failure(category, f"{context} governance_surface `repository_mode` must stay within the stable contract"))
+    if governance_surface.get("loom_state") not in {"active", "partial", "absent"}:
+        failures.append(Failure(category, f"{context} governance_surface `loom_state` must stay within the stable contract"))
 
     missing_inputs = governance_surface.get("missing_inputs")
     if missing_inputs is not None and not isinstance(missing_inputs, list):
@@ -451,6 +466,8 @@ def require_governance_surface(
         failures.append(Failure(category, f"{context} governance_surface must include `carrier_summary`"))
     else:
         required_carriers = ("work_item", "recovery", "review", "status_surface", "spec_path", "plan_path")
+        if set(carrier_summary.keys()) != set(required_carriers):
+            failures.append(Failure(category, f"{context} governance_surface carrier keys must stay within the stable contract"))
         for carrier in required_carriers:
             entry = carrier_summary.get(carrier)
             if not isinstance(entry, dict):
@@ -467,10 +484,139 @@ def require_governance_surface(
                         Failure(category, f"{context} governance_surface carrier `{carrier}` must include non-empty `{field}`")
                     )
 
-    for key in ("review_merge_surface", "github_control_plane"):
-        value = governance_surface.get(key)
-        if value is not None and not isinstance(value, dict):
-            failures.append(Failure(category, f"{context} governance_surface `{key}` must be an object"))
+    review_merge_surface = governance_surface.get("review_merge_surface")
+    if review_merge_surface is not None and not isinstance(review_merge_surface, dict):
+        failures.append(Failure(category, f"{context} governance_surface `review_merge_surface` must be an object"))
+    elif isinstance(review_merge_surface, dict):
+        for key in ("pr_template", "validation_surface", "merge_surface"):
+            value = review_merge_surface.get(key)
+            if not isinstance(value, str) or not value:
+                failures.append(Failure(category, f"{context} governance_surface `review_merge_surface.{key}` must be a non-empty string"))
+
+    github_control_plane = governance_surface.get("github_control_plane")
+    if github_control_plane is not None and not isinstance(github_control_plane, dict):
+        failures.append(Failure(category, f"{context} governance_surface `github_control_plane` must be an object"))
+    elif isinstance(github_control_plane, dict):
+        for key in ("repository", "default_branch", "branch_protection", "required_checks", "pr_reviews"):
+            if key not in github_control_plane:
+                failures.append(Failure(category, f"{context} governance_surface `github_control_plane.{key}` must exist"))
+        for key in ("repository", "default_branch"):
+            value = github_control_plane.get(key)
+            if not isinstance(value, str) or not value:
+                failures.append(Failure(category, f"{context} governance_surface `github_control_plane.{key}` must be a non-empty string"))
+        if github_control_plane.get("branch_protection") not in {"enabled", "disabled", "unknown"}:
+            failures.append(Failure(category, f"{context} governance_surface `github_control_plane.branch_protection` must stay within the stable contract"))
+        if github_control_plane.get("pr_reviews") not in {"required", "not_required", "unknown"}:
+            failures.append(Failure(category, f"{context} governance_surface `github_control_plane.pr_reviews` must stay within the stable contract"))
+        required_checks = github_control_plane.get("required_checks")
+        if not (
+            required_checks == "unknown"
+            or (isinstance(required_checks, list) and all(isinstance(item, str) and item for item in required_checks))
+        ):
+            failures.append(Failure(category, f"{context} governance_surface `github_control_plane.required_checks` must be `unknown` or a string list"))
+
+    require_repo_interface_payload(
+        failures,
+        category=category,
+        context=f"{context} governance_surface.repo_interface",
+        payload=governance_surface.get("repo_interface"),
+    )
+
+
+def require_locator_entry(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+    allowed_statuses: set[str],
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("status") not in allowed_statuses:
+        failures.append(Failure(category, f"{context} status must stay within the stable contract"))
+    for field in ("locator", "source"):
+        value = payload.get(field)
+        if not isinstance(value, str) or not value:
+            failures.append(Failure(category, f"{context} must include non-empty `{field}`"))
+
+
+def require_repo_interface_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("availability") not in REPO_INTERFACE_AVAILABILITY:
+        failures.append(Failure(category, f"{context} availability must stay within the stable contract"))
+    require_locator_entry(
+        failures,
+        category=category,
+        context=f"{context}.manifest",
+        payload=payload.get("manifest"),
+        allowed_statuses={"present", "missing"},
+    )
+    for key in ("companion_entry", "repo_specific_requirements", "specialized_gates"):
+        require_locator_entry(
+            failures,
+            category=category,
+            context=f"{context}.{key}",
+            payload=payload.get(key),
+            allowed_statuses={"present", "missing"},
+        )
+    if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+        failures.append(Failure(category, f"{context} must include non-empty `summary`"))
+    if not isinstance(payload.get("missing_inputs"), list):
+        failures.append(Failure(category, f"{context} must include `missing_inputs` as a list"))
+
+
+def require_repo_specific_requirements_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+    expected_surface: str,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("surface") != expected_surface:
+        failures.append(Failure(category, f"{context} must report `surface: {expected_surface}`"))
+    if payload.get("result") not in {"pass", "block"}:
+        failures.append(Failure(category, f"{context} result must be `pass` or `block`"))
+    if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+        failures.append(Failure(category, f"{context} must include non-empty `summary`"))
+    if not isinstance(payload.get("missing_inputs"), list):
+        failures.append(Failure(category, f"{context} must include `missing_inputs`"))
+    if payload.get("fallback_to") not in {None, "build", "merge"}:
+        failures.append(Failure(category, f"{context} fallback must stay within the stable contract"))
+    for key in ("declared_requirements", "blocking_requirements", "advisory_requirements"):
+        entries = payload.get(key)
+        if not isinstance(entries, list):
+            failures.append(Failure(category, f"{context} must include `{key}` as a list"))
+            continue
+        for index, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                failures.append(Failure(category, f"{context} {key}[{index}] must be an object"))
+                continue
+            for field in ("id", "summary", "locator", "enforcement"):
+                value = entry.get(field)
+                if not isinstance(value, str) or not value:
+                    failures.append(Failure(category, f"{context} {key}[{index}] missing `{field}`"))
+            if entry.get("enforcement") not in REPO_INTERFACE_ENFORCEMENT:
+                failures.append(Failure(category, f"{context} {key}[{index}] enforcement must stay within the stable contract"))
+    declared = payload.get("declared_requirements")
+    blocking = payload.get("blocking_requirements")
+    advisory = payload.get("advisory_requirements")
+    if isinstance(declared, list) and isinstance(blocking, list) and isinstance(advisory, list):
+        if len(declared) != len(blocking) + len(advisory):
+            failures.append(Failure(category, f"{context} declared requirements must split cleanly into blocking and advisory"))
 
 
 def require_host_lifecycle_payload(
@@ -1626,7 +1772,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(Failure("daily-execution-cli", "`flow review` must report `command: flow`"))
             if payload.get("operation") != "review":
                 failures.append(Failure("daily-execution-cli", "`flow review` must report `operation: review`"))
-            for key in ("item", "state_check", "runtime_evidence", "build_checkpoint", "review", "current_checkpoint"):
+            for key in ("item", "state_check", "runtime_evidence", "build_checkpoint", "review", "current_checkpoint", "repo_specific_requirements"):
                 if not isinstance(payload.get(key), dict):
                     failures.append(Failure("daily-execution-cli", f"`flow review` must include `{key}`"))
             require_runtime_state_payload(
@@ -1665,6 +1811,13 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     context="`flow review` review.record",
                     payload=review.get("record"),
                 )
+            require_repo_specific_requirements_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`flow review` repo_specific_requirements",
+                payload=payload.get("repo_specific_requirements"),
+                expected_surface="review",
+            )
         if label == "review-read":
             if payload.get("command") != "review":
                 failures.append(Failure("daily-execution-cli", "`review read` must report `command: review`"))
@@ -1722,6 +1875,13 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 context=f"`{label}`",
                 payload=payload,
             )
+            require_repo_specific_requirements_payload(
+                failures,
+                category="daily-execution-cli",
+                context=f"`{label}` repo_specific_requirements",
+                payload=payload.get("repo_specific_requirements"),
+                expected_surface="closeout",
+            )
         if label == "reconciliation-audit":
             if payload.get("command") != "reconciliation":
                 failures.append(Failure("daily-execution-cli", "`reconciliation audit` must report `command: reconciliation`"))
@@ -1758,7 +1918,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         "`flow merge-ready` fallback must be `null` or a known checkpoint",
                     )
                 )
-            for key in ("item", "runtime_state", "state_check", "runtime_evidence", "build_checkpoint", "merge_checkpoint", "current_checkpoint"):
+            for key in ("item", "runtime_state", "state_check", "runtime_evidence", "build_checkpoint", "merge_checkpoint", "current_checkpoint", "repo_specific_requirements"):
                 if not isinstance(payload.get(key), dict):
                     failures.append(Failure("daily-execution-cli", f"`flow merge-ready` must include `{key}`"))
             require_runtime_state_payload(
@@ -1827,6 +1987,13 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             merge_checkpoint = payload.get("merge_checkpoint")
             if isinstance(merge_checkpoint, dict) and not isinstance(merge_checkpoint.get("pr_template"), dict):
                 failures.append(Failure("daily-execution-cli", "`flow merge-ready` must include `merge_checkpoint.pr_template`"))
+            require_repo_specific_requirements_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`flow merge-ready` repo_specific_requirements",
+                payload=payload.get("repo_specific_requirements"),
+                expected_surface="merge_ready",
+            )
             if payload.get("result") != "fallback":
                 failures.append(Failure("daily-execution-cli", "`flow merge-ready` must return `fallback` for the bootstrap demo"))
             if payload.get("fallback_to") != "admission":
@@ -3264,6 +3431,267 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
     return failures
 
 
+def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    example_target = root / "examples/new-project"
+    if not example_target.exists():
+        return failures
+
+    def write_json(path: Path, payload: object) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    def install_companion(
+        target: Path,
+        *,
+        manifest: dict[str, object] | None = None,
+        repo_interface: dict[str, object] | None = None,
+        legacy_docs_only: bool = False,
+    ) -> None:
+        companion_dir = target / ".loom" / "companion"
+        companion_dir.mkdir(parents=True, exist_ok=True)
+        if legacy_docs_only:
+            (companion_dir / "README.md").write_text("# Legacy Companion Docs\n", encoding="utf-8")
+            return
+        (companion_dir / "README.md").write_text("# Repo Companion\n", encoding="utf-8")
+        for doc in ("review.md", "merge-ready.md", "closeout.md", "specialized-gates.md"):
+            (companion_dir / doc).write_text(f"# {doc}\n", encoding="utf-8")
+        if manifest is not None:
+            write_json(companion_dir / "manifest.json", manifest)
+        if repo_interface is not None:
+            write_json(companion_dir / "repo-interface.json", repo_interface)
+
+    valid_manifest = {
+        "schema_version": "loom-repo-companion-manifest/v1",
+        "companion_entry": ".loom/companion/README.md",
+        "repo_interface": ".loom/companion/repo-interface.json",
+    }
+    valid_interface = {
+        "schema_version": "loom-repo-interface/v1",
+        "companion_entry": ".loom/companion/README.md",
+        "repo_specific_requirements": {
+            "review": [
+                {
+                    "id": "review-specialized-gate",
+                    "summary": "Run the repo-specific semantic review checklist.",
+                    "locator": ".loom/companion/review.md",
+                    "enforcement": "blocking",
+                }
+            ],
+            "merge_ready": [
+                {
+                    "id": "merge-ready-advisory-note",
+                    "summary": "Review the repo-specific merge advisory note.",
+                    "locator": ".loom/companion/merge-ready.md",
+                    "enforcement": "advisory",
+                }
+            ],
+            "closeout": [
+                {
+                    "id": "closeout-specialized-gate",
+                    "summary": "Confirm the repo-specific closeout checklist.",
+                    "locator": ".loom/companion/closeout.md",
+                    "enforcement": "blocking",
+                }
+            ],
+        },
+        "specialized_gates": [
+            {
+                "id": "specialized-release-gate",
+                "summary": "Companion-owned release judgment.",
+                "locator": ".loom/companion/specialized-gates.md",
+            }
+        ],
+    }
+
+    with tempfile.TemporaryDirectory(prefix="loom-check-repo-companion-") as tmp:
+        base = Path(tmp)
+
+        absent_target = base / "absent"
+        shutil.copytree(example_target, absent_target)
+        absent_surface = build_governance_surface(absent_target)
+        repo_interface = absent_surface.get("repo_interface")
+        require_repo_interface_payload(
+            failures,
+            category="repo-companion",
+            context="absent repo companion",
+            payload=repo_interface,
+        )
+        if not isinstance(repo_interface, dict) or repo_interface.get("availability") != "absent":
+            failures.append(Failure("repo-companion", "absent repo companion sample must report `availability: absent`"))
+
+        docs_only_target = base / "docs-only"
+        shutil.copytree(example_target, docs_only_target)
+        install_companion(docs_only_target, legacy_docs_only=True)
+        docs_only_surface = build_governance_surface(docs_only_target)
+        docs_only_interface = docs_only_surface.get("repo_interface")
+        require_repo_interface_payload(
+            failures,
+            category="repo-companion",
+            context="docs-only repo companion",
+            payload=docs_only_interface,
+        )
+        if not isinstance(docs_only_interface, dict) or docs_only_interface.get("availability") != "companion_docs_only":
+            failures.append(Failure("repo-companion", "docs-only repo companion sample must report `availability: companion_docs_only`"))
+
+        incomplete_target = base / "incomplete"
+        shutil.copytree(example_target, incomplete_target)
+        install_companion(
+            incomplete_target,
+            manifest={
+                **valid_manifest,
+                "current_stop": "forbidden authored state",
+                "repo_interface": ".loom/companion/missing-interface.json",
+            },
+        )
+        incomplete_surface = build_governance_surface(incomplete_target)
+        incomplete_interface = incomplete_surface.get("repo_interface")
+        require_repo_interface_payload(
+            failures,
+            category="repo-companion",
+            context="incomplete repo companion",
+            payload=incomplete_interface,
+        )
+        if not isinstance(incomplete_interface, dict) or incomplete_interface.get("availability") != "incomplete":
+            failures.append(Failure("repo-companion", "incomplete repo companion sample must report `availability: incomplete`"))
+
+        invalid_interface_target = base / "invalid-interface"
+        shutil.copytree(example_target, invalid_interface_target)
+        install_companion(
+            invalid_interface_target,
+            manifest=valid_manifest,
+            repo_interface={
+                "schema_version": "loom-repo-interface/v1",
+                "companion_entry": ".loom/companion/README.md",
+                "repo_specific_requirements": {
+                    "review": [
+                        {
+                            "id": "bad-enforcement",
+                            "summary": "Broken requirement",
+                            "locator": ".loom/companion/review.md",
+                            "enforcement": "required",
+                        }
+                    ],
+                    "merge_ready": [],
+                },
+                "specialized_gates": [],
+            },
+        )
+        invalid_interface_surface = build_governance_surface(invalid_interface_target)
+        invalid_interface = invalid_interface_surface.get("repo_interface")
+        require_repo_interface_payload(
+            failures,
+            category="repo-companion",
+            context="invalid repo companion interface",
+            payload=invalid_interface,
+        )
+        if not isinstance(invalid_interface, dict) or invalid_interface.get("availability") != "incomplete":
+            failures.append(Failure("repo-companion", "invalid repo companion interface sample must report `availability: incomplete`"))
+
+        present_target = base / "present"
+        shutil.copytree(example_target, present_target)
+        install_companion(
+            present_target,
+            manifest=valid_manifest,
+            repo_interface=valid_interface,
+        )
+        present_surface = build_governance_surface(present_target)
+        present_interface = present_surface.get("repo_interface")
+        require_repo_interface_payload(
+            failures,
+            category="repo-companion",
+            context="present repo companion",
+            payload=present_interface,
+        )
+        if not isinstance(present_interface, dict) or present_interface.get("availability") != "present":
+            failures.append(Failure("repo-companion", "present repo companion sample must report `availability: present`"))
+
+        review_requirements = repo_specific_requirements_payload(
+            present_interface,
+            target_root=present_target,
+            surface="review",
+        )
+        require_repo_specific_requirements_payload(
+            failures,
+            category="repo-companion",
+            context="present repo companion review requirements",
+            payload=review_requirements,
+            expected_surface="review",
+        )
+        if review_requirements.get("result") != "block":
+            failures.append(Failure("repo-companion", "blocking review requirements must fail closed"))
+
+        merge_requirements = repo_specific_requirements_payload(
+            present_interface,
+            target_root=present_target,
+            surface="merge_ready",
+        )
+        require_repo_specific_requirements_payload(
+            failures,
+            category="repo-companion",
+            context="present repo companion merge-ready requirements",
+            payload=merge_requirements,
+            expected_surface="merge_ready",
+        )
+        if merge_requirements.get("result") != "pass":
+            failures.append(Failure("repo-companion", "advisory merge-ready requirements must remain non-blocking"))
+
+        closeout_requirements = repo_specific_requirements_payload(
+            present_interface,
+            target_root=present_target,
+            surface="closeout",
+        )
+        require_repo_specific_requirements_payload(
+            failures,
+            category="repo-companion",
+            context="present repo companion closeout requirements",
+            payload=closeout_requirements,
+            expected_surface="closeout",
+        )
+        if closeout_requirements.get("result") != "block":
+            failures.append(Failure("repo-companion", "blocking closeout requirements must fail closed"))
+
+        flow_review_payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "flow",
+                "review",
+                "--target",
+                str(present_target),
+                "--item",
+                "INIT-0001",
+            ],
+        )
+        if error:
+            failures.append(Failure("repo-companion", f"`flow review` companion sample failed: {error}"))
+        elif flow_review_payload.get("result") != "block":
+            failures.append(Failure("repo-companion", "`flow review` must block when repo companion declares blocking review requirements"))
+
+        flow_merge_ready_payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "flow",
+                "merge-ready",
+                "--target",
+                str(present_target),
+                "--item",
+                "INIT-0001",
+            ],
+        )
+        if error:
+            failures.append(Failure("repo-companion", f"`flow merge-ready` companion sample failed: {error}"))
+        elif not isinstance(flow_merge_ready_payload.get("repo_specific_requirements"), dict):
+            failures.append(Failure("repo-companion", "`flow merge-ready` companion sample must include `repo_specific_requirements`"))
+        elif flow_merge_ready_payload["repo_specific_requirements"].get("result") != "pass":
+            failures.append(Failure("repo-companion", "`flow merge-ready` advisory companion requirements must stay non-blocking"))
+
+    return failures
+
+
 def is_within(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
@@ -3295,12 +3723,13 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_demo_fact_chain(root))
     failures.extend(check_demo_repo_local_cli(root))
     failures.extend(check_daily_execution_cli(root))
+    failures.extend(check_repo_companion_interface_contracts(root))
     failures.extend(check_markdown_links(root))
     return failures
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 13
+    categories_checked = 14
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")
