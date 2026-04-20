@@ -28,7 +28,7 @@
 - 本轮启用的能力清单
 - 每项能力分别映射到哪些 `governance`、`harness`、`templates`、`adoption` 规则
 - 这次采用的是最小装配、轻量 retrofit 还是更完整装配
-- 接入方式是根级重写还是 `companion docs`
+- 接入方式是根级重写还是 `repo companion`（历史表述：`companion docs`）
 - 恢复形态是 `checkpoint-lite` 还是标准恢复形态
 
 ### 3. 暂不引入
@@ -81,6 +81,14 @@
     - `branch_protection`
     - `required_checks`
     - `pr_reviews`
+  - `repo_interface`
+    - `availability`
+    - `manifest`
+    - `companion_entry`
+    - `repo_specific_requirements`
+    - `specialized_gates`
+    - `summary`
+    - `missing_inputs`
   - `summary`
   - `missing_inputs`
 
@@ -137,6 +145,7 @@
   - `validation_entry`
   - `review_merge_surface`
   - `github_control_plane`
+  - `repo_interface`
   - `summary`
   - `missing_inputs`
 - `carrier_summary` 的 6 个子项固定为：
@@ -148,6 +157,13 @@
   - `plan_path`
 - `carrier_summary` 每个子项固定为 `{status, locator, source}`，`status` 只允许 `present | missing | planned`
 - `github_control_plane` 缺失时允许用 `unknown`，但不得猜测
+- `repo_interface` 只允许承接 `repo companion` 的 locator 和机读 requirements / gates 摘要，不得复制 authored state
+- `repo_interface.availability` 只允许：
+  - `absent`
+  - `companion_docs_only`
+  - `incomplete`
+  - `present`
+- `repo_interface.manifest`、`repo_interface.companion_entry`、`repo_interface.repo_specific_requirements`、`repo_interface.specialized_gates` 固定为 `{status, locator, source}`
 
 禁止事项：
 
@@ -155,6 +171,7 @@
 - 改名或拆出并行的治理读面字段
 - 在 `governance_surface` 中并行复制实时停点、下一步、阻断项或验证摘要
 - 用 `governance_surface` 覆盖 `work item`、恢复入口、PR 或规则文档的 authored 事实
+- 把 `repo_interface` 变成第二套 review / recovery / closeout authored state
 
 ### 6. 验证与收口
 
