@@ -1,0 +1,588 @@
+#!/usr/bin/env python3
+"""Shared governance-surface detection for Loom bootstrap, route, and resume."""
+
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+from pathlib import Path
+from typing import Any
+
+from runtime_paths import installed_skill_script
+
+CARRIER_KEYS = (
+    "work_item",
+    "recovery",
+    "review",
+    "status_surface",
+    "spec_path",
+    "plan_path",
+)
+
+PLANNED_LOCATORS = {
+    "work_item": ".loom/work-items/INIT-0001.md",
+    "recovery": ".loom/progress/INIT-0001.md",
+    "review": ".loom/reviews/INIT-0001.json",
+    "status_surface": ".loom/status/current.md",
+    "spec_path": ".loom/specs/INIT-0001/spec.md",
+    "plan_path": ".loom/specs/INIT-0001/plan.md",
+}
+
+REPO_INTERFACE_SURFACES = ("review", "merge_ready", "closeout")
+REPO_INTERFACE_AVAILABILITY = {"absent", "companion_docs_only", "incomplete", "present"}
+REPO_INTERFACE_MANIFEST_SCHEMA = "loom-repo-companion-manifest/v1"
+REPO_INTERFACE_SCHEMA = "loom-repo-interface/v1"
+REPO_INTERFACE_ENFORCEMENT = {"blocking", "advisory"}
+REPO_INTERFACE_MANIFEST_KEYS = {"schema_version", "companion_entry", "repo_interface"}
+REPO_INTERFACE_KEYS = {"schema_version", "companion_entry", "repo_specific_requirements", "specialized_gates"}
+
+
+def run_process(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(args, cwd=cwd, check=False, capture_output=True, text=True)
+
+
+def file_exists(root: Path, relative: str) -> bool:
+    return (root / relative).exists()
+
+
+def relative_locator(path: Path, root: Path) -> str:
+    try:
+        return str(path.relative_to(root))
+    except ValueError:
+        return str(path)
+
+
+def safe_read_json(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def command_prefix(root: Path, tool_name: str) -> str:
+    loom_tool = root / ".loom/bin" / tool_name
+    if loom_tool.exists():
+        return f"python3 .loom/bin/{tool_name}"
+    if tool_name == "loom_init.py":
+        return f"python3 {installed_skill_script(__file__, 'loom-init')}"
+    if tool_name == "loom_flow.py":
+        return f"python3 {installed_skill_script(__file__, 'loom-resume')}"
+    return "unknown"
+
+
+def git_remote_origin(root: Path) -> str | None:
+    result = run_process(["git", "remote", "get-url", "origin"], root)
+    if result.returncode != 0:
+        return None
+    remote = result.stdout.strip()
+    return remote or None
+
+
+def detect_github_repo(root: Path) -> tuple[str | None, str | None]:
+    remote = git_remote_origin(root)
+    if not remote:
+        return None, None
+    match = re.search(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/.]+)(?:\.git)?$", remote)
+    if not match:
+        return None, None
+    return match.group("owner"), match.group("repo")
+
+
+def gh_json(root: Path, args: list[str]) -> tuple[dict[str, Any] | None, list[str]]:
+    result = run_process(["gh", *args], root)
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "gh command failed"
+        return None, [detail]
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        return None, [f"invalid JSON from gh {' '.join(args)}: {exc.msg}"]
+    if not isinstance(payload, dict):
+        return None, [f"gh {' '.join(args)} did not return a JSON object"]
+    return payload, []
+
+
+def detect_loom_state(root: Path) -> str:
+    active_requirements = (
+        root / ".loom/bootstrap/init-result.json",
+        root / ".loom/work-items",
+        root / ".loom/progress",
+        root / ".loom/status/current.md",
+    )
+    if all(path.exists() for path in active_requirements):
+        return "active"
+
+    partial_markers = (
+        root / ".loom",
+        root / "AGENTS.md",
+        root / ".github/PULL_REQUEST_TEMPLATE.md",
+    )
+    if any(path.exists() for path in partial_markers):
+        return "partial"
+    return "absent"
+
+
+def detect_repository_mode(root: Path, loom_state: str, scenario_override: str | None = None) -> str:
+    if scenario_override in {"new", "small-existing", "complex-existing"}:
+        return scenario_override
+
+    init_result = safe_read_json(root / ".loom/bootstrap/init-result.json")
+    if isinstance(init_result, dict):
+        run = init_result.get("run")
+        if isinstance(run, dict):
+            scenario_key = run.get("scenario_key")
+            if scenario_key in {"new", "small-existing", "complex-existing"}:
+                return str(scenario_key)
+
+    code_dirs = ("src", "app", "lib", "cmd", "pkg", "services", "packages")
+    boundary_files = (
+        "README.md",
+        "AGENTS.md",
+        "WORKFLOW.md",
+        "docs/WORKFLOW.md",
+        "package.json",
+        "pyproject.toml",
+        "Cargo.toml",
+        "go.mod",
+        "Makefile",
+        ".github/workflows",
+    )
+    baseline_count = sum(1 for entry in boundary_files if file_exists(root, entry))
+    code_count = sum(1 for entry in code_dirs if file_exists(root, entry))
+
+    meaningful_entries = 0
+    for path in root.iterdir():
+        if path.name in {".git", ".DS_Store"}:
+            continue
+        if path.name == ".loom" and loom_state != "absent":
+            continue
+        meaningful_entries += 1
+
+    if loom_state == "absent" and meaningful_entries <= 2 and baseline_count <= 1 and code_count == 0:
+        return "new"
+    if baseline_count + code_count >= 4 or meaningful_entries >= 8:
+        return "complex-existing"
+    return "small-existing"
+
+
+def carrier_entry(status: str, locator: str, source: str) -> dict[str, str]:
+    return {"status": status, "locator": locator, "source": source}
+
+
+def has_legacy_companion_docs(root: Path) -> bool:
+    companion_dir = root / ".loom" / "companion"
+    if not companion_dir.exists() or not companion_dir.is_dir():
+        return False
+    for path in companion_dir.iterdir():
+        if path.name in {"manifest.json", "repo-interface.json"}:
+            continue
+        if path.suffix.lower() == ".md":
+            return True
+    return False
+
+
+def relative_locator_from_value(root: Path, raw_locator: object) -> str | None:
+    if not isinstance(raw_locator, str):
+        return None
+    locator = raw_locator.strip()
+    if not locator:
+        return None
+    locator_path = Path(locator)
+    if locator_path.is_absolute():
+        try:
+            return str(locator_path.relative_to(root))
+        except ValueError:
+            return str(locator_path)
+    return str(locator_path)
+
+
+def resolve_locator(root: Path, raw_locator: object) -> tuple[str | None, Path | None]:
+    locator = relative_locator_from_value(root, raw_locator)
+    if locator is None:
+        return None, None
+    return locator, (root / locator).resolve()
+
+
+def locator_status_entry(
+    *,
+    root: Path,
+    raw_locator: object,
+    source: str,
+) -> tuple[dict[str, str], str | None]:
+    locator, target = resolve_locator(root, raw_locator)
+    if locator is None or target is None:
+        return carrier_entry("missing", "unknown", source), f"{source} is missing a valid locator"
+    if not target.exists():
+        return carrier_entry("missing", locator, source), f"{source} points to missing path `{locator}`"
+    return carrier_entry("present", locator, source), None
+
+
+def validate_repo_specific_requirement(
+    *,
+    root: Path,
+    surface: str,
+    entry: object,
+    index: int,
+) -> list[str]:
+    prefix = f"repo_interface.{surface}[{index}]"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"]
+    missing_inputs: list[str] = []
+    for field in ("id", "summary", "locator", "enforcement"):
+        value = entry.get(field)
+        if not isinstance(value, str) or not value.strip():
+            missing_inputs.append(f"{prefix} missing `{field}`")
+    enforcement = entry.get("enforcement")
+    if enforcement not in REPO_INTERFACE_ENFORCEMENT:
+        missing_inputs.append(f"{prefix} enforcement must be `blocking` or `advisory`")
+    locator, target = resolve_locator(root, entry.get("locator"))
+    if locator is None or target is None:
+        missing_inputs.append(f"{prefix} locator must be a non-empty string")
+    elif not target.exists():
+        missing_inputs.append(f"{prefix} locator points to missing path `{locator}`")
+    return missing_inputs
+
+
+def validate_specialized_gate(
+    *,
+    root: Path,
+    entry: object,
+    index: int,
+) -> list[str]:
+    prefix = f"specialized_gates[{index}]"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"]
+    missing_inputs: list[str] = []
+    for field in ("id", "summary", "locator"):
+        value = entry.get(field)
+        if not isinstance(value, str) or not value.strip():
+            missing_inputs.append(f"{prefix} missing `{field}`")
+    locator, target = resolve_locator(root, entry.get("locator"))
+    if locator is None or target is None:
+        missing_inputs.append(f"{prefix} locator must be a non-empty string")
+    elif not target.exists():
+        missing_inputs.append(f"{prefix} locator points to missing path `{locator}`")
+    return missing_inputs
+
+
+def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
+    companion_dir = root / ".loom" / "companion"
+    manifest_path = companion_dir / "manifest.json"
+    repo_interface_path = companion_dir / "repo-interface.json"
+
+    repo_interface_surface: dict[str, Any] = {
+        "availability": "absent",
+        "manifest": carrier_entry("missing", ".loom/companion/manifest.json", "companion manifest"),
+        "companion_entry": carrier_entry("missing", "unknown", "repo companion manifest"),
+        "repo_specific_requirements": carrier_entry("missing", "unknown", "repo companion interface"),
+        "specialized_gates": carrier_entry("missing", "unknown", "repo companion interface"),
+        "summary": "no repo companion interface is declared for this repository.",
+        "missing_inputs": [],
+    }
+    missing_inputs: list[str] = []
+
+    if not manifest_path.exists():
+        if has_legacy_companion_docs(root):
+            repo_interface_surface["availability"] = "companion_docs_only"
+            repo_interface_surface["summary"] = (
+                "legacy companion docs are present, but no machine-readable repo companion manifest is declared."
+            )
+        return repo_interface_surface, missing_inputs
+
+    repo_interface_surface["manifest"] = carrier_entry(
+        "present",
+        ".loom/companion/manifest.json",
+        "repository scan",
+    )
+    manifest = safe_read_json(manifest_path)
+    if manifest is None:
+        missing_inputs.append("repo companion manifest is unreadable")
+        repo_interface_surface["availability"] = "incomplete"
+        repo_interface_surface["summary"] = "repo companion manifest exists, but the machine-readable interface is incomplete."
+        repo_interface_surface["missing_inputs"] = missing_inputs
+        return repo_interface_surface, missing_inputs
+
+    if manifest.get("schema_version") != REPO_INTERFACE_MANIFEST_SCHEMA:
+        missing_inputs.append(
+            f"repo companion manifest schema must be `{REPO_INTERFACE_MANIFEST_SCHEMA}`"
+        )
+    extra_manifest_keys = sorted(set(manifest.keys()) - REPO_INTERFACE_MANIFEST_KEYS)
+    if extra_manifest_keys:
+        missing_inputs.append(
+            "repo companion manifest must stay locator-only: "
+            + ", ".join(extra_manifest_keys)
+        )
+
+    companion_entry, companion_error = locator_status_entry(
+        root=root,
+        raw_locator=manifest.get("companion_entry"),
+        source="repo companion manifest.companion_entry",
+    )
+    repo_interface_surface["companion_entry"] = companion_entry
+    if companion_error:
+        missing_inputs.append(companion_error)
+
+    manifest_repo_interface, manifest_repo_interface_error = locator_status_entry(
+        root=root,
+        raw_locator=manifest.get("repo_interface"),
+        source="repo companion manifest.repo_interface",
+    )
+    repo_interface_surface["repo_specific_requirements"] = manifest_repo_interface
+    repo_interface_surface["specialized_gates"] = manifest_repo_interface.copy()
+    if manifest_repo_interface_error:
+        missing_inputs.append(manifest_repo_interface_error)
+
+    repo_interface_locator, repo_interface_target = resolve_locator(root, manifest.get("repo_interface"))
+    if repo_interface_surface["repo_specific_requirements"]["status"] != "present":
+        if repo_interface_path.exists() and manifest_repo_interface_error:
+            missing_inputs.append("repo companion manifest must point `repo_interface` to `.loom/companion/repo-interface.json`")
+    else:
+        interface_payload = safe_read_json(repo_interface_target or repo_interface_path)
+        if interface_payload is None:
+            missing_inputs.append("repo companion interface is unreadable")
+        else:
+            if interface_payload.get("schema_version") != REPO_INTERFACE_SCHEMA:
+                missing_inputs.append(f"repo companion interface schema must be `{REPO_INTERFACE_SCHEMA}`")
+            extra_interface_keys = sorted(set(interface_payload.keys()) - REPO_INTERFACE_KEYS)
+            if extra_interface_keys:
+                missing_inputs.append(
+                    "repo companion interface contains unexpected top-level fields: "
+                    + ", ".join(extra_interface_keys)
+                )
+            interface_companion_entry, interface_companion_error = locator_status_entry(
+                root=root,
+                raw_locator=interface_payload.get("companion_entry"),
+                source="repo companion interface.companion_entry",
+            )
+            if interface_companion_entry["status"] == "present":
+                repo_interface_surface["companion_entry"] = interface_companion_entry
+            if interface_companion_error:
+                missing_inputs.append(interface_companion_error)
+
+            requirements = interface_payload.get("repo_specific_requirements")
+            if not isinstance(requirements, dict):
+                missing_inputs.append("repo companion interface must include `repo_specific_requirements`")
+            else:
+                for surface in REPO_INTERFACE_SURFACES:
+                    entries = requirements.get(surface)
+                    if not isinstance(entries, list):
+                        missing_inputs.append(
+                            f"repo companion interface surface `{surface}` must be a list"
+                        )
+                        continue
+                    for index, entry in enumerate(entries):
+                        missing_inputs.extend(
+                            validate_repo_specific_requirement(
+                                root=root,
+                                surface=surface,
+                                entry=entry,
+                                index=index,
+                            )
+                        )
+
+            specialized_gates = interface_payload.get("specialized_gates")
+            if not isinstance(specialized_gates, list):
+                missing_inputs.append("repo companion interface must include `specialized_gates` as a list")
+            else:
+                for index, entry in enumerate(specialized_gates):
+                    missing_inputs.extend(
+                        validate_specialized_gate(
+                            root=root,
+                            entry=entry,
+                            index=index,
+                        )
+                    )
+
+    if missing_inputs:
+        repo_interface_surface["availability"] = "incomplete"
+        repo_interface_surface["summary"] = (
+            "repo companion manifest exists, but the machine-readable interface is incomplete."
+        )
+    else:
+        repo_interface_surface["availability"] = "present"
+        repo_interface_surface["summary"] = (
+            "repo companion manifest and machine-readable repo interface are readable."
+        )
+    repo_interface_surface["missing_inputs"] = list(dict.fromkeys(missing_inputs))
+    return repo_interface_surface, list(dict.fromkeys(missing_inputs))
+
+
+def first_match(directory: Path, suffix: str, root: Path) -> str:
+    for path in sorted(directory.glob(f"*{suffix}")):
+        return relative_locator(path, root)
+    return ""
+
+
+def detect_carrier_summary(root: Path, *, repository_mode: str, planning_mode: bool) -> dict[str, dict[str, str]]:
+    item_dir = root / ".loom/work-items"
+    recovery_dir = root / ".loom/progress"
+    review_dir = root / ".loom/reviews"
+    status_path = root / ".loom/status/current.md"
+    spec_path = root / ".loom/specs/INIT-0001/spec.md"
+    plan_path = root / ".loom/specs/INIT-0001/plan.md"
+
+    present_locators = {
+        "work_item": first_match(item_dir, ".md", root) if item_dir.exists() else "",
+        "recovery": first_match(recovery_dir, ".md", root) if recovery_dir.exists() else "",
+        "review": first_match(review_dir, ".json", root) if review_dir.exists() else "",
+        "status_surface": relative_locator(status_path, root) if status_path.exists() else "",
+        "spec_path": relative_locator(spec_path, root) if spec_path.exists() else "",
+        "plan_path": relative_locator(plan_path, root) if plan_path.exists() else "",
+    }
+
+    summary: dict[str, dict[str, str]] = {}
+    for key in CARRIER_KEYS:
+        locator = present_locators[key]
+        if locator:
+            summary[key] = carrier_entry("present", locator, "repository scan")
+        elif planning_mode and repository_mode == "new":
+            summary[key] = carrier_entry("planned", PLANNED_LOCATORS[key], "bootstrap plan")
+        else:
+            summary[key] = carrier_entry("missing", "unknown", "repository scan")
+    return summary
+
+
+def detect_execution_entry(root: Path, loom_state: str, *, bootstrap_mode: bool) -> str:
+    if bootstrap_mode:
+        return "python3 .loom/bin/loom_flow.py flow resume --target . --item INIT-0001"
+    if loom_state == "active":
+        return f"{command_prefix(root, 'loom_flow.py')} flow resume --target . --item INIT-0001"
+    if loom_state == "partial":
+        return f"{command_prefix(root, 'loom_init.py')} route --target <repo> --task \"请接手当前事项并恢复上下文后继续推进\""
+    return "unknown"
+
+
+def detect_validation_entry(loom_state: str, *, bootstrap_mode: bool) -> str:
+    if bootstrap_mode:
+        return "python3 .loom/bin/loom_init.py verify --target ."
+    if loom_state == "active":
+        return "python3 .loom/bin/loom_init.py verify --target ."
+    if loom_state == "partial":
+        return f"python3 {installed_skill_script(__file__, 'loom-init')} verify --target <repo>"
+    return "unknown"
+
+
+def detect_review_merge_surface(root: Path, loom_state: str, *, bootstrap_mode: bool) -> dict[str, str]:
+    pr_template = ".github/PULL_REQUEST_TEMPLATE.md" if file_exists(root, ".github/PULL_REQUEST_TEMPLATE.md") else "unknown"
+    validation_surface = ".loom/status/current.md" if file_exists(root, ".loom/status/current.md") else "unknown"
+    if bootstrap_mode and validation_surface == "unknown":
+        validation_surface = ".loom/status/current.md"
+
+    if bootstrap_mode:
+        merge_surface = "python3 .loom/bin/loom_flow.py checkpoint merge --target . --item INIT-0001"
+    elif loom_state == "active":
+        merge_surface = f"{command_prefix(root, 'loom_flow.py')} checkpoint merge --target . [--item <id>]"
+    else:
+        merge_surface = "unknown"
+    return {
+        "pr_template": pr_template,
+        "validation_surface": validation_surface,
+        "merge_surface": merge_surface,
+    }
+
+
+def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
+    owner, repo = detect_github_repo(root)
+    surface: dict[str, Any] = {
+        "repository": f"{owner}/{repo}" if owner and repo else "unknown",
+        "default_branch": "unknown",
+        "branch_protection": "unknown",
+        "required_checks": "unknown",
+        "pr_reviews": "unknown",
+    }
+    missing_inputs: list[str] = []
+
+    if not owner or not repo:
+        missing_inputs.append("cannot resolve GitHub repository from git origin")
+        return surface, missing_inputs
+
+    repo_payload, repo_errors = gh_json(root, ["repo", "view", f"{owner}/{repo}", "--json", "nameWithOwner,defaultBranchRef"])
+    if repo_errors or repo_payload is None:
+        missing_inputs.extend(f"github control plane: {message}" for message in repo_errors)
+        return surface, missing_inputs
+
+    branch_ref = repo_payload.get("defaultBranchRef")
+    if isinstance(branch_ref, dict):
+        branch_name = branch_ref.get("name")
+        if isinstance(branch_name, str) and branch_name:
+            surface["default_branch"] = branch_name
+    if surface["default_branch"] == "unknown":
+        missing_inputs.append("github control plane: default branch is unavailable")
+        return surface, missing_inputs
+
+    branch_payload, branch_errors = gh_json(root, ["api", f"repos/{owner}/{repo}/branches/{surface['default_branch']}"])
+    if branch_errors or branch_payload is None:
+        missing_inputs.extend(f"github control plane: {message}" for message in branch_errors)
+        return surface, missing_inputs
+
+    protected = branch_payload.get("protected")
+    if isinstance(protected, bool):
+        surface["branch_protection"] = "enabled" if protected else "disabled"
+    protection = branch_payload.get("protection")
+    if isinstance(protection, dict):
+        required_status = protection.get("required_status_checks")
+        if isinstance(required_status, dict):
+            contexts = required_status.get("contexts")
+            if isinstance(contexts, list) and all(isinstance(item, str) for item in contexts):
+                surface["required_checks"] = contexts
+            else:
+                surface["required_checks"] = []
+        pull_request_reviews = protection.get("required_pull_request_reviews")
+        if isinstance(pull_request_reviews, dict):
+            surface["pr_reviews"] = "required"
+        elif surface["branch_protection"] == "enabled":
+            surface["pr_reviews"] = "not_required"
+    return surface, missing_inputs
+
+
+def build_governance_surface(
+    root: Path,
+    *,
+    bootstrap_mode: bool = False,
+    scenario_override: str | None = None,
+) -> dict[str, Any]:
+    loom_state = detect_loom_state(root)
+    repository_mode = detect_repository_mode(root, loom_state, scenario_override=scenario_override)
+    planning_mode = bootstrap_mode and repository_mode == "new" and loom_state != "active"
+    carrier_summary = detect_carrier_summary(root, repository_mode=repository_mode, planning_mode=planning_mode)
+    github_control_plane, github_missing = detect_github_control_plane(root)
+    execution_entry = detect_execution_entry(root, loom_state, bootstrap_mode=bootstrap_mode)
+    validation_entry = detect_validation_entry(loom_state, bootstrap_mode=bootstrap_mode)
+    review_merge_surface = detect_review_merge_surface(root, loom_state, bootstrap_mode=bootstrap_mode)
+    repo_interface, repo_interface_missing = detect_repo_interface(root)
+
+    missing_inputs: list[str] = []
+    if bootstrap_mode and repository_mode == "new":
+        missing_inputs.extend(github_missing)
+        summary = "repository is treated as new; Loom can plan the first governance carriers and bootstrap entrypoints without adding a second truth source."
+    else:
+        present_carriers = [key for key, value in carrier_summary.items() if value["status"] == "present"]
+        if not present_carriers:
+            missing_inputs.append("no stable Loom carriers are readable yet")
+        missing_inputs.extend(github_missing)
+        if repo_interface["availability"] == "incomplete":
+            missing_inputs.extend(repo_interface_missing)
+        control_plane_ready = github_control_plane["default_branch"] != "unknown"
+        carrier_ready = bool(present_carriers)
+        summary = (
+            "resume chain is readable and the current governance carriers can support continued execution."
+            if carrier_ready and control_plane_ready
+            else "resume chain is only partially supported because governance carriers or GitHub control-plane signals are incomplete."
+        )
+
+    return {
+        "repository_mode": repository_mode,
+        "loom_state": loom_state,
+        "carrier_summary": carrier_summary,
+        "execution_entry": execution_entry,
+        "validation_entry": validation_entry,
+        "review_merge_surface": review_merge_surface,
+        "github_control_plane": github_control_plane,
+        "repo_interface": repo_interface,
+        "summary": summary,
+        "missing_inputs": list(dict.fromkeys(missing_inputs)),
+    }
