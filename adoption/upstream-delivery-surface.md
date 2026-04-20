@@ -18,10 +18,16 @@
   - 稳定入口合同、`loom-init` root 路由、7 个场景 skills、`registry.json`、`upgrade-contract.json` 与 `route-matrix.md`
 - `adoption/`
   - 稳定 adoption 路径、经验回流、验证记录合同、版本化与升级路径
+  - `repo companion migration` 稳定下游合同
   - 执行入口兼容说明、reconciliation audit/sync 兼容边界、7 个场景 skill 验证记录与完整执行内核复验记录
   - 第一批执行化补充验证记录：
     - `adoption/validation-main-path-new-project.md`
     - `adoption/validation-existing-repo-execution-sync.md`
+  - companion 合同参考与验证记录：
+    - `adoption/repo-companion-migration.md`
+    - `adoption/reference-companion-spec-syvert.md`
+    - `adoption/reference-companion-spec-webenvoy.md`
+    - `adoption/validation-repo-companion-interface.md`
   - Loom 自身 `#143` 树 retrofit 记录：
     - `adoption/validation-retrofit-143-tree.md`
     - 只作为 Loom 自身 closeout / retrofit 依据，不单独提升为新的默认 adoption 路径
@@ -52,6 +58,7 @@ Loom 对下游交付的对象不是单个文件，而是以下组合：
 - 一组最小模板
 - 一组可升级的入口合同与 root/scene 路由入口
 - 一组 adoption / upgrade 说明
+- 一组下游 `repo companion migration` 机读合同（`.loom/companion/manifest.json` 与 `.loom/companion/repo-interface.json`）
 
 下游不应被要求复制候选材料，才能消费 Loom 的核心能力。
 

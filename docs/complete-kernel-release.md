@@ -15,7 +15,7 @@
 - `adoption`
 
 下游是否需要动作：是。
-至少需要重新读取稳定入口、升级说明和场景 skill 注册表，并按本文给出的升级路径确认是否要接入新增的 review / reconciliation / closeout 能力。
+至少需要重新读取稳定入口、升级说明和场景 skill 注册表，并按本文给出的升级路径确认是否要接入新增的 review / reconciliation / closeout 能力。若采用 `repo companion migration`，还需补齐 `.loom/companion/manifest.json` 与 `.loom/companion/repo-interface.json`。
 
 对应 Loom issue：`#63`、`#71`
 
@@ -69,6 +69,9 @@
 3. 接入 `runtime-evidence`、`state-check` 与 4 个聚合 flow：`resume` / `handoff` / `review` / `merge-ready`
 4. 在 review 前统一走 `flow pre-review`，正式审查使用 `flow review` + `review record`
 5. 让宿主刷新 `skills/registry.json`、`skills/upgrade-contract.json`、skill manifests 与引用资源
+6. 若采用 `repo companion` 接入，新增并维护：
+   - `.loom/companion/manifest.json`
+   - `.loom/companion/repo-interface.json`
 
 ### 2.3 兼容原则
 
@@ -98,12 +101,30 @@
 
 - 新项目主路径验证：
   - `adoption/validation-main-path-new-project.md`
-- 既有仓库执行 / 回写 / sync companion 验证：
+- 既有仓库执行 / 回写 / sync repo companion 验证：
   - `adoption/validation-existing-repo-execution-sync.md`
 - Loom 自身 `#143` 树 live retrofit 与 closeout 依据：
   - `adoption/validation-retrofit-143-tree.md`
 
 其中，`#180` 提供的是 Loom 自身 retrofit / closeout 证据，不单独宣称为新的默认 adoption 路径。
+
+### 3.2 Repo Companion Interface 验证覆盖（2026-04-20）
+
+本批补充将 `repo companion` 的机读读面与 requirement 消费口径纳入版本化公开面，覆盖：
+
+- absent companion
+- companion docs only
+- incomplete manifest / repo-interface
+- present manifest + blocking review requirements
+- present manifest + advisory merge-ready requirements
+- present manifest + blocking closeout requirements
+
+对应文档：
+
+- `adoption/repo-companion-migration.md`
+- `adoption/reference-companion-spec-syvert.md`
+- `adoption/reference-companion-spec-webenvoy.md`
+- `adoption/validation-repo-companion-interface.md`
 
 ## 4. 发布后操作建议
 
@@ -128,7 +149,7 @@
   - validation：`adoption/validation-skill-*.md`
   - GitHub：父子 issue 树与对应 PR 已收口到主干
 
-## 5. 第一波场景 SKILLS 收口状态
+## 6. 第一波场景 SKILLS 收口状态
 
 本次发布已完成以下收口条件：
 
@@ -139,3 +160,19 @@
 - `#168/#170/#180` 的补充验证记录已进入 adoption / release 文档，用于支持第一批执行化的最终 closeout
 
 对应总父 issue：`#71`
+
+## 7. Repo Companion Migration 补充（默认 `minor`）
+
+截至 `2026-04-20`，`repo companion migration contract` 已进入版本化公开面。
+
+本批默认变更分类：`minor`。原因：
+
+- 新增稳定下游合同与参考样本，不破坏既有入口和 gate 语义
+- 新增的是 `repo companion` 机读声明面，不是替换现有执行链路
+
+下游最小动作：
+
+1. 新增 `.loom/companion/manifest.json`
+2. 新增 `.loom/companion/repo-interface.json`
+3. 在 `repo-interface.json` 中显式声明 `schema_version`、`companion_entry`、`repo_specific_requirements`、`specialized_gates`
+4. 让 `governance_surface` 与 `loom_flow` 通过机读接口消费 companion requirements
