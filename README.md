@@ -51,19 +51,19 @@ Loom 不是业务模板，也不是一组散落的规则文档。
 
 ### 环境要求
 
-- 一个支持安装和调用 `SKILLS` 的 Claude Code / Codex 等 Agent 平台
+- 一个支持发现、安装和调用 repo-local plugin 的 Claude Code / Codex 等 Agent 平台
 - 对 Loom 仓库的访问权限
 - 如需本地验证或调试，需具备 `python3`
 
 ### AI Agent 版
 
-把 Loom 接进 Claude Code / Codex 等 Agent 平台时，先把它当作一组要安装和使用的 skills 即可；首屏不要求你先理解 Loom 的内部装配合同。
+把 Loom 接进 Claude Code / Codex 等 Agent 平台时，repo 内默认安装对象是 repo-local `loom` plugin。
 
 最小安装动作是：
 
 1. 获取这个仓库
-2. 按当前 Agent 平台的标准方式安装 Loom skills
-3. 确认 `loom-init` 被识别为默认入口，且其余 Loom 场景 skills 可用
+2. 按当前 Agent 平台的标准方式发现并安装 repo-local `loom` plugin
+3. 确认默认从 `loom-init` 进入，且其余 Loom scene skills 可用
 
 安装完成后，使用 Loom skills 的顺序是：
 
@@ -73,8 +73,10 @@ Loom 不是业务模板，也不是一组散落的规则文档。
 
 安装完成后，用户需要先知道的只有两件事：
 
-- 默认入口是 `loom-init`
+- 默认进入方式是 `loom-init`
 - 其余能力由 7 个场景 skills 承接，`loom-init` 会把你导向正确入口
+
+repo-local `loom CLI` 仍保留，但它是次级入口，主要用于自动化、验证、调试和宿主编排，不是安装主路径。
 
 如果你需要看每个 skill 的作用和入口分工，读 [skills/README.md](./skills/README.md)。
 
@@ -87,20 +89,20 @@ Loom 不是业务模板，也不是一组散落的规则文档。
 如果你希望 AI Agent 直接把 Loom 装进它正在开发的项目流程里，可以把下面这段提示词直接发给它：
 
 ```text
-帮我把 Loom 安装到当前项目使用的 Claude Code / Codex 等 Agent 平台中，并让它可以在这个项目里直接调用。
+帮我把 Loom 以 repo-local plugin 的方式接到当前项目使用的 Claude Code / Codex 等 Agent 平台中，并让它可以在这个项目里直接调用。
 
 按 https://github.com/MC-and-his-Agents/Loom 操作：
 1. 获取 Loom 仓库
-2. 按当前平台支持的方式安装 Loom skills
-3. 确认 loom-init 被识别为默认入口，并且其他 Loom scene skills 可用
+2. 按当前平台支持的方式发现并安装 repo-local loom plugin
+3. 确认默认从 loom-init 进入，并且其他 Loom scene skills 可用
 4. 安装完成后，不要直接开始改代码；先用 loom-init 判断当前项目属于哪个场景，并告诉我下一步应该进入哪个 skill
 
-如果当前 Claude Code / Codex 等 Agent 平台使用的是本地 skills 目录、manifest 注册或等价机制，请按该平台的标准方式完成安装。
+如果当前 Claude Code / Codex 等 Agent 平台使用的是本地 plugin 目录、marketplace、manifest 注册或等价机制，请按该平台的标准方式完成安装。
 如果需要安装、升级或平台适配的正式说明，请继续查看 Loom README 里的深度链接。
 如果安装失败，请明确告诉我卡在哪一步。
 ```
 
-这段提示词的目的不是让 agent 学会 Loom 的内部结构，而是让它先把 Loom 接进当前项目，再从 `loom-init` 开始后续开发。
+这段提示词的目的不是让 agent 学会 Loom 的内部结构，而是让它先把 repo-local `loom` plugin 接进当前项目，再从 `loom-init` 开始后续开发。
 
 ## Agent Skills
 
