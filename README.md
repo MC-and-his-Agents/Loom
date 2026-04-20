@@ -44,7 +44,7 @@ Loom 不是业务模板，也不是一组散落的规则文档。
 | `harness` 执行层 | 读取状态、恢复上下文、组织 review、merge-ready 和 closeout |
 | `governance` 判断层 | 统一回答什么时候能继续、什么时候能 review、什么时候算完成 |
 | `repo companion` 接入层 | 为既有仓库暴露 locator-only manifest、机读 repo requirements 和 specialized gates，而不把单仓规则抬升为 Loom core |
-| Agent 平台接入 | 通过 `skills/registry.json`、`skills/install-layout.json`、`skills/upgrade-contract.json` 和 manifest/executable 进行发现、安装、运行态识别和升级 |
+| Agent 平台接入 | 把 Loom skills 安装进 Claude Code / Codex 等 Agent 平台，并让 `loom-init` 成为默认入口 |
 | 次级 CLI | 为自动化、脚本和调试保留等价入口 |
 
 ## 安装与快速开始
@@ -57,47 +57,30 @@ Loom 不是业务模板，也不是一组散落的规则文档。
 
 ### AI Agent 版
 
+把 Loom 接进 Claude Code / Codex 等 Agent 平台时，先把它当作一组要安装和使用的 skills 即可；首屏不要求你先理解 Loom 的内部装配合同。
+
 最小安装动作是：
 
 1. 获取这个仓库
-2. 让 Claude Code / Codex 等 Agent 平台读取 [skills/registry.json](./skills/registry.json)
-3. 让 Claude Code / Codex 等 Agent 平台同步 [skills/upgrade-contract.json](./skills/upgrade-contract.json)
-4. 让 Claude Code / Codex 等 Agent 平台同步 [skills/install-layout.json](./skills/install-layout.json)
-5. 安装或刷新 `loom-init` 与各场景 skill 的：
-   - manifest
-   - skill-local `scripts/`
-   - `shared/scripts/`
-   - `shared/assets/`
-   - `shared/references/`
-6. 确认 Claude Code / Codex 等 Agent 平台能把 `loom-init` 识别为默认入口
-7. 用 `loom-init runtime-state` 或 `loom_flow runtime-state` 确认当前场景是 `installed-runtime`，而不是 `repo-local-demo`
+2. 按当前 Agent 平台的标准方式安装 Loom skills
+3. 确认 `loom-init` 被识别为默认入口，且其余 Loom 场景 skills 可用
 
-不要把 repo-local `tools/` 可运行误当成安装成功。`tools/loom_init.py`、`tools/loom_flow.py`、`tools/loom_check.py` 只保留为仓库开发包装层；installed-skills 的正式执行面在 `skills/*/scripts/` 与 `skills/shared/*`。当前稳定 runtime scene 只允许 `repo-local-demo`、`installed-runtime`、`upgrade-rehearsal`；若缺 shared runtime/resources、layout/registry 漂移或 scene 与 carrier 冲突，Loom 必须 fail-closed 并返回原因。
+安装完成后，使用 Loom skills 的顺序是：
 
-当前稳定入口包括：
+1. 先进入 `loom-init`
+2. 让 `loom-init` 判断当前项目属于哪个场景
+3. 再进入对应的 Loom skill，而不是直接开始改代码
 
-- 默认入口：`loom-init`
-- 场景入口：
-  - `loom-adopt`
-  - `loom-resume`
-  - `loom-pre-review`
-  - `loom-review`
-  - `loom-handoff`
-  - `loom-retire`
-  - `loom-merge-ready`
+安装完成后，用户需要先知道的只有两件事：
 
-升级时，Claude Code / Codex 等 Agent 平台至少应刷新：
+- 默认入口是 `loom-init`
+- 其余能力由 7 个场景 skills 承接，`loom-init` 会把你导向正确入口
 
-- `skills/registry.json`
-- `skills/upgrade-contract.json`
-- `skills/install-layout.json`
-- 各 skill manifest
-- skill-local `scripts/`
-- `shared/scripts/`
-- `shared/assets/`
-- `shared/references/`
+如果你需要看每个 skill 的作用和入口分工，读 [skills/README.md](./skills/README.md)。
 
-安装与升级的正式合同见 [skills/distribution-and-adapter-contract.md](./skills/distribution-and-adapter-contract.md)。
+如果你需要看安装、升级和平台适配的正式说明，读 [skills/distribution-and-adapter-contract.md](./skills/distribution-and-adapter-contract.md)。
+
+如果你需要看版本判断和升级语义，读 [adoption/versioning-and-upgrades.md](./adoption/versioning-and-upgrades.md)。
 
 ### 给正在开发项目的 Agent 的快速安装
 
@@ -108,18 +91,16 @@ Loom 不是业务模板，也不是一组散落的规则文档。
 
 按 https://github.com/MC-and-his-Agents/Loom 操作：
 1. 获取 Loom 仓库
-2. 读取 skills/registry.json
-3. 读取 skills/upgrade-contract.json
-4. 读取 skills/install-layout.json
-5. 安装或刷新 loom-init 和所有场景 skills 的 manifest、skill-local scripts、shared/scripts、shared/assets、shared/references
-6. 确认 loom-init 被识别为默认入口
-7. 安装完成后，不要直接开始改代码；先用 loom-init 判断当前项目属于哪个场景，并告诉我下一步应该进入哪个 skill
+2. 按当前平台支持的方式安装 Loom skills
+3. 确认 loom-init 被识别为默认入口，并且其他 Loom scene skills 可用
+4. 安装完成后，不要直接开始改代码；先用 loom-init 判断当前项目属于哪个场景，并告诉我下一步应该进入哪个 skill
 
 如果当前 Claude Code / Codex 等 Agent 平台使用的是本地 skills 目录、manifest 注册或等价机制，请按该平台的标准方式完成安装。
+如果需要安装、升级或平台适配的正式说明，请继续查看 Loom README 里的深度链接。
 如果安装失败，请明确告诉我卡在哪一步。
 ```
 
-这段提示词的目的不是让 agent 学会 Loom 的内部结构，而是让它先把 Loom 接进当前项目，再开始后续开发。
+这段提示词的目的不是让 agent 学会 Loom 的内部结构，而是让它先把 Loom 接进当前项目，再从 `loom-init` 开始后续开发。
 
 ## Agent Skills
 
@@ -398,9 +379,9 @@ CLI 主要给这些情况使用：
 - `python3 skills/shared/scripts/loom_flow.py checkpoint|state-check|closeout ...`
 - `make loom-check`
 
-其中 `skills/*/scripts/` 与 `skills/shared/scripts/` 才是 installed-skills 的正式 CLI 面；repo-local `tools/` 只用于当前仓库开发和调试，不构成安装态证明。若 `runtime-state` 没有返回 `installed-runtime` 或显式的 `upgrade-rehearsal`，就不能把当前入口宣称为已安装 runtime 成功。
+其中 `skills/*/scripts/` 与 `skills/shared/scripts/` 是安装态可调用入口；repo-local `tools/` 只用于当前仓库开发和调试。
 
-这条 fail-closed 纪律同样覆盖 `purity-check`、`workspace cleanup|retire`、`reconciliation audit|sync`、`closeout check|sync`；安装态 runtime/layout/resources 漂移时，这些入口必须先停下，而不是继续消费宿主控制面。
+安装、升级、运行态识别和失败可见性的正式合同不在本节展开，统一见 [skills/distribution-and-adapter-contract.md](./skills/distribution-and-adapter-contract.md)。
 
 ## 深入阅读
 
