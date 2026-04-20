@@ -289,6 +289,138 @@ def runtime_state_block_payload(
     return payload
 
 
+def repo_specific_default_fallback(surface: str) -> str:
+    return {
+        "review": "build",
+        "merge_ready": "merge",
+        "closeout": "merge",
+    }[surface]
+
+
+def repo_specific_requirements_payload(
+    repo_interface: object,
+    *,
+    target_root: Path,
+    surface: str,
+) -> dict[str, Any]:
+    empty_payload = {
+        "surface": surface,
+        "result": "pass",
+        "declared_requirements": [],
+        "blocking_requirements": [],
+        "advisory_requirements": [],
+        "summary": "no repo companion requirements are declared for this surface.",
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if not isinstance(repo_interface, dict):
+        return {
+            **empty_payload,
+            "result": "block",
+            "summary": "repo companion interface could not be read from governance_surface.",
+            "missing_inputs": ["governance_surface.repo_interface"],
+            "fallback_to": repo_specific_default_fallback(surface),
+        }
+
+    availability = repo_interface.get("availability")
+    if availability == "absent":
+        return {
+            **empty_payload,
+            "summary": "no repo companion interface is declared for this repository.",
+        }
+    if availability == "companion_docs_only":
+        return {
+            **empty_payload,
+            "summary": "legacy companion docs are present, but no machine-readable repo companion requirements are declared.",
+        }
+    if availability == "incomplete":
+        missing_inputs = repo_interface.get("missing_inputs")
+        return {
+            **empty_payload,
+            "result": "block",
+            "summary": "repo companion interface is incomplete, so Loom cannot safely consume repo-specific requirements.",
+            "missing_inputs": list(missing_inputs) if isinstance(missing_inputs, list) else ["repo companion interface"],
+            "fallback_to": repo_specific_default_fallback(surface),
+        }
+    if availability != "present":
+        return {
+            **empty_payload,
+            "result": "block",
+            "summary": "repo companion interface returned an unknown availability state.",
+            "missing_inputs": [f"unknown repo companion availability: {availability}"],
+            "fallback_to": repo_specific_default_fallback(surface),
+        }
+
+    repo_specific_locator = repo_interface.get("repo_specific_requirements")
+    declared_locator = (
+        repo_specific_locator.get("locator")
+        if isinstance(repo_specific_locator, dict)
+        else ".loom/companion/repo-interface.json"
+    )
+    repo_specific_path = target_root / str(declared_locator)
+    blocking: list[dict[str, Any]] = []
+    advisory: list[dict[str, Any]] = []
+    declared: list[dict[str, Any]] = []
+    try:
+        payload = load_json_file(repo_specific_path)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {
+            **empty_payload,
+            "result": "block",
+            "summary": "repo companion requirements are declared, but the machine-readable interface could not be loaded.",
+            "missing_inputs": [f"missing repo companion interface: {repo_specific_path}"],
+            "fallback_to": repo_specific_default_fallback(surface),
+        }
+
+    requirements = payload.get("repo_specific_requirements") if isinstance(payload, dict) else None
+    entries = requirements.get(surface) if isinstance(requirements, dict) else None
+    if not isinstance(entries, list):
+        return {
+            **empty_payload,
+            "result": "block",
+            "summary": "repo companion interface is missing the requested surface requirements.",
+            "missing_inputs": [f"repo companion surface missing: {surface}"],
+            "fallback_to": repo_specific_default_fallback(surface),
+        }
+
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        declared.append(entry)
+        if entry.get("enforcement") == "blocking":
+            blocking.append(entry)
+        elif entry.get("enforcement") == "advisory":
+            advisory.append(entry)
+
+    if blocking:
+        summary = (
+            "companion-declared blocking requirements remain outside Loom core and must be handled before this surface can pass."
+        )
+        result = "block"
+        fallback_to = repo_specific_default_fallback(surface)
+        missing_inputs = [f"repo companion requirement: {entry.get('id', 'unknown')}" for entry in blocking]
+    elif advisory:
+        summary = "only companion-declared advisory requirements are present for this surface."
+        result = "pass"
+        fallback_to = None
+        missing_inputs = []
+    else:
+        summary = "no repo companion requirements are declared for this surface."
+        result = "pass"
+        fallback_to = None
+        missing_inputs = []
+    return {
+        "surface": surface,
+        "result": result,
+        "declared_requirements": declared,
+        "blocking_requirements": blocking,
+        "advisory_requirements": advisory,
+        "summary": summary,
+        "missing_inputs": missing_inputs,
+        "fallback_to": fallback_to,
+    }
+
+
 def normalize_checkpoint(raw: str) -> str:
     lowered = raw.strip().lower()
     if "commit checkpoint" in lowered or "admission checkpoint" in lowered:
@@ -2690,6 +2822,12 @@ def closeout_payload(
     skip_gate: bool,
 ) -> tuple[dict[str, Any], list[str]]:
     missing_inputs: list[str] = []
+    governance_surface = build_governance_surface(target_root)
+    repo_specific_requirements = repo_specific_requirements_payload(
+        governance_surface.get("repo_interface"),
+        target_root=target_root,
+        surface="closeout",
+    )
     gate: dict[str, Any] = {"skipped": skip_gate}
     if not skip_gate:
         repo_gate = target_root / ".loom/bin/loom_check.py"
@@ -2815,6 +2953,11 @@ def closeout_payload(
         fallback_to = closeout_fallback
     elif result == "pass" and isinstance(reconciliation_payload, dict) and reconciliation_payload.get("result") == "warn":
         summary = "closeout state is consistent, but reconciliation audit reported non-blocking warnings that still need review."
+    if result == "pass" and repo_specific_requirements["result"] == "block":
+        result = "block"
+        summary = repo_specific_requirements["summary"]
+        fallback_to = repo_specific_requirements["fallback_to"]
+        missing_inputs.extend(repo_specific_requirements["missing_inputs"])
     return (
         {
             "command": "closeout",
@@ -2828,6 +2971,7 @@ def closeout_payload(
             "issue": issue_payload,
             "pr": pr_payload,
             "project": project_payload,
+            "repo_specific_requirements": repo_specific_requirements,
             **({"reconciliation": reconciliation_payload} if reconciliation_payload is not None else {}),
         },
         [],
@@ -2892,6 +3036,18 @@ def handle_closeout(args: argparse.Namespace) -> int:
         return emit(payload)
 
     reconciliation = payload.get("reconciliation")
+    repo_specific_requirements = payload.get("repo_specific_requirements")
+    if isinstance(repo_specific_requirements, dict) and repo_specific_requirements.get("result") == "block":
+        return emit(
+            {
+                **payload,
+                "operation": "sync",
+                "result": "block",
+                "summary": "closeout sync is blocked until companion-declared blocking requirements are handled.",
+                "fallback_to": repo_specific_requirements.get("fallback_to") or "merge",
+                "runtime_state": runtime_state,
+            }
+        )
     if isinstance(reconciliation, dict):
         reconciliation_result = reconciliation.get("result")
         if reconciliation_result in {"fix-needed", "block"}:
@@ -3894,6 +4050,8 @@ def handle_flow(args: argparse.Namespace) -> int:
 
     review_payload: dict[str, Any] | None = None
     governance_surface = build_governance_surface(target_root)
+    repo_interface = governance_surface.get("repo_interface")
+    repo_specific_requirements: dict[str, Any] | None = None
 
     if args.operation in {"resume", "handoff"}:
         locate_payload = base_workspace_payload(context, "locate")
@@ -3930,6 +4088,11 @@ def handle_flow(args: argparse.Namespace) -> int:
         if args.operation == "merge-ready":
             build_payload = checkpoint_payload("build", context)
             merge_payload = checkpoint_payload("merge", context)
+            repo_specific_requirements = repo_specific_requirements_payload(
+                repo_interface,
+                target_root=target_root,
+                surface="merge_ready",
+            )
             steps.extend(
                 [
                     {
@@ -3950,6 +4113,11 @@ def handle_flow(args: argparse.Namespace) -> int:
             )
         elif args.operation == "review":
             build_payload = checkpoint_payload("build", context)
+            repo_specific_requirements = repo_specific_requirements_payload(
+                repo_interface,
+                target_root=target_root,
+                surface="review",
+            )
             review_record, review_path, review_errors = load_review_record(
                 target_root,
                 context["item_id"],
@@ -4019,6 +4187,9 @@ def handle_flow(args: argparse.Namespace) -> int:
         if step_result == "block" and result == "pass":
             result = "block"
             fallback_to = step.get("fallback_to")
+    if result != "block" and isinstance(repo_specific_requirements, dict) and repo_specific_requirements["result"] == "block":
+        result = "block"
+        fallback_to = fallback_to or repo_specific_requirements["fallback_to"]
 
     if args.operation == "resume":
         summary = (
@@ -4033,17 +4204,23 @@ def handle_flow(args: argparse.Namespace) -> int:
             else "handoff flow produced the minimum writeback checklist, but blocking signals remain before transfer."
         )
     elif args.operation == "merge-ready":
-        summary = (
-            "merge-ready flow found the required evidence and checkpoint state for host merge."
-            if result == "pass"
-            else "merge-ready flow found fallback or blocking signals before host merge."
-        )
+        if isinstance(repo_specific_requirements, dict) and result == "block" and repo_specific_requirements["result"] == "block":
+            summary = "merge-ready flow found companion-declared blocking requirements that Loom core does not satisfy on its own."
+        else:
+            summary = (
+                "merge-ready flow found the required evidence and checkpoint state for host merge."
+                if result == "pass"
+                else "merge-ready flow found fallback or blocking signals before host merge."
+            )
     elif args.operation == "review":
-        summary = (
-            "review flow prepared the semantic review context and exposed the formal review artifact."
-            if result == "pass"
-            else "review flow found missing review material or earlier blocking signals."
-        )
+        if isinstance(repo_specific_requirements, dict) and result == "block" and repo_specific_requirements["result"] == "block":
+            summary = "review flow exposed companion-declared blocking requirements instead of pretending Loom core already covers them."
+        else:
+            summary = (
+                "review flow prepared the semantic review context and exposed the formal review artifact."
+                if result == "pass"
+                else "review flow found missing review material or earlier blocking signals."
+            )
     else:
         summary = (
             "pre-review flow is ready to proceed."
@@ -4056,6 +4233,10 @@ def handle_flow(args: argparse.Namespace) -> int:
             for message in step.get("missing_inputs", []):
                 if message not in missing_inputs:
                     missing_inputs.append(message)
+    if isinstance(repo_specific_requirements, dict) and repo_specific_requirements["result"] == "block":
+        for message in repo_specific_requirements.get("missing_inputs", []):
+            if message not in missing_inputs:
+                missing_inputs.append(message)
     if args.operation == "resume":
         for message in governance_surface.get("missing_inputs", []):
             if message not in missing_inputs:
@@ -4149,6 +4330,7 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "fallback_to": build_payload["fallback_to"],
                     },
                     "review": review_payload,
+                    "repo_specific_requirements": repo_specific_requirements,
                     "current_checkpoint": {
                         "raw": context["current_checkpoint_raw"],
                         "normalized": context["current_checkpoint"],
@@ -4186,6 +4368,7 @@ def handle_flow(args: argparse.Namespace) -> int:
                     },
                     "current_lane": context["current_lane"],
                     "latest_validation_summary": context["latest_validation_summary"],
+                    "repo_specific_requirements": repo_specific_requirements,
                 }
                 if args.operation == "merge-ready"
                 else {}
