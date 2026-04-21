@@ -21,6 +21,19 @@ Spike 事项应允许以“证据边界 + 准入条件 + handoff 输入”作为
 - 这是一条很强的方法论
 - 但是否作为 Loom 的默认正式套件能力，仍需更多项目验证
 
+## `EXT-0053`
+
+`shadow parity` 的 mismatch 是否应自动升级为 blocking merge gate，当前还不应直接固化。
+
+当前结论：
+
+- `shadow parity` 作为 validation-only compare surface 已经成立
+- 但“compare 结果自动决定 merge / closeout 放行”仍缺 live adopted repo 证据
+- Loom 当前应继续保持：
+  - compare 入口稳定
+  - 结果固定为 `match | mismatch | unreadable`
+  - 不声明哪一方自动获胜
+
 ## `parent-sub-issue relation`
 
 跨多轮推进的事项，往往需要表达“总事项负责收敛目标与完成语义，子事项负责承接可独立推进的执行单元”这一关系。

@@ -4,7 +4,7 @@
 
 它的目标是避免下游仓库只能依赖手工复制或临场比较来获取 Loom 更新。
 
-当前正式产品版本：`v0.5.0`
+当前正式产品版本：`v0.6.0`
 
 当前发布判断：`minor`
 
@@ -29,6 +29,7 @@ Loom 的版本对象是“可被下游直接消费的能力面”，而不是单
   - `single-skill standard-skill packages`
 - `adoption` 中面向下游的稳定采用 / 升级规则
 - `repo companion migration` 稳定下游合同（含 `repo-interface.json`）
+- `repo interop` 稳定下游合同（含 `interop.json`）
 
 候选文档、宿主特定实现和未升为 `keep` 的条目，不自动进入稳定版本边界。
 
@@ -107,6 +108,13 @@ Loom 继续使用 `major` / `minor` / `patch` 的发布判断，但在 `pre-1` �
 - [`reference-companion-spec-syvert.md`](./reference-companion-spec-syvert.md)
 - [`reference-companion-spec-webenvoy.md`](./reference-companion-spec-webenvoy.md)
 - [`validation-repo-companion-interface.md`](./validation-repo-companion-interface.md)
+
+若发布包含成熟治理重仓 attach / interop / parity 合同变更，还应同步更新：
+
+- [`deep-existing-repo-default.md`](./deep-existing-repo-default.md)
+- [`deep-existing-repo-workflow.md`](./deep-existing-repo-workflow.md)
+- [`repo-interop-contract.md`](./repo-interop-contract.md)
+- [`validation-deep-existing-repo-syvert-webenvoy.md`](./validation-deep-existing-repo-syvert-webenvoy.md)
 
 ## 6. 交付面与升级动作的对应关系
 
@@ -204,23 +212,32 @@ Loom 继续使用 `major` / `minor` / `patch` 的发布判断，但在 `pre-1` �
 - 既有 CLI 顶层结果语义被破坏
 - `shadow mode` 被直接提升为新的默认 blocking merge gate
 
-## 7. `v0.5.0` 的发布判断
+## 7. `v0.6.0` 的发布判断
 
-`v0.5.0` 本次按 `minor` 管理，原因是：
+`v0.6.0` 本次按 `minor` 管理，原因是：
 
-- 用户首层产品路径保持不变，仍然只看到 `loom-pre-review -> loom-review -> loom-merge-ready`
+- 用户首层产品路径保持不变，`repository_mode` 仍只暴露 `new | small-existing | complex-existing`
 - 这次新增的是既有交付形态内的稳定能力扩展：
-  - 正式 review 内部执行链固定为 `flow review -> review run -> review record`
-  - 默认 Codex-backed review adapter 被 Loom 正式承接
-  - `merge-ready` / `checkpoint merge` 继续只消费单一 authored `review record`
+  - `deep-existing-repo` 作为 `complex-existing` 下的 attach-only adoption path
+  - `repo-interface v2` 在保持 `v1` 可读的前提下扩展 typed gates、metadata/context machine contract
+  - `interop.json` 作为 retained host action result / repo-native carrier / shadow parity 的独立只读合同
+  - `shadow parity` 保持 validation-only，不改写 merge gate
 - 本次没有改写四层 repo-local 交付形态、root entry 身份、route priority、checkpoint 语义或关闭语义
-- 本次没有要求下游重新理解 install surface、scenario skill 边界或单 skill package 边界
+- 本次没有要求下游重新理解 install surface、scenario skill 边界或 single-skill package 边界
+
+本次仍不进入 `major` 的原因是：
+
+- 没有新增第四种 `repository_mode`
+- 没有改写 root contract 或必备工件
+- 没有破坏 `loom-init` / `governance_surface` / `loom_flow` 的既有顶层结果语义
+- 没有把 `shadow parity` 提升为新的默认 blocking merge gate
 
 本次仍不进入 `v1.0.0` 的原因是：
 
 - Loom 仍处于 pre-1 阶段
-- multi-engine、全局发行渠道与更完整的宿主回归矩阵仍未进入稳定发布面
-- 本次新增的是默认 review 主路径，而不是 `v1.x` 级别的长期稳定承诺重写
+- live adopted repo 的 interop / parity dogfood 仍在早期
+- `metadata_contract` 的跨仓字段 taxonomy 仍未稳定
+- 宿主完整回归矩阵与全局发行渠道仍未进入稳定发布面
 
 ## 8. 与 `skills` 分发合同的关系
 

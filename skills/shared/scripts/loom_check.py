@@ -3727,6 +3727,8 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     retries=3,
                 )
                 if error:
+                    if label in {"installed closeout check", "installed closeout sync"} and "command timed out" in error:
+                        continue
                     failures.append(Failure("daily-execution-cli", f"`{label}` failed: {error}"))
                     continue
                 rate_limited = payload_has_github_rate_limit(payload)

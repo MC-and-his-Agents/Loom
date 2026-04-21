@@ -1,16 +1,16 @@
 # Upstream Delivery Surface
 
-本文定义 Loom `v0.5.0` 作为上游系统时，对下游稳定暴露的交付面。
+本文定义 Loom `v0.6.0` 作为上游系统时，对下游稳定暴露的交付面。
 
 它的目标不是描述某个宿主如何发行，而是明确：哪些内容已经形成 Loom 的稳定发布面，哪些内容仍然属于候选或宿主特定实现。
 
-当前正式产品版本：`v0.5.0`
+当前正式产品版本：`v0.6.0`
 
 当前发布判断：`minor`
 
 ## 1. 四层 repo-local 稳定交付面
 
-`v0.5.0` 延续 `v0.4.0` 已固定的四层 repo-local 交付形态，并在这条稳定边界内扩展默认 review 主路径：
+`v0.6.0` 延续 `v0.5.0` 已固定的四层 repo-local 交付形态，并在这条稳定边界内扩展成熟治理重仓 adoption 面：
 
 ### 1.1 `repo-local plugin`
 
@@ -65,15 +65,20 @@
 - `adoption/`
   - 稳定 adoption 路径、经验回流、验证记录合同、版本化与升级路径
   - `repo companion migration` 稳定下游合同
+  - `deep-existing-repo` attach-only adoption path
+  - `repo-interface v2` 与 `interop.json` 的稳定机读合同
+  - validation-only `shadow parity` 读面
   - 执行入口兼容说明、reconciliation audit / sync 兼容边界、7 个场景 skill 验证记录与完整执行内核复验记录
   - 第一批执行化补充验证记录：
     - `adoption/validation-main-path-new-project.md`
     - `adoption/validation-existing-repo-execution-sync.md`
   - companion 合同参考与验证记录：
     - `adoption/repo-companion-migration.md`
+    - `adoption/repo-interop-contract.md`
     - `adoption/reference-companion-spec-syvert.md`
     - `adoption/reference-companion-spec-webenvoy.md`
     - `adoption/validation-repo-companion-interface.md`
+    - `adoption/validation-deep-existing-repo-syvert-webenvoy.md`
   - `SKILLS` 产品面收敛验证与 closeout：
     - `adoption/validation-skills-surface-convergence.md`
   - Loom 自身 `#143` 树 retrofit 记录：
@@ -108,7 +113,7 @@ Loom 对下游交付的对象不是单个文件，而是以下组合：
 - 一组稳定的 scenario skill 入口合同
 - 一组可单独正式交付的 standard-skill packages 边界说明
 - 一组 adoption / upgrade / release 说明
-- 一组下游 `repo companion migration` 机读合同（`.loom/companion/manifest.json` 与 `.loom/companion/repo-interface.json`）
+- 一组下游 `repo companion migration` 机读合同（`.loom/companion/manifest.json`、`.loom/companion/repo-interface.json`、按需的 `.loom/companion/interop.json`）
 
 下游不应被要求复制候选材料，才能消费 Loom 的核心能力。
 
@@ -117,6 +122,7 @@ Loom 对下游交付的对象不是单个文件，而是以下组合：
 - `repo-local plugin`、repo-local `loom CLI`、scenario skills、single-skill standard-skill packages 必须分层表达
 - `skills` 的用户首层公开面、单 skill 交付面与宿主 / adapter 公开面必须分层表达
 - 宿主实现细节不进入稳定交付面
+- `shadow parity` 作为 validation-only read surface 可以进入稳定交付面，但不自动变成 merge gate
 - 单仓验证不足的结论不进入稳定交付面
 - 根入口摘要不重复内核正文；内核正文只保留在唯一主落点
 - 单 skill package 不得被写成“完整 Loom 默认能力”的同义词
