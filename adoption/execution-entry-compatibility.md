@@ -4,13 +4,13 @@
 
 对应 Loom issue：`#60`
 
-当前正式产品版本：`v0.4.0`
+当前正式产品版本：`v0.5.0`
 
-当前发布判断：`major but still pre-1`
+当前发布判断：`minor`
 
 ## 1. 四层交付面的入口兼容
 
-`v0.4.0` 当前稳定入口按以下四层兼容：
+`v0.5.0` 在保持既有四层 repo-local 交付形态不变的前提下，当前稳定入口按以下四层兼容：
 
 | 交付面 | 稳定入口 | 兼容承诺 |
 | --- | --- | --- |
@@ -28,6 +28,7 @@
 | root 入口与基础验证 | `loom route` / `loom init verify` | `loom-init` 继续作为唯一 root entry，路由能力不替代底层 CLI |
 | 初始化与恢复公共治理读面 | `loom-init` 输出合同 + `loom-adopt` / `loom-resume` 场景合同 | `governance_surface` 作为稳定公共字段存在；其中 `repo_interface` 只承接 `repo companion` locator 与机读 requirements / gates，场景 skill 只能复用或摘要，不新增第二套治理真相 |
 | 日常读取与检查 | `loom flow fact-chain` / `loom flow runtime-evidence` / `loom flow state-check` | 输出保持 JSON 结果语义（`result/summary/missing_inputs/fallback_to`） |
+| 正式 review 执行 | `loom flow review` + `loom review run` + `loom review read|record` | `flow review` 保持只读，`review run` 负责默认 engine 执行与 evidence 落盘，正式 authored truth 仍只允许写回单一 `review record` |
 | checkpoint 执行 | `loom flow checkpoint admission/build/merge` | 三阶段语义与回退关系保持不变 |
 | 现场与纯度治理 | `loom flow workspace <create/locate/cleanup/retire>` + `purity-check` | 生命周期动作与失败语义保持不变 |
 | 宿主动作与 closeout | [../harness/host-action-contract.md](../harness/host-action-contract.md) + `loom flow host-lifecycle` + `reconciliation audit|sync` + `closeout check|sync` | 新增统一主落点，不改变现有 CLI；Loom 冻结 host-facing actions 的结果与去向，但不接管宿主 branch / PR / worktree 生命周期 |
@@ -58,23 +59,25 @@
 6. `loom flow resume`
 7. `loom flow pre-review`
 8. `loom flow review`
-9. `loom review read|record`
-10. `loom flow recovery writeback`
-11. `loom flow work-item create|update`
-12. `loom flow handoff`
-13. `loom flow merge-ready`
-14. `loom flow checkpoint admission/build/merge`
-15. `loom flow workspace locate/cleanup/retire`
-16. `loom flow host-lifecycle`
-17. `loom flow reconciliation audit`
-18. `loom flow reconciliation sync --dry-run`
-19. `loom flow closeout check`
+9. `loom review run`
+10. `loom review read|record`
+11. `loom flow recovery writeback`
+12. `loom flow work-item create|update`
+13. `loom flow handoff`
+14. `loom flow merge-ready`
+15. `loom flow checkpoint admission/build/merge`
+16. `loom flow workspace locate/cleanup/retire`
+17. `loom flow host-lifecycle`
+18. `loom flow reconciliation audit`
+19. `loom flow reconciliation sync --dry-run`
+20. `loom flow closeout check`
 
 预期：
 
 - 前 1-9 步提供“该进入哪个入口 / 可继续执行 / 需阻断 / 是否应回退”的统一判断
 - `loom-init`、`loom-adopt`、`loom-resume` 对外公开的治理读面保持同一字段名 `governance_surface`
 - `governance_surface.repo_interface` 只区分 `absent | companion_docs_only | incomplete | present` 四类机读状态，不把旧式 companion docs 伪装成稳定 repo interface
+- 正式 review 固定按 `flow review -> review run -> review record` 分层；默认 engine 若失败必须 fail-closed，并明确回到 manual review 写回同一 review record
 - merge 阶段可按状态返回 `fallback`，而不是伪装成通过
 - `flow review`、`flow merge-ready` 与 `closeout check|sync` 只增量暴露 `repo_specific_requirements`；blocking companion requirement 必须显式阻断，advisory requirement 只展示不阻断
 - host-facing actions 继续复用既有命令，但 `fallback` 只保留给 Loom 内部 checkpoint / merge control；closeout 与 reconciliation 不把 drift 伪装成 `fallback`
@@ -90,6 +93,7 @@
 - `verify`：均返回 `ok: true`
 - `fact-chain/runtime-evidence/state-check`：均可读
 - `flow resume/pre-review/review/handoff/merge-ready`：均可返回稳定 JSON 结果
+- `review run`：可在 build checkpoint 就绪时调用默认 Codex reviewer，并把 raw output 收敛为 Loom evidence 与 normalized findings
 - `review record`、`recovery writeback`、`work-item create|update`：可显式回写 authored 结果而不引入第二真相
 - `checkpoint merge` 在当前样本阶段按预期返回 `fallback`
 - `host-action-contract` 把 `host-lifecycle`、`reconciliation`、`closeout` 的结果与 `fallback_to` 收到唯一主落点，而不改写既有 CLI 入口

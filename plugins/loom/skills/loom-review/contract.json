@@ -1,7 +1,7 @@
 {
   "id": "loom-review",
   "role": "scenario/review",
-  "contract_version": "1.3.0",
+  "contract_version": "1.4.0",
   "display_name": "Loom Review",
   "description": "Run the formal semantic review layer on top of pre-review and return authoritative review findings plus a verdict without replacing merge-ready.",
   "root_entry": false,
@@ -32,6 +32,8 @@
       "runtime_evidence",
       "build_checkpoint",
       "review",
+      "engine",
+      "manual_review",
       "current_checkpoint"
     ]
   },
