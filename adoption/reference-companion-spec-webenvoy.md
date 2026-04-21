@@ -2,7 +2,7 @@
 
 本文提供 `WebEnvoy` 的 `repo companion` 参考样本。
 
-它只证明当前 `.loom/companion/repo-interface.json` 最小 schema 足以承接另一类真实下游；不把 `WebEnvoy` 的模板负担、流程命名或 host gate 直接提升为 Loom core 默认规则。
+它只证明当前 `.loom/companion/repo-interface.json` 机读合同足以承接另一类真实下游；不把 `WebEnvoy` 的模板负担、流程命名或 host gate 直接提升为 Loom core 默认规则。
 
 ## 1. Companion Rules
 
@@ -38,7 +38,7 @@
 
 ```json
 {
-  "schema_version": "loom-repo-interface/v1",
+  "schema_version": "loom-repo-interface/v2",
   "companion_entry": ".loom/companion/README.md",
   "repo_specific_requirements": {
     "review": [
@@ -70,13 +70,58 @@
     {
       "id": "webenvoy-pre-review",
       "summary": "WebEnvoy-specific pre-review appendix.",
-      "locator": ".loom/companion/pre-review.md"
+      "locator": ".loom/companion/pre-review.md",
+      "gate_type": "pre_review"
     },
     {
       "id": "webenvoy-formal-review",
       "summary": "WebEnvoy-specific formal review appendix.",
-      "locator": ".loom/companion/review.md"
+      "locator": ".loom/companion/review.md",
+      "gate_type": "review"
     }
-  ]
+  ],
+  "metadata_contract": {
+    "fields": [
+      {
+        "id": "integration_check",
+        "summary": "Declare the integration check metadata block required by guarded WebEnvoy changes.",
+        "applicability_locator": ".loom/companion/metadata-contract.md",
+        "authority_locator": ".github/PULL_REQUEST_TEMPLATE.md",
+        "enforcement": "blocking"
+      },
+      {
+        "id": "gate_applicability",
+        "summary": "Declare which repo-local gates apply to the current change before review can complete.",
+        "applicability_locator": ".loom/companion/metadata-contract.md",
+        "authority_locator": ".github/PULL_REQUEST_TEMPLATE.md",
+        "enforcement": "blocking"
+      },
+      {
+        "id": "live_evidence_record",
+        "summary": "Point review and merge-ready to the live evidence record consumed by WebEnvoy governance.",
+        "applicability_locator": ".loom/companion/metadata-contract.md",
+        "authority_locator": ".github/PULL_REQUEST_TEMPLATE.md",
+        "enforcement": "advisory"
+      }
+    ]
+  },
+  "context_schema": {
+    "fields": [
+      {
+        "id": "guardian_lane",
+        "summary": "Review lane used to determine which overload modules and guardian checks apply.",
+        "type": "string",
+        "required": true,
+        "mapping_rule_locator": ".loom/companion/context-schema.md"
+      },
+      {
+        "id": "evidence_window",
+        "summary": "Evidence freshness window consumed by pre-review and review preparation.",
+        "type": "string",
+        "required": false,
+        "mapping_rule_locator": ".loom/companion/context-schema.md"
+      }
+    ]
+  }
 }
 ```

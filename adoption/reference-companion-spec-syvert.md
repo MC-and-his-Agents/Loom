@@ -2,7 +2,7 @@
 
 本文提供 `Syvert` 的 `repo companion` 参考样本。
 
-它只证明当前 `.loom/companion/repo-interface.json` 最小 schema 足以承接一类真实下游；不把 `Syvert` 的 gate、目录名或命名习惯直接提升为 Loom core 默认规则。
+它只证明当前 `.loom/companion/repo-interface.json` 机读合同足以承接一类真实下游；不把 `Syvert` 的 gate、目录名或命名习惯直接提升为 Loom core 默认规则。
 
 ## 1. Companion Rules
 
@@ -38,7 +38,7 @@
 
 ```json
 {
-  "schema_version": "loom-repo-interface/v1",
+  "schema_version": "loom-repo-interface/v2",
   "companion_entry": ".loom/companion/README.md",
   "repo_specific_requirements": {
     "review": [
@@ -70,13 +70,54 @@
     {
       "id": "syvert-admission-checkpoint",
       "summary": "Syvert-specific admission checkpoint appendix.",
-      "locator": ".loom/companion/checkpoints.md"
+      "locator": ".loom/companion/checkpoints.md",
+      "gate_type": "admission"
     },
     {
       "id": "syvert-build-checkpoint",
       "summary": "Syvert-specific build checkpoint appendix.",
-      "locator": ".loom/companion/checkpoints.md"
+      "locator": ".loom/companion/checkpoints.md",
+      "gate_type": "build"
     }
-  ]
+  ],
+  "context_schema": {
+    "fields": [
+      {
+        "id": "issue",
+        "summary": "Primary Syvert issue identifier carried through execution and closeout.",
+        "type": "string",
+        "required": true,
+        "mapping_rule_locator": ".loom/companion/context-schema.md"
+      },
+      {
+        "id": "item_key",
+        "summary": "Stable repo-native item key used by Syvert execution lanes.",
+        "type": "string",
+        "required": true,
+        "mapping_rule_locator": ".loom/companion/context-schema.md"
+      },
+      {
+        "id": "item_type",
+        "summary": "Execution item type used by Syvert governance branching.",
+        "type": "string",
+        "required": true,
+        "mapping_rule_locator": ".loom/companion/context-schema.md"
+      },
+      {
+        "id": "release",
+        "summary": "Release line required for merge-ready and closeout decisions.",
+        "type": "string",
+        "required": false,
+        "mapping_rule_locator": ".loom/companion/context-schema.md"
+      },
+      {
+        "id": "sprint",
+        "summary": "Sprint label used by Syvert planning and reporting flows.",
+        "type": "string",
+        "required": false,
+        "mapping_rule_locator": ".loom/companion/context-schema.md"
+      }
+    ]
+  }
 }
 ```

@@ -26,7 +26,7 @@
 | 层级 | 稳定入口 | 兼容承诺 |
 | --- | --- | --- |
 | root 入口与基础验证 | `loom route` / `loom init verify` | `loom-init` 继续作为唯一 root entry，路由能力不替代底层 CLI |
-| 初始化与恢复公共治理读面 | `loom-init` 输出合同 + `loom-adopt` / `loom-resume` 场景合同 | `governance_surface` 作为稳定公共字段存在；其中 `repo_interface` 只承接 `repo companion` locator 与机读 requirements / gates，场景 skill 只能复用或摘要，不新增第二套治理真相 |
+| 初始化与恢复公共治理读面 | `loom-init` 输出合同 + `loom-adopt` / `loom-resume` 场景合同 | `governance_surface` 作为稳定公共字段存在；其中 `repo_interface` 只承接 `repo companion` locator、机读 requirements / typed gates，以及 `v2` 下的 metadata/context 合同摘要，场景 skill 只能复用或摘要，不新增第二套治理真相 |
 | 日常读取与检查 | `loom flow fact-chain` / `loom flow runtime-evidence` / `loom flow state-check` | 输出保持 JSON 结果语义（`result/summary/missing_inputs/fallback_to`） |
 | 正式 review 执行 | `loom flow review` + `loom review run` + `loom review read|record` | `flow review` 保持只读，`review run` 负责默认 engine 执行与 evidence 落盘，正式 authored truth 仍只允许写回单一 `review record` |
 | checkpoint 执行 | `loom flow checkpoint admission/build/merge` | 三阶段语义与回退关系保持不变 |
@@ -44,7 +44,7 @@
 - 新增场景 skill 入口不替代 `loom-init` 的 root 身份，只补显式入口与隐式路由
 - 单 skill package 只补正式交付物，不重写场景 skill 合同
 - 新增 [../harness/host-action-contract.md](../harness/host-action-contract.md) 只收口既有 host-facing actions 的合同，不新增 umbrella CLI，也不改写既有命令输出结构
-- `governance_surface` 只允许扩充 locator 或职责说明，不允许更名、拆成并行字段或复制实时 authored 状态；`repo_interface` 只允许承接 `repo companion` 的 locator、requirements 与 specialized gates 机读摘要
+- `governance_surface` 只允许扩充 locator 或职责说明，不允许更名、拆成并行字段或复制实时 authored 状态；`repo_interface` 只允许承接 `repo companion` 的 locator、requirements、typed specialized gates，以及 `v2` 下的 metadata/context 机读摘要
 - gate 与 verify 始终复用同一 CLI，不维护第二套检查命令
 
 ## 4. 可复验操作流

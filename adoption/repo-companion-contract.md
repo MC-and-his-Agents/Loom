@@ -76,7 +76,17 @@
 
 `.loom/companion/repo-interface.json` 是 companion-owned 的最小机读合同，供 `governance_surface` 与 `loom_flow` 消费。
 
-当前稳定 schema：
+当前兼容读取两个 schema：
+
+- `loom-repo-interface/v1`
+- `loom-repo-interface/v2`
+
+其中：
+
+- `v1` 继续保持可读，作为下游兼容口径
+- `v2` 是当前正式扩展口径，用于承接 typed `specialized_gates`、repo-specific metadata contract 与 context schema
+
+### 4.1 `v1` 兼容合同
 
 ```json
 {
@@ -91,12 +101,46 @@
 }
 ```
 
-字段约束：
+`v1` 字段约束：
 
 - `schema_version` 固定为 `loom-repo-interface/v1`
 - `companion_entry` 必须指向可读的 companion 主文档
 - `repo_specific_requirements` 必须同时声明 `review`、`merge_ready`、`closeout` 三个 surface
 - `specialized_gates` 必须存在，可为空数组
+
+### 4.2 `v2` 扩展合同
+
+```json
+{
+  "schema_version": "loom-repo-interface/v2",
+  "companion_entry": ".loom/companion/README.md",
+  "repo_specific_requirements": {
+    "review": [],
+    "merge_ready": [],
+    "closeout": []
+  },
+  "specialized_gates": [],
+  "metadata_contract": {
+    "fields": []
+  },
+  "context_schema": {
+    "fields": []
+  }
+}
+```
+
+`v2` 在 `v1` 之上新增两个可选顶层 section：
+
+- `metadata_contract`
+- `context_schema`
+
+稳定约束：
+
+- `metadata_contract` 与 `context_schema` 只在 `v2` 合法
+- `v2` 不改变 `repo_specific_requirements` 与 `specialized_gates` 的既有纪律
+- `v2` 不把 repo runtime state、review summary、validation status 或 retained host action result 写入 `repo-interface.json`
+
+### 4.3 通用字段纪律
 
 `repo_specific_requirements` 的每条 requirement 固定字段：
 
@@ -115,6 +159,56 @@
 - `id`
 - `summary`
 - `locator`
+- `gate_type` 可选
+
+其中：
+
+- `gate_type` 只允许 `admission | pre_review | review | build | merge_ready | closeout`
+- `gate_type` 只用于说明 gate 所属 Loom surface，不承载 repo-specific 运行态细节
+
+### 4.4 `metadata_contract`
+
+`metadata_contract` 用于声明 repo-specific metadata fields，而不是把这些字段抬升为 Loom core 默认字段。
+
+`metadata_contract.fields[*]` 固定字段：
+
+- `id`
+- `summary`
+- `applicability_locator`
+- `authority_locator`
+- `enforcement`
+
+其中：
+
+- `applicability_locator` 指向“何时需要这组 metadata”的 companion 或 repo-local 权威说明
+- `authority_locator` 指向 metadata 真正承载的 repo-native carrier、模板或权威入口
+- `enforcement` 只允许 `blocking | advisory`
+
+### 4.5 `context_schema`
+
+`context_schema` 用于声明 repo-specific required context fields 与映射规则，不暗含单一 Loom 通用字段模型。
+
+`context_schema.fields[*]` 固定字段：
+
+- `id`
+- `summary`
+- `type`
+- `required`
+- `mapping_rule_locator`
+
+其中：
+
+- `type` 只允许基础类型：`string | integer | number | boolean`
+- `required` 必须是布尔值
+- `mapping_rule_locator` 指向仓库如何把宿主上下文映射到该字段的权威说明
+
+### 4.6 纪律重申
+
+无论 `v1` 或 `v2`，以下纪律保持不变：
+
+- `manifest.json` 仍 locator-only
+- `repo-interface.json` 仍不承载运行态、review summary、current stop、validation status 或 host action result
+- repo-specific 规则仍通过 companion 合同挂接，不得伪装成 Loom core 默认规则
 
 ## 5. 读面语义
 

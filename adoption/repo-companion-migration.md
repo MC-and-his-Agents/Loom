@@ -14,7 +14,7 @@
 其中：
 
 - `manifest.json` 只负责 locator，不承载 authored state
-- `repo-interface.json` 只负责 companion-owned requirements / gates 的机读声明
+- `repo-interface.json` 负责 companion-owned requirements / typed gates，以及 `v2` 下的 metadata/context 机读声明
 
 对应稳定 schema 见 [repo-companion-contract.md](/Users/mc/dev/Loom/adoption/repo-companion-contract.md)。
 
@@ -36,29 +36,44 @@
 
 ## 3. `repo-interface.json` 最小合同
 
-`v1` 只冻结以下顶层字段：
+下游迁移当前允许两种 schema：
+
+- `loom-repo-interface/v1`
+- `loom-repo-interface/v2`
+
+其中：
+
+- `v1` 继续兼容读取
+- `v2` 在 `v1` 基础上新增 typed `specialized_gates`、`metadata_contract`、`context_schema`
+
+`v1` 顶层字段固定为：
 
 - `schema_version`
 - `companion_entry`
 - `repo_specific_requirements`
 - `specialized_gates`
 
+`v2` 顶层字段固定为：
+
+- `schema_version`
+- `companion_entry`
+- `repo_specific_requirements`
+- `specialized_gates`
+- `metadata_contract`
+- `context_schema`
+
 其中：
 
-- `schema_version` 固定为 `loom-repo-interface/v1`
 - `repo_specific_requirements` 必须同时声明 `review`、`merge_ready`、`closeout`
-- `repo_specific_requirements` 每项 requirement 固定字段为：
-  - `id`
-  - `summary`
-  - `locator`
-  - `enforcement`
+- requirement 固定字段为 `id | summary | locator | enforcement`
 - `enforcement` 只允许 `blocking | advisory`
-- `specialized_gates` 每项 gate 固定字段为：
-  - `id`
-  - `summary`
-  - `locator`
+- `specialized_gates` 固定字段为 `id | summary | locator`，并允许可选 `gate_type`
+- `gate_type` 只允许 `admission | pre_review | review | build | merge_ready | closeout`
+- `metadata_contract.fields[*]` 固定字段为 `id | summary | applicability_locator | authority_locator | enforcement`
+- `context_schema.fields[*]` 固定字段为 `id | summary | type | required | mapping_rule_locator`
+- `context_schema.fields[*].type` 只允许 `string | integer | number | boolean`
 
-本批不引入 `contract_version`、repo metadata、validation status 或 retained host actions 的机读字段；这些边界继续由 companion 文档与既有 host-action 合同承接。
+本批仍不引入 `contract_version`、runtime status、review summary 或 retained host actions 的执行结果字段；这些边界继续由 companion 文档与既有 host-action 合同承接。
 
 ## 4. 迁移时的兼容结果
 
