@@ -35,7 +35,7 @@
     {
       "id": "loom-review",
       "role": "scenario/review",
-      "contract_version": "1.3.0",
+      "contract_version": "1.4.0",
       "manifest": "loom-review/contract.json",
       "executable": "loom-review/scripts/loom-review.py"
     },

@@ -13,6 +13,7 @@
 
 ```bash
 python3 tools/loom_flow.py flow review --target examples/new-project --item INIT-0001
+python3 tools/loom_flow.py review run --target <temp-copy> --item INIT-0001
 python3 tools/loom_flow.py review read --target examples/new-project --item INIT-0001
 python3 tools/loom_check.py
 ```
@@ -47,7 +48,8 @@ cat > <temp-copy>/.loom/review-findings.json <<'JSON'
   }
 ]
 JSON
-python3 tools/loom_flow.py review record --target <temp-copy> --item NEXT-0001 --decision fallback --kind code_review --summary "Formal review has not approved the item yet." --reviewer loom-check --fallback-to admission --findings-file .loom/review-findings.json
+python3 tools/loom_flow.py review run --target <temp-copy> --item NEXT-0001
+python3 tools/loom_flow.py review record --target <temp-copy> --item NEXT-0001 --decision fallback --kind code_review --summary "Formal review has not approved the item yet." --reviewer loom-check --fallback-to admission --findings-file .loom/review-findings.json --engine-adapter loom/default-codex --engine-evidence .loom/runtime/review/NEXT-0001/<head>/engine-result.json --normalized-findings .loom/review-findings.json
 ```
 
 ## 结果
@@ -58,6 +60,10 @@ python3 tools/loom_flow.py review record --target <temp-copy> --item NEXT-0001 -
   - 输出顶层稳定携带 `runtime_state`，且 `runtime_state.result=block` 时不会继续伪装成可 review
 - `review read`
   - 能稳定读取 `.loom/reviews/INIT-0001.json`
+- `review run`
+  - 先复用 `flow review` 基线，不在 review checkpoint 未就绪时伪造审查结论
+  - 默认调用 Codex reviewer，并把 raw output 落为 `.loom/runtime/review/<item>/<head>/...` evidence
+  - engine 缺失、schema 漂移、runtime 冲突或 tracked repo diff 时统一 `block`，并保留 manual review 写回入口
 - `recovery writeback`
   - 只写 recovery 主入口，再同步状态面，不引入第二 authored 真相
 - `work-item create/update`
@@ -66,6 +72,7 @@ python3 tools/loom_flow.py review record --target <temp-copy> --item NEXT-0001 -
   - 能在单一 `review_entry` 中写出 merge checkpoint 可机械消费的正式 review 结论
   - `findings` 成为权威数组，逐条承接 `id`、`severity`、`rebuttal`、`disposition`
   - `blocking_issues` / `follow_ups` 只保留兼容投影
+  - `consumed_inputs.engine_adapter`、`engine_evidence`、`normalized_findings` 只记录 evidence 来源，不形成第二 authored truth
 - `loom_check`
   - 已把 `flow review`、`review read|record`、`recovery writeback`、`work-item create|update` 纳入 gate
 
@@ -84,4 +91,4 @@ python3 tools/loom_flow.py review record --target <temp-copy> --item NEXT-0001 -
 
 ## 结论
 
-`pre-review -> review -> merge-ready -> merge checkpoint` 已形成明确分层；同时 recovery writeback 与 work item authoring 也已有稳定脚本面，不再只停留在规则层。
+`pre-review -> flow review -> review run -> review record -> merge-ready -> merge checkpoint` 已形成明确分层；同时 recovery writeback 与 work item authoring 也已有稳定脚本面，不再只停留在规则层。

@@ -33,6 +33,7 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
 统一入口固定为：
 
 - `loom flow review --target <repo> [--item <id>]`
+- `loom review run --target <repo> [--item <id>]`
 - `loom review record --target <repo> [--item <id>] --decision <allow|block|fallback> --kind <general_review|code_review|spec_review> --summary <text> --reviewer <id>`
 
 补充约束：
@@ -41,7 +42,7 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
 - `--blocking-issue` / `--follow-up` 仅保留兼容 authored 入口，不得与 `--findings-file` 混用
 - 无论通过哪种入口，最终都只允许写回单一 `review_entry` 指向的 review record
 
-这个 skill 先用 `flow review` 读取正式 review 的机械基线，再用 `review record` 把审查结论写成可消费载体。
+这个 skill 先用 `flow review` 读取正式 review 的机械基线，再用 `review run` 触发默认 Codex reviewer 并生成 Loom-normalized findings，最后用 `review record` 把审查结论写成可消费载体。
 
 安装态或 repo-local 开发态可以把这些 `loom ...` 动作映射到底层 `scripts/...` 或共享 runtime carrier；但 `loom-review` 自身的场景合同、进入时机和输出责任保持不变。
 
@@ -51,8 +52,9 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
 
 1. 运行 `flow review`，确认当前事项是否具备进入正式审查的最小条件
 2. 若 `flow review` 非 `pass`，直接返回 `block` 或 `fallback`，不伪造审查结论
-3. 基于 `skills/shared/references/governance/review-model.md` 执行语义审查
-4. 用 `review record` 写入正式 review 结论，让 merge checkpoint 可机械消费
+3. 运行 `review run`，用默认 Codex adapter 执行 formal review，并把 raw output 收敛为 Loom evidence 与 normalized findings
+4. 若 `review run` fail-closed，显式回到 manual review 写回同一 `review record`
+5. 用 `review record` 写入正式 review 结论，让 merge checkpoint 可机械消费
 
 这个 skill 不做以下事情：
 
@@ -61,6 +63,7 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
 - 不直接执行 merge 或平台动作
 - 不回写 recovery entry、status surface 或其他 authored 真相载体
 - 不跳过 review record，直接把口头结论交给 merge checkpoint
+- 不把 engine raw output 升级成第二 authored truth
 
 ## 4. 输出要求
 
@@ -70,6 +73,8 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
 - review 机械基线结果
 - build checkpoint 是否允许进入正式审查
 - review artifact 的定位与已记录结论
+- 默认 engine 的执行结果、evidence 定位与 fail-closed 原因
+- manual review 的回退写回入口
 - review record 中的权威 findings / disposition 摘要
 - 审查结论（`allow` / `block` / `fallback`）
 - 若当前不能继续，应回退到哪里
@@ -79,7 +84,7 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
 只有当以下条件同时满足时，`loom-review` 才算完成：
 
 - 显式调用 `loom-review` 与 root 隐式路由都能稳定命中
-- 审查执行严格以 `flow review` 为前置，而不是绕过预检
+- 审查执行严格以 `flow review -> review run -> review record` 为前置，而不是绕过预检
 - 输出 JSON 与 review record 都能直接支撑 merge checkpoint 消费
 - skill 不创建第二 authored 真相源，不替代 merge-ready 聚合
 - review/disposition contract 只扩展 review record 内部字段，不新增第二 artifact 或新状态机

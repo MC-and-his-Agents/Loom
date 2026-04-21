@@ -313,7 +313,7 @@ agent 进入 `loom-review`。
 Loom 在这里做了什么：
 
 - `loom-review` 负责正式 review 入口
-- harness 负责 review execution 与 review record
+- harness 负责 `flow review -> review run -> review record` 这条正式 review 执行链
 
 ### 6. merge-ready
 
@@ -405,6 +405,7 @@ repo-local `loom CLI` 主要给这些情况使用：
 - `loom flow resume --target <repo> [--item <id>]`
 - `loom flow pre-review --target <repo> [--item <id>]`
 - `loom flow review --target <repo> [--item <id>]`
+- `loom review run --target <repo> [--item <id>]`
 - `loom review record --target <repo> [--item <id>] ...`
 - `loom flow closeout check --target <repo>`
 - `loom check <repo>`

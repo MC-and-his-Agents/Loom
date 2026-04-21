@@ -138,6 +138,9 @@ Loom 当前日常执行 CLI 至少提供以下入口：
 - `.loom/runtime/cache`
 - `.loom/flow/tmp`
 
+`review run` 落下的 `.loom/runtime/review/` evidence 不属于 cleanup 的默认删除面。
+它是可消费的运行时审查证据；若要进入长期真相，仍必须回写到正式 `review record`。
+
 ### 5.2 失败语义
 
 以下情况至少应返回 `block`，且不得自动删除内容：
