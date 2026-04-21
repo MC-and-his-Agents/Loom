@@ -1546,6 +1546,110 @@ def check_demo_repo_local_cli(root: Path) -> list[Failure]:
     return failures
 
 
+def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    with tempfile.TemporaryDirectory(prefix="loom-check-deep-existing-") as tmp:
+        tmp_root = Path(tmp)
+
+        def write_repo(target: Path, *, validation_entry: bool, pr_template: bool, workflow_doc: bool) -> None:
+            (target / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
+            (target / "scripts").mkdir(parents=True, exist_ok=True)
+            (target / "src").mkdir(parents=True, exist_ok=True)
+            (target / "README.md").write_text("# Sample Repo\n", encoding="utf-8")
+            (target / "AGENTS.md").write_text("# Root Rules\n", encoding="utf-8")
+            (target / "src" / "main.py").write_text("print('ok')\n", encoding="utf-8")
+            (target / "scripts" / "governance_status.py").write_text("print('ok')\n", encoding="utf-8")
+            (target / ".github" / "workflows" / "ci.yml").write_text("name: ci\n", encoding="utf-8")
+            if workflow_doc:
+                (target / "WORKFLOW.md").write_text("# Workflow\n", encoding="utf-8")
+            if validation_entry:
+                (target / "Makefile").write_text("check:\n\t@echo ok\n", encoding="utf-8")
+            if pr_template:
+                (target / ".github" / "PULL_REQUEST_TEMPLATE.md").write_text("## Summary\n", encoding="utf-8")
+
+        deep_target = tmp_root / "deep-existing"
+        write_repo(deep_target, validation_entry=True, pr_template=True, workflow_doc=True)
+        deep_payload, deep_error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_init.py",
+                "bootstrap",
+                "--target",
+                str(deep_target),
+                "--write",
+                "--force",
+                "--verify",
+                "--install-pr-template",
+            ],
+        )
+        if deep_error:
+            failures.append(Failure("deep-existing-bootstrap", f"`deep-existing bootstrap` failed: {deep_error}"))
+        else:
+            recommended = deep_payload.get("recommended_adoption")
+            verification = deep_payload.get("verification")
+            governance_surface = deep_payload.get("governance_surface")
+            if not isinstance(recommended, dict) or recommended.get("path") != "deep-existing-repo":
+                failures.append(Failure("deep-existing-bootstrap", "`deep-existing bootstrap` must select `recommended_adoption.path = deep-existing-repo`"))
+            run = deep_payload.get("run")
+            if not isinstance(run, dict) or run.get("scenario_key") != "complex-existing":
+                failures.append(Failure("deep-existing-bootstrap", "`deep-existing bootstrap` must keep `scenario_key = complex-existing`"))
+            if not isinstance(verification, dict) or verification.get("ok") is not True:
+                failures.append(Failure("deep-existing-bootstrap", "`deep-existing bootstrap` must verify successfully"))
+            if not isinstance(governance_surface, dict) or governance_surface.get("repository_mode") != "complex-existing":
+                failures.append(Failure("deep-existing-bootstrap", "`deep-existing bootstrap` must keep `governance_surface.repository_mode = complex-existing`"))
+            for required in (
+                ".loom/companion/README.md",
+                ".loom/companion/checkpoints.md",
+                ".loom/companion/review.md",
+                ".loom/companion/merge-ready.md",
+                ".loom/companion/closeout.md",
+            ):
+                if not (deep_target / required).exists():
+                    failures.append(Failure("deep-existing-bootstrap", f"`deep-existing bootstrap` is missing `{required}`"))
+            for forbidden in (
+                ".loom/work-items/INIT-0001.md",
+                ".loom/progress/INIT-0001.md",
+                ".loom/status/current.md",
+            ):
+                if (deep_target / forbidden).exists():
+                    failures.append(Failure("deep-existing-bootstrap", f"`deep-existing bootstrap` must not generate `{forbidden}`"))
+            fact_chain = deep_payload.get("fact_chain")
+            if not isinstance(fact_chain, dict) or fact_chain.get("mode") != "repo-native attach-only":
+                failures.append(Failure("deep-existing-bootstrap", "`deep-existing bootstrap` must keep `fact_chain.mode = repo-native attach-only`"))
+
+        full_target = tmp_root / "full-bootstrap"
+        write_repo(full_target, validation_entry=False, pr_template=False, workflow_doc=False)
+        full_payload, full_error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_init.py",
+                "bootstrap",
+                "--target",
+                str(full_target),
+                "--write",
+                "--force",
+                "--verify",
+                "--install-pr-template",
+            ],
+        )
+        if full_error:
+            failures.append(Failure("deep-existing-bootstrap", f"`full-bootstrap fallback sample` failed: {full_error}"))
+        else:
+            recommended = full_payload.get("recommended_adoption")
+            if not isinstance(recommended, dict) or recommended.get("path") != "full-bootstrap":
+                failures.append(Failure("deep-existing-bootstrap", "complex existing sample without overload must keep `recommended_adoption.path = full-bootstrap`"))
+            for required in (
+                ".loom/work-items/INIT-0001.md",
+                ".loom/progress/INIT-0001.md",
+                ".loom/status/current.md",
+            ):
+                if not (full_target / required).exists():
+                    failures.append(Failure("deep-existing-bootstrap", f"`full-bootstrap fallback sample` must generate `{required}`"))
+    return failures
+
+
 def check_daily_execution_cli(root: Path) -> list[Failure]:
     failures: list[Failure] = []
     example_target = root / "examples/new-project"
@@ -4130,6 +4234,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_demo_assets(root))
     failures.extend(check_demo_fact_chain(root))
     failures.extend(check_demo_repo_local_cli(root))
+    failures.extend(check_deep_existing_repo_bootstrap(root))
     failures.extend(check_daily_execution_cli(root))
     failures.extend(check_repo_companion_interface_contracts(root))
     failures.extend(check_markdown_links(root))
