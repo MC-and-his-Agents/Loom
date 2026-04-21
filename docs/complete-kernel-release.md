@@ -1,10 +1,10 @@
-# Loom v0.4.0 Release
+# Loom v0.5.0 Release
 
-本文是 Loom `v0.4.0` 的正式发布与升级说明。
+本文是 Loom `v0.5.0` 的正式发布与升级说明。
 
-发布日期：`2026-04-20`
+发布日期：`2026-04-21`
 
-变更分类：`major but still pre-1`
+变更分类：`minor`
 
 受影响交付面：
 
@@ -12,88 +12,81 @@
 - repo-local `loom CLI`
 - `scenario skills`
 - `single-skill standard-skill packages`
-- `governance`
 - `harness`
 - `templates`
 - `adoption`
 
-下游是否需要动作：是。
-至少需要重新读取稳定安装面、升级说明与 release note，并按本文确认自己消费的是完整 Loom install surface 还是单个 standard-skill package。若采用 `repo companion migration`，仍需维护 `.loom/companion/manifest.json` 与 `.loom/companion/repo-interface.json`。
+下游是否需要动作：否。
+已接入 `v0.4.0` 的下游可以继续沿用既有 authored review 路径；若要消费本次默认 Codex-backed review 主路径，应刷新 repo-local `loom` plugin、repo-local `loom CLI` 或对应 single-skill package 安装物。
 
-对应 Loom issue：`#232`、`#236`、`#237`
+对应 Loom issue：`#248`、`#249`、`#250`、`#251`、`#252`、`#253`
 
-## 1. 本次发布收敛的稳定交付面
+## 1. 本次发布收敛的默认 review 主路径
 
-`v0.4.0` 把 Loom 的 repo-local 交付形态正式固定为四层：
+`v0.5.0` 在不改写既有四层 repo-local 交付形态的前提下，把 Loom 的正式 review 默认路径收敛为：
 
-### 1.1 `repo-local plugin`
+1. `flow review`
+   - 继续只读，负责 formal review 的机械基线、进入条件与 blocking companion requirements
+2. `review run`
+   - 新增默认 engine 执行层
+   - 固定调用 Codex-backed reviewer
+   - 把 raw output 落为 `.loom/runtime/review/<item>/<head>/...` evidence
+   - 产出 Loom-owned normalized findings，并在 engine 不可用、schema 漂移、runtime 冲突或 repo tracked diff 时 fail-closed
+3. `review record`
+   - 继续作为唯一正式 authored truth
+   - 把 decision / findings / reviewed_head 写回单一 review record
+   - 只记录 `engine_adapter`、`engine_evidence`、`normalized_findings` 这类 consumed inputs，而不创建第二 authored artifact
 
-- 作为默认安装对象被 Agent 平台发现和安装
-- 承接完整 Loom 入口面
-- 对用户继续暴露 `loom-init` 与其余 scenario skills
+用户首层路径仍保持不变：
 
-### 1.2 repo-local `loom CLI`
+- `loom-pre-review -> loom-review -> loom-merge-ready`
 
-- 作为次级执行面，统一承接 `loom ...` 的自动化、验证、调试与宿主编排语义
-- 继续服务于 plugin 安装物与单 skill package
-- 不升格成用户第一入口
+内部正式 review 执行链现在固定为：
 
-### 1.3 `scenario skills`
+- `flow review -> review run -> review record`
 
-- 继续作为用户执行面
-- root entry：`loom-init`
-- scenario skills：`loom-adopt`、`loom-resume`、`loom-pre-review`、`loom-review`、`loom-handoff`、`loom-retire`、`loom-merge-ready`
-- 路由与升级工件仍以 `skills/registry.json`、`skills/upgrade-contract.json`、`skills/route-matrix.md` 为准
+## 2. 为什么这是 `minor`
 
-### 1.4 `single-skill standard-skill packages`
+本次按 `minor` 管理，原因是：
 
-- 正式定义为单个标准 skill 的交付物
-- 每个 package 只承接该 skill 的场景合同、最小 launcher / shim 与所需私有资源
-- 不再沿用“单个用户可见 skill 产品单元”的旧 framing
-- 不承诺整包 Loom 默认能力
+- 这次新增的是既有执行面内的稳定能力扩展，而不是安装面或角色边界重写
+- 用户仍从相同的 scenario skill 进入，不需要重新理解四层 repo-local 交付形态
+- `merge-ready` / `checkpoint merge` 继续只消费单一 authored `review record`
+- 既有 manual review 路径保持可用；engine 失败时只是 fail-closed 回到同一 review record 写回路径
 
-## 2. 为什么这是 `major but still pre-1`
+本次没有进入 `major` 的原因是：
 
-本次按 `major` 管理，原因是：
-
-- Loom 的默认安装对象、次级执行面、用户执行面与单 skill 正式交付物边界都被重新收清
-- 下游必须重新理解 plugin / CLI / scenario skills / single-skill packages 四层公开面
-- 单 skill 包不再允许被写成“缩小版整包 Loom”
-
-本次仍是 `pre-1`，原因是：
-
-- Loom 仍未进入 `v1.x` 的长期稳定承诺阶段
-- 全局发行渠道、宿主完整回归矩阵与更多宿主实现仍不属于稳定交付面
-- 本次没有重写 JSON runtime contracts、shared runtime 脚本或 route priority / root identity 的 machine semantics
+- 没有引入新的 root entry、scenario skill、默认安装对象或新的事实真相源
+- 没有把 Loom 扩写成 multi-engine marketplace
+- 没有改写 checkpoint、closeout、route priority 或 review record 的唯一真相边界
 
 ## 3. 下游升级路径
 
 ### 3.1 完整 Loom 消费方
 
-1. 重新读取根 `README.md`、`skills/README.md`、`skills/distribution-and-adapter-contract.md`、`adoption/versioning-and-upgrades.md`
-2. 刷新 repo-local `loom` plugin 的安装物、skill manifests、引用资源与升级协议
-3. 确认默认仍从 `loom-init` 进入，且 7 个 scenario skills 可发现
-4. 把用户执行面继续固定在 scenario skills，把 repo-local `loom CLI` 保持为次级入口
+1. 重新读取根 `README.md`、`adoption/versioning-and-upgrades.md` 与本文
+2. 刷新 repo-local `loom` plugin 的安装物，确保 plugin 镜像里的 `loom-review` contract、shared runtime 与 review schema 已同步到当前版本
+3. 若希望使用默认 engine-backed review，确认宿主环境可调用 `codex`
+4. 若 `review run` fail-closed，继续按 manual review 路径把正式结论写回同一 `review record`
 
-### 3.2 repo-local `loom CLI` 消费方
+### 3.2 repo-local `loom CLI` / 自动化消费方
 
-1. 在自动化、验证、调试与宿主编排中统一使用 `loom ...` 语义
-2. 不把 CLI 写成新的事实真相源
-3. 不把 CLI 公开面误写成 plugin 安装主路径
+1. 在 formal review 自动化里显式采用 `loom review run`
+2. 不直接消费 engine raw output、prompt 或日志，把它们视为 evidence 而不是 merge gate truth
+3. 继续让 `loom review record` 成为唯一正式写回入口
 
 ### 3.3 单 skill package 消费方
 
-1. 先确认自己消费的是哪个 `single-skill standard-skill package`
-2. 只按该 skill 的场景合同、最小 launcher / shim 与所需私有资源理解安装物
-3. 不假设其余 scenario skills、`loom-init` 路由或整包 Loom 默认能力已经同时可用
-4. 若需要完整 Loom 入口面，回到 repo-local `loom` plugin
+1. 刷新 `loom-review` package 与共享 runtime 资源
+2. 确认安装布局包含 `shared/assets/review/loom-review-result-schema.json`
+3. 不把默认 Codex-backed path 理解成新的 package 边界；它仍属于 `loom-review` 既有场景合同内的扩展
 
 ### 3.4 兼容原则
 
-- 新增公开层次不替代既有 root / scene contract
-- 单命令入口与聚合入口并存
-- gate 与 verify 复用同一 CLI，不维护第二套检查命令
-- 单 skill package 的正式化不改变 scenario skill 的角色合同
+- `flow review` 保持只读，不承担 engine 执行或 authored writeback
+- engine 输出只作为 evidence 存在，不形成第二 authored truth
+- `merge-ready` / `checkpoint merge` 不直接读取 engine raw output
+- 仅补 Loom runtime/status carriers 的提交不应把 review 判成 stale；非 carrier 漂移仍必须 stale/block
 
 详见：[adoption/execution-entry-compatibility.md](../adoption/execution-entry-compatibility.md)
 
@@ -102,42 +95,50 @@
 本次 release 已把以下文档统一到同一条仓库真相：
 
 - 根 `README.md`
-- `skills/README.md`
-- `skills/distribution-and-adapter-contract.md`
 - `adoption/upstream-delivery-surface.md`
 - `adoption/versioning-and-upgrades.md`
 - `adoption/execution-entry-compatibility.md`
+- `harness/review-execution.md`
+- `harness/merge-checkpoint.md`
+- `skills/loom-review/SKILL.md`
+- `skills/loom-review/contract.json`
+- `templates/review-record.md`
 - `VERSION`
+- plugin 镜像下的 `plugins/loom/skills/**`
 
 这些文档共同回答：
 
-- 四层 repo-local 交付面是什么
-- 哪些对象属于完整 Loom install surface
-- 哪些对象只是单 skill 正式交付物
-- 为什么本轮是 `v0.4.0` 的 `major but still pre-1`
+- 默认 formal review 主路径是什么
+- engine evidence、authored truth 与 merge 消费的边界是什么
+- 为什么本轮是 `v0.5.0` 的 `minor`
+- plugin / installed runtime 需要刷新哪些镜像文件
 
 ## 5. 延续有效的验证与收口依据
 
-本次 release 继续消费既有验证记录与 adoption 复验，而不是重写 machine contracts：
+本次 release 除了沿用既有完整内核验证外，还新增并固定了以下 review 主路径验证：
 
-- 6 个场景 skill 的显式触发、隐式路由与下游消费验证
-- 新项目完整内核复验：`loom-adoption-new-project`
-- 既有仓库完整内核复验：`mail-listener` + `hotcp`
-- 第一批执行化补充验证：
-  - `adoption/validation-main-path-new-project.md`
-  - `adoption/validation-existing-repo-execution-sync.md`
-  - `adoption/validation-retrofit-143-tree.md`
-- `repo companion` 机读读面与 requirement 消费验证：
-  - `adoption/validation-repo-companion-interface.md`
+- repo-local `python3 tools/loom_check.py`
+- repo-local `python3 -m py_compile skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_check.py`
+- repo-local `git diff --check`
+- GitHub PR `#254` 的 `py-compile`、`demo-bootstrap`、`repo-local-cli` 与 `loom-check`
+- 版本控制内的 review 验证记录：
+  - `adoption/validation-review-and-authoring.md`
+  - `adoption/validation-installed-skills-pre-merge-chain.md`
 
-本批的新增收口重点是 boundary / versioning / release truth 对齐，而不是重做 runtime validation。
+负样本也已进入验证记录：
+
+- engine unavailable
+- schema drift
+- repo tracked diff detected
+- review stale / head drift
+- validation summary drift
 
 ## 6. 本次不进入发布面的内容
 
-以下内容本次明确不进入 `v0.4.0` 的稳定发布面：
+以下内容本次明确不进入 `v0.5.0` 的稳定发布面：
 
-- 全局发行 Loom CLI
-- npm、pipx、Homebrew 等分发渠道
-- 宿主特定 marketplace 流程、路径、按钮或权限细节
-- 把单个 standard-skill package 宣称为“默认完整 Loom”
-- JSON runtime contracts、shared runtime 脚本或 route priority 的重写
+- multi-engine marketplace 或 engine selector
+- 第二 authored review artifact
+- 把 `codex exec` 之类宿主命令名提升为 Loom core 对外合同
+- 让 `merge-ready` 或 `checkpoint merge` 充当第一次正式语义审查
+- guardian / merge gate 语义提前混入 reviewer rubric

@@ -4,9 +4,9 @@
 
 它的目标是避免下游仓库只能依赖手工复制或临场比较来获取 Loom 更新。
 
-当前正式产品版本：`v0.4.0`
+当前正式产品版本：`v0.5.0`
 
-当前发布判断：`major but still pre-1`
+当前发布判断：`minor`
 
 ## 1. 版本对象
 
@@ -51,7 +51,7 @@ Loom 当前仍处于 `pre-1` 阶段，因此不会把每次重大收敛都伪装
 - 这是一次足以改变下游安装面、调用面、交付面或升级判断的重大收敛
 - 下游必须显式重读安装、升级与 release truth
 - 但 Loom 仍未进入 `v1.x` 的长期稳定承诺阶段
-- 因此本次正式版本写作 `v0.4.0`，而不是 `v1.0.0`
+- 因此重大版本在 pre-1 阶段仍写作 `v0.x.0`，而不是 `v1.0.0`
 
 判断 `major` 看的不是数字写法，而是下游是否必须重新理解公开交付面。
 
@@ -188,23 +188,23 @@ Loom 继续使用 `major` / `minor` / `patch` 的发布判断，但在 `pre-1` �
 - 新增稳定 `repo companion migration` 合同、但不破坏既有入口语义，通常为 `minor`
 - 对已有路径做澄清或补证据通常为 `patch`
 
-## 7. `v0.4.0` 的发布判断
+## 7. `v0.5.0` 的发布判断
 
-`v0.4.0` 本次按 `major but still pre-1` 管理，原因是：
+`v0.5.0` 本次按 `minor` 管理，原因是：
 
-- Loom 的 repo-local 对外交付形态被正式固定为四层：
-  - `repo-local plugin`
-  - repo-local `loom CLI`
-  - `scenario skills`
-  - `single-skill standard-skill packages`
-- 下游必须显式重读根 `README.md`、`skills/README.md`、`skills/distribution-and-adapter-contract.md`、本文与 release note
-- 单 skill 正式交付物的边界已被重新写清，不再沿用“单个用户可见 skill 产品单元”的旧 framing
+- 用户首层产品路径保持不变，仍然只看到 `loom-pre-review -> loom-review -> loom-merge-ready`
+- 这次新增的是既有交付形态内的稳定能力扩展：
+  - 正式 review 内部执行链固定为 `flow review -> review run -> review record`
+  - 默认 Codex-backed review adapter 被 Loom 正式承接
+  - `merge-ready` / `checkpoint merge` 继续只消费单一 authored `review record`
+- 本次没有改写四层 repo-local 交付形态、root entry 身份、route priority、checkpoint 语义或关闭语义
+- 本次没有要求下游重新理解 install surface、scenario skill 边界或单 skill package 边界
 
 本次仍不进入 `v1.0.0` 的原因是：
 
 - Loom 仍处于 pre-1 阶段
-- 全局发行渠道与宿主完整回归矩阵未进入稳定发布面
-- 机读 runtime contracts 与 shared runtime scripts 没有在本次发布中被重写
+- multi-engine、全局发行渠道与更完整的宿主回归矩阵仍未进入稳定发布面
+- 本次新增的是默认 review 主路径，而不是 `v1.x` 级别的长期稳定承诺重写
 
 ## 8. 与 `skills` 分发合同的关系
 
