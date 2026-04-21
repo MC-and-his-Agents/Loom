@@ -32,10 +32,22 @@ PLANNED_LOCATORS = {
 REPO_INTERFACE_SURFACES = ("review", "merge_ready", "closeout")
 REPO_INTERFACE_AVAILABILITY = {"absent", "companion_docs_only", "incomplete", "present"}
 REPO_INTERFACE_MANIFEST_SCHEMA = "loom-repo-companion-manifest/v1"
-REPO_INTERFACE_SCHEMA = "loom-repo-interface/v1"
+REPO_INTERFACE_V1_SCHEMA = "loom-repo-interface/v1"
+REPO_INTERFACE_V2_SCHEMA = "loom-repo-interface/v2"
+REPO_INTERFACE_SCHEMAS = {REPO_INTERFACE_V1_SCHEMA, REPO_INTERFACE_V2_SCHEMA}
 REPO_INTERFACE_ENFORCEMENT = {"blocking", "advisory"}
+REPO_INTERFACE_GATE_TYPES = {
+    "admission",
+    "pre_review",
+    "review",
+    "build",
+    "merge_ready",
+    "closeout",
+}
+REPO_INTERFACE_CONTEXT_TYPES = {"string", "integer", "number", "boolean"}
 REPO_INTERFACE_MANIFEST_KEYS = {"schema_version", "companion_entry", "repo_interface"}
-REPO_INTERFACE_KEYS = {"schema_version", "companion_entry", "repo_specific_requirements", "specialized_gates"}
+REPO_INTERFACE_V1_KEYS = {"schema_version", "companion_entry", "repo_specific_requirements", "specialized_gates"}
+REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {"metadata_contract", "context_schema"}
 
 
 def run_process(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -266,6 +278,80 @@ def validate_specialized_gate(
         missing_inputs.append(f"{prefix} locator must be a non-empty string")
     elif not target.exists():
         missing_inputs.append(f"{prefix} locator points to missing path `{locator}`")
+    gate_type = entry.get("gate_type")
+    if gate_type is not None and gate_type not in REPO_INTERFACE_GATE_TYPES:
+        missing_inputs.append(
+            f"{prefix} gate_type must be one of `admission`, `pre_review`, `review`, `build`, `merge_ready`, `closeout`"
+        )
+    return missing_inputs
+
+
+def validate_metadata_contract(
+    *,
+    root: Path,
+    entry: object,
+) -> list[str]:
+    prefix = "metadata_contract"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"]
+    fields = entry.get("fields")
+    if not isinstance(fields, list):
+        return [f"{prefix} must include `fields` as a list"]
+    missing_inputs: list[str] = []
+    for index, field in enumerate(fields):
+        field_prefix = f"{prefix}.fields[{index}]"
+        if not isinstance(field, dict):
+            missing_inputs.append(f"{field_prefix} must be an object")
+            continue
+        for required in ("id", "summary", "applicability_locator", "authority_locator", "enforcement"):
+            value = field.get(required)
+            if required == "enforcement":
+                continue
+            if not isinstance(value, str) or not value.strip():
+                missing_inputs.append(f"{field_prefix} missing `{required}`")
+        enforcement = field.get("enforcement")
+        if enforcement not in REPO_INTERFACE_ENFORCEMENT:
+            missing_inputs.append(f"{field_prefix} enforcement must be `blocking` or `advisory`")
+        for locator_field in ("applicability_locator", "authority_locator"):
+            locator, target = resolve_locator(root, field.get(locator_field))
+            if locator is None or target is None:
+                missing_inputs.append(f"{field_prefix} `{locator_field}` must be a non-empty string")
+            elif not target.exists():
+                missing_inputs.append(f"{field_prefix} `{locator_field}` points to missing path `{locator}`")
+    return missing_inputs
+
+
+def validate_context_schema(
+    *,
+    root: Path,
+    entry: object,
+) -> list[str]:
+    prefix = "context_schema"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"]
+    fields = entry.get("fields")
+    if not isinstance(fields, list):
+        return [f"{prefix} must include `fields` as a list"]
+    missing_inputs: list[str] = []
+    for index, field in enumerate(fields):
+        field_prefix = f"{prefix}.fields[{index}]"
+        if not isinstance(field, dict):
+            missing_inputs.append(f"{field_prefix} must be an object")
+            continue
+        for required in ("id", "summary", "type", "mapping_rule_locator"):
+            value = field.get(required)
+            if not isinstance(value, str) or not value.strip():
+                missing_inputs.append(f"{field_prefix} missing `{required}`")
+        field_type = field.get("type")
+        if field_type not in REPO_INTERFACE_CONTEXT_TYPES:
+            missing_inputs.append(f"{field_prefix} type must be one of `string`, `integer`, `number`, `boolean`")
+        if not isinstance(field.get("required"), bool):
+            missing_inputs.append(f"{field_prefix} `required` must be a boolean")
+        locator, target = resolve_locator(root, field.get("mapping_rule_locator"))
+        if locator is None or target is None:
+            missing_inputs.append(f"{field_prefix} `mapping_rule_locator` must be a non-empty string")
+        elif not target.exists():
+            missing_inputs.append(f"{field_prefix} `mapping_rule_locator` points to missing path `{locator}`")
     return missing_inputs
 
 
@@ -345,9 +431,15 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
         if interface_payload is None:
             missing_inputs.append("repo companion interface is unreadable")
         else:
-            if interface_payload.get("schema_version") != REPO_INTERFACE_SCHEMA:
-                missing_inputs.append(f"repo companion interface schema must be `{REPO_INTERFACE_SCHEMA}`")
-            extra_interface_keys = sorted(set(interface_payload.keys()) - REPO_INTERFACE_KEYS)
+            interface_schema = interface_payload.get("schema_version")
+            if interface_schema not in REPO_INTERFACE_SCHEMAS:
+                missing_inputs.append(
+                    "repo companion interface schema must be `loom-repo-interface/v1` or `loom-repo-interface/v2`"
+                )
+            allowed_interface_keys = (
+                REPO_INTERFACE_V2_KEYS if interface_schema == REPO_INTERFACE_V2_SCHEMA else REPO_INTERFACE_V1_KEYS
+            )
+            extra_interface_keys = sorted(set(interface_payload.keys()) - allowed_interface_keys)
             if extra_interface_keys:
                 missing_inputs.append(
                     "repo companion interface contains unexpected top-level fields: "
@@ -394,6 +486,24 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
                             root=root,
                             entry=entry,
                             index=index,
+                        )
+                    )
+
+            if interface_schema == REPO_INTERFACE_V2_SCHEMA:
+                metadata_contract = interface_payload.get("metadata_contract")
+                if metadata_contract is not None:
+                    missing_inputs.extend(
+                        validate_metadata_contract(
+                            root=root,
+                            entry=metadata_contract,
+                        )
+                    )
+                context_schema = interface_payload.get("context_schema")
+                if context_schema is not None:
+                    missing_inputs.extend(
+                        validate_context_schema(
+                            root=root,
+                            entry=context_schema,
                         )
                     )
 

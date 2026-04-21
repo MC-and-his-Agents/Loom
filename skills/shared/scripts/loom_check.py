@@ -3966,7 +3966,15 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
             (companion_dir / "README.md").write_text("# Legacy Companion Docs\n", encoding="utf-8")
             return
         (companion_dir / "README.md").write_text("# Repo Companion\n", encoding="utf-8")
-        for doc in ("review.md", "merge-ready.md", "closeout.md", "specialized-gates.md"):
+        for doc in (
+            "review.md",
+            "merge-ready.md",
+            "closeout.md",
+            "specialized-gates.md",
+            "checkpoints.md",
+            "metadata-contract.md",
+            "context-schema.md",
+        ):
             (companion_dir / doc).write_text(f"# {doc}\n", encoding="utf-8")
         if manifest is not None:
             write_json(companion_dir / "manifest.json", manifest)
@@ -3978,7 +3986,7 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
         "companion_entry": ".loom/companion/README.md",
         "repo_interface": ".loom/companion/repo-interface.json",
     }
-    valid_interface = {
+    valid_interface_v1 = {
         "schema_version": "loom-repo-interface/v1",
         "companion_entry": ".loom/companion/README.md",
         "repo_specific_requirements": {
@@ -4014,6 +4022,41 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
                 "locator": ".loom/companion/specialized-gates.md",
             }
         ],
+    }
+    valid_interface_v2 = {
+        "schema_version": "loom-repo-interface/v2",
+        "companion_entry": ".loom/companion/README.md",
+        "repo_specific_requirements": valid_interface_v1["repo_specific_requirements"],
+        "specialized_gates": [
+            {
+                "id": "specialized-review-gate",
+                "summary": "Companion-owned review specialization.",
+                "locator": ".loom/companion/specialized-gates.md",
+                "gate_type": "review",
+            }
+        ],
+        "metadata_contract": {
+            "fields": [
+                {
+                    "id": "integration_check",
+                    "summary": "Declare repo-specific integration metadata.",
+                    "applicability_locator": ".loom/companion/metadata-contract.md",
+                    "authority_locator": ".loom/companion/review.md",
+                    "enforcement": "blocking",
+                }
+            ]
+        },
+        "context_schema": {
+            "fields": [
+                {
+                    "id": "item_key",
+                    "summary": "Repo-native item key.",
+                    "type": "string",
+                    "required": True,
+                    "mapping_rule_locator": ".loom/companion/context-schema.md",
+                }
+            ]
+        },
     }
 
     with tempfile.TemporaryDirectory(prefix="loom-check-repo-companion-") as tmp:
@@ -4100,23 +4143,93 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
         if not isinstance(invalid_interface, dict) or invalid_interface.get("availability") != "incomplete":
             failures.append(Failure("repo-companion", "invalid repo companion interface sample must report `availability: incomplete`"))
 
-        present_target = base / "present"
+        invalid_v2_target = base / "invalid-v2-interface"
+        shutil.copytree(example_target, invalid_v2_target)
+        install_companion(
+            invalid_v2_target,
+            manifest=valid_manifest,
+            repo_interface={
+                "schema_version": "loom-repo-interface/v2",
+                "companion_entry": ".loom/companion/README.md",
+                "repo_specific_requirements": valid_interface_v1["repo_specific_requirements"],
+                "specialized_gates": [
+                    {
+                        "id": "bad-gate-type",
+                        "summary": "Broken gate type",
+                        "locator": ".loom/companion/specialized-gates.md",
+                        "gate_type": "guardian",
+                    }
+                ],
+                "metadata_contract": {
+                    "fields": [
+                        {
+                            "id": "bad-metadata",
+                            "summary": "Broken metadata field",
+                            "applicability_locator": ".loom/companion/metadata-contract.md",
+                            "authority_locator": ".loom/companion/review.md",
+                            "enforcement": "required",
+                        }
+                    ]
+                },
+                "context_schema": {
+                    "fields": [
+                        {
+                            "id": "bad-context",
+                            "summary": "Broken context field",
+                            "type": "object",
+                            "required": "yes",
+                            "mapping_rule_locator": ".loom/companion/context-schema.md",
+                        }
+                    ]
+                },
+            },
+        )
+        invalid_v2_surface = build_governance_surface(invalid_v2_target)
+        invalid_v2_interface = invalid_v2_surface.get("repo_interface")
+        require_repo_interface_payload(
+            failures,
+            category="repo-companion",
+            context="invalid v2 repo companion interface",
+            payload=invalid_v2_interface,
+        )
+        if not isinstance(invalid_v2_interface, dict) or invalid_v2_interface.get("availability") != "incomplete":
+            failures.append(Failure("repo-companion", "invalid v2 repo companion interface sample must report `availability: incomplete`"))
+
+        present_v1_target = base / "present-v1"
+        shutil.copytree(example_target, present_v1_target)
+        install_companion(
+            present_v1_target,
+            manifest=valid_manifest,
+            repo_interface=valid_interface_v1,
+        )
+        present_v1_surface = build_governance_surface(present_v1_target)
+        present_v1_interface = present_v1_surface.get("repo_interface")
+        require_repo_interface_payload(
+            failures,
+            category="repo-companion",
+            context="present v1 repo companion",
+            payload=present_v1_interface,
+        )
+        if not isinstance(present_v1_interface, dict) or present_v1_interface.get("availability") != "present":
+            failures.append(Failure("repo-companion", "present v1 repo companion sample must report `availability: present`"))
+
+        present_target = base / "present-v2"
         shutil.copytree(example_target, present_target)
         install_companion(
             present_target,
             manifest=valid_manifest,
-            repo_interface=valid_interface,
+            repo_interface=valid_interface_v2,
         )
         present_surface = build_governance_surface(present_target)
         present_interface = present_surface.get("repo_interface")
         require_repo_interface_payload(
             failures,
             category="repo-companion",
-            context="present repo companion",
+            context="present v2 repo companion",
             payload=present_interface,
         )
         if not isinstance(present_interface, dict) or present_interface.get("availability") != "present":
-            failures.append(Failure("repo-companion", "present repo companion sample must report `availability: present`"))
+            failures.append(Failure("repo-companion", "present v2 repo companion sample must report `availability: present`"))
 
         review_requirements = repo_specific_requirements_payload(
             present_interface,
