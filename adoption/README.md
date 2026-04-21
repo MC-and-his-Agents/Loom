@@ -17,6 +17,7 @@
 - 采用动机与上游边界：[rationale.md](./rationale.md)
 - 事项分流、checkpoint 与入口策略：[routing-and-checkpoints.md](./routing-and-checkpoints.md)
 - `repo companion` 主合同：[repo-companion-contract.md](./repo-companion-contract.md)
+- `repo interop` 主合同：[repo-interop-contract.md](./repo-interop-contract.md)
 - `repo companion` scoped adoption/workflow contract：[companion-oriented-workflow.md](./companion-oriented-workflow.md)
 - 成熟治理重仓接入树 workflow contract：[deep-existing-repo-workflow.md](./deep-existing-repo-workflow.md)
 - `repo companion` migration contract：[repo-companion-migration.md](./repo-companion-migration.md)

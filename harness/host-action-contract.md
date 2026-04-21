@@ -22,6 +22,11 @@ Loom 的宿主动作面不是新的 umbrella CLI，也不是宿主平台替身�
 - 宿主 gate / required checks / merge controls 的放行消费
 - post-merge 的 drift 审计与控制面对齐
 
+当成熟既有仓库需要把 retained host action result 暴露给 Loom 时：
+
+- 结果 locator 通过 companion-owned `.loom/companion/interop.json` 声明
+- Loom 只消费这些结果，不接管动作执行本身
+
 具体专题落点仍保持拆分：
 
 - 对象 ownership 边界见 [host-lifecycle-boundary.md](./host-lifecycle-boundary.md)

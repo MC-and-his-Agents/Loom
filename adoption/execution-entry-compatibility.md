@@ -27,7 +27,7 @@
 | --- | --- | --- |
 | root 入口与基础验证 | `loom route` / `loom init verify` | `loom-init` 继续作为唯一 root entry，路由能力不替代底层 CLI |
 | 初始化与恢复公共治理读面 | `loom-init` 输出合同 + `loom-adopt` / `loom-resume` 场景合同 | `governance_surface` 作为稳定公共字段存在；其中 `repo_interface` 只承接 `repo companion` locator、机读 requirements / typed gates，以及 `v2` 下的 metadata/context 合同摘要，场景 skill 只能复用或摘要，不新增第二套治理真相 |
-| 日常读取与检查 | `loom flow fact-chain` / `loom flow runtime-evidence` / `loom flow state-check` | 输出保持 JSON 结果语义（`result/summary/missing_inputs/fallback_to`） |
+| 日常读取与检查 | `loom flow fact-chain` / `loom flow runtime-evidence` / `loom flow state-check` / `loom shadow-parity` | 输出保持 JSON 结果语义（`result/summary/missing_inputs/fallback_to`）；`shadow-parity` 只做 validation parity，不改现有 merge gate |
 | 正式 review 执行 | `loom flow review` + `loom review run` + `loom review read|record` | `flow review` 保持只读，`review run` 负责默认 engine 执行与 evidence 落盘，正式 authored truth 仍只允许写回单一 `review record` |
 | checkpoint 执行 | `loom flow checkpoint admission/build/merge` | 三阶段语义与回退关系保持不变 |
 | 现场与纯度治理 | `loom flow workspace <create/locate/cleanup/retire>` + `purity-check` | 生命周期动作与失败语义保持不变 |
@@ -56,25 +56,27 @@
 3. `loom flow fact-chain`
 4. `loom flow runtime-evidence`
 5. `loom flow state-check`
-6. `loom flow resume`
-7. `loom flow pre-review`
-8. `loom flow review`
-9. `loom review run`
-10. `loom review read|record`
-11. `loom flow recovery writeback`
-12. `loom flow work-item create|update`
-13. `loom flow handoff`
-14. `loom flow merge-ready`
-15. `loom flow checkpoint admission/build/merge`
-16. `loom flow workspace locate/cleanup/retire`
-17. `loom flow host-lifecycle`
-18. `loom flow reconciliation audit`
-19. `loom flow reconciliation sync --dry-run`
-20. `loom flow closeout check`
+6. `loom shadow-parity`
+7. `loom flow resume`
+8. `loom flow pre-review`
+9. `loom flow review`
+10. `loom review run`
+11. `loom review read|record`
+12. `loom flow recovery writeback`
+13. `loom flow work-item create|update`
+14. `loom flow handoff`
+15. `loom flow merge-ready`
+16. `loom flow checkpoint admission/build/merge`
+17. `loom flow workspace locate/cleanup/retire`
+18. `loom flow host-lifecycle`
+19. `loom flow reconciliation audit`
+20. `loom flow reconciliation sync --dry-run`
+21. `loom flow closeout check`
 
 预期：
 
 - 前 1-9 步提供“该进入哪个入口 / 可继续执行 / 需阻断 / 是否应回退”的统一判断
+- `shadow-parity` 只输出 `match | mismatch | unreadable` 的 parity report，不把 mismatch 直接提升为 merge 阻断
 - `loom-init`、`loom-adopt`、`loom-resume` 对外公开的治理读面保持同一字段名 `governance_surface`
 - `governance_surface.repo_interface` 只区分 `absent | companion_docs_only | incomplete | present` 四类机读状态，不把旧式 companion docs 伪装成稳定 repo interface
 - 正式 review 固定按 `flow review -> review run -> review record` 分层；默认 engine 若失败必须 fail-closed，并明确回到 manual review 写回同一 review record
