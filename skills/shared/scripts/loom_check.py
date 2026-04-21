@@ -421,6 +421,102 @@ def load_command_json(
     return payload, None
 
 
+def prepend_path_env(bin_dir: Path, extra: dict[str, str] | None = None) -> dict[str, str]:
+    env = dict(extra or {})
+    current_path = os.environ.get("PATH", "")
+    env["PATH"] = str(bin_dir) if not current_path else f"{bin_dir}:{current_path}"
+    return env
+
+
+def write_fake_codex(
+    path: Path,
+    *,
+    mode: str,
+    tracked_edit_target: str | None = None,
+) -> None:
+    if mode == "success":
+        body = """#!/usr/bin/env python3
+import json
+import pathlib
+import sys
+
+args = sys.argv[1:]
+output_path = pathlib.Path(args[args.index("-o") + 1])
+payload = {
+    "decision": "allow",
+    "summary": "Default Codex reviewer found the item ready for merge checkpoint consumption.",
+    "findings": [
+        {
+            "id": "warn-1",
+            "summary": "Keep the follow-up validation note visible in the review record.",
+            "severity": "warn",
+            "rebuttal": None,
+            "disposition": {
+                "status": "accepted",
+                "summary": "The reviewer accepts the current validation coverage."
+            },
+            "details": "This finding is advisory and should not block merge-ready."
+        }
+    ]
+}
+output_path.parent.mkdir(parents=True, exist_ok=True)
+output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+sys.exit(0)
+"""
+    elif mode == "schema_drift":
+        body = """#!/usr/bin/env python3
+import json
+import pathlib
+import sys
+
+args = sys.argv[1:]
+output_path = pathlib.Path(args[args.index("-o") + 1])
+payload = {
+    "decision": "allow",
+    "findings": []
+}
+output_path.parent.mkdir(parents=True, exist_ok=True)
+output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+sys.exit(0)
+"""
+    elif mode == "tracked_edit":
+        target = tracked_edit_target or ""
+        body = f"""#!/usr/bin/env python3
+import json
+import pathlib
+import sys
+
+args = sys.argv[1:]
+cwd = pathlib.Path(args[args.index("-C") + 1])
+output_path = pathlib.Path(args[args.index("-o") + 1])
+target = cwd / {target!r}
+target.write_text(target.read_text(encoding="utf-8") + "\\ntracked edit from fake codex\\n", encoding="utf-8")
+payload = {{
+    "decision": "block",
+    "summary": "Tracked repository content was modified during review.",
+    "findings": [
+        {{
+            "id": "block-1",
+            "summary": "Tracked repo content changed during review execution.",
+            "severity": "block",
+            "rebuttal": None,
+            "disposition": {{
+                "status": "rejected",
+                "summary": "The run must fail closed."
+            }}
+        }}
+    ]
+}}
+output_path.parent.mkdir(parents=True, exist_ok=True)
+output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+sys.exit(0)
+"""
+    else:
+        raise ValueError(f"unknown fake codex mode: {mode}")
+    path.write_text(body, encoding="utf-8")
+    path.chmod(0o755)
+
+
 def require_governance_surface(
     failures: list[Failure],
     *,
@@ -773,6 +869,15 @@ def require_review_record_contract(
     for list_field in ("blocking_issues", "follow_ups"):
         if not isinstance(payload.get(list_field), list):
             failures.append(Failure(category, f"{context} must include review `{list_field}` as a list"))
+    consumed_inputs = payload.get("consumed_inputs")
+    if consumed_inputs is not None:
+        if not isinstance(consumed_inputs, dict):
+            failures.append(Failure(category, f"{context} review `consumed_inputs` must be an object when present"))
+        else:
+            for key in ("engine_adapter", "engine_evidence", "normalized_findings"):
+                value = consumed_inputs.get(key)
+                if value is not None and (not isinstance(value, str) or not value):
+                    failures.append(Failure(category, f"{context} review consumed input `{key}` must be null or a non-empty string"))
     for finding in findings:
         if not isinstance(finding, dict):
             failures.append(Failure(category, f"{context} review findings must be JSON objects"))
@@ -797,6 +902,81 @@ def require_review_record_contract(
                 failures.append(Failure(category, f"{context} review finding disposition status must stay within the stable contract"))
             if not isinstance(disposition.get("summary"), str) or not disposition.get("summary"):
                 failures.append(Failure(category, f"{context} review finding disposition must include non-empty `summary`"))
+
+
+def require_review_run_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+    expected_result: set[str],
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must return a JSON object"))
+        return
+    if payload.get("command") != "review":
+        failures.append(Failure(category, f"{context} must report `command: review`"))
+    if payload.get("operation") != "run":
+        failures.append(Failure(category, f"{context} must report `operation: run`"))
+    if payload.get("result") not in expected_result:
+        failures.append(Failure(category, f"{context} returned an unexpected result"))
+    for key in ("item", "state_check", "runtime_evidence", "build_checkpoint", "review", "current_checkpoint", "engine", "manual_review"):
+        if not isinstance(payload.get(key), dict):
+            failures.append(Failure(category, f"{context} must include `{key}`"))
+    require_runtime_state_payload(
+        failures,
+        category=category,
+        context=context,
+        payload=payload.get("runtime_state"),
+        allowed_results={"pass", "block"},
+    )
+    engine = payload.get("engine")
+    if not isinstance(engine, dict):
+        return
+    if engine.get("engine") != "codex":
+        failures.append(Failure(category, f"{context} engine must stay `codex` for the default path"))
+    if engine.get("adapter") != "loom/default-codex":
+        failures.append(Failure(category, f"{context} adapter must stay `loom/default-codex`"))
+    if engine.get("result") not in {"pass", "block", "not_run"}:
+        failures.append(Failure(category, f"{context} engine result must stay within the stable contract"))
+    if engine.get("failure_reason") not in {None, "engine_unavailable", "schema_drift", "runtime_conflict", "repo_diff_detected"}:
+        failures.append(Failure(category, f"{context} engine failure reason must stay within the stable contract"))
+    evidence = engine.get("evidence")
+    if engine.get("result") == "not_run":
+        if evidence is not None:
+            failures.append(Failure(category, f"{context} engine evidence must be null when the engine is not run"))
+    else:
+        if not isinstance(evidence, dict):
+            failures.append(Failure(category, f"{context} engine must include `evidence` when it runs"))
+        else:
+            for key in ("runtime_root", "prompt", "raw_result", "normalized_findings", "metadata"):
+                value = evidence.get(key)
+                if not isinstance(value, str) or not value:
+                    failures.append(Failure(category, f"{context} engine evidence must include non-empty `{key}`"))
+    manual_review = payload.get("manual_review")
+    if isinstance(manual_review, dict):
+        if not isinstance(manual_review.get("summary"), str) or not manual_review.get("summary"):
+            failures.append(Failure(category, f"{context} manual_review must include non-empty `summary`"))
+        if not isinstance(manual_review.get("review_record_path"), str) or not manual_review.get("review_record_path"):
+            failures.append(Failure(category, f"{context} manual_review must include `review_record_path`"))
+        if manual_review.get("recommended_kind") not in {"general_review", "code_review", "spec_review"}:
+            failures.append(Failure(category, f"{context} manual_review recommended kind must stay within the stable contract"))
+        if not isinstance(manual_review.get("command"), list):
+            failures.append(Failure(category, f"{context} manual_review must include `command` as a list"))
+    review_record_input = payload.get("review_record_input")
+    if payload.get("result") == "pass":
+        if not isinstance(review_record_input, dict):
+            failures.append(Failure(category, f"{context} must include `review_record_input` when engine review passes"))
+        else:
+            for key in ("decision", "summary", "reviewer", "kind", "findings_file", "engine_adapter", "engine_evidence", "normalized_findings"):
+                value = review_record_input.get(key)
+                if not isinstance(value, str) or not value:
+                    failures.append(Failure(category, f"{context} review_record_input must include non-empty `{key}`"))
+            if review_record_input.get("decision") not in {"allow", "block", "fallback"}:
+                failures.append(Failure(category, f"{context} review_record_input decision must stay within the stable contract"))
+            if review_record_input.get("reviewer") != "loom/default-codex":
+                failures.append(Failure(category, f"{context} review_record_input reviewer must stay `loom/default-codex`"))
 
 
 def require_runtime_state_payload(
@@ -2003,6 +2183,187 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             if isinstance(payload.get("merge_checkpoint"), dict) and payload["merge_checkpoint"].get("fallback_to") != "admission":
                 failures.append(Failure("daily-execution-cli", "`flow merge-ready` merge checkpoint must fall back to `admission` for the bootstrap demo"))
 
+    with tempfile.TemporaryDirectory(prefix="loom-check-review-run-") as tmp:
+        source_snapshot = Path(tmp) / "source-snapshot"
+        review_target = Path(tmp) / "new-project"
+        fake_bin = Path(tmp) / "bin"
+        fake_bin.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(root, source_snapshot, ignore=shutil.ignore_patterns(".git", ".DS_Store", "__pycache__"))
+
+        def prepare_review_target(target: Path, label: str) -> bool:
+            shutil.copytree(source_snapshot, target)
+            for args in (
+                ["git", "init"],
+                ["git", "config", "user.email", "loom-check@example.com"],
+                ["git", "config", "user.name", "loom-check"],
+            ):
+                result = run_command(root, args, cwd=target)
+                if result.returncode != 0:
+                    detail = result.stderr.strip() or result.stdout.strip() or "git setup failed"
+                    failures.append(Failure("daily-execution-cli", f"`{label}` setup failed: {detail}"))
+                    return False
+            payload, error = load_command_json(
+                root,
+                [
+                    "python3",
+                    "tools/loom_init.py",
+                    "bootstrap",
+                    "--target",
+                    ".",
+                    "--write",
+                    "--force",
+                    "--verify",
+                    "--install-pr-template",
+                ],
+                cwd=target,
+            )
+            if error:
+                failures.append(Failure("daily-execution-cli", f"`{label}` bootstrap failed: {error}"))
+                return False
+            verification = payload.get("verification")
+            if not isinstance(verification, dict) or verification.get("ok") is not True:
+                failures.append(Failure("daily-execution-cli", f"`{label}` bootstrap must verify successfully"))
+                return False
+            for args in (
+                ["git", "add", "."],
+                ["git", "commit", "-m", "review-run baseline"],
+            ):
+                result = run_command(root, args, cwd=target)
+                if result.returncode != 0:
+                    detail = result.stderr.strip() or result.stdout.strip() or "git baseline commit failed"
+                    failures.append(Failure("daily-execution-cli", f"`{label}` setup failed: {detail}"))
+                    return False
+            return True
+
+        prepare_review_target(review_target, "review run positive chain")
+        write_fake_codex(fake_bin / "codex", mode="success")
+        success_env = prepend_path_env(fake_bin)
+
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(review_target),
+                "--item",
+                "INIT-0001",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` positive chain failed: {error}"))
+        else:
+            require_review_run_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`review run` positive chain",
+                payload=payload,
+                expected_result={"pass"},
+            )
+
+        engine_missing_target = Path(tmp) / "engine-missing"
+        prepare_review_target(engine_missing_target, "review run engine unavailable")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(engine_missing_target),
+                "--item",
+                "INIT-0001",
+            ],
+            env={"PATH": "/usr/bin:/bin"},
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` engine unavailable failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`review run` must block when the default engine is unavailable"))
+        else:
+            require_review_run_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`review run` engine unavailable",
+                payload=payload,
+                expected_result={"block"},
+            )
+            engine = payload.get("engine")
+            if isinstance(engine, dict) and engine.get("failure_reason") != "engine_unavailable":
+                failures.append(Failure("daily-execution-cli", "`review run` must report `engine_unavailable` when Codex is missing"))
+            if payload.get("fallback_to") is not None:
+                failures.append(Failure("daily-execution-cli", "`review run` must not convert engine failure into checkpoint fallback"))
+
+        schema_target = Path(tmp) / "schema-drift"
+        prepare_review_target(schema_target, "review run schema drift")
+        write_fake_codex(fake_bin / "codex", mode="schema_drift")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(schema_target),
+                "--item",
+                "INIT-0001",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` schema drift failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`review run` must block on schema drift"))
+        else:
+            require_review_run_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`review run` schema drift",
+                payload=payload,
+                expected_result={"block"},
+            )
+            engine = payload.get("engine")
+            if isinstance(engine, dict) and engine.get("failure_reason") != "schema_drift":
+                failures.append(Failure("daily-execution-cli", "`review run` must report `schema_drift` for invalid engine output"))
+
+        dirty_target = Path(tmp) / "tracked-edit"
+        prepare_review_target(dirty_target, "review run tracked edit")
+        write_fake_codex(fake_bin / "codex", mode="tracked_edit", tracked_edit_target=".loom/status/current.md")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(dirty_target),
+                "--item",
+                "INIT-0001",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` tracked edit failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`review run` must block when engine modifies tracked repo content"))
+        else:
+            require_review_run_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`review run` tracked edit",
+                payload=payload,
+                expected_result={"block"},
+            )
+            engine = payload.get("engine")
+            if isinstance(engine, dict) and engine.get("failure_reason") != "repo_diff_detected":
+                failures.append(Failure("daily-execution-cli", "`review run` must report `repo_diff_detected` when tracked files change"))
+
     with tempfile.TemporaryDirectory(prefix="loom-check-flow-") as tmp:
         lifecycle_target = Path(tmp) / "new-project"
         shutil.copytree(example_target, lifecycle_target)
@@ -2387,6 +2748,10 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             source_snapshot = tmp_root / "source-snapshot"
             positive_target = tmp_root / "positive-target"
             review_fallback_target = tmp_root / "review-fallback-target"
+            fake_bin = tmp_root / "bin"
+            fake_bin.mkdir(parents=True, exist_ok=True)
+            write_fake_codex(fake_bin / "codex", mode="success")
+            installed_review_env = prepend_path_env(fake_bin)
             shutil.copytree(root / "skills", install_root)
             shutil.copytree(root, source_snapshot, ignore=shutil.ignore_patterns(".git", ".DS_Store", "__pycache__"))
 
@@ -2630,6 +2995,35 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                             payload=review.get("record"),
                         )
 
+                review_run_payload: dict[str, object] | None = None
+                review_record_input: dict[str, object] | None = None
+                review_run_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "review",
+                        "run",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                    env=installed_review_env,
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed review run` failed: {error}"))
+                elif review_run_payload.get("result") != "pass":
+                    failures.append(Failure("daily-execution-cli", "`installed review run` must pass for the positive chain"))
+                else:
+                    require_review_run_payload(
+                        failures,
+                        category="daily-execution-cli",
+                        context="`installed review run`",
+                        payload=review_run_payload,
+                        expected_result={"pass"},
+                    )
+                    review_record_input = review_run_payload.get("review_record_input") if isinstance(review_run_payload, dict) else None
                 review_record_payload, error = load_command_json(
                     root,
                     [
@@ -2642,13 +3036,27 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         "--item",
                         "INIT-0001",
                         "--decision",
-                        "allow",
+                        str(review_record_input.get("decision", "allow")) if isinstance(review_record_input, dict) else "allow",
                         "--kind",
-                        "code_review",
+                        str(review_record_input.get("kind", "code_review")) if isinstance(review_record_input, dict) else "code_review",
                         "--summary",
-                        "Installed pre-merge chain is ready for merge checkpoint consumption.",
+                        str(review_record_input.get("summary", "Installed pre-merge chain is ready for merge checkpoint consumption."))
+                        if isinstance(review_record_input, dict)
+                        else "Installed pre-merge chain is ready for merge checkpoint consumption.",
                         "--reviewer",
-                        "loom-check",
+                        str(review_record_input.get("reviewer", "loom-check")) if isinstance(review_record_input, dict) else "loom-check",
+                        "--findings-file",
+                        str(review_record_input.get("findings_file", ".loom/review-findings.json")) if isinstance(review_record_input, dict) else ".loom/review-findings.json",
+                        "--engine-adapter",
+                        str(review_record_input.get("engine_adapter", "loom/default-codex")) if isinstance(review_record_input, dict) else "loom/default-codex",
+                        "--engine-evidence",
+                        str(review_record_input.get("engine_evidence", ".loom/runtime/review/INIT-0001/unknown-head/engine-result.json"))
+                        if isinstance(review_record_input, dict)
+                        else ".loom/runtime/review/INIT-0001/unknown-head/engine-result.json",
+                        "--normalized-findings",
+                        str(review_record_input.get("normalized_findings", ".loom/review-findings.json"))
+                        if isinstance(review_record_input, dict)
+                        else ".loom/review-findings.json",
                     ],
                 )
                 if error:
