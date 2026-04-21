@@ -49,6 +49,7 @@
     "shared/references/templates/pull-request.md",
     "shared/references/templates/review-record.md",
     "shared/references/adoption/lightweight-retrofit-default.md",
+    "shared/references/adoption/deep-existing-repo-default.md",
     "shared/references/adoption/routing-and-checkpoints.md",
     "loom-init",
     "loom-adopt",

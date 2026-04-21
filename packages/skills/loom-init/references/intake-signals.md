@@ -84,7 +84,7 @@
 
 默认装配路径：
 
-- 直接采用 [shared/adoption/lightweight-retrofit-default.md](shared/adoption/lightweight-retrofit-default.md)
+- 直接采用 [../.loom-runtime/shared/references/adoption/lightweight-retrofit-default.md](../.loom-runtime/shared/references/adoption/lightweight-retrofit-default.md)
 - 默认 `companion docs` 接入
 - 默认装配最小治理包
 - 默认不装配完整 recovery、work item、状态面与重 harness
@@ -108,6 +108,19 @@
 - 纳入恢复主入口、执行上下文、work item 或等价执行入口、状态读取、隔离现场与纯度规则
 - 对高风险边界事项纳入正式规约套件与前移 checkpoint
 
+若同时满足以下条件，则 `复杂既有仓库` 默认优先走 `deep-existing-repo`：
+
+- 根级边界文档清晰
+- 已有统一的仓库级验证入口
+- 已出现 `merge_review_semantic_overload`
+
+这条路径的含义是：
+
+- 保留 `repository_mode = complex-existing`
+- 保留 root rules、retained host actions 与 repo-native carriers
+- 先做 `recognize-and-attach`
+- 不在第一轮直接写入 Loom-owned recovery/status carriers
+
 ## 5. 冲突处理规则
 
 当信号之间出现冲突时，按以下规则处理：
@@ -129,10 +142,11 @@
 - `复杂既有仓库`
   - 更完整装配
   - 重点是恢复、执行支撑、状态读取与高风险事项准入
+  - 若同时满足“根规则清晰 + 统一验证入口 + `merge_review_semantic_overload`”，默认优先走 `deep-existing-repo`
 
 ## 7. `lightweight retrofit default` 的消费关系
 
-`loom-init` 对小型既有仓库的默认入口不是临场经验，而是直接消费 [shared/adoption/lightweight-retrofit-default.md](shared/adoption/lightweight-retrofit-default.md)。
+`loom-init` 对小型既有仓库的默认入口不是临场经验，而是直接消费 [../.loom-runtime/shared/references/adoption/lightweight-retrofit-default.md](../.loom-runtime/shared/references/adoption/lightweight-retrofit-default.md)。
 
 这意味着：
 

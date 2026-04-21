@@ -456,9 +456,11 @@ def detect_merge_review_overload(root: Path, validation_entry: bool) -> bool:
     code_dirs = sum(1 for hint in CODE_DIR_HINTS if (root / hint).exists())
     if code_dirs == 0:
         return False
-    if not validation_entry and not file_exists(root, ".github/PULL_REQUEST_TEMPLATE.md"):
-        return True
-    return False
+    has_pr_template = file_exists(root, ".github/PULL_REQUEST_TEMPLATE.md")
+    has_workflow_doc = any(file_exists(root, candidate) for candidate in ("WORKFLOW.md", "docs/WORKFLOW.md"))
+    has_repo_scripts = (root / "scripts").exists()
+    has_repo_native_governance = (root / "docs" / "exec-plans").exists() or (root / "scripts" / "policy").exists()
+    return bool(validation_entry and has_pr_template and has_repo_scripts and (has_workflow_doc or has_repo_native_governance))
 
 
 def detect_repository_type(root: Path) -> str:
@@ -549,7 +551,26 @@ def recovery_mode(scenario: str) -> str:
     return "checkpoint-lite" if scenario in {"new", "small-existing"} else "standard"
 
 
-def rule_refs_for_capabilities(scenario: str) -> list[dict[str, object]]:
+def recommended_adoption_path(scenario: str, intake: dict[str, object]) -> str:
+    if scenario == "new":
+        return "minimal-bootstrap"
+    if scenario == "small-existing":
+        return "lightweight-retrofit"
+    if (
+        intake.get("repository_type") == "existing"
+        and intake.get("root_boundary_docs") == "clear"
+        and bool(intake.get("repository_level_validation_entry"))
+        and bool(intake.get("merge_review_semantic_overload"))
+    ):
+        return "deep-existing-repo"
+    return "full-bootstrap"
+
+
+def uses_attach_only_path(adoption_path: str) -> bool:
+    return adoption_path == "deep-existing-repo"
+
+
+def rule_refs_for_capabilities(scenario: str, adoption_path: str) -> list[dict[str, object]]:
     common = [
         {
             "name": "bootstrap/root",
@@ -587,6 +608,17 @@ def rule_refs_for_capabilities(scenario: str) -> list[dict[str, object]]:
                 ],
             }
         )
+    elif uses_attach_only_path(adoption_path):
+        common.append(
+            {
+                "name": "deep-existing-repo",
+                "rules": [
+                    "skills/shared/references/adoption/deep-existing-repo-default.md",
+                    "skills/shared/references/adoption/routing-and-checkpoints.md",
+                    "skills/shared/references/harness/host-action-contract.md",
+                ],
+            }
+        )
     else:
         common.append(
             {
@@ -602,7 +634,7 @@ def rule_refs_for_capabilities(scenario: str) -> list[dict[str, object]]:
     return common
 
 
-def deferred_capabilities(scenario: str) -> list[dict[str, str]]:
+def deferred_capabilities(scenario: str, adoption_path: str) -> list[dict[str, str]]:
     if scenario == "new":
         return [
             {
@@ -629,6 +661,19 @@ def deferred_capabilities(scenario: str) -> list[dict[str, str]]:
                 "upgrade_trigger": "mixed work, shared boundaries, or review overload becomes structural",
             },
         ]
+    if uses_attach_only_path(adoption_path):
+        return [
+            {
+                "name": "loom-owned-recovery-carriers",
+                "reason": "the first attach-only round must preserve repo-native carriers instead of generating Loom-owned recovery/status placeholders",
+                "upgrade_trigger": "the repo needs Loom-owned recovery or status carriers to stabilize multi-round execution",
+            },
+            {
+                "name": "typed-repo-companion-and-interop",
+                "reason": "the first attach-only round only establishes the stable entry and read surface",
+                "upgrade_trigger": "the repo needs typed gates, metadata contracts, host adapters, or shadow parity",
+            },
+        ]
     return [
         {
             "name": "host-specific-skill-regression-matrix",
@@ -638,7 +683,49 @@ def deferred_capabilities(scenario: str) -> list[dict[str, str]]:
     ]
 
 
-def initial_work_items(scenario: str, target_root: Path) -> list[dict[str, object]]:
+def attach_only_artifact_paths(target_root: Path, install_pr_template: bool) -> list[str]:
+    artifacts = [
+        ".loom/README.md",
+        ".loom/bootstrap/intake.snapshot.json",
+        ".loom/bootstrap/init-result.json",
+        ".loom/bootstrap/manifest.json",
+        ".loom/bootstrap/capability-map.md",
+        ".loom/companion/README.md",
+        ".loom/companion/checkpoints.md",
+        ".loom/companion/review.md",
+        ".loom/companion/merge-ready.md",
+        ".loom/companion/closeout.md",
+        ".loom/bin/loom_init.py",
+        ".loom/bin/fact_chain_support.py",
+        ".loom/bin/governance_surface.py",
+        ".loom/bin/loom_flow.py",
+        ".loom/bin/runtime_paths.py",
+        ".loom/bin/runtime_state.py",
+        ".loom/bin/loom_check.py",
+    ]
+    if install_pr_template or not (target_root / ".github/PULL_REQUEST_TEMPLATE.md").exists():
+        artifacts.append(".github/PULL_REQUEST_TEMPLATE.md")
+    return artifacts
+
+
+def initial_work_items(scenario: str, target_root: Path, adoption_path: str, install_pr_template: bool) -> list[dict[str, object]]:
+    if uses_attach_only_path(adoption_path):
+        return [
+            {
+                "id": WORK_ITEM_ID,
+                "goal": "Attach Loom to the existing governance stack without replacing root rules or host-owned actions",
+                "scope": "Establish attach metadata, companion entry, and repo-local validation without generating Loom-owned recovery/status carriers",
+                "execution_path": "recognize-and-attach",
+                "workspace_entry": ".",
+                "recovery_entry": "existing root rules and repo-native carriers",
+                "review_entry": ".loom/companion/review.md",
+                "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
+                "artifacts": attach_only_artifact_paths(target_root, install_pr_template),
+                "closing_condition": "The attach metadata, companion entry, and repo-local validation path are readable without generated Loom-owned recovery/status carriers",
+                "post_build_continuation": "Extend the attached repo companion and interop surfaces without rewriting the retained host stack",
+                "owner_for_checkpoint_lite": "repository owner or current attach operator",
+            }
+        ]
     artifacts = [
         ".loom/bootstrap/init-result.json",
         ".loom/work-items/INIT-0001.md",
@@ -674,13 +761,8 @@ def initial_work_items(scenario: str, target_root: Path) -> list[dict[str, objec
     ]
 
 
-def initial_artifacts(target_root: Path, install_pr_template: bool) -> list[dict[str, str]]:
+def initial_artifacts(target_root: Path, install_pr_template: bool, adoption_path: str) -> list[dict[str, str]]:
     artifacts = [
-        {
-            "path": "AGENTS.md",
-            "kind": "root-entry",
-            "source": "generated",
-        },
         {
             "path": ".loom/README.md",
             "kind": "rule-entry",
@@ -704,26 +786,6 @@ def initial_artifacts(target_root: Path, install_pr_template: bool) -> list[dict
         {
             "path": ".loom/bootstrap/capability-map.md",
             "kind": "capability-map",
-            "source": "generated",
-        },
-        {
-            "path": ".loom/work-items/INIT-0001.md",
-            "kind": "work-item",
-            "source": "generated",
-        },
-        {
-            "path": ".loom/progress/INIT-0001.md",
-            "kind": "progress",
-            "source": "generated",
-        },
-        {
-            "path": ".loom/reviews/INIT-0001.json",
-            "kind": "review-entry",
-            "source": "generated",
-        },
-        {
-            "path": ".loom/status/current.md",
-            "kind": "status-surface",
             "source": "generated",
         },
         {
@@ -761,17 +823,77 @@ def initial_artifacts(target_root: Path, install_pr_template: bool) -> list[dict
             "kind": "loom-tool",
             "source": CHECK_RUNTIME_SOURCE,
         },
-        {
-            "path": ".loom/specs/INIT-0001/spec.md",
-            "kind": "spec",
-            "source": "skills/shared/assets/templates/scaffold/spec.md",
-        },
-        {
-            "path": ".loom/specs/INIT-0001/plan.md",
-            "kind": "plan",
-            "source": "skills/shared/assets/templates/scaffold/plan.md",
-        },
     ]
+    if uses_attach_only_path(adoption_path):
+        artifacts.extend(
+            [
+                {
+                    "path": ".loom/companion/README.md",
+                    "kind": "repo-companion-entry",
+                    "source": "generated",
+                },
+                {
+                    "path": ".loom/companion/checkpoints.md",
+                    "kind": "repo-companion-doc",
+                    "source": "generated",
+                },
+                {
+                    "path": ".loom/companion/review.md",
+                    "kind": "repo-companion-doc",
+                    "source": "generated",
+                },
+                {
+                    "path": ".loom/companion/merge-ready.md",
+                    "kind": "repo-companion-doc",
+                    "source": "generated",
+                },
+                {
+                    "path": ".loom/companion/closeout.md",
+                    "kind": "repo-companion-doc",
+                    "source": "generated",
+                },
+            ]
+        )
+    else:
+        artifacts.extend(
+            [
+                {
+                    "path": "AGENTS.md",
+                    "kind": "root-entry",
+                    "source": "generated",
+                },
+                {
+                    "path": ".loom/work-items/INIT-0001.md",
+                    "kind": "work-item",
+                    "source": "generated",
+                },
+                {
+                    "path": ".loom/progress/INIT-0001.md",
+                    "kind": "progress",
+                    "source": "generated",
+                },
+                {
+                    "path": ".loom/reviews/INIT-0001.json",
+                    "kind": "review-entry",
+                    "source": "generated",
+                },
+                {
+                    "path": ".loom/status/current.md",
+                    "kind": "status-surface",
+                    "source": "generated",
+                },
+                {
+                    "path": ".loom/specs/INIT-0001/spec.md",
+                    "kind": "spec",
+                    "source": "skills/shared/assets/templates/scaffold/spec.md",
+                },
+                {
+                    "path": ".loom/specs/INIT-0001/plan.md",
+                    "kind": "plan",
+                    "source": "skills/shared/assets/templates/scaffold/plan.md",
+                },
+            ]
+        )
     if install_pr_template or not (target_root / ".github/PULL_REQUEST_TEMPLATE.md").exists():
         artifacts.append(
             {
@@ -784,16 +906,26 @@ def initial_artifacts(target_root: Path, install_pr_template: bool) -> list[dict
 
 
 def build_result(target_root: Path, scenario: str, intake: dict[str, object], install_pr_template: bool) -> dict[str, object]:
+    adoption_path = recommended_adoption_path(scenario, intake)
+    attach_only = uses_attach_only_path(adoption_path)
     main_problem = {
         "new": "the repository has no controlled Loom entry yet",
         "small-existing": "the repo has a baseline but still lacks a stable Loom adoption entry and explicit first artifacts",
-        "complex-existing": "the repo needs execution support, recovery, and status carriers instead of more ad hoc guidance",
+        "complex-existing": (
+            "the repo already has a mature governance stack, so Loom must attach to the existing root rules and retained host actions"
+            if attach_only
+            else "the repo needs execution support, recovery, and status carriers instead of more ad hoc guidance"
+        ),
     }[scenario]
 
     reason = {
         "new": "the repo is still establishing its first baseline, so the bootstrap should create the smallest stable entry and first artifacts",
         "small-existing": "the repo already has a baseline, so Loom should enter through companion artifacts instead of rewriting the root",
-        "complex-existing": "the repo shows execution-support pressure, so the bootstrap must materialize recovery and status carriers immediately",
+        "complex-existing": (
+            "the repo already has stable root rules and validation entry, so Loom should recognize and attach instead of materializing replacement recovery and status carriers"
+            if attach_only
+            else "the repo shows execution-support pressure, so the bootstrap must materialize recovery and status carriers immediately"
+        ),
     }[scenario]
 
     result = {
@@ -819,41 +951,70 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
             "why_this_path": reason,
         },
         "recommended_adoption": {
-            "path": {
-                "new": "minimal-bootstrap",
-                "small-existing": "lightweight-retrofit",
-                "complex-existing": "full-bootstrap",
-            }[scenario],
+            "path": adoption_path,
             "integration_mode": integration_mode(scenario),
             "recovery_mode": recovery_mode(scenario),
-            "capabilities": rule_refs_for_capabilities(scenario),
+            "capabilities": rule_refs_for_capabilities(scenario, adoption_path),
         },
-        "deferred_capabilities": deferred_capabilities(scenario),
-        "fact_chain": {
-            "mode": "work-item + recovery-entry + derived status-surface",
-            "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
-            "entry_points": {
-                "current_item_id": WORK_ITEM_ID,
-                "work_item": ".loom/work-items/INIT-0001.md",
-                "recovery_entry": ".loom/progress/INIT-0001.md",
-                "status_surface": ".loom/status/current.md",
-            },
-        },
-        "initial_artifacts": initial_artifacts(target_root, install_pr_template),
-        "initial_work_items": initial_work_items(scenario, target_root),
+        "deferred_capabilities": deferred_capabilities(scenario, adoption_path),
+        "fact_chain": (
+            {
+                "mode": "repo-native attach-only",
+                "read_entry": "not_applicable",
+                "entry_points": {
+                    "current_item_id": WORK_ITEM_ID,
+                    "work_item": "not_applicable",
+                    "recovery_entry": "not_applicable",
+                    "status_surface": "not_applicable",
+                },
+            }
+            if attach_only
+            else {
+                "mode": "work-item + recovery-entry + derived status-surface",
+                "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
+                "entry_points": {
+                    "current_item_id": WORK_ITEM_ID,
+                    "work_item": ".loom/work-items/INIT-0001.md",
+                    "recovery_entry": ".loom/progress/INIT-0001.md",
+                    "status_surface": ".loom/status/current.md",
+                },
+            }
+        ),
+        "initial_artifacts": initial_artifacts(target_root, install_pr_template, adoption_path),
+        "initial_work_items": initial_work_items(scenario, target_root, adoption_path, install_pr_template),
         "validation_and_closing": {
             "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
-            "checkpoint_relationship": [
-                "admission checkpoint confirms the bootstrap work item and first artifacts are readable",
-                "build checkpoint confirms generated carriers and templates are internally consistent",
-                "merge checkpoint should only pass after downstream repo truth, docs, and delivery state align",
-            ],
-            "clean_state": "all generated Loom artifacts are readable, verified, and free of conflicting duplicates",
-            "close_when": [
-                "the target repo has a readable root or companion Loom entry",
-                "the first work item, progress carrier, and spec/plan artifacts exist",
-                "the bootstrap manifest and init-result are verifiable",
-            ],
+            "checkpoint_relationship": (
+                [
+                    "admission checkpoint confirms the attached companion entry and bootstrap metadata are readable",
+                    "build checkpoint confirms the attach-only surfaces and repo-local validation entry are internally consistent",
+                    "merge checkpoint should only pass after downstream repo truth, companion extensions, and release judgment align",
+                ]
+                if attach_only
+                else [
+                    "admission checkpoint confirms the bootstrap work item and first artifacts are readable",
+                    "build checkpoint confirms generated carriers and templates are internally consistent",
+                    "merge checkpoint should only pass after downstream repo truth, docs, and delivery state align",
+                ]
+            ),
+            "clean_state": (
+                "all generated attach-only Loom artifacts are readable, verified, and do not introduce Loom-owned recovery/status placeholders"
+                if attach_only
+                else "all generated Loom artifacts are readable, verified, and free of conflicting duplicates"
+            ),
+            "close_when": (
+                [
+                    "the target repo has a readable root rule entry and attached repo companion entry",
+                    "the attach-only bootstrap metadata and repo-local validation path are verifiable",
+                    "the bootstrap manifest does not declare Loom-owned recovery/status carriers for this path",
+                ]
+                if attach_only
+                else [
+                    "the target repo has a readable root or companion Loom entry",
+                    "the first work item, progress carrier, and spec/plan artifacts exist",
+                    "the bootstrap manifest and init-result are verifiable",
+                ]
+            ),
         },
         "runtime_state": runtime_state_payload(target_root),
         "governance_surface": build_governance_surface(
@@ -867,19 +1028,28 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
 
 def render_loom_readme(result: dict[str, object]) -> str:
     run = result["run"]
+    attach_only = uses_attach_only_path(str(result["recommended_adoption"]["path"]))
+    path_lines = (
+        "- Repo companion entry: `.loom/companion/README.md`\n"
+        "- Companion checkpoints: `.loom/companion/checkpoints.md`\n"
+        "- Companion review surface: `.loom/companion/review.md`\n"
+        if attach_only
+        else "- First work item: `.loom/work-items/INIT-0001.md`\n"
+        "- Progress carrier: `.loom/progress/INIT-0001.md`\n"
+        "- Status surface: `.loom/status/current.md`\n"
+    )
     return (
         "# Loom Bootstrap\n\n"
         f"This directory was generated by `{RUNTIME_SOURCE}`.\n\n"
         "## Current Path\n\n"
         f"- Scenario: {run['scenario']}\n"
+        f"- Recommended adoption path: {result['recommended_adoption']['path']}\n"
         f"- Integration mode: {run['integration_mode']}\n"
         f"- Recovery mode: {run['recovery_mode']}\n\n"
         "## Main Entry Points\n\n"
         "- Bootstrap manifest: `.loom/bootstrap/manifest.json`\n"
         "- Bootstrap result: `.loom/bootstrap/init-result.json`\n"
-        "- First work item: `.loom/work-items/INIT-0001.md`\n"
-        "- Progress carrier: `.loom/progress/INIT-0001.md`\n"
-        "- Status surface: `.loom/status/current.md`\n"
+        f"{path_lines}"
         "- Runtime-state entry: `.loom/bin/loom_init.py runtime-state --target .`\n"
         "- Daily execution CLI: `.loom/bin/loom_flow.py`\n"
         "- Gate CLI: `.loom/bin/loom_check.py`\n"
@@ -904,6 +1074,52 @@ def render_capability_map(result: dict[str, object]) -> str:
             lines.append(f"- `{rule}`")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
+
+
+def render_companion_readme(result: dict[str, object]) -> str:
+    return (
+        "# Repo Companion\n\n"
+        "This companion entry attaches Loom to the existing repository governance surface.\n\n"
+        "## Preserved Ownership\n\n"
+        "- Root rules remain in the repository's existing boundary docs.\n"
+        "- Retained host actions stay host-owned.\n"
+        "- Repo-native carriers remain the source of truth until a later Loom interop slice stabilizes.\n\n"
+        "## Loom Entry Surfaces\n\n"
+        "- Review surface: `.loom/companion/review.md`\n"
+        "- Merge-ready surface: `.loom/companion/merge-ready.md`\n"
+        "- Closeout surface: `.loom/companion/closeout.md`\n"
+        "- Checkpoints surface: `.loom/companion/checkpoints.md`\n"
+    )
+
+
+def render_companion_checkpoints() -> str:
+    return (
+        "# Companion Checkpoints\n\n"
+        "- Admission: read the existing root rules and repo-native admission surface before entering implementation.\n"
+        "- Build: preserve retained host actions and repo-native carriers; do not assume Loom-owned recovery/status carriers exist.\n"
+        "- Merge-ready: consume companion extensions and host-owned gates without re-implementing the host lifecycle.\n"
+    )
+
+
+def render_companion_review() -> str:
+    return (
+        "# Companion Review Surface\n\n"
+        "Use this file to attach repo-specific review requirements while keeping the repository's existing root rules authoritative.\n"
+    )
+
+
+def render_companion_merge_ready() -> str:
+    return (
+        "# Companion Merge-Ready Surface\n\n"
+        "Use this file to summarize repo-specific merge-ready expectations without taking over host-owned merge controls.\n"
+    )
+
+
+def render_companion_closeout() -> str:
+    return (
+        "# Companion Closeout Surface\n\n"
+        "Use this file to attach repo-specific closeout expectations while preserving the host-owned closeout controls and repo-native truth.\n"
+    )
 
 
 def render_work_item(result: dict[str, object]) -> str:
@@ -1040,6 +1256,7 @@ def scaffold_target(
 ) -> tuple[int, list[str]]:
     written = 0
     touched: list[str] = []
+    attach_only = uses_attach_only_path(str(result["recommended_adoption"]["path"]))
 
     writes: list[tuple[Path, str | dict[str, object], str]] = [
         (target_root / ".loom/README.md", render_loom_readme(result), "text"),
@@ -1047,11 +1264,26 @@ def scaffold_target(
         (output_path, result, "json"),
         (target_root / ".loom/bootstrap/manifest.json", manifest_payload(result), "json"),
         (target_root / ".loom/bootstrap/capability-map.md", render_capability_map(result), "text"),
-        (target_root / ".loom/work-items/INIT-0001.md", render_work_item(result), "text"),
-        (target_root / ".loom/progress/INIT-0001.md", render_progress(result), "text"),
-        (target_root / ".loom/reviews/INIT-0001.json", render_review_entry(result), "text"),
-        (target_root / ".loom/status/current.md", render_status(result), "text"),
     ]
+    if attach_only:
+        writes.extend(
+            [
+                (target_root / ".loom/companion/README.md", render_companion_readme(result), "text"),
+                (target_root / ".loom/companion/checkpoints.md", render_companion_checkpoints(), "text"),
+                (target_root / ".loom/companion/review.md", render_companion_review(), "text"),
+                (target_root / ".loom/companion/merge-ready.md", render_companion_merge_ready(), "text"),
+                (target_root / ".loom/companion/closeout.md", render_companion_closeout(), "text"),
+            ]
+        )
+    else:
+        writes.extend(
+            [
+                (target_root / ".loom/work-items/INIT-0001.md", render_work_item(result), "text"),
+                (target_root / ".loom/progress/INIT-0001.md", render_progress(result), "text"),
+                (target_root / ".loom/reviews/INIT-0001.json", render_review_entry(result), "text"),
+                (target_root / ".loom/status/current.md", render_status(result), "text"),
+            ]
+        )
 
     for path, payload, kind in writes:
         changed = write_json(path, payload, force=force) if kind == "json" else write_text(path, payload, force=force)
@@ -1067,12 +1299,18 @@ def scaffold_target(
         (Path(__file__).with_name("runtime_paths.py"), target_root / ".loom/bin/runtime_paths.py"),
         (Path(__file__).with_name("runtime_state.py"), target_root / ".loom/bin/runtime_state.py"),
         (Path(__file__).with_name("loom_check.py"), target_root / ".loom/bin/loom_check.py"),
-        (shared_asset(__file__, "templates/scaffold/spec.md"), target_root / ".loom/specs/INIT-0001/spec.md"),
-        (shared_asset(__file__, "templates/scaffold/plan.md"), target_root / ".loom/specs/INIT-0001/plan.md"),
     ):
         if copy_file(source, destination, force=force):
             written += 1
             touched.append(str(destination.relative_to(target_root)))
+    if not attach_only:
+        for source, destination in (
+            (shared_asset(__file__, "templates/scaffold/spec.md"), target_root / ".loom/specs/INIT-0001/spec.md"),
+            (shared_asset(__file__, "templates/scaffold/plan.md"), target_root / ".loom/specs/INIT-0001/plan.md"),
+        ):
+            if copy_file(source, destination, force=force):
+                written += 1
+                touched.append(str(destination.relative_to(target_root)))
 
     pr_template_target = target_root / ".github/PULL_REQUEST_TEMPLATE.md"
     if install_pr_template or not pr_template_target.exists():
@@ -1081,7 +1319,7 @@ def scaffold_target(
             touched.append(str(pr_template_target.relative_to(target_root)))
 
     root_agents = target_root / "AGENTS.md"
-    if not root_agents.exists():
+    if not attach_only and not root_agents.exists():
         if write_text(root_agents, render_root_agents(), force=force):
             written += 1
             touched.append(str(root_agents.relative_to(target_root)))
@@ -1090,42 +1328,59 @@ def scaffold_target(
 
 
 def verify_target(target_root: Path, output_path: Path) -> list[str]:
-    required_paths = [
-        "AGENTS.md",
-        ".loom/README.md",
-        ".loom/bootstrap/intake.snapshot.json",
-        str(output_path.relative_to(target_root)),
-        ".loom/bootstrap/manifest.json",
-        ".loom/bootstrap/capability-map.md",
-        ".loom/work-items/INIT-0001.md",
-        ".loom/progress/INIT-0001.md",
-        ".loom/reviews/INIT-0001.json",
-        ".loom/status/current.md",
-        ".loom/bin/loom_init.py",
-        ".loom/bin/fact_chain_support.py",
-        ".loom/bin/governance_surface.py",
-        ".loom/bin/loom_flow.py",
-        ".loom/bin/runtime_paths.py",
-        ".loom/bin/runtime_state.py",
-        ".loom/bin/loom_check.py",
-        ".loom/specs/INIT-0001/spec.md",
-        ".loom/specs/INIT-0001/plan.md",
-    ]
     errors: list[str] = []
     runtime_state = runtime_state_payload(target_root)
     if runtime_state["result"] != "pass":
         errors.extend(f"runtime-state: {message}" for message in runtime_state["missing_inputs"])
-    for relative in required_paths:
-        if not (target_root / relative).exists():
-            errors.append(f"missing required artifact: {relative}")
 
     current_item_id: str | None = None
+    attach_only = False
+    required_paths: list[str] = []
     if output_path.exists():
         try:
             result = read_json(output_path)
         except json.JSONDecodeError as exc:
             errors.append(f"invalid init-result JSON: {exc.msg}")
             return errors
+        adoption = result.get("recommended_adoption")
+        if isinstance(adoption, dict):
+            attach_only = uses_attach_only_path(str(adoption.get("path", "")))
+        required_paths = [
+            ".loom/README.md",
+            ".loom/bootstrap/intake.snapshot.json",
+            str(output_path.relative_to(target_root)),
+            ".loom/bootstrap/manifest.json",
+            ".loom/bootstrap/capability-map.md",
+            ".loom/bin/loom_init.py",
+            ".loom/bin/fact_chain_support.py",
+            ".loom/bin/governance_surface.py",
+            ".loom/bin/loom_flow.py",
+            ".loom/bin/runtime_paths.py",
+            ".loom/bin/runtime_state.py",
+            ".loom/bin/loom_check.py",
+        ]
+        if attach_only:
+            required_paths.extend(
+                [
+                    ".loom/companion/README.md",
+                    ".loom/companion/checkpoints.md",
+                    ".loom/companion/review.md",
+                    ".loom/companion/merge-ready.md",
+                    ".loom/companion/closeout.md",
+                ]
+            )
+        else:
+            required_paths.extend(
+                [
+                    "AGENTS.md",
+                    ".loom/work-items/INIT-0001.md",
+                    ".loom/progress/INIT-0001.md",
+                    ".loom/reviews/INIT-0001.json",
+                    ".loom/status/current.md",
+                    ".loom/specs/INIT-0001/spec.md",
+                    ".loom/specs/INIT-0001/plan.md",
+                ]
+            )
         for key in (
             "project_judgment",
             "recommended_adoption",
@@ -1172,50 +1427,79 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
                     if not isinstance(value, str) or not value:
                         errors.append(f"initial work item is missing required field: {field}")
                 validated_work_items.append(work_item)
-
-    fact_chain_report, fact_chain_errors = inspect_fact_chain(
-        target_root,
-        str(output_path.relative_to(target_root)),
-    )
-    if fact_chain_errors:
-        errors.extend(f"fact-chain: {message}" for message in fact_chain_errors)
-    elif not fact_chain_report:
-        errors.append("fact-chain: no report was produced")
-    elif output_path.exists():
-        current_item_id = fact_chain_report["fact_chain"]["entry_points"]["current_item_id"]
-        runtime_evidence_report = fact_chain_report.get("runtime_evidence")
-        if not isinstance(runtime_evidence_report, dict):
-            errors.append("fact-chain: missing runtime_evidence report")
-        else:
-            for field in (
-                "run_entry",
-                "logs_entry",
-                "diagnostics_entry",
-                "verification_entry",
-                "lane_entry",
-            ):
-                if field not in runtime_evidence_report:
-                    errors.append(f"fact-chain: runtime_evidence is missing `{field}`")
-        matching_work_item = None
-        for work_item in validated_work_items:
-            if work_item.get("id") == current_item_id:
-                matching_work_item = work_item
-                break
-        if matching_work_item is None:
-            errors.append(f"init-result is missing the current work item `{current_item_id}`")
-        else:
-            expected_init_fields = {
-                "recovery_entry": fact_chain_report["fact_chain"]["entry_points"]["recovery_entry"],
-                "validation_entry": fact_chain_report["facts"]["validation_entry"]["value"],
-                "workspace_entry": fact_chain_report["facts"]["workspace_entry"]["value"],
+        if attach_only:
+            fact_chain = result.get("fact_chain")
+            if not isinstance(fact_chain, dict):
+                errors.append("init-result is missing required section: fact_chain")
+            else:
+                if fact_chain.get("mode") != "repo-native attach-only":
+                    errors.append("deep-existing-repo init-result must keep `fact_chain.mode = repo-native attach-only`")
+                if fact_chain.get("read_entry") != "not_applicable":
+                    errors.append("deep-existing-repo init-result must keep `fact_chain.read_entry = not_applicable`")
+                entry_points = fact_chain.get("entry_points")
+                if not isinstance(entry_points, dict):
+                    errors.append("deep-existing-repo init-result must include fact_chain.entry_points")
+                else:
+                    for field in ("work_item", "recovery_entry", "status_surface"):
+                        if entry_points.get(field) != "not_applicable":
+                            errors.append(f"deep-existing-repo init-result must keep `fact_chain.entry_points.{field} = not_applicable`")
+            declared_generated = {
+                artifact.get("path")
+                for artifact in result.get("initial_artifacts", [])
+                if isinstance(artifact, dict) and isinstance(artifact.get("path"), str)
             }
-            for field, expected_value in expected_init_fields.items():
-                actual_value = matching_work_item.get(field)
-                if actual_value != expected_value:
-                    errors.append(
-                        f"init-result work item `{current_item_id}` has inconsistent `{field}`: "
-                        f"expected `{expected_value}`, got `{actual_value}`"
-                    )
+            for forbidden in (".loom/work-items/INIT-0001.md", ".loom/progress/INIT-0001.md", ".loom/status/current.md"):
+                if forbidden in declared_generated:
+                    errors.append(f"deep-existing-repo bootstrap must not declare generated carrier `{forbidden}`")
+
+    for relative in required_paths:
+        if not (target_root / relative).exists():
+            errors.append(f"missing required artifact: {relative}")
+
+    if not attach_only:
+        fact_chain_report, fact_chain_errors = inspect_fact_chain(
+            target_root,
+            str(output_path.relative_to(target_root)),
+        )
+        if fact_chain_errors:
+            errors.extend(f"fact-chain: {message}" for message in fact_chain_errors)
+        elif not fact_chain_report:
+            errors.append("fact-chain: no report was produced")
+        elif output_path.exists():
+            current_item_id = fact_chain_report["fact_chain"]["entry_points"]["current_item_id"]
+            runtime_evidence_report = fact_chain_report.get("runtime_evidence")
+            if not isinstance(runtime_evidence_report, dict):
+                errors.append("fact-chain: missing runtime_evidence report")
+            else:
+                for field in (
+                    "run_entry",
+                    "logs_entry",
+                    "diagnostics_entry",
+                    "verification_entry",
+                    "lane_entry",
+                ):
+                    if field not in runtime_evidence_report:
+                        errors.append(f"fact-chain: runtime_evidence is missing `{field}`")
+            matching_work_item = None
+            for work_item in validated_work_items:
+                if work_item.get("id") == current_item_id:
+                    matching_work_item = work_item
+                    break
+            if matching_work_item is None:
+                errors.append(f"init-result is missing the current work item `{current_item_id}`")
+            else:
+                expected_init_fields = {
+                    "recovery_entry": fact_chain_report["fact_chain"]["entry_points"]["recovery_entry"],
+                    "validation_entry": fact_chain_report["facts"]["validation_entry"]["value"],
+                    "workspace_entry": fact_chain_report["facts"]["workspace_entry"]["value"],
+                }
+                for field, expected_value in expected_init_fields.items():
+                    actual_value = matching_work_item.get(field)
+                    if actual_value != expected_value:
+                        errors.append(
+                            f"init-result work item `{current_item_id}` has inconsistent `{field}`: "
+                            f"expected `{expected_value}`, got `{actual_value}`"
+                        )
 
     pr_template = target_root / ".github/PULL_REQUEST_TEMPLATE.md"
     if pr_template.exists():
@@ -1228,24 +1512,29 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
     if flow_tool.exists():
         commands: list[tuple[str, list[str], set[str]]] = [
             (
-                "loom-flow fact-chain",
-                ["python3", ".loom/bin/loom_flow.py", "fact-chain", "--target", "."],
-                {"pass"},
-            ),
-            (
-                "loom-flow runtime-evidence",
-                ["python3", ".loom/bin/loom_flow.py", "runtime-evidence", "--target", "."],
+                "loom-init runtime-state",
+                ["python3", ".loom/bin/loom_init.py", "runtime-state", "--target", "."],
                 {"pass"},
             ),
         ]
-        if current_item_id:
+        if not attach_only:
             commands.extend(
                 [
                     (
-                        "loom-init runtime-state",
-                        ["python3", ".loom/bin/loom_init.py", "runtime-state", "--target", "."],
+                        "loom-flow fact-chain",
+                        ["python3", ".loom/bin/loom_flow.py", "fact-chain", "--target", "."],
                         {"pass"},
                     ),
+                    (
+                        "loom-flow runtime-evidence",
+                        ["python3", ".loom/bin/loom_flow.py", "runtime-evidence", "--target", "."],
+                        {"pass"},
+                    ),
+                ]
+            )
+        if current_item_id and not attach_only:
+            commands.extend(
+                [
                     (
                         "loom-flow checkpoint admission",
                         [
@@ -1429,6 +1718,24 @@ def fact_chain(args: argparse.Namespace) -> int:
     except RuntimeError as exc:
         print(f"loom-init: {exc}", file=sys.stderr)
         return 2
+    if output_path.exists():
+        try:
+            result = read_json(output_path)
+        except json.JSONDecodeError:
+            result = {}
+        adoption = result.get("recommended_adoption") if isinstance(result, dict) else None
+        if isinstance(adoption, dict) and uses_attach_only_path(str(adoption.get("path", ""))):
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "errors": ["fact-chain is not available for `deep-existing-repo` attach-only bootstrap output"],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return 1
 
     report, errors = inspect_fact_chain(target_root, str(output_path.relative_to(target_root)))
     if errors:

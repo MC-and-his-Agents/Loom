@@ -76,6 +76,7 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
   - `skills/shared/references/governance/maturity-and-closing.md`
   - `skills/shared/references/adoption/routing-and-checkpoints.md`
   - `skills/shared/references/adoption/lightweight-retrofit-default.md`
+  - `skills/shared/references/adoption/deep-existing-repo-default.md`
 - `skills/shared/references/harness/recovery-model.md`
 - `skills/shared/references/harness/fact-chain-contract.md`
 - `skills/shared/references/harness/status-surface.md`
@@ -167,7 +168,8 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 
 默认动作：
 
-- 进入更完整装配
+- 若根规则清晰、验证入口稳定且命中 `merge_review_semantic_overload`，优先进入 `deep-existing-repo` / `recognize-and-attach`
+- 否则进入更完整装配
 - 显式纳入：
   - 恢复主入口
   - 执行上下文
@@ -176,6 +178,13 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
   - 隔离现场与纯度规则
 - 对涉及共享契约、运行模型、高风险核心抽象的事项，默认纳入正式规约套件与前移 checkpoint
 - 对恢复成本明显升高的事项，默认从 `checkpoint-lite` 升级到标准恢复形态
+
+当命中 `deep-existing-repo` 时，额外保持以下纪律：
+
+- 保留 root rules
+- 保留 retained host actions
+- 保留 repo-native carriers
+- 第一轮不生成 Loom-owned `work-item` / `progress` / `status-surface` placeholder
 
 ## 4. 输出初始化结果
 

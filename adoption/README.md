@@ -24,6 +24,7 @@
 - `repo companion` WebEnvoy 参考接口样本：[reference-companion-spec-webenvoy.md](./reference-companion-spec-webenvoy.md)
 - `repo companion` 接口状态验证：[validation-repo-companion-interface.md](./validation-repo-companion-interface.md)
 - 小型既有仓库的默认 retrofit 策略：[lightweight-retrofit-default.md](./lightweight-retrofit-default.md)
+- 成熟治理重仓的默认 attach 策略：[deep-existing-repo-default.md](./deep-existing-repo-default.md)
 - 暂不固化、待继续验证的候选模式：[candidate-patterns.md](./candidate-patterns.md)
 - 外部优秀 `SKILLS` 仓库设计清单与 Loom gap analysis：[skills-repo-design-checklist.md](./skills-repo-design-checklist.md)
 - 初始化 `SKILL` 模拟验证：[demo-init-validation.md](./demo-init-validation.md)

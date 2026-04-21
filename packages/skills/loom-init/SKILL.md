@@ -49,7 +49,7 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 
 如果信号不足或同时命中多个场景，不要猜测。回退到 `loom-init`，并要求最小补充信号。
 
-完整场景路由规则见 [references/route-matrix.md](references/route-matrix.md)。
+完整场景路由规则见 [./.loom-runtime/route-matrix.md](./.loom-runtime/route-matrix.md)。
 
 ## Installed Entry Surface
 
@@ -71,24 +71,25 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
   - `AGENTS.md`
   - `README.md`
 - Loom 核心规则：
-  - `references/shared/governance/principles.md`
-  - `references/shared/governance/review-model.md`
-  - `references/shared/governance/maturity-and-closing.md`
-  - `references/shared/adoption/routing-and-checkpoints.md`
-  - `references/shared/adoption/lightweight-retrofit-default.md`
-- `references/shared/harness/recovery-model.md`
-- `references/shared/harness/fact-chain-contract.md`
-- `references/shared/harness/status-surface.md`
-- `references/shared/harness/work-item-contract.md`
-- `references/shared/harness/workspace-model.md`
-- `references/route-matrix.md`
-- `references/input-signals.md`
-- `references/shared/harness/automation-frontload.md`
-- `references/shared/harness/workspace-and-purity.md`
-- `references/shared/harness/execution-context.md`
-- `references/shared/templates/spec-suite.md`
-- `references/shared/templates/pull-request.md`
-- `references/output-contract.md`
+  - `skills/shared/references/governance/principles.md`
+  - `skills/shared/references/governance/review-model.md`
+  - `skills/shared/references/governance/maturity-and-closing.md`
+  - `skills/shared/references/adoption/routing-and-checkpoints.md`
+  - `skills/shared/references/adoption/lightweight-retrofit-default.md`
+  - `skills/shared/references/adoption/deep-existing-repo-default.md`
+- `skills/shared/references/harness/recovery-model.md`
+- `skills/shared/references/harness/fact-chain-contract.md`
+- `skills/shared/references/harness/status-surface.md`
+- `skills/shared/references/harness/work-item-contract.md`
+- `skills/shared/references/harness/workspace-model.md`
+- `skills/route-matrix.md`
+- `skills/loom-init/references/input-signals.md`
+- `skills/shared/references/harness/automation-frontload.md`
+- `skills/shared/references/harness/workspace-and-purity.md`
+- `skills/shared/references/harness/execution-context.md`
+- `skills/shared/references/templates/spec-suite.md`
+- `skills/shared/references/templates/pull-request.md`
+- `skills/loom-init/references/output-contract.md`
 
 只有在事项带有明显不确定性、需要进一步分层时，才补读：
 
@@ -98,7 +99,7 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 
 优先从仓库现状推断答案，只在关键信息缺失时再问用户。
 
-使用 [references/input-signals.md](references/input-signals.md) 组织问诊。必须先完成最小必判字段的收集，再做路径判断。
+使用 [references/input-signals.md](./references/input-signals.md) 组织问诊。必须先完成最小必判字段的收集，再做路径判断。
 
 问诊结果必须收成以下结论，而不是停留在零散观察：
 
@@ -137,7 +138,7 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 
 ### 3.2 小型既有仓库
 
-当仓库满足 [references/shared/adoption/lightweight-retrofit-default.md](references/shared/adoption/lightweight-retrofit-default.md) 的默认条件时，判为 `小型既有仓库`。
+当仓库满足 [./.loom-runtime/shared/references/adoption/lightweight-retrofit-default.md](./.loom-runtime/shared/references/adoption/lightweight-retrofit-default.md) 的默认条件时，判为 `小型既有仓库`。
 
 默认动作：
 
@@ -167,7 +168,8 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 
 默认动作：
 
-- 进入更完整装配
+- 若根规则清晰、验证入口稳定且命中 `merge_review_semantic_overload`，优先进入 `deep-existing-repo` / `recognize-and-attach`
+- 否则进入更完整装配
 - 显式纳入：
   - 恢复主入口
   - 执行上下文
@@ -177,9 +179,16 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 - 对涉及共享契约、运行模型、高风险核心抽象的事项，默认纳入正式规约套件与前移 checkpoint
 - 对恢复成本明显升高的事项，默认从 `checkpoint-lite` 升级到标准恢复形态
 
+当命中 `deep-existing-repo` 时，额外保持以下纪律：
+
+- 保留 root rules
+- 保留 retained host actions
+- 保留 repo-native carriers
+- 第一轮不生成 Loom-owned `work-item` / `progress` / `status-surface` placeholder
+
 ## 4. 输出初始化结果
 
-始终使用 [references/output-contract.md](references/output-contract.md) 的结构输出结果。
+始终使用 [references/output-contract.md](./references/output-contract.md) 的结构输出结果。
 
 输出中必须显式写出：
 
