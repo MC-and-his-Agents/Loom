@@ -96,7 +96,35 @@ release judgment 的正式版本语义仍以 [versioning-and-upgrades.md](/Users
 
 换句话说，这棵树的 closeout 不应再依赖会话反复解释“为什么 `deep-existing-repo` 不是第四个 scenario”“为什么 Loom 仍不接管宿主动作底层实现”。
 
-## 6. 读取顺序
+## 6. `#242` Closeout Basis
+
+`#242` 的正式 closeout basis 由 `#243 -> #247` 共同组成：
+
+- `#243`
+  - 冻结 `deep-existing-repo` 树的边界、PR slices、默认 release judgment 与 closeout 口径
+- `#244`
+  - 把 `deep-existing-repo` 固定为 `complex-existing` 下的 attach-only adoption path
+- `#245`
+  - 把 `repo-interface v2`、typed `specialized_gates`、`metadata_contract` 与 `context_schema` 收成正式 machine contract
+- `#246`
+  - 把 `interop.json`、retained host action result / repo-native carrier 的只读消费面，以及 validation-only `shadow parity` 收成正式合同
+- `#247`
+  - 用 `Syvert` / `WebEnvoy` 样本完成 validation、`v0.6.0 / minor` release judgment 与 parent closeout basis
+
+本树完成后，继续保留在宿主层或候选区的内容包括：
+
+- branch / PR / worktree / merge / ruleset 的底层宿主实现
+- `metadata_contract` 的跨仓字段 taxonomy
+- repo-native carrier / host adapter 的细字段和 payload 形状
+- 把 parity mismatch 自动提升为 blocking merge gate
+
+下一棵树若继续推进，应优先验证：
+
+- live adopted repo 的 `interop.json` dogfood
+- `metadata_contract` 是否出现第二个独立样本
+- `shadow parity` 是否能安全进入更强的 closeout / merge 语义
+
+## 7. 读取顺序
 
 1. 目标仓库原有根级边界文档
 2. [lightweight-retrofit-default.md](/Users/mc/dev/Loom/adoption/lightweight-retrofit-default.md)

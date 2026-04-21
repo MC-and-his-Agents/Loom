@@ -4,13 +4,13 @@
 
 对应 Loom issue：`#60`
 
-当前正式产品版本：`v0.5.0`
+当前正式产品版本：`v0.6.0`
 
 当前发布判断：`minor`
 
 ## 1. 四层交付面的入口兼容
 
-`v0.5.0` 在保持既有四层 repo-local 交付形态不变的前提下，当前稳定入口按以下四层兼容：
+`v0.6.0` 在保持既有四层 repo-local 交付形态不变的前提下，当前稳定入口按以下四层兼容：
 
 | 交付面 | 稳定入口 | 兼容承诺 |
 | --- | --- | --- |
@@ -26,7 +26,7 @@
 | 层级 | 稳定入口 | 兼容承诺 |
 | --- | --- | --- |
 | root 入口与基础验证 | `loom route` / `loom init verify` | `loom-init` 继续作为唯一 root entry，路由能力不替代底层 CLI |
-| 初始化与恢复公共治理读面 | `loom-init` 输出合同 + `loom-adopt` / `loom-resume` 场景合同 | `governance_surface` 作为稳定公共字段存在；其中 `repo_interface` 只承接 `repo companion` locator、机读 requirements / typed gates，以及 `v2` 下的 metadata/context 合同摘要，场景 skill 只能复用或摘要，不新增第二套治理真相 |
+| 初始化与恢复公共治理读面 | `loom-init` 输出合同 + `loom-adopt` / `loom-resume` 场景合同 | `governance_surface` 作为稳定公共字段存在；其中 `repo_interface` 只承接 `repo companion` locator、机读 requirements / typed gates，以及 `v2` 下的 metadata/context 合同摘要，`repo_interop` 只承接 retained host action result、repo-native carriers 与 shadow parity 的只读入口，场景 skill 只能复用或摘要，不新增第二套治理真相 |
 | 日常读取与检查 | `loom flow fact-chain` / `loom flow runtime-evidence` / `loom flow state-check` / `loom shadow-parity` | 输出保持 JSON 结果语义（`result/summary/missing_inputs/fallback_to`）；`shadow-parity` 只做 validation parity，不改现有 merge gate |
 | 正式 review 执行 | `loom flow review` + `loom review run` + `loom review read|record` | `flow review` 保持只读，`review run` 负责默认 engine 执行与 evidence 落盘，正式 authored truth 仍只允许写回单一 `review record` |
 | checkpoint 执行 | `loom flow checkpoint admission/build/merge` | 三阶段语义与回退关系保持不变 |
@@ -44,7 +44,7 @@
 - 新增场景 skill 入口不替代 `loom-init` 的 root 身份，只补显式入口与隐式路由
 - 单 skill package 只补正式交付物，不重写场景 skill 合同
 - 新增 [../harness/host-action-contract.md](../harness/host-action-contract.md) 只收口既有 host-facing actions 的合同，不新增 umbrella CLI，也不改写既有命令输出结构
-- `governance_surface` 只允许扩充 locator 或职责说明，不允许更名、拆成并行字段或复制实时 authored 状态；`repo_interface` 只允许承接 `repo companion` 的 locator、requirements、typed specialized gates，以及 `v2` 下的 metadata/context 机读摘要
+- `governance_surface` 只允许扩充 locator 或职责说明，不允许更名、拆成并行字段或复制实时 authored 状态；`repo_interface` 只允许承接 `repo companion` 的 locator、requirements、typed specialized gates，以及 `v2` 下的 metadata/context 机读摘要；`repo_interop` 只允许承接 retained host action result、repo-native carriers 与 `shadow parity` 的 locator-only 读面
 - gate 与 verify 始终复用同一 CLI，不维护第二套检查命令
 
 ## 4. 可复验操作流
@@ -79,6 +79,7 @@
 - `shadow-parity` 只输出 `match | mismatch | unreadable` 的 parity report，不把 mismatch 直接提升为 merge 阻断
 - `loom-init`、`loom-adopt`、`loom-resume` 对外公开的治理读面保持同一字段名 `governance_surface`
 - `governance_surface.repo_interface` 只区分 `absent | companion_docs_only | incomplete | present` 四类机读状态，不把旧式 companion docs 伪装成稳定 repo interface
+- `governance_surface.repo_interop` 只承接 `absent | incomplete | present` 的 interop 读面状态，不把 host action result 或 repo-native carrier 内容复制成第二 authored truth
 - 正式 review 固定按 `flow review -> review run -> review record` 分层；默认 engine 若失败必须 fail-closed，并明确回到 manual review 写回同一 review record
 - merge 阶段可按状态返回 `fallback`，而不是伪装成通过
 - `flow review`、`flow merge-ready` 与 `closeout check|sync` 只增量暴露 `repo_specific_requirements`；blocking companion requirement 必须显式阻断，advisory requirement 只展示不阻断
@@ -91,7 +92,7 @@
 基于 `mail-listener`、`hotcp`、`loom-adoption-new-project` 的临时副本复验：
 
 - `route`：显式 skill 命中与隐式信号命中均可复验
-- `governance_surface`：初始化与恢复场景均通过稳定公共字段暴露治理承接面，不额外发明并行状态源
+- `governance_surface`：初始化与恢复场景均通过稳定公共字段暴露治理承接面，不额外发明并行状态源；其中 `repo_interface` 与 `repo_interop` 继续保持读面分离
 - `verify`：均返回 `ok: true`
 - `fact-chain/runtime-evidence/state-check`：均可读
 - `flow resume/pre-review/review/handoff/merge-ready`：均可返回稳定 JSON 结果

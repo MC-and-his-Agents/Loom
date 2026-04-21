@@ -24,6 +24,7 @@
 - `repo companion` Syvert 参考接口样本：[reference-companion-spec-syvert.md](./reference-companion-spec-syvert.md)
 - `repo companion` WebEnvoy 参考接口样本：[reference-companion-spec-webenvoy.md](./reference-companion-spec-webenvoy.md)
 - `repo companion` 接口状态验证：[validation-repo-companion-interface.md](./validation-repo-companion-interface.md)
+- 成熟治理重仓接入验证：[validation-deep-existing-repo-syvert-webenvoy.md](./validation-deep-existing-repo-syvert-webenvoy.md)
 - 小型既有仓库的默认 retrofit 策略：[lightweight-retrofit-default.md](./lightweight-retrofit-default.md)
 - 成熟治理重仓的默认 attach 策略：[deep-existing-repo-default.md](./deep-existing-repo-default.md)
 - 暂不固化、待继续验证的候选模式：[candidate-patterns.md](./candidate-patterns.md)
@@ -66,6 +67,7 @@ Issue -> 验证 / 回写索引：
 - `#227` -> [validation-skills-surface-convergence.md](./validation-skills-surface-convergence.md)
 - `#223` -> [skills-repo-design-checklist.md](./skills-repo-design-checklist.md)
 - `#233` -> [../docs/skills-surface-delivery-judgment.md](../docs/skills-surface-delivery-judgment.md); [../docs/skills-surface-issue-tree-draft.md](../docs/skills-surface-issue-tree-draft.md)
+- `#247` -> [validation-deep-existing-repo-syvert-webenvoy.md](./validation-deep-existing-repo-syvert-webenvoy.md); [versioning-and-upgrades.md](./versioning-and-upgrades.md); [../docs/complete-kernel-release.md](../docs/complete-kernel-release.md)
 - `#226` -> [upstream-delivery-surface.md](./upstream-delivery-surface.md); [versioning-and-upgrades.md](./versioning-and-upgrades.md); [../skills/distribution-and-adapter-contract.md](../skills/distribution-and-adapter-contract.md)
 - `#169` -> [landing-map.md](./landing-map.md); [upstream-delivery-surface.md](./upstream-delivery-surface.md); [versioning-and-upgrades.md](./versioning-and-upgrades.md); [../docs/complete-kernel-release.md](../docs/complete-kernel-release.md)
 
