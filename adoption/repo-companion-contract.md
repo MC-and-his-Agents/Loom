@@ -18,6 +18,11 @@
 - specialized gates 的机读声明
 - 仓库级 adoption / workflow 挂接入口
 
+与之并行但单独分离的 companion-owned 读面：
+
+- retained host action result / repo-native carrier / shadow parity 的只读入口
+  - 由 [repo-interop-contract.md](/Users/mc/dev/Loom/adoption/repo-interop-contract.md) 承接
+
 它不承接以下 authored truth：
 
 - work item
@@ -209,6 +214,7 @@
 - `manifest.json` 仍 locator-only
 - `repo-interface.json` 仍不承载运行态、review summary、current stop、validation status 或 host action result
 - repo-specific 规则仍通过 companion 合同挂接，不得伪装成 Loom core 默认规则
+- host adapter / repo-native carrier / shadow parity 入口继续留在独立的 `interop.json`，不得回塞到 `repo-interface.json`
 
 ## 5. 读面语义
 

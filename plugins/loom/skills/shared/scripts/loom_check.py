@@ -86,6 +86,7 @@ CORE_DOCS = (
     "adoption/routing-and-checkpoints.md",
     "adoption/lightweight-retrofit-default.md",
     "adoption/repo-companion-contract.md",
+    "adoption/repo-interop-contract.md",
     "adoption/companion-oriented-workflow.md",
     "adoption/repo-companion-migration.md",
     "adoption/reference-companion-spec-syvert.md",
@@ -212,6 +213,7 @@ REVIEW_FINDING_SEVERITIES = {"warn", "block"}
 REVIEW_FINDING_DISPOSITION_STATUSES = {"accepted", "rejected", "deferred"}
 REPO_INTERFACE_AVAILABILITY = {"absent", "companion_docs_only", "incomplete", "present"}
 REPO_INTERFACE_ENFORCEMENT = {"blocking", "advisory"}
+REPO_INTEROP_AVAILABILITY = {"absent", "incomplete", "present"}
 
 
 def repo_root_from_argv(argv: list[str]) -> Path:
@@ -383,6 +385,7 @@ def run_command(
     args: list[str],
     cwd: Path | None = None,
     env: dict[str, str] | None = None,
+    timeout_seconds: float | None = None,
 ) -> subprocess.CompletedProcess[str]:
     command_env = os.environ.copy()
     for key in ("LOOM_SOURCE_REPO_ROOT", "LOOM_INSTALLED_SKILLS_ROOT", "LOOM_RUNTIME_SCENE"):
@@ -396,6 +399,7 @@ def run_command(
         capture_output=True,
         text=True,
         env=command_env,
+        timeout=timeout_seconds,
     )
 
 
@@ -405,8 +409,12 @@ def load_command_json(
     *,
     cwd: Path | None = None,
     env: dict[str, str] | None = None,
+    timeout_seconds: float | None = None,
 ) -> tuple[dict[str, object] | None, str | None]:
-    result = run_command(root, args, cwd=cwd, env=env)
+    try:
+        result = run_command(root, args, cwd=cwd, env=env, timeout_seconds=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        return None, f"command timed out after {int(timeout_seconds or 0)}s"
     if not result.stdout.strip():
         detail = "command produced no JSON output"
         if result.stderr.strip():
@@ -419,6 +427,50 @@ def load_command_json(
     if not isinstance(payload, dict):
         return None, "command output must be a JSON object"
     return payload, None
+
+
+def load_command_json_with_retry(
+    root: Path,
+    args: list[str],
+    *,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+    timeout_seconds: float | None = None,
+    retries: int = 2,
+) -> tuple[dict[str, object] | None, str | None]:
+    transient_needles = (
+        "EOF",
+        "unknown owner type",
+        "command timed out",
+        "connection reset",
+        "TLS handshake timeout",
+    )
+    last_payload: dict[str, object] | None = None
+    last_error: str | None = None
+    for _ in range(retries):
+        payload, error = load_command_json(
+            root,
+            args,
+            cwd=cwd,
+            env=env,
+            timeout_seconds=timeout_seconds,
+        )
+        if error is None:
+            return payload, None
+        last_payload = payload
+        last_error = error
+        if not any(needle in error for needle in transient_needles):
+            return payload, error
+    return last_payload, last_error
+
+
+def payload_has_github_rate_limit(payload: object) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    missing_inputs = payload.get("missing_inputs")
+    if not isinstance(missing_inputs, list):
+        return False
+    return any(isinstance(item, str) and "API rate limit exceeded" in item for item in missing_inputs)
 
 
 def prepend_path_env(bin_dir: Path, extra: dict[str, str] | None = None) -> dict[str, str]:
@@ -538,6 +590,7 @@ def require_governance_surface(
         "review_merge_surface",
         "github_control_plane",
         "repo_interface",
+        "repo_interop",
         "summary",
         "missing_inputs",
     )
@@ -617,6 +670,12 @@ def require_governance_surface(
         context=f"{context} governance_surface.repo_interface",
         payload=governance_surface.get("repo_interface"),
     )
+    require_repo_interop_payload(
+        failures,
+        category=category,
+        context=f"{context} governance_surface.repo_interop",
+        payload=governance_surface.get("repo_interop"),
+    )
 
 
 def require_locator_entry(
@@ -658,6 +717,39 @@ def require_repo_interface_payload(
         allowed_statuses={"present", "missing"},
     )
     for key in ("companion_entry", "repo_specific_requirements", "specialized_gates"):
+        require_locator_entry(
+            failures,
+            category=category,
+            context=f"{context}.{key}",
+            payload=payload.get(key),
+            allowed_statuses={"present", "missing"},
+        )
+    if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+        failures.append(Failure(category, f"{context} must include non-empty `summary`"))
+    if not isinstance(payload.get("missing_inputs"), list):
+        failures.append(Failure(category, f"{context} must include `missing_inputs` as a list"))
+
+
+def require_repo_interop_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("availability") not in REPO_INTEROP_AVAILABILITY:
+        failures.append(Failure(category, f"{context} availability must stay within the stable contract"))
+    require_locator_entry(
+        failures,
+        category=category,
+        context=f"{context}.contract",
+        payload=payload.get("contract"),
+        allowed_statuses={"present", "missing"},
+    )
+    for key in ("host_adapters", "repo_native_carriers", "shadow_surfaces"):
         require_locator_entry(
             failures,
             category=category,
@@ -713,6 +805,77 @@ def require_repo_specific_requirements_payload(
     if isinstance(declared, list) and isinstance(blocking, list) and isinstance(advisory, list):
         if len(declared) != len(blocking) + len(advisory):
             failures.append(Failure(category, f"{context} declared requirements must split cleanly into blocking and advisory"))
+
+
+def require_shadow_parity_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+    expected_reports: int,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("command") != "shadow-parity":
+        failures.append(Failure(category, f"{context} must report `command: shadow-parity`"))
+    if payload.get("result") not in {"pass", "warn"}:
+        failures.append(Failure(category, f"{context} result must be `pass` or `warn`"))
+    if payload.get("fallback_to") is not None:
+        failures.append(Failure(category, f"{context} fallback_to must remain `null`"))
+    if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+        failures.append(Failure(category, f"{context} must include non-empty `summary`"))
+    if not isinstance(payload.get("missing_inputs"), list):
+        failures.append(Failure(category, f"{context} must include `missing_inputs`"))
+    require_runtime_state_payload(
+        failures,
+        category=category,
+        context=context,
+        payload=payload.get("runtime_state"),
+        expected_scene="repo-local-demo",
+        expected_carrier="repo-local-wrapper",
+        allowed_results={"pass"},
+    )
+    governance_surface = {"governance_surface": payload.get("governance_surface")}
+    if isinstance(payload.get("governance_surface"), dict):
+        require_governance_surface(
+            failures,
+            category=category,
+            context=context,
+            payload=governance_surface,
+        )
+    reports = payload.get("reports")
+    if not isinstance(reports, list):
+        failures.append(Failure(category, f"{context} must include `reports` as a list"))
+        return
+    if len(reports) != expected_reports:
+        failures.append(Failure(category, f"{context} must include {expected_reports} parity reports"))
+    for index, report in enumerate(reports):
+        if not isinstance(report, dict):
+            failures.append(Failure(category, f"{context} reports[{index}] must be an object"))
+            continue
+        if report.get("surface") not in {"admission", "review", "merge_ready", "closeout"}:
+            failures.append(Failure(category, f"{context} reports[{index}] must declare a known surface"))
+        if report.get("result") not in {"match", "mismatch", "unreadable"}:
+            failures.append(Failure(category, f"{context} reports[{index}] result must stay within the stable contract"))
+        if not isinstance(report.get("summary"), str) or not report.get("summary"):
+            failures.append(Failure(category, f"{context} reports[{index}] must include non-empty `summary`"))
+        if not isinstance(report.get("missing_inputs"), list):
+            failures.append(Failure(category, f"{context} reports[{index}] must include `missing_inputs`"))
+        for key in ("host_adapters", "repo_native_carriers"):
+            if not isinstance(report.get(key), list):
+                failures.append(Failure(category, f"{context} reports[{index}] must include `{key}` as a list"))
+        for surface_key in ("loom_surface", "repo_surface"):
+            surface_payload = report.get(surface_key)
+            if not isinstance(surface_payload, dict):
+                failures.append(Failure(category, f"{context} reports[{index}] must include `{surface_key}`"))
+                continue
+            if surface_payload.get("status") not in {"readable", "missing"}:
+                failures.append(Failure(category, f"{context} reports[{index}] `{surface_key}.status` must stay within the stable contract"))
+            locator = surface_payload.get("locator")
+            if not isinstance(locator, str) or not locator:
+                failures.append(Failure(category, f"{context} reports[{index}] `{surface_key}.locator` must be non-empty"))
 
 
 def require_host_lifecycle_payload(
@@ -3557,12 +3720,18 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     ],
                 ),
             ):
-                payload, error = load_command_json(root, args)
+                payload, error = load_command_json_with_retry(
+                    root,
+                    args,
+                    timeout_seconds=30,
+                    retries=3,
+                )
                 if error:
                     failures.append(Failure("daily-execution-cli", f"`{label}` failed: {error}"))
                     continue
+                rate_limited = payload_has_github_rate_limit(payload)
                 if label == "installed reconciliation audit":
-                    if payload.get("result") != "pass":
+                    if payload.get("result") != "pass" and not rate_limited:
                         failures.append(Failure("daily-execution-cli", "`installed reconciliation audit` must pass on the historical closeout sample"))
                     require_runtime_state_payload(
                         failures,
@@ -3580,7 +3749,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         payload=payload,
                     )
                 elif label == "installed reconciliation sync dry-run":
-                    if payload.get("result") != "pass":
+                    if payload.get("result") != "pass" and not rate_limited:
                         failures.append(Failure("daily-execution-cli", "`installed reconciliation sync --dry-run` must pass on an already aligned sample"))
                     require_runtime_state_payload(
                         failures,
@@ -3592,7 +3761,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         allowed_results={"pass"},
                     )
                 else:
-                    if payload.get("result") != "pass":
+                    if payload.get("result") != "pass" and not rate_limited:
                         failures.append(Failure("daily-execution-cli", f"`{label}` must pass on the historical closeout sample"))
                     require_runtime_state_payload(
                         failures,
@@ -4317,6 +4486,191 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
     return failures
 
 
+def check_repo_interop_contracts(root: Path) -> list[Failure]:
+    example_target = root / "examples/new-project"
+    if not example_target.exists():
+        return []
+
+    failures: list[Failure] = []
+
+    def write_json(path: Path, payload: object) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    def install_interop(
+        target: Path,
+        *,
+        interop: dict[str, object] | None = None,
+    ) -> None:
+        companion_dir = target / ".loom" / "companion"
+        companion_dir.mkdir(parents=True, exist_ok=True)
+        (target / "host").mkdir(parents=True, exist_ok=True)
+        (target / "native").mkdir(parents=True, exist_ok=True)
+        (target / ".loom" / "shadow").mkdir(parents=True, exist_ok=True)
+        (target / "native" / "status").mkdir(parents=True, exist_ok=True)
+        for relative, payload in {
+            ".loom/shadow/admission-loom.json": {"result": "pass"},
+            ".loom/shadow/admission-repo.json": {"result": "pass"},
+            ".loom/shadow/review-loom.json": {"decision": "allow"},
+            ".loom/shadow/review-repo.json": {"decision": "allow"},
+            ".loom/shadow/merge-ready-loom.json": {"status": "pass"},
+            ".loom/shadow/merge-ready-repo.json": {"status": "pass"},
+            ".loom/shadow/closeout-loom.json": {"status": "done"},
+            ".loom/shadow/closeout-repo.json": {"status": "done"},
+            "host/guardian-review.json": {"verdict": "allow"},
+        }.items():
+            write_json(target / relative, payload)
+        if interop is not None:
+            write_json(companion_dir / "interop.json", interop)
+
+    valid_interop = {
+        "schema_version": "loom-repo-interop/v1",
+        "host_adapters": [
+            {
+                "id": "guardian-review",
+                "summary": "Read guardian review verdicts without reimplementing the host action.",
+                "surfaces": ["review", "merge_ready"],
+                "locator": "host/guardian-review.json",
+            }
+        ],
+        "repo_native_carriers": [
+            {
+                "id": "governance-status",
+                "summary": "Read repo-native governance status output without migrating carriers.",
+                "surfaces": ["admission", "review", "merge_ready", "closeout"],
+                "locator": "native/status",
+            }
+        ],
+        "shadow_surfaces": {
+            "admission": {
+                "summary": "Compare admission parity.",
+                "loom_locator": ".loom/shadow/admission-loom.json",
+                "repo_locator": ".loom/shadow/admission-repo.json",
+            },
+            "review": {
+                "summary": "Compare review parity.",
+                "loom_locator": ".loom/shadow/review-loom.json",
+                "repo_locator": ".loom/shadow/review-repo.json",
+            },
+            "merge_ready": {
+                "summary": "Compare merge-ready parity.",
+                "loom_locator": ".loom/shadow/merge-ready-loom.json",
+                "repo_locator": ".loom/shadow/merge-ready-repo.json",
+            },
+            "closeout": {
+                "summary": "Compare closeout parity.",
+                "loom_locator": ".loom/shadow/closeout-loom.json",
+                "repo_locator": ".loom/shadow/closeout-repo.json",
+            },
+        },
+    }
+
+    with tempfile.TemporaryDirectory(prefix="loom-check-repo-interop-") as tmp:
+        base = Path(tmp)
+
+        absent_target = base / "absent"
+        shutil.copytree(example_target, absent_target)
+        absent_surface = build_governance_surface(absent_target)
+        repo_interop = absent_surface.get("repo_interop")
+        require_repo_interop_payload(
+            failures,
+            category="repo-interop",
+            context="absent repo interop",
+            payload=repo_interop,
+        )
+        if not isinstance(repo_interop, dict) or repo_interop.get("availability") != "absent":
+            failures.append(Failure("repo-interop", "absent repo interop sample must report `availability: absent`"))
+
+        invalid_target = base / "invalid"
+        shutil.copytree(example_target, invalid_target)
+        install_interop(
+            invalid_target,
+            interop={
+                "schema_version": "loom-repo-interop/v1",
+                "host_adapters": [
+                    {
+                        "id": "bad-adapter",
+                        "summary": "Broken adapter",
+                        "surfaces": ["guardian"],
+                        "locator": "host/missing.json",
+                    }
+                ],
+                "repo_native_carriers": [],
+                "shadow_surfaces": {
+                    "admission": {
+                        "summary": "Compare admission parity.",
+                        "loom_locator": ".loom/shadow/admission-loom.json",
+                        "repo_locator": ".loom/shadow/admission-repo.json",
+                    }
+                },
+            },
+        )
+        invalid_surface = build_governance_surface(invalid_target)
+        invalid_interop = invalid_surface.get("repo_interop")
+        require_repo_interop_payload(
+            failures,
+            category="repo-interop",
+            context="invalid repo interop",
+            payload=invalid_interop,
+        )
+        if not isinstance(invalid_interop, dict) or invalid_interop.get("availability") != "incomplete":
+            failures.append(Failure("repo-interop", "invalid repo interop sample must report `availability: incomplete`"))
+
+        present_target = base / "present"
+        shutil.copytree(example_target, present_target)
+        install_interop(present_target, interop=valid_interop)
+        present_surface = build_governance_surface(present_target)
+        present_interop = present_surface.get("repo_interop")
+        require_repo_interop_payload(
+            failures,
+            category="repo-interop",
+            context="present repo interop",
+            payload=present_interop,
+        )
+        if not isinstance(present_interop, dict) or present_interop.get("availability") != "present":
+            failures.append(Failure("repo-interop", "present repo interop sample must report `availability: present`"))
+
+        parity_payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "shadow-parity", "--target", str(present_target)],
+        )
+        if error:
+            failures.append(Failure("repo-interop", f"`shadow-parity` sample failed: {error}"))
+        else:
+            require_shadow_parity_payload(
+                failures,
+                category="repo-interop",
+                context="`shadow-parity` present sample",
+                payload=parity_payload,
+                expected_reports=4,
+            )
+            if parity_payload.get("result") != "pass":
+                failures.append(Failure("repo-interop", "`shadow-parity` must pass when all declared surfaces match"))
+
+        mismatch_target = base / "mismatch"
+        shutil.copytree(present_target, mismatch_target)
+        write_json(mismatch_target / ".loom/shadow/review-repo.json", {"decision": "block"})
+        mismatch_payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "shadow-parity", "--target", str(mismatch_target), "--surface", "review"],
+        )
+        if error:
+            failures.append(Failure("repo-interop", f"`shadow-parity` mismatch sample failed: {error}"))
+        else:
+            require_shadow_parity_payload(
+                failures,
+                category="repo-interop",
+                context="`shadow-parity` mismatch sample",
+                payload=mismatch_payload,
+                expected_reports=1,
+            )
+            reports = mismatch_payload.get("reports")
+            if not isinstance(reports, list) or not reports or reports[0].get("result") != "mismatch":
+                failures.append(Failure("repo-interop", "`shadow-parity` mismatch sample must report `mismatch`"))
+
+    return failures
+
+
 def is_within(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
@@ -4350,12 +4704,13 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_deep_existing_repo_bootstrap(root))
     failures.extend(check_daily_execution_cli(root))
     failures.extend(check_repo_companion_interface_contracts(root))
+    failures.extend(check_repo_interop_contracts(root))
     failures.extend(check_markdown_links(root))
     return failures
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 14
+    categories_checked = 15
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")

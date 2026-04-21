@@ -94,6 +94,7 @@ ENGINE_FAILURE_REASONS = {
     "runtime_conflict",
     "repo_diff_detected",
 }
+SHADOW_PARITY_SURFACES = ("admission", "review", "merge_ready", "closeout")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -260,6 +261,20 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     reconciliation.add_argument("--comment", help="Optional closeout comment for issue sync")
     reconciliation.add_argument("--comment-file", help="Read closeout comment body from a file")
     reconciliation.add_argument("--dry-run", action="store_true", help="Preview reconciliation sync actions without writing GitHub state")
+
+    shadow = subparsers.add_parser("shadow-parity", help="Compare Loom and repo-native parity surfaces without changing merge gates")
+    shadow.add_argument("--target", required=True, help="Target repository root")
+    shadow.add_argument(
+        "--surface",
+        choices=(*SHADOW_PARITY_SURFACES, "all"),
+        default="all",
+        help="Shadow surface to compare; defaults to all supported surfaces",
+    )
+    shadow.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
 
     flow = subparsers.add_parser("flow", help="Run a bundled high-frequency Loom flow")
     flow.add_argument("operation", choices=("pre-review", "review", "resume", "handoff", "merge-ready"))
@@ -433,6 +448,185 @@ def repo_specific_requirements_payload(
         "summary": summary,
         "missing_inputs": missing_inputs,
         "fallback_to": fallback_to,
+    }
+
+
+def load_repo_interop_contract(repo_interop: object, *, target_root: Path) -> tuple[dict[str, Any] | None, list[str]]:
+    if not isinstance(repo_interop, dict):
+        return None, ["governance_surface.repo_interop"]
+    availability = repo_interop.get("availability")
+    if availability == "absent":
+        return None, ["repo interop contract is absent"]
+    if availability == "incomplete":
+        missing_inputs = repo_interop.get("missing_inputs")
+        return None, list(missing_inputs) if isinstance(missing_inputs, list) else ["repo interop contract is incomplete"]
+    if availability != "present":
+        return None, [f"unknown repo interop availability: {availability}"]
+
+    contract_locator = repo_interop.get("contract")
+    declared_locator = (
+        contract_locator.get("locator")
+        if isinstance(contract_locator, dict)
+        else ".loom/companion/interop.json"
+    )
+    interop_path = target_root / str(declared_locator)
+    try:
+        payload = load_json_file(interop_path)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None, [f"missing repo interop contract: {interop_path}"]
+    if not isinstance(payload, dict):
+        return None, [f"repo interop contract is unreadable: {interop_path}"]
+    return payload, []
+
+
+def normalized_shadow_value(path: Path) -> tuple[str | None, str | None]:
+    try:
+        if path.is_dir():
+            return None, f"shadow parity locator points to a directory: {path}"
+        raw_text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return None, f"cannot read shadow parity locator `{path}`: {exc.strerror or exc}"
+    if not raw_text.strip():
+        return None, f"shadow parity locator is empty: {path}"
+
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError:
+        payload = None
+
+    if isinstance(payload, dict):
+        for key in ("parity_value", "result", "decision", "status", "verdict", "value"):
+            value = payload.get(key)
+            if isinstance(value, (str, int, float, bool)) and str(value).strip():
+                return str(value).strip().lower(), None
+        return json.dumps(payload, ensure_ascii=False, sort_keys=True), None
+    if isinstance(payload, list):
+        return json.dumps(payload, ensure_ascii=False, sort_keys=True), None
+    if isinstance(payload, (str, int, float, bool)) and str(payload).strip():
+        return str(payload).strip().lower(), None
+
+    for line in raw_text.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            return stripped.lower(), None
+    return None, f"shadow parity locator does not expose a comparable value: {path}"
+
+
+def shadow_parity_report(
+    repo_interop: object,
+    *,
+    target_root: Path,
+    surface: str,
+) -> dict[str, Any]:
+    empty_report = {
+        "surface": surface,
+        "result": "unreadable",
+        "summary": "shadow parity could not be evaluated for this surface.",
+        "missing_inputs": [],
+        "host_adapters": [],
+        "repo_native_carriers": [],
+        "loom_surface": {
+            "status": "missing",
+            "locator": "unknown",
+            "normalized_value": None,
+        },
+        "repo_surface": {
+            "status": "missing",
+            "locator": "unknown",
+            "normalized_value": None,
+        },
+    }
+    interop_payload, interop_errors = load_repo_interop_contract(repo_interop, target_root=target_root)
+    if interop_errors:
+        return {
+            **empty_report,
+            "summary": "shadow parity is unavailable because the repo interop contract is missing or incomplete.",
+            "missing_inputs": interop_errors,
+        }
+    if not isinstance(interop_payload, dict):
+        return empty_report
+
+    host_adapters = interop_payload.get("host_adapters")
+    repo_native_carriers = interop_payload.get("repo_native_carriers")
+    shadow_surfaces = interop_payload.get("shadow_surfaces")
+    if not isinstance(host_adapters, list) or not isinstance(repo_native_carriers, list) or not isinstance(shadow_surfaces, dict):
+        return {
+            **empty_report,
+            "summary": "shadow parity is unavailable because the repo interop contract cannot be consumed safely.",
+            "missing_inputs": ["repo interop contract"],
+        }
+
+    relevant_host_adapters = [
+        entry for entry in host_adapters if isinstance(entry, dict) and surface in entry.get("surfaces", [])
+    ]
+    relevant_repo_native_carriers = [
+        entry for entry in repo_native_carriers if isinstance(entry, dict) and surface in entry.get("surfaces", [])
+    ]
+    declared_surface = shadow_surfaces.get(surface)
+    if not isinstance(declared_surface, dict):
+        return {
+            **empty_report,
+            "summary": "shadow parity is unavailable because this surface is not declared in the repo interop contract.",
+            "missing_inputs": [f"shadow surface missing: {surface}"],
+            "host_adapters": relevant_host_adapters,
+            "repo_native_carriers": relevant_repo_native_carriers,
+        }
+
+    loom_locator = declared_surface.get("loom_locator")
+    repo_locator = declared_surface.get("repo_locator")
+    loom_path = target_root / str(loom_locator)
+    repo_path = target_root / str(repo_locator)
+
+    loom_value, loom_error = normalized_shadow_value(loom_path)
+    repo_value, repo_error = normalized_shadow_value(repo_path)
+
+    missing_inputs: list[str] = []
+    if loom_error:
+        missing_inputs.append(loom_error)
+    if repo_error:
+        missing_inputs.append(repo_error)
+
+    loom_surface = {
+        "status": "readable" if loom_error is None else "missing",
+        "locator": str(loom_locator),
+        "normalized_value": loom_value,
+    }
+    repo_surface = {
+        "status": "readable" if repo_error is None else "missing",
+        "locator": str(repo_locator),
+        "normalized_value": repo_value,
+    }
+
+    if loom_error or repo_error or loom_value is None or repo_value is None:
+        return {
+            **empty_report,
+            "summary": "shadow parity is unreadable because one or both declared surfaces cannot be normalized.",
+            "missing_inputs": missing_inputs,
+            "host_adapters": relevant_host_adapters,
+            "repo_native_carriers": relevant_repo_native_carriers,
+            "loom_surface": loom_surface,
+            "repo_surface": repo_surface,
+        }
+    if loom_value == repo_value:
+        return {
+            "surface": surface,
+            "result": "match",
+            "summary": "Loom and repo-native surfaces report the same normalized result.",
+            "missing_inputs": [],
+            "host_adapters": relevant_host_adapters,
+            "repo_native_carriers": relevant_repo_native_carriers,
+            "loom_surface": loom_surface,
+            "repo_surface": repo_surface,
+        }
+    return {
+        "surface": surface,
+        "result": "mismatch",
+        "summary": "Loom and repo-native surfaces disagree on the normalized result.",
+        "missing_inputs": [],
+        "host_adapters": relevant_host_adapters,
+        "repo_native_carriers": relevant_repo_native_carriers,
+        "loom_surface": loom_surface,
+        "repo_surface": repo_surface,
     }
 
 
@@ -5105,6 +5299,60 @@ def handle_flow(args: argparse.Namespace) -> int:
     )
 
 
+def handle_shadow_parity(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    runtime_state = runtime_state_payload(target_root)
+    if runtime_state["result"] != "pass":
+        return emit(
+            runtime_state_block_payload(
+                command="shadow-parity",
+                runtime_state=runtime_state,
+                summary="shadow parity is blocked because the Loom runtime state is inconsistent.",
+            )
+        )
+
+    governance_surface = build_governance_surface(target_root)
+    repo_interop = governance_surface.get("repo_interop")
+    requested_surfaces = SHADOW_PARITY_SURFACES if args.surface == "all" else (args.surface,)
+    reports = [
+        shadow_parity_report(
+            repo_interop,
+            target_root=target_root,
+            surface=surface,
+        )
+        for surface in requested_surfaces
+    ]
+
+    result = "pass" if reports and all(report["result"] == "match" for report in reports) else "warn"
+    if result == "pass":
+        summary = "shadow parity matches across all requested surfaces."
+    else:
+        summaries = {report["result"] for report in reports}
+        if "mismatch" in summaries:
+            summary = "shadow parity found mismatches between Loom and repo-native governance surfaces."
+        else:
+            summary = "shadow parity could not fully read the declared governance surfaces."
+
+    missing_inputs: list[str] = []
+    for report in reports:
+        for message in report.get("missing_inputs", []):
+            if message not in missing_inputs:
+                missing_inputs.append(message)
+
+    return emit(
+        {
+            "command": "shadow-parity",
+            "result": result,
+            "summary": summary,
+            "missing_inputs": missing_inputs,
+            "fallback_to": None,
+            "runtime_state": runtime_state,
+            "governance_surface": governance_surface,
+            "reports": reports,
+        }
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     if args.command == "fact-chain":
@@ -5127,6 +5375,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_closeout(args)
     if args.command == "reconciliation":
         return handle_reconciliation(args)
+    if args.command == "shadow-parity":
+        return handle_shadow_parity(args)
     if args.command == "flow":
         return handle_flow(args)
     if args.command == "checkpoint":
