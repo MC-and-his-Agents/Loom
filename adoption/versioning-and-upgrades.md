@@ -188,6 +188,22 @@ Loom 继续使用 `major` / `minor` / `patch` 的发布判断，但在 `pre-1` �
 - 新增稳定 `repo companion migration` 合同、但不破坏既有入口语义，通常为 `minor`
 - 对已有路径做澄清或补证据通常为 `patch`
 
+对于成熟治理重仓接入树：
+
+- `deep-existing-repo`
+  - 若继续保持 `repository_mode = complex-existing`，并把新增能力限制为 adoption path / attach strategy，通常为 `minor`
+- `repo-interface v2`
+  - 若保持 `v1` 可读、CLI 顶层结果语义不变，通常为 `minor`
+- `host adapter` / repo-native interop / `shadow mode`
+  - 若保持只读消费，不接管宿主底层生命周期，也通常为 `minor`
+
+只有以下变化同时出现时，才应考虑升为 `major`：
+
+- `repository_mode` 枚举被改写
+- root contract 或必备工件被改写
+- 既有 CLI 顶层结果语义被破坏
+- `shadow mode` 被直接提升为新的默认 blocking merge gate
+
 ## 7. `v0.5.0` 的发布判断
 
 `v0.5.0` 本次按 `minor` 管理，原因是：

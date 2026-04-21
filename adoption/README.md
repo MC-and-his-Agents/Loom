@@ -18,6 +18,7 @@
 - 事项分流、checkpoint 与入口策略：[routing-and-checkpoints.md](./routing-and-checkpoints.md)
 - `repo companion` 主合同：[repo-companion-contract.md](./repo-companion-contract.md)
 - `repo companion` scoped adoption/workflow contract：[companion-oriented-workflow.md](./companion-oriented-workflow.md)
+- 成熟治理重仓接入树 workflow contract：[deep-existing-repo-workflow.md](./deep-existing-repo-workflow.md)
 - `repo companion` migration contract：[repo-companion-migration.md](./repo-companion-migration.md)
 - `repo companion` Syvert 参考接口样本：[reference-companion-spec-syvert.md](./reference-companion-spec-syvert.md)
 - `repo companion` WebEnvoy 参考接口样本：[reference-companion-spec-webenvoy.md](./reference-companion-spec-webenvoy.md)
