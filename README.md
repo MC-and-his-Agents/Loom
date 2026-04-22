@@ -14,6 +14,17 @@ Loom 是一个面向 Agent Coding 场景的治理、执行与收口仓库。
 - 团队缺少统一的 merge-ready 判断
 - 代码进主干后，这一轮工作仍然没有真正收口
 
+更适合的仓库类型：
+
+- 会持续多轮推进、需要恢复现场的开发仓库
+- 有 review、合并和收口要求的多人协作仓库
+- 希望让 Agent 在仓库内按稳定流程推进工作的项目
+
+不太适合的仓库类型：
+
+- 一次性脚本、临时实验或几十分钟内即可完成的小改动仓库
+- 没有持续执行需求，也没有明确 review 或 closeout 语义的轻量仓库
+
 Loom 面向的是 Agent 执行路径，不要求人类用户手工编排每一步功能入口。
 接入完成后，Agent 会根据当前项目状态和已发现的 SKILLS 理解后续可执行路径。
 
@@ -132,21 +143,6 @@ https://github.com/MC-and-his-Agents/Loom
 不要安装整套 Loom，也不要直接开始改业务代码。
 ```
 
-### `loom-retire`
-
-适合场景：
-
-- 当前执行现场需要干净退出
-- 你希望结束这一轮工作时不要留下悬空状态
-
-```text
-帮我把这个仓库里的 `loom-retire` skill 接入当前项目：
-https://github.com/MC-and-his-Agents/Loom
-
-请按当前 Agent 环境支持的方式，只接入 `loom-retire`，让它在当前项目中可被发现并正常使用。
-不要安装整套 Loom，也不要直接开始改业务代码。
-```
-
 ### `loom-merge-ready`
 
 适合场景：
@@ -159,6 +155,21 @@ https://github.com/MC-and-his-Agents/Loom
 https://github.com/MC-and-his-Agents/Loom
 
 请按当前 Agent 环境支持的方式，只接入 `loom-merge-ready`，让它在当前项目中可被发现并正常使用。
+不要安装整套 Loom，也不要直接开始改业务代码。
+```
+
+### `loom-retire`
+
+适合场景：
+
+- 当前执行现场需要干净退出
+- 你希望结束这一轮工作时不要留下悬空状态
+
+```text
+帮我把这个仓库里的 `loom-retire` skill 接入当前项目：
+https://github.com/MC-and-his-Agents/Loom
+
+请按当前 Agent 环境支持的方式，只接入 `loom-retire`，让它在当前项目中可被发现并正常使用。
 不要安装整套 Loom，也不要直接开始改业务代码。
 ```
 
