@@ -206,6 +206,22 @@ def write_json(path: Path, payload: object, force: bool) -> bool:
     return write_text(path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n", force=force)
 
 
+def ensure_gitignore_has_loom(target_root: Path) -> bool:
+    gitignore = target_root / ".gitignore"
+    desired_line = ".loom/"
+    if gitignore.exists():
+        current = gitignore.read_text(encoding="utf-8")
+        lines = current.splitlines()
+        if desired_line in lines:
+            return False
+        new_content = current if current.endswith("\n") or not current else current + "\n"
+        new_content += desired_line + "\n"
+    else:
+        new_content = desired_line + "\n"
+    gitignore.write_text(new_content, encoding="utf-8")
+    return True
+
+
 def file_exists(root: Path, relative_path: str) -> bool:
     return (root / relative_path).exists()
 
@@ -1323,6 +1339,10 @@ def scaffold_target(
         if write_text(root_agents, render_root_agents(), force=force):
             written += 1
             touched.append(str(root_agents.relative_to(target_root)))
+
+    if ensure_gitignore_has_loom(target_root):
+        written += 1
+        touched.append(".gitignore")
 
     return written, touched
 
