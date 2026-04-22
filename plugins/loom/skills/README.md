@@ -31,6 +31,26 @@ Loom 在 `skills` 层固定承认两类对象：
 - 单 skill package 不自动补齐 `loom-init`、其余 scenario skills 或完整 plugin 安装体验
 - 单 skill package 可以复用同一 `loom` CLI 语义，但不会因此升级成整包 Loom 的替身
 
+## 安装入口
+
+Loom 当前正式承认一条 npm / `npx` 安装入口：
+
+- `npx @mc-and-his-agents/loom-installer add plugin`
+- `npx @mc-and-his-agents/loom-installer add skill <skill-id>`
+
+这条入口负责安装、发现与验证，不替代 Python runtime。
+
+运行前提：
+
+- Node `>=20`
+- Python `>=3.10`，推荐 `3.11+`
+
+安装语义必须保持清晰：
+
+- `add plugin` 承诺完整 Loom 入口面
+- `add skill <skill-id>` 只承诺对应标准 skill
+- 安装成功不等于已经执行 Loom runtime，只代表安装 / 发现 / 验证链成立
+
 ## 用户会看到哪些入口
 
 Loom 当前稳定提供 1 个 root entry 和 7 个 scenario skills：

@@ -1,0 +1,64 @@
+name: node-installer-pr-gate
+
+on:
+  pull_request:
+    paths:
+      - 'packages/loom-installer/**'
+      - 'plugins/loom/**'
+      - 'packages/skills/**'
+      - 'README.md'
+      - 'skills/README.md'
+      - 'skills/distribution-and-adapter-contract.md'
+      - 'skills/shared/scripts/loom_check.py'
+      - 'plugins/loom/skills/README.md'
+      - 'plugins/loom/skills/distribution-and-adapter-contract.md'
+      - 'plugins/loom/skills/shared/scripts/loom_check.py'
+      - '.github/workflows/node-installer-pr.yml'
+      - '.github/workflows/node-installer-release.yml'
+      - '.github/workflows/loom-check.yml'
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        run: git fetch origin "${{ github.base_ref }}" --depth=1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install installer dependencies
+        run: npm ci --prefix packages/loom-installer
+
+      - name: Check version bump
+        run: node packages/loom-installer/scripts/check-version-bump.mjs --base "origin/${{ github.base_ref }}"
+
+      - name: Check doc sync
+        run: npm --prefix packages/loom-installer run check:docs
+
+      - name: Check payload drift
+        run: npm --prefix packages/loom-installer run check:payload
+
+      - name: Run installer tests
+        run: npm --prefix packages/loom-installer test
+
+      - name: Run installer pack smoke
+        working-directory: packages/loom-installer
+        run: npm pack --dry-run
+
+      - name: Run loom check
+        run: python3 skills/shared/scripts/loom_check.py

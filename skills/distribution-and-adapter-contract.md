@@ -30,6 +30,7 @@ Loom 当前把 `skills` 公开面分成三层：
   - `single-skill standard-skill package` 的命名对象、边界与最小运行切片
 - 宿主 / adapter 首层公开面
   - 本文
+  - `@mc-and-his-agents/loom-installer`
   - `registry.json`
   - `install-layout.json`
   - `upgrade-contract.json`
@@ -91,6 +92,7 @@ Loom 当前对 `skills` 的稳定公开接口分成三组。
 ### 宿主 / adapter 公开面
 
 - `bootstrap/root contract` 的最小职责
+- npm / `npx` installer surface
 - 安装合同
 - 发现合同
 - 运行态识别合同
@@ -232,7 +234,65 @@ Loom 在此层不规定包管理器、注册中心、目录布局或分发协议
 - 若当前不能继续运行，fail-closed 原因是什么
 - 当前宿主是否识别为可升级状态
 
-## 八、不应进入内核的宿主特定细节
+## 八、Node installer 接入面
+
+Loom 当前为宿主适配固定承认一个 Node installer：
+
+- npm package：`@mc-and-his-agents/loom-installer`
+- 稳定命令面：
+  - `npx @mc-and-his-agents/loom-installer add plugin`
+  - `npx @mc-and-his-agents/loom-installer add skill <skill-id>`
+
+Node installer 的职责边界：
+
+- 负责安装、发现与验证
+- 不替代 `skills/shared/scripts/*` 与各场景 skill 的 Python runtime
+- 不把单 skill 安装伪装成完整 Loom 安装
+- 对安装失败维持 fail-closed
+- main 分支是真相源
+- PR 只做门禁，不直接发布 npm
+- publish 成功后再创建同版本 git tag
+
+Node installer 当前打包的正式安装源：
+
+- plugin payload：`plugins/loom/**`
+- single-skill payload：`packages/skills/<skill-id>/**`
+
+Node installer 的最小 preflight 必须覆盖：
+
+- 目标目录存在且可写
+- package 内 payload 完整且校验不漂移
+- `python3 >= 3.10`，并对 `3.11+` 给出推荐
+- `add skill <skill-id>` 只能接受已登记 skill id
+- Claude plugin 安装必须确认 `claude` CLI 可用
+
+Node installer 的最小 verify 输出必须覆盖：
+
+- `mode`
+- `host`
+- `installed_paths`
+- `verification`
+- `warnings`
+- `fail_closed_reason`
+
+当前宿主映射固定如下：
+
+- Codex plugin
+  - repo-local `plugins/loom/**`
+  - `.agents/plugins/marketplace.json`
+- Codex single-skill
+  - `~/.codex/skills/<skill-id>/`
+  - `~/.codex/config.toml` `[[skills.config]]`
+- Claude plugin
+  - repo-local `.claude/marketplaces/loom-local/`
+  - `claude plugin marketplace add`
+  - `claude plugin install loom@loom-local`
+- Claude single-skill
+  - `<target>/.claude/skills/<skill-id>/`
+
+这些路径与命令属于 adapter surface，不反向提升为 Loom 内核规则。
+
+## 九、不应进入内核的宿主特定细节
 
 以下内容不得直接进入 Loom `skills/` 内核合同：
 
@@ -244,7 +304,7 @@ Loom 在此层不规定包管理器、注册中心、目录布局或分发协议
 
 这些内容可以存在于宿主适配器文档、宿主发行包或宿主实现中，但不应反向污染 Loom 的入口层合同。
 
-## 九、入口层最小验证面
+## 十、入口层最小验证面
 
 对 `skills` 分发与适配合同的验证，至少应覆盖：
 

@@ -1,0 +1,162 @@
+name: node-installer-release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/loom-installer/**'
+      - 'plugins/loom/**'
+      - 'packages/skills/**'
+      - 'README.md'
+      - 'skills/README.md'
+      - 'skills/distribution-and-adapter-contract.md'
+      - 'skills/shared/scripts/loom_check.py'
+      - 'plugins/loom/skills/README.md'
+      - 'plugins/loom/skills/distribution-and-adapter-contract.md'
+      - 'plugins/loom/skills/shared/scripts/loom_check.py'
+      - '.github/workflows/node-installer-release.yml'
+      - '.github/workflows/loom-check.yml'
+
+concurrency:
+  group: node-installer-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      PACKAGE_NAME: '@mc-and-his-agents/loom-installer'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install installer dependencies
+        run: npm ci --prefix packages/loom-installer
+
+      - name: Check doc sync
+        run: npm --prefix packages/loom-installer run check:docs
+
+      - name: Check payload drift
+        run: npm --prefix packages/loom-installer run check:payload
+
+      - name: Run installer tests
+        run: npm --prefix packages/loom-installer test
+
+      - name: Run installer pack smoke
+        working-directory: packages/loom-installer
+        run: npm pack --dry-run
+
+      - name: Run loom check
+        run: python3 skills/shared/scripts/loom_check.py
+
+      - name: Resolve release state
+        id: state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(node -e "console.log(JSON.parse(require('fs').readFileSync('packages/loom-installer/package.json', 'utf8')).version)")
+          TAG="v${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+          CHANGED_FILES=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}")
+          if printf '%s\n' "$CHANGED_FILES" | grep -E '^(packages/loom-installer/src/|packages/loom-installer/scripts/|packages/loom-installer/package.json|plugins/loom/|packages/skills/)' >/dev/null; then
+            echo "behavior_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "behavior_changed=false" >> "$GITHUB_OUTPUT"
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "create_release=false" >> "$GITHUB_OUTPUT"
+            echo "reason=no-behavior-change" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if npm view "${PACKAGE_NAME}@${VERSION}" version >/dev/null 2>&1; then
+            PUBLISHED=true
+          else
+            PUBLISHED=false
+          fi
+
+          TAG_EXISTS=false
+          TAG_MATCHES=false
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            TAG_EXISTS=true
+            TAG_SHA=$(git rev-list -n 1 "refs/tags/${TAG}")
+            if [ "$TAG_SHA" = "${{ github.sha }}" ]; then
+              TAG_MATCHES=true
+            fi
+          fi
+
+          RELEASE_EXISTS=false
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            RELEASE_EXISTS=true
+          fi
+
+          if [ "$PUBLISHED" = false ]; then
+            if [ "$TAG_EXISTS" = true ] || [ "$RELEASE_EXISTS" = true ]; then
+              echo "release state is inconsistent: unpublished npm version already has git tag or GitHub release" >&2
+              exit 1
+            fi
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "create_release=true" >> "$GITHUB_OUTPUT"
+            echo "reason=publish-required" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$TAG_EXISTS" != true ]; then
+            echo "release state is inconsistent: npm version ${VERSION} already exists but git tag ${TAG} is missing" >&2
+            exit 1
+          fi
+          if [ "$TAG_MATCHES" != true ]; then
+            echo "release state is inconsistent: git tag ${TAG} does not point to ${{ github.sha }}" >&2
+            exit 1
+          fi
+
+          echo "published=true" >> "$GITHUB_OUTPUT"
+          echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          if [ "$RELEASE_EXISTS" = true ]; then
+            echo "create_release=false" >> "$GITHUB_OUTPUT"
+            echo "reason=already-published-and-released" >> "$GITHUB_OUTPUT"
+          else
+            echo "create_release=true" >> "$GITHUB_OUTPUT"
+            echo "reason=release-missing" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish npm package
+        if: steps.state.outputs.should_publish == 'true'
+        working-directory: packages/loom-installer
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          LOOM_INSTALLER_BUILD_TIMESTAMP: ${{ github.event.head_commit.timestamp }}
+        run: npm publish --access public
+
+      - name: Create git tag
+        if: steps.state.outputs.should_publish == 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "${{ steps.state.outputs.tag }}" -m "Release ${{ steps.state.outputs.tag }}"
+          git push origin "${{ steps.state.outputs.tag }}"
+
+      - name: Create GitHub release
+        if: steps.state.outputs.create_release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ steps.state.outputs.tag }}" --title "${{ steps.state.outputs.tag }}" --generate-notes
