@@ -61,4 +61,4 @@ jobs:
         run: npm pack --dry-run
 
       - name: Run loom check
-        run: python3 skills/shared/scripts/loom_check.py
+        run: make loom-check
