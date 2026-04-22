@@ -22,7 +22,6 @@ from runtime_paths import repo_local_root
 
 TOP_LEVEL_DIRS = (
     "adoption",
-    "docs",
     "governance",
     "harness",
     "skills",
@@ -3309,6 +3308,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     [
                         "git",
                         "add",
+                        "-f",
                         ".loom/progress/INIT-0001.md",
                         ".loom/status/current.md",
                         ".loom/reviews/INIT-0001.json",
@@ -3489,7 +3489,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
 
                     git_add = run_command(
                         root,
-                        ["git", "add", ".loom/progress/INIT-0001.md", ".loom/status/current.md"],
+                        ["git", "add", "-f", ".loom/progress/INIT-0001.md", ".loom/status/current.md"],
                         cwd=review_fallback_target,
                     )
                     if git_add.returncode != 0:
