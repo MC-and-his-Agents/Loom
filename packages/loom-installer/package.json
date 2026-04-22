@@ -1,10 +1,10 @@
 {
   "name": "@mc-and-his-agents/loom-installer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Node installer for Loom plugin and single-skill installation surfaces.",
   "type": "module",
   "bin": {
-    "loom-installer": "dist/cli.js"
+    "loom-installer": "dist/src/cli.js"
   },
   "files": [
     "dist",
@@ -37,5 +37,10 @@
     "codex",
     "claude"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MC-and-his-Agents/Loom.git",
+    "directory": "packages/loom-installer"
+  }
 }

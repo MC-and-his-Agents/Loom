@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -76,6 +76,19 @@ test('payload manifest excludes python cache artifacts', () => {
   const manifest = JSON.parse(readFileSync(join(packageRoot(), 'payload', 'manifest.json'), 'utf8'));
   assert.equal(Array.isArray(manifest.files), true);
   assert.equal(manifest.files.some((entry: { path: string }) => entry.path.includes('__pycache__') || entry.path.endsWith('.pyc')), false);
+});
+
+test('package bin target matches the built CLI entrypoint', () => {
+  const packageJson = JSON.parse(readFileSync(join(packageRoot(), 'package.json'), 'utf8'));
+  const cliEntry = packageJson.bin?.['loom-installer'];
+  assert.equal(typeof cliEntry, 'string');
+  assert.equal(cliEntry, 'dist/src/cli.js');
+  assert.equal(existsSync(join(packageRoot(), cliEntry)), true);
+  assert.deepEqual(packageJson.repository, {
+    type: 'git',
+    url: 'https://github.com/MC-and-his-Agents/Loom.git',
+    directory: 'packages/loom-installer',
+  });
 });
 
 test('codex plugin install writes marketplace entry', () => {
