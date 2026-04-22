@@ -32,6 +32,37 @@ Loom 面向的是 Agent 执行路径，不要求人类用户手工编排每一�
 
 当接入流程在目标仓库写入 `.loom/` 产物时，会默认把 `.loom/` 追加到 `.gitignore`。
 
+### 用 `npx` 直接接入
+
+如果当前 Agent 环境允许直接执行本地安装命令，可以直接使用 Loom 的 Node installer：
+
+```bash
+npx @mc-and-his-agents/loom-installer add plugin --host codex
+npx @mc-and-his-agents/loom-installer add plugin --host claude
+npx @mc-and-his-agents/loom-installer add skill loom-init --host codex
+npx @mc-and-his-agents/loom-installer add skill loom-init --host claude
+```
+
+运行前提：
+
+- Node `>=20`
+- Python `>=3.10`，推荐 `3.11+`
+
+这条 `npx` 入口只负责安装、发现和验证。
+Loom 当前真实执行面仍然是仓库里的 Python runtime。
+
+### 用 `npm` 安装后再接入
+
+如果你希望先把 installer 固定到当前项目，也可以先安装再执行：
+
+```bash
+npm install -D @mc-and-his-agents/loom-installer
+npx loom-installer add plugin --host codex
+npx loom-installer add plugin --host claude
+npx loom-installer add skill loom-init --host codex
+npx loom-installer add skill loom-init --host claude
+```
+
 ### 完整接入 Loom Plugin
 
 适合场景：

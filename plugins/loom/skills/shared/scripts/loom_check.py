@@ -50,6 +50,8 @@ AREA_READMES = (
 CORE_DOCS = (
     ".github/PULL_REQUEST_TEMPLATE.md",
     ".github/workflows/loom-check.yml",
+    ".github/workflows/node-installer-pr.yml",
+    ".github/workflows/node-installer-release.yml",
     "governance/principles.md",
     "governance/review-model.md",
     "governance/maturity-and-closing.md",
@@ -99,6 +101,17 @@ CORE_DOCS = (
     "templates/review-record.md",
     "templates/scaffold/spec.md",
     "templates/scaffold/plan.md",
+    "packages/loom-installer/README.md",
+    "packages/loom-installer/package.json",
+    "packages/loom-installer/package-lock.json",
+    "packages/loom-installer/tsconfig.json",
+    "packages/loom-installer/scripts/build-payload.mjs",
+    "packages/loom-installer/scripts/check-doc-sync.mjs",
+    "packages/loom-installer/scripts/check-payload-drift.mjs",
+    "packages/loom-installer/scripts/check-version-bump.mjs",
+    "packages/loom-installer/src/cli.ts",
+    "packages/loom-installer/src/index.ts",
+    "packages/loom-installer/test/installer.test.ts",
     "tools/loom_init.py",
     "tools/loom_flow.py",
 )
@@ -4612,6 +4625,33 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
     return failures
 
 
+def check_node_installer(root: Path) -> list[Failure]:
+    category = "node-installer"
+    failures: list[Failure] = []
+    package_root = root / "packages/loom-installer"
+    if not package_root.exists():
+        return [Failure(category, "missing `packages/loom-installer`")]
+    npm_bin = shutil.which("npm")
+    if not npm_bin:
+        return [Failure(category, "`npm` is required to validate the Node installer")]
+
+    commands = (
+        ["npm", "ci"],
+        ["npm", "test"],
+        ["npm", "pack", "--dry-run"],
+    )
+    for args in commands:
+        try:
+            result = run_command(root, args, cwd=package_root, timeout_seconds=300)
+        except subprocess.TimeoutExpired:
+            failures.append(Failure(category, f"`{' '.join(args)}` timed out"))
+            continue
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip() or "command failed without output"
+            failures.append(Failure(category, f"`{' '.join(args)}` failed: {detail}"))
+    return failures
+
+
 def is_within(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
@@ -4646,12 +4686,13 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_daily_execution_cli(root))
     failures.extend(check_repo_companion_interface_contracts(root))
     failures.extend(check_repo_interop_contracts(root))
+    failures.extend(check_node_installer(root))
     failures.extend(check_markdown_links(root))
     return failures
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 15
+    categories_checked = 16
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")
