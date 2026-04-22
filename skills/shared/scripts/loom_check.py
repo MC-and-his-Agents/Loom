@@ -22,7 +22,6 @@ from runtime_paths import repo_local_root
 
 TOP_LEVEL_DIRS = (
     "adoption",
-    "docs",
     "governance",
     "harness",
     "skills",
