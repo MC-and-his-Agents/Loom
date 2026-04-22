@@ -44,30 +44,11 @@
   - 入口消费：`skills/loom-init/SKILL.md`
 - `loom-init` 输出合同
   - 稳定落点：`skills/loom-init/references/output-contract.md`
-- 场景 skill 验证记录
-  - 稳定落点：`adoption/validation-skill-loom-adopt.md`; `adoption/validation-skill-loom-resume.md`; `adoption/validation-skill-loom-pre-review.md`; `adoption/validation-skill-loom-handoff.md`; `adoption/validation-skill-loom-retire.md`; `adoption/validation-skill-loom-merge-ready.md`
-- 真实 adoption 验证记录合同
-  - 稳定落点：`adoption/validation-record-contract.md`
-- 经验回流机制
-  - 稳定落点：`adoption/experience-feedback-loop.md`
-- 版本化与升级路径
-  - 稳定落点：`adoption/versioning-and-upgrades.md`
 - `repo interop` 主合同
   - 稳定落点：`adoption/repo-interop-contract.md`
-- 上游交付面
-  - 稳定落点：`adoption/upstream-delivery-surface.md`
-- 执行入口兼容与操作流
-  - 稳定落点：`adoption/execution-entry-compatibility.md`
 - `skills` 分发与适配合同
   - 稳定落点：`skills/distribution-and-adapter-contract.md`
   - 入口消费：`skills/README.md`
-- 完整执行内核复验（新项目 / 既有仓库）
-  - 稳定落点：`adoption/validation-complete-kernel-new-project.md`; `adoption/validation-complete-kernel-existing-repos.md`
-- 第一批执行化补充验证与 retrofit closeout 依据
-  - 稳定落点：`adoption/validation-main-path-new-project.md`; `adoption/validation-existing-repo-execution-sync.md`; `adoption/validation-retrofit-143-tree.md`
-- 成熟治理重仓接入验证与收口依据
-  - 稳定落点：`adoption/validation-deep-existing-repo-syvert-webenvoy.md`
-
 补充约束：
 
 - `repo companion` contract 的唯一主落点固定为 `adoption/repo-companion-contract.md`
@@ -96,14 +77,14 @@
 | EXT-0017 | `adapt` | `templates/spec-suite.md` | `candidate` | 正式套件与进度工件分离 |
 | EXT-0018 | `keep` | `governance/review-model.md` | `core` | 审查基线应最小化 |
 | EXT-0019 | `adapt` | `adoption/routing-and-checkpoints.md` | `candidate` | 分流思想保留，但不先固化分层 |
-| EXT-0020 | `needs_validation` | `adoption/candidate-patterns.md` | `parking` | Spike / 标准 / 高风险分层 |
+| EXT-0020 | `needs_validation` | `archive-only` | `parking` | Spike / 标准 / 高风险分层 |
 | EXT-0021 | `keep` | `adoption/rationale.md` | `core` | 实现前 checkpoint 需工程化 |
 | EXT-0022 | `keep` | `adoption/routing-and-checkpoints.md`; `harness/checkpoint-model.md`; `harness/execution-chain.md`; `harness/merge-checkpoint.md` | `core` | 三类 checkpoint 的治理语义与执行侧承接已收成稳定合同 |
 | EXT-0023 | `keep` | `governance/principles.md` | `core` | 载体职责分离 |
 | EXT-0024 | `keep` | `adoption/routing-and-checkpoints.md` | `core` | 中等事项设计说明通道 |
 | EXT-0025 | `keep` | `harness/workspace-model.md`; `harness/workspace-lifecycle.md` | `core` | 单现场单事项与可定位生命周期入口 |
 | EXT-0026 | `keep` | `governance/maturity-and-closing.md` | `core` | 关闭语义与成熟度绑定 |
-| EXT-0027 | `adapt` | `adoption/candidate-patterns.md` | `candidate` | Spike 证据分层方法论 |
+| EXT-0027 | `adapt` | `archive-only` | `candidate` | Spike 证据分层方法论 |
 | EXT-0028 | `adapt` | `templates/pull-request.md` | `candidate` | 结构化 PR 模板按条件展开 |
 | EXT-0029 | `keep` | `harness/workspace-and-purity.md`; `harness/workspace-lifecycle.md` | `core` | 纯度预检、cleanup/retire 与范围前置 |
 | EXT-0030 | `keep` | `adoption/rationale.md` | `core` | merge 前 review 过载的结构性根因 |
@@ -111,7 +92,7 @@
 | EXT-0032 | `keep` | `adoption/repo-companion-contract.md` | `core` | 既有根规则仓库优先以 `repo companion` 接入；历史 `companion docs` 仅保留作迁移表述，并由 `loom-init` 消费该主合同 |
 | EXT-0033 | `keep` | `harness/recovery-model.md`; `skills/loom-init/SKILL.md`; `skills/loom-init/references/output-contract.md` | `core` | 低复杂度仓库允许 checkpoint-lite，并由入口层明确承接方式 |
 | EXT-0034 | `keep` | `governance-design.md` | `core` | 短入口文档、深知识库与可机械校验的知识结构 |
-| EXT-0035 | `keep` | `harness/status-surface.md`; `skills/loom-init/references/output-contract.md`; `adoption/validation-runtime-evidence-hotcp.md` | `core` | 运行时可见性、日志指标 trace 与 agent 可验证性 |
+| EXT-0035 | `keep` | `harness/status-surface.md`; `skills/loom-init/references/output-contract.md` | `core` | 运行时可见性、日志指标 trace 与 agent 可验证性 |
 | EXT-0036 | `keep` | `harness/automation-frontload.md`; `tools/loom_check.py` | `core` | 知识库、模板与执行支撑的机械化校验能力 |
 | EXT-0037 | `keep` | `harness/work-item-contract.md`; `harness/workspace-model.md`; `harness/execution-chain.md`; `harness-design.md`; `skills/loom-init/references/output-contract.md` | `core` | initializer 产物、初始 progress 与 clean state |
 | EXT-0038 | `keep` | `harness/fact-chain-contract.md`; `harness/execution-context.md`; `harness/work-item-contract.md`; `harness/recovery-model.md`; `harness/execution-chain.md`; `skills/loom-init/references/output-contract.md` | `core` | 每轮读取与回写、单单元增量推进 |
@@ -119,14 +100,14 @@
 | EXT-0040 | `adapt` | `skills/distribution-and-adapter-contract.md` | `candidate` | 薄 `bootstrap/root contract` 与深知识引用关系 |
 | EXT-0041 | `adapt` | `harness/automation-frontload.md`; `skills/distribution-and-adapter-contract.md` | `candidate` | 入口层触发与行为回归测试 |
 | EXT-0042 | `keep` | `skills/distribution-and-adapter-contract.md` | `core` | 宿主特定细节收敛在 adapter 层 |
-| EXT-0043 | `needs_validation` | `adoption/candidate-patterns.md` | `parking` | `#180` 已补 Loom 自身 retrofit 证据，但父事项 / 子事项关系仍缺第二宿主或第二仓库样本，继续停在待验证区 |
+| EXT-0043 | `needs_validation` | `archive-only` | `parking` | `#180` 已补 Loom 自身 retrofit 证据，但父事项 / 子事项关系仍缺第二宿主或第二仓库样本，继续停在待验证区 |
 | EXT-0044 | `adapt` | `skills/loom-init/SKILL.md`; `skills/loom-init/references/intake-signals.md` | `candidate` | `#168` 已把空仓新项目主路径写成正式验证记录，证明“先建立最小入口与升级边界”可被真实样本消费，但仍未形成第二新项目样本 |
 | EXT-0045 | `keep` | `adoption/lightweight-retrofit-default.md`; `skills/loom-init/references/intake-signals.md`; `skills/loom-init/SKILL.md` | `core` | `#170` 已补既有仓库执行 / 回写 / sync repo companion 验证，继续支撑“轻量 retrofit 需要仓库级验证入口”的稳定边界 |
 | EXT-0046 | `adapt` | `skills/loom-init/references/intake-signals.md`; `harness/recovery-model.md`; `harness/status-surface.md` | `candidate` | 复杂既有仓库应从第一轮 adoption 起进入更完整装配 |
 | EXT-0047 | `adapt` | `skills/loom-init/references/intake-signals.md`; `harness/recovery-model.md`; `harness/status-surface.md` | `candidate` | 现行规则入口与历史入口并存本身是恢复与状态升级信号 |
-| EXT-0048 | `keep` | `adoption/deep-existing-repo-default.md`; `adoption/deep-existing-repo-workflow.md`; `skills/loom-init/references/intake-signals.md`; `skills/loom-init/references/output-contract.md` | `core` | 成熟治理重仓在 `complex-existing` 下应优先走 attach-only 的 `deep-existing-repo`，而不是新增第四种 `repository_mode` |
-| EXT-0049 | `keep` | `adoption/repo-companion-contract.md`; `adoption/validation-repo-companion-interface.md` | `core` | typed `specialized_gates` 与 locator-first `context_schema` 已成为稳定 companion 合同 |
+| EXT-0048 | `keep` | `adoption/deep-existing-repo-default.md`; `skills/loom-init/references/intake-signals.md`; `skills/loom-init/references/output-contract.md` | `core` | 成熟治理重仓在 `complex-existing` 下应优先走 attach-only 的 `deep-existing-repo`，而不是新增第四种 `repository_mode` |
+| EXT-0049 | `keep` | `adoption/repo-companion-contract.md` | `core` | typed `specialized_gates` 与 locator-first `context_schema` 已成为稳定 companion 合同 |
 | EXT-0050 | `adapt` | `adoption/repo-companion-contract.md` | `candidate` | `metadata_contract` 已进入 `repo-interface v2` 作为可选扩展，但字段 taxonomy 仍待第二个独立样本继续抽象 |
 | EXT-0051 | `keep` | `adoption/repo-interop-contract.md`; `harness/host-action-contract.md` | `core` | retained host action result 与 repo-native carriers 需要通过独立 `interop.json` 被 Loom 只读消费，而不是回塞到 `repo-interface.json` 或接管宿主实现 |
-| EXT-0052 | `keep` | `adoption/repo-interop-contract.md`; `adoption/validation-deep-existing-repo-syvert-webenvoy.md` | `core` | `shadow parity` 作为 `admission/review/merge_ready/closeout` 的 validation-only compare surface 已进入稳定合同 |
-| EXT-0053 | `needs_validation` | `adoption/candidate-patterns.md` | `parking` | parity mismatch 是否应自动升级为 blocking merge gate 仍缺 live adopted repo 证据，继续停在待验证区 |
+| EXT-0052 | `keep` | `adoption/repo-interop-contract.md` | `core` | `shadow parity` 作为 `admission/review/merge_ready/closeout` 的 validation-only compare surface 已进入稳定合同 |
+| EXT-0053 | `needs_validation` | `archive-only` | `parking` | parity mismatch 是否应自动升级为 blocking merge gate 仍缺 live adopted repo 证据，继续停在待验证区 |

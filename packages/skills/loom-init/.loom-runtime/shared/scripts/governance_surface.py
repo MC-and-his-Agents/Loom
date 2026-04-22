@@ -39,10 +39,34 @@ PLANNED_LOCATORS = {
 REPO_INTERFACE_SURFACES = ("review", "merge_ready", "closeout")
 REPO_INTERFACE_AVAILABILITY = {"absent", "companion_docs_only", "incomplete", "present"}
 REPO_INTERFACE_MANIFEST_SCHEMA = "loom-repo-companion-manifest/v1"
-REPO_INTERFACE_SCHEMA = "loom-repo-interface/v1"
+REPO_INTERFACE_V1_SCHEMA = "loom-repo-interface/v1"
+REPO_INTERFACE_V2_SCHEMA = "loom-repo-interface/v2"
+REPO_INTERFACE_SCHEMAS = {REPO_INTERFACE_V1_SCHEMA, REPO_INTERFACE_V2_SCHEMA}
 REPO_INTERFACE_ENFORCEMENT = {"blocking", "advisory"}
+REPO_INTERFACE_GATE_TYPES = {
+    "admission",
+    "pre_review",
+    "review",
+    "build",
+    "merge_ready",
+    "closeout",
+}
+REPO_INTERFACE_CONTEXT_TYPES = {"string", "integer", "number", "boolean"}
 REPO_INTERFACE_MANIFEST_KEYS = {"schema_version", "companion_entry", "repo_interface"}
-REPO_INTERFACE_KEYS = {"schema_version", "companion_entry", "repo_specific_requirements", "specialized_gates"}
+REPO_INTERFACE_V1_KEYS = {"schema_version", "companion_entry", "repo_specific_requirements", "specialized_gates"}
+REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {"metadata_contract", "context_schema"}
+REPO_INTEROP_AVAILABILITY = {"absent", "incomplete", "present"}
+REPO_INTEROP_SCHEMA = "loom-repo-interop/v1"
+REPO_INTEROP_KEYS = {"schema_version", "host_adapters", "repo_native_carriers", "shadow_surfaces"}
+REPO_INTEROP_COLLECTION_SURFACES = {
+    "admission",
+    "pre_review",
+    "review",
+    "build",
+    "merge_ready",
+    "closeout",
+}
+REPO_INTEROP_SHADOW_SURFACES = ("admission", "review", "merge_ready", "closeout")
 
 
 def run_process(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -275,6 +299,134 @@ def validate_specialized_gate(
         missing_inputs.append(f"{prefix} locator must be a non-empty string")
     elif not target.exists():
         missing_inputs.append(f"{prefix} locator points to missing path `{locator}`")
+    gate_type = entry.get("gate_type")
+    if gate_type is not None and gate_type not in REPO_INTERFACE_GATE_TYPES:
+        missing_inputs.append(
+            f"{prefix} gate_type must be one of `admission`, `pre_review`, `review`, `build`, `merge_ready`, `closeout`"
+        )
+    return missing_inputs
+
+
+def validate_metadata_contract(
+    *,
+    root: Path,
+    entry: object,
+) -> list[str]:
+    prefix = "metadata_contract"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"]
+    fields = entry.get("fields")
+    if not isinstance(fields, list):
+        return [f"{prefix} must include `fields` as a list"]
+    missing_inputs: list[str] = []
+    for index, field in enumerate(fields):
+        field_prefix = f"{prefix}.fields[{index}]"
+        if not isinstance(field, dict):
+            missing_inputs.append(f"{field_prefix} must be an object")
+            continue
+        for required in ("id", "summary", "applicability_locator", "authority_locator", "enforcement"):
+            value = field.get(required)
+            if required == "enforcement":
+                continue
+            if not isinstance(value, str) or not value.strip():
+                missing_inputs.append(f"{field_prefix} missing `{required}`")
+        enforcement = field.get("enforcement")
+        if enforcement not in REPO_INTERFACE_ENFORCEMENT:
+            missing_inputs.append(f"{field_prefix} enforcement must be `blocking` or `advisory`")
+        for locator_field in ("applicability_locator", "authority_locator"):
+            locator, target = resolve_locator(root, field.get(locator_field))
+            if locator is None or target is None:
+                missing_inputs.append(f"{field_prefix} `{locator_field}` must be a non-empty string")
+            elif not target.exists():
+                missing_inputs.append(f"{field_prefix} `{locator_field}` points to missing path `{locator}`")
+    return missing_inputs
+
+
+def validate_context_schema(
+    *,
+    root: Path,
+    entry: object,
+) -> list[str]:
+    prefix = "context_schema"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"]
+    fields = entry.get("fields")
+    if not isinstance(fields, list):
+        return [f"{prefix} must include `fields` as a list"]
+    missing_inputs: list[str] = []
+    for index, field in enumerate(fields):
+        field_prefix = f"{prefix}.fields[{index}]"
+        if not isinstance(field, dict):
+            missing_inputs.append(f"{field_prefix} must be an object")
+            continue
+        for required in ("id", "summary", "type", "mapping_rule_locator"):
+            value = field.get(required)
+            if not isinstance(value, str) or not value.strip():
+                missing_inputs.append(f"{field_prefix} missing `{required}`")
+        field_type = field.get("type")
+        if field_type not in REPO_INTERFACE_CONTEXT_TYPES:
+            missing_inputs.append(f"{field_prefix} type must be one of `string`, `integer`, `number`, `boolean`")
+        if not isinstance(field.get("required"), bool):
+            missing_inputs.append(f"{field_prefix} `required` must be a boolean")
+        locator, target = resolve_locator(root, field.get("mapping_rule_locator"))
+        if locator is None or target is None:
+            missing_inputs.append(f"{field_prefix} `mapping_rule_locator` must be a non-empty string")
+        elif not target.exists():
+            missing_inputs.append(f"{field_prefix} `mapping_rule_locator` points to missing path `{locator}`")
+    return missing_inputs
+
+
+def validate_repo_interop_collection_entry(
+    *,
+    root: Path,
+    collection: str,
+    entry: object,
+    index: int,
+) -> list[str]:
+    prefix = f"{collection}[{index}]"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"]
+    missing_inputs: list[str] = []
+    for field in ("id", "summary", "locator"):
+        value = entry.get(field)
+        if not isinstance(value, str) or not value.strip():
+            missing_inputs.append(f"{prefix} missing `{field}`")
+    surfaces = entry.get("surfaces")
+    if not isinstance(surfaces, list) or not surfaces:
+        missing_inputs.append(f"{prefix} must include `surfaces` as a non-empty list")
+    else:
+        for surface_index, surface in enumerate(surfaces):
+            if surface not in REPO_INTEROP_COLLECTION_SURFACES:
+                missing_inputs.append(
+                    f"{prefix}.surfaces[{surface_index}] must be one of `admission`, `pre_review`, `review`, `build`, `merge_ready`, `closeout`"
+                )
+    locator, target = resolve_locator(root, entry.get("locator"))
+    if locator is None or target is None:
+        missing_inputs.append(f"{prefix} locator must be a non-empty string")
+    elif not target.exists():
+        missing_inputs.append(f"{prefix} locator points to missing path `{locator}`")
+    return missing_inputs
+
+
+def validate_shadow_surface(
+    *,
+    root: Path,
+    surface: str,
+    entry: object,
+) -> list[str]:
+    prefix = f"shadow_surfaces.{surface}"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"]
+    missing_inputs: list[str] = []
+    summary = entry.get("summary")
+    if not isinstance(summary, str) or not summary.strip():
+        missing_inputs.append(f"{prefix} missing `summary`")
+    for locator_field in ("loom_locator", "repo_locator"):
+        locator, target = resolve_locator(root, entry.get(locator_field))
+        if locator is None or target is None:
+            missing_inputs.append(f"{prefix} `{locator_field}` must be a non-empty string")
+        elif not target.exists():
+            missing_inputs.append(f"{prefix} `{locator_field}` points to missing path `{locator}`")
     return missing_inputs
 
 
@@ -354,9 +506,15 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
         if interface_payload is None:
             missing_inputs.append("repo companion interface is unreadable")
         else:
-            if interface_payload.get("schema_version") != REPO_INTERFACE_SCHEMA:
-                missing_inputs.append(f"repo companion interface schema must be `{REPO_INTERFACE_SCHEMA}`")
-            extra_interface_keys = sorted(set(interface_payload.keys()) - REPO_INTERFACE_KEYS)
+            interface_schema = interface_payload.get("schema_version")
+            if interface_schema not in REPO_INTERFACE_SCHEMAS:
+                missing_inputs.append(
+                    "repo companion interface schema must be `loom-repo-interface/v1` or `loom-repo-interface/v2`"
+                )
+            allowed_interface_keys = (
+                REPO_INTERFACE_V2_KEYS if interface_schema == REPO_INTERFACE_V2_SCHEMA else REPO_INTERFACE_V1_KEYS
+            )
+            extra_interface_keys = sorted(set(interface_payload.keys()) - allowed_interface_keys)
             if extra_interface_keys:
                 missing_inputs.append(
                     "repo companion interface contains unexpected top-level fields: "
@@ -406,6 +564,24 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
                         )
                     )
 
+            if interface_schema == REPO_INTERFACE_V2_SCHEMA:
+                metadata_contract = interface_payload.get("metadata_contract")
+                if metadata_contract is not None:
+                    missing_inputs.extend(
+                        validate_metadata_contract(
+                            root=root,
+                            entry=metadata_contract,
+                        )
+                    )
+                context_schema = interface_payload.get("context_schema")
+                if context_schema is not None:
+                    missing_inputs.extend(
+                        validate_context_schema(
+                            root=root,
+                            entry=context_schema,
+                        )
+                    )
+
     if missing_inputs:
         repo_interface_surface["availability"] = "incomplete"
         repo_interface_surface["summary"] = (
@@ -418,6 +594,107 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
         )
     repo_interface_surface["missing_inputs"] = list(dict.fromkeys(missing_inputs))
     return repo_interface_surface, list(dict.fromkeys(missing_inputs))
+
+
+def detect_repo_interop(root: Path) -> tuple[dict[str, Any], list[str]]:
+    interop_path = root / ".loom" / "companion" / "interop.json"
+    repo_interop_surface: dict[str, Any] = {
+        "availability": "absent",
+        "contract": carrier_entry("missing", ".loom/companion/interop.json", "repository scan"),
+        "host_adapters": carrier_entry("missing", "unknown", "repo interop contract"),
+        "repo_native_carriers": carrier_entry("missing", "unknown", "repo interop contract"),
+        "shadow_surfaces": carrier_entry("missing", "unknown", "repo interop contract"),
+        "summary": "no repo interop contract is declared for this repository.",
+        "missing_inputs": [],
+    }
+    missing_inputs: list[str] = []
+
+    if not interop_path.exists():
+        return repo_interop_surface, missing_inputs
+
+    repo_interop_surface["contract"] = carrier_entry(
+        "present",
+        ".loom/companion/interop.json",
+        "repository scan",
+    )
+    interop_payload = safe_read_json(interop_path)
+    if interop_payload is None:
+        missing_inputs.append("repo interop contract is unreadable")
+    else:
+        if interop_payload.get("schema_version") != REPO_INTEROP_SCHEMA:
+            missing_inputs.append(f"repo interop contract schema must be `{REPO_INTEROP_SCHEMA}`")
+        extra_keys = sorted(set(interop_payload.keys()) - REPO_INTEROP_KEYS)
+        if extra_keys:
+            missing_inputs.append(
+                "repo interop contract contains unexpected top-level fields: "
+                + ", ".join(extra_keys)
+            )
+
+        for key in ("host_adapters", "repo_native_carriers", "shadow_surfaces"):
+            repo_interop_surface[key] = carrier_entry(
+                "present",
+                ".loom/companion/interop.json",
+                "repo interop contract",
+            )
+
+        host_adapters = interop_payload.get("host_adapters")
+        if not isinstance(host_adapters, list):
+            missing_inputs.append("repo interop contract must include `host_adapters` as a list")
+        else:
+            for index, entry in enumerate(host_adapters):
+                missing_inputs.extend(
+                    validate_repo_interop_collection_entry(
+                        root=root,
+                        collection="host_adapters",
+                        entry=entry,
+                        index=index,
+                    )
+                )
+
+        repo_native_carriers = interop_payload.get("repo_native_carriers")
+        if not isinstance(repo_native_carriers, list):
+            missing_inputs.append("repo interop contract must include `repo_native_carriers` as a list")
+        else:
+            for index, entry in enumerate(repo_native_carriers):
+                missing_inputs.extend(
+                    validate_repo_interop_collection_entry(
+                        root=root,
+                        collection="repo_native_carriers",
+                        entry=entry,
+                        index=index,
+                    )
+                )
+
+        shadow_surfaces = interop_payload.get("shadow_surfaces")
+        if not isinstance(shadow_surfaces, dict):
+            missing_inputs.append("repo interop contract must include `shadow_surfaces` as an object")
+        else:
+            extra_shadow_surfaces = sorted(set(shadow_surfaces.keys()) - set(REPO_INTEROP_SHADOW_SURFACES))
+            if extra_shadow_surfaces:
+                missing_inputs.append(
+                    "repo interop contract shadow_surfaces contains unexpected surfaces: "
+                    + ", ".join(extra_shadow_surfaces)
+                )
+            for surface in REPO_INTEROP_SHADOW_SURFACES:
+                if surface not in shadow_surfaces:
+                    missing_inputs.append(f"repo interop contract shadow_surfaces missing `{surface}`")
+                    continue
+                missing_inputs.extend(
+                    validate_shadow_surface(
+                        root=root,
+                        surface=surface,
+                        entry=shadow_surfaces.get(surface),
+                    )
+                )
+
+    if missing_inputs:
+        repo_interop_surface["availability"] = "incomplete"
+        repo_interop_surface["summary"] = "repo interop contract exists, but the machine-readable read surface is incomplete."
+    else:
+        repo_interop_surface["availability"] = "present"
+        repo_interop_surface["summary"] = "repo interop contract is readable for host adapters, repo-native carriers, and shadow parity."
+    repo_interop_surface["missing_inputs"] = list(dict.fromkeys(missing_inputs))
+    return repo_interop_surface, list(dict.fromkeys(missing_inputs))
 
 
 def first_match(directory: Path, suffix: str, root: Path) -> str:
@@ -564,6 +841,7 @@ def build_governance_surface(
     validation_entry = detect_validation_entry(loom_state, bootstrap_mode=bootstrap_mode)
     review_merge_surface = detect_review_merge_surface(root, loom_state, bootstrap_mode=bootstrap_mode)
     repo_interface, repo_interface_missing = detect_repo_interface(root)
+    repo_interop, repo_interop_missing = detect_repo_interop(root)
 
     missing_inputs: list[str] = []
     if bootstrap_mode and repository_mode == "new":
@@ -576,6 +854,8 @@ def build_governance_surface(
         missing_inputs.extend(github_missing)
         if repo_interface["availability"] == "incomplete":
             missing_inputs.extend(repo_interface_missing)
+        if repo_interop["availability"] == "incomplete":
+            missing_inputs.extend(repo_interop_missing)
         control_plane_ready = github_control_plane["default_branch"] != "unknown"
         carrier_ready = bool(present_carriers)
         summary = (
@@ -593,6 +873,7 @@ def build_governance_surface(
         "review_merge_surface": review_merge_surface,
         "github_control_plane": github_control_plane,
         "repo_interface": repo_interface,
+        "repo_interop": repo_interop,
         "summary": summary,
         "missing_inputs": list(dict.fromkeys(missing_inputs)),
     }

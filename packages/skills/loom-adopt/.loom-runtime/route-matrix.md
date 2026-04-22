@@ -15,7 +15,7 @@
 | 初始化 / retrofit | 初始化、新项目接入、既有仓库 retrofit、引入 Loom | `loom-adopt` | `loom-init/scripts/loom-init.py bootstrap\|verify\|fact-chain` |
 | 恢复执行 | 接手当前事项、恢复上下文、问下一步、继续推进 | `loom-resume` | `loom-resume/scripts/loom-resume.py flow resume` |
 | review 前统一检查 | review 前检查、进入 review、确认是否可 review | `loom-pre-review` | `loom-pre-review/scripts/loom-pre-review.py flow pre-review` |
-| 正式 review | 正式 review、语义审查、输出 review 结论、code review、spec review | `loom-review` | `loom-review/scripts/loom-review.py flow review` + `loom-review/scripts/loom-review.py review record` |
+| 正式 review | 正式 review、语义审查、输出 review 结论、code review、spec review | `loom-review` | `loom-review/scripts/loom-review.py flow review` + `shared/scripts/loom_flow.py review run` + `loom-review/scripts/loom-review.py review record` |
 | 交接 | 交接、回写停点、移交当前事项 | `loom-handoff` | `loom-handoff/scripts/loom-handoff.py flow handoff` |
 | 清理 / retire | 清理现场、退休现场、结束当前事项现场 | `loom-retire` | `loom-retire/scripts/loom-retire.py workspace cleanup\|retire` |
 | merge 前放行 | merge-ready、最终放行前预检、确认是否可合并 | `loom-merge-ready` | `loom-merge-ready/scripts/loom-merge-ready.py flow merge-ready` |

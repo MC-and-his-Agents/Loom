@@ -104,8 +104,6 @@ repo-local `loom CLI` 仍保留，但它是次级入口，主要用于自动化�
 
 如果你需要看安装、升级和平台适配的正式说明，读 [skills/distribution-and-adapter-contract.md](./skills/distribution-and-adapter-contract.md)。
 
-如果你需要看版本判断和升级语义，读 [adoption/versioning-and-upgrades.md](./adoption/versioning-and-upgrades.md)。
-
 如果你需要看单个标准 skill 如何被正式交付、以及它为什么不等于整包 Loom，读 [skills/README.md](./skills/README.md)。
 
 ### 给正在开发项目的 Agent 的快速安装
@@ -419,10 +417,4 @@ repo-local `loom CLI` 主要给这些情况使用：
 - [skills/README.md](./skills/README.md)
 - [harness/README.md](./harness/README.md)
 - [skills/distribution-and-adapter-contract.md](./skills/distribution-and-adapter-contract.md)
-- [docs/skills-surface-delivery-judgment.md](./docs/skills-surface-delivery-judgment.md)
-  - 冻结 Loom 下一轮 installable plugin + CLI + skills 的交付判断
-- [docs/skills-surface-issue-tree-draft.md](./docs/skills-surface-issue-tree-draft.md)
-  - 可直接提交的 installable Loom issue tree 草案
 - [VISION.md](./VISION.md)
-- [docs/complete-kernel-release.md](./docs/complete-kernel-release.md)
-- [adoption/versioning-and-upgrades.md](./adoption/versioning-and-upgrades.md)

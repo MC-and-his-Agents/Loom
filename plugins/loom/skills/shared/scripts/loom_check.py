@@ -22,7 +22,6 @@ from runtime_paths import repo_local_root
 
 TOP_LEVEL_DIRS = (
     "adoption",
-    "docs",
     "governance",
     "harness",
     "skills",
@@ -51,9 +50,6 @@ AREA_READMES = (
 CORE_DOCS = (
     ".github/PULL_REQUEST_TEMPLATE.md",
     ".github/workflows/loom-check.yml",
-    "docs/roadmap.md",
-    "docs/demo-new-project.md",
-    "docs/complete-kernel-release.md",
     "governance/principles.md",
     "governance/review-model.md",
     "governance/maturity-and-closing.md",
@@ -64,7 +60,6 @@ CORE_DOCS = (
     "harness/fact-chain-contract.md",
     "harness/execution-context.md",
     "harness/execution-chain.md",
-    "harness/daily-entry-matrix.md",
     "harness/checkpoint-model.md",
     "harness/workspace-model.md",
     "harness/workspace-lifecycle.md",
@@ -87,33 +82,6 @@ CORE_DOCS = (
     "adoption/lightweight-retrofit-default.md",
     "adoption/repo-companion-contract.md",
     "adoption/repo-interop-contract.md",
-    "adoption/companion-oriented-workflow.md",
-    "adoption/repo-companion-migration.md",
-    "adoption/reference-companion-spec-syvert.md",
-    "adoption/reference-companion-spec-webenvoy.md",
-    "adoption/candidate-patterns.md",
-    "adoption/demo-init-validation.md",
-    "adoption/validation-record-contract.md",
-    "adoption/validation-repo-companion-interface.md",
-    "adoption/experience-feedback-loop.md",
-    "adoption/validation-new-project.md",
-    "adoption/validation-devskills.md",
-    "adoption/validation-hotcp.md",
-    "adoption/validation-review-and-authoring.md",
-    "adoption/validation-installed-skills-pre-merge-chain.md",
-    "adoption/validation-installed-skills-post-merge-closeout.md",
-    "adoption/validation-host-lifecycle-and-closeout.md",
-    "adoption/validation-fact-chain-mail-listener.md",
-    "adoption/validation-checkpoints-hotcp.md",
-    "adoption/validation-workspace-lifecycle-hotcp.md",
-    "adoption/validation-workspace-lifecycle-mail-listener.md",
-    "adoption/validation-runtime-evidence-hotcp.md",
-    "adoption/validation-automation-frontload-hotcp.md",
-    "adoption/execution-entry-compatibility.md",
-    "adoption/validation-complete-kernel-new-project.md",
-    "adoption/validation-complete-kernel-existing-repos.md",
-    "adoption/versioning-and-upgrades.md",
-    "adoption/upstream-delivery-surface.md",
     "skills/distribution-and-adapter-contract.md",
     "skills/registry.json",
     "skills/install-layout.json",
@@ -155,7 +123,6 @@ AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT = (
     "harness/work-item-contract.md",
     "harness/execution-context.md",
     "harness/execution-chain.md",
-    "harness/daily-entry-matrix.md",
     "harness/checkpoint-model.md",
     "harness/workspace-model.md",
     "harness/workspace-lifecycle.md",
@@ -168,7 +135,6 @@ AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT = (
 
 DEMO_ASSETS = (
     "examples/new-project/.gitkeep",
-    "docs/demo-new-project.md",
     "examples/new-project/AGENTS.md",
     "examples/new-project/.github/PULL_REQUEST_TEMPLATE.md",
     "examples/new-project/.loom/bootstrap/init-result.json",
@@ -1621,35 +1587,6 @@ def check_skill_routing(root: Path) -> list[Failure]:
 
 def check_demo_assets(root: Path) -> list[Failure]:
     failures = check_required_paths(root, "demo-assets", DEMO_ASSETS)
-    demo_doc = root / "docs/demo-new-project.md"
-    if not demo_doc.exists():
-        return failures
-
-    text = demo_doc.read_text(encoding="utf-8")
-    for needle in (
-        "make loom-demo-new-project",
-        "tools/loom_init.py bootstrap",
-        ".loom/bin/loom_init.py verify",
-        ".loom/bin/loom_init.py runtime-state",
-        ".loom/bin/loom_init.py fact-chain",
-        ".loom/bin/loom_flow.py fact-chain",
-        ".loom/bin/loom_flow.py runtime-state",
-        ".loom/bin/loom_flow.py runtime-evidence",
-        ".loom/bin/loom_flow.py state-check",
-        ".loom/bin/loom_flow.py flow pre-review",
-        ".loom/bin/loom_flow.py flow review",
-        ".loom/bin/loom_flow.py review read",
-        ".loom/bin/loom_flow.py review record",
-        ".loom/bin/loom_flow.py recovery writeback",
-        ".loom/bin/loom_flow.py work-item create",
-        ".loom/bin/loom_flow.py host-lifecycle",
-        ".loom/bin/loom_flow.py closeout check",
-        ".loom/bin/loom_flow.py checkpoint admission",
-        ".loom/bin/loom_flow.py workspace locate",
-        ".loom/bin/loom_flow.py purity-check",
-    ):
-        if needle not in text:
-            failures.append(Failure("demo-assets", f"`docs/demo-new-project.md` is missing `{needle}`"))
 
     init_result_path = root / "examples/new-project/.loom/bootstrap/init-result.json"
     if init_result_path.exists():

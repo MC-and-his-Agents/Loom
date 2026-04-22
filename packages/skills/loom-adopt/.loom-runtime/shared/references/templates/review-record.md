@@ -13,6 +13,7 @@
 - `findings`
 - `blocking_issues`
 - `follow_ups`
+- `consumed_inputs`
 
 允许结果：
 
@@ -30,4 +31,5 @@
 - `rebuttal` 当前稳定值为 `null` 或非空字符串
 - `disposition` 当前稳定值为 `null` 或对象；对象内的 `status` 只允许 `accepted`、`rejected`、`deferred`
 - `blocking_issues` / `follow_ups` 仅作为兼容字段保留，默认从 `findings` 投影，不应被当作独立 authored 真相
+- `consumed_inputs.engine_adapter`、`consumed_inputs.engine_evidence`、`consumed_inputs.normalized_findings` 只记录 evidence 来源，不构成第二 authored truth
 - review record 是 merge checkpoint 的正式输入之一，不得只留在会话或 PR 评论里

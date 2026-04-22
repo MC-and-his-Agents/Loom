@@ -34,11 +34,10 @@ Loom 当前冻结的三层目标态是：
 1. [AGENTS.md](./AGENTS.md)
 2. [VISION.md](./VISION.md)
 3. [README.md](./README.md)
-4. [docs/roadmap.md](./docs/roadmap.md)
-5. [adoption/extraction-ledger.md](./adoption/extraction-ledger.md)
-6. [adoption/landing-map.md](./adoption/landing-map.md)
-7. 各区域 `README.md`
-8. 各区域具体规则与说明文件
+4. [adoption/extraction-ledger.md](./adoption/extraction-ledger.md)
+5. [adoption/landing-map.md](./adoption/landing-map.md)
+6. 各区域 `README.md`
+7. 各区域具体规则与说明文件
 
 ## 读取顺序
 
@@ -64,8 +63,7 @@ Loom 当前冻结的三层目标态是：
 讨论 Loom 当前阶段、阶段目标与阶段顺序时：
 
 1. [AGENTS.md](./AGENTS.md)
-2. [docs/roadmap.md](./docs/roadmap.md)
-3. 对应 GitHub issues
+2. 对应 GitHub issues
 
 ## 目录职责
 

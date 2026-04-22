@@ -84,7 +84,7 @@
 
 默认装配路径：
 
-- 直接采用 [../.loom-runtime/shared/references/adoption/lightweight-retrofit-default.md](../.loom-runtime/shared/references/adoption/lightweight-retrofit-default.md)
+- 直接采用 [shared/adoption/lightweight-retrofit-default.md](shared/adoption/lightweight-retrofit-default.md)
 - 默认 `companion docs` 接入
 - 默认装配最小治理包
 - 默认不装配完整 recovery、work item、状态面与重 harness
@@ -146,7 +146,7 @@
 
 ## 7. `lightweight retrofit default` 的消费关系
 
-`loom-init` 对小型既有仓库的默认入口不是临场经验，而是直接消费 [../.loom-runtime/shared/references/adoption/lightweight-retrofit-default.md](../.loom-runtime/shared/references/adoption/lightweight-retrofit-default.md)。
+`loom-init` 对小型既有仓库的默认入口不是临场经验，而是直接消费 [shared/adoption/lightweight-retrofit-default.md](shared/adoption/lightweight-retrofit-default.md)。
 
 这意味着：
 

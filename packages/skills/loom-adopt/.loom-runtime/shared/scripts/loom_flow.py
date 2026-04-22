@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -23,7 +24,7 @@ from fact_chain_support import (
     parse_work_item,
 )
 from governance_surface import build_governance_surface
-from runtime_paths import shared_script
+from runtime_paths import shared_asset, shared_script
 from runtime_state import detect_runtime_state
 
 PR_TEMPLATE_SECTIONS = (
@@ -39,6 +40,9 @@ OWNED_TEMP_ROOTS = (
     ".loom/runtime/cache",
     ".loom/runtime/tmp",
     ".loom/flow/tmp",
+)
+OWNED_RUNTIME_EVIDENCE_ROOTS = (
+    ".loom/runtime/review",
 )
 
 TERMINAL_CHECKPOINTS = {
@@ -82,6 +86,15 @@ REVIEW_DECISIONS = {"allow", "block", "fallback"}
 REVIEW_KINDS = {"general_review", "code_review", "spec_review"}
 REVIEW_FINDING_SEVERITIES = {"warn", "block"}
 REVIEW_FINDING_DISPOSITION_STATUSES = {"accepted", "rejected", "deferred"}
+DEFAULT_REVIEW_ENGINE = "codex"
+DEFAULT_REVIEW_ADAPTER = "loom/default-codex"
+ENGINE_FAILURE_REASONS = {
+    "engine_unavailable",
+    "schema_drift",
+    "runtime_conflict",
+    "repo_diff_detected",
+}
+SHADOW_PARITY_SURFACES = ("admission", "review", "merge_ready", "closeout")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -156,8 +169,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Init-result path relative to the target root",
     )
 
-    review = subparsers.add_parser("review", help="Read or record a Loom formal review artifact")
-    review.add_argument("operation", choices=("read", "record"))
+    review = subparsers.add_parser("review", help="Read, run, or record a Loom formal review artifact")
+    review.add_argument("operation", choices=("read", "run", "record"))
     review.add_argument("--target", required=True, help="Target repository root")
     review.add_argument("--item", help="Expected current item id")
     review.add_argument(
@@ -172,6 +185,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     review.add_argument("--reviewer", help="Reviewer identity")
     review.add_argument("--fallback-to", choices=("admission", "build", "merge"))
     review.add_argument("--findings-file", help="Optional findings JSON path relative to the target root")
+    review.add_argument("--engine-adapter", help="Optional review engine adapter identifier consumed by this record")
+    review.add_argument("--engine-evidence", help="Optional review engine evidence path relative to the target root")
+    review.add_argument("--normalized-findings", help="Optional normalized findings path relative to the target root")
     review.add_argument("--blocking-issue", action="append", default=[], help="Blocking review finding")
     review.add_argument("--follow-up", action="append", default=[], help="Follow-up item recorded by the review")
 
@@ -245,6 +261,20 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     reconciliation.add_argument("--comment", help="Optional closeout comment for issue sync")
     reconciliation.add_argument("--comment-file", help="Read closeout comment body from a file")
     reconciliation.add_argument("--dry-run", action="store_true", help="Preview reconciliation sync actions without writing GitHub state")
+
+    shadow = subparsers.add_parser("shadow-parity", help="Compare Loom and repo-native parity surfaces without changing merge gates")
+    shadow.add_argument("--target", required=True, help="Target repository root")
+    shadow.add_argument(
+        "--surface",
+        choices=(*SHADOW_PARITY_SURFACES, "all"),
+        default="all",
+        help="Shadow surface to compare; defaults to all supported surfaces",
+    )
+    shadow.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
 
     flow = subparsers.add_parser("flow", help="Run a bundled high-frequency Loom flow")
     flow.add_argument("operation", choices=("pre-review", "review", "resume", "handoff", "merge-ready"))
@@ -421,6 +451,185 @@ def repo_specific_requirements_payload(
     }
 
 
+def load_repo_interop_contract(repo_interop: object, *, target_root: Path) -> tuple[dict[str, Any] | None, list[str]]:
+    if not isinstance(repo_interop, dict):
+        return None, ["governance_surface.repo_interop"]
+    availability = repo_interop.get("availability")
+    if availability == "absent":
+        return None, ["repo interop contract is absent"]
+    if availability == "incomplete":
+        missing_inputs = repo_interop.get("missing_inputs")
+        return None, list(missing_inputs) if isinstance(missing_inputs, list) else ["repo interop contract is incomplete"]
+    if availability != "present":
+        return None, [f"unknown repo interop availability: {availability}"]
+
+    contract_locator = repo_interop.get("contract")
+    declared_locator = (
+        contract_locator.get("locator")
+        if isinstance(contract_locator, dict)
+        else ".loom/companion/interop.json"
+    )
+    interop_path = target_root / str(declared_locator)
+    try:
+        payload = load_json_file(interop_path)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None, [f"missing repo interop contract: {interop_path}"]
+    if not isinstance(payload, dict):
+        return None, [f"repo interop contract is unreadable: {interop_path}"]
+    return payload, []
+
+
+def normalized_shadow_value(path: Path) -> tuple[str | None, str | None]:
+    try:
+        if path.is_dir():
+            return None, f"shadow parity locator points to a directory: {path}"
+        raw_text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return None, f"cannot read shadow parity locator `{path}`: {exc.strerror or exc}"
+    if not raw_text.strip():
+        return None, f"shadow parity locator is empty: {path}"
+
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError:
+        payload = None
+
+    if isinstance(payload, dict):
+        for key in ("parity_value", "result", "decision", "status", "verdict", "value"):
+            value = payload.get(key)
+            if isinstance(value, (str, int, float, bool)) and str(value).strip():
+                return str(value).strip().lower(), None
+        return json.dumps(payload, ensure_ascii=False, sort_keys=True), None
+    if isinstance(payload, list):
+        return json.dumps(payload, ensure_ascii=False, sort_keys=True), None
+    if isinstance(payload, (str, int, float, bool)) and str(payload).strip():
+        return str(payload).strip().lower(), None
+
+    for line in raw_text.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            return stripped.lower(), None
+    return None, f"shadow parity locator does not expose a comparable value: {path}"
+
+
+def shadow_parity_report(
+    repo_interop: object,
+    *,
+    target_root: Path,
+    surface: str,
+) -> dict[str, Any]:
+    empty_report = {
+        "surface": surface,
+        "result": "unreadable",
+        "summary": "shadow parity could not be evaluated for this surface.",
+        "missing_inputs": [],
+        "host_adapters": [],
+        "repo_native_carriers": [],
+        "loom_surface": {
+            "status": "missing",
+            "locator": "unknown",
+            "normalized_value": None,
+        },
+        "repo_surface": {
+            "status": "missing",
+            "locator": "unknown",
+            "normalized_value": None,
+        },
+    }
+    interop_payload, interop_errors = load_repo_interop_contract(repo_interop, target_root=target_root)
+    if interop_errors:
+        return {
+            **empty_report,
+            "summary": "shadow parity is unavailable because the repo interop contract is missing or incomplete.",
+            "missing_inputs": interop_errors,
+        }
+    if not isinstance(interop_payload, dict):
+        return empty_report
+
+    host_adapters = interop_payload.get("host_adapters")
+    repo_native_carriers = interop_payload.get("repo_native_carriers")
+    shadow_surfaces = interop_payload.get("shadow_surfaces")
+    if not isinstance(host_adapters, list) or not isinstance(repo_native_carriers, list) or not isinstance(shadow_surfaces, dict):
+        return {
+            **empty_report,
+            "summary": "shadow parity is unavailable because the repo interop contract cannot be consumed safely.",
+            "missing_inputs": ["repo interop contract"],
+        }
+
+    relevant_host_adapters = [
+        entry for entry in host_adapters if isinstance(entry, dict) and surface in entry.get("surfaces", [])
+    ]
+    relevant_repo_native_carriers = [
+        entry for entry in repo_native_carriers if isinstance(entry, dict) and surface in entry.get("surfaces", [])
+    ]
+    declared_surface = shadow_surfaces.get(surface)
+    if not isinstance(declared_surface, dict):
+        return {
+            **empty_report,
+            "summary": "shadow parity is unavailable because this surface is not declared in the repo interop contract.",
+            "missing_inputs": [f"shadow surface missing: {surface}"],
+            "host_adapters": relevant_host_adapters,
+            "repo_native_carriers": relevant_repo_native_carriers,
+        }
+
+    loom_locator = declared_surface.get("loom_locator")
+    repo_locator = declared_surface.get("repo_locator")
+    loom_path = target_root / str(loom_locator)
+    repo_path = target_root / str(repo_locator)
+
+    loom_value, loom_error = normalized_shadow_value(loom_path)
+    repo_value, repo_error = normalized_shadow_value(repo_path)
+
+    missing_inputs: list[str] = []
+    if loom_error:
+        missing_inputs.append(loom_error)
+    if repo_error:
+        missing_inputs.append(repo_error)
+
+    loom_surface = {
+        "status": "readable" if loom_error is None else "missing",
+        "locator": str(loom_locator),
+        "normalized_value": loom_value,
+    }
+    repo_surface = {
+        "status": "readable" if repo_error is None else "missing",
+        "locator": str(repo_locator),
+        "normalized_value": repo_value,
+    }
+
+    if loom_error or repo_error or loom_value is None or repo_value is None:
+        return {
+            **empty_report,
+            "summary": "shadow parity is unreadable because one or both declared surfaces cannot be normalized.",
+            "missing_inputs": missing_inputs,
+            "host_adapters": relevant_host_adapters,
+            "repo_native_carriers": relevant_repo_native_carriers,
+            "loom_surface": loom_surface,
+            "repo_surface": repo_surface,
+        }
+    if loom_value == repo_value:
+        return {
+            "surface": surface,
+            "result": "match",
+            "summary": "Loom and repo-native surfaces report the same normalized result.",
+            "missing_inputs": [],
+            "host_adapters": relevant_host_adapters,
+            "repo_native_carriers": relevant_repo_native_carriers,
+            "loom_surface": loom_surface,
+            "repo_surface": repo_surface,
+        }
+    return {
+        "surface": surface,
+        "result": "mismatch",
+        "summary": "Loom and repo-native surfaces disagree on the normalized result.",
+        "missing_inputs": [],
+        "host_adapters": relevant_host_adapters,
+        "repo_native_carriers": relevant_repo_native_carriers,
+        "loom_surface": loom_surface,
+        "repo_surface": repo_surface,
+    }
+
+
 def normalize_checkpoint(raw: str) -> str:
     lowered = raw.strip().lower()
     if "commit checkpoint" in lowered or "admission checkpoint" in lowered:
@@ -496,6 +705,16 @@ def git_changed_paths(root: Path, base: str, head: str) -> tuple[list[str], list
     return paths, []
 
 
+def git_tracked_diff_fingerprint(root: Path) -> tuple[str | None, list[str]]:
+    result = run_git(root, ["diff", "--binary", "--no-ext-diff", "HEAD", "--"])
+    if result is None:
+        return None, ["git is unavailable while fingerprinting tracked changes"]
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "git diff failed"
+        return None, [detail]
+    return result.stdout, []
+
+
 def git_remote_origin(root: Path) -> str | None:
     result = run_git(root, ["remote", "get-url", "origin"])
     if result is None or result.returncode != 0:
@@ -521,6 +740,24 @@ def read_text_file(path_str: str) -> tuple[str | None, list[str]]:
     except OSError as exc:
         return None, [f"failed to read {path}: {exc.strerror or exc}"]
     return text, []
+
+
+def write_json_file(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def cleanup_scratch_tree(target_root: Path, scratch_dir: Path) -> None:
+    shutil.rmtree(scratch_dir, ignore_errors=True)
+    for candidate in (scratch_dir.parent, scratch_dir.parent.parent):
+        try:
+            candidate.relative_to(target_root)
+        except ValueError:
+            continue
+        try:
+            candidate.rmdir()
+        except OSError:
+            pass
 
 
 def gh_json(root: Path, args: list[str]) -> tuple[dict[str, Any] | None, list[str]]:
@@ -970,6 +1207,406 @@ def load_review_record(
     return normalized_payload, relative, errors
 
 
+def build_review_flow_payload(target_root: Path, output_relative: str, expected_item: str | None) -> dict[str, Any]:
+    runtime_state = runtime_state_payload(target_root)
+    steps: list[dict[str, Any]] = [
+        {
+            "name": "runtime-state",
+            "result": runtime_state["result"],
+            "summary": runtime_state["summary"],
+            "missing_inputs": runtime_state["missing_inputs"],
+            "fallback_to": runtime_state["fallback_to"],
+        }
+    ]
+    if runtime_state["result"] != "pass":
+        return {
+            "command": "flow",
+            "operation": "review",
+            "result": "block",
+            "summary": "flow command is blocked because the Loom runtime state is inconsistent.",
+            "missing_inputs": runtime_state["missing_inputs"],
+            "fallback_to": runtime_state["fallback_to"],
+            "steps": steps,
+            "runtime_state": runtime_state,
+        }
+
+    context, errors = load_context(target_root, output_relative, expected_item)
+    if errors:
+        return {
+            "command": "flow",
+            "operation": "review",
+            "result": "block",
+            "summary": "flow command could not read a valid Loom fact chain.",
+            "missing_inputs": [f"fact-chain: {message}" for message in errors],
+            "fallback_to": "admission",
+            "steps": steps,
+            "runtime_state": runtime_state,
+        }
+
+    steps.append(
+        {
+            "name": "fact-chain",
+            "result": "pass",
+            "summary": "fact chain is readable from a single entry.",
+            "missing_inputs": [],
+            "fallback_to": None,
+        }
+    )
+
+    state_payload = state_check_payload(context)
+    steps.append(
+        {
+            "name": "state-check",
+            "result": state_payload["result"],
+            "summary": state_payload["summary"],
+            "missing_inputs": state_payload["missing_inputs"],
+            "fallback_to": state_payload["fallback_to"],
+        }
+    )
+
+    runtime_fields, runtime_missing = runtime_evidence_from_report(context["report"])
+    runtime_result = "pass" if not runtime_missing else "block"
+    steps.append(
+        {
+            "name": "runtime-evidence",
+            "result": runtime_result,
+            "summary": (
+                "runtime evidence entries are readable."
+                if runtime_result == "pass"
+                else "runtime evidence entries are incomplete or inconsistent."
+            ),
+            "missing_inputs": runtime_missing,
+            "fallback_to": "admission" if runtime_missing else None,
+            "runtime_evidence": runtime_fields,
+        }
+    )
+
+    build_payload = checkpoint_payload("build", context)
+    governance_surface = build_governance_surface(target_root)
+    repo_specific_requirements = repo_specific_requirements_payload(
+        governance_surface.get("repo_interface"),
+        target_root=target_root,
+        surface="review",
+    )
+    review_record, review_path, review_errors = load_review_record(
+        target_root,
+        context["item_id"],
+        context["review_entry"],
+    )
+    steps.extend(
+        [
+            {
+                "name": "checkpoint-build",
+                "result": build_payload["result"],
+                "summary": build_payload["summary"],
+                "missing_inputs": build_payload["missing_inputs"],
+                "fallback_to": build_payload["fallback_to"],
+            },
+            {
+                "name": "review-entry",
+                "result": "pass" if review_record and not review_errors else "block",
+                "summary": (
+                    "formal review artifact is readable."
+                    if review_record and not review_errors
+                    else "formal review artifact is missing or invalid."
+                ),
+                "missing_inputs": review_errors or ([] if review_record else [f"missing review artifact: {review_path}"]),
+                "fallback_to": "build" if (review_errors or review_record is None) else None,
+            },
+        ]
+    )
+
+    result = "pass"
+    fallback_to: str | None = None
+    for step in steps:
+        step_result = step["result"]
+        if step_result == "fallback":
+            result = "fallback"
+            fallback_to = step.get("fallback_to") or "admission"
+            break
+        if step_result == "block" and result == "pass":
+            result = "block"
+            fallback_to = step.get("fallback_to")
+    if result != "block" and repo_specific_requirements["result"] == "block":
+        result = "block"
+        fallback_to = fallback_to or repo_specific_requirements["fallback_to"]
+
+    if result == "block" and repo_specific_requirements["result"] == "block":
+        summary = "review flow exposed companion-declared blocking requirements instead of pretending Loom core already covers them."
+    else:
+        summary = (
+            "review flow prepared the semantic review context and exposed the formal review artifact."
+            if result == "pass"
+            else "review flow found missing review material or earlier blocking signals."
+        )
+
+    missing_inputs: list[str] = []
+    for step in steps:
+        if step["result"] in {"block", "fallback"}:
+            for message in step.get("missing_inputs", []):
+                if message not in missing_inputs:
+                    missing_inputs.append(message)
+    if repo_specific_requirements["result"] == "block":
+        for message in repo_specific_requirements.get("missing_inputs", []):
+            if message not in missing_inputs:
+                missing_inputs.append(message)
+
+    return {
+        "command": "flow",
+        "operation": "review",
+        "item": {
+            "id": context["item_id"],
+            "goal": context["goal"],
+            "scope": context["scope"],
+            "execution_path": context["execution_path"],
+        },
+        "result": result,
+        "summary": summary,
+        "missing_inputs": missing_inputs,
+        "fallback_to": fallback_to,
+        "steps": steps,
+        "runtime_state": runtime_state,
+        "state_check": {
+            "result": state_payload["result"],
+            "summary": state_payload["summary"],
+            "missing_inputs": state_payload["missing_inputs"],
+            "fallback_to": state_payload["fallback_to"],
+            "checks": state_payload["checks"],
+        },
+        "runtime_evidence": runtime_fields,
+        "build_checkpoint": {
+            "result": build_payload["result"],
+            "summary": build_payload["summary"],
+            "missing_inputs": build_payload["missing_inputs"],
+            "fallback_to": build_payload["fallback_to"],
+        },
+        "review": {
+            "path": review_path,
+            "record": review_record,
+        },
+        "repo_specific_requirements": repo_specific_requirements,
+        "current_checkpoint": {
+            "raw": context["current_checkpoint_raw"],
+            "normalized": context["current_checkpoint"],
+        },
+    }
+
+
+def run_default_review_engine(context: dict[str, Any], build_payload: dict[str, Any], review_path: str) -> dict[str, Any]:
+    reviewed_head = git_head_sha(context["target_root"]) or "unknown-head"
+    runtime_root = review_runtime_root(context, reviewed_head)
+    prompt_path = runtime_root / "prompt.txt"
+    result_path = runtime_root / "engine-result.json"
+    findings_path = runtime_root / "normalized-findings.json"
+    metadata_path = runtime_root / "engine-metadata.json"
+    scratch_dir = context["target_root"] / ".loom/runtime/tmp" / "review-engine" / context["item_id"]
+    prompt_text = build_default_review_prompt(
+        context=context,
+        build_payload=build_payload,
+        runtime_fields=runtime_evidence_from_report(context["report"])[0],
+        review_path=review_path,
+    )
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    prompt_path.write_text(prompt_text, encoding="utf-8")
+
+    before_fingerprint, fingerprint_errors = git_tracked_diff_fingerprint(context["target_root"])
+    if fingerprint_errors:
+        cleanup_scratch_tree(context["target_root"], scratch_dir)
+        return {
+            "result": "block",
+            "summary": "default review engine could not verify tracked-change purity before execution.",
+            "missing_inputs": [f"engine preflight: {message}" for message in fingerprint_errors],
+            "fallback_to": None,
+            "engine": {
+                "engine": DEFAULT_REVIEW_ENGINE,
+                "adapter": DEFAULT_REVIEW_ADAPTER,
+                "result": "block",
+                "failure_reason": "runtime_conflict",
+                "reviewed_head": reviewed_head,
+                "evidence": {
+                    "runtime_root": relative_to_root(runtime_root, context["target_root"]),
+                    "prompt": relative_to_root(prompt_path, context["target_root"]),
+                    "raw_result": relative_to_root(result_path, context["target_root"]),
+                    "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+                    "metadata": relative_to_root(metadata_path, context["target_root"]),
+                },
+            },
+        }
+
+    scratch_dir.mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ)
+    scratch_dir_text = str(scratch_dir.resolve())
+    env["TMPDIR"] = scratch_dir_text
+    env["TMP"] = scratch_dir_text
+    env["TEMP"] = scratch_dir_text
+
+    failure_reason: str | None = None
+    failure_detail: str | None = None
+    raw_payload: dict[str, Any] | None = None
+    try:
+        completed = subprocess.run(
+            [
+                DEFAULT_REVIEW_ENGINE,
+                "exec",
+                "-C",
+                str(context["target_root"]),
+                "-s",
+                "workspace-write",
+                "--output-schema",
+                str(review_engine_schema_path()),
+                "-o",
+                str(result_path),
+                "-",
+            ],
+            cwd=context["target_root"],
+            env=env,
+            input=prompt_text,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        failure_reason = "engine_unavailable"
+        failure_detail = f"default review engine `{DEFAULT_REVIEW_ENGINE}` is unavailable in PATH"
+    else:
+        if completed.returncode != 0:
+            failure_reason = "runtime_conflict"
+            failure_detail = completed.stderr.strip() or completed.stdout.strip() or "default review engine returned a non-zero exit status"
+        else:
+            try:
+                if result_path.exists():
+                    raw_payload = load_json_file(result_path)
+                elif completed.stdout.strip():
+                    raw_payload = json.loads(completed.stdout)
+                else:
+                    failure_reason = "schema_drift"
+                    failure_detail = "default review engine did not emit a structured result"
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                failure_reason = "schema_drift"
+                failure_detail = f"default review engine returned invalid JSON: {exc}"
+
+    after_fingerprint, after_errors = git_tracked_diff_fingerprint(context["target_root"])
+    if after_errors and failure_reason is None:
+        failure_reason = "runtime_conflict"
+        failure_detail = after_errors[0]
+    elif failure_reason is None and before_fingerprint != after_fingerprint:
+        failure_reason = "repo_diff_detected"
+        failure_detail = "default review engine modified tracked repository content"
+
+    if failure_reason is None and raw_payload is None:
+        failure_reason = "schema_drift"
+        failure_detail = "default review engine did not produce a readable review result"
+
+    engine_evidence = {
+        "runtime_root": relative_to_root(runtime_root, context["target_root"]),
+        "prompt": relative_to_root(prompt_path, context["target_root"]),
+        "raw_result": relative_to_root(result_path, context["target_root"]),
+        "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+        "metadata": relative_to_root(metadata_path, context["target_root"]),
+    }
+
+    if failure_reason is not None:
+        write_json_file(
+            metadata_path,
+            {
+                "engine": DEFAULT_REVIEW_ENGINE,
+                "adapter": DEFAULT_REVIEW_ADAPTER,
+                "failure_reason": failure_reason,
+                "summary": failure_detail,
+                "reviewed_head": reviewed_head,
+            },
+        )
+        cleanup_scratch_tree(context["target_root"], scratch_dir)
+        return {
+            "result": "block",
+            "summary": "default review engine failed closed before a formal review record could be authored.",
+            "missing_inputs": [failure_detail or f"default review engine failed: {failure_reason}"],
+            "fallback_to": None,
+            "engine": {
+                "engine": DEFAULT_REVIEW_ENGINE,
+                "adapter": DEFAULT_REVIEW_ADAPTER,
+                "result": "block",
+                "failure_reason": failure_reason,
+                "reviewed_head": reviewed_head,
+                "evidence": engine_evidence,
+            },
+        }
+
+    if raw_payload is not None and not result_path.exists():
+        write_json_file(result_path, raw_payload)
+
+    normalized_payload, normalization_errors = normalize_engine_review_result(
+        raw_payload,
+        relative=relative_to_root(result_path, context["target_root"]),
+    )
+    if normalization_errors or normalized_payload is None:
+        write_json_file(
+            metadata_path,
+            {
+                "engine": DEFAULT_REVIEW_ENGINE,
+                "adapter": DEFAULT_REVIEW_ADAPTER,
+                "failure_reason": "schema_drift",
+                "summary": "normalized engine output did not satisfy Loom review schema",
+                "errors": normalization_errors,
+                "reviewed_head": reviewed_head,
+            },
+        )
+        cleanup_scratch_tree(context["target_root"], scratch_dir)
+        return {
+            "result": "block",
+            "summary": "default review engine returned a structured payload that Loom could not safely normalize.",
+            "missing_inputs": normalization_errors,
+            "fallback_to": None,
+            "engine": {
+                "engine": DEFAULT_REVIEW_ENGINE,
+                "adapter": DEFAULT_REVIEW_ADAPTER,
+                "result": "block",
+                "failure_reason": "schema_drift",
+                "reviewed_head": reviewed_head,
+                "evidence": engine_evidence,
+            },
+        }
+
+    write_json_file(findings_path, {"findings": normalized_payload["findings"]})
+    write_json_file(
+        metadata_path,
+        {
+            "engine": DEFAULT_REVIEW_ENGINE,
+            "adapter": DEFAULT_REVIEW_ADAPTER,
+            "result": "pass",
+            "reviewed_head": reviewed_head,
+            "decision": normalized_payload["decision"],
+            "summary": normalized_payload["summary"],
+            "kind": default_review_kind(context),
+        },
+    )
+    cleanup_scratch_tree(context["target_root"], scratch_dir)
+    return {
+        "result": "pass",
+        "summary": "default review engine produced a Loom-normalized formal review draft.",
+        "missing_inputs": [],
+        "fallback_to": None,
+        "engine": {
+            "engine": DEFAULT_REVIEW_ENGINE,
+            "adapter": DEFAULT_REVIEW_ADAPTER,
+            "result": "pass",
+            "failure_reason": None,
+            "reviewed_head": reviewed_head,
+            "evidence": engine_evidence,
+        },
+        "review_record_input": {
+            "decision": normalized_payload["decision"],
+            "summary": normalized_payload["summary"],
+            "reviewer": DEFAULT_REVIEW_ADAPTER,
+            "kind": default_review_kind(context),
+            "findings_file": relative_to_root(findings_path, context["target_root"]),
+            "engine_adapter": DEFAULT_REVIEW_ADAPTER,
+            "engine_evidence": relative_to_root(result_path, context["target_root"]),
+            "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+        },
+    }
+
+
 def render_work_item(data: dict[str, Any]) -> str:
     return (
         f"# {data['item_id']}\n\n"
@@ -1063,16 +1700,54 @@ def collect_temp_paths(target_root: Path) -> list[Path]:
     return paths
 
 
+def path_matches_owned_roots(path: str, roots: tuple[str, ...]) -> bool:
+    normalized = path.rstrip("/")
+    for root in roots:
+        owned_root = root.rstrip("/")
+        if normalized == owned_root:
+            return True
+        if normalized.startswith(f"{owned_root}/"):
+            return True
+    return False
+
+
+def owned_dirty_path_kind(target_root: Path, path: str) -> str | None:
+    if path_matches_owned_roots(path, OWNED_TEMP_ROOTS):
+        return "temp"
+    if path_matches_owned_roots(path, OWNED_RUNTIME_EVIDENCE_ROOTS):
+        return "evidence"
+
+    normalized = path.rstrip("/")
+    for root in OWNED_TEMP_ROOTS:
+        candidate = target_root / root
+        if candidate.exists() and root.rstrip("/").startswith(f"{normalized}/"):
+            return "temp"
+    for root in OWNED_RUNTIME_EVIDENCE_ROOTS:
+        candidate = target_root / root
+        if candidate.exists() and root.rstrip("/").startswith(f"{normalized}/"):
+            return "evidence"
+    return None
+
+
 def dirty_paths_by_owner(target_root: Path) -> tuple[list[str], list[str]]:
     owned: list[str] = []
     foreign: list[str] = []
     for entry in git_dirty_entries(target_root):
         path = entry["path"]
-        if any(path == root or path.startswith(f"{root}/") for root in OWNED_TEMP_ROOTS):
+        if owned_dirty_path_kind(target_root, path) == "temp":
             owned.append(path)
         else:
             foreign.append(path)
     return owned, foreign
+
+
+def dirty_runtime_evidence_paths(target_root: Path) -> list[str]:
+    evidence: list[str] = []
+    for entry in git_dirty_entries(target_root):
+        path = entry["path"]
+        if owned_dirty_path_kind(target_root, path) == "evidence":
+            evidence.append(path)
+    return evidence
 
 
 def declared_scope_paths(scope_text: str) -> list[str]:
@@ -1149,6 +1824,162 @@ def load_context(target_root: Path, output_relative: str, expected_item: str | N
         "read_entry": str(report["fact_chain"]["read_entry"]),
     }
     return context, []
+
+
+def review_runtime_root(context: dict[str, Any], reviewed_head: str | None = None) -> Path:
+    head = (reviewed_head or git_head_sha(context["target_root"]) or "unknown-head").strip() or "unknown-head"
+    safe_head = re.sub(r"[^A-Za-z0-9_.-]", "-", head)
+    return context["target_root"] / ".loom/runtime/review" / context["item_id"] / safe_head
+
+
+def default_review_kind(context: dict[str, Any]) -> str:
+    execution_path = context["execution_path"].strip().lower()
+    scope = context["scope"].strip().lower()
+    if "spec" in execution_path or "spec" in scope:
+        return "spec_review"
+    scope_paths = declared_scope_paths(context["scope"])
+    if scope_paths and all(path.endswith(".md") or path.startswith(".loom/") for path in scope_paths):
+        return "general_review"
+    return "code_review"
+
+
+def review_focus_paths(context: dict[str, Any]) -> list[str]:
+    result = run_git(context["target_root"], ["diff", "--name-only", "--no-renames", "HEAD", "--"])
+    if result is not None and result.returncode == 0:
+        tracked_paths = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        if tracked_paths:
+            return tracked_paths
+    scope_paths = declared_scope_paths(context["scope"])
+    if scope_paths:
+        return scope_paths
+    return [relative_to_root(context["workspace_path"], context["target_root"])]
+
+
+def review_engine_schema_path() -> Path:
+    return shared_asset(__file__, "review/loom-review-result-schema.json")
+
+
+def normalize_engine_review_result(payload: Any, *, relative: str) -> tuple[dict[str, Any] | None, list[str]]:
+    if not isinstance(payload, dict):
+        return None, [f"engine result `{relative}` must be a JSON object"]
+
+    decision = payload.get("decision")
+    summary = payload.get("summary")
+    findings_payload = payload.get("findings")
+    errors: list[str] = []
+    if decision not in REVIEW_DECISIONS:
+        errors.append(f"engine result `{relative}` decision must be one of {', '.join(sorted(REVIEW_DECISIONS))}")
+    if not isinstance(summary, str) or not summary.strip():
+        errors.append(f"engine result `{relative}` must include non-empty `summary`")
+    findings, finding_errors = normalize_review_findings(findings_payload, relative=relative)
+    errors.extend(finding_errors)
+    if errors:
+        return None, errors
+
+    return {
+        **payload,
+        "decision": decision,
+        "summary": summary.strip(),
+        "findings": findings,
+    }, []
+
+
+def manual_review_payload(
+    *,
+    context: dict[str, Any],
+    findings_file: str | None,
+    kind: str,
+    review_record_path: str,
+) -> dict[str, Any]:
+    command = [
+        "python3",
+        "tools/loom_flow.py",
+        "review",
+        "record",
+        "--target",
+        str(context["target_root"]),
+        "--item",
+        context["item_id"],
+        "--decision",
+        "<allow|block|fallback>",
+        "--kind",
+        kind,
+        "--summary",
+        "<stable review summary>",
+        "--reviewer",
+        "<reviewer-id>",
+    ]
+    if findings_file:
+        command.extend(["--findings-file", findings_file])
+    return {
+        "summary": "If the default engine is blocked, complete formal review by writing the same review record manually.",
+        "review_record_path": review_record_path,
+        "findings_file": findings_file,
+        "recommended_kind": kind,
+        "command": command,
+    }
+
+
+def build_default_review_prompt(
+    *,
+    context: dict[str, Any],
+    build_payload: dict[str, Any],
+    runtime_fields: dict[str, dict[str, Any]],
+    review_path: str,
+) -> str:
+    focus_paths = review_focus_paths(context)
+    workspace_path = relative_to_root(context["workspace_path"], context["target_root"])
+    runtime_lines = [
+        f"- {field}: {runtime_fields[field]['value']}"
+        for field in RUNTIME_EVIDENCE_FIELDS
+    ]
+    path_lines = [f"- `{path}`" for path in focus_paths[:20]]
+    if len(focus_paths) > 20:
+        path_lines.append(f"- ... ({len(focus_paths) - 20} more paths omitted)")
+    return "\n".join(
+        [
+            "你是 Loom 默认 formal reviewer。",
+            "请基于当前仓库工作树做正式语义审查，并只输出符合 schema 的 JSON 结果。",
+            "优先阅读当前事项直接相关的文件与差异，不要做整仓广播式探索。",
+            "",
+            "Loom 审查边界：",
+            "- 你负责 reviewer rubric：判断方向、边界、语义正确性、风险与验证充分性。",
+            "- 你不是 merge gate；不要输出 safe_to_merge、guardian verdict 或宿主按钮决策。",
+            "- 你的输出只是 review evidence；最终正式真相会被回写到单一 review record。",
+            "- 若阻断项成立，decision 设为 `block`；若当前输入不足以形成正式结论，decision 设为 `fallback`。",
+            "",
+            "当前事项：",
+            f"- Item ID: {context['item_id']}",
+            f"- Goal: {context['goal']}",
+            f"- Scope: {context['scope']}",
+            f"- Execution Path: {context['execution_path']}",
+            f"- Workspace Entry: {context['workspace_entry']}",
+            f"- Workspace Path: {workspace_path}",
+            f"- Review Record Path: {review_path}",
+            f"- Latest Validation Summary: {context['latest_validation_summary']}",
+            "",
+            "Build Checkpoint：",
+            f"- Result: {build_payload['result']}",
+            f"- Summary: {build_payload['summary']}",
+            "",
+            "Runtime Evidence Entrypoints：",
+            *runtime_lines,
+            "",
+            "优先审查这些路径：",
+            *path_lines,
+            "",
+            "Findings 写作要求：",
+            "- 每条 finding 必须包含 `id`、`summary`、`severity`、`rebuttal`、`disposition`。",
+            "- `severity` 只允许 `warn` 或 `block`。",
+            "- `disposition.status` 只允许 `accepted`、`rejected`、`deferred`。",
+            "- 若没有阻断项但仍有后续动作，可输出 `warn` findings。",
+            "",
+            "Decision 规则：",
+            "- `allow`: 当前事项已通过 formal review。",
+            "- `block`: 存在明确阻断项。",
+            "- `fallback`: 当前输入不足或需要先回到前序 checkpoint 再继续。",
+        ]
+    ).rstrip() + "\n"
 
 
 def load_fact_chain_report(target_root: Path, output_relative: str) -> tuple[dict[str, Any], list[str]]:
@@ -1364,12 +2195,17 @@ def purity_report_from_context(context: dict[str, Any], fact_chain_errors: list[
             )
 
     owned_dirty, foreign_dirty = dirty_paths_by_owner(target_root)
+    evidence_dirty = dirty_runtime_evidence_paths(target_root)
+    foreign_dirty = [path for path in foreign_dirty if path not in evidence_dirty]
     if foreign_dirty:
         preview = ", ".join(sorted(foreign_dirty)[:5])
         hard_failures.append(f"workspace contains untriaged residual changes: {preview}")
     if owned_dirty:
         preview = ", ".join(sorted(owned_dirty)[:5])
         hard_failures.append(f"loom-owned temporary residue is still present: {preview}")
+    if evidence_dirty:
+        preview = ", ".join(sorted(evidence_dirty)[:5])
+        report_only.append(f"runtime review evidence is present and does not block purity on its own: {preview}")
 
     scope_paths = declared_scope_paths(context["scope"])
     out_of_scope_changes: list[str] = []
@@ -3438,6 +4274,87 @@ def handle_review(args: argparse.Namespace) -> int:
             }
         )
 
+    if args.operation == "run":
+        flow_payload = build_review_flow_payload(target_root, args.output, args.item)
+        if flow_payload["result"] != "pass":
+            manual_review = manual_review_payload(
+                context=context,
+                findings_file=None,
+                kind=default_review_kind(context),
+                review_record_path=review_path,
+            )
+            return emit(
+                {
+                    "command": "review",
+                    "operation": "run",
+                    "item": flow_payload.get("item"),
+                    "result": flow_payload["result"],
+                    "summary": "default review engine was not started because the Loom review baseline is not ready.",
+                    "missing_inputs": flow_payload["missing_inputs"],
+                    "fallback_to": flow_payload["fallback_to"],
+                    "steps": flow_payload.get("steps", []),
+                    "runtime_state": flow_payload.get("runtime_state"),
+                    "state_check": flow_payload.get("state_check"),
+                    "runtime_evidence": flow_payload.get("runtime_evidence"),
+                    "build_checkpoint": flow_payload.get("build_checkpoint"),
+                    "review": flow_payload.get("review"),
+                    "repo_specific_requirements": flow_payload.get("repo_specific_requirements"),
+                    "current_checkpoint": flow_payload.get("current_checkpoint"),
+                    "engine": {
+                        "engine": DEFAULT_REVIEW_ENGINE,
+                        "adapter": DEFAULT_REVIEW_ADAPTER,
+                        "result": "not_run",
+                        "failure_reason": None,
+                        "reviewed_head": git_head_sha(target_root) or "unknown-head",
+                        "evidence": None,
+                    },
+                    "manual_review": manual_review,
+                }
+            )
+
+        build_payload = flow_payload["build_checkpoint"]
+        engine_payload = run_default_review_engine(context, build_payload, review_path)
+        review_record_input = engine_payload.get("review_record_input")
+        findings_file = (
+            review_record_input.get("findings_file")
+            if isinstance(review_record_input, dict)
+            else None
+        )
+        manual_review = manual_review_payload(
+            context=context,
+            findings_file=findings_file if isinstance(findings_file, str) else None,
+            kind=default_review_kind(context),
+            review_record_path=review_path,
+        )
+        result = engine_payload["result"]
+        summary = (
+            engine_payload["summary"]
+            if result == "pass"
+            else "default review engine failed closed; record any formal review conclusion through the single review record."
+        )
+        return emit(
+            {
+                "command": "review",
+                "operation": "run",
+                "item": flow_payload.get("item"),
+                "result": result,
+                "summary": summary,
+                "missing_inputs": engine_payload["missing_inputs"],
+                "fallback_to": None if result == "block" else engine_payload["fallback_to"],
+                "steps": flow_payload.get("steps", []),
+                "runtime_state": flow_payload.get("runtime_state"),
+                "state_check": flow_payload.get("state_check"),
+                "runtime_evidence": flow_payload.get("runtime_evidence"),
+                "build_checkpoint": flow_payload.get("build_checkpoint"),
+                "review": flow_payload.get("review"),
+                "repo_specific_requirements": flow_payload.get("repo_specific_requirements"),
+                "current_checkpoint": flow_payload.get("current_checkpoint"),
+                "engine": engine_payload["engine"],
+                "manual_review": manual_review,
+                **({"review_record_input": review_record_input} if isinstance(review_record_input, dict) else {}),
+            }
+        )
+
     missing_inputs: list[str] = []
     for field in ("decision", "kind", "summary", "reviewer"):
         value = getattr(args, field.replace("-", "_"), None)
@@ -3527,11 +4444,14 @@ def handle_review(args: argparse.Namespace) -> int:
             "recovery_entry": str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"]),
             "status_surface": str(context["report"]["fact_chain"]["entry_points"]["status_surface"]),
             "build_checkpoint": build_payload["result"],
+            "engine_adapter": args.engine_adapter,
+            "engine_evidence": args.engine_evidence,
+            "normalized_findings": args.normalized_findings,
         },
     }
     review_abs = target_root / review_path
     review_abs.parent.mkdir(parents=True, exist_ok=True)
-    review_abs.write_text(json.dumps(review_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_json_file(review_abs, review_payload)
 
     verified_record, _, verified_errors = load_review_record(target_root, context["item_id"], review_path)
     if verified_errors or verified_record is None:
@@ -4026,6 +4946,8 @@ def handle_flow(args: argparse.Namespace) -> int:
                 "runtime_state": runtime_state,
             }
         )
+    if args.operation == "review":
+        return emit(build_review_flow_payload(target_root, args.output, args.item))
 
     steps.append(
         {
@@ -4377,6 +5299,60 @@ def handle_flow(args: argparse.Namespace) -> int:
     )
 
 
+def handle_shadow_parity(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    runtime_state = runtime_state_payload(target_root)
+    if runtime_state["result"] != "pass":
+        return emit(
+            runtime_state_block_payload(
+                command="shadow-parity",
+                runtime_state=runtime_state,
+                summary="shadow parity is blocked because the Loom runtime state is inconsistent.",
+            )
+        )
+
+    governance_surface = build_governance_surface(target_root)
+    repo_interop = governance_surface.get("repo_interop")
+    requested_surfaces = SHADOW_PARITY_SURFACES if args.surface == "all" else (args.surface,)
+    reports = [
+        shadow_parity_report(
+            repo_interop,
+            target_root=target_root,
+            surface=surface,
+        )
+        for surface in requested_surfaces
+    ]
+
+    result = "pass" if reports and all(report["result"] == "match" for report in reports) else "warn"
+    if result == "pass":
+        summary = "shadow parity matches across all requested surfaces."
+    else:
+        summaries = {report["result"] for report in reports}
+        if "mismatch" in summaries:
+            summary = "shadow parity found mismatches between Loom and repo-native governance surfaces."
+        else:
+            summary = "shadow parity could not fully read the declared governance surfaces."
+
+    missing_inputs: list[str] = []
+    for report in reports:
+        for message in report.get("missing_inputs", []):
+            if message not in missing_inputs:
+                missing_inputs.append(message)
+
+    return emit(
+        {
+            "command": "shadow-parity",
+            "result": result,
+            "summary": summary,
+            "missing_inputs": missing_inputs,
+            "fallback_to": None,
+            "runtime_state": runtime_state,
+            "governance_surface": governance_surface,
+            "reports": reports,
+        }
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     if args.command == "fact-chain":
@@ -4399,6 +5375,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_closeout(args)
     if args.command == "reconciliation":
         return handle_reconciliation(args)
+    if args.command == "shadow-parity":
+        return handle_shadow_parity(args)
     if args.command == "flow":
         return handle_flow(args)
     if args.command == "checkpoint":
