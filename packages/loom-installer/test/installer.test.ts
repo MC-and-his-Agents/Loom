@@ -84,6 +84,11 @@ test('package bin target matches the built CLI entrypoint', () => {
   assert.equal(typeof cliEntry, 'string');
   assert.equal(cliEntry, 'dist/src/cli.js');
   assert.equal(existsSync(join(packageRoot(), cliEntry)), true);
+  assert.deepEqual(packageJson.repository, {
+    type: 'git',
+    url: 'https://github.com/MC-and-his-Agents/Loom.git',
+    directory: 'packages/loom-installer',
+  });
 });
 
 test('codex plugin install writes marketplace entry', () => {

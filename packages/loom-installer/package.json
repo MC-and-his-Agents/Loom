@@ -37,5 +37,10 @@
     "codex",
     "claude"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MC-and-his-Agents/Loom.git",
+    "directory": "packages/loom-installer"
+  }
 }
