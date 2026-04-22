@@ -2430,6 +2430,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 return False
             for args in (
                 ["git", "add", "."],
+                ["git", "add", "-f", ".loom"],
                 ["git", "commit", "-m", "review-run baseline"],
             ):
                 result = run_command(root, args, cwd=target)
