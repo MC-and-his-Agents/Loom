@@ -4,7 +4,7 @@
   "description": "Node installer for Loom plugin and single-skill installation surfaces.",
   "type": "module",
   "bin": {
-    "loom-installer": "dist/cli.js"
+    "loom-installer": "dist/src/cli.js"
   },
   "files": [
     "dist",
