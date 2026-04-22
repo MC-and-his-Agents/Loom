@@ -36,7 +36,6 @@
     "shared/references/harness/automation-frontload.md",
     "shared/references/harness/workspace-and-purity.md",
     "shared/references/harness/execution-context.md",
-    "shared/references/harness/daily-entry-matrix.md",
     "shared/references/harness/execution-chain.md",
     "shared/references/harness/merge-checkpoint.md",
     "shared/references/harness/closeout-gate.md",

@@ -28,6 +28,7 @@
 - 本轮启用的能力清单
 - 每项能力分别映射到哪些 `governance`、`harness`、`templates`、`adoption` 规则
 - 这次采用的是最小装配、轻量 retrofit 还是更完整装配
+- 若命中成熟治理重仓 attach path，必须显式写出 `recommended_adoption.path = deep-existing-repo`
 - 接入方式是根级重写还是 `repo companion`（历史表述：`companion docs`）
 - 恢复形态是 `checkpoint-lite` 还是标准恢复形态
 
@@ -93,6 +94,12 @@
   - `missing_inputs`
 
 若本轮不装配标准恢复或状态面，也必须写清现有载体如何承接这些职责。
+
+若本轮走 `deep-existing-repo`，还必须显式写出：
+
+- attach-only 必备工件是什么
+- 哪些 repo-native carriers 继续保留
+- 哪些 Loom-owned carriers 本轮不会生成
 
 `init-result` 只允许承接 locator-only 信息，不并行复制实时停点、下一步、阻断项或最近验证摘要。
 
@@ -197,3 +204,5 @@
 - 相关信息分别落在哪个载体上
 
 若这些问题仍需要靠临场解释补齐，说明输出合同未达标。
+
+对 `deep-existing-repo` 而言，这组问题的答案允许由 attach metadata、repo companion 入口与 repo-native carriers 共同承接；它不要求第一轮就生成 Loom-owned `work-item` / `progress` / `status-surface`。

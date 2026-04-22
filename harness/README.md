@@ -3,7 +3,7 @@
 `harness/` 承接 Loom 的稳定执行合同与宿主编排语义。
 
 这里的文件不记录实时进度，也不把初始化场景或强度模型重复写成多份说明。
-这里承接的是已经冻结的执行链路、宿主控制面边界与可持续复用的编排职责；完整阶段目标由 `docs/roadmap.md` 承接，初始化场景和强度模型讨论由 `harness-design.md` 承接。
+这里承接的是已经冻结的执行链路、宿主控制面边界与可持续复用的编排职责；当前阶段目标由对应 GitHub issues 承接，初始化场景和强度模型讨论由 `harness-design.md` 承接。
 
 ## 组件边界
 
@@ -15,8 +15,6 @@
   - 定义每轮正式执行必须绑定和读取的最小上下文语义
 - [execution-chain.md](./execution-chain.md)
   - 定义从初始化产物到 merge checkpoint 放行的最小执行链路
-- `daily-entry-matrix.md`
-  - 定义 `skills` / CLI / gate 在日常高频动作上的入口矩阵与职责边界
 - `checkpoint-model.md`
   - 定义 `admission` / `build` checkpoint 的输入、输出、失败语义与回退去向
 - [workspace-model.md](./workspace-model.md)
@@ -53,4 +51,4 @@
 
 - 本目录优先表达可执行规则与编排责任，不在多个文件并行复述同一条执行链路
 - 同一条 harness 规则应有唯一主落点；允许围绕同一编排链路按不同宿主表面拆分文件，但不得复制第二套真相
-- 若某能力仍依赖初始化场景、装配关系、强度模型或阶段性取舍讨论，应留在 `harness-design.md` 或 `docs/roadmap.md`
+- 若某能力仍依赖初始化场景、装配关系、强度模型或阶段性取舍讨论，应留在 `harness-design.md` 或对应 GitHub issues

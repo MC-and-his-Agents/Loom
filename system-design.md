@@ -16,7 +16,7 @@
 - 愿景与价值判断
   - 见 [VISION.md](./VISION.md)
 - 当前阶段、推进顺序、进度状态
-  - 见 [docs/roadmap.md](./docs/roadmap.md)
+  - 见对应 GitHub issues
 - 多仓提取证据与落点台账
   - 见 [adoption/extraction-ledger.md](./adoption/extraction-ledger.md)
   - 见 [adoption/landing-map.md](./adoption/landing-map.md)

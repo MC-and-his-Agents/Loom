@@ -14,6 +14,7 @@
     "shared/scripts/governance_surface.py",
     "shared/scripts/loom_flow.py",
     "shared/scripts/loom_check.py",
+    "shared/assets/review/loom-review-result-schema.json",
     "shared/assets/templates/scaffold/spec.md",
     "shared/assets/templates/scaffold/plan.md",
     "shared/assets/github/PULL_REQUEST_TEMPLATE.md",
@@ -33,7 +34,6 @@
     "shared/references/harness/automation-frontload.md",
     "shared/references/harness/workspace-and-purity.md",
     "shared/references/harness/execution-context.md",
-    "shared/references/harness/daily-entry-matrix.md",
     "shared/references/harness/execution-chain.md",
     "shared/references/harness/merge-checkpoint.md",
     "shared/references/harness/closeout-gate.md",
@@ -46,6 +46,7 @@
     "shared/references/templates/pull-request.md",
     "shared/references/templates/review-record.md",
     "shared/references/adoption/lightweight-retrofit-default.md",
+    "shared/references/adoption/deep-existing-repo-default.md",
     "shared/references/adoption/routing-and-checkpoints.md",
     "loom-retire",
     "loom-retire/scripts/loom-retire.py"

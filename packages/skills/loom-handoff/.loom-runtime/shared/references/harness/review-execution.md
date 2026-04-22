@@ -14,6 +14,14 @@ Loom 把 review 分成三层：
   - merge 前统一放行聚合
 
 `review` 不替代前后两层，也不把语义判断硬编码成脚本。
+默认开箱即用路径固定为：
+
+1. `flow review`
+   - 只读基线；确认是否具备进入 formal review 的条件
+2. `review run`
+   - 调用默认 Codex-backed reviewer，产出结构化 review evidence 与 Loom-normalized findings
+3. `review record`
+   - 把 formal review 结论写入单一 authored review record
 
 ## 2. 唯一 review 载体
 
@@ -22,13 +30,19 @@ Loom 把 review 分成三层：
 默认入口：
 
 - `python3 skills/loom-review/scripts/loom-review.py flow review --target <repo> [--item <id>]`
+- `python3 skills/shared/scripts/loom_flow.py review run --target <repo> [--item <id>]`
 - `python3 skills/shared/scripts/loom_flow.py review record --target <repo> [--item <id>] --decision <allow|block|fallback> --kind <general_review|code_review|spec_review> --summary <text> --reviewer <id>`
 
 其中：
 
+- `flow review` 固定保持只读，不触发 engine，也不产生副作用
+- `review run` 只负责运行默认 reviewer、落盘 evidence、生成 normalized findings，并显式 fail-closed
 - `review record` 仍只写入单一 `review_entry` 指向的 JSON
 - 结构化审查结论可通过 `--findings-file <path>` 写入同一 review record
 - `--blocking-issue` / `--follow-up` 只保留兼容 authored 入口，不得与 `--findings-file` 混用
+
+默认 engine 当前固定为 Codex。
+若 engine 不可用、schema 漂移、runtime 冲突或运行后改动了 tracked repo 内容，`review run` 必须返回 `block`，并指向 manual review 继续写回同一 `review record`；不得把这类失败伪装成 checkpoint fallback。
 
 ## 3. review record 最小字段
 
@@ -56,6 +70,8 @@ review record 至少应包含：
 - `rebuttal` 当前稳定值为 `null` 或非空字符串
 - `disposition` 当前稳定值为 `null` 或对象；对象内的 `status` 只允许 `accepted`、`rejected`、`deferred`
 - `blocking_issues` / `follow_ups` 只是从 `findings` 投影出的兼容字段，不构成第二真相源
+- `consumed_inputs.engine_adapter`、`consumed_inputs.engine_evidence`、`consumed_inputs.normalized_findings`
+  - 只记录 evidence 来源，不构成第二 authored truth
 
 ## 4. 与 merge checkpoint 的边界
 
@@ -72,9 +88,12 @@ review record 至少应包含：
 - `decision: fallback` 按 `fallback_to` 返回 `fallback`
 - 如需读取阻断或后续事项，只能优先消费同一 review record 内的 `findings`
 
+它不得直接消费 engine raw output、prompt、日志或其他 evidence 文件。
+
 ## 5. 非目标
 
 - 不把 review 结论写回 recovery entry 或 status surface
 - 不让 PR 模板充当正式 review 真相
 - 不让 merge-ready 替代正式 review
 - 不为 rebuttal / disposition 再创建第二份 review artifact 或新状态机
+- 不把 Loom 扩写成 multi-engine marketplace

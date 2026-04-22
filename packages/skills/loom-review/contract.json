@@ -1,5 +1,5 @@
 {
-  "contract_version": "1.3.0",
+  "contract_version": "1.4.0",
   "description": "Run the formal semantic review layer on top of pre-review and return authoritative review findings plus a verdict without replacing merge-ready.",
   "display_name": "Loom Review",
   "entrypoint": {
@@ -35,6 +35,8 @@
       "runtime_evidence",
       "build_checkpoint",
       "review",
+      "engine",
+      "manual_review",
       "current_checkpoint"
     ]
   },
