@@ -33,12 +33,28 @@ Loom 在 `skills` 层固定承认两类对象：
 
 ## 安装入口
 
+Loom 在安装层固定区分两条路径：
+
+- 通过 npm 安装
+  - 面向“在别的项目里使用 Loom”
+  - 使用已发布的 `@mc-and-his-agents/loom-installer`
+  - 这是默认推荐路径
+- 通过 Loom 仓库接入
+  - 面向“让 Agent 直接以 Loom 仓库作为接入来源”
+  - 适合调试、验证、演示，或希望按仓库当前 truth 直接接入的场景
+  - 这不是另一种 npm 命令，而是把 Loom 仓库地址交给 Agent 作为安装来源
+
+如果目标是把 Loom 稳定接到别的项目里，优先走 npm 路径。
+如果目标是验证仓库 truth、调试接入链，或让 Agent 直接按仓库当前状态完成接入，再走仓库路径。
+
+### 通过 npm 安装
+
 Loom 当前正式承认一条 npm / `npx` 安装入口：
 
 - `npx @mc-and-his-agents/loom-installer add plugin`
 - `npx @mc-and-his-agents/loom-installer add skill <skill-id>`
 
-这条入口负责安装、发现与验证，不替代 Python runtime。
+这条 npm 入口负责安装、发现与验证，不替代 Python runtime。
 
 运行前提：
 
@@ -50,6 +66,22 @@ Loom 当前正式承认一条 npm / `npx` 安装入口：
 - `add plugin` 承诺完整 Loom 入口面
 - `add skill <skill-id>` 只承诺对应标准 skill
 - 安装成功不等于已经执行 Loom runtime，只代表安装 / 发现 / 验证链成立
+
+### 通过 Loom 仓库接入
+
+如果不走已发布 npm 包，也可以把 Loom 仓库直接交给 Agent 作为接入来源：
+
+- Loom 仓库：`https://github.com/MC-and-his-Agents/Loom`
+
+这种方式表达的是“按仓库当前 truth 直接接入 Loom”，而不是“通过 npm 获取 installer”。
+它适合：
+
+- 验证仓库当前 truth 是否可被直接接入
+- 调试、演示或本地试装 Loom
+- 让 Agent 在当前环境里自行判断更适合 plugin 还是 single-skill 接入
+
+这条路径不等于已经安装 `@mc-and-his-agents/loom-installer`。
+如果用户需要稳定、可复用、面向已发布版本的安装面，应回到 npm 路径。
 
 ## 用户会看到哪些入口
 

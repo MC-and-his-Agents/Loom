@@ -32,6 +32,20 @@ Loom 面向的是 Agent 执行路径，不要求人类用户手工编排每一�
 
 当接入流程在目标仓库写入 `.loom/` 产物时，会默认把 `.loom/` 追加到 `.gitignore`。
 
+Loom 当前有两条明确的接入路径：
+
+- 通过 npm 安装
+  - 面向“我要在别的项目里使用 Loom”
+  - 使用已发布的 `@mc-and-his-agents/loom-installer`
+  - 这是默认推荐路径
+- 通过 Loom 仓库接入
+  - 面向“我要让 Agent 直接基于这个 Loom 仓库完成接入”
+  - 适合还没准备 npm 安装面、或希望 Agent 按仓库 truth 直接接入的场景
+  - 这不是另一种 npm 命令，而是让 Agent 以仓库地址作为接入来源
+
+如果你只是想把 Loom 接到自己的项目里，优先用 npm 路径。
+如果你正在调试、验证、演示，或希望 Agent 直接以 Loom 仓库为来源完成接入，再使用仓库路径。
+
 ### 用 `npx` 直接接入
 
 如果当前 Agent 环境允许直接执行本地安装命令，可以直接使用 Loom 的 Node installer：
@@ -62,6 +76,23 @@ npx loom-installer add plugin --host claude
 npx loom-installer add skill loom-init --host codex
 npx loom-installer add skill loom-init --host claude
 ```
+
+以上两种都属于“通过 npm 安装”。
+
+### 通过 Loom 仓库接入
+
+如果你不打算先走已发布 npm 包，而是希望 Agent 直接以 Loom 仓库作为接入来源，可以把 Loom 仓库地址直接交给 Agent：
+
+- Loom 仓库：`https://github.com/MC-and-his-Agents/Loom`
+
+这种方式适合：
+
+- 你要按仓库当前 truth 直接接入，而不是依赖已发布版本
+- 你在验证、调试或演示 Loom
+- 你希望 Agent 自己判断当前环境更适合 plugin 还是 single-skill 接入
+
+这种方式不等于已经通过 npm 安装 `@mc-and-his-agents/loom-installer`。
+它表达的是“把 Loom 仓库作为接入来源”，而不是“从 npm 获取 Loom 安装器”。
 
 ### 完整接入 Loom Plugin
 
