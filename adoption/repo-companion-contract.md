@@ -173,7 +173,22 @@
 
 ### 4.4 `metadata_contract`
 
-`metadata_contract` 用于声明 repo-specific metadata fields，而不是把这些字段抬升为 Loom core 默认字段。
+`metadata_contract` 用于声明 repo-specific metadata block 的 locator contract，而不是把这些字段抬升为 Loom core 默认字段或通用 schema。
+
+它回答的是：
+
+- 这组 repo-specific metadata 在什么条件下适用
+- 真正的权威承载面位于哪里
+- Loom 应按什么阻断强度消费它
+
+它不回答：
+
+- Loom 运行时当前处于什么状态
+- review / validation / merge / closeout 已经得出了什么结论
+- retained host action 的结果是什么
+- 跨仓默认应统一使用哪些字段名
+
+换句话说，`metadata_contract.fields[*]` 是 locator-first 的“这组 repo-local metadata 去哪里读、何时读、按什么强度读”，不是“Loom core 现在认可哪些 metadata 字段名”的总表。
 
 `metadata_contract.fields[*]` 固定字段：
 
@@ -188,6 +203,72 @@
 - `applicability_locator` 指向“何时需要这组 metadata”的 companion 或 repo-local 权威说明
 - `authority_locator` 指向 metadata 真正承载的 repo-native carrier、模板或权威入口
 - `enforcement` 只允许 `blocking | advisory`
+
+当前已被样本证明有价值、但仍保持 repo-specific example 的字段族包括：
+
+- `integration_check`
+- `gate_applicability`
+- `live_evidence_record`
+
+稳定约束：
+
+- 这些名字可以作为 repo-specific metadata block example 出现在 companion 合同中
+- 它们不得被回写成 Loom core 默认字段名
+- Loom 不为它们提供跨仓统一 taxonomy 承诺
+
+### 4.4.1 明确禁止上移的字段模式
+
+`metadata_contract` 不得承接以下字段模式：
+
+- runtime state
+  - 例如 `runtime_state`、`current_lane`、`run_entry`、`logs_entry`、`diagnostics_entry`、`verification_entry`
+- authored execution state
+  - 例如 `current_stop`、`next_step`、`blockers`、`latest_validation_summary`
+- review summary / review verdict
+  - 例如 `review_summary`、`review_decision`、`reviewed_validation_summary`
+- validation / merge / closeout status
+  - 例如 `validation_status`、`merge_verdict`、`closeout_result`
+- retained host action result
+  - 例如 `guardian_verdict`、`ruleset_result`、`host_action_result`
+
+这些字段模式分别属于：
+
+- `harness/` 与 recovery / status carriers
+- review record 与 closeout 合同
+- companion-owned `interop.json`
+
+它们不能因为“看起来像 metadata”就被回塞到 `repo-interface.json`。
+
+### 4.4.2 与 `context_schema` 的边界
+
+`metadata_contract` 与 `context_schema` 的分工固定如下：
+
+- `metadata_contract`
+  - 声明 repo-local metadata block 的适用条件、权威入口与阻断强度
+- `context_schema`
+  - 声明 Loom 运行某个 surface 时必须提供哪些 repo-specific 上下文字段
+
+明确禁止事项：
+
+- 不得在 `metadata_contract` 中声明 `issue`、`item_key`、`release`、`sprint`、`guardian_lane` 这类调用上下文字段
+- 不得在 `context_schema` 中伪装声明 repo-native metadata block 的 authority locator
+- 不得把同一字段同时当作“必传上下文字段”和“repo-local metadata result 字段”写成单一 Loom core 默认概念
+
+### 4.4.3 与 `interop.json` 的边界
+
+`metadata_contract` 不得声明以下 locator：
+
+- retained host action result 的 locator
+- repo-native carrier truth 的 locator
+- `shadow parity` compare surface 的 locator
+
+这些入口固定属于 [repo-interop-contract.md](/Users/mc/dev/Loom/adoption/repo-interop-contract.md)。
+
+明确禁止事项：
+
+- 不得把 guardian / integration / ruleset / merge-native verdict 的结果 locator 写进 `metadata_contract`
+- 不得把 `shadow_surfaces` 的 `loom_locator` / `repo_locator` 回塞到 `repo-interface.json`
+- 不得把 `blocking ownership`、`override path`、`authority-of-truth` 写成 `metadata_contract` 字段
 
 ### 4.5 `context_schema`
 
@@ -213,6 +294,7 @@
 
 - `manifest.json` 仍 locator-only
 - `repo-interface.json` 仍不承载运行态、review summary、current stop、validation status 或 host action result
+- `metadata_contract` 仍只是 repo-specific metadata block 的 locator contract，不定义 Loom core 默认 taxonomy
 - repo-specific 规则仍通过 companion 合同挂接，不得伪装成 Loom core 默认规则
 - host adapter / repo-native carrier / shadow parity 入口继续留在独立的 `interop.json`，不得回塞到 `repo-interface.json`
 
