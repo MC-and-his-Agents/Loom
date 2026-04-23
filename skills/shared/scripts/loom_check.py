@@ -1253,9 +1253,9 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
     if not isinstance(contract, dict):
         return [Failure(category, "`skills/loom-init/contract.json` must be a JSON object")]
 
-    if "Loom is a skills-first methodology repository" not in readme:
+    if "Loom 是一个以 skills 为先的方法论仓库" not in readme:
         failures.append(Failure(category, "`README.md` must present Loom as a skills-first methodology repository"))
-    if "Advanced / Compatibility" not in readme:
+    if "高级 / 兼容" not in readme:
         failures.append(Failure(category, "`README.md` must keep single-skill installation as an advanced compatibility path"))
     if "它是 Loom 唯一的 root entry" not in skills_readme:
         failures.append(Failure(category, "`skills/README.md` must keep `loom-init` as the unique root entry"))

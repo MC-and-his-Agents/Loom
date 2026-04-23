@@ -10,10 +10,10 @@ const requiredNeedles = [
   {
     path: 'README.md',
     needles: [
-      'Loom is a skills-first methodology repository',
+      'Loom 是一个以 skills 为先的方法论仓库',
       'Fetch and follow instructions from https://raw.githubusercontent.com/MC-and-his-Agents/Loom/refs/heads/main/.codex/INSTALL.md',
       'npx @mc-and-his-agents/loom-installer add plugin --host codex',
-      'Advanced / Compatibility',
+      '高级 / 兼容',
     ],
   },
   {
