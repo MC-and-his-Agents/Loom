@@ -40,6 +40,13 @@ function prepareEnv(base: string): NodeJS.ProcessEnv {
   };
 }
 
+function writeCodexMarketplace(repoRoot: string, marketplace: unknown): string {
+  const marketplacePath = join(repoRoot, '.agents', 'plugins', 'marketplace.json');
+  mkdirSync(join(repoRoot, '.agents', 'plugins'), { recursive: true });
+  writeFileSync(marketplacePath, JSON.stringify(marketplace, null, 2));
+  return marketplacePath;
+}
+
 function writeFakeClaude(binDir: string, logPath: string): string {
   const scriptPath = join(binDir, 'claude');
   writeFileSync(
@@ -114,6 +121,73 @@ test('codex plugin install writes marketplace entry', () => {
   assert.equal(marketplace.plugins[0].source.path, './plugins/loom');
 });
 
+test('codex plugin install fails closed on marketplace conflicts without force', () => {
+  const base = fixtureRoot();
+  const envSource = prepareEnv(base);
+  mkdirSync(envSource.CODEX_HOME!, { recursive: true });
+  const repoRoot = join(base, 'repo');
+  mkdirSync(repoRoot, { recursive: true });
+  writeCodexMarketplace(repoRoot, {
+    name: 'custom-marketplace',
+    plugins: [
+      {
+        name: 'loom',
+        source: {
+          source: 'local',
+          path: './plugins/not-loom',
+        },
+      },
+    ],
+  });
+
+  const parsed: ParsedCommand = {
+    mode: 'plugin',
+    options: {
+      host: 'codex',
+      target: repoRoot,
+      force: false,
+      json: false,
+    },
+  };
+
+  assert.throws(() => runInstaller(parsed, envSource, packageRoot()), /already declares loom from a different path/);
+});
+
+test('codex plugin install lets --force take over conflicting marketplace entry', () => {
+  const base = fixtureRoot();
+  const envSource = prepareEnv(base);
+  mkdirSync(envSource.CODEX_HOME!, { recursive: true });
+  const repoRoot = join(base, 'repo');
+  mkdirSync(repoRoot, { recursive: true });
+  writeCodexMarketplace(repoRoot, {
+    name: 'custom-marketplace',
+    plugins: [
+      {
+        name: 'loom',
+        source: {
+          source: 'local',
+          path: './plugins/not-loom',
+        },
+      },
+    ],
+  });
+
+  const parsed: ParsedCommand = {
+    mode: 'plugin',
+    options: {
+      host: 'codex',
+      target: repoRoot,
+      force: true,
+      json: false,
+    },
+  };
+
+  const result = runInstaller(parsed, envSource, packageRoot());
+  const marketplace = JSON.parse(readFileSync(join(repoRoot, '.agents', 'plugins', 'marketplace.json'), 'utf8'));
+  assert.equal(result.mode, 'plugin');
+  assert.equal(marketplace.plugins[0].source.path, './plugins/loom');
+});
+
 test('codex skill install writes skills.config entry', () => {
   const base = fixtureRoot();
   const envSource = prepareEnv(base);
@@ -138,6 +212,101 @@ test('codex skill install writes skills.config entry', () => {
   assert.match(config, /\[\[skills\.config\]\]/);
   assert.match(config, /loom-review\/SKILL\.md/);
   assert.match(config, /enabled = true/);
+});
+
+test('codex skill install fails closed on conflicting skills.config entry without force', () => {
+  const base = fixtureRoot();
+  const envSource = prepareEnv(base);
+  mkdirSync(envSource.CODEX_HOME!, { recursive: true });
+  const repoRoot = join(base, 'repo');
+  mkdirSync(repoRoot, { recursive: true });
+  writeFileSync(
+    join(envSource.CODEX_HOME!, 'config.toml'),
+    [
+      'model = "gpt-5"',
+      '',
+      '[[skills.config]]',
+      'path = "/tmp/other/loom-review/SKILL.md"',
+      'enabled = true',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+
+  const parsed: ParsedCommand = {
+    mode: 'skill',
+    skillId: 'loom-review',
+    options: {
+      host: 'codex',
+      target: repoRoot,
+      force: false,
+      json: false,
+    },
+  };
+
+  assert.throws(() => runInstaller(parsed, envSource, packageRoot()), /already has loom-review from a different path/);
+});
+
+test('codex skill install lets --force take over conflicting skills.config entry', () => {
+  const base = fixtureRoot();
+  const envSource = prepareEnv(base);
+  mkdirSync(envSource.CODEX_HOME!, { recursive: true });
+  const repoRoot = join(base, 'repo');
+  mkdirSync(repoRoot, { recursive: true });
+  writeFileSync(
+    join(envSource.CODEX_HOME!, 'config.toml'),
+    [
+      'model = "gpt-5"',
+      '',
+      '[[skills.config]]',
+      'path = "/tmp/other/loom-review/SKILL.md"',
+      'enabled = true',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+
+  const parsed: ParsedCommand = {
+    mode: 'skill',
+    skillId: 'loom-review',
+    options: {
+      host: 'codex',
+      target: repoRoot,
+      force: true,
+      json: false,
+    },
+  };
+
+  const result = runInstaller(parsed, envSource, packageRoot());
+  const config = readFileSync(join(envSource.CODEX_HOME!, 'config.toml'), 'utf8');
+  assert.equal(result.mode, 'skill');
+  assert.doesNotMatch(config, /\/tmp\/other\/loom-review\/SKILL\.md/);
+  assert.match(config, /loom-review\/SKILL\.md/);
+});
+
+test('single-skill installs stay scoped to the named skill for codex', () => {
+  const base = fixtureRoot();
+  const envSource = prepareEnv(base);
+  mkdirSync(envSource.CODEX_HOME!, { recursive: true });
+  const repoRoot = join(base, 'repo');
+  mkdirSync(repoRoot, { recursive: true });
+
+  const parsed: ParsedCommand = {
+    mode: 'skill',
+    skillId: 'loom-init',
+    options: {
+      host: 'codex',
+      target: repoRoot,
+      force: false,
+      json: false,
+    },
+  };
+
+  const result = runInstaller(parsed, envSource, packageRoot());
+  assert.equal(result.mode, 'skill');
+  assert.match(result.warnings[0] ?? '', /only the named skill, not the full Loom plugin surface/);
+  assert.equal(existsSync(join(repoRoot, 'plugins', 'loom')), false);
+  assert.equal(existsSync(join(repoRoot, '.agents', 'plugins', 'marketplace.json')), false);
 });
 
 test('claude plugin install assembles marketplace and calls claude CLI', () => {
@@ -169,6 +338,31 @@ test('claude plugin install assembles marketplace and calls claude CLI', () => {
   assert.equal(pluginManifest.name, 'loom');
   assert.match(log, /plugin marketplace add/);
   assert.match(log, /plugin install loom@loom-local/);
+});
+
+test('single-skill installs stay scoped to the named skill for claude', () => {
+  const base = fixtureRoot();
+  const envSource = prepareEnv(base);
+  mkdirSync(envSource.CLAUDE_CONFIG_DIR!, { recursive: true });
+  const repoRoot = join(base, 'repo');
+  mkdirSync(repoRoot, { recursive: true });
+
+  const parsed: ParsedCommand = {
+    mode: 'skill',
+    skillId: 'loom-init',
+    options: {
+      host: 'claude',
+      target: repoRoot,
+      force: false,
+      json: false,
+    },
+  };
+
+  const result = runInstaller(parsed, envSource, packageRoot());
+  assert.equal(result.mode, 'skill');
+  assert.match(result.warnings[0] ?? '', /does not expose the full Loom plugin surface/);
+  assert.equal(existsSync(join(repoRoot, '.claude', 'skills', 'loom-init', 'SKILL.md')), true);
+  assert.equal(existsSync(join(repoRoot, '.claude', 'marketplaces', 'loom-local')), false);
 });
 
 test('cli emits structured json on success', () => {

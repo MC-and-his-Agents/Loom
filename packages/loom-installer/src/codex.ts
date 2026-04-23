@@ -55,7 +55,7 @@ function ensureMarketplace(targetRoot: string, force: boolean): string[] {
   const existing = marketplace.plugins.find(
     (entry) => typeof entry === 'object' && entry !== null && (entry as { name?: string }).name === 'loom',
   ) as { name?: string; source?: { path?: string } } | undefined;
-  if (existing && existing.source?.path && existing.source.path !== expectedPath) {
+  if (existing && existing.source?.path && existing.source.path !== expectedPath && !force) {
     throw new InstallerError(
       `Codex marketplace already declares loom from a different path: ${existing.source.path}`,
       `refusing to take over non-Loom marketplace entry for loom: ${existing.source.path}`,
