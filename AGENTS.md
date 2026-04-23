@@ -34,9 +34,9 @@ Loom 当前冻结的三层目标态是：
 1. [AGENTS.md](./AGENTS.md)
 2. [VISION.md](./VISION.md)
 3. [README.md](./README.md)
-4. [adoption/extraction-ledger.md](./adoption/extraction-ledger.md)
-5. [adoption/landing-map.md](./adoption/landing-map.md)
-6. 各区域 `README.md`
+4. [docs/evidence/extraction-ledger.md](./docs/evidence/extraction-ledger.md)
+5. [docs/evidence/landing-map.md](./docs/evidence/landing-map.md)
+6. `docs/` 与 `skills/` 下各区域 `README.md`
 7. 各区域具体规则与说明文件
 
 ## 读取顺序
@@ -50,14 +50,14 @@ Loom 当前冻结的三层目标态是：
 讨论 Loom 当前有哪些能力、从哪里提取而来时：
 
 1. [AGENTS.md](./AGENTS.md)
-2. [adoption/extraction-ledger.md](./adoption/extraction-ledger.md)
-3. [adoption/landing-map.md](./adoption/landing-map.md)
+2. [docs/evidence/extraction-ledger.md](./docs/evidence/extraction-ledger.md)
+3. [docs/evidence/landing-map.md](./docs/evidence/landing-map.md)
 
 讨论 Loom 仓库结构与当前落点时：
 
 1. [AGENTS.md](./AGENTS.md)
-2. [adoption/landing-map.md](./adoption/landing-map.md)
-3. 各区域 `README.md`
+2. [docs/evidence/landing-map.md](./docs/evidence/landing-map.md)
+3. `docs/` 与 `skills/` 下各区域 `README.md`
 4. 各区域具体文件
 
 讨论 Loom 当前阶段、阶段目标与阶段顺序时：
@@ -67,22 +67,24 @@ Loom 当前冻结的三层目标态是：
 
 ## 目录职责
 
-- `governance/`
+- `docs/methodology/governance/`
   - 治理原则、状态机、审查模型、成熟度与关闭语义
-- `harness/`
+- `docs/methodology/harness/`
   - 执行上下文、工作现场、恢复模型、宿主编排、自动化前置与纯度控制
-- `templates/`
+- `docs/methodology/templates/`
   - 正式规约模板、PR 模板和其他结构化工件
-- `adoption/`
-  - 提取台账、落点映射、采用动机、事项分流与候选模式
 - `skills/`
   - 初始化、接手、执行、审查、merge-ready、收口等一等可执行入口
+- `docs/adoption/`
+  - 采用动机、事项分流、repo companion 与 repo interop 合同
+- `docs/evidence/`
+  - 提取台账、落点映射与验证样本归档
 
 ## 工作纪律
 
 1. Loom 中的“说明文件”不应长期停留在纯解释状态；一旦对应条目已稳定，应继续推进到最小规范。
 2. 同一条 Loom 规则不得在多个区域重复完整表述；其他文档应链接或引用唯一落点。
-3. 若新增内容无法映射到 `governance`、`harness`、`templates`、`adoption`、`skills` 之一，应先停止并重新判断边界。
+3. 若新增内容无法映射到 `docs/methodology`、`docs/adoption`、`docs/evidence`、`skills` 之一，应先停止并重新判断边界。
 4. 若某结论只来自单一仓库且缺少第二来源支撑，默认进入 `adapt` 或 `needs_validation`，不得直接进入 `core`。
 5. 若某项能力只是当前仓库的组织便利，而非上游运行模型能力，不应进入 Loom。
 6. Loom 的模板与规则应优先追求最小可用，不追求首轮完备。
