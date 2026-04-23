@@ -21,6 +21,10 @@ const behaviorPaths = [
   'packages/loom-installer/scripts/build-payload.mjs',
 ];
 
+const ignoredBehaviorPaths = [
+  'plugins/loom/skills/distribution-and-adapter-contract.md',
+];
+
 function git(args) {
   return execFileSync('git', args, {
     cwd: repoRoot,
@@ -47,8 +51,11 @@ function changedFiles() {
 }
 
 const changed = changedFiles();
+const relevantChanged = changed.filter((path) => !ignoredBehaviorPaths.includes(path));
 const behaviorChanged = changed.some(
-  (path) => behaviorPaths.includes(path) || behaviorPrefixes.some((prefix) => path === prefix || path.startsWith(prefix)),
+  (path) =>
+    relevantChanged.includes(path) &&
+    (behaviorPaths.includes(path) || behaviorPrefixes.some((prefix) => path === prefix || path.startsWith(prefix))),
 );
 const currentVersion = readCurrentVersion();
 const baseVersion = readBaseVersion();
