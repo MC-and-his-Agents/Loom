@@ -1,6 +1,7 @@
 name: node-installer-release
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -31,6 +32,7 @@ jobs:
     env:
       PACKAGE_NAME: '@mc-and-his-agents/loom-installer'
       PACKAGE_TAG_PREFIX: 'loom-installer-v'
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -143,11 +145,19 @@ jobs:
             echo "reason=release-missing" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Verify npm publish identity
+        if: steps.state.outputs.should_publish == 'true'
+        working-directory: packages/loom-installer
+        run: |
+          npm whoami
+          npm view "${PACKAGE_NAME}" version
+
       - name: Publish npm package
         if: steps.state.outputs.should_publish == 'true'
         working-directory: packages/loom-installer
         env:
           LOOM_INSTALLER_BUILD_TIMESTAMP: ${{ github.event.head_commit.timestamp }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public
 
       - name: Create git tag
