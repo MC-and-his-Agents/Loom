@@ -110,4 +110,4 @@
 | EXT-0050 | `adapt` | `adoption/repo-companion-contract.md` | `candidate` | `#276` 已把 `metadata_contract` 收紧为 repo-specific metadata block 的 locator contract，并明确禁止 runtime state、review/validation summary、host action result 回塞；`integration_check` / `gate_applicability` / `live_evidence_record` 仍只保留为 repo-specific example，不升为 Loom core 默认字段 |
 | EXT-0051 | `keep` | `adoption/repo-interop-contract.md`; `harness/host-action-contract.md` | `core` | retained host action result 与 repo-native carriers 需要通过独立 `interop.json` 被 Loom 只读消费，而不是回塞到 `repo-interface.json` 或接管宿主实现 |
 | EXT-0052 | `keep` | `adoption/repo-interop-contract.md` | `core` | `shadow parity` 作为 `admission/review/merge_ready/closeout` 的 validation-only compare surface 已进入稳定合同 |
-| EXT-0053 | `needs_validation` | `archive-only` | `parking` | parity mismatch 是否应自动升级为 blocking merge gate 仍缺 live adopted repo 证据，继续停在待验证区 |
+| EXT-0053 | `needs_validation` | `archive-only` | `parking` | `#277` 已把升级前提写成版本化证据标准：需要至少两个新增 live adopted repo、四个 surface 的版本化 parity 记录、稳定 mismatch 分型、可证明的 gate 收益，以及落在 `interop.json` 之外的 blocking ownership / override / authority-of-truth；在此之前继续停在待验证区 |
