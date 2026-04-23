@@ -44,4 +44,5 @@ npx loom-installer add skill loom-init
 
 - PR 只做门禁，不直接发布 npm
 - `main` 是唯一发布真相源
-- publish 成功后再创建同版本 git tag
+- Loom 仓库主 release 与 installer npm 包版本线独立维护
+- publish 成功后再创建 `loom-installer-v<version>` git tag 与同名前缀的 GitHub Release
