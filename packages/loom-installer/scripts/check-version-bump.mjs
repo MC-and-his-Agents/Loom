@@ -12,10 +12,13 @@ const baseRef = baseArgIndex >= 0 ? process.argv[baseArgIndex + 1] : 'origin/mai
 
 const behaviorPrefixes = [
   'packages/loom-installer/src/',
-  'packages/loom-installer/scripts/',
-  'packages/loom-installer/package.json',
   'plugins/loom/',
   'packages/skills/',
+];
+
+const behaviorPaths = [
+  'packages/loom-installer/package.json',
+  'packages/loom-installer/scripts/build-payload.mjs',
 ];
 
 function git(args) {
@@ -44,7 +47,9 @@ function changedFiles() {
 }
 
 const changed = changedFiles();
-const behaviorChanged = changed.some((path) => behaviorPrefixes.some((prefix) => path === prefix || path.startsWith(prefix)));
+const behaviorChanged = changed.some(
+  (path) => behaviorPaths.includes(path) || behaviorPrefixes.some((prefix) => path === prefix || path.startsWith(prefix)),
+);
 const currentVersion = readCurrentVersion();
 const baseVersion = readBaseVersion();
 

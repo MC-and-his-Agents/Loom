@@ -80,7 +80,7 @@ jobs:
           echo "release_title=${RELEASE_TITLE}" >> "$GITHUB_OUTPUT"
 
           CHANGED_FILES=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}")
-          if printf '%s\n' "$CHANGED_FILES" | grep -E '^(packages/loom-installer/src/|packages/loom-installer/scripts/|packages/loom-installer/package.json|plugins/loom/|packages/skills/)' >/dev/null; then
+          if printf '%s\n' "$CHANGED_FILES" | grep -E '^(packages/loom-installer/src/|packages/loom-installer/scripts/build-payload\.mjs|packages/loom-installer/package.json|plugins/loom/|packages/skills/)' >/dev/null; then
             echo "behavior_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "behavior_changed=false" >> "$GITHUB_OUTPUT"
