@@ -21,11 +21,13 @@ from loom_flow import repo_specific_requirements_payload
 from runtime_paths import repo_local_root
 
 TOP_LEVEL_DIRS = (
-    "adoption",
-    "governance",
-    "harness",
+    ".codex",
+    ".codex-plugin",
+    "docs",
+    "examples",
+    "packages",
     "skills",
-    "templates",
+    "tools",
 )
 
 TOP_LEVEL_FILES = (
@@ -34,17 +36,14 @@ TOP_LEVEL_FILES = (
     "Makefile",
     "README.md",
     "VISION.md",
-    "governance-design.md",
-    "harness-design.md",
-    "system-design.md",
 )
 
 AREA_READMES = (
-    "adoption/README.md",
-    "governance/README.md",
-    "harness/README.md",
+    "docs/adoption/README.md",
+    "docs/methodology/governance/README.md",
+    "docs/methodology/harness/README.md",
     "skills/README.md",
-    "templates/README.md",
+    "docs/methodology/templates/README.md",
 )
 
 CORE_DOCS = (
@@ -52,38 +51,43 @@ CORE_DOCS = (
     ".github/workflows/loom-check.yml",
     ".github/workflows/node-installer-pr.yml",
     ".github/workflows/node-installer-release.yml",
-    "governance/principles.md",
-    "governance/review-model.md",
-    "governance/maturity-and-closing.md",
-    "governance/state-machine.md",
-    "governance/truth-and-sync-boundary.md",
-    "governance/host-object-taxonomy.md",
-    "harness/work-item-contract.md",
-    "harness/fact-chain-contract.md",
-    "harness/execution-context.md",
-    "harness/execution-chain.md",
-    "harness/checkpoint-model.md",
-    "harness/workspace-model.md",
-    "harness/workspace-lifecycle.md",
-    "harness/host-action-contract.md",
-    "harness/host-lifecycle-boundary.md",
-    "harness/reconciliation-audit.md",
-    "harness/recovery-model.md",
-    "harness/review-execution.md",
-    "harness/status-surface.md",
-    "harness/automation-frontload.md",
-    "harness/merge-checkpoint.md",
-    "harness/closeout-gate.md",
-    "harness/workspace-and-purity.md",
-    "templates/spec-suite.md",
-    "templates/pull-request.md",
-    "adoption/extraction-ledger.md",
-    "adoption/landing-map.md",
-    "adoption/rationale.md",
-    "adoption/routing-and-checkpoints.md",
-    "adoption/lightweight-retrofit-default.md",
-    "adoption/repo-companion-contract.md",
-    "adoption/repo-interop-contract.md",
+    ".codex/INSTALL.md",
+    ".codex-plugin/plugin.json",
+    "docs/architecture/governance-design.md",
+    "docs/architecture/harness-design.md",
+    "docs/architecture/system-design.md",
+    "docs/methodology/governance/principles.md",
+    "docs/methodology/governance/review-model.md",
+    "docs/methodology/governance/maturity-and-closing.md",
+    "docs/methodology/governance/state-machine.md",
+    "docs/methodology/governance/truth-and-sync-boundary.md",
+    "docs/methodology/governance/host-object-taxonomy.md",
+    "docs/methodology/harness/work-item-contract.md",
+    "docs/methodology/harness/fact-chain-contract.md",
+    "docs/methodology/harness/execution-context.md",
+    "docs/methodology/harness/execution-chain.md",
+    "docs/methodology/harness/checkpoint-model.md",
+    "docs/methodology/harness/workspace-model.md",
+    "docs/methodology/harness/workspace-lifecycle.md",
+    "docs/methodology/harness/host-action-contract.md",
+    "docs/methodology/harness/host-lifecycle-boundary.md",
+    "docs/methodology/harness/reconciliation-audit.md",
+    "docs/methodology/harness/recovery-model.md",
+    "docs/methodology/harness/review-execution.md",
+    "docs/methodology/harness/status-surface.md",
+    "docs/methodology/harness/automation-frontload.md",
+    "docs/methodology/harness/merge-checkpoint.md",
+    "docs/methodology/harness/closeout-gate.md",
+    "docs/methodology/harness/workspace-and-purity.md",
+    "docs/methodology/templates/spec-suite.md",
+    "docs/methodology/templates/pull-request.md",
+    "docs/evidence/extraction-ledger.md",
+    "docs/evidence/landing-map.md",
+    "docs/adoption/rationale.md",
+    "docs/adoption/routing-and-checkpoints.md",
+    "docs/adoption/lightweight-retrofit-default.md",
+    "docs/adoption/repo-companion-contract.md",
+    "docs/adoption/repo-interop-contract.md",
     "skills/distribution-and-adapter-contract.md",
     "skills/registry.json",
     "skills/install-layout.json",
@@ -98,9 +102,9 @@ CORE_DOCS = (
     "skills/loom-review/contract.json",
     "skills/loom-review/references/input-signals.md",
     "skills/loom-review/references/output-contract.md",
-    "templates/review-record.md",
-    "templates/scaffold/spec.md",
-    "templates/scaffold/plan.md",
+    "docs/methodology/templates/review-record.md",
+    "docs/methodology/templates/scaffold/spec.md",
+    "docs/methodology/templates/scaffold/plan.md",
     "packages/loom-installer/README.md",
     "packages/loom-installer/package.json",
     "packages/loom-installer/package-lock.json",
@@ -117,8 +121,8 @@ CORE_DOCS = (
 )
 
 AUTOMATION_FRONTLOAD_TEMPLATES = (
-    "templates/spec-suite.md",
-    "templates/pull-request.md",
+    "docs/methodology/templates/spec-suite.md",
+    "docs/methodology/templates/pull-request.md",
 )
 
 AUTOMATION_FRONTLOAD_SKILLS = (
@@ -133,17 +137,23 @@ AUTOMATION_FRONTLOAD_SKILLS = (
 )
 
 AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT = (
-    "harness/work-item-contract.md",
-    "harness/execution-context.md",
-    "harness/execution-chain.md",
-    "harness/checkpoint-model.md",
-    "harness/workspace-model.md",
-    "harness/workspace-lifecycle.md",
-    "harness/recovery-model.md",
-    "harness/status-surface.md",
-    "harness/automation-frontload.md",
-    "harness/merge-checkpoint.md",
-    "harness/workspace-and-purity.md",
+    "docs/methodology/harness/work-item-contract.md",
+    "docs/methodology/harness/execution-context.md",
+    "docs/methodology/harness/execution-chain.md",
+    "docs/methodology/harness/checkpoint-model.md",
+    "docs/methodology/harness/workspace-model.md",
+    "docs/methodology/harness/workspace-lifecycle.md",
+    "docs/methodology/harness/recovery-model.md",
+    "docs/methodology/harness/status-surface.md",
+    "docs/methodology/harness/automation-frontload.md",
+    "docs/methodology/harness/merge-checkpoint.md",
+    "docs/methodology/harness/workspace-and-purity.md",
+)
+
+GENERATED_TRACKED_PATHS = (
+    "plugins/loom",
+    "packages/skills",
+    "packages/loom-installer/payload",
 )
 
 DEMO_ASSETS = (
@@ -218,7 +228,25 @@ def check_required_paths(root: Path, category: str, paths: tuple[str, ...]) -> l
 
 
 def iter_markdown_files(root: Path) -> list[Path]:
-    return sorted(path for path in root.rglob("*.md") if path.is_file())
+    skipped_parts = {
+        ".git",
+        "node_modules",
+        "dist",
+        "payload",
+        "packages/skills",
+        "plugins/loom",
+    }
+    results: list[Path] = []
+    for path in root.rglob("*.md"):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(root).as_posix()
+        if any(relative == part or relative.startswith(f"{part}/") for part in skipped_parts):
+            continue
+        if relative.startswith("packages/loom-installer/payload/"):
+            continue
+        results.append(path)
+    return sorted(results)
 
 
 def split_link_target(raw_target: str) -> tuple[str, str]:
@@ -1225,10 +1253,10 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
     if not isinstance(contract, dict):
         return [Failure(category, "`skills/loom-init/contract.json` must be a JSON object")]
 
-    if "### 完整接入 Loom Plugin" not in readme:
-        failures.append(Failure(category, "`README.md` must keep the Loom plugin installation entry section"))
-    if "### `loom-init`" not in readme:
-        failures.append(Failure(category, "`README.md` must keep the single-skill `loom-init` installation section"))
+    if "Loom 是一个以 skills 为先的方法论仓库" not in readme:
+        failures.append(Failure(category, "`README.md` must present Loom as a skills-first methodology repository"))
+    if "高级 / 兼容" not in readme:
+        failures.append(Failure(category, "`README.md` must keep single-skill installation as an advanced compatibility path"))
     if "它是 Loom 唯一的 root entry" not in skills_readme:
         failures.append(Failure(category, "`skills/README.md` must keep `loom-init` as the unique root entry"))
     if "显式 skill 名称调用优先" not in route_matrix:
@@ -1265,8 +1293,8 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
     for command in installation_commands:
         if command not in skills_readme:
             failures.append(Failure(category, f"`skills/README.md` must document `{command}`"))
-    if "请按当前 Agent 环境支持的方式，只接入 `loom-init`" not in readme:
-        failures.append(Failure(category, "`README.md` must preserve the `loom-init` single-skill boundary prompt"))
+    if "git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom" not in readme:
+        failures.append(Failure(category, "`README.md` must document native skills-library installation"))
 
     return failures
 
@@ -4785,6 +4813,30 @@ def check_node_installer(root: Path) -> list[Failure]:
     return failures
 
 
+def check_generated_artifacts_untracked(root: Path) -> list[Failure]:
+    if not (root / ".git").exists():
+        return []
+    result = run_command(
+        root,
+        ["git", "ls-files", *GENERATED_TRACKED_PATHS],
+        timeout_seconds=30,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "git ls-files failed"
+        return [Failure("generated-artifacts", detail)]
+    tracked = [line for line in result.stdout.splitlines() if line.strip()]
+    if not tracked:
+        return []
+    preview = ", ".join(tracked[:8])
+    suffix = "" if len(tracked) <= 8 else f", ... (+{len(tracked) - 8} more)"
+    return [
+        Failure(
+            "generated-artifacts",
+            f"generated payload paths must not be tracked: {preview}{suffix}",
+        )
+    ]
+
+
 def is_within(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
@@ -4821,6 +4873,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_repo_companion_interface_contracts(root))
     failures.extend(check_repo_interop_contracts(root))
     failures.extend(check_node_installer(root))
+    failures.extend(check_generated_artifacts_untracked(root))
     failures.extend(check_markdown_links(root))
     return failures
 

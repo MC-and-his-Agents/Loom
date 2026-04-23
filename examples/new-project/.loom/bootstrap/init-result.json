@@ -7,7 +7,7 @@
     "contract_version": "1.3.0"
   },
   "run": {
-    "target": "/Users/mc/dev/Loom/examples/new-project",
+    "target": "/Users/mc/dev/Loom-superpowers-layout/examples/new-project",
     "scenario": "新项目",
     "scenario_key": "new",
     "integration_mode": "root",
@@ -85,11 +85,6 @@
   },
   "initial_artifacts": [
     {
-      "path": "AGENTS.md",
-      "kind": "root-entry",
-      "source": "generated"
-    },
-    {
       "path": ".loom/README.md",
       "kind": "rule-entry",
       "source": "generated"
@@ -112,26 +107,6 @@
     {
       "path": ".loom/bootstrap/capability-map.md",
       "kind": "capability-map",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/work-items/INIT-0001.md",
-      "kind": "work-item",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/progress/INIT-0001.md",
-      "kind": "progress",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/reviews/INIT-0001.json",
-      "kind": "review-entry",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/status/current.md",
-      "kind": "status-surface",
       "source": "generated"
     },
     {
@@ -168,6 +143,31 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py"
+    },
+    {
+      "path": "AGENTS.md",
+      "kind": "root-entry",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/work-items/INIT-0001.md",
+      "kind": "work-item",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/progress/INIT-0001.md",
+      "kind": "progress",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/reviews/INIT-0001.json",
+      "kind": "review-entry",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/status/current.md",
+      "kind": "status-surface",
+      "source": "generated"
     },
     {
       "path": ".loom/specs/INIT-0001/spec.md",
@@ -237,12 +237,12 @@
     "scene": "repo-local-demo",
     "carrier": "repo-local-wrapper",
     "entry_family": "loom-init",
-    "install_root": "/Users/mc/dev/Loom/skills",
-    "runtime_root": "/Users/mc/dev/Loom/skills/shared/scripts",
-    "registry_path": "/Users/mc/dev/Loom/skills/registry.json",
-    "layout_or_manifest_path": "/Users/mc/dev/Loom/skills/install-layout.json",
-    "source_repo_root": "/Users/mc/dev/Loom",
-    "target_root": "/Users/mc/dev/Loom/examples/new-project",
+    "install_root": "/Users/mc/dev/Loom-superpowers-layout/skills",
+    "runtime_root": "/Users/mc/dev/Loom-superpowers-layout/skills/shared/scripts",
+    "registry_path": "/Users/mc/dev/Loom-superpowers-layout/skills/registry.json",
+    "layout_or_manifest_path": "/Users/mc/dev/Loom-superpowers-layout/skills/install-layout.json",
+    "source_repo_root": "/Users/mc/dev/Loom-superpowers-layout",
+    "target_root": "/Users/mc/dev/Loom-superpowers-layout/examples/new-project",
     "checks": {
       "scene_marker": {
         "status": "pass",
@@ -252,21 +252,21 @@
         "status": "pass",
         "summary": "carrier layout exposes an installed skills root and shared runtime tree.",
         "evidence": {
-          "install_root": "/Users/mc/dev/Loom/skills"
+          "install_root": "/Users/mc/dev/Loom-superpowers-layout/skills"
         }
       },
       "registry_contract": {
         "status": "pass",
         "summary": "registry, upgrade contract, and skill entrypoints are consistent.",
         "evidence": {
-          "path": "/Users/mc/dev/Loom/skills/registry.json"
+          "path": "/Users/mc/dev/Loom-superpowers-layout/skills/registry.json"
         }
       },
       "shared_runtime": {
         "status": "pass",
         "summary": "shared runtime scripts are present and executable roots can be resolved.",
         "evidence": {
-          "path": "/Users/mc/dev/Loom/skills/shared/scripts"
+          "path": "/Users/mc/dev/Loom-superpowers-layout/skills/shared/scripts"
         }
       },
       "referenced_resources": {
@@ -352,6 +352,31 @@
         "source": "repo companion interface"
       },
       "summary": "no repo companion interface is declared for this repository.",
+      "missing_inputs": []
+    },
+    "repo_interop": {
+      "availability": "absent",
+      "contract": {
+        "status": "missing",
+        "locator": ".loom/companion/interop.json",
+        "source": "repository scan"
+      },
+      "host_adapters": {
+        "status": "missing",
+        "locator": "unknown",
+        "source": "repo interop contract"
+      },
+      "repo_native_carriers": {
+        "status": "missing",
+        "locator": "unknown",
+        "source": "repo interop contract"
+      },
+      "shadow_surfaces": {
+        "status": "missing",
+        "locator": "unknown",
+        "source": "repo interop contract"
+      },
+      "summary": "no repo interop contract is declared for this repository.",
       "missing_inputs": []
     },
     "summary": "repository is treated as new; Loom can plan the first governance carriers and bootstrap entrypoints without adding a second truth source.",

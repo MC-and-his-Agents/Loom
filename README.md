@@ -1,248 +1,117 @@
 # Loom
 
-Loom 是一个面向 Agent Coding 场景的治理、执行与收口仓库。
+Loom 是一个以 skills 为先的方法论仓库，用来组织 agent coding workflow。
 
-它解决的不是“怎么生成业务代码”，而是“项目如何被稳定接入、持续推进、进入 review、判断是否可合并，并在合并后完成收口”。
+它给编码智能体提供一条受治理约束的执行路径：从 adopt、resume、review、merge-ready，到 handoff 和 closeout。它的目标不是更快地产生业务代码，而是避免智能体工作停在“代码已经改了”，并把结果收敛到 merge-ready 与 closeout 完成态。
 
-## 适用场景
+## 工作方式
 
-如果你正在用 Agent 持续参与项目开发，而不是一次性生成代码，Loom 适合这类场景：
+Loom 以整包 skills library 的方式接入。智能体从 `loom-init` 起步，再根据当前任务和仓库状态路由到合适的 scenario skill。
 
-- agent 进入仓库后，不知道应该先接入、继续做、还是进入 review
-- 做到一半的任务需要恢复，但现场信息散落在聊天记录、PR 和临时说明里
-- 问题经常在最后 review 才第一次系统性暴露
-- 团队缺少统一的 merge-ready 判断
-- 代码进主干后，这一轮工作仍然没有真正收口
+基础执行流如下：
 
-更适合的仓库类型：
+1. `loom-init` 判断当前应当 adopt、resume、review、handoff、retire，还是检查 merge readiness。
+2. scenario skills 执行具体工作流，并消费共享的 Loom runtime contract。
+3. 方法论文档下沉在 skills 层之后，用户不需要先理解治理内部结构再开始使用 Loom。
+4. runtime evidence、review record、merge checkpoint 和 closeout check 共同维持仓库状态一致。
 
-- 会持续多轮推进、需要恢复现场的开发仓库
-- 有 review、合并和收口要求的多人协作仓库
-- 希望让 Agent 在仓库内按稳定流程推进工作的项目
+## 安装
 
-不太适合的仓库类型：
+### Codex 原生 Skills 发现
 
-- 一次性脚本、临时实验或几十分钟内即可完成的小改动仓库
-- 没有持续执行需求，也没有明确 review 或 closeout 语义的轻量仓库
+可以直接这样告诉 Codex：
 
-Loom 面向的是 Agent 执行路径，不要求人类用户手工编排每一步功能入口。
-接入完成后，Agent 会根据当前项目状态和已发现的 SKILLS 理解后续可执行路径。
+```text
+Fetch and follow instructions from https://raw.githubusercontent.com/MC-and-his-Agents/Loom/refs/heads/main/.codex/INSTALL.md
+```
 
-## 快速接入
+也可以手动安装：
 
-当接入流程在目标仓库写入 `.loom/` 产物时，会默认把 `.loom/` 追加到 `.gitignore`。
+```bash
+git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom
+mkdir -p ~/.agents/skills
+ln -s ~/.codex/loom/skills ~/.agents/skills/loom
+```
 
-Loom 当前有两条明确的接入路径：
+安装后请重启 Codex，让原生 skills discovery 重新加载 Loom skills。
 
-- 通过 npm 安装
-  - 面向“我要在别的项目里使用 Loom”
-  - 使用已发布的 `@mc-and-his-agents/loom-installer`
-  - 这是默认推荐路径
-- 通过 Loom 仓库接入
-  - 面向“我要让 Agent 直接基于这个 Loom 仓库完成接入”
-  - 适合还没准备 npm 安装面、或希望 Agent 按仓库 truth 直接接入的场景
-  - 这不是另一种 npm 命令，而是让 Agent 以仓库地址作为接入来源
+### npm Installer
 
-如果你只是想把 Loom 接到自己的项目里，优先用 npm 路径。
-如果你正在调试、验证、演示，或希望 Agent 直接以 Loom 仓库为来源完成接入，再使用仓库路径。
-
-### 用 `npx` 直接接入
-
-如果当前 Agent 环境允许直接执行本地安装命令，可以直接使用 Loom 的 Node installer：
+如果你希望通过 installer 把 plugin 接到目标仓库，可以使用：
 
 ```bash
 npx @mc-and-his-agents/loom-installer add plugin --host codex
 npx @mc-and-his-agents/loom-installer add plugin --host claude
-npx @mc-and-his-agents/loom-installer add skill loom-init --host codex
-npx @mc-and-his-agents/loom-installer add skill loom-init --host claude
 ```
 
-运行前提：
-
-- Node `>=20`
-- Python `>=3.10`，推荐 `3.11+`
-
-这条 `npx` 入口只负责安装、发现和验证。
-Loom 当前真实执行面仍然是仓库里的 Python runtime。
-
-### 用 `npm` 安装后再接入
-
-如果你希望先把 installer 固定到当前项目，也可以先安装再执行：
+也可以先固定 installer 版本：
 
 ```bash
 npm install -D @mc-and-his-agents/loom-installer
 npx loom-installer add plugin --host codex
 npx loom-installer add plugin --host claude
-npx loom-installer add skill loom-init --host codex
-npx loom-installer add skill loom-init --host claude
 ```
 
-以上两种都属于“通过 npm 安装”。
+要求：
 
-### 通过 Loom 仓库接入
+- Node `>=20`
+- Python `>=3.10`，推荐 `3.11+`
 
-如果你不打算先走已发布 npm 包，而是希望 Agent 直接以 Loom 仓库作为接入来源，可以把 Loom 仓库地址直接交给 Agent：
+installer 负责安装、发现和校验；Loom 的实际执行仍然运行在 skills library 随附的 Python runtime 上。
 
-- Loom 仓库：`https://github.com/MC-and-his-Agents/Loom`
+## 基本工作流
 
-这种方式适合：
+1. 当你不确定下一步该做什么时，从 `loom-init` 开始。
+2. 用 `loom-adopt` 初始化新仓库，或把 Loom retrofit 到既有仓库。
+3. 用 `loom-resume` 恢复上下文并继续当前 work item。
+4. 用 `loom-pre-review` 在正式 review 前暴露明显的 readiness 缺口。
+5. 用 `loom-review` 产出结构化 review 结果。
+6. 用 `loom-merge-ready` 在合并前验证 release boundary。
+7. 用 `loom-handoff` 或 `loom-retire` 把现场收成可恢复或已关闭状态。
 
-- 你要按仓库当前 truth 直接接入，而不是依赖已发布版本
-- 你在验证、调试或演示 Loom
-- 你希望 Agent 自己判断当前环境更适合 plugin 还是 single-skill 接入
+智能体不能把“已经有改动文件”当作完成。对 Loom 来说，只有目标、文档、review 状态、验证证据、主干真相和宿主控制面全部对齐，才算真正完成。
 
-这种方式不等于已经通过 npm 安装 `@mc-and-his-agents/loom-installer`。
-它表达的是“把 Loom 仓库作为接入来源”，而不是“从 npm 获取 Loom 安装器”。
+## SKILLS 库
 
-### 完整接入 Loom Plugin
+Loom 当前暴露一个 root entry 和七个 scenario skills：
 
-适合场景：
+| Skill | 作用 |
+| --- | --- |
+| `loom-init` | root entry；负责初始化或路由到正确场景。 |
+| `loom-adopt` | 为仓库建立最小 Loom 接入面。 |
+| `loom-resume` | 恢复上下文并继续 work item。 |
+| `loom-pre-review` | 在正式 review 前检查 readiness。 |
+| `loom-review` | 执行正式 review 并记录结果。 |
+| `loom-handoff` | 写出可恢复的交接点。 |
+| `loom-merge-ready` | 验证 merge readiness。 |
+| `loom-retire` | 在不丢弃用户改动的前提下清理并退场。 |
 
-- 你要把 Loom 作为当前项目的默认 Agent Coding 入口
-- 你希望 Agent 在项目中自动发现并使用 Loom 提供的整套能力
-- 你不想手工拼装接入、恢复、审查和收口环节
+canonical skills library 位于 [skills/](./skills/)。生成出来的 plugin 和 single-skill payload 不再提交到仓库；release tooling 会从根级 canonical `.codex-plugin/` 与 `skills/` 真相源动态构建它们。
 
-可以把下面这段提示词直接发给你的 Agent：
+## 高级 / 兼容
 
-```text
-帮我把这个仓库里的 Loom 以 plugin 方式接入当前项目：
-https://github.com/MC-and-his-Agents/Loom
+单 skill 安装仍然保留，作为兼容和高级路径，但它不再是 Loom 的主路径：
 
-请按当前 Agent 环境支持的本地 plugin 方式完成接入，让 Loom 在当前项目中可被发现并正常使用。
-不要直接开始改业务代码。
+```bash
+npx @mc-and-his-agents/loom-installer add skill loom-retire --host codex
+npx @mc-and-his-agents/loom-installer add skill loom-retire --host claude
 ```
 
-## 单独接入某个 Skill
+单独安装的 skill 只会向宿主暴露该 skill 本身。如果你需要 `loom-init` 路由能力和完整 scenario surface，请安装完整 Loom plugin 或整包 skills library。
 
-如果你不需要整套 Loom，而是只想为当前项目补一个明确的场景入口，可以直接接入对应 skill。
-下面每个场景都附了一段可直接复制的 prompt。
-
-### `loom-init`
-
-适合场景：
-
-- 你希望 Agent 进入项目后先判断当前应该从哪个场景开始
-- 你不想让 Agent 一进仓库就直接改代码
-
-```text
-帮我把这个仓库里的 `loom-init` skill 接入当前项目：
-https://github.com/MC-and-his-Agents/Loom
-
-请按当前 Agent 环境支持的方式，只接入 `loom-init`，让它在当前项目中可被发现并正常使用。
-不要安装整套 Loom，也不要直接开始改业务代码。
-```
-
-### `loom-adopt`
-
-适合场景：
-
-- 当前项目还没有 Loom，需要先完成接入骨架
-- 你想让 Agent 帮你把项目纳入 Loom 工作流
-
-```text
-帮我把这个仓库里的 `loom-adopt` skill 接入当前项目：
-https://github.com/MC-and-his-Agents/Loom
-
-请按当前 Agent 环境支持的方式，只接入 `loom-adopt`，让它在当前项目中可被发现并正常使用。
-不要安装整套 Loom，也不要直接开始改业务代码。
-```
-
-### `loom-resume`
-
-适合场景：
-
-- 当前任务做到一半，需要恢复执行
-- 你希望 Agent 先恢复现场，而不是靠聊天记录重新理解上下文
-
-```text
-帮我把这个仓库里的 `loom-resume` skill 接入当前项目：
-https://github.com/MC-and-his-Agents/Loom
-
-请按当前 Agent 环境支持的方式，只接入 `loom-resume`，让它在当前项目中可被发现并正常使用。
-不要安装整套 Loom，也不要直接开始改业务代码。
-```
-
-### `loom-pre-review`
-
-适合场景：
-
-- 你希望在正式 review 前先暴露明显问题
-- 你不想把第一次系统性检查留到最后
-
-```text
-帮我把这个仓库里的 `loom-pre-review` skill 接入当前项目：
-https://github.com/MC-and-his-Agents/Loom
-
-请按当前 Agent 环境支持的方式，只接入 `loom-pre-review`，让它在当前项目中可被发现并正常使用。
-不要安装整套 Loom，也不要直接开始改业务代码。
-```
-
-### `loom-review`
-
-适合场景：
-
-- 你要把审查结果沉淀成正式输入，而不只是 PR 上的零散评论
-- 你需要一个明确的 review 场景入口
-
-```text
-帮我把这个仓库里的 `loom-review` skill 接入当前项目：
-https://github.com/MC-and-his-Agents/Loom
-
-请按当前 Agent 环境支持的方式，只接入 `loom-review`，让它在当前项目中可被发现并正常使用。
-不要安装整套 Loom，也不要直接开始改业务代码。
-```
-
-### `loom-handoff`
-
-适合场景：
-
-- 当前工作要换一个 Agent 或换一个执行者继续
-- 你希望交接时把状态说清楚，而不是只留聊天记录
-
-```text
-帮我把这个仓库里的 `loom-handoff` skill 接入当前项目：
-https://github.com/MC-and-his-Agents/Loom
-
-请按当前 Agent 环境支持的方式，只接入 `loom-handoff`，让它在当前项目中可被发现并正常使用。
-不要安装整套 Loom，也不要直接开始改业务代码。
-```
-
-### `loom-merge-ready`
-
-适合场景：
-
-- 你需要一个明确的入口来判断当前是否可以合并
-- 你不想只靠主观感觉决定是否 merge
-
-```text
-帮我把这个仓库里的 `loom-merge-ready` skill 接入当前项目：
-https://github.com/MC-and-his-Agents/Loom
-
-请按当前 Agent 环境支持的方式，只接入 `loom-merge-ready`，让它在当前项目中可被发现并正常使用。
-不要安装整套 Loom，也不要直接开始改业务代码。
-```
-
-### `loom-retire`
-
-适合场景：
-
-- 当前执行现场需要干净退出
-- 你希望结束这一轮工作时不要留下悬空状态
-
-```text
-帮我把这个仓库里的 `loom-retire` skill 接入当前项目：
-https://github.com/MC-and-his-Agents/Loom
-
-请按当前 Agent 环境支持的方式，只接入 `loom-retire`，让它在当前项目中可被发现并正常使用。
-不要安装整套 Loom，也不要直接开始改业务代码。
-```
-
-## 文档入口
-
-如果你想继续看具体内容，从这里进入：
+## 维护者文档
 
 - 愿景与边界：[VISION.md](./VISION.md)
-- Skills 与分发形态：[skills/README.md](./skills/README.md)
-- Harness 执行层：[harness/README.md](./harness/README.md)
-- Adoption 落点与接入材料：[adoption/README.md](./adoption/README.md)
-- 安装、分发与适配合同：[skills/distribution-and-adapter-contract.md](./skills/distribution-and-adapter-contract.md)
+- 仓库宪法：[AGENTS.md](./AGENTS.md)
+- Skills 面：[skills/README.md](./skills/README.md)
+- 方法论文档：[docs/methodology/](./docs/methodology/)
+- 架构说明：[docs/architecture/](./docs/architecture/)
+- 接入合同：[docs/adoption/](./docs/adoption/)
+- 证据台账：[docs/evidence/](./docs/evidence/)
+- 分发合同：[skills/distribution-and-adapter-contract.md](./skills/distribution-and-adapter-contract.md)
+
+## 设计哲学
+
+Loom 以 merge-readiness 为中心。review、validation、host state 和 closeout 是彼此独立但必须收敛一致的表面，任何一个面没有收口，都不应视为工作完成。
+
+Loom 不是业务模板、代码生成器，也不是 GitHub、CI、review engine 或 `git worktree` 的替代品。它是方法论与可执行 skills 层，用来让智能体以一致方式消费这些宿主能力。

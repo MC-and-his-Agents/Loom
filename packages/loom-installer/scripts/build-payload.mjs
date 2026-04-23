@@ -8,39 +8,23 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(scriptDir, '..');
 const repoRoot = join(packageRoot, '..', '..');
 const payloadRoot = join(packageRoot, 'payload');
-const pluginSource = join(repoRoot, 'plugins', 'loom');
-const skillsSourceRoot = join(repoRoot, 'packages', 'skills');
-const pluginManifestPath = join(pluginSource, '.codex-plugin', 'plugin.json');
+const pluginManifestSource = join(repoRoot, '.codex-plugin');
+const skillsSourceRoot = join(repoRoot, 'skills');
+const pluginManifestPath = join(pluginManifestSource, 'plugin.json');
+const privateRuntimeDir = '.loom-runtime';
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'));
+}
+
+function writeJson(path, value) {
+  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
 }
 
 function sha256(path) {
   const hash = createHash('sha256');
   hash.update(readFileSync(path));
   return hash.digest('hex');
-}
-
-function collectFiles(baseDir, relativeBase = '') {
-  const files = [];
-  for (const entry of readdirSync(baseDir, { withFileTypes: true })) {
-    const entryPath = join(baseDir, entry.name);
-    const entryRelative = relativeBase ? join(relativeBase, entry.name) : entry.name;
-    if (entry.isDirectory()) {
-      files.push(...collectFiles(entryPath, entryRelative));
-      continue;
-    }
-    if (!entry.isFile()) {
-      continue;
-    }
-    files.push({
-      path: entryRelative.replaceAll('\\', '/'),
-      bytes: statSync(entryPath).size,
-      sha256: sha256(entryPath),
-    });
-  }
-  return files.sort((a, b) => a.path.localeCompare(b.path));
 }
 
 function shouldIgnore(name) {
@@ -65,6 +49,30 @@ function copyDirectoryFiltered(sourceDir, targetDir) {
   }
 }
 
+function collectFiles(baseDir, relativeBase = '') {
+  const files = [];
+  for (const entry of readdirSync(baseDir, { withFileTypes: true })) {
+    if (shouldIgnore(entry.name)) {
+      continue;
+    }
+    const entryPath = join(baseDir, entry.name);
+    const entryRelative = relativeBase ? join(relativeBase, entry.name) : entry.name;
+    if (entry.isDirectory()) {
+      files.push(...collectFiles(entryPath, entryRelative));
+      continue;
+    }
+    if (!entry.isFile()) {
+      continue;
+    }
+    files.push({
+      path: entryRelative.replaceAll('\\', '/'),
+      bytes: statSync(entryPath).size,
+      sha256: sha256(entryPath),
+    });
+  }
+  return files.sort((a, b) => a.path.localeCompare(b.path));
+}
+
 function gitValue(args, fallback) {
   try {
     return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' }).trim() || fallback;
@@ -73,8 +81,104 @@ function gitValue(args, fallback) {
   }
 }
 
-if (!existsSync(pluginSource)) {
-  throw new Error(`missing plugin source: ${pluginSource}`);
+function publicSkillEntries() {
+  const registry = readJson(join(skillsSourceRoot, 'registry.json'));
+  if (!Array.isArray(registry.entries) || registry.entries.length === 0) {
+    throw new Error('skills/registry.json must declare entries');
+  }
+  return registry.entries.map((entry) => {
+    if (!entry?.id) {
+      throw new Error('skills/registry.json contains an entry without id');
+    }
+    return entry;
+  });
+}
+
+function runtimeScript(skillId) {
+  return skillId === 'loom-init' || skillId === 'loom-adopt' ? 'loom_init.py' : 'loom_flow.py';
+}
+
+function writeSingleSkillWrapper(skillId, targetPath) {
+  const script = runtimeScript(skillId);
+  writeFileSync(
+    targetPath,
+    [
+      '#!/usr/bin/env python3',
+      'from __future__ import annotations',
+      '',
+      'import os',
+      'import runpy',
+      'import sys',
+      'from pathlib import Path',
+      '',
+      'SCRIPT_PATH = Path(__file__).resolve()',
+      'PACKAGE_ROOT = SCRIPT_PATH.parents[1]',
+      `RUNTIME_ROOT = PACKAGE_ROOT / "${privateRuntimeDir}"`,
+      '',
+      'os.environ.setdefault("LOOM_INSTALLED_SKILLS_ROOT", str(RUNTIME_ROOT))',
+      `os.environ.setdefault("LOOM_PACKAGE_SKILL_ID", "${skillId}")`,
+      'sys.path.insert(0, str(RUNTIME_ROOT / "shared/scripts"))',
+      `runpy.run_path(RUNTIME_ROOT / "shared/scripts/${script}", run_name="__main__")`,
+      '',
+    ].join('\n'),
+    { encoding: 'utf8', mode: 0o755 },
+  );
+}
+
+function copyTopLevelSkillSurface(skillId, targetRoot) {
+  const sourceRoot = join(skillsSourceRoot, skillId);
+  const targetSkillRoot = join(targetRoot, skillId);
+  const packageSkillRoot = targetRoot;
+  copyDirectoryFiltered(sourceRoot, packageSkillRoot);
+  rmSync(join(packageSkillRoot, 'scripts'), { recursive: true, force: true });
+  mkdirSync(join(packageSkillRoot, 'scripts'), { recursive: true });
+  const entrypoint = readJson(join(sourceRoot, 'contract.json')).entrypoint ?? {};
+  const executable = entrypoint.script ?? entrypoint.bootstrap_cli ?? entrypoint.orchestration_cli ?? entrypoint.route_cli;
+  if (!executable || typeof executable !== 'string') {
+    throw new Error(`${skillId}/contract.json must declare entrypoint.script`);
+  }
+  writeSingleSkillWrapper(skillId, join(packageSkillRoot, executable));
+  rmSync(targetSkillRoot, { recursive: true, force: true });
+}
+
+function copyFullRuntime(runtimeRoot) {
+  copyDirectoryFiltered(skillsSourceRoot, runtimeRoot);
+}
+
+function buildPluginPayload() {
+  const pluginTarget = join(payloadRoot, 'plugin', 'loom');
+  mkdirSync(pluginTarget, { recursive: true });
+  copyDirectoryFiltered(pluginManifestSource, join(pluginTarget, '.codex-plugin'));
+  copyDirectoryFiltered(skillsSourceRoot, join(pluginTarget, 'skills'));
+}
+
+function buildSingleSkillPayloads(entries) {
+  const skillsPayloadRoot = join(payloadRoot, 'skills');
+  mkdirSync(skillsPayloadRoot, { recursive: true });
+  const skills = [];
+  for (const entry of entries) {
+    const skillId = entry.id;
+    const sourceDir = join(skillsSourceRoot, skillId);
+    if (!existsSync(sourceDir)) {
+      throw new Error(`missing skill source: ${sourceDir}`);
+    }
+    const contract = readJson(join(sourceDir, 'contract.json'));
+    const packageDir = join(skillsPayloadRoot, skillId);
+    mkdirSync(packageDir, { recursive: true });
+    copyTopLevelSkillSurface(skillId, packageDir);
+    copyFullRuntime(join(packageDir, privateRuntimeDir));
+    skills.push({
+      id: contract.id,
+      display_name: contract.display_name,
+      contract_version: contract.contract_version,
+      relative_path: `skills/${skillId}`,
+    });
+  }
+  return skills;
+}
+
+if (!existsSync(pluginManifestPath)) {
+  throw new Error(`missing plugin manifest: ${pluginManifestPath}`);
 }
 if (!existsSync(skillsSourceRoot)) {
   throw new Error(`missing skills source root: ${skillsSourceRoot}`);
@@ -82,33 +186,11 @@ if (!existsSync(skillsSourceRoot)) {
 
 rmSync(payloadRoot, { recursive: true, force: true });
 mkdirSync(payloadRoot, { recursive: true });
-mkdirSync(join(payloadRoot, 'plugin'), { recursive: true });
-mkdirSync(join(payloadRoot, 'skills'), { recursive: true });
 
-copyDirectoryFiltered(pluginSource, join(payloadRoot, 'plugin', 'loom'));
-
-const skillDirs = readdirSync(skillsSourceRoot, { withFileTypes: true })
-  .filter((entry) => entry.isDirectory())
-  .map((entry) => entry.name)
-  .sort();
-
-const skills = [];
-for (const skillDir of skillDirs) {
-  const sourceDir = join(skillsSourceRoot, skillDir);
-  const contractPath = join(sourceDir, 'contract.json');
-  const contract = readJson(contractPath);
-  copyDirectoryFiltered(sourceDir, join(payloadRoot, 'skills', skillDir));
-  skills.push({
-    id: contract.id,
-    display_name: contract.display_name,
-    contract_version: contract.contract_version,
-    relative_path: `skills/${skillDir}`,
-  });
-}
-
+buildPluginPayload();
+const skillRecords = buildSingleSkillPayloads(publicSkillEntries());
 const pluginManifest = readJson(pluginManifestPath);
-const files = collectFiles(payloadRoot)
-  .filter((entry) => entry.path !== 'manifest.json');
+const files = collectFiles(payloadRoot).filter((entry) => entry.path !== 'manifest.json');
 
 const manifest = {
   schema_version: 'loom-installer-payload/v1',
@@ -119,18 +201,18 @@ const manifest = {
   built_at: process.env.LOOM_INSTALLER_BUILD_TIMESTAMP ?? new Date().toISOString(),
   runtime: {
     python_minimum: '3.10',
-    python_recommended: '3.11+'
+    python_recommended: '3.11+',
   },
   plugin: {
     name: pluginManifest.name,
     version: pluginManifest.version,
-    relative_path: 'plugin/loom'
+    relative_path: 'plugin/loom',
   },
-  skills,
-  files
+  skills: skillRecords,
+  files,
 };
 
-writeFileSync(join(payloadRoot, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+writeJson(join(payloadRoot, 'manifest.json'), manifest);
 
 console.log(`payload ready: ${relative(repoRoot, payloadRoot)}`);
-console.log(`skills bundled: ${skills.map((skill) => skill.id).join(', ')}`);
+console.log(`skills bundled: ${skillRecords.map((skill) => skill.id).join(', ')}`);

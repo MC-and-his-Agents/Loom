@@ -14,7 +14,7 @@
 本文默认前提：
 
 - `SKILLS` 是入口层，不是事实真相源
-- 治理规则、执行机制、模板约束在安装态由 `skills/shared/references/` 暴露稳定读面；repo-local 源码真相仍分别维护在 `governance/`、`harness/`、`templates/`、`adoption/`
+- 治理规则、执行机制、模板约束在安装态由 `skills/shared/references/` 暴露稳定读面；repo-local 源码真相维护在 `docs/methodology/` 与 `docs/adoption/`
 - 宿主可以不同，但 Loom 对入口层的最小能力边界应保持稳定
 - 当前版本判断是 `major but still pre-1`
 
@@ -256,8 +256,8 @@ Node installer 的职责边界：
 
 Node installer 当前打包的正式安装源：
 
-- plugin payload：`plugins/loom/**`
-- single-skill payload：`packages/skills/<skill-id>/**`
+- plugin payload：发布时由 `.codex-plugin/` 与 `skills/` 生成
+- single-skill payload：发布时由 canonical `skills/` 临时生成
 
 Node installer 的最小 preflight 必须覆盖：
 
@@ -279,7 +279,7 @@ Node installer 的最小 verify 输出必须覆盖：
 当前宿主映射固定如下：
 
 - Codex plugin
-  - repo-local `plugins/loom/**`
+  - repo-local `.codex-plugin/` + `skills/`
   - `.agents/plugins/marketplace.json`
 - Codex single-skill
   - `~/.codex/skills/<skill-id>/`

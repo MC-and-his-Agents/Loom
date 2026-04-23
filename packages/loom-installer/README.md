@@ -1,48 +1,55 @@
 # @mc-and-his-agents/loom-installer
 
-Loom 的 npm / npx 安装入口。
+Loom npm / npx installer.
 
-它负责两件事：
+The primary install mode is the complete Loom plugin surface. Single-skill install remains available for compatibility and advanced use.
 
-- 把 Loom 作为完整 plugin 接到 Codex 或 Claude
-- 把某个单独 Loom skill 接到对应宿主
-
-它不替代 Loom 当前的 Python runtime；真正的执行面仍然是仓库里的 Python 脚本与已发布的 skill / plugin 产物。
-
-## 命令面
+## Commands
 
 ```bash
-npx @mc-and-his-agents/loom-installer add plugin
-npx @mc-and-his-agents/loom-installer add skill loom-init
+npx @mc-and-his-agents/loom-installer add plugin --host codex
+npx @mc-and-his-agents/loom-installer add plugin --host claude
 ```
 
-也可以先安装再执行：
+Single skill compatibility path:
+
+```bash
+npx @mc-and-his-agents/loom-installer add skill <skill-id> --host codex
+npx @mc-and-his-agents/loom-installer add skill <skill-id> --host claude
+```
+
+You can also pin the installer first:
 
 ```bash
 npm install -D @mc-and-his-agents/loom-installer
-npx loom-installer add plugin
-npx loom-installer add skill loom-init
+npx loom-installer add plugin --host codex
 ```
 
-可选参数：
+Options:
 
 - `--host codex|claude|auto`
 - `--target <repo-root>`
 - `--force`
 - `--json`
 
-## 运行时要求
+## Requirements
 
 - Node `>=20`
 - Python `>=3.10`，推荐 `3.11+`
 
-## 发布说明
+## Payload Model
 
-本包支持 `npm publish`，但发布只在 `main` 上进行。
+The published package includes a generated payload. The payload is generated from the canonical root `.codex-plugin/` and `skills/` sources during build / pack / publish.
 
-发布模型：
+Generated payload directories are not committed to git. The build step recreates them deterministically and `check:payload` verifies rebuild stability.
 
-- PR 只做门禁，不直接发布 npm
-- `main` 是唯一发布真相源
-- Loom 仓库主 release 与 installer npm 包版本线独立维护
-- publish 成功后再创建 `loom-installer-v<version>` git tag 与同名前缀的 GitHub Release
+## Release Notes
+
+Publishing only happens from `main`.
+
+Release model:
+
+- PRs run gates but do not publish npm.
+- `main` is the only release truth source.
+- Loom repository releases and installer npm package versions are maintained separately.
+- publish 成功后再创建 `loom-installer-v<version>` git tag 与同名前缀的 GitHub Release.

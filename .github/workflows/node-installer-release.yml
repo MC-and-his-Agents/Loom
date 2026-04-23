@@ -7,15 +7,12 @@ on:
       - main
     paths:
       - 'packages/loom-installer/**'
-      - 'plugins/loom/**'
-      - 'packages/skills/**'
+      - '.codex-plugin/**'
+      - 'skills/**'
       - 'README.md'
       - 'skills/README.md'
       - 'skills/distribution-and-adapter-contract.md'
       - 'skills/shared/scripts/loom_check.py'
-      - 'plugins/loom/skills/README.md'
-      - 'plugins/loom/skills/distribution-and-adapter-contract.md'
-      - 'plugins/loom/skills/shared/scripts/loom_check.py'
       - '.github/workflows/node-installer-release.yml'
       - '.github/workflows/loom-check.yml'
 
@@ -82,8 +79,8 @@ jobs:
           echo "release_title=${RELEASE_TITLE}" >> "$GITHUB_OUTPUT"
 
           CHANGED_FILES=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}")
-          FILTERED_CHANGED=$(printf '%s\n' "$CHANGED_FILES" | grep -Ev '^(plugins/loom/skills/distribution-and-adapter-contract\.md)$' || true)
-          if printf '%s\n' "$FILTERED_CHANGED" | grep -E '^(packages/loom-installer/src/|packages/loom-installer/scripts/build-payload\.mjs|packages/loom-installer/package.json|plugins/loom/|packages/skills/)' >/dev/null; then
+          FILTERED_CHANGED=$CHANGED_FILES
+          if printf '%s\n' "$FILTERED_CHANGED" | grep -E '^(packages/loom-installer/src/|packages/loom-installer/scripts/build-payload\.mjs|packages/loom-installer/package.json|\.codex-plugin/|skills/)' >/dev/null; then
             echo "behavior_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "behavior_changed=false" >> "$GITHUB_OUTPUT"

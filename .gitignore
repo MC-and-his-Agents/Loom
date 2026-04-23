@@ -88,3 +88,8 @@ vendor/
 
 # Go workspace
 go.work.sum
+
+# Loom generated release artifacts
+plugins/loom/
+packages/skills/
+packages/loom-installer/payload/

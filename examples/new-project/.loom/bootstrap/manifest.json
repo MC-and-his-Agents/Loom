@@ -7,11 +7,6 @@
   "output": ".loom/bootstrap/init-result.json",
   "artifacts": [
     {
-      "path": "AGENTS.md",
-      "kind": "root-entry",
-      "source": "generated"
-    },
-    {
       "path": ".loom/README.md",
       "kind": "rule-entry",
       "source": "generated"
@@ -34,26 +29,6 @@
     {
       "path": ".loom/bootstrap/capability-map.md",
       "kind": "capability-map",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/work-items/INIT-0001.md",
-      "kind": "work-item",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/progress/INIT-0001.md",
-      "kind": "progress",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/reviews/INIT-0001.json",
-      "kind": "review-entry",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/status/current.md",
-      "kind": "status-surface",
       "source": "generated"
     },
     {
@@ -90,6 +65,31 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py"
+    },
+    {
+      "path": "AGENTS.md",
+      "kind": "root-entry",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/work-items/INIT-0001.md",
+      "kind": "work-item",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/progress/INIT-0001.md",
+      "kind": "progress",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/reviews/INIT-0001.json",
+      "kind": "review-entry",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/status/current.md",
+      "kind": "status-surface",
+      "source": "generated"
     },
     {
       "path": ".loom/specs/INIT-0001/spec.md",
