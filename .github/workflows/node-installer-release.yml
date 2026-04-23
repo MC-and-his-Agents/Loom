@@ -30,6 +30,7 @@ jobs:
       id-token: write
     env:
       PACKAGE_NAME: '@mc-and-his-agents/loom-installer'
+      PACKAGE_TAG_PREFIX: 'loom-installer-v'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -72,9 +73,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION=$(node -e "console.log(JSON.parse(require('fs').readFileSync('packages/loom-installer/package.json', 'utf8')).version)")
-          TAG="v${VERSION}"
+          TAG="${PACKAGE_TAG_PREFIX}${VERSION}"
+          RELEASE_TITLE="loom-installer v${VERSION}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "release_title=${RELEASE_TITLE}" >> "$GITHUB_OUTPUT"
 
           CHANGED_FILES=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}")
           if printf '%s\n' "$CHANGED_FILES" | grep -E '^(packages/loom-installer/src/|packages/loom-installer/scripts/|packages/loom-installer/package.json|plugins/loom/|packages/skills/)' >/dev/null; then
@@ -110,7 +113,7 @@ jobs:
 
           if [ "$PUBLISHED" = false ]; then
             if [ "$TAG_EXISTS" = true ] || [ "$RELEASE_EXISTS" = true ]; then
-              echo "release state is inconsistent: unpublished npm version already has git tag or GitHub release" >&2
+              echo "release state is inconsistent: unpublished npm version already has installer git tag or GitHub release" >&2
               exit 1
             fi
             echo "published=false" >> "$GITHUB_OUTPUT"
@@ -121,11 +124,11 @@ jobs:
           fi
 
           if [ "$TAG_EXISTS" != true ]; then
-            echo "release state is inconsistent: npm version ${VERSION} already exists but git tag ${TAG} is missing" >&2
+            echo "release state is inconsistent: npm version ${VERSION} already exists but installer git tag ${TAG} is missing" >&2
             exit 1
           fi
           if [ "$TAG_MATCHES" != true ]; then
-            echo "release state is inconsistent: git tag ${TAG} does not point to ${{ github.sha }}" >&2
+            echo "release state is inconsistent: installer git tag ${TAG} does not point to ${{ github.sha }}" >&2
             exit 1
           fi
 
@@ -158,4 +161,4 @@ jobs:
         if: steps.state.outputs.create_release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ steps.state.outputs.tag }}" --title "${{ steps.state.outputs.tag }}" --generate-notes
+        run: gh release create "${{ steps.state.outputs.tag }}" --title "${{ steps.state.outputs.release_title }}" --generate-notes

@@ -44,7 +44,8 @@ const requiredNeedles = [
       '若 shared runtime / resources 缺失、合同漂移或运行态冲突，宿主必须 fail-closed，而不是继续报告“可运行”',
       '当前入口属于 plugin install、scenario skill 还是单 skill package',
       'main 分支是真相源',
-      'publish 成功后再创建同版本 git tag',
+      'Loom 仓库主 release 与 installer npm 包版本线独立维护',
+      'publish 成功后再创建 `loom-installer-v<version>` git tag 与同名前缀的 GitHub Release',
     ],
   },
   {
@@ -66,6 +67,8 @@ const requiredNeedles = [
       '把某个单独 Loom skill 接到对应宿主',
       '它不替代 Loom 当前的 Python runtime；真正的执行面仍然是仓库里的 Python 脚本与已发布的 skill / plugin 产物。',
       '发布只在 `main` 上进行',
+      'Loom 仓库主 release 与 installer npm 包版本线独立维护',
+      'publish 成功后再创建 `loom-installer-v<version>` git tag 与同名前缀的 GitHub Release',
     ],
   },
 ];
