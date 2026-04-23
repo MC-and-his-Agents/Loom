@@ -126,6 +126,42 @@
 - `shadow mode` 在本树内只做 validation / parity，不直接成为 merge gate
 - `shadow_surfaces` 只描述比对入口，不声明“哪一方自动获胜”
 
+### 5.1 从 validation-only 升级前必须满足的证据标准
+
+在进入下一阶段之前，`shadow parity` 仍固定保持为 validation-only compare surface。
+
+要讨论是否从 validation-only 升级到更强治理面，必须同时满足以下条件：
+
+1. 至少两个新增的 live adopted repo
+   - 不得只重复消费当前 `Syvert` / `WebEnvoy` 基线表述
+2. 每个样本都提供版本化 parity 记录
+   - 至少覆盖 `admission`
+   - `review`
+   - `merge_ready`
+   - `closeout`
+3. `mismatch` 必须能稳定分型
+   - 至少区分：
+     - contract drift
+     - surface unreadable
+     - Loom bug
+     - repo-native lag
+4. 必须证明更强 gate 的收益
+   - 也就是自动升级后能减少真实错误放行
+   - 同时不会制造不可接受的误阻断
+5. blocking ownership、override path、authority-of-truth 必须落在 `interop.json` 之外的权威合同
+   - 例如 host action、closeout gate、review / checkpoint 合同
+
+只要以上任一条件未满足，`shadow parity` 就不得从 validation-only 升级。
+
+### 5.2 当前明确不做
+
+在本树当前阶段，明确不做以下升级：
+
+- 不把 `mismatch` 直接视为 blocking merge gate
+- 不把 `unreadable` 视为 repo-native 失败或 Loom 自动获胜
+- 不在 `interop.json` 中声明 blocking owner、override decision 或 final verdict
+- 不要求 `shadow parity` 代替 review、merge-ready 或 closeout 的正式 authority-of-truth
+
 ## 6. 与其他合同的关系
 
 - `repo-interface.json`
@@ -140,3 +176,4 @@
 - 不把 interop 细节塞回 `repo-interface.json`
 - 不让 `interop.json` 承载运行态或 authored state
 - 不让 Loom 因为读取了 interop contract，就接管宿主底层实现
+- 不让 `interop.json` 定义 blocking owner、override path 或 final merge authority
