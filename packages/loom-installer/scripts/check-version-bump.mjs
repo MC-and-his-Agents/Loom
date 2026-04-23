@@ -12,8 +12,8 @@ const baseRef = baseArgIndex >= 0 ? process.argv[baseArgIndex + 1] : 'origin/mai
 
 const behaviorPrefixes = [
   'packages/loom-installer/src/',
-  'plugins/loom/',
-  'packages/skills/',
+  '.codex-plugin/',
+  'skills/',
 ];
 
 const behaviorPaths = [
@@ -21,9 +21,7 @@ const behaviorPaths = [
   'packages/loom-installer/scripts/build-payload.mjs',
 ];
 
-const ignoredBehaviorPaths = [
-  'plugins/loom/skills/distribution-and-adapter-contract.md',
-];
+const ignoredBehaviorPaths = [];
 
 function git(args) {
   return execFileSync('git', args, {
