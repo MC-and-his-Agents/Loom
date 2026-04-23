@@ -96,9 +96,9 @@
 | EXT-0036 | `keep` | `harness/automation-frontload.md`; `tools/loom_check.py` | `core` | 知识库、模板与执行支撑的机械化校验能力 |
 | EXT-0037 | `keep` | `harness/work-item-contract.md`; `harness/workspace-model.md`; `harness/execution-chain.md`; `harness-design.md`; `skills/loom-init/references/output-contract.md` | `core` | initializer 产物、初始 progress 与 clean state |
 | EXT-0038 | `keep` | `harness/fact-chain-contract.md`; `harness/execution-context.md`; `harness/work-item-contract.md`; `harness/recovery-model.md`; `harness/execution-chain.md`; `skills/loom-init/references/output-contract.md` | `core` | 每轮读取与回写、单单元增量推进 |
-| EXT-0039 | `adapt` | `skills/distribution-and-adapter-contract.md` | `candidate` | `skills` 的安装、发现与升级合同 |
-| EXT-0040 | `adapt` | `skills/distribution-and-adapter-contract.md` | `candidate` | 薄 `bootstrap/root contract` 与深知识引用关系 |
-| EXT-0041 | `adapt` | `harness/automation-frontload.md`; `skills/distribution-and-adapter-contract.md` | `candidate` | 入口层触发与行为回归测试 |
+| EXT-0039 | `keep` | `skills/distribution-and-adapter-contract.md` | `core` | `#273` 已把安装、发现、升级合同写成正式入口合同并接入 installer gate |
+| EXT-0040 | `keep` | `skills/distribution-and-adapter-contract.md` | `core` | `#273` 已把薄 root contract 与深知识引用关系收成稳定入口边界，而不是候选约定 |
+| EXT-0041 | `keep` | `harness/automation-frontload.md`; `skills/distribution-and-adapter-contract.md` | `core` | `#273` 已把 root route、fallback、runtime/install drift 与安装边界回归纳入现有门禁 |
 | EXT-0042 | `keep` | `skills/distribution-and-adapter-contract.md` | `core` | 宿主特定细节收敛在 adapter 层 |
 | EXT-0043 | `needs_validation` | `archive-only` | `parking` | `#180` 已补 Loom 自身 retrofit 证据，但父事项 / 子事项关系仍缺第二宿主或第二仓库样本，继续停在待验证区 |
 | EXT-0044 | `adapt` | `skills/loom-init/SKILL.md`; `skills/loom-init/references/intake-signals.md` | `candidate` | `#168` 已把空仓新项目主路径写成正式验证记录，证明“先建立最小入口与升级边界”可被真实样本消费，但仍未形成第二新项目样本 |
