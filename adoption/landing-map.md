@@ -101,10 +101,10 @@
 | EXT-0041 | `keep` | `harness/automation-frontload.md`; `skills/distribution-and-adapter-contract.md` | `core` | `#273` 已把 root route、fallback、runtime/install drift 与安装边界回归纳入现有门禁 |
 | EXT-0042 | `keep` | `skills/distribution-and-adapter-contract.md` | `core` | 宿主特定细节收敛在 adapter 层 |
 | EXT-0043 | `needs_validation` | `archive-only` | `parking` | `#180` 已补 Loom 自身 retrofit 证据，但父事项 / 子事项关系仍缺第二宿主或第二仓库样本，继续停在待验证区 |
-| EXT-0044 | `adapt` | `skills/loom-init/SKILL.md`; `skills/loom-init/references/intake-signals.md` | `candidate` | `#168` 已把空仓新项目主路径写成正式验证记录，证明“先建立最小入口与升级边界”可被真实样本消费，但仍未形成第二新项目样本 |
+| EXT-0044 | `keep` | `skills/loom-init/SKILL.md`; `skills/loom-init/references/intake-signals.md`; `skills/loom-init/references/output-contract.md` | `core` | `#168` 与 `#275` 现在已提供两个独立空仓新项目样本，稳定复验同一条 root route、`minimal-bootstrap` 输出形状、验证入口与 fail-closed merge/closeout 边界 |
 | EXT-0045 | `keep` | `adoption/lightweight-retrofit-default.md`; `skills/loom-init/references/intake-signals.md`; `skills/loom-init/SKILL.md` | `core` | `#170` 已补既有仓库执行 / 回写 / sync repo companion 验证，继续支撑“轻量 retrofit 需要仓库级验证入口”的稳定边界 |
-| EXT-0046 | `adapt` | `skills/loom-init/references/intake-signals.md`; `harness/recovery-model.md`; `harness/status-surface.md` | `candidate` | 复杂既有仓库应从第一轮 adoption 起进入更完整装配 |
-| EXT-0047 | `adapt` | `skills/loom-init/references/intake-signals.md`; `harness/recovery-model.md`; `harness/status-surface.md` | `candidate` | 现行规则入口与历史入口并存本身是恢复与状态升级信号 |
+| EXT-0046 | `adapt` | `skills/loom-init/references/intake-signals.md`; `harness/recovery-model.md`; `harness/status-surface.md` | `candidate` | `hotcp` 继续证明某类复杂既有仓库需要更完整装配，但 `#275` 的 `Syvert` / `WebEnvoy` 第二样本反证说明不能把 `complex-existing` 一律升级成默认 `full-bootstrap` |
+| EXT-0047 | `adapt` | `skills/loom-init/references/intake-signals.md`; `harness/recovery-model.md`; `harness/status-surface.md` | `candidate` | `hotcp` 继续证明现行入口与历史入口并存可能是恢复升级信号，但 `#275` 的 `Syvert` / `WebEnvoy` 第二样本说明仅凭该信号本身仍不足以要求 Loom-owned recovery/status carriers |
 | EXT-0048 | `keep` | `adoption/deep-existing-repo-default.md`; `skills/loom-init/references/intake-signals.md`; `skills/loom-init/references/output-contract.md` | `core` | 成熟治理重仓在 `complex-existing` 下应优先走 attach-only 的 `deep-existing-repo`，而不是新增第四种 `repository_mode` |
 | EXT-0049 | `keep` | `adoption/repo-companion-contract.md` | `core` | typed `specialized_gates` 与 locator-first `context_schema` 已成为稳定 companion 合同 |
 | EXT-0050 | `adapt` | `adoption/repo-companion-contract.md` | `candidate` | `metadata_contract` 已进入 `repo-interface v2` 作为可选扩展，但字段 taxonomy 仍待第二个独立样本继续抽象 |
