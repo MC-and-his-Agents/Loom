@@ -107,7 +107,7 @@
 | EXT-0047 | `adapt` | `skills/loom-init/references/intake-signals.md`; `harness/recovery-model.md`; `harness/status-surface.md` | `candidate` | `hotcp` 继续证明现行入口与历史入口并存可能是恢复升级信号，但 `#275` 的 `Syvert` / `WebEnvoy` 第二样本说明仅凭该信号本身仍不足以要求 Loom-owned recovery/status carriers |
 | EXT-0048 | `keep` | `adoption/deep-existing-repo-default.md`; `skills/loom-init/references/intake-signals.md`; `skills/loom-init/references/output-contract.md` | `core` | 成熟治理重仓在 `complex-existing` 下应优先走 attach-only 的 `deep-existing-repo`，而不是新增第四种 `repository_mode` |
 | EXT-0049 | `keep` | `adoption/repo-companion-contract.md` | `core` | typed `specialized_gates` 与 locator-first `context_schema` 已成为稳定 companion 合同 |
-| EXT-0050 | `adapt` | `adoption/repo-companion-contract.md` | `candidate` | `metadata_contract` 已进入 `repo-interface v2` 作为可选扩展，但字段 taxonomy 仍待第二个独立样本继续抽象 |
+| EXT-0050 | `adapt` | `adoption/repo-companion-contract.md` | `candidate` | `#276` 已把 `metadata_contract` 收紧为 repo-specific metadata block 的 locator contract，并明确禁止 runtime state、review/validation summary、host action result 回塞；`integration_check` / `gate_applicability` / `live_evidence_record` 仍只保留为 repo-specific example，不升为 Loom core 默认字段 |
 | EXT-0051 | `keep` | `adoption/repo-interop-contract.md`; `harness/host-action-contract.md` | `core` | retained host action result 与 repo-native carriers 需要通过独立 `interop.json` 被 Loom 只读消费，而不是回塞到 `repo-interface.json` 或接管宿主实现 |
 | EXT-0052 | `keep` | `adoption/repo-interop-contract.md` | `core` | `shadow parity` 作为 `admission/review/merge_ready/closeout` 的 validation-only compare surface 已进入稳定合同 |
 | EXT-0053 | `needs_validation` | `archive-only` | `parking` | parity mismatch 是否应自动升级为 blocking merge gate 仍缺 live adopted repo 证据，继续停在待验证区 |
