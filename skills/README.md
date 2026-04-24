@@ -1,22 +1,24 @@
 # Skills
 
+Language: English | [中文版本](./README.zh-CN.md)
+
 `skills/` is the canonical skills library for Loom.
 
-When Loom is installed through Codex native skill discovery, a host plugin, or the npm installer, this directory is the user-facing execution surface. The methodology and architecture docs stay behind this layer; users should normally enter through skills, not through internal governance documents.
+When Loom is installed through Codex native skill discovery, a host plugin, or the npm installer, this directory is the user-facing execution surface. Methodology and architecture documents stay behind this layer; users should enter through skills instead of internal governance docs.
 
-默认从 `loom-init` 开始。它是 Loom 唯一的 root entry，负责两件事：
+By default, start from `loom-init`. It is the unique root entry for Loom and is responsible for two things:
 
-- 初始化 Loom，或把 Loom retrofit 进既有仓库
-- 在没有显式指定场景 skill 时，根据任务信号把执行者导向正确场景
+- initialize Loom or retrofit Loom into an existing repository
+- route the operator to the correct scenario skill when no explicit skill was named
 
-当前 `skills/` 层消费的是新的强治理控制面，固定约束如下：
+The `skills/` layer consumes the current strong-governance control plane with these fixed constraints:
 
-- `Work Item` 是唯一正式执行入口
-- 命中 formal spec 的事项，必须先通过 `spec gate`
-- 执行放行链固定收敛为 `spec gate -> build gate -> review gate -> merge gate`
-- `status control plane` 只读取并汇总事实链与宿主控制面，不新增 authored 真相
-- profile maturity 按 `light -> standard -> strong` 升级；事项成熟度仍按治理状态机推进
-- merge 由 GitHub 或等价宿主控制面受控执行；Loom 只消费并汇总 `GitHub controlled merge` 的前置条件
+- `Work Item` is the only formal execution entry
+- tasks that hit the formal spec path must pass the `spec gate` first
+- the release chain converges on `spec gate -> build gate -> review gate -> merge gate`
+- `status control plane` only reads and summarizes fact-chain and host control-plane truth, and does not author a second source of truth
+- profile maturity upgrades through `light -> standard -> strong`, while item maturity still advances through the governance state machine
+- merge is controlled by GitHub or an equivalent host control plane; Loom only consumes and summarizes the prerequisites for GitHub controlled merge
 
 ## Skills Library
 

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -10,10 +10,21 @@ const requiredNeedles = [
   {
     path: 'README.md',
     needles: [
-      'Loom 是一个以 skills 为先的方法论仓库',
+      'skills-first methodology repository',
+      'Fetch and follow instructions from https://raw.githubusercontent.com/MC-and-his-Agents/Loom/refs/heads/main/.codex/INSTALL.md',
+      'npx @mc-and-his-agents/loom-installer add plugin --host codex',
+      'Advanced / Compatibility',
+      '[中文版本](./README.zh-CN.md)',
+    ],
+  },
+  {
+    path: 'README.zh-CN.md',
+    needles: [
+      '以 skills 为先的方法论仓库',
       'Fetch and follow instructions from https://raw.githubusercontent.com/MC-and-his-Agents/Loom/refs/heads/main/.codex/INSTALL.md',
       'npx @mc-and-his-agents/loom-installer add plugin --host codex',
       '高级 / 兼容',
+      '[English version](./README.md)',
     ],
   },
   {
@@ -28,9 +39,20 @@ const requiredNeedles = [
     path: 'skills/README.md',
     needles: [
       'canonical skills library',
-      '默认从 `loom-init` 开始',
+      'unique root entry',
       'Advanced / Compatibility',
       'npx @mc-and-his-agents/loom-installer add skill <skill-id>',
+      '[中文版本](./README.zh-CN.md)',
+    ],
+  },
+  {
+    path: 'skills/README.zh-CN.md',
+    needles: [
+      'canonical skills library',
+      '唯一的 root entry',
+      'Advanced / Compatibility',
+      'npx @mc-and-his-agents/loom-installer add skill <skill-id>',
+      '[English version](./README.md)',
     ],
   },
   {
@@ -47,10 +69,23 @@ const requiredNeedles = [
     needles: [
       'npm install -D @mc-and-his-agents/loom-installer',
       'Node `>=20`',
-      'Python `>=3.10`，推荐 `3.11+`',
+      'Python `>=3.10`, recommended `3.11+`',
       'add plugin',
       'add skill <skill-id>',
       'payload is generated from the canonical root `.codex-plugin/` and `skills/` sources',
+      '[中文版本](./README.zh-CN.md)',
+    ],
+  },
+  {
+    path: 'packages/loom-installer/README.zh-CN.md',
+    needles: [
+      'npm install -D @mc-and-his-agents/loom-installer',
+      'Node `>=20`',
+      'Python `>=3.10`，推荐 `3.11+`',
+      'add plugin',
+      'add skill <skill-id>',
+      'canonical root `.codex-plugin/` 与 `skills/` 源',
+      '[English version](./README.md)',
     ],
   },
 ];
@@ -60,6 +95,10 @@ function readRepoFile(relativePath) {
 }
 
 for (const entry of requiredNeedles) {
+  if (!existsSync(join(repoRoot, entry.path))) {
+    console.error(`doc sync check failed: missing ${entry.path}`);
+    process.exit(1);
+  }
   const content = readRepoFile(entry.path);
   for (const needle of entry.needles) {
     if (!content.includes(needle)) {

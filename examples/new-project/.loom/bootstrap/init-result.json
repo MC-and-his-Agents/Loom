@@ -430,7 +430,7 @@
           },
           "branch": {
             "status": "present",
-            "locator": "feat/graphql-budget-rest-high-frequency",
+            "locator": "main",
             "authority": "git"
           },
           "worktree": {
