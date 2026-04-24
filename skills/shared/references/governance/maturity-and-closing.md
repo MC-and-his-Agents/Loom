@@ -13,6 +13,7 @@
 - 事项从说明到收口的最小阶段
 - 每个阶段的语义边界
 - 事项何时可以关闭
+- `maturity upgrade` 的纪律
 
 稳定状态名与转移规则见 [state-machine.md](./state-machine.md)。
 issue 类型、激活规则与 `absorbed` 的消费边界见 [issue-model.md](./issue-model.md)。
@@ -20,6 +21,7 @@ issue 类型、激活规则与 `absorbed` 的消费边界见 [issue-model.md](./
 ## 2. 成熟度先于关闭
 
 关闭语义必须与事项成熟度一致，不得提前制造“已完成”状态。
+任何状态推进都必须沿同一条 `maturity upgrade` 主链发生。
 
 说明完成、实现完成、合并就绪、主干收口是不同语义。
 
@@ -31,6 +33,7 @@ issue 类型、激活规则与 `absorbed` 的消费边界见 [issue-model.md](./
 
 - 不得跳过“说明已清楚 -> 实现进行中 -> 合并就绪 -> 已进入主干并收口”的语义顺序
 - 项目可以细化显示名，但不得破坏 [state-machine.md](./state-machine.md) 的稳定状态机语义
+- 项目可以加辅助标签，但不得把 `spec_approved`、`in_review`、`merge gate passed` 之类局部 gate 结论伪装成新的成熟度主状态
 
 ## 4. 关闭一致性条件
 
@@ -54,6 +57,8 @@ issue 类型、激活规则与 `absorbed` 的消费边界见 [issue-model.md](./
   - 表示“可进入主干”，不表示“已收口”
 - 进入主干并收口
   - 才表示事项完成
+- `spec gate` / `review gate`
+  - 表示局部放行结论，不等于成熟度主状态升级
 
 ## 6. 关闭反模式
 
@@ -66,4 +71,4 @@ issue 类型、激活规则与 `absorbed` 的消费边界见 [issue-model.md](./
 
 ## 7. 一句话结论
 
-成熟度模型的目标是让状态语义可验证，而不是让关闭动作更快发生。
+成熟度模型的目标是让 `maturity upgrade` 可验证，而不是让关闭动作更快发生。

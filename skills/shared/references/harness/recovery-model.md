@@ -32,7 +32,7 @@
 - 继续执行前，先回到该入口
 - 其他工件只能补充，不得并行充当主入口
 - 恢复主入口必须与当前事项直接绑定
-- merge checkpoint 消费最近恢复事实，但不替代该入口
+- merge gate 消费最近恢复事实，但不替代该入口
 
 ## 3. 最小恢复事实集
 
@@ -70,7 +70,7 @@
 边界固定如下：
 
 - `resume` / `handoff` 只读，不得隐式写 recovery authored 字段
-- `recovery writeback` 只写恢复主入口，再同步重渲染状态面
+- `recovery writeback` 只写恢复主入口，再同步重渲染 `status control plane`
 - 状态面不接受独立 authored 修改
 
 ## 5. `checkpoint-lite` 与标准恢复形态
@@ -89,13 +89,13 @@ Loom 默认承认两种恢复形态：
 - 事项经常跨多轮推进
 - 中断恢复成本明显升高
 - 出现多个入口并行记录
-- merge checkpoint 已需要稳定消费风险、验证摘要与回退边界
+- merge gate 已需要稳定消费风险、验证摘要与回退边界
 - 不存在单一稳定宿主载体，或当前仓库同时存在多个运行 / 状态入口
 
 ## 6. 边界约束
 
 - 不得只依赖聊天记录、分支名或个人记忆恢复
 - 不得在多个文档中并行维护“下一步”
-- 恢复主入口是动态执行真相的唯一主入口；状态面与 merge checkpoint 只允许派生消费
+- 恢复主入口是动态执行真相的唯一主入口；`status control plane` 与 merge gate 只允许派生消费
 - `exec-plan` 或等价恢复工件只承接执行与恢复，不替代正式需求真相
 - 本文件不重复定义回写后如何进入验证汇总与放行；该顺序由 [execution-chain.md](./execution-chain.md) 与 [merge-checkpoint.md](./merge-checkpoint.md) 承接

@@ -24,6 +24,11 @@
     "If the runtime is blocked, what fail-closed reason is visible to the operator?",
     "Should the host assert LOOM_RUNTIME_SCENE=upgrade-rehearsal for this run?",
     "Does the host need to refresh referenced resources after upgrade?",
-    "Did the registry gain or retire scenario entries that the host must rediscover?"
+    "Did the registry gain or retire scenario entries that the host must rediscover?",
+    "Does the installed shared reference layer still expose Work Item as the unique execution entry?",
+    "Does the installed gate chain still expose spec gate, build gate, review gate, and merge gate without parallel aliases?",
+    "Does the installed status control plane still converge fact-chain and host control signals without adding authored state?",
+    "Does the installed profile maturity model still preserve light -> standard -> strong upgrades?",
+    "Does the installed merge surface still treat host merge as GitHub-controlled rather than Loom-authored?"
   ]
 }

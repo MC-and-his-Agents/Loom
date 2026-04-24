@@ -11,14 +11,14 @@
 本文件只回答四件事：
 
 - Loom 当前如何区分不同类型的 issue
-- 哪些 issue 可以作为执行对象进入活跃推进
+- 哪些 issue 可以进入宿主执行控制面
 - parent / child issue 在 closeout 中各自承担什么角色
 - `absorbed` 这类结论如何被消费
 
 事项成熟度状态由 [state-machine.md](./state-machine.md) 承接。
 成熟度与关闭总原则由 [maturity-and-closing.md](./maturity-and-closing.md) 承接。
 宿主对象命名由 [host-object-taxonomy.md](./host-object-taxonomy.md) 承接。
-`active issue` 与 host branch / `git worktree` / PR / merge commit 的绑定证明见 [../harness/host-issue-binding.md](../harness/host-issue-binding.md)。
+host issue 与 `Work Item`、host branch、`git worktree`、PR、merge commit 的绑定证明见 [../harness/host-issue-binding.md](../harness/host-issue-binding.md)。
 
 ## 2. 稳定 issue 类型
 
@@ -27,9 +27,9 @@ Loom 当前固定三类 issue：
 - `spec / planning issue`
   - 用于冻结目标、范围、方案、拆分或阶段判断
   - 不是默认执行对象
-- `active execution issue`
-  - 用于承接当前真实实施缺口
-  - 是默认执行对象
+- `execution-bound issue`
+  - 用于承接当前真实实施缺口的宿主 issue
+  - 它可以映射到当前 `Work Item`，但不是 Loom 的执行主入口
 - `validation / closeout issue`
   - 用于承接验证、对账、收口或主干真相同步
   - 只在实现主体已基本完成、但仍存在独立收口工作时使用
@@ -42,14 +42,14 @@ Loom 当前固定三类 issue：
 
 - parent issue
   - 默认是范围、阶段或收口容器
-  - 不默认等于当前活跃执行对象
+  - 不默认等于当前 `Work Item`
 - child issue
   - 默认承接可独立推进的真实执行缺口
   - 是否激活取决于是否已经进入当前轮次实施
 
 稳定约束：
 
-- 不得把历史规划 parent 长期冒充活跃执行 issue
+- 不得把历史规划 parent 长期冒充当前 `Work Item` 对应的宿主 issue
 - 不得把尚未进入实施的 child issue 提前写成进行中
 - 当 parent 只承担汇总与收口时，应让真正实施落在 child issue
 
@@ -59,7 +59,7 @@ Loom 当前固定三类 issue：
 
 issue 级激活表示：
 
-- 该 issue 已被选为当前轮次要推进的宿主执行对象
+- 该 issue 已被选为当前轮次要推进的宿主控制面对象
 - 它应在宿主控制面上体现为进行中或等价语义
 - 后续证据、PR、review 或 closeout 应围绕该 issue 建立一致关系
 
@@ -69,8 +69,8 @@ issue 未被激活时，可以继续存在于 tree 中，但默认保持 `Todo` 
 
 `work-item --activate` 表示：
 
-- Loom 执行现场把某个 `work item` 切换为当前 locator truth
-- 当前轮次恢复、停点与执行入口开始指向该 `work item`
+- Loom 执行现场把某个 `Work Item` 切换为当前 locator truth
+- 当前轮次恢复、停点与执行入口开始指向该 `Work Item`
 
 它不等于：
 
@@ -80,8 +80,8 @@ issue 未被激活时，可以继续存在于 tree 中，但默认保持 `Todo` 
 
 换句话说：
 
-- issue 级激活是宿主执行对象语义
-- `work-item --activate` 是 Loom 执行入口语义
+- issue 级激活是宿主控制面语义
+- `work-item --activate` 是 Loom 唯一执行入口语义
 
 两者通常相关，但必须明确区分，不得互相偷换。
 
@@ -124,4 +124,4 @@ Loom 当前只稳定约束两点：
 
 ## 7. 一句话结论
 
-Loom 的 issue 模型目标不是把所有 issue 都变成执行对象，而是稳定区分规划、执行、验证/收口三类语义，并让激活与 closeout 只围绕真实缺口发生。
+Loom 的 issue 模型目标不是把所有 issue 都变成执行入口，而是稳定区分规划、执行、验证/收口三类语义，并让宿主 issue 与 `Work Item` 各守边界。

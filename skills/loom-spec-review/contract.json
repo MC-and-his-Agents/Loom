@@ -3,7 +3,7 @@
   "role": "scenario/spec-review",
   "contract_version": "1.0.0",
   "display_name": "Loom Spec Review",
-  "description": "Run the formal spec review flow and return the spec-approved gate consumed by implementation review and merge-ready.",
+  "description": "Run the formal spec review flow and return the spec gate consumed by implementation review and merge-ready.",
   "root_entry": false,
   "entrypoint": {
     "skill_markdown": "SKILL.md",

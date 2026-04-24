@@ -60,6 +60,92 @@ REPO_INTEROP_COLLECTION_SURFACES = {
     "closeout",
 }
 REPO_INTEROP_SHADOW_SURFACES = ("admission", "review", "merge_ready", "closeout")
+GOVERNANCE_CONTROL_VERSION = "loom-governance-control/v1"
+HOST_BINDING_OBJECTS = (
+    "phase",
+    "fr",
+    "work_item",
+    "branch",
+    "worktree",
+    "implementation_pr",
+    "merge_commit",
+    "closeout",
+)
+WORK_ITEM_ENFORCEMENT_FALLBACKS = {
+    "roadmap": "phase",
+    "phase": "fr",
+    "fr": "work_item",
+    "implementation_pr": "work_item",
+    "merge_commit": "closeout",
+}
+GATE_FAILURE_TAXONOMY = {
+    "spec_stale": "Approved spec no longer covers the implementation surface.",
+    "review_stale": "Implementation review no longer covers the current head or scope.",
+    "head_drift": "The head SHA changed after an approval gate was recorded.",
+    "host_signal_drift": "GitHub issue, PR, project, branch, or check state no longer agrees with Loom's local carriers.",
+    "gate_failure": "A required predecessor gate is missing, blocking, or unreadable.",
+    "closeout_reconciliation_drift": "Merged work and issue/project closeout state are not yet aligned.",
+}
+GATE_CHAIN = (
+    {
+        "id": "work_item_admission",
+        "requires": [],
+        "fallback_to": "admission",
+    },
+    {
+        "id": "spec_gate",
+        "requires": ["work_item_admission", "formal_spec_or_not_applicable", "spec_review_approved"],
+        "fallback_to": "admission",
+    },
+    {
+        "id": "build_gate",
+        "requires": ["work_item_admission", "spec_gate", "head_sha", "validation_summary", "approved_scope"],
+        "fallback_to": "build",
+    },
+    {
+        "id": "review_gate",
+        "requires": ["build_gate", "head_sha", "validation_summary", "single_review_record"],
+        "fallback_to": "review",
+    },
+    {
+        "id": "merge_gate",
+        "requires": ["review_gate", "head_binding", "validation_summary", "no_stale_or_drift"],
+        "fallback_to": "merge",
+    },
+    {
+        "id": "github_controlled_merge",
+        "requires": ["merge_gate", "required_checks", "branch_protection", "merge_policy"],
+        "fallback_to": "merge",
+    },
+    {
+        "id": "closeout",
+        "requires": ["github_controlled_merge", "merge_commit", "target_main", "reconciliation_audit"],
+        "fallback_to": "reconciliation-sync",
+    },
+)
+MATURITY_LEVELS = {
+    "light": {
+        "requires": ["work_item", "recovery", "status_surface", "review"],
+        "summary": "Minimal Work Item -> review -> merge-ready governance is available.",
+    },
+    "standard": {
+        "requires": [
+            "light",
+            "fr_work_item_layer",
+            "spec_path",
+            "plan_path",
+            "spec_gate",
+            "status_control_plane",
+            "basic_host_binding",
+            "closeout_reconciliation_read",
+        ],
+        "summary": "Formal spec, spec gate, status control plane, basic host binding, and closeout/reconciliation reads are available.",
+    },
+    "strong": {
+        "requires": ["standard", "repo_interface", "repo_interop", "github_controlled_merge"],
+        "summary": "Host-backed binding, reconciliation, controlled merge, and closeout gates are available.",
+    },
+}
 
 
 def run_process(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -819,6 +905,179 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
     return surface, missing_inputs
 
 
+def detect_host_binding_surface(
+    root: Path,
+    *,
+    carrier_summary: dict[str, dict[str, str]],
+    github_control_plane: dict[str, Any],
+    repo_interface: dict[str, Any],
+    repo_interop: dict[str, Any],
+) -> dict[str, Any]:
+    branch_result = run_process(["git", "branch", "--show-current"], root)
+    branch = branch_result.stdout.strip() if branch_result.returncode == 0 else ""
+    worktree_result = run_process(["git", "rev-parse", "--show-toplevel"], root)
+    worktree = worktree_result.stdout.strip() if worktree_result.returncode == 0 else ""
+    default_branch = github_control_plane.get("default_branch")
+    required_objects: dict[str, dict[str, Any]] = {
+        "work_item": {
+            "status": carrier_summary.get("work_item", {}).get("status", "missing"),
+            "locator": carrier_summary.get("work_item", {}).get("locator", "unknown"),
+            "authority": "loom fact chain",
+        },
+        "branch": {
+            "status": "present" if branch else "missing",
+            "locator": branch or "unknown",
+            "authority": "git",
+        },
+        "worktree": {
+            "status": "present" if worktree else "missing",
+            "locator": worktree or "unknown",
+            "authority": "git",
+        },
+        "implementation_pr": {
+            "status": "host-managed",
+            "locator": "GitHub PR linked from Work Item or branch",
+            "authority": "host",
+        },
+        "merge_commit": {
+            "status": "host-managed",
+            "locator": "GitHub merged PR mergeCommit",
+            "authority": "host",
+        },
+        "closeout": {
+            "status": "present" if repo_interop.get("availability") == "present" else "host-managed",
+            "locator": "reconciliation audit + closeout gate",
+            "authority": "loom + host",
+        },
+    }
+    profile_objects = {
+        "phase": {
+            "status": "profile-defined",
+            "locator": "GitHub parent issue or equivalent planning object",
+            "authority": "github-profile",
+        },
+        "fr": {
+            "status": "profile-defined",
+            "locator": "GitHub sub-issue or equivalent formal request",
+            "authority": "github-profile",
+        },
+    }
+    missing_inputs = [
+        key
+        for key in ("work_item", "branch", "worktree")
+        if required_objects[key]["status"] in {"missing", "unknown"}
+    ]
+    if default_branch in {None, "unknown"}:
+        missing_inputs.append("github default branch")
+    if repo_interface.get("availability") == "incomplete":
+        missing_inputs.append("repo interface")
+    if repo_interop.get("availability") == "incomplete":
+        missing_inputs.append("repo interop")
+    return {
+        "schema_version": "loom-host-binding/v1",
+        "required_objects": {**profile_objects, **required_objects},
+        "default_branch": default_branch,
+        "missing_inputs": missing_inputs,
+        "result": "pass" if not missing_inputs else "block",
+        "summary": (
+            "host binding surface can relate the active Work Item to branch, worktree, PR, merge commit, and closeout."
+            if not missing_inputs
+            else "host binding surface is readable, but required binding facts are missing or host-managed."
+        ),
+    }
+
+
+def maturity_status(
+    *,
+    carrier_summary: dict[str, dict[str, str]],
+    repo_interface: dict[str, Any],
+    repo_interop: dict[str, Any],
+    github_control_plane: dict[str, Any],
+    host_binding: dict[str, Any],
+) -> dict[str, Any]:
+    carrier_present = {
+        key: value.get("status") == "present"
+        for key, value in carrier_summary.items()
+    }
+    spec_gate_present = (
+        carrier_present.get("review", False)
+        and carrier_present.get("spec_path", False)
+        and carrier_present.get("plan_path", False)
+    )
+    repo_interface_present = repo_interface.get("availability") == "present"
+    repo_interop_present = repo_interop.get("availability") == "present"
+    basic_host_binding_present = host_binding.get("result") == "pass"
+    github_control_plane_present = github_control_plane.get("default_branch") != "unknown"
+    facts = {
+        **carrier_present,
+        "light": False,
+        "standard": False,
+        "fr_work_item_layer": repo_interface_present,
+        "spec_gate": spec_gate_present,
+        "status_control_plane": True,
+        "basic_host_binding": basic_host_binding_present,
+        "closeout_reconciliation_read": repo_interop_present,
+        "repo_interface": repo_interface_present,
+        "repo_interop": repo_interop_present,
+        "github_controlled_merge": (
+            github_control_plane_present
+            and basic_host_binding_present
+            and repo_interface_present
+            and repo_interop_present
+        ),
+    }
+    achieved: list[str] = []
+    missing_by_level: dict[str, list[str]] = {}
+    for level in ("light", "standard", "strong"):
+        missing = [field for field in MATURITY_LEVELS[level]["requires"] if not facts.get(field)]
+        missing_by_level[level] = missing
+        if not missing:
+            achieved.append(level)
+            facts[level] = True
+    current = achieved[-1] if achieved else "unadopted"
+    next_level = None
+    for level in ("light", "standard", "strong"):
+        if level not in achieved:
+            next_level = level
+            break
+    return {
+        "schema_version": "loom-governance-maturity/v1",
+        "current": current,
+        "achieved": achieved,
+        "next": next_level,
+        "levels": MATURITY_LEVELS,
+        "missing_by_level": missing_by_level,
+    }
+
+
+def governance_control_plane(
+    *,
+    carrier_summary: dict[str, dict[str, str]],
+    github_control_plane: dict[str, Any],
+    repo_interface: dict[str, Any],
+    repo_interop: dict[str, Any],
+    host_binding: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": GOVERNANCE_CONTROL_VERSION,
+        "execution_entry": {
+            "only_default_entry": "work_item",
+            "illegal_entry_fallbacks": WORK_ITEM_ENFORCEMENT_FALLBACKS,
+            "result": "pass" if carrier_summary.get("work_item", {}).get("status") == "present" else "block",
+        },
+        "host_binding": host_binding,
+        "taxonomy": GATE_FAILURE_TAXONOMY,
+        "gate_chain": GATE_CHAIN,
+        "maturity": maturity_status(
+            carrier_summary=carrier_summary,
+            repo_interface=repo_interface,
+            repo_interop=repo_interop,
+            github_control_plane=github_control_plane,
+            host_binding=host_binding,
+        ),
+    }
+
+
 def build_governance_surface(
     root: Path,
     *,
@@ -835,6 +1094,20 @@ def build_governance_surface(
     review_merge_surface = detect_review_merge_surface(root, loom_state, bootstrap_mode=bootstrap_mode)
     repo_interface, repo_interface_missing = detect_repo_interface(root)
     repo_interop, repo_interop_missing = detect_repo_interop(root)
+    host_binding = detect_host_binding_surface(
+        root,
+        carrier_summary=carrier_summary,
+        github_control_plane=github_control_plane,
+        repo_interface=repo_interface,
+        repo_interop=repo_interop,
+    )
+    control_plane = governance_control_plane(
+        carrier_summary=carrier_summary,
+        github_control_plane=github_control_plane,
+        repo_interface=repo_interface,
+        repo_interop=repo_interop,
+        host_binding=host_binding,
+    )
 
     missing_inputs: list[str] = []
     if bootstrap_mode and repository_mode == "new":
@@ -849,6 +1122,8 @@ def build_governance_surface(
             missing_inputs.extend(repo_interface_missing)
         if repo_interop["availability"] == "incomplete":
             missing_inputs.extend(repo_interop_missing)
+        if host_binding["result"] == "block":
+            missing_inputs.extend(f"host binding: {message}" for message in host_binding["missing_inputs"])
         control_plane_ready = github_control_plane["default_branch"] != "unknown"
         carrier_ready = bool(present_carriers)
         summary = (
@@ -867,6 +1142,7 @@ def build_governance_surface(
         "github_control_plane": github_control_plane,
         "repo_interface": repo_interface,
         "repo_interop": repo_interop,
+        "governance_control_plane": control_plane,
         "summary": summary,
         "missing_inputs": list(dict.fromkeys(missing_inputs)),
     }

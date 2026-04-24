@@ -87,7 +87,7 @@
 - 直接采用 [../../shared/references/adoption/lightweight-retrofit-default.md](../../shared/references/adoption/lightweight-retrofit-default.md)
 - 默认 `companion docs` 接入
 - 默认装配最小治理包
-- 默认不装配完整 recovery、work item、状态面与重 harness
+- 默认不装配完整 recovery、`Work Item`、`status control plane` 与重 harness
 - 若需要轻量跨轮承接，默认 `checkpoint-lite`
 
 ### 4.3 `复杂既有仓库`
@@ -105,7 +105,7 @@
 默认装配路径：
 
 - 进入更完整装配
-- 纳入恢复主入口、执行上下文、work item 或等价执行入口、状态读取、隔离现场与纯度规则
+- 纳入恢复主入口、执行上下文、`Work Item` 或等价唯一执行入口、`status control plane`、隔离现场与纯度规则
 - 对高风险边界事项纳入正式规约套件与前移 checkpoint
 
 若同时满足以下条件，则 `复杂既有仓库` 默认优先走 `deep-existing-repo`：

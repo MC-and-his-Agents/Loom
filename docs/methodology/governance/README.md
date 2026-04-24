@@ -18,9 +18,11 @@
 - [review-model.md](./review-model.md)
   - `EXT-0004` `EXT-0014` `EXT-0018`
 - [github-delivery-funnel.md](./github-delivery-funnel.md)
-  - `#288`
+  - `#299` `#300` `#304` `#305`
 - [spec-implementation-separation.md](./spec-implementation-separation.md)
   - `#290`
+- [governance-maturity-model.md](./governance-maturity-model.md)
+  - `#307`
 - [maturity-and-closing.md](./maturity-and-closing.md)
   - `EXT-0026`
 - [state-machine.md](./state-machine.md)

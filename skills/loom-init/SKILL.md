@@ -38,7 +38,7 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
   - 路由到 `loom-resume`
 - review 前检查 / 进入 review 前预检
   - 路由到 `loom-pre-review`
-- formal spec review / spec 是否通过 / `spec-approved` gate
+- formal spec review / spec 是否通过 / `spec gate`
   - 路由到 `loom-spec-review`
 - 正式 review / 语义审查 / review 结论
   - 路由到 `loom-review`
@@ -46,7 +46,7 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
   - 路由到 `loom-handoff`
 - 清理现场 / retire 当前事项
   - 路由到 `loom-retire`
-- merge-ready / 最终放行前预检
+- merge-ready / 最终放行前预检 / GitHub controlled merge 前置检查
   - 路由到 `loom-merge-ready`
 
 如果信号不足或同时命中多个场景，不要猜测。回退到 `loom-init`，并要求最小补充信号。
@@ -132,6 +132,7 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 ## 3. 做出装配判断
 
 不要输出抽象“建议采用 Loom”。必须把判断落成“判定信号 -> 默认动作”的装配决策。
+初始化结果还必须明确新控制面如何落位：`Work Item` 唯一入口、`spec gate`、`gate chain`、`status control plane`、`maturity upgrade`、`GitHub controlled merge`。
 
 ### 3.1 新项目
 
@@ -182,8 +183,8 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 - 显式纳入：
   - 恢复主入口
   - 执行上下文
-  - work item 或等价执行入口
-  - 状态读取
+  - `Work Item` 或等价唯一执行入口
+  - `status control plane`
   - 隔离现场与纯度规则
 - 对涉及共享契约、运行模型、高风险核心抽象的事项，默认纳入正式规约套件与前移 checkpoint
 - 对恢复成本明显升高的事项，默认从 `checkpoint-lite` 升级到标准恢复形态

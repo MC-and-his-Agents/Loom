@@ -34,7 +34,7 @@ Loom 当前固定四类对象：
 
 进入 execution objects 的对象：
 
-- `work item`
+- `Work Item`
 - recovery 主入口
 - review record
 - `workspace`
@@ -62,8 +62,8 @@ Loom 当前固定四类对象：
 
 例如：
 
-- `active execution issue`
-  - 指当前被选为宿主执行对象的 issue，而不是 `work item`
+- `execution-bound issue`
+  - 指当前与 `Work Item` 对齐的宿主 issue，而不是 `Work Item` 本身
 - `host merge`
   - 指宿主平台真正执行的 merge
 - `host branch`
@@ -75,7 +75,7 @@ Loom 当前固定四类对象：
 
 进入 derived objects 的对象：
 
-- status surface
+- status control plane
 - merge-ready 摘要
 - closeout 摘要
 - route / resume / handoff 摘要
@@ -116,7 +116,7 @@ Loom 当前固定以下命名规则：
 - `git worktree`
   - 只表示 Git 宿主对象
 - issue activation
-  - 只表示宿主 issue 已进入当前执行，不等于 `work-item --activate`
+  - 只表示宿主 issue 已进入当前执行控制面，不等于 `work-item --activate`
 - `review record`
   - 只表示正式 review 真相，包含同一载体内的 findings / rebuttal / disposition authored 字段
 - `PR`

@@ -61,6 +61,7 @@ CORE_DOCS = (
     "docs/methodology/governance/github-delivery-funnel.md",
     "docs/methodology/governance/spec-implementation-separation.md",
     "docs/methodology/governance/maturity-and-closing.md",
+    "docs/methodology/governance/governance-maturity-model.md",
     "docs/methodology/governance/state-machine.md",
     "docs/methodology/governance/truth-and-sync-boundary.md",
     "docs/methodology/governance/host-object-taxonomy.md",
@@ -81,6 +82,9 @@ CORE_DOCS = (
     "docs/methodology/harness/automation-frontload.md",
     "docs/methodology/harness/merge-checkpoint.md",
     "docs/methodology/harness/closeout-gate.md",
+    "docs/methodology/harness/gate-chain.md",
+    "docs/methodology/harness/controlled-merge.md",
+    "docs/methodology/harness/governance-failure-taxonomy.md",
     "docs/methodology/harness/workspace-and-purity.md",
     "docs/methodology/templates/spec-suite.md",
     "docs/methodology/templates/spec-template.md",
@@ -88,9 +92,11 @@ CORE_DOCS = (
     "docs/methodology/templates/pull-request.md",
     "docs/evidence/extraction-ledger.md",
     "docs/evidence/landing-map.md",
+    "docs/evidence/validations/validation-syvert-strong-governance-parity.md",
     "docs/adoption/rationale.md",
     "docs/adoption/routing-and-checkpoints.md",
     "docs/adoption/github-profile.md",
+    "docs/adoption/github-profile-upgrade.md",
     "docs/adoption/lightweight-retrofit-default.md",
     "docs/adoption/repo-companion-contract.md",
     "docs/adoption/repo-interop-contract.md",
@@ -706,6 +712,117 @@ def require_governance_surface(
         context=f"{context} governance_surface.repo_interop",
         payload=governance_surface.get("repo_interop"),
     )
+    require_governance_control_plane(
+        failures,
+        category=category,
+        context=f"{context} governance_surface.governance_control_plane",
+        payload=governance_surface.get("governance_control_plane"),
+    )
+
+
+def require_governance_control_plane(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("schema_version") != "loom-governance-control/v1":
+        failures.append(Failure(category, f"{context} schema_version must be `loom-governance-control/v1`"))
+    execution_entry = payload.get("execution_entry")
+    if not isinstance(execution_entry, dict):
+        failures.append(Failure(category, f"{context}.execution_entry must be an object"))
+    else:
+        if execution_entry.get("only_default_entry") != "work_item":
+            failures.append(Failure(category, f"{context}.execution_entry must keep `work_item` as the only default entry"))
+        if execution_entry.get("result") not in {"pass", "block"}:
+            failures.append(Failure(category, f"{context}.execution_entry.result must be `pass` or `block`"))
+        fallbacks = execution_entry.get("illegal_entry_fallbacks")
+        if not isinstance(fallbacks, dict) or fallbacks.get("fr") != "work_item" or fallbacks.get("implementation_pr") != "work_item":
+            failures.append(Failure(category, f"{context}.execution_entry must fail closed from FR/PR back to Work Item"))
+
+    host_binding = payload.get("host_binding")
+    if not isinstance(host_binding, dict):
+        failures.append(Failure(category, f"{context}.host_binding must be an object"))
+    else:
+        if host_binding.get("schema_version") != "loom-host-binding/v1":
+            failures.append(Failure(category, f"{context}.host_binding schema_version must be `loom-host-binding/v1`"))
+        if host_binding.get("result") not in {"pass", "block"}:
+            failures.append(Failure(category, f"{context}.host_binding.result must be `pass` or `block`"))
+        required_objects = host_binding.get("required_objects")
+        expected_objects = {"phase", "fr", "work_item", "branch", "worktree", "implementation_pr", "merge_commit", "closeout"}
+        if not isinstance(required_objects, dict) or set(required_objects) != expected_objects:
+            failures.append(Failure(category, f"{context}.host_binding.required_objects must expose the stable host binding object set"))
+        elif required_objects.get("work_item", {}).get("authority") != "loom fact chain":
+            failures.append(Failure(category, f"{context}.host_binding work_item authority must remain Loom fact chain"))
+
+    taxonomy = payload.get("taxonomy")
+    expected_taxonomy = {
+        "spec_stale",
+        "review_stale",
+        "head_drift",
+        "host_signal_drift",
+        "gate_failure",
+        "closeout_reconciliation_drift",
+    }
+    if not isinstance(taxonomy, dict) or not expected_taxonomy.issubset(set(taxonomy)):
+        failures.append(Failure(category, f"{context}.taxonomy must expose the stable stale/drift/gate-failure keys"))
+
+    gate_chain = payload.get("gate_chain")
+    expected_gate_order = [
+        "work_item_admission",
+        "spec_gate",
+        "build_gate",
+        "review_gate",
+        "merge_gate",
+        "github_controlled_merge",
+        "closeout",
+    ]
+    if not isinstance(gate_chain, list):
+        failures.append(Failure(category, f"{context}.gate_chain must be a list"))
+    else:
+        gate_order = [entry.get("id") for entry in gate_chain if isinstance(entry, dict)]
+        if gate_order != expected_gate_order:
+            failures.append(Failure(category, f"{context}.gate_chain must preserve the strong governance gate order"))
+        for entry in gate_chain:
+            if not isinstance(entry, dict):
+                failures.append(Failure(category, f"{context}.gate_chain entries must be objects"))
+                continue
+            if not isinstance(entry.get("requires"), list):
+                failures.append(Failure(category, f"{context}.gate_chain `{entry.get('id')}` must declare `requires`"))
+            if entry.get("fallback_to") not in {"admission", "build", "review", "merge", "reconciliation-sync"}:
+                failures.append(Failure(category, f"{context}.gate_chain `{entry.get('id')}` fallback_to is outside the stable set"))
+
+    maturity = payload.get("maturity")
+    if not isinstance(maturity, dict):
+        failures.append(Failure(category, f"{context}.maturity must be an object"))
+    else:
+        if maturity.get("schema_version") != "loom-governance-maturity/v1":
+            failures.append(Failure(category, f"{context}.maturity schema_version must be `loom-governance-maturity/v1`"))
+        if maturity.get("current") not in {"unadopted", "light", "standard", "strong"}:
+            failures.append(Failure(category, f"{context}.maturity current must stay within the stable levels"))
+        levels = maturity.get("levels")
+        if not isinstance(levels, dict) or set(levels) != {"light", "standard", "strong"}:
+            failures.append(Failure(category, f"{context}.maturity levels must define light, standard, and strong"))
+        standard_requires = levels.get("standard", {}).get("requires") if isinstance(levels, dict) and isinstance(levels.get("standard"), dict) else None
+        expected_standard_requires = {
+            "light",
+            "fr_work_item_layer",
+            "spec_path",
+            "plan_path",
+            "spec_gate",
+            "status_control_plane",
+            "basic_host_binding",
+            "closeout_reconciliation_read",
+        }
+        if not isinstance(standard_requires, list) or set(standard_requires) != expected_standard_requires:
+            failures.append(Failure(category, f"{context}.maturity standard level must require the full governance control plane"))
+        strong_requires = levels.get("strong", {}).get("requires") if isinstance(levels, dict) and isinstance(levels.get("strong"), dict) else None
+        if not isinstance(strong_requires, list) or "github_controlled_merge" not in strong_requires:
+            failures.append(Failure(category, f"{context}.maturity strong level must require GitHub controlled merge"))
 
 
 def require_locator_entry(
@@ -1987,6 +2104,21 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             {"pass"},
         ),
         (
+            "status-control",
+            ["python3", "tools/loom_status.py", "--target", "examples/new-project", "--item", "INIT-0001"],
+            {"pass", "block"},
+        ),
+        (
+            "governance-profile-status",
+            ["python3", "tools/loom_flow.py", "governance-profile", "status", "--target", "examples/new-project"],
+            {"pass"},
+        ),
+        (
+            "governance-profile-upgrade-plan",
+            ["python3", "tools/loom_flow.py", "governance-profile", "upgrade-plan", "--target", "examples/new-project"],
+            {"pass", "block"},
+        ),
+        (
             "flow-pre-review",
             [
                 "python3",
@@ -2163,6 +2295,68 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 expected_scene="repo-local-demo",
                 expected_carrier="repo-local-wrapper",
                 allowed_results={"pass"},
+            )
+        if label == "status-control":
+            if payload.get("command") != "status":
+                failures.append(Failure("daily-execution-cli", "`loom_status` must report `command: status`"))
+            governance_status = payload.get("governance_status")
+            if not isinstance(governance_status, dict):
+                failures.append(Failure("daily-execution-cli", "`loom_status` must include `governance_status`"))
+            else:
+                if governance_status.get("schema_version") != "loom-governance-status/v2":
+                    failures.append(Failure("daily-execution-cli", "`loom_status` governance_status must report schema v2"))
+                if governance_status.get("result") not in {"pass", "block"}:
+                    failures.append(Failure("daily-execution-cli", "`loom_status` governance_status result must be `pass` or `block`"))
+                if not isinstance(governance_status.get("gate_chain"), list):
+                    failures.append(Failure("daily-execution-cli", "`loom_status` governance_status must include gate_chain"))
+                else:
+                    gate_names = [
+                        gate.get("name")
+                        for gate in governance_status["gate_chain"]
+                        if isinstance(gate, dict)
+                    ]
+                    expected_names = [
+                        "work_item_admission",
+                        "spec_gate",
+                        "build_gate",
+                        "review_gate",
+                        "merge_gate",
+                        "github_controlled_merge",
+                    ]
+                    if gate_names != expected_names:
+                        failures.append(Failure("daily-execution-cli", "`loom_status` governance_status gate_chain must use the stable gate vocabulary"))
+                classifications = governance_status.get("classifications")
+                if not isinstance(classifications, list):
+                    failures.append(Failure("daily-execution-cli", "`loom_status` governance_status must include classifications"))
+            closeout = payload.get("closeout")
+            if not isinstance(closeout, dict):
+                failures.append(Failure("daily-execution-cli", "`loom_status` must include `closeout`"))
+            else:
+                if closeout.get("result") not in {"pass", "block", "not_applicable"}:
+                    failures.append(Failure("daily-execution-cli", "`loom_status` closeout result must stay within the stable set"))
+                reconciliation = closeout.get("reconciliation")
+                if not isinstance(reconciliation, dict):
+                    failures.append(Failure("daily-execution-cli", "`loom_status` closeout must include reconciliation"))
+                elif reconciliation.get("result") not in {"pass", "warn", "fix-needed", "block", "not_applicable"}:
+                    failures.append(Failure("daily-execution-cli", "`loom_status` closeout reconciliation result must stay within the stable set"))
+            require_governance_surface(
+                failures,
+                category="daily-execution-cli",
+                context="`loom_status`",
+                payload=payload,
+            )
+        if label in {"governance-profile-status", "governance-profile-upgrade-plan"}:
+            if payload.get("command") != "governance-profile":
+                failures.append(Failure("daily-execution-cli", f"`{label}` must report `command: governance-profile`"))
+            expected_operation = "status" if label == "governance-profile-status" else "upgrade-plan"
+            if payload.get("operation") != expected_operation:
+                failures.append(Failure("daily-execution-cli", f"`{label}` must report `operation: {expected_operation}`"))
+            control_plane = payload.get("governance_control_plane")
+            require_governance_control_plane(
+                failures,
+                category="daily-execution-cli",
+                context=f"`{label}` governance_control_plane",
+                payload=control_plane,
             )
         if label == "flow-pre-review":
             require_runtime_state_payload(

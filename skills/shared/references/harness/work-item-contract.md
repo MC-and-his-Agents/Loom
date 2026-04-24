@@ -10,7 +10,7 @@
 
 ## 1. 能力定位
 
-work item 是进入正式执行的入口。
+`Work Item` 是进入正式执行的唯一入口。
 若项目使用 `exec-plan` 或等价工件，它只承接执行与恢复。
 
 本文件同时定义初始化后至少应落位哪些执行产物。
@@ -18,7 +18,7 @@ work item 是进入正式执行的入口。
 
 ## 2. work item 最小合同
 
-进入正式执行的事项，必须有可追踪的 work item，并至少表达：
+进入正式执行的事项，必须有可追踪的 `Work Item`，并至少表达：
 
 - 事项标识
 - 目标
@@ -31,13 +31,14 @@ work item 是进入正式执行的入口。
 - 当前验证入口
 - 关闭条件
 
-一个 work item 对应一个清晰目标，不得承载多个无关正式事项。
+一个 `Work Item` 对应一个清晰目标，不得承载多个无关正式事项。
+任何 host issue、PR、plan、spec 都只能映射或引用它，不得越权替代它成为正式执行入口。
 
 ## 3. 初始化产物模型
 
 当 Loom 初始化一个仓库或一条正式执行链路时，最小产物应包括：
 
-- 可进入执行的首批 work item 或等价事项清单
+- 可进入执行的首批 `Work Item` 或等价事项清单
 - 至少一个 `progress` / `checkpoint` 载体
 - 与事项关联的唯一恢复主入口约定
 - 可定位的执行路径与工作现场入口
@@ -64,13 +65,14 @@ Loom 不固化这些产物的具体文件名，但要求它们在初始化完成
 
 ## 5. 与执行链路的关系
 
-work item / `exec-plan` 至少要能被以下环节消费：
+`Work Item` / `exec-plan` 至少要能被以下环节消费：
 
 - 每轮读取
 - 工作现场定位
 - 每轮回写
 - 验证汇总
-- merge checkpoint 放行
+- spec gate 命中判断
+- gate chain 放行
 
 不同执行路径可以有不同最小输入强度：
 
@@ -85,10 +87,10 @@ work item / `exec-plan` 至少要能被以下环节消费：
 
 ## 6. 事实链约束
 
-- `work item` 只承接静态执行真相，不并行 authored 当前停点、下一步、阻断项或最近验证摘要
-- `work item` 可以 authored `review_entry` 这类 locator，但不得 authored review 结论本身
-- 当前 checkpoint 属于恢复主入口，而不是 `work item`
-- 状态面若展示 `goal`、`scope`、`execution_path` 等字段，必须从 `work item` 派生
+- `Work Item` 只承接静态执行真相，不并行 authored 当前停点、下一步、阻断项或最近验证摘要
+- `Work Item` 可以 authored `review_entry` 这类 locator，但不得 authored review 结论本身
+- 当前 checkpoint 属于恢复主入口，而不是 `Work Item`
+- `status control plane` 若展示 `goal`、`scope`、`execution_path` 等字段，必须从 `Work Item` 派生
 
 ## 7. 最小 author/update 入口
 

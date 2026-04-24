@@ -24,7 +24,7 @@
 - `loom-spec-review`
 - `loom-review`
 - `loom-merge-ready`
-- `status surface`
+- `status control plane`
 - GitHub host 读取
 
 ## 2. 最小字段
@@ -39,6 +39,7 @@ Loom 当前冻结以下最小字段：
 - `sprint`
 - `head_sha`
 - `status`
+- `gate_chain`
 
 ## 3. 字段语义
 
@@ -103,6 +104,17 @@ host-backed profile 可以映射到 issue / work item 编号，但语义必须�
 - `merge_ready`
 - `closed`
 
+### 3.9 `gate_chain`
+
+当前事项在强治理控制面中的 gate 位置。
+
+最小子字段：
+
+- `spec_gate`
+- `build_gate`
+- `review_gate`
+- `merge_gate`
+
 ## 4. 来源边界
 
 这些字段不得全部 authored 在单一载体中。
@@ -119,6 +131,8 @@ host-backed profile 可以映射到 issue / work item 编号，但语义必须�
   - 从 git / host control plane 派生
 - `status`
   - 从 `spec review`、formal review、checkpoint 与 closeout 结果派生
+- `gate_chain`
+  - 从 spec review、review record、merge checkpoint 与宿主控制面派生
 
 ## 5. repo-local 与 host-backed 对齐
 
@@ -133,10 +147,11 @@ repo-local 与 host-backed 两条路径都必须收敛到同一语义：
 - 它处在漏斗哪一段
 - 当前 `head_sha` 是什么
 - 当前是否已达到 `spec_approved` / `merge_ready`
+- 当前 gate chain 走到哪里
 
 ## 6. 边界约束
 
 - `item context` 是读取合同，不是新的 authored 工件
 - 它不得复制 `next_step`、`blockers`、`latest_validation_summary`
 - 它不得替代 `work item`、`recovery entry`、`review record`
-- 它必须能被 `status surface` 和 GitHub host 读面同时消费
+- 它必须能被 `status control plane` 和 GitHub host 读面同时消费

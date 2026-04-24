@@ -1,12 +1,12 @@
 # GitHub Profile
 
-本文件定义 Loom 当前默认 `GitHub governance profile`。
+本文件定义 Loom strong governance 默认 `GitHub governance profile`。
 
 GitHub 是默认 host-backed 实现，不是 Loom 唯一可支持宿主。
 
 ## 1. 目标
 
-让普通仓库即使没有现成的 `AGENTS.md`、`VISION`、`ROADMAP`、`WORKFLOW`，也能通过 Loom 的最小接入路径获得同等级别的治理能力。
+让普通仓库不仅能接入 Loom，还能沿同一条升级路径逐步达到 strong governance。
 
 ## 2. 最小对象组
 
@@ -17,9 +17,11 @@ GitHub profile 至少应能表达：
 - `FR`
 - `Work Item`
 - `implementation PR`
-- review / merge gate 信号
+- implementation review / `merge-ready`
+- `controlled merge`
+- `closeout / reconciliation` 信号
 
-这些对象可以通过 issue、sub-issue、PR、branch protection、required checks 等宿主能力承接。
+这些对象可以通过 issue、sub-issue、PR、branch protection、required checks、merge commit、Project 等宿主能力承接。
 
 ## 3. 默认映射
 
@@ -35,42 +37,44 @@ GitHub profile 至少应能表达：
   - 唯一默认执行入口 issue
 - `implementation PR`
   - 与当前 `Work Item` 绑定的实现 PR
+- `controlled merge`
+  - branch protection、required checks、merge method、merge commit 的统一消费面
 
-## 4. 最小前置关系
+## 4. strong governance 默认要求
 
-默认前置关系必须成立：
+GitHub host 下的 strong governance 默认要求：
 
-- `FR` 先于 `Work Item`
-- 命中 formal spec 路径时，`spec review` 先于 `implementation PR`
-- `PR review` 与 `merge-ready` 必须消费 `head_sha`
-- `merge-ready` 只做最终放行，不补做前序规格判断
+- `Work Item` 是唯一默认执行入口
+- `FR -> Work Item -> PR -> merge commit` 绑定链可稳定读取
+- formal spec 路径必须先过 `spec review`
+- implementation review、`merge-ready`、`controlled merge`、`closeout` 强制消费前序 gate
+- 统一状态面能直接暴露 stale / drift / gate failure
+- closeout 必须消费 `reconciliation audit`
+- merge 默认走受控 PR 合入，默认方法为 `squash`
 
-## 5. 与 `loom-adopt` 的关系
-
-`loom-adopt` 在 GitHub profile 下至少应能生成或收口以下语义槽位：
-
-- `governance charter`
-- `project intent`
-- `phase plan`
-- `execution contract`
-
-这些槽位不要求必须采用 Syvert 的文件名，但必须让 Loom 能稳定读取与继续执行。
-
-## 6. 三档接入
+## 5. 三档 profile
 
 ### Light
 
-- 只生成最小治理骨架
-- 只启用 `Work Item -> review -> merge-ready`
+- 只要求 `Work Item -> review -> merge-ready`
+- 允许缺 formal spec 路径与强 closeout control plane
 
 ### Standard
 
-- 启用 `FR`、formal spec、`spec review`
-- 提供更完整的 `item context` 与状态读取
+- 引入 `FR`、formal spec、`spec review`
+- 引入统一状态读取面与基本 host binding
 
 ### Strong Governance
 
-- 启用更强的 host 状态读取、受控合并与高级 gate
+- 强制 `Work Item` enforcement
+- 强制 host binding、gate chain、`controlled merge`
+- 强制 closeout / reconciliation 一体化状态面
+- 要求有 parity validation 证据
+
+## 6. 与 adoption 的关系
+
+- 默认升级顺序见 [github-profile-upgrade.md](./github-profile-upgrade.md)
+- 成熟治理重仓的 attach-only 路径见 [deep-existing-repo-default.md](./deep-existing-repo-default.md)
 
 ## 7. 非 GitHub 宿主
 
@@ -79,8 +83,9 @@ GitHub profile 至少应能表达：
 Loom 冻结的是：
 
 - 对象语义
-- 前置关系
-- 状态读取
-- merge-ready 语义
+- 绑定链
+- gate chain
+- 状态控制面
+- closeout 语义
 
 不是 GitHub 的产品细节。
