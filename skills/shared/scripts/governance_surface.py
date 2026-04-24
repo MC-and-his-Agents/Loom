@@ -219,6 +219,10 @@ def gh_json(root: Path, args: list[str]) -> tuple[dict[str, Any] | None, list[st
     return payload, []
 
 
+def gh_rest_json(root: Path, path: str) -> tuple[dict[str, Any] | None, list[str]]:
+    return gh_json(root, ["api", path])
+
+
 def detect_loom_state(root: Path) -> str:
     active_requirements = (
         root / ".loom/bootstrap/init-result.json",
@@ -866,16 +870,17 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
         missing_inputs.append("cannot resolve GitHub repository from git origin")
         return surface, missing_inputs
 
-    repo_payload, repo_errors = gh_json(root, ["repo", "view", f"{owner}/{repo}", "--json", "nameWithOwner,defaultBranchRef"])
+    repo_payload, repo_errors = gh_rest_json(root, f"repos/{owner}/{repo}")
     if repo_errors or repo_payload is None:
         missing_inputs.extend(f"github control plane: {message}" for message in repo_errors)
         return surface, missing_inputs
 
-    branch_ref = repo_payload.get("defaultBranchRef")
-    if isinstance(branch_ref, dict):
-        branch_name = branch_ref.get("name")
-        if isinstance(branch_name, str) and branch_name:
-            surface["default_branch"] = branch_name
+    full_name = repo_payload.get("full_name")
+    if isinstance(full_name, str) and full_name:
+        surface["repository"] = full_name
+    branch_name = repo_payload.get("default_branch")
+    if isinstance(branch_name, str) and branch_name:
+        surface["default_branch"] = branch_name
     if surface["default_branch"] == "unknown":
         missing_inputs.append("github control plane: default branch is unavailable")
         return surface, missing_inputs
