@@ -65,15 +65,16 @@ installer 负责安装、发现和校验；Loom 的实际执行仍然运行在 s
 2. 用 `loom-adopt` 初始化新仓库，或把 Loom retrofit 到既有仓库。
 3. 用 `loom-resume` 恢复上下文并继续当前 work item。
 4. 用 `loom-pre-review` 在正式 review 前暴露明显的 readiness 缺口。
-5. 用 `loom-review` 产出结构化 review 结果。
-6. 用 `loom-merge-ready` 在合并前验证 release boundary。
-7. 用 `loom-handoff` 或 `loom-retire` 把现场收成可恢复或已关闭状态。
+5. 命中 formal spec 路径时，先用 `loom-spec-review` 产出 `spec-approved` gate。
+6. 用 `loom-review` 产出结构化 review 结果。
+7. 用 `loom-merge-ready` 在合并前验证 release boundary。
+8. 用 `loom-handoff` 或 `loom-retire` 把现场收成可恢复或已关闭状态。
 
 智能体不能把“已经有改动文件”当作完成。对 Loom 来说，只有目标、文档、review 状态、验证证据、主干真相和宿主控制面全部对齐，才算真正完成。
 
 ## SKILLS 库
 
-Loom 当前暴露一个 root entry 和七个 scenario skills：
+Loom 当前暴露一个 root entry 和八个 scenario skills：
 
 | Skill | 作用 |
 | --- | --- |
@@ -81,6 +82,7 @@ Loom 当前暴露一个 root entry 和七个 scenario skills：
 | `loom-adopt` | 为仓库建立最小 Loom 接入面。 |
 | `loom-resume` | 恢复上下文并继续 work item。 |
 | `loom-pre-review` | 在正式 review 前检查 readiness。 |
+| `loom-spec-review` | 审查 formal spec 路径并产出 `spec-approved` gate。 |
 | `loom-review` | 执行正式 review 并记录结果。 |
 | `loom-handoff` | 写出可恢复的交接点。 |
 | `loom-merge-ready` | 验证 merge readiness。 |

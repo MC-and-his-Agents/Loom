@@ -58,11 +58,14 @@ CORE_DOCS = (
     "docs/architecture/system-design.md",
     "docs/methodology/governance/principles.md",
     "docs/methodology/governance/review-model.md",
+    "docs/methodology/governance/github-delivery-funnel.md",
+    "docs/methodology/governance/spec-implementation-separation.md",
     "docs/methodology/governance/maturity-and-closing.md",
     "docs/methodology/governance/state-machine.md",
     "docs/methodology/governance/truth-and-sync-boundary.md",
     "docs/methodology/governance/host-object-taxonomy.md",
     "docs/methodology/harness/work-item-contract.md",
+    "docs/methodology/harness/item-context-contract.md",
     "docs/methodology/harness/fact-chain-contract.md",
     "docs/methodology/harness/execution-context.md",
     "docs/methodology/harness/execution-chain.md",
@@ -80,11 +83,14 @@ CORE_DOCS = (
     "docs/methodology/harness/closeout-gate.md",
     "docs/methodology/harness/workspace-and-purity.md",
     "docs/methodology/templates/spec-suite.md",
+    "docs/methodology/templates/spec-template.md",
+    "docs/methodology/templates/implementation-contract-template.md",
     "docs/methodology/templates/pull-request.md",
     "docs/evidence/extraction-ledger.md",
     "docs/evidence/landing-map.md",
     "docs/adoption/rationale.md",
     "docs/adoption/routing-and-checkpoints.md",
+    "docs/adoption/github-profile.md",
     "docs/adoption/lightweight-retrofit-default.md",
     "docs/adoption/repo-companion-contract.md",
     "docs/adoption/repo-interop-contract.md",
@@ -102,9 +108,14 @@ CORE_DOCS = (
     "skills/loom-review/contract.json",
     "skills/loom-review/references/input-signals.md",
     "skills/loom-review/references/output-contract.md",
+    "skills/loom-spec-review/SKILL.md",
+    "skills/loom-spec-review/contract.json",
+    "skills/loom-spec-review/references/input-signals.md",
+    "skills/loom-spec-review/references/output-contract.md",
     "docs/methodology/templates/review-record.md",
     "docs/methodology/templates/scaffold/spec.md",
     "docs/methodology/templates/scaffold/plan.md",
+    "tools/loom_status.py",
     "packages/loom-installer/README.md",
     "packages/loom-installer/package.json",
     "packages/loom-installer/package-lock.json",
@@ -122,6 +133,8 @@ CORE_DOCS = (
 
 AUTOMATION_FRONTLOAD_TEMPLATES = (
     "docs/methodology/templates/spec-suite.md",
+    "docs/methodology/templates/spec-template.md",
+    "docs/methodology/templates/implementation-contract-template.md",
     "docs/methodology/templates/pull-request.md",
 )
 
@@ -134,6 +147,9 @@ AUTOMATION_FRONTLOAD_SKILLS = (
     "skills/loom-init/references/input-signals.md",
     "skills/loom-init/references/intake-signals.md",
     "skills/loom-init/references/output-contract.md",
+    "skills/loom-spec-review/SKILL.md",
+    "skills/loom-spec-review/references/input-signals.md",
+    "skills/loom-spec-review/references/output-contract.md",
 )
 
 AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT = (
@@ -165,15 +181,18 @@ DEMO_ASSETS = (
     "examples/new-project/.loom/work-items/INIT-0001.md",
     "examples/new-project/.loom/progress/INIT-0001.md",
     "examples/new-project/.loom/reviews/INIT-0001.json",
+    "examples/new-project/.loom/reviews/INIT-0001.spec.json",
     "examples/new-project/.loom/status/current.md",
     "examples/new-project/.loom/bin/loom_init.py",
     "examples/new-project/.loom/bin/fact_chain_support.py",
     "examples/new-project/.loom/bin/runtime_paths.py",
     "examples/new-project/.loom/bin/runtime_state.py",
     "examples/new-project/.loom/bin/loom_flow.py",
+    "examples/new-project/.loom/bin/loom_status.py",
     "examples/new-project/.loom/bin/loom_check.py",
     "examples/new-project/.loom/specs/INIT-0001/spec.md",
     "examples/new-project/.loom/specs/INIT-0001/plan.md",
+    "examples/new-project/.loom/specs/INIT-0001/implementation-contract.md",
 )
 
 LINK_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
@@ -1307,6 +1326,7 @@ def check_skill_manifests(root: Path) -> list[Failure]:
         "loom-resume": "scenario/resume",
         "loom-pre-review": "scenario/pre-review",
         "loom-review": "scenario/review",
+        "loom-spec-review": "scenario/spec-review",
         "loom-handoff": "scenario/handoff",
         "loom-retire": "scenario/retire",
         "loom-merge-ready": "scenario/merge-ready",
@@ -1607,6 +1627,7 @@ def check_skill_routing(root: Path) -> list[Failure]:
         ("请初始化这个新项目并接入 Loom", "loom-adopt"),
         ("请接手当前事项并恢复上下文后继续推进", "loom-resume"),
         ("请在进入 review 前做统一检查", "loom-pre-review"),
+        ("请先对 formal spec 做 spec review", "loom-spec-review"),
         ("请对当前事项做正式 review 并给出审查结论", "loom-review"),
         ("请准备交接并回写停点", "loom-handoff"),
         ("请清理并 retire 当前事项现场", "loom-retire"),
@@ -2353,12 +2374,13 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 "state-check",
                 "runtime-evidence",
                 "checkpoint-build",
+                "spec-review-gate",
                 "review-entry",
             ]:
                 failures.append(
                     Failure(
                         "daily-execution-cli",
-                        "`flow review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-build, and review-entry in order",
+                        "`flow review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-build, spec-review-gate, and review-entry in order",
                     )
                 )
             review = payload.get("review")
@@ -2610,6 +2632,44 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 result = run_command(root, args, cwd=target)
                 if result.returncode != 0:
                     detail = result.stderr.strip() or result.stdout.strip() or "git baseline commit failed"
+                    failures.append(Failure("daily-execution-cli", f"`{label}` setup failed: {detail}"))
+                    return False
+            head = run_command(root, ["git", "rev-parse", "HEAD"], cwd=target)
+            if head.returncode != 0:
+                detail = head.stderr.strip() or head.stdout.strip() or "git rev-parse failed"
+                failures.append(Failure("daily-execution-cli", f"`{label}` setup failed: {detail}"))
+                return False
+            reviewed_head = head.stdout.strip() or "unknown-head"
+            spec_review_path = target / ".loom/reviews/INIT-0001.spec.json"
+            spec_review_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "loom-review/v1",
+                        "item_id": "INIT-0001",
+                        "decision": "allow",
+                        "kind": "spec_review",
+                        "summary": "Formal spec is approved for downstream review-run tests.",
+                        "reviewer": "loom-check",
+                        "reviewed_head": reviewed_head,
+                        "reviewed_validation_summary": "Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist.",
+                        "fallback_to": None,
+                        "findings": [],
+                        "blocking_issues": [],
+                        "follow_ups": [],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            for args in (
+                ["git", "add", "-f", ".loom/reviews/INIT-0001.spec.json"],
+                ["git", "commit", "-m", "record spec review baseline"],
+            ):
+                result = run_command(root, args, cwd=target)
+                if result.returncode != 0:
+                    detail = result.stderr.strip() or result.stdout.strip() or "git spec review baseline failed"
                     failures.append(Failure("daily-execution-cli", f"`{label}` setup failed: {detail}"))
                     return False
             return True
@@ -3219,6 +3279,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 task_signals = {
                     "resume": "请接手当前事项并恢复上下文后继续推进",
                     "pre-review": "请在进入 review 前做统一检查",
+                    "spec-review": "请先对 formal spec 做 spec review",
                     "review": "请对当前事项做正式 review 并给出审查结论",
                     "merge-ready": "请做 merge-ready 最终放行前预检并确认是否可以合并",
                 }
@@ -3320,6 +3381,131 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     failures.append(Failure("daily-execution-cli", f"`installed flow pre-review` failed: {error}"))
                 elif payload.get("result") != "pass":
                     failures.append(Failure("daily-execution-cli", "`installed flow pre-review` must pass for the positive chain"))
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-init" / "scripts" / "loom-init.py"),
+                        "route",
+                        "--target",
+                        str(positive_target),
+                        "--task",
+                        task_signals["spec-review"],
+                    ],
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed route spec-review` failed: {error}"))
+                else:
+                    require_route_payload(
+                        failures,
+                        category="daily-execution-cli",
+                        context="`installed route spec-review`",
+                        payload=payload,
+                        expected_skill="loom-spec-review",
+                        expected_mode="implicit",
+                        expected_runtime_scene="installed-runtime",
+                        expected_runtime_carrier="installed-skills-root",
+                    )
+
+                spec_review_flow_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-spec-review" / "scripts" / "loom-spec-review.py"),
+                        "flow",
+                        "spec-review",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed flow spec-review` failed: {error}"))
+                elif spec_review_flow_payload.get("result") != "pass":
+                    failures.append(Failure("daily-execution-cli", "`installed flow spec-review` must pass for the positive chain"))
+
+                spec_review_run_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "review",
+                        "run",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                        "--review-file",
+                        ".loom/reviews/INIT-0001.spec.json",
+                    ],
+                    env=installed_review_env,
+                )
+                spec_review_record_input: dict[str, object] | None = None
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed spec review run` failed: {error}"))
+                elif spec_review_run_payload.get("result") != "pass":
+                    failures.append(Failure("daily-execution-cli", "`installed spec review run` must pass for the positive chain"))
+                else:
+                    require_review_run_payload(
+                        failures,
+                        category="daily-execution-cli",
+                        context="`installed spec review run`",
+                        payload=spec_review_run_payload,
+                        expected_result={"pass"},
+                    )
+                    spec_review_record_input = (
+                        spec_review_run_payload.get("review_record_input")
+                        if isinstance(spec_review_run_payload, dict)
+                        else None
+                    )
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-spec-review" / "scripts" / "loom-spec-review.py"),
+                        "review",
+                        "record",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                        "--review-file",
+                        ".loom/reviews/INIT-0001.spec.json",
+                        "--decision",
+                        str(spec_review_record_input.get("decision", "allow")) if isinstance(spec_review_record_input, dict) else "allow",
+                        "--kind",
+                        "spec_review",
+                        "--summary",
+                        str(spec_review_record_input.get("summary", "Installed formal spec is approved for downstream review."))
+                        if isinstance(spec_review_record_input, dict)
+                        else "Installed formal spec is approved for downstream review.",
+                        "--reviewer",
+                        str(spec_review_record_input.get("reviewer", "loom-check")) if isinstance(spec_review_record_input, dict) else "loom-check",
+                        "--findings-file",
+                        str(spec_review_record_input.get("findings_file", ".loom/review-findings.json"))
+                        if isinstance(spec_review_record_input, dict)
+                        else ".loom/review-findings.json",
+                        "--engine-adapter",
+                        str(spec_review_record_input.get("engine_adapter", "loom/default-codex"))
+                        if isinstance(spec_review_record_input, dict)
+                        else "loom/default-codex",
+                        "--engine-evidence",
+                        str(spec_review_record_input.get("engine_evidence", ".loom/runtime/review/INIT-0001/unknown-head/engine-result.json"))
+                        if isinstance(spec_review_record_input, dict)
+                        else ".loom/runtime/review/INIT-0001/unknown-head/engine-result.json",
+                        "--normalized-findings",
+                        str(spec_review_record_input.get("normalized_findings", ".loom/review-findings.json"))
+                        if isinstance(spec_review_record_input, dict)
+                        else ".loom/review-findings.json",
+                    ],
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed spec review record allow` failed: {error}"))
+                elif payload.get("result") != "pass":
+                    failures.append(Failure("daily-execution-cli", "`installed spec review record allow` must pass"))
 
                 payload, error = load_command_json(
                     root,

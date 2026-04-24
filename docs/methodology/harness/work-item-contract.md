@@ -7,6 +7,8 @@
 - `EXT-0037` 的初始化产物模型
 
 完整执行顺序见 [execution-chain.md](./execution-chain.md)。
+默认 GitHub 交付漏斗语义见 [../governance/github-delivery-funnel.md](../governance/github-delivery-funnel.md)。
+最小 `item context` 字段见 [item-context-contract.md](./item-context-contract.md)。
 
 ## 1. 能力定位
 

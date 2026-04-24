@@ -17,6 +17,10 @@
   - `EXT-0001` `EXT-0002` `EXT-0006` `EXT-0023`
 - [review-model.md](./review-model.md)
   - `EXT-0004` `EXT-0014` `EXT-0018`
+- [github-delivery-funnel.md](./github-delivery-funnel.md)
+  - `#288`
+- [spec-implementation-separation.md](./spec-implementation-separation.md)
+  - `#290`
 - [maturity-and-closing.md](./maturity-and-closing.md)
   - `EXT-0026`
 - [state-machine.md](./state-machine.md)

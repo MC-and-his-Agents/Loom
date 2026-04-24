@@ -12,6 +12,10 @@
 
 - [spec-suite.md](./spec-suite.md)
   - `EXT-0015` `EXT-0016` `EXT-0017`
+- [spec-template.md](./spec-template.md)
+  - `#290`
+- [implementation-contract-template.md](./implementation-contract-template.md)
+  - `#290`
 - [pull-request.md](./pull-request.md)
   - `EXT-0008` `EXT-0028`
 

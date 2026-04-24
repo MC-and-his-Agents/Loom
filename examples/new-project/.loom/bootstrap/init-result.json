@@ -7,7 +7,7 @@
     "contract_version": "1.3.0"
   },
   "run": {
-    "target": "/Users/mc/dev/Loom-superpowers-layout/examples/new-project",
+    "target": "/Users/mc/dev/Loom/examples/new-project",
     "scenario": "新项目",
     "scenario_key": "new",
     "integration_mode": "root",
@@ -130,6 +130,11 @@
       "source": "skills/shared/scripts/loom_flow.py"
     },
     {
+      "path": ".loom/bin/loom_status.py",
+      "kind": "loom-tool",
+      "source": "skills/shared/scripts/loom_status.py"
+    },
+    {
       "path": ".loom/bin/runtime_paths.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/runtime_paths.py"
@@ -165,6 +170,11 @@
       "source": "generated"
     },
     {
+      "path": ".loom/reviews/INIT-0001.spec.json",
+      "kind": "review-entry",
+      "source": "generated"
+    },
+    {
       "path": ".loom/status/current.md",
       "kind": "status-surface",
       "source": "generated"
@@ -178,6 +188,11 @@
       "path": ".loom/specs/INIT-0001/plan.md",
       "kind": "plan",
       "source": "skills/shared/assets/templates/scaffold/plan.md"
+    },
+    {
+      "path": ".loom/specs/INIT-0001/implementation-contract.md",
+      "kind": "implementation-contract",
+      "source": "skills/shared/assets/templates/scaffold/implementation-contract.md"
     },
     {
       "path": ".github/PULL_REQUEST_TEMPLATE.md",
@@ -200,15 +215,18 @@
         ".loom/work-items/INIT-0001.md",
         ".loom/progress/INIT-0001.md",
         ".loom/reviews/INIT-0001.json",
+        ".loom/reviews/INIT-0001.spec.json",
         ".loom/status/current.md",
         ".loom/bin/loom_init.py",
         ".loom/bin/fact_chain_support.py",
         ".loom/bin/governance_surface.py",
         ".loom/bin/loom_flow.py",
+        ".loom/bin/loom_status.py",
         ".loom/bin/runtime_paths.py",
         ".loom/bin/loom_check.py",
         ".loom/specs/INIT-0001/spec.md",
-        ".loom/specs/INIT-0001/plan.md"
+        ".loom/specs/INIT-0001/plan.md",
+        ".loom/specs/INIT-0001/implementation-contract.md"
       ],
       "closing_condition": "The generated entry, work item, recovery entry, and templates are readable and verified",
       "post_build_continuation": "Promote the first real downstream issue after the bootstrap artifacts are accepted",
@@ -237,12 +255,12 @@
     "scene": "repo-local-demo",
     "carrier": "repo-local-wrapper",
     "entry_family": "loom-init",
-    "install_root": "/Users/mc/dev/Loom-superpowers-layout/skills",
-    "runtime_root": "/Users/mc/dev/Loom-superpowers-layout/skills/shared/scripts",
-    "registry_path": "/Users/mc/dev/Loom-superpowers-layout/skills/registry.json",
-    "layout_or_manifest_path": "/Users/mc/dev/Loom-superpowers-layout/skills/install-layout.json",
-    "source_repo_root": "/Users/mc/dev/Loom-superpowers-layout",
-    "target_root": "/Users/mc/dev/Loom-superpowers-layout/examples/new-project",
+    "install_root": "/Users/mc/dev/Loom/skills",
+    "runtime_root": "/Users/mc/dev/Loom/skills/shared/scripts",
+    "registry_path": "/Users/mc/dev/Loom/skills/registry.json",
+    "layout_or_manifest_path": "/Users/mc/dev/Loom/skills/install-layout.json",
+    "source_repo_root": "/Users/mc/dev/Loom",
+    "target_root": "/Users/mc/dev/Loom/examples/new-project",
     "checks": {
       "scene_marker": {
         "status": "pass",
@@ -252,21 +270,21 @@
         "status": "pass",
         "summary": "carrier layout exposes an installed skills root and shared runtime tree.",
         "evidence": {
-          "install_root": "/Users/mc/dev/Loom-superpowers-layout/skills"
+          "install_root": "/Users/mc/dev/Loom/skills"
         }
       },
       "registry_contract": {
         "status": "pass",
         "summary": "registry, upgrade contract, and skill entrypoints are consistent.",
         "evidence": {
-          "path": "/Users/mc/dev/Loom-superpowers-layout/skills/registry.json"
+          "path": "/Users/mc/dev/Loom/skills/registry.json"
         }
       },
       "shared_runtime": {
         "status": "pass",
         "summary": "shared runtime scripts are present and executable roots can be resolved.",
         "evidence": {
-          "path": "/Users/mc/dev/Loom-superpowers-layout/skills/shared/scripts"
+          "path": "/Users/mc/dev/Loom/skills/shared/scripts"
         }
       },
       "referenced_resources": {

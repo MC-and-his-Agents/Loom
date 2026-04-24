@@ -1,6 +1,6 @@
 {
   "schema_version": "loom-skill-upgrade/v1",
-  "registry_version": "1.3.0",
+  "registry_version": "1.4.0",
   "root_entry": "loom-init",
   "current_contract_version": "1.3.0",
   "upgrade_policy": {

@@ -19,6 +19,24 @@
 - Recovery Boundary: Bootstrap result at `.loom/bootstrap/init-result.json`; bootstrap manifest at `.loom/bootstrap/manifest.json`.
 - Current Lane: bootstrap verification only
 
+## Governance Status
+
+- Item Key: INIT-0001
+- Item Type: work_item
+- Phase: not_declared
+- FR: not_declared
+- Release: not_declared
+- Sprint: not_declared
+- Head SHA: bootstrap-placeholder
+- Status: planning
+- Spec Entry: .loom/specs/INIT-0001/spec.md
+- Plan Entry: .loom/specs/INIT-0001/plan.md
+- Implementation Contract Entry: .loom/specs/INIT-0001/implementation-contract.md
+- Spec Review Entry: .loom/reviews/INIT-0001.spec.json
+- Spec Review Status: pending
+- Review Head Status: bootstrap-placeholder
+- Merge Gate Status: pending
+
 ## Runtime Evidence
 
 - Run Entry: not_applicable

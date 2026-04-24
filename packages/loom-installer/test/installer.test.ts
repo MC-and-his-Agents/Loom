@@ -85,6 +85,44 @@ test('payload manifest excludes python cache artifacts', () => {
   assert.equal(manifest.files.some((entry: { path: string }) => entry.path.includes('__pycache__') || entry.path.endsWith('.pyc')), false);
 });
 
+test('payload manifest tracks loom-spec-review as a public skill', () => {
+  const manifest = JSON.parse(readFileSync(join(packageRoot(), 'payload', 'manifest.json'), 'utf8'));
+  assert.equal(Array.isArray(manifest.skills), true);
+  assert.equal(
+    manifest.skills.some((entry: { id: string; relative_path: string }) => entry.id === 'loom-spec-review' && entry.relative_path === 'skills/loom-spec-review'),
+    true,
+  );
+});
+
+test('payload bundles shared references and runtime paths required by install layout', () => {
+  assert.equal(
+    existsSync(join(packageRoot(), 'payload', 'plugin', 'loom', 'skills', 'shared', 'references', 'harness', 'execution-context.md')),
+    true,
+  );
+  assert.equal(
+    existsSync(
+      join(
+        packageRoot(),
+        'payload',
+        'skills',
+        'loom-init',
+        '.loom-runtime',
+        'shared',
+        'references',
+        'templates',
+        'implementation-contract-template.md',
+      ),
+    ),
+    true,
+  );
+  assert.equal(
+    existsSync(
+      join(packageRoot(), 'payload', 'skills', 'loom-init', '.loom-runtime', 'loom-spec-review', 'references', 'input-signals.md'),
+    ),
+    true,
+  );
+});
+
 test('package bin target matches the built CLI entrypoint', () => {
   const packageJson = JSON.parse(readFileSync(join(packageRoot(), 'package.json'), 'utf8'));
   const cliEntry = packageJson.bin?.['loom-installer'];

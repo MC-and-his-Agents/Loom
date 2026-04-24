@@ -63,7 +63,10 @@ REPO_INTEROP_SHADOW_SURFACES = ("admission", "review", "merge_ready", "closeout"
 
 
 def run_process(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(args, cwd=cwd, check=False, capture_output=True, text=True)
+    try:
+        return subprocess.run(args, cwd=cwd, check=False, capture_output=True, text=True, timeout=15)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(args=args, returncode=124, stdout="", stderr="command timed out after 15s")
 
 
 def file_exists(root: Path, relative: str) -> bool:

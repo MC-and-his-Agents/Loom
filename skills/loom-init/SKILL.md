@@ -38,6 +38,8 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
   - 路由到 `loom-resume`
 - review 前检查 / 进入 review 前预检
   - 路由到 `loom-pre-review`
+- formal spec review / spec 是否通过 / `spec-approved` gate
+  - 路由到 `loom-spec-review`
 - 正式 review / 语义审查 / review 结论
   - 路由到 `loom-review`
 - 交接 / 回写停点 / 移交当前事项
@@ -72,13 +74,18 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
   - `README.md`
 - Loom 核心规则：
   - `skills/shared/references/governance/principles.md`
+  - `skills/shared/references/governance/github-delivery-funnel.md`
   - `skills/shared/references/governance/review-model.md`
+  - `skills/shared/references/governance/spec-implementation-separation.md`
   - `skills/shared/references/governance/maturity-and-closing.md`
+  - `skills/shared/references/adoption/github-profile.md`
   - `skills/shared/references/adoption/routing-and-checkpoints.md`
   - `skills/shared/references/adoption/lightweight-retrofit-default.md`
   - `skills/shared/references/adoption/deep-existing-repo-default.md`
 - `skills/shared/references/harness/recovery-model.md`
 - `skills/shared/references/harness/fact-chain-contract.md`
+- `skills/shared/references/harness/item-context-contract.md`
+- `skills/shared/references/harness/status-surface-contract.md`
 - `skills/shared/references/harness/status-surface.md`
 - `skills/shared/references/harness/work-item-contract.md`
 - `skills/shared/references/harness/workspace-model.md`
@@ -88,6 +95,8 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 - `skills/shared/references/harness/workspace-and-purity.md`
 - `skills/shared/references/harness/execution-context.md`
 - `skills/shared/references/templates/spec-suite.md`
+- `skills/shared/references/templates/spec-template.md`
+- `skills/shared/references/templates/implementation-contract-template.md`
 - `skills/shared/references/templates/pull-request.md`
 - `skills/loom-init/references/output-contract.md`
 

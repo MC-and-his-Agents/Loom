@@ -18,6 +18,7 @@ from runtime_state import detect_runtime_state
 
 RUNTIME_SOURCE = "skills/shared/scripts/loom_init.py"
 FLOW_RUNTIME_SOURCE = "skills/shared/scripts/loom_flow.py"
+STATUS_RUNTIME_SOURCE = "skills/shared/scripts/loom_status.py"
 CHECK_RUNTIME_SOURCE = "skills/shared/scripts/loom_check.py"
 FACT_CHAIN_RUNTIME_SOURCE = "skills/shared/scripts/fact_chain_support.py"
 GOVERNANCE_RUNTIME_SOURCE = "skills/shared/scripts/governance_surface.py"
@@ -85,10 +86,17 @@ SKILL_SIGNAL_RULES: dict[str, tuple[str, ...]] = {
         "正式 review",
         "formal review",
         "code review",
-        "spec review",
         "语义审查",
         "做审查",
         "review 结论",
+    ),
+    "loom-spec-review": (
+        "spec review",
+        "formal spec review",
+        "spec-approved",
+        "确认 spec 是否通过",
+        "审查 formal spec",
+        "审查 spec",
     ),
     "loom-handoff": (
         "交接",
@@ -747,15 +755,18 @@ def initial_work_items(scenario: str, target_root: Path, adoption_path: str, ins
         ".loom/work-items/INIT-0001.md",
         ".loom/progress/INIT-0001.md",
         ".loom/reviews/INIT-0001.json",
+        ".loom/reviews/INIT-0001.spec.json",
         ".loom/status/current.md",
         ".loom/bin/loom_init.py",
         ".loom/bin/fact_chain_support.py",
         ".loom/bin/governance_surface.py",
         ".loom/bin/loom_flow.py",
+        ".loom/bin/loom_status.py",
         ".loom/bin/runtime_paths.py",
         ".loom/bin/loom_check.py",
         ".loom/specs/INIT-0001/spec.md",
         ".loom/specs/INIT-0001/plan.md",
+        ".loom/specs/INIT-0001/implementation-contract.md",
     ]
     if not (target_root / ".github/PULL_REQUEST_TEMPLATE.md").exists():
         artifacts.append(".github/PULL_REQUEST_TEMPLATE.md")
@@ -823,6 +834,11 @@ def initial_artifacts(target_root: Path, install_pr_template: bool, adoption_pat
             "path": ".loom/bin/loom_flow.py",
             "kind": "loom-tool",
             "source": FLOW_RUNTIME_SOURCE,
+        },
+        {
+            "path": ".loom/bin/loom_status.py",
+            "kind": "loom-tool",
+            "source": STATUS_RUNTIME_SOURCE,
         },
         {
             "path": ".loom/bin/runtime_paths.py",
@@ -894,6 +910,11 @@ def initial_artifacts(target_root: Path, install_pr_template: bool, adoption_pat
                     "source": "generated",
                 },
                 {
+                    "path": ".loom/reviews/INIT-0001.spec.json",
+                    "kind": "review-entry",
+                    "source": "generated",
+                },
+                {
                     "path": ".loom/status/current.md",
                     "kind": "status-surface",
                     "source": "generated",
@@ -907,6 +928,11 @@ def initial_artifacts(target_root: Path, install_pr_template: bool, adoption_pat
                     "path": ".loom/specs/INIT-0001/plan.md",
                     "kind": "plan",
                     "source": "skills/shared/assets/templates/scaffold/plan.md",
+                },
+                {
+                    "path": ".loom/specs/INIT-0001/implementation-contract.md",
+                    "kind": "implementation-contract",
+                    "source": "skills/shared/assets/templates/scaffold/implementation-contract.md",
                 },
             ]
         )
@@ -1068,6 +1094,7 @@ def render_loom_readme(result: dict[str, object]) -> str:
         f"{path_lines}"
         "- Runtime-state entry: `.loom/bin/loom_init.py runtime-state --target .`\n"
         "- Daily execution CLI: `.loom/bin/loom_flow.py`\n"
+        "- Unified status CLI: `.loom/bin/loom_status.py --target .`\n"
         "- Gate CLI: `.loom/bin/loom_check.py`\n"
     )
 
@@ -1196,6 +1223,28 @@ def render_review_entry(result: dict[str, object]) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
 
 
+def render_spec_review_entry(result: dict[str, object]) -> str:
+    item = result["initial_work_items"][0]
+    payload = {
+        "schema_version": "loom-review/v1",
+        "item_id": item["id"],
+        "decision": "fallback",
+        "kind": "spec_review",
+        "summary": "Formal spec review has not been completed yet.",
+        "reviewer": "not yet assigned",
+        "reviewed_head": "bootstrap-placeholder",
+        "reviewed_validation_summary": "Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist.",
+        "fallback_to": "admission",
+        "blocking_issues": [
+            "Spec-approved gate remains open until the formal spec path receives its own review record."
+        ],
+        "follow_ups": [
+            "Record a spec_review decision before implementation review or merge-ready consumes the formal spec path."
+        ],
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+
+
 def default_runtime_evidence(result: dict[str, object]) -> dict[str, str]:
     item = result["initial_work_items"][0]
     return {
@@ -1231,6 +1280,22 @@ def render_status(result: dict[str, object]) -> str:
         "- Latest Validation Summary: Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist.\n"
         "- Recovery Boundary: Bootstrap result at `.loom/bootstrap/init-result.json`; bootstrap manifest at `.loom/bootstrap/manifest.json`.\n"
         "- Current Lane: bootstrap verification only\n\n"
+        "## Governance Status\n\n"
+        "- Item Key: INIT-0001\n"
+        "- Item Type: work_item\n"
+        "- Phase: not_declared\n"
+        "- FR: not_declared\n"
+        "- Release: not_declared\n"
+        "- Sprint: not_declared\n"
+        "- Head SHA: bootstrap-placeholder\n"
+        "- Status: planning\n"
+        "- Spec Entry: .loom/specs/INIT-0001/spec.md\n"
+        "- Plan Entry: .loom/specs/INIT-0001/plan.md\n"
+        "- Implementation Contract Entry: .loom/specs/INIT-0001/implementation-contract.md\n"
+        "- Spec Review Entry: .loom/reviews/INIT-0001.spec.json\n"
+        "- Spec Review Status: pending\n"
+        "- Review Head Status: bootstrap-placeholder\n"
+        "- Merge Gate Status: pending\n\n"
         "## Runtime Evidence\n\n"
         f"- Run Entry: {runtime_evidence['run_entry']}\n"
         f"- Logs Entry: {runtime_evidence['logs_entry']}\n"
@@ -1297,6 +1362,7 @@ def scaffold_target(
                 (target_root / ".loom/work-items/INIT-0001.md", render_work_item(result), "text"),
                 (target_root / ".loom/progress/INIT-0001.md", render_progress(result), "text"),
                 (target_root / ".loom/reviews/INIT-0001.json", render_review_entry(result), "text"),
+                (target_root / ".loom/reviews/INIT-0001.spec.json", render_spec_review_entry(result), "text"),
                 (target_root / ".loom/status/current.md", render_status(result), "text"),
             ]
         )
@@ -1312,6 +1378,7 @@ def scaffold_target(
         (Path(__file__).with_name("fact_chain_support.py"), target_root / ".loom/bin/fact_chain_support.py"),
         (Path(__file__).with_name("governance_surface.py"), target_root / ".loom/bin/governance_surface.py"),
         (Path(__file__).with_name("loom_flow.py"), target_root / ".loom/bin/loom_flow.py"),
+        (Path(__file__).with_name("loom_status.py"), target_root / ".loom/bin/loom_status.py"),
         (Path(__file__).with_name("runtime_paths.py"), target_root / ".loom/bin/runtime_paths.py"),
         (Path(__file__).with_name("runtime_state.py"), target_root / ".loom/bin/runtime_state.py"),
         (Path(__file__).with_name("loom_check.py"), target_root / ".loom/bin/loom_check.py"),
@@ -1323,6 +1390,10 @@ def scaffold_target(
         for source, destination in (
             (shared_asset(__file__, "templates/scaffold/spec.md"), target_root / ".loom/specs/INIT-0001/spec.md"),
             (shared_asset(__file__, "templates/scaffold/plan.md"), target_root / ".loom/specs/INIT-0001/plan.md"),
+            (
+                shared_asset(__file__, "templates/scaffold/implementation-contract.md"),
+                target_root / ".loom/specs/INIT-0001/implementation-contract.md",
+            ),
         ):
             if copy_file(source, destination, force=force):
                 written += 1
@@ -1399,6 +1470,7 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
                     ".loom/status/current.md",
                     ".loom/specs/INIT-0001/spec.md",
                     ".loom/specs/INIT-0001/plan.md",
+                    ".loom/specs/INIT-0001/implementation-contract.md",
                 ]
             )
         for key in (
@@ -1836,11 +1908,18 @@ def route(args: argparse.Namespace) -> int:
 
     known_skills = set(registry_skill_ids or ())
     governance_surface: dict[str, object] | None = None
-    if target_root.exists() and target_root.is_dir():
+
+    def resolved_governance_surface() -> dict[str, object] | None:
+        nonlocal governance_surface
+        if governance_surface is not None:
+            return governance_surface
+        if not target_root.exists() or not target_root.is_dir():
+            return None
         try:
             governance_surface = build_governance_surface(target_root)
         except OSError:
             governance_surface = None
+        return governance_surface
 
     if args.skill:
         if args.skill not in known_skills:
@@ -1871,7 +1950,7 @@ def route(args: argparse.Namespace) -> int:
                     summary=f"explicit skill `{args.skill}` selected",
                     missing_inputs=[],
                     fallback_to="loom-init",
-                    governance_surface=governance_surface if args.skill in {"loom-adopt", "loom-resume"} else None,
+                    governance_surface=resolved_governance_surface() if args.skill in {"loom-adopt", "loom-resume"} else None,
                     runtime_state=runtime_state,
                 ),
                 ensure_ascii=False,
@@ -1911,7 +1990,9 @@ def route(args: argparse.Namespace) -> int:
                     summary=f"task signals route to `{selected_skill}`",
                     missing_inputs=[],
                     fallback_to="loom-init",
-                    governance_surface=governance_surface if selected_skill in {"loom-adopt", "loom-resume"} else None,
+                    governance_surface=(
+                        resolved_governance_surface() if selected_skill in {"loom-adopt", "loom-resume"} else None
+                    ),
                     runtime_state=runtime_state,
                 ),
                 ensure_ascii=False,
@@ -1927,9 +2008,9 @@ def route(args: argparse.Namespace) -> int:
             mode="fallback",
             matched_signals=[],
             summary="task signals are insufficient for stable routing",
-            missing_inputs=["one stable scenario signal such as adopt, resume, pre-review, handoff, retire, or merge-ready"],
+            missing_inputs=["one stable scenario signal such as adopt, resume, pre-review, spec-review, review, handoff, retire, or merge-ready"],
             fallback_to="loom-init",
-            governance_surface=governance_surface if governance_surface is not None else None,
+            governance_surface=None,
             runtime_state=runtime_state,
         )
     else:
@@ -1942,7 +2023,7 @@ def route(args: argparse.Namespace) -> int:
             summary=f"task signals matched multiple scenario skills: {', '.join(sorted(matches))}",
             missing_inputs=["a single dominant scenario signal or an explicit --skill"],
             fallback_to="loom-init",
-            governance_surface=governance_surface if governance_surface is not None else None,
+            governance_surface=None,
             runtime_state=runtime_state,
         )
     print(json.dumps(payload, ensure_ascii=False, indent=2))
