@@ -11,7 +11,7 @@
 本文件只回答三件事：
 
 - Loom 事项有哪些稳定成熟度状态
-- 状态之间如何推进、阻断与回退
+- 状态之间如何作为 `maturity upgrade` 推进、阻断与回退
 - 什么条件下才允许关闭
 
 字段载体与同步边界由 [truth-and-sync-boundary.md](./truth-and-sync-boundary.md) 承接。
@@ -32,6 +32,7 @@ Loom 当前固定四个成熟度状态：
   - 结果已进入主干，且控制面与仓内状态已收口
 
 这四个状态是语义状态，不要求宿主平台直接使用同名字段。
+任何更细的项目显示名，都只能映射到这条 `maturity upgrade` 主链，不得并行再造另一条成熟度状态机。
 
 ## 3. 状态进入条件
 
@@ -67,13 +68,13 @@ Loom 当前固定四个成熟度状态：
 
 - build 级结果已达线
 - 正式 review 结论可消费
-- merge checkpoint 已能回答“可进入 host merge”
+- merge gate 已能回答“可进入 GitHub controlled merge”
 
 默认证据：
 
 - review record
 - merge-ready 摘要或等价执行输出
-- merge checkpoint 结果
+- merge gate 结果
 
 ### 3.4 `closed_out`
 
@@ -127,7 +128,7 @@ Loom 当前固定四个成熟度状态：
 
 换句话说：
 
-- `block` / `fallback` 是转移结果
+- `block` / `fallback` 是 `maturity upgrade` 的转移结果
 - `retired` 是执行现场状态
 - `absorbed` 是 closeout 可消费语义
 - 事项成熟度仍只落在四个稳定状态中
@@ -141,7 +142,7 @@ Loom 当前固定四个成熟度状态：
 - `spec` 已通过
 - PR 已创建
 - `merge_ready`
-- merge checkpoint 已允许放行
+- merge gate 已允许放行
 
 关闭动作必须以 `closed_out` 为前提，而不是以“代码改完了”或“PR 绿了”为前提。
 
@@ -160,4 +161,4 @@ Loom 当前固定四个成熟度状态：
 
 ## 8. 一句话结论
 
-Loom 的状态机目标不是增加更多名词，而是让“何时能前进、何时要回退、何时才算完成”有稳定可消费的语义。
+Loom 的状态机目标不是增加更多名词，而是让 `maturity upgrade` 的前进、回退与完成语义稳定可消费。

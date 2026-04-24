@@ -93,7 +93,7 @@ SKILL_SIGNAL_RULES: dict[str, tuple[str, ...]] = {
     "loom-spec-review": (
         "spec review",
         "formal spec review",
-        "spec-approved",
+        "spec gate",
         "确认 spec 是否通过",
         "审查 formal spec",
         "审查 spec",
@@ -1236,7 +1236,7 @@ def render_spec_review_entry(result: dict[str, object]) -> str:
         "reviewed_validation_summary": "Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist.",
         "fallback_to": "admission",
         "blocking_issues": [
-            "Spec-approved gate remains open until the formal spec path receives its own review record."
+            "Spec gate remains open until the formal spec path receives its own review record."
         ],
         "follow_ups": [
             "Record a spec_review decision before implementation review or merge-ready consumes the formal spec path."

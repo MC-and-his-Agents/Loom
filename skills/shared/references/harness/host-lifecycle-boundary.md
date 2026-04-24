@@ -5,7 +5,7 @@
 宿主动作入口、结果词表与 `fallback_to` 纪律的统一主落点见 [host-action-contract.md](./host-action-contract.md)。
 
 稳定命名与对象分类见 [../governance/host-object-taxonomy.md](../governance/host-object-taxonomy.md)。
-`active issue` 与 branch / `git worktree` / PR / merge commit 的绑定消费见 [host-issue-binding.md](./host-issue-binding.md)。
+host issue 与 `Work Item`、branch、`git worktree`、PR、merge commit 的绑定消费见 [host-issue-binding.md](./host-issue-binding.md)。
 
 ## 1. 结论
 
@@ -23,10 +23,10 @@
 Loom 固定承接：
 
 - `workspace_entry` 对应的执行现场语义
-- 对 `active issue -> branch / git worktree / PR / merge commit` 绑定关系的读取与校验
+- 对 `Work Item -> host issue / branch / git worktree / PR / merge commit` 绑定关系的读取与校验
 - recovery 与 checkpoint 对执行现场的绑定
 - branch / PR / worktree 是否已经影响执行正确性的边界检查结果
-- merge 前对 host merge 的统一放行判断
+- merge 前对 `GitHub controlled merge` 的统一放行判断
 - host merge 后实现是否已被 `absorbed` 的可证明结论
 
 ## 3. Loom 不承接什么
@@ -51,6 +51,6 @@ Loom 当前不提供以下原生命令：
 
 - branch / PR purity 可以被 Loom 报告和消费，但不意味着 Loom 接管其生命周期
 - `workspace` 是执行现场抽象，不等于 git worktree
-- Loom 只消费 `active issue` 与宿主对象的绑定，不在这里主定义 `active issue`
+- Loom 只消费 `Work Item` 与宿主对象的绑定，不在这里主定义 host issue
 - 宿主对象的 UI、命名、按钮与策略不进入 Loom 默认内核
 - `host-lifecycle` 正常只读边界，不把宿主动作缺口伪装成 `fallback`；回退纪律由 [host-action-contract.md](./host-action-contract.md) 统一承接

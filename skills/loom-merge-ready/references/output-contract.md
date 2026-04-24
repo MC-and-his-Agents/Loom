@@ -7,11 +7,11 @@
 - `result`
   - `pass`、`block` 或 `fallback`
 - `summary`
-  - 对 merge 前统一放行状态的单句结论
+  - 对进入 `GitHub controlled merge` 前统一放行状态的单句结论
 - `missing_inputs`
   - 当前仍阻断放行的缺口列表
 - `fallback_to`
-  - 若当前必须回退，应回退到的 checkpoint；无回退时为 `null`
+  - 若当前必须回退，应回退到的 gate；无回退时为 `null`
 - `runtime_state`
   - 当前 Loom 入口自己的 scene / carrier 判定，以及 fail-closed 原因
 - `state_check`
@@ -22,6 +22,10 @@
   - `checkpoint build` 的结果、摘要、阻断项与回退去向
 - `merge_checkpoint`
   - `checkpoint merge` 的结果、摘要、阻断项、回退去向，以及可读的 PR 模板检查结果
+- `gate_chain`
+  - `spec_gate`、`build_gate`、`review_gate`、`merge_gate` 的当前可消费状态
+- `github_controlled_merge`
+  - required checks、branch protection、merge method 与 host merge 前置状态
 - `current_checkpoint`
   - 当前 recovery checkpoint 的原始值与归一化值
 - `current_lane`
@@ -31,4 +35,4 @@
 - `steps`
   - 固定按 `runtime-state -> fact-chain -> state-check -> runtime-evidence -> checkpoint-build -> checkpoint-merge` 顺序列出
 
-这个 skill 只给出 merge 前统一放行摘要，不替代宿主平台 merge，也不直接执行平台动作。
+这个 skill 只给出 `merge gate` 摘要，不替代宿主平台 merge，也不直接执行平台动作。

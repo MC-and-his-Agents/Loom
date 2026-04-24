@@ -5,3 +5,4 @@
 - merge-ready
 - 最终放行前预检
 - 确认当前事项是否可合并
+- 确认 `GitHub controlled merge` 前置是否齐全

@@ -1,6 +1,6 @@
 ---
 name: loom-spec-review
-description: 负责 formal spec review 执行层。Use when Codex needs to review the formal spec path and produce the spec-approved gate consumed by implementation review and merge-ready.
+description: 负责 formal spec review 执行层。Use when Codex needs to review the formal spec path and produce the spec gate consumed by implementation review and merge-ready.
 ---
 
 # Loom Spec Review
@@ -9,7 +9,7 @@ description: 负责 formal spec review 执行层。Use when Codex needs to revie
 
 它与 `loom-review`、`loom-merge-ready` 的边界固定如下：
 
-- `loom-spec-review` 负责 formal spec 路径的审查与 `spec-approved` gate
+- `loom-spec-review` 负责 formal spec 路径的审查与 `spec gate`
 - `loom-review` 负责实现/语义层正式 review，但不能绕过 spec gate
 - `loom-merge-ready` 负责 merge 前统一放行聚合
 
@@ -19,7 +19,7 @@ description: 负责 formal spec review 执行层。Use when Codex needs to revie
 
 - 明确要求做 spec review
 - 明确要求确认 formal spec 是否通过
-- 明确要求产出可被 implementation review / merge-ready 消费的 spec-approved 结论
+- 明确要求产出可被 implementation review / merge-ready 消费的 `spec gate` 结论
 - 明确要求审查 `.loom/specs/<item>/spec.md` 或等价 formal spec 路径
 
 如果任务其实是在做初始化、恢复执行、review 前预检、implementation review、handoff、retire 或 merge-ready，应回到 root route matrix，让 `loom-init` 路由到对应场景：
@@ -55,7 +55,7 @@ description: 负责 formal spec review 执行层。Use when Codex needs to revie
 - 不替代 implementation review
 - 不替代 merge-ready 放行判断
 - 不直接执行 merge 或平台动作
-- 不回写 recovery entry、status surface 或其他 authored 真相载体
+- 不回写 recovery entry、status control plane 或其他 authored 真相载体
 
 ## 4. 输出要求
 

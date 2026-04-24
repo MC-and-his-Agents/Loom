@@ -77,7 +77,7 @@ Loom 当前固定四层：
 
 以下对象只允许派生读取：
 
-- status surface
+- status control plane
 - merge-ready 摘要
 - closeout 摘要
 - `init-result` 中的统一读取入口
@@ -113,7 +113,7 @@ Loom 当前只允许以下同步：
 - repo execution truth -> host control truth
   - 例如 closeout 时把应关闭的 issue / project 状态推进到一致结果
 - repo execution truth -> derived read surfaces
-  - 例如从 `work item` 与 recovery 主入口重渲染状态面、resume 摘要或其他统一读取面
+- 例如从 `Work Item` 与 recovery 主入口重渲染 `status control plane`、resume 摘要或其他统一读取面
 - host control truth -> derived read surfaces
   - 例如把 PR / checks 状态汇总到 merge-ready 或 closeout 读面
 
@@ -151,7 +151,7 @@ Loom 当前只允许以下同步：
 | issue | host control truth | 治理事项控制面 |
 | project item | host control truth | 计划与状态展示控制面 |
 | PR | host control truth | 实现载体与 merge 控制面 |
-| status surface | derived read surface | 执行摘要读面 |
+| status control plane | derived read surface | 执行摘要读面 |
 | merge-ready 摘要 | derived read surface | 放行前汇总读面 |
 | closeout 摘要 | derived read surface | 收口前汇总读面 |
 | CI / guardian / reviewer 输出 | runtime / review evidence | 可消费证据 |

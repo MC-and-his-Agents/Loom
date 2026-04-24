@@ -337,15 +337,10 @@
     },
     "github_control_plane": {
       "repository": "MC-and-his-Agents/Loom",
-      "default_branch": "main",
-      "branch_protection": "enabled",
-      "required_checks": [
-        "py-compile",
-        "demo-bootstrap",
-        "repo-local-cli",
-        "loom-check"
-      ],
-      "pr_reviews": "not_required"
+      "default_branch": "unknown",
+      "branch_protection": "unknown",
+      "required_checks": "unknown",
+      "pr_reviews": "unknown"
     },
     "repo_interface": {
       "availability": "absent",
@@ -397,7 +392,204 @@
       "summary": "no repo interop contract is declared for this repository.",
       "missing_inputs": []
     },
+    "governance_control_plane": {
+      "schema_version": "loom-governance-control/v1",
+      "execution_entry": {
+        "only_default_entry": "work_item",
+        "illegal_entry_fallbacks": {
+          "roadmap": "phase",
+          "phase": "fr",
+          "fr": "work_item",
+          "implementation_pr": "work_item",
+          "merge_commit": "closeout"
+        },
+        "result": "pass"
+      },
+      "host_binding": {
+        "schema_version": "loom-host-binding/v1",
+        "required_objects": {
+          "phase": {
+            "status": "profile-defined",
+            "locator": "GitHub parent issue or equivalent planning object",
+            "authority": "github-profile"
+          },
+          "fr": {
+            "status": "profile-defined",
+            "locator": "GitHub sub-issue or equivalent formal request",
+            "authority": "github-profile"
+          },
+          "work_item": {
+            "status": "present",
+            "locator": ".loom/work-items/INIT-0001.md",
+            "authority": "loom fact chain"
+          },
+          "branch": {
+            "status": "present",
+            "locator": "feat/syvert-governance-parity",
+            "authority": "git"
+          },
+          "worktree": {
+            "status": "present",
+            "locator": "/Users/mc/dev/Loom",
+            "authority": "git"
+          },
+          "implementation_pr": {
+            "status": "host-managed",
+            "locator": "GitHub PR linked from Work Item or branch",
+            "authority": "host"
+          },
+          "merge_commit": {
+            "status": "host-managed",
+            "locator": "GitHub merged PR mergeCommit",
+            "authority": "host"
+          },
+          "closeout": {
+            "status": "host-managed",
+            "locator": "reconciliation audit + closeout gate",
+            "authority": "loom + host"
+          }
+        },
+        "default_branch": "unknown",
+        "missing_inputs": [
+          "github default branch"
+        ],
+        "result": "block",
+        "summary": "host binding surface is readable, but required binding facts are missing or host-managed."
+      },
+      "taxonomy": {
+        "spec_stale": "Approved spec no longer covers the implementation surface.",
+        "review_stale": "Implementation review no longer covers the current head or scope.",
+        "head_drift": "The head SHA changed after an approval gate was recorded.",
+        "host_signal_drift": "GitHub issue, PR, project, branch, or check state no longer agrees with Loom's local carriers.",
+        "gate_failure": "A required predecessor gate is missing, blocking, or unreadable.",
+        "closeout_reconciliation_drift": "Merged work and issue/project closeout state are not yet aligned."
+      },
+      "gate_chain": [
+        {
+          "id": "work_item_admission",
+          "requires": [],
+          "fallback_to": "admission"
+        },
+        {
+          "id": "spec_gate",
+          "requires": [
+            "work_item_admission",
+            "formal_spec_or_not_applicable",
+            "spec_review_approved"
+          ],
+          "fallback_to": "admission"
+        },
+        {
+          "id": "build_gate",
+          "requires": [
+            "work_item_admission",
+            "spec_gate",
+            "head_sha",
+            "validation_summary",
+            "approved_scope"
+          ],
+          "fallback_to": "build"
+        },
+        {
+          "id": "review_gate",
+          "requires": [
+            "build_gate",
+            "head_sha",
+            "validation_summary",
+            "single_review_record"
+          ],
+          "fallback_to": "review"
+        },
+        {
+          "id": "merge_gate",
+          "requires": [
+            "review_gate",
+            "head_binding",
+            "validation_summary",
+            "no_stale_or_drift"
+          ],
+          "fallback_to": "merge"
+        },
+        {
+          "id": "github_controlled_merge",
+          "requires": [
+            "merge_gate",
+            "required_checks",
+            "branch_protection",
+            "merge_policy"
+          ],
+          "fallback_to": "merge"
+        },
+        {
+          "id": "closeout",
+          "requires": [
+            "github_controlled_merge",
+            "merge_commit",
+            "target_main",
+            "reconciliation_audit"
+          ],
+          "fallback_to": "reconciliation-sync"
+        }
+      ],
+      "maturity": {
+        "schema_version": "loom-governance-maturity/v1",
+        "current": "light",
+        "achieved": [
+          "light"
+        ],
+        "next": "standard",
+        "levels": {
+          "light": {
+            "requires": [
+              "work_item",
+              "recovery",
+              "status_surface",
+              "review"
+            ],
+            "summary": "Minimal Work Item -> review -> merge-ready governance is available."
+          },
+          "standard": {
+            "requires": [
+              "light",
+              "fr_work_item_layer",
+              "spec_path",
+              "plan_path",
+              "spec_gate",
+              "status_control_plane",
+              "basic_host_binding",
+              "closeout_reconciliation_read"
+            ],
+            "summary": "Formal spec, spec gate, status control plane, basic host binding, and closeout/reconciliation reads are available."
+          },
+          "strong": {
+            "requires": [
+              "standard",
+              "repo_interface",
+              "repo_interop",
+              "github_controlled_merge"
+            ],
+            "summary": "Host-backed binding, reconciliation, controlled merge, and closeout gates are available."
+          }
+        },
+        "missing_by_level": {
+          "light": [],
+          "standard": [
+            "fr_work_item_layer",
+            "basic_host_binding",
+            "closeout_reconciliation_read"
+          ],
+          "strong": [
+            "standard",
+            "repo_interface",
+            "repo_interop",
+            "github_controlled_merge"
+          ]
+        }
+      }
+    },
     "summary": "repository is treated as new; Loom can plan the first governance carriers and bootstrap entrypoints without adding a second truth source.",
-    "missing_inputs": []
+    "missing_inputs": [
+      "github control plane: GraphQL: API rate limit already exceeded for user ID 9820018."
+    ]
   }
 }

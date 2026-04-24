@@ -14,10 +14,11 @@ Loom 当前冻结的默认交付路径如下：
 - `GitHub FR`
 - `GitHub Work Item`
 - `spec / contract`
-- `spec review`
+- `spec gate`
 - `implementation PR`
-- `PR review`
-- `squash merge`
+- `review gate`
+- `merge gate`
+- `GitHub controlled merge`
 
 Loom 只冻结这条路径的语义，不冻结 GitHub 之外宿主的具体对象名字。
 
@@ -68,6 +69,38 @@ Loom 只冻结这条路径的语义，不冻结 GitHub 之外宿主的具体对�
 
 任何未收成 `Work Item` 的对象，都默认仍停留在规划或边界层。
 
+### 2.5 gate chain
+
+GitHub profile 下的正式放行链固定为：
+
+- `spec gate`
+- `build gate`
+- `review gate`
+- `merge gate`
+
+其中：
+
+- `spec gate`
+  - 负责 formal spec 路径的通过 / 阻断
+- `build gate`
+  - 负责实现仍在已批准范围内，且验证基线可继续消费
+- `review gate`
+  - 负责正式 implementation review 结论进入单一 review record
+- `merge gate`
+  - 负责进入宿主 merge 前的最终统一放行
+
+### 2.6 `GitHub controlled merge`
+
+进入 `merge gate` 通过后，真正的 merge 仍由 GitHub 控制面执行。
+
+Loom 只消费：
+
+- `head_sha`
+- required checks
+- review 状态
+- branch protection / ruleset
+- merge 结果与 main 吸收事实
+
 ## 3. 前置关系
 
 默认前置关系固定如下：
@@ -75,9 +108,10 @@ Loom 只冻结这条路径的语义，不冻结 GitHub 之外宿主的具体对�
 - `Roadmap / Phase` 为 `FR` 提供阶段边界
 - `FR` 为 `Work Item` 提供正式目标与共享边界
 - `Work Item` 若命中 formal spec 准入，必须先有 `spec / contract`
-- `spec review` 通过后，`Work Item` 才能进入 `implementation PR`
-- `PR review` 不替代 `spec review`
-- `merge-ready` 不承担第一次高质量语义判断
+- `spec gate` 通过后，`Work Item` 才能进入 `implementation PR`
+- `review gate` 不替代 `spec gate`
+- `merge gate` 不承担第一次高质量语义判断
+- `GitHub controlled merge` 只能发生在 `merge gate` 通过之后
 
 ## 4. Loom 与 GitHub 的边界
 
@@ -87,7 +121,8 @@ Loom 只要求 GitHub profile 至少能稳定提供：
 
 - `Roadmap / Phase / FR / Work Item` 的映射关系
 - 当前事项的 `head_sha`
-- PR / review / merge gate 的最小状态读取
+- `spec gate / review gate / merge gate` 的最小状态读取
+- `GitHub controlled merge` 所需的 required checks / branch protection / ruleset 读面
 - parent / sub-issue 关系
 
 这些读取面应被 Loom 消费，而不是在 skill、脚本和 PR 描述里各自发明一套解释。
@@ -97,3 +132,4 @@ Loom 只要求 GitHub profile 至少能稳定提供：
 - 不把 `Phase / FR / Work Item` 三个名字冻结为 Loom 永恒唯一命名
 - 不把 GitHub API 细节提升为 Loom core 规则
 - 不让 `FR` 或 `PR` 越权替代 `Work Item`
+- 不把 Loom 写成 merge 执行者；merge 始终属于宿主控制面

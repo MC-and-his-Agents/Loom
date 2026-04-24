@@ -60,5 +60,5 @@
 
 - 当前仓库需要 Loom-owned recovery carrier 承接多轮执行停点
 - repo-native carriers 无法稳定承接 recovery / review / closeout 真相
-- companion 之外还需要 Loom-owned status surface 承接统一读面
+- companion 之外还需要 Loom-owned `status control plane` 承接统一读面
 - repo-local attach 入口已经稳定，但下一轮需要 typed machine contract、interop 或 shadow parity

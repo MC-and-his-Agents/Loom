@@ -15,7 +15,7 @@ description: 负责交接当前事项。Use when Codex needs to prepare a handof
 
 - 只读取现有事实链、状态检查和现场定位结果
 - 只输出 handoff 所需的最小回写清单与载体定位
-- 不直接写 recovery entry、status surface 或其他 authored 载体
+- 不直接写 recovery entry、status control plane 或其他 authored 载体
 
 输入信号与输出合同见：
 

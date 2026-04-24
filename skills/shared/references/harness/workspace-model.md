@@ -44,7 +44,7 @@
 ## 4. 边界约束
 
 Loom 只固化现场隔离、单事项和可恢复定位。
-必要时，Loom 会读取 `active issue` 与 host branch / `git worktree` / PR 的绑定来校验现场是否仍服务同一事项。
+必要时，Loom 会读取 `Work Item` 与 host issue / branch / `git worktree` / PR 的绑定来校验现场是否仍服务同一事项。
 
 Loom 当前不固化：
 
@@ -53,4 +53,4 @@ Loom 当前不固化：
 - 具体命令、脚本或平台命名约定
 
 branch、PR 与 git worktree 的宿主边界见 [host-lifecycle-boundary.md](./host-lifecycle-boundary.md)。
-`active issue` 绑定消费见 [host-issue-binding.md](./host-issue-binding.md)。
+host issue 绑定消费见 [host-issue-binding.md](./host-issue-binding.md)。

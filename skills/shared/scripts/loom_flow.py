@@ -276,6 +276,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Init-result path relative to the target root",
     )
 
+    governance_profile = subparsers.add_parser(
+        "governance-profile",
+        help="Read Loom governance maturity and upgrade requirements",
+    )
+    governance_profile.add_argument("operation", choices=("status", "upgrade-plan"))
+    governance_profile.add_argument("--target", required=True, help="Target repository root")
+
     flow = subparsers.add_parser("flow", help="Run a bundled high-frequency Loom flow")
     flow.add_argument("operation", choices=("pre-review", "review", "spec-review", "resume", "handoff", "merge-ready"))
     flow.add_argument("--target", required=True, help="Target repository root")
@@ -1686,7 +1693,7 @@ def build_review_flow_payload(
         )
     else:
         summary = (
-            "spec-review flow prepared the formal spec review context and exposed the spec-approved artifact."
+            "spec-review flow prepared the formal spec review context and exposed the spec gate artifact."
             if operation == "spec-review" and result == "pass"
             else (
                 "spec-review flow found missing spec review material or earlier blocking signals."
@@ -3383,6 +3390,52 @@ def host_lifecycle_payload(context: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def governance_profile_payload(target_root: Path, operation: str) -> dict[str, Any]:
+    governance_surface = build_governance_surface(target_root)
+    control_plane = governance_surface.get("governance_control_plane")
+    maturity = control_plane.get("maturity") if isinstance(control_plane, dict) else None
+    if not isinstance(maturity, dict):
+        return {
+            "command": "governance-profile",
+            "operation": operation,
+            "result": "block",
+            "summary": "governance profile maturity could not be read from the unified control plane.",
+            "missing_inputs": ["governance_control_plane.maturity"],
+            "fallback_to": "admission",
+            "governance_surface": governance_surface,
+        }
+
+    current = maturity.get("current")
+    next_level = maturity.get("next")
+    missing_by_level = maturity.get("missing_by_level")
+    missing_inputs: list[Any] = []
+    if operation == "upgrade-plan" and isinstance(next_level, str) and isinstance(missing_by_level, dict):
+        raw_missing = missing_by_level.get(next_level, [])
+        if isinstance(raw_missing, list):
+            missing_inputs = raw_missing
+    result = "pass" if not missing_inputs else "block"
+    summary = (
+        f"governance profile is already at `{current}` maturity."
+        if operation == "status" or result == "pass"
+        else f"governance profile can upgrade toward `{next_level}` after the missing contracts are installed."
+    )
+    return {
+        "command": "governance-profile",
+        "operation": operation,
+        "result": result,
+        "summary": summary,
+        "missing_inputs": missing_inputs,
+        "fallback_to": None if result == "pass" else "adoption",
+        "maturity": maturity,
+        "governance_control_plane": control_plane,
+    }
+
+
+def handle_governance_profile(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    return emit(governance_profile_payload(target_root, args.operation))
+
+
 def handle_host_lifecycle(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
     context, errors = load_context(target_root, args.output, args.item)
@@ -4910,7 +4963,7 @@ def handle_review(args: argparse.Namespace) -> int:
             "item": {"id": context["item_id"]},
             "result": "pass",
             "summary": (
-                "formal spec review conclusion was recorded and is ready for spec-approved gate consumption."
+                "formal spec review conclusion was recorded and is ready for spec gate consumption."
                 if args.kind == "spec_review"
                 else "formal review conclusion was recorded and is ready for merge checkpoint consumption."
             ),
@@ -5819,6 +5872,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_reconciliation(args)
     if args.command == "shadow-parity":
         return handle_shadow_parity(args)
+    if args.command == "governance-profile":
+        return handle_governance_profile(args)
     if args.command == "flow":
         return handle_flow(args)
     if args.command == "checkpoint":

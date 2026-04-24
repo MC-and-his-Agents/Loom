@@ -5,12 +5,12 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
 
 # Loom Review
 
-这个 skill 承接正式 review 执行层。
+这个 skill 承接正式 review 执行层，也就是 gate chain 里的 `review gate`。
 
 它不等于 `loom-pre-review`，也不替代 `loom-merge-ready`：
 
 - `loom-pre-review` 负责进入 review 前的统一机械预检
-- `loom-review` 负责执行正式语义审查并产出审查结论
+- `loom-review` 负责执行正式语义审查并产出 `review gate` 结论
 - `loom-merge-ready` 负责 merge 前统一放行聚合
 
 对执行者来说，正式 review 的首层入口仍是 `loom-review` 这个场景 skill。repo-local 自动化、验证、调试和宿主编排可以统一调用 repo-local `loom CLI`，但这不替代场景 skill 的用户入口，也不改变 review / merge-ready 的边界。
@@ -54,15 +54,15 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
 2. 若 `flow review` 非 `pass`，直接返回 `block` 或 `fallback`，不伪造审查结论
 3. 运行 `review run`，用默认 Codex adapter 执行 formal review，并把 raw output 收敛为 Loom evidence 与 normalized findings
 4. 若 `review run` fail-closed，显式回到 manual review 写回同一 `review record`
-5. 用 `review record` 写入正式 review 结论，让 merge checkpoint 可机械消费
+5. 用 `review record` 写入正式 review 结论，让 `merge gate` 可机械消费
 
 这个 skill 不做以下事情：
 
 - 不替代 pre-review 预检
-- 不替代 merge-ready 放行判断
+- 不替代 `merge gate` 放行判断
 - 不直接执行 merge 或平台动作
-- 不回写 recovery entry、status surface 或其他 authored 真相载体
-- 不跳过 review record，直接把口头结论交给 merge checkpoint
+- 不回写 recovery entry、status control plane 或其他 authored 真相载体
+- 不跳过 review record，直接把口头结论交给 `merge gate`
 - 不把 engine raw output 升级成第二 authored truth
 
 ## 4. 输出要求
@@ -71,7 +71,7 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
 
 - 当前事项是什么
 - review 机械基线结果
-- build checkpoint 是否允许进入正式审查
+- build gate 是否允许进入正式审查
 - review artifact 的定位与已记录结论
 - 默认 engine 的执行结果、evidence 定位与 fail-closed 原因
 - manual review 的回退写回入口
@@ -85,7 +85,7 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
 
 - 显式调用 `loom-review` 与 root 隐式路由都能稳定命中
 - 审查执行严格以 `flow review -> review run -> review record` 为前置，而不是绕过预检
-- 输出 JSON 与 review record 都能直接支撑 merge checkpoint 消费
+- 输出 JSON 与 review record 都能直接支撑 `merge gate` 消费
 - skill 不创建第二 authored 真相源，不替代 merge-ready 聚合
 - review/disposition contract 只扩展 review record 内部字段，不新增第二 artifact 或新状态机
 

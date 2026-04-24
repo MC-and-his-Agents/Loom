@@ -11,7 +11,7 @@
 - `missing_inputs`
   - 当前仍需补齐的阻断项；无阻断时为空数组
 - `fallback_to`
-  - 若当前状态不适合直接移交，应回退到哪个 checkpoint；无回退时为 `null`
+  - 若当前状态不适合直接移交，应回退到哪个 gate；无回退时为 `null`
 - `runtime_state`
   - 当前 Loom 入口自己的 scene / carrier 判定，以及 fail-closed 原因
 - `workspace`
@@ -23,7 +23,7 @@
 - `recovery_entry`
   - 当前 recovery entry 的定位字符串
 - `status_surface`
-  - 当前 status surface 的定位字符串
+  - 当前 `status control plane` 的定位字符串
 - `current_stop`
   - 当前执行停点，供交接前回写
 - `next_step`

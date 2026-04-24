@@ -18,6 +18,7 @@ GitHub profile 至少应能表达：
 - `Work Item`
 - `implementation PR`
 - review / merge gate 信号
+- `status control plane`
 
 这些对象可以通过 issue、sub-issue、PR、branch protection、required checks 等宿主能力承接。
 
@@ -35,6 +36,8 @@ GitHub profile 至少应能表达：
   - 唯一默认执行入口 issue
 - `implementation PR`
   - 与当前 `Work Item` 绑定的实现 PR
+- `status control plane`
+  - 汇总 `Work Item`、gate chain、`head_sha` 与 GitHub 控制面信号的统一读面
 
 ## 4. 最小前置关系
 
@@ -42,8 +45,10 @@ GitHub profile 至少应能表达：
 
 - `FR` 先于 `Work Item`
 - 命中 formal spec 路径时，`spec review` 先于 `implementation PR`
+- `spec gate` 先于 implementation review / merge gate
 - `PR review` 与 `merge-ready` 必须消费 `head_sha`
 - `merge-ready` 只做最终放行，不补做前序规格判断
+- host merge 必须由 GitHub 控制面受控执行，而不是由 Loom 直接代行
 
 ## 5. 与 `loom-adopt` 的关系
 
@@ -71,6 +76,10 @@ GitHub profile 至少应能表达：
 ### Strong Governance
 
 - 启用更强的 host 状态读取、受控合并与高级 gate
+- 固定使用 `Work Item` 作为唯一执行入口
+- 固定暴露 `spec gate -> build gate -> review gate -> merge gate`
+- 固定暴露统一 `status control plane`
+- 固定要求成熟度升级与 GitHub controlled merge 可被复核
 
 ## 7. 非 GitHub 宿主
 
@@ -81,6 +90,8 @@ Loom 冻结的是：
 - 对象语义
 - 前置关系
 - 状态读取
+- gate chain
+- maturity upgrade
 - merge-ready 语义
 
 不是 GitHub 的产品细节。

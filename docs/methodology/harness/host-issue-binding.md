@@ -1,90 +1,109 @@
 # Host Issue Binding
 
-本文件定义 Loom 当前消费 `active issue` 与宿主 branch、`git worktree`、PR、merge commit 之间绑定关系的最小合同。
+本文件冻结 Loom strong governance 默认消费的统一 host binding contract。
 
-`active issue` 的主定义不在本文件。
-本文件只承接 Loom 为了执行、定位、放行与收口而必须消费的绑定事实。
+它解决的问题不是“某个脚本怎样猜当前 PR”，而是“所有 review / merge-ready / controlled merge / closeout 应该消费同一套绑定语义”。
 
-## 1. 能力定位
+## 1. 目标
 
-本文件回答：
+Loom 必须能稳定回答：
 
-- Loom 在执行侧最少需要读取哪些 host 绑定关系
-- 哪些绑定关系可用于判断实现是否已被 host merge 吸收
-- 单个 host PR 吸收多个 issue 时最少要能表达什么
-- 哪些结论仍不能直接等同于 `closed_out`
+- 当前执行锚点是谁
+- 该事项绑定了哪些 host objects
+- 这些绑定是否仍然指向同一条交付链
+- merge 后能否从 `Work Item` 追溯到 PR、merge commit 与 closeout basis
 
-## 2. 最小绑定对象
+## 2. 统一绑定锚点
 
-当某正式事项进入实现与收口链路时，Loom 只消费以下绑定关系：
+统一锚点固定为当前 `Work Item`。
 
-- `active issue -> host branch`
-- `active issue -> git worktree`
-- `active issue -> host PR`
-- `host PR -> merge commit`
+在 formal planning 层：
 
-这些绑定关系都属于 host control truth 或其派生读取结果。
-Loom 可以读取、校验、汇总并据此阻断，但不在仓内 authored 第二套主定义。
-
-## 3. 最小消费规则
-
-Loom 至少消费这些绑定关系用于以下动作：
-
-- `workspace locate` / recovery
-  - 判断当前执行现场是否仍服务同一正式事项
-- merge-ready / closeout check
-  - 判断实现载体、合并结果与主干事实是否一致
-- cleanup / retire
-  - 判断某 host branch 或 `git worktree` 是否仍被正式事项占用
-
-若绑定关系缺失、指向冲突或无法证明当前实现属于同一事项，结果必须返回 `block` 或显式 drift。
-
-## 4. 单 PR 吸收多事项
-
-单个 host PR 可以吸收多个 issue，但前提是这些 issue 的实现缺口确实都被该 PR 对应的 merge 结果覆盖。
-
-Loom 最少需要能机械回答两件事：
-
-- 这个 host PR 吸收了哪些 issue
-- 哪些相关 issue 仍保留独立剩余缺口，不能被一起判定为 `absorbed`
+- `FR`
+  - 负责 requirement / formal spec 容器
+- `Work Item`
+  - 负责执行、review、merge 与 closeout
 
 因此：
 
-- PR body、closing rationale、merge commit 或等价宿主证据中，至少要有一处能稳定表达 issue 与 merged work 的对应关系
-- 若同一 PR 同时涉及 parent / child issue，默认只吸收被明确证明已覆盖的 issue，不得把整棵 tree 一并视为已吸收
+- `FR` 可以为 `Work Item` 提供上位边界
+- `FR` 不能直接替代当前执行锚点
+- PR、branch、`head_sha`、merge commit 都必须最终回链到当前 `Work Item`
 
-## 5. `absorbed`
+## 3. 最小绑定对象组
 
-`absorbed` 是 Loom 在 harness 层定义的实现吸收结论。
+当事项进入正式执行链后，Loom 至少要能读取以下绑定：
 
-它只表示：
+- `Work Item -> FR`（若存在 formal spec 路径）
+- `Work Item -> host branch`
+- `Work Item -> git worktree`
+- `Work Item -> host PR`
+- `Work Item -> current head_sha`
+- `PR -> reviewed head_sha`
+- `PR -> merge commit`
+- `merge commit -> target branch`
 
-- 某正式事项对应的实现已经通过 host merge 进入主干
-- 这一结论可以被宿主事实证明，而不是凭口头判断
+GitHub profile 下，这些对象通常由 issue、sub-issue、PR、branch 与 merge commit 承接；Loom 冻结的是关系语义，不是 GitHub 私有字段名。
 
-最小证明面至少包括：
+## 4. 统一读取规则
 
-- 对应 host PR 已 merged
-- 对应 merge commit 可定位
-- merge commit 已被目标主干吸收
+所有正式 gate 只允许消费同一 binding surface：
 
-`absorbed` 不等于：
+- implementation review
+  - 消费 `Work Item`、当前 `head_sha`、关联 PR
+- `merge-ready`
+  - 消费 `Work Item -> PR -> reviewed head_sha`
+- `controlled merge`
+  - 消费 `Work Item -> PR -> merge commit`
+- `closeout`
+  - 消费 `Work Item -> PR -> merge commit -> target branch`
 
+任何入口都不得再用局部约定重建第二套绑定规则。
+
+## 5. GitHub strong governance 默认绑定链
+
+GitHub host 下默认要求至少能证明：
+
+- `FR -> Work Item`
+- `Work Item -> implementation PR`
+- `implementation PR -> merge commit`
+- `merge commit -> default branch`
+
+若当前事项是 docs-only closeout、formal spec closeout 或 parent closeout，仍然必须绑定当前 `Work Item`，不得回退到 `FR` 直接承接 PR。
+
+## 6. 单 PR 吸收多事项
+
+单个 PR 可以吸收多个 `Work Item`，但必须显式可证明。
+
+最小要求：
+
+- 当前 PR 关联的 `Work Item` 列表可稳定读取
+- 每个 `Work Item` 都能分别判断是否已被该 merge commit 覆盖
+- parent / child 不能因共享同一 PR 就自动一起 `closed_out`
+
+默认结论：
+
+- `absorbed`
+  - 可以按事项分别成立
 - `closed_out`
-- issue 已关闭
-- project 状态已同步完成
-- 恢复主入口或现场已清理完毕
+  - 必须按事项分别判断
 
-在 issue tree 中：
+## 7. 绑定失败分类
 
-- child issue
-  - 可以因自身缺口已被其他 merged work 覆盖而形成 `absorbed`
-- parent issue
-  - 可以消费 child 的 `absorbed` 结果，但不得仅因某个 child 被吸收就自动视为自身已 `closed_out`
+以下情况必须进入统一 taxonomy，而不是留给调用方自由解释：
 
-## 6. 边界约束
+- `binding_failure`
+  - 必需绑定缺失、冲突或无法证明
+- `head_drift`
+  - 当前受审 `head_sha` 与绑定链不一致
+- `host_signal_drift`
+  - PR、merge commit、主干或宿主状态互相冲突
+- `merge_signal_drift`
+  - merge 后回链不完整，无法进入 closeout
 
-- 本文件不主定义 `active issue` 的语义、生命周期或 authored 字段
-- 本文件不把 `workspace` 写成 `git worktree`
-- 本文件不要求每个宿主都必须暴露同名字段；只要求绑定关系可被稳定证明
-- 本文件不接管 branch、PR、`git worktree` 或 merge 的宿主生命周期动作
+## 8. 边界约束
+
+- 本文件不接管 host branch / PR / merge 的底层生命周期动作
+- 本文件不把 GitHub 字段名提升为 Loom core 唯一术语
+- 本文件不把 `absorbed` 直接等同于 `closed_out`
+- 本文件不允许 `FR`、PR 或 merge commit 越权替代 `Work Item`

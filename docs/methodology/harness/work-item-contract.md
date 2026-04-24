@@ -1,106 +1,124 @@
 # Work Item Contract
 
-本文件定义 Loom 当前最小 work item / `exec-plan` 合同。
-
-本文件当前承接：
-
-- `EXT-0037` 的初始化产物模型
+本文件冻结 Loom 对 `Work Item` 的执行入口合同与 enforcement 纪律。
 
 完整执行顺序见 [execution-chain.md](./execution-chain.md)。
-默认 GitHub 交付漏斗语义见 [../governance/github-delivery-funnel.md](../governance/github-delivery-funnel.md)。
-最小 `item context` 字段见 [item-context-contract.md](./item-context-contract.md)。
+`Work Item` 的 GitHub 默认语义见 [../governance/github-delivery-funnel.md](../governance/github-delivery-funnel.md)。
 
-## 1. 能力定位
+## 1. 目标
 
-work item 是进入正式执行的入口。
-若项目使用 `exec-plan` 或等价工件，它只承接执行与恢复。
+`Work Item` 不只是“当前默认执行入口”，而是 Loom strong governance 下被 enforcement 的唯一默认执行入口。
 
-本文件同时定义初始化后至少应落位哪些执行产物。
-字段归属见 [fact-chain-contract.md](./fact-chain-contract.md)。
+因此它必须同时解决：
 
-## 2. work item 最小合同
+- 谁可以进入正式执行链
+- 非法入口如何 fail-closed
+- 所有正式 gate 如何回溯到同一事项身份
 
-进入正式执行的事项，必须有可追踪的 work item，并至少表达：
+## 2. 唯一默认执行入口
+
+只有 `Work Item` 可以进入：
+
+- worktree / branch 绑定
+- recovery / resume
+- implementation review
+- `merge-ready`
+- `controlled merge`
+- `closeout`
+
+以下对象都不是执行入口：
+
+- `Roadmap / Phase`
+- `FR`
+- PR
+- merge commit
+- release / sprint 索引
+- 临时说明文档
+
+这些对象可以提供边界或证据，但不能直接触发正式执行。
+
+## 3. 最小合同
+
+进入正式执行的 `Work Item` 至少必须表达：
 
 - 事项标识
 - 目标
 - 范围
 - 当前执行路径
+- 上位 requirement / `FR`
 - 关联工件
 - 工作现场入口
-- 恢复主入口路径
-- review 结论入口
-- 当前验证入口
+- 恢复主入口
+- review 入口
+- 验证入口
 - 关闭条件
 
-一个 work item 对应一个清晰目标，不得承载多个无关正式事项。
+一个 `Work Item` 只承接一个清晰执行目标，不得混装多个无关事项。
 
-## 3. 初始化产物模型
+## 4. enforcement 规则
 
-当 Loom 初始化一个仓库或一条正式执行链路时，最小产物应包括：
+### 4.1 允许进入执行的条件
 
-- 可进入执行的首批 work item 或等价事项清单
-- 至少一个 `progress` / `checkpoint` 载体
-- 与事项关联的唯一恢复主入口约定
-- 可定位的执行路径与工作现场入口
-- 后续验证或执行支撑的入口约定
-- 首个稳定提交或等价回退边界，用于界定初始化后的首轮 clean state
+至少同时满足：
 
-Loom 不固化这些产物的具体文件名，但要求它们在初始化完成后已可读取、可回写、可继续执行。
+- 当前对象已被明确定义为 `Work Item`
+- 可读取最小 `item context`
+- 能定位恢复主入口或等价动态真相
+- host binding 可以回链到同一事项
 
-## 4. `exec-plan` 的职责边界
+### 4.2 非法入口
 
-如果项目使用 `exec-plan`，其职责应限制为：
+以下都属于非法入口：
 
-- 记录当前停点
-- 记录下一步
-- 记录已验证事实
-- 记录阻断项
-- 记录与正式工件的关联
+- 直接从 `FR` 开始 implementation PR
+- 直接从 PR 反推当前事项并进入 resume
+- 直接从 merge commit 启动 closeout
+- 直接从 release / sprint 索引建立执行现场
 
-禁止事项：
+### 4.3 fail-closed 结果
 
-- 用 `exec-plan` 替代正式需求真相
-- 用 `exec-plan` 替代长期状态真相
-- 用 `exec-plan` 吞并多个无关事项
+非法入口必须返回：
 
-## 5. 与执行链路的关系
+- `gate_failure.missing_prerequisite_gate`
+  - 缺合法执行入口
+- 或 `gate_failure.binding_failure`
+  - 无法证明当前对象属于某个合法 `Work Item`
 
-work item / `exec-plan` 至少要能被以下环节消费：
+回退方向只允许指向：
 
-- 每轮读取
-- 工作现场定位
-- 每轮回写
-- 验证汇总
-- merge checkpoint 放行
+- `Work Item` authoring
+- `FR -> Work Item` 拆分
+- binding 修复
 
-不同执行路径可以有不同最小输入强度：
+## 5. formal spec 路径的额外约束
 
-- 轻量事项
-  - work item 可直接进入实现与 PR
-- 中等事项
-  - work item 应关联简化设计说明
-- 正式规约事项
-  - work item 应关联 `spec.md` 与 `plan.md`
+若事项命中 formal spec 路径，还必须满足：
 
-无论路径轻重，都必须能被 [execution-context.md](./execution-context.md)、[recovery-model.md](./recovery-model.md) 与 [merge-checkpoint.md](./merge-checkpoint.md) 消费。
+- `FR` 已存在
+- formal spec 已绑定到 `FR`
+- 当前 `Work Item` 只通过关联关系消费该 formal spec
+- `spec_review` 未通过前不得进入 implementation PR
 
-## 6. 事实链约束
+## 6. 与初始化产物的关系
 
-- `work item` 只承接静态执行真相，不并行 authored 当前停点、下一步、阻断项或最近验证摘要
-- `work item` 可以 authored `review_entry` 这类 locator，但不得 authored review 结论本身
-- 当前 checkpoint 属于恢复主入口，而不是 `work item`
-- 状态面若展示 `goal`、`scope`、`execution_path` 等字段，必须从 `work item` 派生
+初始化或 adoption 完成后，最小可用产物应包括：
 
-## 7. 最小 author/update 入口
+- 可进入执行的首批 `Work Item`
+- 可定位的恢复主入口
+- 唯一恢复主入口约定
+- 可被 review / merge / closeout 消费的 locator
 
-静态事项 authoring 由日常 CLI 显式承接：
+Loom 不冻结文件名，但要求这些入口从第一轮开始即可被机械读取。
 
-- `python3 tools/loom_flow.py work-item create --target <repo> --item <id> ...`
-- `python3 tools/loom_flow.py work-item update --target <repo> --item <id> ...`
+## 7. 事实链约束
 
-边界固定如下：
+- `Work Item` 只承接静态执行真相
+- checkpoint、停点、下一步、阻断项属于恢复主入口
+- `Work Item` 可以 authored locator，不得 authored review 或 closeout 结论本身
+- 统一状态控制面展示的 `item` 字段必须从 `Work Item` 派生
 
-- `create` / `update` 只写静态字段与关联工件
-- 是否切换为当前活跃事项，必须显式使用 `--activate`
-- `--activate` 只允许改 locator truth，不得顺手写 recovery 动态字段
+## 8. 非目标
+
+- 不把 `exec-plan` 提升为执行入口本身
+- 不让 PR 模板或会话记录代替 `Work Item`
+- 不为不同宿主再各自定义一套“谁可以开始执行”的规则

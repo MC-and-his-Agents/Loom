@@ -12,13 +12,13 @@
 
 Loom 的执行真相只允许沿一条事实链流动：
 
-- `work item`
+- `Work Item`
   - 承接静态执行真相
 - 恢复主入口
   - 承接动态执行真相
-- 状态面
+- `status control plane`
   - 只负责派生读取
-- merge checkpoint
+- `merge gate`
   - 只消费上述真相，不补读第二套状态来源
 
 本文件只定义 repo execution truth 内部的字段归属、派生关系与禁止事项。
@@ -28,9 +28,9 @@ Loom 的执行真相只允许沿一条事实链流动：
 
 ## 2. 主真相载体
 
-### 2.1 `work item`
+### 2.1 `Work Item`
 
-`work item` 是静态执行真相的唯一主入口，至少承接：
+`Work Item` 是静态执行真相的唯一主入口，至少承接：
 
 - `item_id`
 - `goal`
@@ -80,15 +80,15 @@ Loom 的执行真相只允许沿一条事实链流动：
 
 | 字段 | 主来源 | 类型 | 允许消费方 |
 | --- | --- | --- | --- |
-| `item_id` | `work item` | authored | execution-context、status-surface、checkpoint、merge-checkpoint |
-| `goal` | `work item` | authored | execution-context、checkpoint、merge-checkpoint |
-| `scope` | `work item` | authored | execution-context、checkpoint、purity-check |
-| `execution_path` | `work item` | authored | execution-context、checkpoint |
-| `workspace_entry` | `work item` | authored | workspace-lifecycle、purity-check、status-surface |
-| `recovery_entry` | `work item` | authored | execution-context、workspace-lifecycle、checkpoint |
-| `review_entry` | `work item` | authored | review-execution、merge-checkpoint |
-| `validation_entry` | `work item` | authored | checkpoint、merge-checkpoint、verify |
-| `closing_condition` | `work item` | authored | checkpoint、merge-checkpoint |
+| `item_id` | `Work Item` | authored | execution-context、status-surface、checkpoint、merge-checkpoint |
+| `goal` | `Work Item` | authored | execution-context、checkpoint、merge-checkpoint |
+| `scope` | `Work Item` | authored | execution-context、checkpoint、purity-check |
+| `execution_path` | `Work Item` | authored | execution-context、checkpoint |
+| `workspace_entry` | `Work Item` | authored | workspace-lifecycle、purity-check、status-surface |
+| `recovery_entry` | `Work Item` | authored | execution-context、workspace-lifecycle、checkpoint |
+| `review_entry` | `Work Item` | authored | review-execution、merge-checkpoint |
+| `validation_entry` | `Work Item` | authored | checkpoint、merge-checkpoint、verify |
+| `closing_condition` | `Work Item` | authored | checkpoint、merge-checkpoint |
 | `current_checkpoint` | recovery 主入口 | authored | status-surface、checkpoint、workspace-lifecycle |
 | `current_stop` | recovery 主入口 | authored | execution-context、checkpoint |
 | `next_step` | recovery 主入口 | authored | execution-context、status-surface、checkpoint |
@@ -97,7 +97,7 @@ Loom 的执行真相只允许沿一条事实链流动：
 | `recovery_boundary` | recovery 主入口 | authored | checkpoint、merge-checkpoint |
 | `current_lane` | recovery 主入口 | authored | status-surface、checkpoint、runtime-evidence |
 | `read_entry` | `init-result` | locator | verify、fact-chain、daily CLI |
-| `status_surface` locator | `init-result` + `work item` 派生 | derived | fact-chain、verify、checkpoint、workspace-lifecycle |
+| `status_surface` locator | `init-result` + `Work Item` 派生 | derived | fact-chain、verify、checkpoint、workspace-lifecycle |
 | `runtime_evidence.*` | status-surface `Runtime Evidence` | derived | fact-chain、verify、merge-checkpoint、loom-check |
 
 约束：
@@ -117,7 +117,7 @@ Loom 的执行真相只允许沿一条事实链流动：
 派生规则固定如下：
 
 - 静态执行事实
-  - 从 `work item` 派生
+  - 从 `Work Item` 派生
 - 动态执行事实
   - 从恢复主入口派生
 - carrier 定位与读取入口
@@ -129,7 +129,7 @@ Loom 的执行真相只允许沿一条事实链流动：
 
 以下情况都属于并行真相，必须报错或阻断：
 
-- 在 `work item` 之外 authored 第二份 `goal`、`scope`、`execution_path`
+- 在 `Work Item` 之外 authored 第二份 `goal`、`scope`、`execution_path`
 - 在恢复主入口之外 authored 第二份 `current_checkpoint`、`current_stop`、`next_step`、`blockers`
 - 让状态面手工维护与恢复主入口不同的 `next_step` 或验证摘要
 - 让 merge checkpoint 依赖另一份未声明主入口的状态摘要
@@ -140,7 +140,7 @@ Loom 的执行真相只允许沿一条事实链流动：
 任何机械入口在读取执行状态时，至少要遵守以下顺序：
 
 1. 先读 `init-result` 中的 carrier 定位
-2. 再读 `work item`
+2. 再读 `Work Item`
 3. 再读恢复主入口
 4. 需要状态汇总时，再读派生状态面
 
@@ -157,4 +157,4 @@ Loom 的执行真相只允许沿一条事实链流动：
 - 若某仓库还停留在 `checkpoint-lite`，也必须明确唯一动态事实承载面
 - 本文件不重复定义字段如何呈现在 Markdown、JSON 或其他载体；只定义谁拥有 authored 权限
 - issue / project / PR / checks 等 host control truth 不在本文件内定义 authored 归属
-- `active issue` 与 branch / `git worktree` / PR / merge commit 的绑定关系只可被本事实链消费，不进入仓内 authored 真相；其最小绑定合同见 [host-issue-binding.md](./host-issue-binding.md)
+- host issue 与 `Work Item`、branch、`git worktree`、PR、merge commit 的绑定关系只可被本事实链消费，不进入仓内 authored 真相；其最小绑定合同见 [host-issue-binding.md](./host-issue-binding.md)

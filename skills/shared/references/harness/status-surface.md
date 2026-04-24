@@ -13,14 +13,16 @@
 它服务读取，不服务并行记账。
 本文件把“状态读取字段”和“运行时证据入口”明确拆开定义。
 字段归属与派生关系以 [fact-chain-contract.md](./fact-chain-contract.md) 为准。
+在强治理控制面里，它就是共享的 `status control plane`。
 
 ## 2. 状态读取字段
 
 Loom 当前至少要求状态面能展示：
 
-- 当前事项
+- 当前 `Work Item`
 - 当前执行路径
 - 当前 checkpoint 阶段
+- 当前 gate chain 位置
 - 当前工作现场
 - 当前恢复主入口
 - 当前 review 入口
@@ -31,12 +33,12 @@ Loom 当前至少要求状态面能展示：
 
 这些字段必须从已有主真相派生，不允许手工维护第二套 authored 值：
 
-- `当前事项`、`当前执行路径`
-  - 从 `work item` 派生
-- `当前 checkpoint 阶段`、`当前阻断项`、`下一步`、`最近验证摘要`、`当前环境 lane`
-  - 从恢复主入口派生
+- `当前 Work Item`、`当前执行路径`
+  - 从 `Work Item` 派生
+- `当前 checkpoint 阶段`、`当前 gate chain 位置`、`当前阻断项`、`下一步`、`最近验证摘要`、`当前环境 lane`
+  - 从恢复主入口、review record 与 merge checkpoint 派生
 - `当前工作现场`、`当前恢复主入口`、`当前 review 入口`、`验证入口`
-  - 从 `work item` 与 `init-result` 的 carrier 定位派生
+  - 从 `Work Item` 与 `init-result` 的 carrier 定位派生
 
 ## 3. `Runtime Evidence` 固定区块
 
@@ -114,6 +116,7 @@ Loom 固化的是“可读取、可验证”的能力目标，不固化具体可
 - 状态面若展示的 `next_step`、`blockers`、`latest_validation_summary` 与恢复主入口不一致，应视为事实链断裂
 - `Runtime Evidence` 的 5 个字段必须全部出现；不允许用“缺字段”表达不适用
 - 运行时证据入口不等于完整 observability 平台设计；本文件只要求最小可读入口
+- 状态面可以展示 `spec gate`、`review gate`、`merge gate`，但这些值只能派生读取，不得单独 authored
 
 当前仓库中的统一读取入口包括：
 

@@ -1,95 +1,102 @@
 # Merge Checkpoint
 
-本文件定义 Loom 当前 merge checkpoint 的执行侧合同。
+本文件定义 Loom strong governance 下 `merge-ready` 的执行侧合同。
 
-本文件当前承接：
-
-- `#27` 的稳定落点
-- harness 侧放行承接语义
+前序消费链见 [gate-chain.md](./gate-chain.md)。
+受控合并合同见 [controlled-merge.md](./controlled-merge.md)。
 
 ## 1. 能力定位
 
-merge checkpoint 是执行侧的最终放行层。
+`merge-ready` 是 `controlled merge` 之前的最终放行层。
 
 它只回答三类问题：
 
-- 当前 head 是否仍在已批准范围内
-- 当前执行材料是否已经完整到足以进入主干
-- 当前自动检查、验证摘要与运行证据是否支持放行
+- 当前前序 gate 是否已完整通过
+- 当前 `head_sha` 是否仍在批准范围内
+- 当前验证、review 与运行证据是否足以进入宿主 merge 控制面
 
-它不承担第一次高质量语义判断，也不替代 governance 的前置准入与 reviewer 的审查职责。
-字段归属以 [fact-chain-contract.md](./fact-chain-contract.md) 为准。
+它不承担第一次高质量语义判断，也不替代 `controlled merge` 的宿主校验。
 
 ## 2. 放行前必读输入
 
-进入 merge checkpoint 前，至少应能读取以下事实：
+进入 `merge-ready` 前，至少应能读取：
 
-- 当前变更范围与目标
-- 关联事项、规格或等价正式工件
-- 自动检查结果
-- 正式 review record
+- 当前 `Work Item`
+- formal spec 路径上的 `spec_review`
+- implementation review record
+- 当前 `head_sha`
+- host binding 中的 branch / PR / reviewed head
 - 最近验证摘要
-- 运行时证据或 `not_applicable` 声明
+- 运行时证据或 `not_applicable`
 - 风险与回滚边界
 - 未决阻断项
-- 当前 head 是否仍在批准范围内
 
-这些事实通常分别来自：
+## 3. 强前置消费纪律
 
-- [work-item-contract.md](./work-item-contract.md)
-- [recovery-model.md](./recovery-model.md)
-- [status-surface.md](./status-surface.md)
-- [review-execution.md](./review-execution.md)
-- [automation-frontload.md](./automation-frontload.md)
+`merge-ready` 必须强制消费：
+
+- `Work Item admission`
+- formal spec 路径上的 `spec gate`
+- implementation review
+- 当前 host binding
+
+以下任一情况都必须 fail-closed：
+
+- 缺 formal `spec_review`
+- `spec_review` 未批准
+- implementation review 不存在
+- implementation review 为 `review_stale`
+- 当前 `head_sha` 与 review / PR 绑定不一致
+- 当前验证摘要与 review record 不一致
+
+## 4. 唯一允许结果
+
+`merge-ready` 只允许输出：
+
+- `allow`
+  - 可以进入 `controlled merge`
+- `block`
+  - 仍缺当前层必需输入
+- `fallback`
+  - 必须退回前序 gate 重做
 
 其中：
 
-- 范围、目标、执行路径、验证入口定位
-  - 只能从 `work item` 读取
-- 当前 checkpoint、停点、下一步、阻断项、最近验证摘要、回退边界
-  - 只能从恢复主入口读取
-- 正式 review 结论
-  - 只能从 `work item.review_entry` 指向的 review record 读取
-  - 其中 `findings` 是 review/disposition 的权威字段；`blocking_issues` / `follow_ups` 只作兼容投影
-  - 即使 formal review 由默认 engine 产出，merge checkpoint 也只消费回写后的 review record，不直接读取 engine raw output 或 evidence 文件
-- 状态面
-  - 只允许作为派生汇总读面，不得替代上述主真相
+- 前序 gate 缺失或 stale
+  - 一律 `fallback`
+- 当前层材料缺失但不必回退前序方向判断
+  - `block`
 
-## 3. 唯一允许结果
+## 5. 统一失败分类
 
-merge checkpoint 只允许输出以下三类结果：
+`merge-ready` 只允许使用统一 taxonomy：
 
-- `允许放行`
-  - 执行材料完整，自动检查与验证结果足以承接进入主干
-- `阻断待补`
-  - 仍有未补齐材料，但不必回退到更早 checkpoint 重做方向判断
-- `退回前序 checkpoint`
-  - 当前 head 已超出批准范围，或关键事实缺失到必须回退到前序 checkpoint 重新收口
+- `spec_stale`
+- `review_stale`
+- `head_drift`
+- `binding_failure`
+- `missing_prerequisite_gate`
+- `evidence_failure`
 
-不允许输出模糊结果，例如“基本可以”“先合再说”“口头同意”。
+不得输出私有名词，例如“基本可合”“小问题先过”。
 
-## 4. 回退承接
+## 6. 与 `controlled merge` 的边界
 
-当 merge checkpoint 给出非放行结果时，回退方向必须清晰：
+`merge-ready` 负责确认 Loom 自身前序链是否完整。
+`controlled merge` 负责继续消费宿主 merge 控制面。
 
-- 缺自动检查、结构检查或基础状态一致性
-  - 回到 [automation-frontload.md](./automation-frontload.md) 对应检查面
-- 缺验证摘要、运行证据或 `not_applicable` 声明
-  - 回到 [status-surface.md](./status-surface.md) 与实际验证入口
-- 缺 formal review、review stale 或 reviewer 明确要求回退
-  - 回到 [review-execution.md](./review-execution.md) 或 `build checkpoint`
-  - 若 review 之后只提交了 `review_entry`、recovery 主入口或状态面这类 Loom carrier 更新，不应误判成 stale
-- 缺停点、下一步、风险或回滚边界
-  - 回到 [recovery-model.md](./recovery-model.md)
-- head 已超出批准范围或事项边界失真
-  - 退回前序 checkpoint，重新做范围与方向收口
+因此：
 
-## 5. 边界约束
+- required checks 是否全绿
+  - 可在 `merge-ready` 预读，但正式阻断归 `controlled merge`
+- merge method 是否符合当前 profile
+  - 归 `controlled merge`
+- merge 后的回链与 closeout
+  - 归 `controlled merge` 与 `closeout`
 
-- merge checkpoint 消费 reviewer、自动检查和运行证据的结果，不重新发明第二套审查体系
-- merge checkpoint 只消费单一 review record，不为 findings / disposition 再引入第二 authored artifact
-- merge checkpoint 不直接消费 Codex output、prompt、logs 或其他 review evidence 文件
-- merge checkpoint 只回答“是否可进入 host merge”，进入主干后的 issue / project / main 收口由 [closeout-gate.md](./closeout-gate.md) 承接
-- merge checkpoint 不负责定义成熟度、关闭语义或事项是否值得做；这些属于 `governance/`
-- merge checkpoint 不得补读另一份 authored 状态摘要来替代恢复主入口
-- 本文件不规定宿主平台的按钮、合并策略或 CI 产品，只定义 Loom 必须承接的最小放行语义
+## 7. 边界约束
+
+- 不直接消费 engine raw output、prompt、日志或其他 evidence 文件
+- 不跳过 review record 直接读取 reviewer 会话结论
+- 不把 `merge-ready` 写成宿主按钮说明
+- 不让当前层绕过前序 gate 缺口

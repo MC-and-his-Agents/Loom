@@ -229,6 +229,11 @@ def _validate_referenced_resources(skills_root: Path) -> tuple[dict[str, Any], l
         "shared/references/harness/status-surface-contract.md",
         "shared/references/harness/status-surface.md",
         "shared/references/harness/runtime-state.md",
+        "shared/references/harness/gate-chain.md",
+        "shared/references/harness/controlled-merge.md",
+        "shared/references/harness/governance-failure-taxonomy.md",
+        "shared/references/governance/governance-maturity-model.md",
+        "shared/references/adoption/github-profile-upgrade.md",
     )
     for relative in required_resources:
         if not (skills_root / relative).exists():

@@ -1,64 +1,73 @@
 # Reconciliation Audit
 
-本文件定义 Loom 当前 `reconciliation audit` 的最小执行合同。
-
-本文件当前承接：
-
-- `#177`
+本文件定义 Loom strong governance 下 `reconciliation audit` 的统一状态面合同。
 
 ## 1. 能力定位
 
-`reconciliation audit` 用来回答三件事：
-
-- merged PR 是否已经吸收了仍然 open 的 issue
-- parent issue 是否仍与 child 的真实状态一致
-- issue / PR / project 的控制面状态是否已经漂移
-
-它只读 GitHub 控制面真相并输出审计结论，不做任何写回。
+`reconciliation audit` 不再只是 closeout 旁边的独立审计动作。
+它是统一状态控制面的 closeout / reconciliation 子面，负责暴露 merge 后控制面对齐结论。
 
 ## 2. 稳定入口
 
 - `python3 tools/loom_flow.py reconciliation audit --target <repo> [--issue <n>] [--pr <n>] [--project <n>]`
 
-## 3. 稳定 findings
+## 3. 固定 findings
 
-第一版固定三类 finding：
+当前冻结四类 finding：
 
 - `absorbed_but_open`
-  - merged PR 已进入主干，但 issue 仍 open
+  - merge 已吸收实现，但事项仍 open
 - `parent_drift`
-  - parent issue 的开关状态与 child 的真实剩余缺口不一致
+  - parent 与 child 的收口结论不一致
 - `project_drift`
-  - issue / PR 的 Project 状态与当前控制面结论不一致
+  - issue / PR / project 状态未对齐
+- `merge_signal_drift`
+  - PR、merge commit、主干或 closeout basis 互相冲突
 
 每条 finding 至少表达：
 
+- `category = drift`
 - `kind`
 - `severity`
 - `subject`
 - `evidence`
 - `recommended_action`
+- `fallback_to`
 
 ## 4. 结果语义
 
-`reconciliation audit` 只允许以下结果：
+`reconciliation audit` 只允许：
 
 - `pass`
-  - 没有 drift finding
 - `warn`
-  - 只有低严重度观察结论
 - `fix-needed`
-  - 已发现必须同步但尚未阻断的 drift
 - `block`
-  - 已发现不能继续视为 closeout-ready 的 drift，或必需输入缺失
 
-## 5. 边界约束
+解释固定如下：
 
-- 本入口只生成审计结论，不执行 GitHub 修改
-- issue tree 关系通过 GitHub GraphQL 读取，不回写到仓内 docs
-- `absorbed` 的宿主证明继续由 [host-issue-binding.md](./host-issue-binding.md) 承接
-- 修复 drift 的正式入口由后续 reconciliation sync 承接，本文件不提前定义写路径
+- `pass`
+  - 没有活跃 drift
+- `warn`
+  - 有观察项，但不阻断当前 closeout 判断
+- `fix-needed`
+  - 存在可机械同步的 drift，必须先走 `reconciliation sync`
+- `block`
+  - 存在硬冲突、关键输入缺失或无法继续视为 closeout-ready 的 drift
 
-## 6. 一句话结论
+## 5. 与状态控制面的关系
 
-Loom 先用 `reconciliation audit` 明确报出 absorbed-but-open、parent drift 和 project drift，再决定是否允许后续 closeout 或进入专门 sync。
+统一状态控制面至少要能直接消费并展示：
+
+- `reconciliation` 当前结果
+- 活跃 drift 列表
+- 当前事项是否 `absorbed`
+- 当前事项是否具备 `closed_out` basis
+
+调用方不得要求操作者再去另一份口头说明里解释这些 finding。
+
+## 6. 边界约束
+
+- 本入口只读控制面并输出审计结论
+- 修复 drift 的正式写路径仍由 `reconciliation sync` 承接
+- `absorbed` 的 merge 证明继续由 [host-issue-binding.md](./host-issue-binding.md) 承接
+- taxonomy 必须服从 [governance-failure-taxonomy.md](./governance-failure-taxonomy.md)

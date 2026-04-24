@@ -11,7 +11,7 @@
 - `missing_inputs`
   - 当前阻断正式 review 的缺口；无阻断时为空数组
 - `fallback_to`
-  - 若当前不能继续正式 review，应回退到哪个 checkpoint；无回退时为 `null`
+  - 若当前不能继续正式 review，应回退到哪个 gate；无回退时为 `null`
 - `runtime_state`
   - 当前 Loom 入口自己的 scene / carrier 判定，以及 fail-closed 原因
 - `steps`
@@ -22,6 +22,8 @@
   - 当前 review 可读的运行时证据入口
 - `build_checkpoint`
   - build checkpoint 的结果、摘要、缺失输入与回退语义
+- `gate_chain`
+  - `spec_gate`、`build_gate`、`review_gate` 的当前可消费状态
 - `review`
   - 唯一 `review_entry` review record 的定位、已记录结论，以及权威 findings / disposition 摘要
 - `engine`
@@ -54,4 +56,4 @@
 - 若已有 normalized findings，应从哪个 `findings_file` 继续
 - 最小 `review record` 写回命令骨架是什么
 
-这个 skill 负责正式 review 执行层，不替代 `loom-pre-review` 的机械预检，也不替代 `loom-merge-ready` 的 merge 前聚合放行判断。
+这个 skill 负责正式 review 执行层，不替代 `loom-pre-review` 的机械预检，也不替代 `loom-merge-ready` 的 `merge gate` 聚合放行判断。

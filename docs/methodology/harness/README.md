@@ -8,7 +8,7 @@
 ## 组件边界
 
 - [work-item-contract.md](./work-item-contract.md)
-  - 定义进入正式执行前必须存在的事项与初始化产物合同
+  - 定义唯一默认执行入口与 enforcement 合同
 - [fact-chain-contract.md](./fact-chain-contract.md)
   - 定义静态真相、动态真相与派生读面的唯一归属关系
 - [execution-context.md](./execution-context.md)
@@ -16,9 +16,15 @@
 - [item-context-contract.md](./item-context-contract.md)
   - 定义当前活跃 `Work Item` 的最小 machine-readable 上下文字段与读取边界
 - [status-surface-contract.md](./status-surface-contract.md)
-  - 定义统一状态读取面的对象、字段组与消费边界
+  - 定义 `status control plane v2` 的对象、字段组与消费边界
+- [status-surface.md](./status-surface.md)
+  - 定义统一状态控制面的字段语义、运行时证据与 closeout 展示
+- [governance-failure-taxonomy.md](./governance-failure-taxonomy.md)
+  - 定义 `stale` / `drift` / `gate_failure` 的统一 taxonomy
 - [execution-chain.md](./execution-chain.md)
   - 定义从初始化产物到 merge checkpoint 放行的最小执行链路
+- [gate-chain.md](./gate-chain.md)
+  - 定义 implementation review、`merge-ready`、`controlled merge`、`closeout` 的强前置消费链
 - `checkpoint-model.md`
   - 定义 `admission` / `build` checkpoint 的输入、输出、失败语义与回退去向
 - [workspace-model.md](./workspace-model.md)
@@ -30,25 +36,25 @@
 - [host-lifecycle-boundary.md](./host-lifecycle-boundary.md)
   - 定义 Loom 与宿主 branch / PR / git worktree 生命周期的边界
 - [host-issue-binding.md](./host-issue-binding.md)
-  - 定义 Loom 消费 `active issue` 与 branch / git worktree / PR / merge commit 的绑定合同
+  - 定义 `Work Item` 与 branch / PR / head / merge commit 的绑定链
+- [controlled-merge.md](./controlled-merge.md)
+  - 定义 GitHub merge control plane 的默认消费与 merge 后交接
 - [reconciliation-audit.md](./reconciliation-audit.md)
-  - 定义 Loom 发现 absorbed-but-open / parent drift / project drift 的审计合同
+  - 定义 closeout / reconciliation 统一状态面的 drift 审计合同
 - [recovery-model.md](./recovery-model.md)
   - 定义唯一恢复主入口、`checkpoint`、`resume`、`handoff` 与每轮回写合同
 - [review-execution.md](./review-execution.md)
   - 定义正式 review 执行层、review record 与 merge checkpoint 的对接边界
-- [status-surface.md](./status-surface.md)
-  - 定义状态读取字段、运行时证据入口与 `not_applicable` 语义
 - [automation-frontload.md](./automation-frontload.md)
   - 定义适合机械化前置的检查矩阵与覆盖边界
 - [merge-checkpoint.md](./merge-checkpoint.md)
-  - 定义执行侧放行输入、结果语义与回退承接
+  - 定义 `merge-ready` 的执行侧放行输入、结果语义与回退承接
 - [closeout-gate.md](./closeout-gate.md)
-  - 定义 closeout check / sync 与 GitHub 控制面对齐的最小执行链路
+  - 定义 `closeout` 与 `reconciliation` 的最终收口链路
 - [workspace-and-purity.md](./workspace-and-purity.md)
   - 定义现场职责纯度、分支纯度与范围控制边界
 
-这些文件共同表达的不是零散脚本集合，而是从 work item / fact-chain 到 review / merge / closeout 的统一编排链路。
+这些文件共同表达的不是零散脚本集合，而是从 `Work Item` / fact-chain 到 review / merge / closeout 的统一编排链路。
 当 Loom 需要调用 GitHub、CI、review engine、`git worktree` 或其他宿主能力时，也应先通过 [host-action-contract.md](./host-action-contract.md) 收口结果与去向，再由各专题文件承接细节，而不是在外部再复制一套真相。
 
 ## 目录约束

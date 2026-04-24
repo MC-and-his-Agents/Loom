@@ -28,6 +28,8 @@
 - 本轮启用的能力清单
 - 每项能力分别映射到哪些 `governance`、`harness`、`templates`、`adoption` 规则
 - 这次采用的是最小装配、轻量 retrofit 还是更完整装配
+- `Work Item` 是否已被设为唯一执行入口
+- `spec gate`、`gate chain`、`status control plane`、`maturity upgrade`、`GitHub controlled merge` 分别由哪些稳定载体承接
 - 若命中成熟治理重仓 attach path，必须显式写出 `recommended_adoption.path = deep-existing-repo`
 - 接入方式是根级重写还是 `repo companion`（历史表述：`companion docs`）
 - 恢复形态是 `checkpoint-lite` 还是标准恢复形态
@@ -45,11 +47,12 @@
 至少说明：
 
 - 初始能力清单的承载位置
-- 首批 work item 或等价事项清单的承载位置
+- 首批 `Work Item` 或等价事项清单的承载位置
 - 恢复主入口是什么
 - progress / checkpoint 载体是什么
 - 验证入口是什么
 - 状态读取入口是什么
+- `status control plane` 的读取入口是什么
 - `Runtime Evidence` 区块的落位方式是什么，且至少覆盖：
   - `Run Entry`
   - `Logs Entry`
@@ -60,6 +63,7 @@
 - 首个稳定提交或等价回退边界是什么
 - 事实链 carrier 如何定位
 - 统一事实链读取入口是什么
+- gate chain 的读取入口是什么
 - `governance_surface` 是什么，并至少稳定给出：
   - `repository_mode`
   - `loom_state`
@@ -132,6 +136,7 @@
   - 执行路径
   - 关联工件
   - 关闭条件
+- 若命中 formal spec 路径，还必须说明 `spec gate` 由谁承接
 - 恢复主入口与工作现场入口
 - 若事项已进入轻量跨轮承接，必须说明谁负责回写停点、下一步、阻断项与最近验证摘要
 
@@ -177,7 +182,7 @@
 - 把 `governance_surface` 写成第二套事项进度真相
 - 改名或拆出并行的治理读面字段
 - 在 `governance_surface` 中并行复制实时停点、下一步、阻断项或验证摘要
-- 用 `governance_surface` 覆盖 `work item`、恢复入口、PR 或规则文档的 authored 事实
+- 用 `governance_surface` 覆盖 `Work Item`、恢复入口、PR 或规则文档的 authored 事实
 - 把 `repo_interface` 变成第二套 review / recovery / closeout authored state
 
 ### 6. 验证与收口
@@ -185,7 +190,7 @@
 至少说明：
 
 - 如何验证初始化输出已经可直接承接执行
-- 三个 checkpoint 的承接关系是什么（固定命名为 `admission -> build -> merge`，不再使用 `commit checkpoint` 命名）
+- gate chain 的承接关系是什么（固定命名为 `spec gate -> build gate -> review gate -> merge gate`；若不命中 formal spec，则从 `build gate` 开始）
 - 什么状态算“说明已清楚”
 - 什么状态算“已进入主干并收口”
 - 何时 issue 可以关闭

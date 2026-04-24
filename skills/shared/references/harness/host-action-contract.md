@@ -20,7 +20,7 @@ Loom 的宿主动作面不是新的 umbrella CLI，也不是宿主平台替身�
 
 - 宿主对象边界读取
 - 宿主 gate / required checks / merge controls 的放行消费
-- post-merge 的 drift 审计与控制面对齐
+- `GitHub controlled merge` 前后的 drift 审计与控制面对齐
 
 具体专题落点仍保持拆分：
 
@@ -38,7 +38,7 @@ Loom 的宿主动作面不是新的 umbrella CLI，也不是宿主平台替身�
 | --- | --- | --- | --- |
 | boundary read | `python3 skills/shared/scripts/loom_flow.py host-lifecycle --target <repo> [--item <id>]` | 否 | 读取 workspace / branch / PR / git worktree 的 ownership boundary |
 | merge control read | `python3 skills/shared/scripts/loom_flow.py checkpoint merge --target <repo> [--item <id>]` | 否 | 读取 Loom 对 required checks / validation / review / risk rollback 的放行结论 |
-| merge control summary | `python3 skills/loom-merge-ready/scripts/loom-merge-ready.py flow merge-ready --target <repo> [--item <id>]` | 否 | 汇总进入 host merge 前的统一放行摘要 |
+| merge control summary | `python3 skills/loom-merge-ready/scripts/loom-merge-ready.py flow merge-ready --target <repo> [--item <id>]` | 否 | 汇总进入 `GitHub controlled merge` 前的统一放行摘要 |
 | drift audit | `python3 skills/shared/scripts/loom_flow.py reconciliation audit --target <repo> [--issue <n>] [--pr <n>] [--project <n>]` | 否 | 只读 issue / PR / project 控制面并输出 drift findings |
 | control-plane sync | `python3 skills/shared/scripts/loom_flow.py reconciliation sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>] [--comment-file <path>] [--dry-run]` | 是 | 只修机械可证明的 reconciliation drift |
 | closeout check | `python3 skills/shared/scripts/loom_flow.py closeout check --target <repo> [--issue <n>] [--pr <n>] [--project <n>]` | 否 | 校验 main、issue、PR、project 与仓内结果是否一致 |
@@ -78,8 +78,8 @@ Loom 的宿主动作面不是新的 umbrella CLI，也不是宿主平台替身�
 | 入口 | 允许结果 | `fallback_to` 纪律 |
 | --- | --- | --- |
 | `host-lifecycle` | `pass` / `block` | 只在事实链无法读取时回到 `admission`；正常边界读取不产生 `fallback` 结果 |
-| `checkpoint merge` | `pass` / `block` / `fallback` | `fallback_to` 只能指向 Loom 内部 checkpoint，不得指向宿主控制面动作 |
-| `flow merge-ready` | `pass` / `block` / `fallback` | `fallback_to` 只能指向 Loom 内部 checkpoint 摘要，不得把 host merge 伪装成回退目标 |
+| `checkpoint merge` | `pass` / `block` / `fallback` | `fallback_to` 只能指向 Loom 内部 gate，不得指向宿主控制面动作 |
+| `flow merge-ready` | `pass` / `block` / `fallback` | `fallback_to` 只能指向 Loom 内部 gate 摘要，不得把 host merge 伪装成回退目标 |
 | `reconciliation audit` | `pass` / `warn` / `fix-needed` / `block` | 非 `pass` 时只允许 `manual-reconciliation` 或 `null`；它负责报 drift，不把 drift 伪装成 `fallback` |
 | `reconciliation sync` | `pass` / `block` | `block` 时只允许指向 `manual-reconciliation` 或 `null`；`--dry-run` 也不得把未解决 drift 伪装成通过 |
 | `closeout check` | `pass` / `block` | 普通 closeout 缺口指向 `merge`；若 reconciliation 为 `fix-needed` 必须指向 `reconciliation-sync`；若 reconciliation 为 `block` 必须指向 `manual-reconciliation` |
@@ -87,7 +87,7 @@ Loom 的宿主动作面不是新的 umbrella CLI，也不是宿主平台替身�
 
 补充纪律：
 
-- `fallback` 结果只用于 Loom 内部前序 checkpoint / flow 的回退，不用于 closeout 或 reconciliation
+- `fallback` 结果只用于 Loom 内部前序 gate / flow 的回退，不用于 closeout 或 reconciliation
 - `warn` 与 `fix-needed` 只作为 `reconciliation audit` 的顶层结果存在
 - `fallback_to` 是下一步去向，不等价于把 `result` 改写成 `fallback`
 - 宿主动作不得把 branch / PR / worktree 的真实生命周期命令当作 `fallback_to`
@@ -99,6 +99,7 @@ Loom 当前承接：
 - workspace execution semantics
 - required checks / validation / review / risk rollback 的放行消费
 - 对宿主对象绑定、drift 与 absorbed 结论的读取和校验
+- `status control plane` 所需的宿主控制面读面
 - closeout 前后的控制面对齐判断
 
 宿主平台当前承接：

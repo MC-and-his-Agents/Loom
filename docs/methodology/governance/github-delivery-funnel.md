@@ -1,13 +1,13 @@
 # GitHub Delivery Funnel
 
-本文件定义 Loom 当前默认 `GitHub governance profile` 的交付漏斗。
+本文件定义 Loom strong governance 默认 `GitHub governance profile` 的交付漏斗。
 
-GitHub 是 Loom 当前默认宿主实现，但不是唯一宿主内核。
-其他宿主只要能提供等价对象与状态读取面，也可以实现同一条漏斗。
+GitHub 是默认宿主实现，但不是唯一宿主内核。
+Loom 冻结的是对象语义、前置关系与绑定链，不冻结 GitHub 私有命名。
 
 ## 1. 默认漏斗
 
-Loom 当前冻结的默认交付路径如下：
+默认路径固定为：
 
 - `Roadmap / 阶段目标`
 - `GitHub Phase`
@@ -16,28 +16,22 @@ Loom 当前冻结的默认交付路径如下：
 - `spec / contract`
 - `spec review`
 - `implementation PR`
-- `PR review`
-- `squash merge`
-
-Loom 只冻结这条路径的语义，不冻结 GitHub 之外宿主的具体对象名字。
+- implementation review
+- `merge-ready`
+- `controlled merge`
+- `closeout`
 
 ## 2. 对象分工
 
 ### 2.1 `Roadmap / 阶段目标`
 
-负责表达当前阶段为什么存在、阶段边界是什么、什么结果才算本阶段完成。
-
-它不直接进入执行，也不直接承接 PR。
+负责表达阶段存在理由、阶段边界与阶段完成标准。
+不进入执行，不承接 PR。
 
 ### 2.2 `Phase`
 
-负责把阶段目标映射到一组较稳定的治理范围。
-
-它回答：
-
-- 当前阶段在推进什么大面
-- 哪些 `FR` 属于同一阶段
-- 阶段边界何时允许收口
+负责把阶段目标映射到一组稳定治理范围。
+只承载阶段边界，不承接执行现场。
 
 ### 2.3 `FR`
 
@@ -49,51 +43,65 @@ Loom 只冻结这条路径的语义，不冻结 GitHub 之外宿主的具体对�
 - 共享边界和风险是什么
 - 应拆出哪些 `Work Item`
 
-默认情况下：
+默认约束：
 
-- `FR` 不直接承接实现 PR
+- `FR` 不直接承接 implementation PR
+- formal spec 绑定到 `FR`
 - `FR` 不替代 `Work Item`
-- `FR` 不并行 authored 执行中停点或验证摘要
 
 ### 2.4 `Work Item`
 
-`Work Item` 是 Loom 默认唯一执行入口。
+`Work Item` 是唯一默认执行入口。
 
 只有 `Work Item` 可以进入：
 
-- worktree / branch 绑定
+- worktree / branch
 - recovery / resume
 - implementation PR
-- review / merge-ready / closeout
+- implementation review
+- `merge-ready`
+- `controlled merge`
+- `closeout`
 
-任何未收成 `Work Item` 的对象，都默认仍停留在规划或边界层。
-
-## 3. 前置关系
+## 3. 强前置关系
 
 默认前置关系固定如下：
 
 - `Roadmap / Phase` 为 `FR` 提供阶段边界
-- `FR` 为 `Work Item` 提供正式目标与共享边界
-- `Work Item` 若命中 formal spec 准入，必须先有 `spec / contract`
+- `FR` 为 `Work Item` 提供 requirement 边界
+- 命中 formal spec 路径时，`Work Item` 必须先绑定到 `FR`
+- formal spec 必须先完成 `spec review`
 - `spec review` 通过后，`Work Item` 才能进入 `implementation PR`
-- `PR review` 不替代 `spec review`
-- `merge-ready` 不承担第一次高质量语义判断
+- implementation review 必须消费 `spec review`
+- `merge-ready` 必须消费 `spec review`、implementation review 与当前 `head_sha`
+- `controlled merge` 必须消费 `merge-ready` 与宿主 merge 控制面
+- `closeout` 必须消费 merge commit 与 `reconciliation audit`
 
-## 4. Loom 与 GitHub 的边界
+## 4. 绑定链要求
 
-Loom 不要求自研 GitHub 控制面。
+GitHub host 下默认至少要能稳定读取：
 
-Loom 只要求 GitHub profile 至少能稳定提供：
+- `FR -> Work Item`
+- `Work Item -> implementation PR`
+- `PR -> reviewed head_sha`
+- `PR -> merge commit`
+- `merge commit -> default branch`
 
-- `Roadmap / Phase / FR / Work Item` 的映射关系
-- 当前事项的 `head_sha`
-- PR / review / merge gate 的最小状态读取
-- parent / sub-issue 关系
+任何后序 gate 都不得再用口头解释补齐这条链。
 
-这些读取面应被 Loom 消费，而不是在 skill、脚本和 PR 描述里各自发明一套解释。
+## 5. enforcement 规则
 
-## 5. 非目标
+以下路径必须 fail-closed：
+
+- `FR -> implementation PR`
+- PR 先于 `Work Item`
+- formal spec 路径绕过 `spec review`
+- implementation review 不消费 `spec review`
+- `merge-ready` 不消费 implementation review
+- `closeout` 不消费 merge / reconciliation basis
+
+## 6. 非目标
 
 - 不把 `Phase / FR / Work Item` 三个名字冻结为 Loom 永恒唯一命名
 - 不把 GitHub API 细节提升为 Loom core 规则
-- 不让 `FR` 或 `PR` 越权替代 `Work Item`
+- 不让 `FR`、PR 或 merge commit 越权替代 `Work Item`

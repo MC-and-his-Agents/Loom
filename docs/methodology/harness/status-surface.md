@@ -1,51 +1,62 @@
 # Status Surface
 
-本文件定义 Loom 当前最小状态面合同。
+本文件定义 Loom `status control plane v2` 的字段语义与读取纪律。
 
-统一状态读取面的对象、字段组与消费边界见 [status-surface-contract.md](./status-surface-contract.md)。
-
-本文件当前承接：
-
-- `EXT-0035`
+统一对象组见 [status-surface-contract.md](./status-surface-contract.md)。
+失败分类见 [governance-failure-taxonomy.md](./governance-failure-taxonomy.md)。
 
 ## 1. 能力定位
 
-状态面用于快速读取当前执行状态和运行事实。
+状态面用于在单一读面里暴露当前治理现场。
 
-它服务读取，不服务并行记账。
-本文件把“状态读取字段”和“运行时证据入口”明确拆开定义。
-字段归属与派生关系以 [fact-chain-contract.md](./fact-chain-contract.md) 为准。
-当前 `Work Item` identity 与最小 machine-readable 上下文字段见 [item-context-contract.md](./item-context-contract.md)。
+它至少应回答：
 
-## 2. 状态读取字段
+- 当前是谁在执行
+- 当前走到哪一个 gate
+- 前序 gate 是否可继续消费
+- 当前有哪些 `stale` / `drift` / `gate_failure`
+- merge 与 closeout 是否已有足够 basis
 
-Loom 当前至少要求状态面能展示：
+## 2. 字段派生原则
 
-- 当前事项
-- 当前执行路径
-- 当前 checkpoint 阶段
-- 当前工作现场
-- 当前恢复主入口
-- 当前 review 入口
-- 当前环境 lane
-- 当前阻断项
-- 下一步
-- 最近验证摘要
+所有字段都必须从既有主真相或 host signals 派生：
 
-这些字段必须从已有主真相派生，不允许手工维护第二套 authored 值：
-
-- `当前事项`、`当前执行路径`
-  - 从 `work item` 派生
-- `当前 checkpoint 阶段`、`当前阻断项`、`下一步`、`最近验证摘要`、`当前环境 lane`
+- `item`
+  - 从 `Work Item` 派生
+- `checkpoint`、`recovery`
   - 从恢复主入口派生
-- `当前工作现场`、`当前恢复主入口`、`当前 review 入口`、`验证入口`
-  - 从 `work item` 与 `init-result` 的 carrier 定位派生
+- `gates.spec_review`、`gates.implementation_review`
+  - 从 review records 派生
+- `gates.merge_ready`
+  - 从 merge checkpoint 派生
+- `gates.controlled_merge`
+  - 从受控合并输出与 host merge signals 派生
+- `gates.closeout`
+  - 从 closeout / reconciliation 结果派生
+- `binding`
+  - 从 host binding surface 派生
+- `taxonomy`
+  - 从统一失败分类派生
 
-## 3. `Runtime Evidence` 固定区块
+禁止手工维护第二套 authored 状态摘要。
 
-状态面若承接运行时证据，必须提供固定标题区块 `Runtime Evidence`。
+## 3. 必备展示面
 
-该区块固定为以下 5 个字段，字段不得缺失：
+统一状态面至少要展示：
+
+- 当前 `Work Item`
+- 当前 gate 与下一 gate
+- 当前恢复停点
+- formal spec 路径是否需要 `spec_review`
+- implementation review 是否 stale
+- `merge-ready` 是否受前序 gate 阻断
+- `controlled merge` 是否满足宿主条件
+- `closeout` / `reconciliation` 是否存在 drift
+- 当前活跃 failures 列表
+
+## 4. `Runtime Evidence`
+
+若事项涉及运行面，状态面必须继续提供固定区块 `Runtime Evidence`：
 
 - `Run Entry`
 - `Logs Entry`
@@ -53,72 +64,54 @@ Loom 当前至少要求状态面能展示：
 - `Verification Entry`
 - `Lane Entry`
 
-每个字段的值只能是：
+字段值只能是：
 
-- locator 字符串
+- locator
 - `not_applicable`
 
-## 3.1 字段合同矩阵
+字段缺失永远是错误，不等同于不适用。
 
-| 字段 | 最小语义 | 允许值 | `not_applicable` 允许条件 |
-| --- | --- | --- | --- |
-| `Run Entry` | 告诉执行者去哪启动当前事项运行面 | locator / `not_applicable` | 事项不涉及可运行系统 |
-| `Logs Entry` | 告诉执行者去哪看运行输出或日志 | locator / `not_applicable` | 无运行进程或无日志载体 |
-| `Diagnostics Entry` | 指向指标、trace 或等价诊断入口 | locator / `not_applicable` | 当前事项没有诊断面 |
-| `Verification Entry` | 指向 UI/API/E2E 等可验证入口 | locator / `not_applicable` | 事项不涉及可验证运行结果 |
-| `Lane Entry` | 指向当前 lane 的运行/诊断读取入口 | locator / `not_applicable` | 事项没有 lane 区分 |
+## 5. gate 可消费判定
 
-判定规则：
+状态面必须明确区分：
 
-- 字段缺失始终是错误，不等同于 `not_applicable`。
-- `not_applicable` 必须按字段判断，不能整组一刀切。
-- 若某字段标记 `not_applicable`，应与 `current_lane`、`execution_path`、`latest_validation_summary` 等事实不冲突。
-
-## 4. 运行时证据入口语义
-
-最小证据类别对应如下：
-
-- `Run Entry`
-  - 当前工作现场对应的运行入口
-- `Logs Entry`
-  - 日志或等价运行输出入口
-- `Diagnostics Entry`
-  - 指标、trace 或其他等价诊断入口至少一种
-- `Verification Entry`
-  - UI、接口或端到端结果中的至少一种 agent 可验证入口
-- `Lane Entry`
-  - 当前环境 lane 对应的诊断或读取入口
-
-Loom 固化的是“可读取、可验证”的能力目标，不固化具体可观测工具栈。
-
-## 5. `not_applicable` 语义
-
-若事项不涉及可运行系统，状态面应明确标出运行时证据为 `not_applicable`，而不是伪造运行入口。
-
-典型场景包括：
-
-- 纯文档事项
-- 纯治理规则调整
-- 仅结构整理、尚无运行载体的事项
-
-`not_applicable` 可以按字段逐项声明。
+- `gate 已存在`
+- `gate 已通过`
+- `gate 结论 stale`
+- `gate 因前序缺失不可消费`
 
 例如：
 
-- `Verification Entry` 可读
-- `Run Entry`、`Logs Entry`、`Diagnostics Entry`、`Lane Entry` 为 `not_applicable`
+- formal spec 路径存在，但 `spec_review` 未批准
+  - `gates.spec_review.status = block`
+  - `taxonomy.active_failures` 必须含 `missing_prerequisite_gate`
+- implementation review 已存在，但 `reviewed_head` 过时
+  - `gates.implementation_review.status = block`
+  - `taxonomy.active_failures` 必须含 `review_stale`
 
-`not_applicable` 只说明该字段当前不适用，不说明验证已自动通过。
+## 6. closeout / reconciliation 展示
 
-## 6. 边界约束
+状态面必须把以下结论直接暴露出来，而不是要求调用方另查：
 
-- 禁止手工维护第二套平行真相
-- 状态面负责读取，不重复承接正式规则定义
-- 状态面若展示的 `next_step`、`blockers`、`latest_validation_summary` 与恢复主入口不一致，应视为事实链断裂
-- `Runtime Evidence` 的 5 个字段必须全部出现；不允许用“缺字段”表达不适用
-- 运行时证据入口不等于完整 observability 平台设计；本文件只要求最小可读入口
+- 当前事项是否 `absorbed`
+- 当前事项是否已经 `closed_out`
+- 是否存在 `absorbed_but_open`
+- 是否存在 `parent_drift`
+- 是否存在 `project_drift`
+- 是否存在 `merge_signal_drift`
+
+## 7. 当前统一入口
 
 当前仓库中的统一读取入口包括：
 
-- `python3 tools/loom_init.py fact-chain --target <repo>`
-- `python3 tools/loom_flow.py runtime-evidence --target <repo> [--item <id>]`
+- `python3 tools/loom_status.py --target <repo> [--item <id>]`
+- `python3 tools/loom_flow.py reconciliation audit --target <repo> ...`
+- `python3 tools/loom_flow.py closeout check --target <repo> ...`
+
+这些入口应输出同一控制面语义，而不是平行结果模型。
+
+## 8. 非目标
+
+- 不把状态面写成新的长期进度账本
+- 不用状态面覆盖 `Work Item` / review record / merge checkpoint / closeout basis 的原始权威位置
+- 不允许调用方只读局部字段就跳过前序 gate
