@@ -782,6 +782,63 @@ def gh_json(root: Path, args: list[str]) -> tuple[dict[str, Any] | None, list[st
     return payload, []
 
 
+def gh_rest_json(root: Path, path: str) -> tuple[dict[str, Any] | None, list[str]]:
+    return gh_json(root, ["api", path])
+
+
+def github_issue_state(value: Any) -> str:
+    return str(value or "unknown").upper()
+
+
+def github_pr_state(payload: dict[str, Any]) -> str:
+    if payload.get("merged_at"):
+        return "MERGED"
+    return str(payload.get("state") or "unknown").upper()
+
+
+def normalize_rest_issue(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": payload.get("node_id"),
+        "databaseId": payload.get("id"),
+        "number": payload.get("number"),
+        "state": github_issue_state(payload.get("state")),
+        "title": payload.get("title"),
+        "url": payload.get("html_url"),
+    }
+
+
+def normalize_rest_pr(payload: dict[str, Any]) -> dict[str, Any]:
+    head = payload.get("head") if isinstance(payload.get("head"), dict) else {}
+    base = payload.get("base") if isinstance(payload.get("base"), dict) else {}
+    merge_commit_sha = payload.get("merge_commit_sha")
+    return {
+        "number": payload.get("number"),
+        "state": github_pr_state(payload),
+        "title": payload.get("title"),
+        "url": payload.get("html_url"),
+        "isDraft": bool(payload.get("draft")),
+        "mergedAt": payload.get("merged_at"),
+        "mergeCommit": {"oid": merge_commit_sha} if isinstance(merge_commit_sha, str) and merge_commit_sha else None,
+        "mergeStateStatus": str(payload.get("mergeable_state")).upper() if payload.get("mergeable_state") else None,
+        "headRefName": head.get("ref"),
+        "baseRefName": base.get("ref"),
+    }
+
+
+def github_issue_payload(root: Path, owner: str, repo_name: str, issue_number: int) -> tuple[dict[str, Any] | None, list[str]]:
+    payload, errors = gh_rest_json(root, f"repos/{owner}/{repo_name}/issues/{issue_number}")
+    if errors or payload is None:
+        return None, errors
+    return normalize_rest_issue(payload), []
+
+
+def github_pr_payload(root: Path, owner: str, repo_name: str, pr_number: int) -> tuple[dict[str, Any] | None, list[str]]:
+    payload, errors = gh_rest_json(root, f"repos/{owner}/{repo_name}/pulls/{pr_number}")
+    if errors or payload is None:
+        return None, errors
+    return normalize_rest_pr(payload), []
+
+
 def gh_json_list(root: Path, args: list[str], key: str) -> tuple[list[dict[str, Any]], list[str]]:
     payload, errors = gh_json(root, args)
     if errors or payload is None:
@@ -3515,6 +3572,7 @@ def find_project_item(items: list[dict[str, Any]], number: int, kind: str) -> di
 
 
 def project_item_for_issue(root: Path, issue_id: str, project_number: int) -> tuple[dict[str, Any] | None, list[str]]:
+    # GraphQL-only for now: GitHub ProjectV2 item field values are not covered by the REST budget-hardening pass.
     query = """
 query($id: ID!) {
   node(id: $id) {
@@ -3606,6 +3664,7 @@ def set_project_item_done(root: Path, project_id: str, item_id: str, status_fiel
 
 
 def issue_tree_payload(root: Path, owner: str, repo_name: str, issue_number: int) -> tuple[dict[str, Any] | None, list[str]]:
+    # GraphQL-only for now: native parent/sub-issue tree shape is outside the high-frequency REST replacement scope.
     query = """
 query($owner:String!, $name:String!, $number:Int!) {
   repository(owner:$owner, name:$name) {
@@ -3710,33 +3769,31 @@ def reconciliation_audit_payload(
     issue_id: str | None = None
     parent_payload: dict[str, Any] | None = None
     if issue_number is not None:
-        issue_payload, issue_errors = issue_tree_payload(target_root, owner, repo_name, issue_number)
+        issue_payload, issue_errors = github_issue_payload(target_root, owner, repo_name, issue_number)
         if issue_errors:
             missing_inputs.extend(f"issue: {message}" for message in issue_errors)
         elif issue_payload is not None:
             raw_issue_id = issue_payload.get("id")
             if isinstance(raw_issue_id, str) and raw_issue_id:
                 issue_id = raw_issue_id
-            parent = issue_payload.get("parent")
-            if isinstance(parent, dict):
-                parent_payload = parent
+            issue_tree, issue_tree_errors = issue_tree_payload(target_root, owner, repo_name, issue_number)
+            if issue_tree_errors:
+                issue_payload["sub_issue_tree"] = {
+                    "status": "unavailable",
+                    "reason": "GraphQL-only parent/sub-issue tree could not be read.",
+                    "errors": issue_tree_errors,
+                }
+            elif issue_tree is not None:
+                issue_payload = {**issue_payload, **issue_tree}
+                parent = issue_payload.get("parent")
+                if isinstance(parent, dict):
+                    parent_payload = parent
 
     pr_payload: dict[str, Any] | None = None
     merge_commit_sha: str | None = None
     merge_commit_in_main = False
     if pr_number is not None:
-        pr_payload, pr_errors = gh_json(
-            target_root,
-            [
-                "pr",
-                "view",
-                str(pr_number),
-                "--repo",
-                f"{owner}/{repo_name}",
-                "--json",
-                "number,state,isDraft,mergedAt,mergeCommit,url,title",
-            ],
-        )
+        pr_payload, pr_errors = github_pr_payload(target_root, owner, repo_name, pr_number)
         if pr_errors:
             missing_inputs.extend(f"pr: {message}" for message in pr_errors)
         elif pr_payload is not None:
@@ -4153,10 +4210,7 @@ def closeout_payload(
     issue_payload: dict[str, Any] | None = None
     issue_id: str | None = None
     if issue_number is not None:
-        issue_payload, issue_errors = gh_json(
-            target_root,
-            ["issue", "view", str(issue_number), "--repo", f"{owner}/{repo_name}", "--json", "id,number,state,title,url"],
-        )
+        issue_payload, issue_errors = github_issue_payload(target_root, owner, repo_name, issue_number)
         if issue_errors:
             missing_inputs.extend(f"issue: {message}" for message in issue_errors)
         elif issue_payload is not None:
@@ -4167,18 +4221,7 @@ def closeout_payload(
     pr_payload: dict[str, Any] | None = None
     merge_commit_sha: str | None = None
     if pr_number is not None:
-        pr_payload, pr_errors = gh_json(
-            target_root,
-            [
-                "pr",
-                "view",
-                str(pr_number),
-                "--repo",
-                f"{owner}/{repo_name}",
-                "--json",
-                "number,state,isDraft,mergedAt,mergeCommit,url",
-            ],
-        )
+        pr_payload, pr_errors = github_pr_payload(target_root, owner, repo_name, pr_number)
         if pr_errors:
             missing_inputs.extend(f"pr: {message}" for message in pr_errors)
         elif pr_payload is not None:

@@ -337,10 +337,15 @@
     },
     "github_control_plane": {
       "repository": "MC-and-his-Agents/Loom",
-      "default_branch": "unknown",
-      "branch_protection": "unknown",
-      "required_checks": "unknown",
-      "pr_reviews": "unknown"
+      "default_branch": "main",
+      "branch_protection": "enabled",
+      "required_checks": [
+        "py-compile",
+        "demo-bootstrap",
+        "repo-local-cli",
+        "loom-check"
+      ],
+      "pr_reviews": "not_required"
     },
     "repo_interface": {
       "availability": "absent",
@@ -425,7 +430,7 @@
           },
           "branch": {
             "status": "present",
-            "locator": "feat/syvert-governance-parity",
+            "locator": "feat/graphql-budget-rest-high-frequency",
             "authority": "git"
           },
           "worktree": {
@@ -449,12 +454,10 @@
             "authority": "loom + host"
           }
         },
-        "default_branch": "unknown",
-        "missing_inputs": [
-          "github default branch"
-        ],
-        "result": "block",
-        "summary": "host binding surface is readable, but required binding facts are missing or host-managed."
+        "default_branch": "main",
+        "missing_inputs": [],
+        "result": "pass",
+        "summary": "host binding surface can relate the active Work Item to branch, worktree, PR, merge commit, and closeout."
       },
       "taxonomy": {
         "spec_stale": "Approved spec no longer covers the implementation surface.",
@@ -575,7 +578,6 @@
           "light": [],
           "standard": [
             "fr_work_item_layer",
-            "basic_host_binding",
             "closeout_reconciliation_read"
           ],
           "strong": [
@@ -588,8 +590,6 @@
       }
     },
     "summary": "repository is treated as new; Loom can plan the first governance carriers and bootstrap entrypoints without adding a second truth source.",
-    "missing_inputs": [
-      "github control plane: GraphQL: API rate limit already exceeded for user ID 9820018."
-    ]
+    "missing_inputs": []
   }
 }

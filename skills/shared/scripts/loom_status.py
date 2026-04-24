@@ -12,7 +12,8 @@ from loom_flow import (
     closeout_payload,
     detect_github_repo,
     emit,
-    gh_json,
+    github_issue_payload,
+    github_pr_payload,
     implementation_review_status_payload,
     load_context,
     runtime_state_payload,
@@ -59,29 +60,14 @@ def github_status_payload(
             errors.append("GitHub repository could not be detected from origin")
         return payload, errors
 
-    repo_slug = f"{owner}/{repo_name}"
     if issue_number is not None:
-        issue_payload, issue_errors = gh_json(
-            root,
-            ["issue", "view", str(issue_number), "--repo", repo_slug, "--json", "number,state,title,url"],
-        )
+        issue_payload, issue_errors = github_issue_payload(root, owner, repo_name, issue_number)
         if issue_errors:
             errors.extend([f"issue #{issue_number}: {message}" for message in issue_errors])
         else:
             payload["issue"] = issue_payload
     if pr_number is not None:
-        pr_payload, pr_errors = gh_json(
-            root,
-            [
-                "pr",
-                "view",
-                str(pr_number),
-                "--repo",
-                repo_slug,
-                "--json",
-                "number,state,title,url,isDraft,mergeStateStatus,headRefName,baseRefName",
-            ],
-        )
+        pr_payload, pr_errors = github_pr_payload(root, owner, repo_name, pr_number)
         if pr_errors:
             errors.extend([f"pr #{pr_number}: {message}" for message in pr_errors])
         else:
