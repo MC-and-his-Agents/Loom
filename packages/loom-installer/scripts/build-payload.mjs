@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, renameSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join, relative } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -11,7 +11,13 @@ const payloadRoot = join(packageRoot, 'payload');
 const pluginManifestSource = join(repoRoot, '.codex-plugin');
 const skillsSourceRoot = join(repoRoot, 'skills');
 const pluginManifestPath = join(pluginManifestSource, 'plugin.json');
+const installLayoutPath = join(skillsSourceRoot, 'install-layout.json');
 const privateRuntimeDir = '.loom-runtime';
+const payloadLockDir = join(packageRoot, '.payload-lock');
+
+function sleep(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'));
@@ -94,6 +100,14 @@ function publicSkillEntries() {
   });
 }
 
+function requiredInstallLayoutPaths() {
+  const layout = readJson(installLayoutPath);
+  if (!Array.isArray(layout.required_paths) || layout.required_paths.length === 0) {
+    throw new Error('skills/install-layout.json must declare required_paths');
+  }
+  return layout.required_paths;
+}
+
 function runtimeScript(skillId) {
   return skillId === 'loom-init' || skillId === 'loom-adopt' ? 'loom_init.py' : 'loom_flow.py';
 }
@@ -145,15 +159,28 @@ function copyFullRuntime(runtimeRoot) {
   copyDirectoryFiltered(skillsSourceRoot, runtimeRoot);
 }
 
-function buildPluginPayload() {
-  const pluginTarget = join(payloadRoot, 'plugin', 'loom');
+function verifyRequiredPaths(rootDir, requiredPaths, label) {
+  const missing = [];
+  for (const requiredPath of requiredPaths) {
+    if (!existsSync(join(rootDir, requiredPath))) {
+      missing.push(requiredPath);
+    }
+  }
+  if (missing.length > 0) {
+    throw new Error(`${label} is missing required paths: ${missing.join(', ')}`);
+  }
+}
+
+function buildPluginPayload(currentPayloadRoot) {
+  const pluginTarget = join(currentPayloadRoot, 'plugin', 'loom');
   mkdirSync(pluginTarget, { recursive: true });
   copyDirectoryFiltered(pluginManifestSource, join(pluginTarget, '.codex-plugin'));
   copyDirectoryFiltered(skillsSourceRoot, join(pluginTarget, 'skills'));
+  return pluginTarget;
 }
 
-function buildSingleSkillPayloads(entries) {
-  const skillsPayloadRoot = join(payloadRoot, 'skills');
+function buildSingleSkillPayloads(currentPayloadRoot, entries, requiredPaths) {
+  const skillsPayloadRoot = join(currentPayloadRoot, 'skills');
   mkdirSync(skillsPayloadRoot, { recursive: true });
   const skills = [];
   for (const entry of entries) {
@@ -166,7 +193,9 @@ function buildSingleSkillPayloads(entries) {
     const packageDir = join(skillsPayloadRoot, skillId);
     mkdirSync(packageDir, { recursive: true });
     copyTopLevelSkillSurface(skillId, packageDir);
-    copyFullRuntime(join(packageDir, privateRuntimeDir));
+    const runtimeRoot = join(packageDir, privateRuntimeDir);
+    copyFullRuntime(runtimeRoot);
+    verifyRequiredPaths(runtimeRoot, requiredPaths, `single-skill runtime for ${skillId}`);
     skills.push({
       id: contract.id,
       display_name: contract.display_name,
@@ -183,36 +212,83 @@ if (!existsSync(pluginManifestPath)) {
 if (!existsSync(skillsSourceRoot)) {
   throw new Error(`missing skills source root: ${skillsSourceRoot}`);
 }
+if (!existsSync(installLayoutPath)) {
+  throw new Error(`missing install layout: ${installLayoutPath}`);
+}
 
-rmSync(payloadRoot, { recursive: true, force: true });
-mkdirSync(payloadRoot, { recursive: true });
+function acquirePayloadLock() {
+  let attempts = 0;
+  for (;;) {
+    try {
+      mkdirSync(payloadLockDir);
+      return;
+    } catch (error) {
+      if (error?.code !== 'EEXIST') {
+        throw error;
+      }
+      attempts += 1;
+      if (attempts >= 200) {
+        throw new Error(`timed out waiting for payload build lock: ${payloadLockDir}`);
+      }
+      sleep(100);
+    }
+  }
+}
 
-buildPluginPayload();
-const skillRecords = buildSingleSkillPayloads(publicSkillEntries());
-const pluginManifest = readJson(pluginManifestPath);
-const files = collectFiles(payloadRoot).filter((entry) => entry.path !== 'manifest.json');
+function releasePayloadLock() {
+  rmSync(payloadLockDir, { recursive: true, force: true });
+}
 
-const manifest = {
-  schema_version: 'loom-installer-payload/v1',
-  loom_version: pluginManifest.version,
-  source_repository: 'https://github.com/MC-and-his-Agents/Loom',
-  source_commit: gitValue(['rev-parse', 'HEAD'], 'unknown'),
-  source_ref: gitValue(['rev-parse', '--abbrev-ref', 'HEAD'], 'unknown'),
-  built_at: process.env.LOOM_INSTALLER_BUILD_TIMESTAMP ?? new Date().toISOString(),
-  runtime: {
-    python_minimum: '3.10',
-    python_recommended: '3.11+',
-  },
-  plugin: {
-    name: pluginManifest.name,
-    version: pluginManifest.version,
-    relative_path: 'plugin/loom',
-  },
-  skills: skillRecords,
-  files,
-};
+function publishPayload(stagingRoot) {
+  rmSync(payloadRoot, { recursive: true, force: true });
+  renameSync(stagingRoot, payloadRoot);
+}
 
-writeJson(join(payloadRoot, 'manifest.json'), manifest);
+function buildPayload() {
+  const stagingRoot = mkdtempSync(join(packageRoot, '.payload-build-'));
+  try {
+    mkdirSync(stagingRoot, { recursive: true });
 
-console.log(`payload ready: ${relative(repoRoot, payloadRoot)}`);
-console.log(`skills bundled: ${skillRecords.map((skill) => skill.id).join(', ')}`);
+    const requiredPaths = requiredInstallLayoutPaths();
+    const pluginTarget = buildPluginPayload(stagingRoot);
+    verifyRequiredPaths(join(pluginTarget, 'skills'), requiredPaths, 'plugin payload');
+    const skillRecords = buildSingleSkillPayloads(stagingRoot, publicSkillEntries(), requiredPaths);
+    const pluginManifest = readJson(pluginManifestPath);
+    const files = collectFiles(stagingRoot).filter((entry) => entry.path !== 'manifest.json');
+
+    const manifest = {
+      schema_version: 'loom-installer-payload/v1',
+      loom_version: pluginManifest.version,
+      source_repository: 'https://github.com/MC-and-his-Agents/Loom',
+      source_commit: gitValue(['rev-parse', 'HEAD'], 'unknown'),
+      source_ref: gitValue(['rev-parse', '--abbrev-ref', 'HEAD'], 'unknown'),
+      built_at: process.env.LOOM_INSTALLER_BUILD_TIMESTAMP ?? new Date().toISOString(),
+      runtime: {
+        python_minimum: '3.10',
+        python_recommended: '3.11+',
+      },
+      plugin: {
+        name: pluginManifest.name,
+        version: pluginManifest.version,
+        relative_path: 'plugin/loom',
+      },
+      skills: skillRecords,
+      files,
+    };
+
+    writeJson(join(stagingRoot, 'manifest.json'), manifest);
+    publishPayload(stagingRoot);
+
+    console.log(`payload ready: ${relative(repoRoot, payloadRoot)}`);
+    console.log(`skills bundled: ${skillRecords.map((skill) => skill.id).join(', ')}`);
+  } finally {
+    rmSync(stagingRoot, { recursive: true, force: true });
+  }
+}
+
+acquirePayloadLock();
+try {
+  buildPayload();
+} finally {
+  releasePayloadLock();
+}
