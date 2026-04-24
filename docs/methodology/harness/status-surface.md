@@ -2,6 +2,8 @@
 
 本文件定义 Loom 当前最小状态面合同。
 
+统一状态读取面的对象、字段组与消费边界见 [status-surface-contract.md](./status-surface-contract.md)。
+
 本文件当前承接：
 
 - `EXT-0035`
@@ -13,6 +15,7 @@
 它服务读取，不服务并行记账。
 本文件把“状态读取字段”和“运行时证据入口”明确拆开定义。
 字段归属与派生关系以 [fact-chain-contract.md](./fact-chain-contract.md) 为准。
+当前 `Work Item` identity 与最小 machine-readable 上下文字段见 [item-context-contract.md](./item-context-contract.md)。
 
 ## 2. 状态读取字段
 

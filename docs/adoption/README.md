@@ -20,6 +20,7 @@
 - `repo interop` 主合同：[repo-interop-contract.md](./repo-interop-contract.md)
 - 小型既有仓库的默认 retrofit 策略：[lightweight-retrofit-default.md](./lightweight-retrofit-default.md)
 - 成熟治理重仓的默认 attach 策略：[deep-existing-repo-default.md](./deep-existing-repo-default.md)
+- GitHub 默认治理实现 profile：[github-profile.md](./github-profile.md)
 
 当前目录对应的主要 `EXT-*` 条目：
 

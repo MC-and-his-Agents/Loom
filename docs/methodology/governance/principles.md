@@ -24,6 +24,8 @@
 - 机械化治理最小能力边界
 
 审查职责与 checkpoint 审查分工见 [review-model.md](./review-model.md)。
+formal `spec review` 与 implementation 分离规则见 [spec-implementation-separation.md](./spec-implementation-separation.md)。
+GitHub 默认交付漏斗见 [github-delivery-funnel.md](./github-delivery-funnel.md)。
 成熟度与关闭语义见 [maturity-and-closing.md](./maturity-and-closing.md)。
 
 ## 2. 真相源分层

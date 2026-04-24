@@ -11,7 +11,7 @@ When Loom is installed through Codex native skill discovery, a host plugin, or t
 
 ## Skills Library
 
-Loom exposes one root entry and seven scenario skills:
+Loom exposes one root entry and eight scenario skills:
 
 | Skill | Role |
 | --- | --- |
@@ -19,6 +19,7 @@ Loom exposes one root entry and seven scenario skills:
 | `loom-adopt` | Initializes a new repository or retrofits Loom into an existing one. |
 | `loom-resume` | Restores context and continues execution. |
 | `loom-pre-review` | Checks readiness before formal review. |
+| `loom-spec-review` | Reviews the formal spec path and produces the spec-approved gate. |
 | `loom-review` | Runs formal review and records review output. |
 | `loom-handoff` | Writes a handoff point and next-step state. |
 | `loom-retire` | Cleans up or retires the current worksite. |
