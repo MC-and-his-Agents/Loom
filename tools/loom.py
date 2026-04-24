@@ -14,8 +14,12 @@ COMMAND_ROUTES: dict[str, tuple[str, tuple[str, ...]]] = {
     "init": ("loom_init.py", ()),
     "route": ("loom_init.py", ("route",)),
     "flow": ("loom_flow.py", ()),
+    "resume": ("loom_flow.py", ("flow", "resume")),
+    "merge-ready": ("loom_flow.py", ("flow", "merge-ready")),
+    "spec-review": ("loom_flow.py", ("flow", "spec-review")),
     "review": ("loom_flow.py", ("review",)),
     "check": ("loom_check.py", ()),
+    "status": ("loom_status.py", ()),
 }
 
 
@@ -27,13 +31,21 @@ def print_usage(stream) -> None:
         "  init    pass through to tools/loom_init.py\n"
         "  route   shortcut for tools/loom_init.py route\n"
         "  flow    pass through to tools/loom_flow.py\n"
+        "  resume  shortcut for tools/loom_flow.py flow resume\n"
+        "  merge-ready  shortcut for tools/loom_flow.py flow merge-ready\n"
+        "  spec-review  shortcut for tools/loom_flow.py flow spec-review\n"
         "  review  shortcut for tools/loom_flow.py review\n"
         "  check   pass through to tools/loom_check.py\n\n"
+        "  status  pass through to tools/loom_status.py\n\n"
         "examples:\n"
         "  python3 tools/loom.py init bootstrap --target examples/new-project --write\n"
         "  python3 tools/loom.py route --target examples/new-project --task \"请接手当前事项并恢复上下文后继续推进\"\n"
+        "  python3 tools/loom.py resume --target examples/new-project --item INIT-0001\n"
         "  python3 tools/loom.py flow review --target examples/new-project --item INIT-0001\n"
+        "  python3 tools/loom.py merge-ready --target examples/new-project --item INIT-0001\n"
+        "  python3 tools/loom.py spec-review --target examples/new-project --item INIT-0001\n"
         "  python3 tools/loom.py review read --target examples/new-project --item INIT-0001\n"
+        "  python3 tools/loom.py status --target examples/new-project --item INIT-0001\n"
         "  python3 tools/loom.py check\n"
     )
 

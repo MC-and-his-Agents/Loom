@@ -277,7 +277,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
 
     flow = subparsers.add_parser("flow", help="Run a bundled high-frequency Loom flow")
-    flow.add_argument("operation", choices=("pre-review", "review", "resume", "handoff", "merge-ready"))
+    flow.add_argument("operation", choices=("pre-review", "review", "spec-review", "resume", "handoff", "merge-ready"))
     flow.add_argument("--target", required=True, help="Target repository root")
     flow.add_argument("--item", help="Expected current item id")
     flow.add_argument(
@@ -321,6 +321,7 @@ def runtime_state_block_payload(
 
 def repo_specific_default_fallback(surface: str) -> str:
     return {
+        "spec_review": "build",
         "review": "build",
         "merge_ready": "merge",
         "closeout": "merge",
@@ -1000,11 +1001,308 @@ def default_review_path(item_id: str) -> str:
     return f".loom/reviews/{item_id}.json"
 
 
-def allowed_post_review_carrier_paths(context: dict[str, Any], review_path: str) -> set[str]:
+def default_spec_review_path(item_id: str) -> str:
+    return f".loom/reviews/{item_id}.spec.json"
+
+
+def allowed_post_review_carrier_paths(context: dict[str, Any], *review_paths: str) -> set[str]:
     return {
-        review_path,
+        *review_paths,
         str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"]),
         str(context["report"]["fact_chain"]["entry_points"]["status_surface"]),
+    }
+
+
+def formal_spec_path(context: dict[str, Any]) -> str | None:
+    preferred = f".loom/specs/{context['item_id']}/spec.md"
+    if (context["target_root"] / preferred).exists():
+        return preferred
+
+    for artifact in context.get("associated_artifacts", []):
+        if isinstance(artifact, str) and artifact.endswith("/spec.md") and (context["target_root"] / artifact).exists():
+            return artifact
+
+    fallback = context["target_root"] / ".loom/specs/INIT-0001/spec.md"
+    if fallback.exists():
+        return ".loom/specs/INIT-0001/spec.md"
+    return None
+
+
+def spec_suite_paths(context: dict[str, Any]) -> dict[str, str]:
+    item_id = context["item_id"]
+    candidates = [
+        {
+            "spec": f".loom/specs/{item_id}/spec.md",
+            "plan": f".loom/specs/{item_id}/plan.md",
+            "implementation_contract": f".loom/specs/{item_id}/implementation-contract.md",
+        },
+        {
+            "spec": ".loom/specs/INIT-0001/spec.md",
+            "plan": ".loom/specs/INIT-0001/plan.md",
+            "implementation_contract": ".loom/specs/INIT-0001/implementation-contract.md",
+        },
+    ]
+    for suite in candidates:
+        if (context["target_root"] / suite["spec"]).exists():
+            return suite
+    return candidates[0]
+
+
+def review_head_binding(
+    target_root: Path,
+    *,
+    reviewed_head: str | None,
+    allowed_paths: set[str],
+) -> tuple[dict[str, Any], list[str]]:
+    current_head = git_head_sha(target_root)
+    payload: dict[str, Any] = {
+        "reviewed_head": reviewed_head,
+        "current_head": current_head,
+        "status": "unknown",
+        "stale": None,
+        "changed_paths": [],
+        "disallowed_paths": [],
+    }
+    if not isinstance(reviewed_head, str) or not reviewed_head.strip():
+        return payload, ["review artifact is missing reviewed_head"]
+    if not isinstance(current_head, str) or not current_head.strip():
+        return payload, ["current HEAD is unavailable"]
+    if reviewed_head == current_head:
+        payload["status"] = "current"
+        payload["stale"] = False
+        return payload, []
+
+    changed_paths, head_errors = git_changed_paths(target_root, reviewed_head, current_head)
+    if head_errors:
+        return payload, [f"review HEAD comparison failed: {detail}" for detail in head_errors]
+
+    payload["changed_paths"] = changed_paths
+    disallowed_paths = [path for path in changed_paths if path not in allowed_paths]
+    payload["disallowed_paths"] = disallowed_paths
+    if changed_paths and not disallowed_paths:
+        payload["status"] = "carrier-only"
+        payload["stale"] = False
+        return payload, []
+
+    payload["status"] = "stale"
+    payload["stale"] = True
+    if not changed_paths:
+        return payload, ["review artifact was recorded against a different HEAD"]
+    return payload, ["review artifact is stale for the current HEAD"]
+
+
+def spec_review_head_binding(
+    context: dict[str, Any],
+    *,
+    reviewed_head: str | None,
+    review_path: str,
+) -> tuple[dict[str, Any], list[str]]:
+    current_head = git_head_sha(context["target_root"])
+    payload: dict[str, Any] = {
+        "reviewed_head": reviewed_head,
+        "current_head": current_head,
+        "status": "unknown",
+        "stale": None,
+        "changed_paths": [],
+        "spec_changed_paths": [],
+    }
+    if not isinstance(reviewed_head, str) or not reviewed_head.strip():
+        return payload, ["review artifact is missing reviewed_head"]
+    if not isinstance(current_head, str) or not current_head.strip():
+        return payload, ["current HEAD is unavailable"]
+    if reviewed_head == current_head:
+        payload["status"] = "current"
+        payload["stale"] = False
+        return payload, []
+
+    changed_paths, head_errors = git_changed_paths(context["target_root"], reviewed_head, current_head)
+    if head_errors:
+        return payload, [f"review HEAD comparison failed: {detail}" for detail in head_errors]
+
+    suite = spec_suite_paths(context)
+    watched_paths = {
+        suite["spec"],
+        suite["plan"],
+        suite["implementation_contract"],
+    }
+    spec_changed_paths = [path for path in changed_paths if path in watched_paths]
+    payload["changed_paths"] = changed_paths
+    payload["spec_changed_paths"] = spec_changed_paths
+    if spec_changed_paths:
+        payload["status"] = "stale"
+        payload["stale"] = True
+        return payload, ["spec review is stale because the formal spec path changed after approval"]
+
+    payload["status"] = "implementation-drift-only"
+    payload["stale"] = False
+    return payload, []
+
+
+def review_gate_payload(
+    context: dict[str, Any],
+    *,
+    review_path: str,
+    expected_kind: str,
+    gate_name: str,
+    required: bool,
+    path_label: str | None = None,
+) -> dict[str, Any]:
+    review_record, _, review_errors = load_review_record(
+        context["target_root"],
+        context["item_id"],
+        review_path,
+    )
+    head_binding = {
+        "reviewed_head": None,
+        "current_head": git_head_sha(context["target_root"]),
+        "status": "unknown",
+        "stale": None,
+        "changed_paths": [],
+        "disallowed_paths": [],
+    }
+    missing_inputs: list[str] = []
+    result = "pass" if required else "not_applicable"
+    fallback_to: str | None = None
+
+    if path_label is not None and not path_label.strip():
+        missing_inputs.append(f"missing formal {gate_name.replace('_', ' ')} path")
+        result = "block"
+        fallback_to = "build"
+
+    if review_errors:
+        missing_inputs.extend(review_errors)
+        result = "block"
+        fallback_to = "build"
+    elif review_record is None:
+        if required:
+            missing_inputs.append(f"missing {gate_name.replace('_', ' ')} artifact: {review_path}")
+            result = "block"
+            fallback_to = "build"
+    else:
+        if review_record.get("kind") != expected_kind:
+            missing_inputs.append(
+                f"{gate_name.replace('_', ' ')} artifact must declare kind `{expected_kind}`"
+            )
+            result = "block"
+            fallback_to = "build"
+        decision = review_record.get("decision")
+        if decision == "allow":
+            if expected_kind == "spec_review":
+                binding_payload, binding_errors = spec_review_head_binding(
+                    context,
+                    reviewed_head=review_record.get("reviewed_head"),
+                    review_path=review_path,
+                )
+            else:
+                binding_payload, binding_errors = review_head_binding(
+                    context["target_root"],
+                    reviewed_head=review_record.get("reviewed_head"),
+                    allowed_paths=allowed_post_review_carrier_paths(context, review_path),
+                )
+            head_binding = binding_payload
+            if binding_errors:
+                missing_inputs.extend(binding_errors)
+                result = "block"
+                fallback_to = "build"
+        elif decision == "fallback":
+            missing_inputs.append(f"{gate_name.replace('_', ' ')} decision is fallback: {review_record['summary']}")
+            result = "fallback"
+            fallback_to = review_record.get("fallback_to") or "build"
+        else:
+            missing_inputs.append(f"{gate_name.replace('_', ' ')} decision is blocking: {review_record['summary']}")
+            result = "block"
+            fallback_to = "build"
+
+    summary = (
+        f"{gate_name.replace('_', ' ')} is not required for the current item."
+        if result == "not_applicable"
+        else (
+            f"{gate_name.replace('_', ' ')} is approved for the current HEAD."
+            if result == "pass"
+            else f"{gate_name.replace('_', ' ')} is missing, stale, or not approved."
+        )
+    )
+    return {
+        "path": review_path,
+        "required": required,
+        **({"formal_spec_path": path_label} if path_label is not None else {}),
+        "result": result,
+        "summary": summary,
+        "missing_inputs": missing_inputs,
+        "fallback_to": fallback_to,
+        "record": review_record,
+        "head_binding": head_binding,
+    }
+
+
+def spec_review_gate_payload(context: dict[str, Any]) -> dict[str, Any]:
+    spec_path = formal_spec_path(context)
+    return review_gate_payload(
+        context,
+        review_path=default_spec_review_path(context["item_id"]),
+        expected_kind="spec_review",
+        gate_name="spec_review",
+        required=spec_path is not None,
+        path_label=spec_path,
+    )
+
+
+def implementation_review_status_payload(context: dict[str, Any]) -> dict[str, Any]:
+    review_record, review_path, review_errors = load_review_record(
+        context["target_root"],
+        context["item_id"],
+        context["review_entry"],
+    )
+    missing_inputs = list(review_errors)
+    head_binding = {
+        "reviewed_head": None,
+        "current_head": git_head_sha(context["target_root"]),
+        "status": "unknown",
+        "stale": None,
+        "changed_paths": [],
+        "disallowed_paths": [],
+    }
+    result = "pass"
+    fallback_to: str | None = None
+    if review_record is None and not review_errors:
+        missing_inputs.append(f"missing implementation review artifact: {review_path}")
+        result = "block"
+        fallback_to = "build"
+    elif review_record is not None:
+        if review_record.get("kind") not in {"general_review", "code_review"}:
+            missing_inputs.append("implementation review artifact must declare kind `general_review` or `code_review`")
+            result = "block"
+            fallback_to = "build"
+        binding_payload, binding_errors = review_head_binding(
+            context["target_root"],
+            reviewed_head=review_record.get("reviewed_head"),
+            allowed_paths=allowed_post_review_carrier_paths(context, review_path),
+        )
+        head_binding = binding_payload
+        if binding_errors:
+            missing_inputs.extend(binding_errors)
+            result = "block"
+            fallback_to = "build"
+    if review_record is not None and review_record.get("decision") == "block":
+        missing_inputs.append(f"implementation review decision is blocking: {review_record['summary']}")
+        result = "block"
+        fallback_to = "build"
+    elif review_record is not None and review_record.get("decision") == "fallback":
+        missing_inputs.append(f"implementation review decision is fallback: {review_record['summary']}")
+        result = "fallback"
+        fallback_to = review_record.get("fallback_to") or "build"
+    return {
+        "path": review_path,
+        "result": result,
+        "summary": (
+            "implementation review is approved for the current HEAD."
+            if result == "pass"
+            else "implementation review is missing, stale, or not approved."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": fallback_to,
+        "record": review_record,
+        "head_binding": head_binding,
     }
 
 
@@ -1207,7 +1505,13 @@ def load_review_record(
     return normalized_payload, relative, errors
 
 
-def build_review_flow_payload(target_root: Path, output_relative: str, expected_item: str | None) -> dict[str, Any]:
+def build_review_flow_payload(
+    target_root: Path,
+    output_relative: str,
+    expected_item: str | None,
+    *,
+    operation: str = "review",
+) -> dict[str, Any]:
     runtime_state = runtime_state_payload(target_root)
     steps: list[dict[str, Any]] = [
         {
@@ -1221,7 +1525,7 @@ def build_review_flow_payload(target_root: Path, output_relative: str, expected_
     if runtime_state["result"] != "pass":
         return {
             "command": "flow",
-            "operation": "review",
+            "operation": operation,
             "result": "block",
             "summary": "flow command is blocked because the Loom runtime state is inconsistent.",
             "missing_inputs": runtime_state["missing_inputs"],
@@ -1234,7 +1538,7 @@ def build_review_flow_payload(target_root: Path, output_relative: str, expected_
     if errors:
         return {
             "command": "flow",
-            "operation": "review",
+            "operation": operation,
             "result": "block",
             "summary": "flow command could not read a valid Loom fact chain.",
             "missing_inputs": [f"fact-chain: {message}" for message in errors],
@@ -1283,16 +1587,62 @@ def build_review_flow_payload(target_root: Path, output_relative: str, expected_
 
     build_payload = checkpoint_payload("build", context)
     governance_surface = build_governance_surface(target_root)
+    surface_name = "review" if operation == "review" else "spec_review"
     repo_specific_requirements = repo_specific_requirements_payload(
         governance_surface.get("repo_interface"),
         target_root=target_root,
-        surface="review",
+        surface=surface_name,
     )
-    review_record, review_path, review_errors = load_review_record(
-        target_root,
-        context["item_id"],
-        context["review_entry"],
-    )
+    if operation == "spec-review":
+        review_path = default_spec_review_path(context["item_id"])
+        review_record, _, review_errors = load_review_record(target_root, context["item_id"], review_path)
+        review_step_name = "spec-review-entry"
+        review_step_result = "pass" if review_record and not review_errors else "block"
+        review_step_summary = (
+            "spec review artifact is readable and ready for authoring."
+            if review_record and not review_errors
+            else "spec review artifact is missing or invalid."
+        )
+        review_step_missing = review_errors or ([] if review_record else [f"missing review artifact: {review_path}"])
+        review_step_fallback = "build" if (review_errors or review_record is None) else None
+        review_payload = {
+            "path": review_path,
+            "record": review_record,
+        }
+        extra_steps: list[dict[str, Any]] = []
+    else:
+        review_path = context["review_entry"]
+        review_record, _, review_errors = load_review_record(target_root, context["item_id"], review_path)
+        review_payload = review_gate_payload(
+            context,
+            review_path=review_path,
+            expected_kind=implementation_review_kind(context),
+            gate_name="implementation_review",
+            required=True,
+        )
+        spec_gate = spec_review_gate_payload(context)
+        extra_steps = [
+            {
+                "name": "spec-review-gate",
+                "result": (
+                    "pass"
+                    if spec_gate["result"] in {"pass", "not_applicable"}
+                    else ("fallback" if spec_gate["result"] == "fallback" else "block")
+                ),
+                "summary": spec_gate["summary"],
+                "missing_inputs": spec_gate["missing_inputs"],
+                "fallback_to": spec_gate["fallback_to"],
+            }
+        ]
+        review_step_name = "review-entry"
+        review_step_result = "pass" if review_record and not review_errors else "block"
+        review_step_summary = (
+            "formal review artifact is readable."
+            if review_record and not review_errors
+            else "formal review artifact is missing or invalid."
+        )
+        review_step_missing = review_errors or ([] if review_record else [f"missing review artifact: {review_path}"])
+        review_step_fallback = "build" if (review_errors or review_record is None) else None
     steps.extend(
         [
             {
@@ -1302,16 +1652,13 @@ def build_review_flow_payload(target_root: Path, output_relative: str, expected_
                 "missing_inputs": build_payload["missing_inputs"],
                 "fallback_to": build_payload["fallback_to"],
             },
+            *extra_steps,
             {
-                "name": "review-entry",
-                "result": "pass" if review_record and not review_errors else "block",
-                "summary": (
-                    "formal review artifact is readable."
-                    if review_record and not review_errors
-                    else "formal review artifact is missing or invalid."
-                ),
-                "missing_inputs": review_errors or ([] if review_record else [f"missing review artifact: {review_path}"]),
-                "fallback_to": "build" if (review_errors or review_record is None) else None,
+                "name": review_step_name,
+                "result": review_step_result,
+                "summary": review_step_summary,
+                "missing_inputs": review_step_missing,
+                "fallback_to": review_step_fallback,
             },
         ]
     )
@@ -1332,12 +1679,24 @@ def build_review_flow_payload(target_root: Path, output_relative: str, expected_
         fallback_to = fallback_to or repo_specific_requirements["fallback_to"]
 
     if result == "block" and repo_specific_requirements["result"] == "block":
-        summary = "review flow exposed companion-declared blocking requirements instead of pretending Loom core already covers them."
+        summary = (
+            "spec-review flow exposed companion-declared blocking requirements instead of pretending Loom core already covers them."
+            if operation == "spec-review"
+            else "review flow exposed companion-declared blocking requirements instead of pretending Loom core already covers them."
+        )
     else:
         summary = (
-            "review flow prepared the semantic review context and exposed the formal review artifact."
-            if result == "pass"
-            else "review flow found missing review material or earlier blocking signals."
+            "spec-review flow prepared the formal spec review context and exposed the spec-approved artifact."
+            if operation == "spec-review" and result == "pass"
+            else (
+                "spec-review flow found missing spec review material or earlier blocking signals."
+                if operation == "spec-review"
+                else (
+                    "review flow prepared the semantic review context and exposed the formal review artifact."
+                    if result == "pass"
+                    else "review flow found missing review material or earlier blocking signals."
+                )
+            )
         )
 
     missing_inputs: list[str] = []
@@ -1353,7 +1712,7 @@ def build_review_flow_payload(target_root: Path, output_relative: str, expected_
 
     return {
         "command": "flow",
-        "operation": "review",
+        "operation": operation,
         "item": {
             "id": context["item_id"],
             "goal": context["goal"],
@@ -1380,10 +1739,19 @@ def build_review_flow_payload(target_root: Path, output_relative: str, expected_
             "missing_inputs": build_payload["missing_inputs"],
             "fallback_to": build_payload["fallback_to"],
         },
-        "review": {
-            "path": review_path,
-            "record": review_record,
-        },
+        **(
+            {
+                "spec_review": review_payload,
+            }
+            if operation == "spec-review"
+            else {
+                "review": {
+                    "path": review_path,
+                    "record": review_record,
+                },
+                "spec_review": spec_gate,
+            }
+        ),
         "repo_specific_requirements": repo_specific_requirements,
         "current_checkpoint": {
             "raw": context["current_checkpoint_raw"],
@@ -1392,7 +1760,13 @@ def build_review_flow_payload(target_root: Path, output_relative: str, expected_
     }
 
 
-def run_default_review_engine(context: dict[str, Any], build_payload: dict[str, Any], review_path: str) -> dict[str, Any]:
+def run_default_review_engine(
+    context: dict[str, Any],
+    build_payload: dict[str, Any],
+    review_path: str,
+    *,
+    review_kind: str | None = None,
+) -> dict[str, Any]:
     reviewed_head = git_head_sha(context["target_root"]) or "unknown-head"
     runtime_root = review_runtime_root(context, reviewed_head)
     prompt_path = runtime_root / "prompt.txt"
@@ -1408,6 +1782,8 @@ def run_default_review_engine(context: dict[str, Any], build_payload: dict[str, 
     )
     runtime_root.mkdir(parents=True, exist_ok=True)
     prompt_path.write_text(prompt_text, encoding="utf-8")
+
+    effective_kind = review_kind or default_review_kind(context)
 
     before_fingerprint, fingerprint_errors = git_tracked_diff_fingerprint(context["target_root"])
     if fingerprint_errors:
@@ -1570,16 +1946,16 @@ def run_default_review_engine(context: dict[str, Any], build_payload: dict[str, 
     write_json_file(findings_path, {"findings": normalized_payload["findings"]})
     write_json_file(
         metadata_path,
-        {
-            "engine": DEFAULT_REVIEW_ENGINE,
-            "adapter": DEFAULT_REVIEW_ADAPTER,
-            "result": "pass",
-            "reviewed_head": reviewed_head,
-            "decision": normalized_payload["decision"],
-            "summary": normalized_payload["summary"],
-            "kind": default_review_kind(context),
-        },
-    )
+            {
+                "engine": DEFAULT_REVIEW_ENGINE,
+                "adapter": DEFAULT_REVIEW_ADAPTER,
+                "result": "pass",
+                "reviewed_head": reviewed_head,
+                "decision": normalized_payload["decision"],
+                "summary": normalized_payload["summary"],
+                "kind": effective_kind,
+            },
+        )
     cleanup_scratch_tree(context["target_root"], scratch_dir)
     return {
         "result": "pass",
@@ -1598,7 +1974,7 @@ def run_default_review_engine(context: dict[str, Any], build_payload: dict[str, 
             "decision": normalized_payload["decision"],
             "summary": normalized_payload["summary"],
             "reviewer": DEFAULT_REVIEW_ADAPTER,
-            "kind": default_review_kind(context),
+            "kind": effective_kind,
             "findings_file": relative_to_root(findings_path, context["target_root"]),
             "engine_adapter": DEFAULT_REVIEW_ADAPTER,
             "engine_evidence": relative_to_root(result_path, context["target_root"]),
@@ -1814,6 +2190,7 @@ def load_context(target_root: Path, output_relative: str, expected_item: str | N
         "goal": str(facts["goal"]["value"]),
         "scope": str(facts["scope"]["value"]),
         "execution_path": str(facts["execution_path"]["value"]),
+        "associated_artifacts": list(facts["associated_artifacts"]["value"]),
         "current_stop": str(facts["current_stop"]["value"]),
         "next_step": str(facts["next_step"]["value"]),
         "blockers": str(facts["blockers"]["value"]),
@@ -1833,10 +2210,13 @@ def review_runtime_root(context: dict[str, Any], reviewed_head: str | None = Non
 
 
 def default_review_kind(context: dict[str, Any]) -> str:
-    execution_path = context["execution_path"].strip().lower()
-    scope = context["scope"].strip().lower()
-    if "spec" in execution_path or "spec" in scope:
-        return "spec_review"
+    scope_paths = declared_scope_paths(context["scope"])
+    if scope_paths and all(path.endswith(".md") or path.startswith(".loom/") for path in scope_paths):
+        return "general_review"
+    return "code_review"
+
+
+def implementation_review_kind(context: dict[str, Any]) -> str:
     scope_paths = declared_scope_paths(context["scope"])
     if scope_paths and all(path.endswith(".md") or path.startswith(".loom/") for path in scope_paths):
         return "general_review"
@@ -1928,6 +2308,10 @@ def build_default_review_prompt(
     review_path: str,
 ) -> str:
     focus_paths = review_focus_paths(context)
+    is_spec_review = review_path == default_spec_review_path(context["item_id"])
+    spec_path = formal_spec_path(context) if is_spec_review else None
+    if spec_path and spec_path not in focus_paths:
+        focus_paths = [spec_path, *focus_paths]
     workspace_path = relative_to_root(context["workspace_path"], context["target_root"])
     runtime_lines = [
         f"- {field}: {runtime_fields[field]['value']}"
@@ -1947,6 +2331,14 @@ def build_default_review_prompt(
             "- 你不是 merge gate；不要输出 safe_to_merge、guardian verdict 或宿主按钮决策。",
             "- 你的输出只是 review evidence；最终正式真相会被回写到单一 review record。",
             "- 若阻断项成立，decision 设为 `block`；若当前输入不足以形成正式结论，decision 设为 `fallback`。",
+            *(
+                [
+                    "- 当前任务是 spec review；必须优先判断 formal spec 是否完整、边界是否清晰、接受条件是否足以支撑后续实现 review。",
+                    f"- Formal Spec Path: {spec_path}",
+                ]
+                if spec_path
+                else []
+            ),
             "",
             "当前事项：",
             f"- Item ID: {context['item_id']}",
@@ -2351,11 +2743,20 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
     pr_template: dict[str, Any] | None = None
     review_record: dict[str, Any] | None = None
     review_path: str | None = None
+    spec_review: dict[str, Any] | None = None
     if stage == "merge":
         pr_template, pr_template_errors = check_pr_template(context["target_root"])
         if pr_template_errors:
             missing_inputs.extend(pr_template_errors)
             if result == "pass":
+                result = "block"
+        spec_review = spec_review_gate_payload(context)
+        if spec_review["result"] in {"block", "fallback"}:
+            missing_inputs.extend(spec_review["missing_inputs"])
+            if spec_review["result"] == "fallback" and result == "pass":
+                result = "fallback"
+                fallback_to = spec_review["fallback_to"] or "build"
+            elif result == "pass":
                 result = "block"
         review_record, review_path, review_errors = load_review_record(
             context["target_root"],
@@ -2376,21 +2777,16 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
                 missing_inputs.append("review artifact does not match the latest validation summary")
                 if result == "pass":
                     result = "block"
-            current_head = git_head_sha(context["target_root"])
-            reviewed_head = review_record.get("reviewed_head")
-            if current_head and reviewed_head != current_head:
-                changed_paths, head_errors = git_changed_paths(context["target_root"], reviewed_head, current_head)
-                if head_errors:
-                    missing_inputs.extend([f"review HEAD comparison failed: {detail}" for detail in head_errors])
-                    if result == "pass":
-                        result = "block"
-                else:
-                    allowed_paths = allowed_post_review_carrier_paths(context, review_path)
-                    disallowed_paths = [path for path in changed_paths if path not in allowed_paths]
-                    if disallowed_paths or not changed_paths:
-                        missing_inputs.append("review artifact was recorded against a different HEAD")
-                        if result == "pass":
-                            result = "block"
+            binding_payload, binding_errors = review_head_binding(
+                context["target_root"],
+                reviewed_head=review_record.get("reviewed_head"),
+                allowed_paths=allowed_post_review_carrier_paths(context, review_path),
+            )
+            review_record["head_binding"] = binding_payload
+            if binding_errors:
+                missing_inputs.extend(binding_errors)
+                if result == "pass":
+                    result = "block"
             if decision == "block":
                 if result == "pass":
                     result = "block"
@@ -2447,6 +2843,8 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
             "path": review_path,
             "record": review_record,
         }
+    if spec_review is not None:
+        payload["spec_review"] = spec_review
     return payload
 
 
@@ -4247,11 +4645,16 @@ def handle_review(args: argparse.Namespace) -> int:
             }
         )
 
+    requested_review_file = args.review_file
+    if args.operation == "record" and args.kind == "spec_review" and not requested_review_file:
+        requested_review_file = default_spec_review_path(context["item_id"])
+
     review_record, review_path, review_errors = load_review_record(
         target_root,
         context["item_id"],
-        args.review_file or context["review_entry"],
+        requested_review_file or context["review_entry"],
     )
+    inferred_spec_review = review_path == default_spec_review_path(context["item_id"])
     if args.operation == "read":
         missing_inputs = list(review_errors)
         if review_record is None and not review_errors:
@@ -4275,12 +4678,15 @@ def handle_review(args: argparse.Namespace) -> int:
         )
 
     if args.operation == "run":
-        flow_payload = build_review_flow_payload(target_root, args.output, args.item)
+        flow_operation = "spec-review" if inferred_spec_review else "review"
+        review_kind = "spec_review" if inferred_spec_review else implementation_review_kind(context)
+        flow_payload = build_review_flow_payload(target_root, args.output, args.item, operation=flow_operation)
+        review_surface = flow_payload.get("review") or (flow_payload.get("spec_review") if inferred_spec_review else None)
         if flow_payload["result"] != "pass":
             manual_review = manual_review_payload(
                 context=context,
                 findings_file=None,
-                kind=default_review_kind(context),
+                kind=review_kind,
                 review_record_path=review_path,
             )
             return emit(
@@ -4297,7 +4703,8 @@ def handle_review(args: argparse.Namespace) -> int:
                     "state_check": flow_payload.get("state_check"),
                     "runtime_evidence": flow_payload.get("runtime_evidence"),
                     "build_checkpoint": flow_payload.get("build_checkpoint"),
-                    "review": flow_payload.get("review"),
+                    "review": review_surface,
+                    "spec_review": flow_payload.get("spec_review"),
                     "repo_specific_requirements": flow_payload.get("repo_specific_requirements"),
                     "current_checkpoint": flow_payload.get("current_checkpoint"),
                     "engine": {
@@ -4313,7 +4720,7 @@ def handle_review(args: argparse.Namespace) -> int:
             )
 
         build_payload = flow_payload["build_checkpoint"]
-        engine_payload = run_default_review_engine(context, build_payload, review_path)
+        engine_payload = run_default_review_engine(context, build_payload, review_path, review_kind=review_kind)
         review_record_input = engine_payload.get("review_record_input")
         findings_file = (
             review_record_input.get("findings_file")
@@ -4323,7 +4730,7 @@ def handle_review(args: argparse.Namespace) -> int:
         manual_review = manual_review_payload(
             context=context,
             findings_file=findings_file if isinstance(findings_file, str) else None,
-            kind=default_review_kind(context),
+            kind=review_kind,
             review_record_path=review_path,
         )
         result = engine_payload["result"]
@@ -4346,7 +4753,8 @@ def handle_review(args: argparse.Namespace) -> int:
                 "state_check": flow_payload.get("state_check"),
                 "runtime_evidence": flow_payload.get("runtime_evidence"),
                 "build_checkpoint": flow_payload.get("build_checkpoint"),
-                "review": flow_payload.get("review"),
+                "review": review_surface,
+                "spec_review": flow_payload.get("spec_review"),
                 "repo_specific_requirements": flow_payload.get("repo_specific_requirements"),
                 "current_checkpoint": flow_payload.get("current_checkpoint"),
                 "engine": engine_payload["engine"],
@@ -4400,6 +4808,35 @@ def handle_review(args: argparse.Namespace) -> int:
                 "build_checkpoint": build_payload,
             }
         )
+    if args.decision == "allow" and args.kind == "spec_review":
+        spec_path = formal_spec_path(context)
+        if spec_path is None:
+            return emit(
+                {
+                    "command": "review",
+                    "operation": "record",
+                    "result": "block",
+                    "summary": "spec review cannot be recorded as `allow` without a readable formal spec path.",
+                    "missing_inputs": ["formal spec path"],
+                    "fallback_to": "build",
+                    "build_checkpoint": build_payload,
+                }
+            )
+    if args.decision == "allow" and args.kind != "spec_review":
+        spec_gate = spec_review_gate_payload(context)
+        if spec_gate["result"] != "pass":
+            return emit(
+                {
+                    "command": "review",
+                    "operation": "record",
+                    "result": "block",
+                    "summary": "implementation review cannot be recorded as `allow` before spec review passes.",
+                    "missing_inputs": list(spec_gate["missing_inputs"]),
+                    "fallback_to": spec_gate["fallback_to"] or "build",
+                    "build_checkpoint": build_payload,
+                    "spec_review": spec_gate,
+                }
+            )
 
     findings: list[dict[str, Any]]
     findings_errors: list[str] = []
@@ -4472,7 +4909,11 @@ def handle_review(args: argparse.Namespace) -> int:
             "operation": "record",
             "item": {"id": context["item_id"]},
             "result": "pass",
-            "summary": "formal review conclusion was recorded and is ready for merge checkpoint consumption.",
+            "summary": (
+                "formal spec review conclusion was recorded and is ready for spec-approved gate consumption."
+                if args.kind == "spec_review"
+                else "formal review conclusion was recorded and is ready for merge checkpoint consumption."
+            ),
             "missing_inputs": [],
             "fallback_to": None,
             "review": {"path": review_path, "record": verified_record},
@@ -4933,7 +5374,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             }
         )
 
-    if args.operation not in {"pre-review", "review", "resume", "handoff", "merge-ready"}:
+    if args.operation not in {"pre-review", "review", "spec-review", "resume", "handoff", "merge-ready"}:
         return emit(
             {
                 "command": "flow",
@@ -4946,8 +5387,8 @@ def handle_flow(args: argparse.Namespace) -> int:
                 "runtime_state": runtime_state,
             }
         )
-    if args.operation == "review":
-        return emit(build_review_flow_payload(target_root, args.output, args.item))
+    if args.operation in {"review", "spec-review"}:
+        return emit(build_review_flow_payload(target_root, args.output, args.item, operation=args.operation))
 
     steps.append(
         {
@@ -5284,6 +5725,7 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "fallback_to": merge_payload["fallback_to"],
                         "pr_template": merge_payload.get("pr_template"),
                     },
+                    "spec_review": merge_payload.get("spec_review"),
                     "current_checkpoint": {
                         "raw": context["current_checkpoint_raw"],
                         "normalized": context["current_checkpoint"],

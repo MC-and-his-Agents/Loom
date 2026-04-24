@@ -33,6 +33,7 @@ EXPECTED_SHARED_RUNTIME_SCRIPTS = (
     "fact_chain_support.py",
     "governance_surface.py",
     "loom_flow.py",
+    "loom_status.py",
     "loom_check.py",
 )
 
@@ -41,6 +42,7 @@ EXPECTED_BOOTSTRAP_RUNTIME_SOURCES = {
     ".loom/bin/fact_chain_support.py": "skills/shared/scripts/fact_chain_support.py",
     ".loom/bin/governance_surface.py": "skills/shared/scripts/governance_surface.py",
     ".loom/bin/loom_flow.py": "skills/shared/scripts/loom_flow.py",
+    ".loom/bin/loom_status.py": "skills/shared/scripts/loom_status.py",
     ".loom/bin/runtime_paths.py": "skills/shared/scripts/runtime_paths.py",
     ".loom/bin/runtime_state.py": "skills/shared/scripts/runtime_state.py",
     ".loom/bin/loom_check.py": "skills/shared/scripts/loom_check.py",
@@ -224,6 +226,7 @@ def _validate_referenced_resources(skills_root: Path) -> tuple[dict[str, Any], l
         "shared/assets/templates/scaffold/spec.md",
         "shared/assets/templates/scaffold/plan.md",
         "shared/assets/github/PULL_REQUEST_TEMPLATE.md",
+        "shared/references/harness/status-surface-contract.md",
         "shared/references/harness/status-surface.md",
         "shared/references/harness/runtime-state.md",
     )
