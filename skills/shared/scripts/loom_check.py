@@ -1372,13 +1372,17 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
     category = "skill-routing-contract"
     failures: list[Failure] = []
     readme_path = root / "README.md"
+    readme_zh_path = root / "README.zh-CN.md"
     skills_readme_path = root / "skills/README.md"
+    skills_readme_zh_path = root / "skills/README.zh-CN.md"
     route_matrix_path = root / "skills/route-matrix.md"
     contract_path = root / "skills/loom-init/contract.json"
 
     try:
         readme = load_text_file(readme_path)
+        readme_zh = load_text_file(readme_zh_path)
         skills_readme = load_text_file(skills_readme_path)
+        skills_readme_zh = load_text_file(skills_readme_zh_path)
         route_matrix = load_text_file(route_matrix_path)
         contract = load_json_file(contract_path)
     except FileNotFoundError:
@@ -1389,12 +1393,20 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
     if not isinstance(contract, dict):
         return [Failure(category, "`skills/loom-init/contract.json` must be a JSON object")]
 
-    if "Loom 是一个以 skills 为先的方法论仓库" not in readme:
+    if "skills-first methodology repository" not in readme:
         failures.append(Failure(category, "`README.md` must present Loom as a skills-first methodology repository"))
-    if "高级 / 兼容" not in readme:
+    if "Advanced / Compatibility" not in readme:
         failures.append(Failure(category, "`README.md` must keep single-skill installation as an advanced compatibility path"))
-    if "它是 Loom 唯一的 root entry" not in skills_readme:
+    if "[中文版本](./README.zh-CN.md)" not in readme or "[English version](./README.md)" not in readme_zh:
+        failures.append(Failure(category, "root README language switch links must stay in sync"))
+    if "以 skills 为先的方法论仓库" not in readme_zh:
+        failures.append(Failure(category, "`README.zh-CN.md` must preserve the Chinese repository positioning"))
+    if "unique root entry" not in skills_readme:
         failures.append(Failure(category, "`skills/README.md` must keep `loom-init` as the unique root entry"))
+    if "[中文版本](./README.zh-CN.md)" not in skills_readme or "[English version](./README.md)" not in skills_readme_zh:
+        failures.append(Failure(category, "skills README language switch links must stay in sync"))
+    if "唯一的 root entry" not in skills_readme_zh:
+        failures.append(Failure(category, "`skills/README.zh-CN.md` must preserve the Chinese root-entry explanation"))
     if "显式 skill 名称调用优先" not in route_matrix:
         failures.append(Failure(category, "`skills/route-matrix.md` must keep explicit routing as the first priority"))
     if "若无法稳定判断，回退到 `loom-init`" not in route_matrix:
@@ -1429,8 +1441,12 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
     for command in installation_commands:
         if command not in skills_readme:
             failures.append(Failure(category, f"`skills/README.md` must document `{command}`"))
+        if command not in skills_readme_zh:
+            failures.append(Failure(category, f"`skills/README.zh-CN.md` must document `{command}`"))
     if "git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom" not in readme:
         failures.append(Failure(category, "`README.md` must document native skills-library installation"))
+    if "git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom" not in readme_zh:
+        failures.append(Failure(category, "`README.zh-CN.md` must document native skills-library installation"))
 
     return failures
 
@@ -3635,6 +3651,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         ".loom/reviews/INIT-0001.spec.json",
                     ],
                     env=installed_review_env,
+                    timeout_seconds=150,
                 )
                 spec_review_record_input: dict[str, object] | None = None
                 if error:
@@ -3769,6 +3786,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         "INIT-0001",
                     ],
                     env=installed_review_env,
+                    timeout_seconds=150,
                 )
                 if error:
                     failures.append(Failure("daily-execution-cli", f"`installed review run` failed: {error}"))
@@ -4130,7 +4148,13 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 elif payload.get("result") != "block":
                     failures.append(Failure("daily-execution-cli", "`installed checkpoint merge` must block when HEAD drifts beyond Loom carriers"))
 
-    gh_auth_ready = shutil.which("gh") is not None and run_command(root, ["gh", "auth", "status"]).returncode == 0
+    gh_auth_probe = None
+    if shutil.which("gh") is not None:
+        try:
+            gh_auth_probe = run_command(root, ["gh", "auth", "status"], timeout_seconds=5)
+        except subprocess.TimeoutExpired:
+            gh_auth_probe = None
+    gh_auth_ready = gh_auth_probe is not None and gh_auth_probe.returncode == 0
     if gh_auth_ready:
         with tempfile.TemporaryDirectory(prefix="loom-check-installed-post-merge-") as tmp:
             tmp_root = Path(tmp)

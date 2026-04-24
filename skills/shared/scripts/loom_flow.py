@@ -88,6 +88,7 @@ REVIEW_FINDING_SEVERITIES = {"warn", "block"}
 REVIEW_FINDING_DISPOSITION_STATUSES = {"accepted", "rejected", "deferred"}
 DEFAULT_REVIEW_ENGINE = "codex"
 DEFAULT_REVIEW_ADAPTER = "loom/default-codex"
+DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS = 120
 ENGINE_FAILURE_REASONS = {
     "engine_unavailable",
     "schema_drift",
@@ -1904,10 +1905,16 @@ def run_default_review_engine(
             text=True,
             capture_output=True,
             check=False,
+            timeout=DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS,
         )
     except FileNotFoundError:
         failure_reason = "engine_unavailable"
         failure_detail = f"default review engine `{DEFAULT_REVIEW_ENGINE}` is unavailable in PATH"
+    except subprocess.TimeoutExpired:
+        failure_reason = "runtime_conflict"
+        failure_detail = (
+            f"default review engine timed out after {DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS}s"
+        )
     else:
         if completed.returncode != 0:
             failure_reason = "runtime_conflict"
