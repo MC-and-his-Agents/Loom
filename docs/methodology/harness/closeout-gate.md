@@ -57,8 +57,10 @@ closeout gate 用来回答两件事：
 因此，`closeout check` 至少要能区分：
 
 - 该 issue 已由其对应实现进入 `closed_out`
+- 该 issue 的对应实现已 merged，但 issue 仍 open，需要 `reconciliation sync`
 - 该 issue 的实现已被其他 merged work `absorbed`，但控制面尚未完成 closeout sync
 - 该 issue 仍保留独立剩余缺口，不能被视为 `absorbed`
+- GitHub host signal 不可读或互相冲突，必须进入 `manual-reconciliation`
 
 ## 4. `sync` 最小动作
 

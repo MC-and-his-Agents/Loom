@@ -3748,13 +3748,19 @@ def make_reconciliation_finding(
     subject: str,
     evidence: dict[str, Any],
     recommended_action: str,
+    category: str = "drift",
+    fallback_to: str | None = None,
 ) -> dict[str, Any]:
+    if fallback_to is None:
+        fallback_to = "manual-reconciliation" if severity == "block" else "reconciliation-sync"
     return {
+        "category": category,
         "kind": kind,
         "severity": severity,
         "subject": subject,
         "evidence": evidence,
         "recommended_action": recommended_action,
+        "fallback_to": fallback_to,
     }
 
 
@@ -3824,13 +3830,13 @@ def reconciliation_audit_payload(
                     merge_commit_sha = oid
                     merge_commit_in_main = contains_merged_commit(target_root, merge_commit_sha)
 
-    absorbed_issue = False
+    merged_issue_open = False
     if issue_payload is not None and pr_payload is not None:
         if issue_payload.get("state") == "OPEN" and pr_payload.get("state") == "MERGED" and merge_commit_sha and merge_commit_in_main:
-            absorbed_issue = True
+            merged_issue_open = True
             findings.append(
                 make_reconciliation_finding(
-                    kind="absorbed_but_open",
+                    kind="merged_but_open",
                     severity="fix-needed",
                     subject=f"issue #{issue_number}",
                     evidence={
@@ -3840,7 +3846,7 @@ def reconciliation_audit_payload(
                         "merge_commit": merge_commit_sha,
                         "merge_commit_in_main": merge_commit_in_main,
                     },
-                    recommended_action="close the absorbed issue or run reconciliation sync after reviewing the evidence.",
+                    recommended_action="close the merged issue or run reconciliation sync after reviewing the evidence.",
                 )
             )
 
@@ -3866,7 +3872,7 @@ def reconciliation_audit_payload(
                 if child_state == "CLOSED":
                     resolved_children.append(child)
                     continue
-                if child_number == issue_number and absorbed_issue:
+                if child_number == issue_number and merged_issue_open:
                     resolved_children.append(child)
                     continue
                 unresolved_children.append(child)
@@ -3929,7 +3935,7 @@ def reconciliation_audit_payload(
             }
 
             if issue_number is not None:
-                expected_done = issue_payload is not None and (issue_payload.get("state") == "CLOSED" or absorbed_issue)
+                expected_done = issue_payload is not None and (issue_payload.get("state") == "CLOSED" or merged_issue_open)
                 if issue_item is None:
                     project_drift_details.append(
                         {
@@ -3994,12 +4000,23 @@ def reconciliation_audit_payload(
         )
 
     if missing_inputs:
+        findings.append(
+            make_reconciliation_finding(
+                kind="host_signal_drift",
+                severity="block",
+                subject="github control plane",
+                evidence={"missing_inputs": missing_inputs},
+                recommended_action="restore readable GitHub issue, PR, project, or repository signals before closeout.",
+                category="drift",
+                fallback_to="manual-reconciliation",
+            )
+        )
         result = "block"
         summary = "reconciliation audit could not complete because required GitHub inputs were missing."
     else:
         result = reconciliation_result(findings)
         summary = (
-            "reconciliation audit found no absorbed-but-open, parent-drift, or project-drift findings."
+            "reconciliation audit found no merged-but-open, absorbed-but-open, parent-drift, host-signal-drift, or project-drift findings."
             if result == "pass"
             else "reconciliation audit found GitHub drift that must be reviewed before closeout."
         )
@@ -4037,7 +4054,7 @@ def reconciliation_sync_plan(audit_payload: dict[str, Any]) -> tuple[list[dict[s
         evidence = finding.get("evidence")
         if severity != "fix-needed":
             continue
-        if kind == "absorbed_but_open":
+        if kind in {"merged_but_open", "absorbed_but_open"}:
             plan.append(
                 {
                     "kind": kind,
