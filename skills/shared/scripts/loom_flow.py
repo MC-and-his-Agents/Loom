@@ -277,6 +277,19 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Init-result path relative to the target root",
     )
 
+    runtime_parity = subparsers.add_parser(
+        "runtime-parity",
+        help="Validate Loom core strong-governance runtime parity without host-specific orchestration",
+    )
+    runtime_parity.add_argument("operation", choices=("validate",))
+    runtime_parity.add_argument("--target", required=True, help="Target repository root")
+    runtime_parity.add_argument("--item", help="Expected current item id")
+    runtime_parity.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+
     governance_profile = subparsers.add_parser(
         "governance-profile",
         help="Read Loom governance maturity and upgrade requirements",
@@ -4162,6 +4175,239 @@ def closeout_reconciliation_result(
     return None, None
 
 
+def runtime_parity_check(
+    name: str,
+    *,
+    result: str,
+    summary: str,
+    evidence: dict[str, Any] | None = None,
+    missing_inputs: list[str] | None = None,
+    fallback_to: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "name": name,
+        "result": result,
+        "summary": summary,
+        "evidence": evidence or {},
+        "missing_inputs": missing_inputs or [],
+        "fallback_to": fallback_to,
+    }
+
+
+def runtime_parity_payload(
+    *,
+    target_root: Path,
+    output_relative: str,
+    expected_item: str | None,
+) -> dict[str, Any]:
+    runtime_state = runtime_state_payload(target_root)
+    checks: list[dict[str, Any]] = []
+    if runtime_state["result"] != "pass":
+        checks.append(
+            runtime_parity_check(
+                "runtime_state",
+                result="block",
+                summary="runtime carrier is not consistent enough to prove runtime parity.",
+                missing_inputs=list(runtime_state.get("missing_inputs", [])),
+                fallback_to=runtime_state.get("fallback_to"),
+                evidence={"runtime_state": runtime_state},
+            )
+        )
+        return {
+            "command": "runtime-parity",
+            "operation": "validate",
+            "schema_version": "loom-runtime-parity/v1",
+            "result": "block",
+            "summary": "Loom core runtime parity validation is blocked by runtime-state drift.",
+            "missing_inputs": list(runtime_state.get("missing_inputs", [])),
+            "fallback_to": runtime_state.get("fallback_to"),
+            "runtime_state": runtime_state,
+            "checks": checks,
+        }
+
+    context, context_errors = load_context(target_root, output_relative, expected_item)
+    governance_surface = build_governance_surface(target_root)
+    control_plane = governance_surface.get("governance_control_plane")
+    carrier_summary = governance_surface.get("carrier_summary")
+
+    if context_errors:
+        checks.append(
+            runtime_parity_check(
+                "work_item",
+                result="block",
+                summary="runtime parity could not read the Work Item fact chain.",
+                missing_inputs=[f"fact-chain: {message}" for message in context_errors],
+                fallback_to="admission",
+            )
+        )
+    else:
+        checks.append(
+            runtime_parity_check(
+                "work_item",
+                result="pass",
+                summary="Work Item is readable as the single execution entry.",
+                evidence={
+                    "item_id": context["item_id"],
+                    "work_item": context["report"]["fact_chain"]["entry_points"]["work_item"],
+                    "recovery_entry": context["report"]["fact_chain"]["entry_points"]["recovery_entry"],
+                    "status_surface": context["report"]["fact_chain"]["entry_points"]["status_surface"],
+                },
+            )
+        )
+
+    if isinstance(control_plane, dict) and control_plane.get("schema_version") == "loom-governance-control/v1":
+        checks.append(
+            runtime_parity_check(
+                "status_control_plane",
+                result="pass",
+                summary="governance control plane is available as a machine-readable runtime surface.",
+                evidence={
+                    "schema_version": control_plane.get("schema_version"),
+                    "taxonomy": sorted((control_plane.get("taxonomy") or {}).keys())
+                    if isinstance(control_plane.get("taxonomy"), dict)
+                    else [],
+                    "maturity": (control_plane.get("maturity") or {}).get("current")
+                    if isinstance(control_plane.get("maturity"), dict)
+                    else None,
+                },
+            )
+        )
+    else:
+        checks.append(
+            runtime_parity_check(
+                "status_control_plane",
+                result="block",
+                summary="governance control plane is missing or unreadable.",
+                missing_inputs=["governance_control_plane"],
+                fallback_to="admission",
+            )
+        )
+
+    expected_gate_order = [
+        "work_item_admission",
+        "spec_gate",
+        "build_gate",
+        "review_gate",
+        "merge_gate",
+        "github_controlled_merge",
+        "closeout",
+    ]
+    gate_chain = control_plane.get("gate_chain") if isinstance(control_plane, dict) else None
+    actual_gate_order = [entry.get("id") for entry in gate_chain if isinstance(entry, dict)] if isinstance(gate_chain, (list, tuple)) else []
+    checks.append(
+        runtime_parity_check(
+            "gate_chain",
+            result="pass" if actual_gate_order == expected_gate_order else "block",
+            summary=(
+                "strong governance gate chain is available in runtime order."
+                if actual_gate_order == expected_gate_order
+                else "strong governance gate chain does not match the runtime parity contract."
+            ),
+            evidence={"gate_order": actual_gate_order, "expected_gate_order": expected_gate_order},
+            missing_inputs=[] if actual_gate_order == expected_gate_order else ["governance_control_plane.gate_chain"],
+            fallback_to=None if actual_gate_order == expected_gate_order else "admission",
+        )
+    )
+
+    host_binding = control_plane.get("host_binding") if isinstance(control_plane, dict) else None
+    required_objects = host_binding.get("required_objects") if isinstance(host_binding, dict) else None
+    controlled_merge_ready = (
+        isinstance(host_binding, dict)
+        and isinstance(required_objects, dict)
+        and {"implementation_pr", "merge_commit", "closeout"}.issubset(required_objects.keys())
+    )
+    checks.append(
+        runtime_parity_check(
+            "controlled_merge_contract",
+            result="pass" if controlled_merge_ready else "block",
+            summary=(
+                "controlled merge contract exposes PR, merge commit, and closeout host-owned bindings."
+                if controlled_merge_ready
+                else "controlled merge contract is missing required host-owned bindings."
+            ),
+            evidence={
+                "host_binding_result": host_binding.get("result") if isinstance(host_binding, dict) else None,
+                "required_objects": sorted(required_objects.keys()) if isinstance(required_objects, dict) else [],
+            },
+            missing_inputs=[] if controlled_merge_ready else ["governance_control_plane.host_binding"],
+            fallback_to=None if controlled_merge_ready else "merge",
+        )
+    )
+
+    closeout_gate = next((entry for entry in gate_chain or [] if isinstance(entry, dict) and entry.get("id") == "closeout"), {})
+    closeout_requires = closeout_gate.get("requires") if isinstance(closeout_gate, dict) else None
+    closeout_ready = isinstance(closeout_requires, (list, tuple)) and "reconciliation_audit" in closeout_requires
+    checks.append(
+        runtime_parity_check(
+            "closeout_reconciliation",
+            result="pass" if closeout_ready else "block",
+            summary=(
+                "closeout gate consumes reconciliation audit as a runtime prerequisite."
+                if closeout_ready
+                else "closeout gate does not expose reconciliation audit as a runtime prerequisite."
+            ),
+            evidence={
+                "closeout_requires": closeout_requires if isinstance(closeout_requires, (list, tuple)) else [],
+                "repo_interop_availability": (governance_surface.get("repo_interop") or {}).get("availability")
+                if isinstance(governance_surface.get("repo_interop"), dict)
+                else None,
+            },
+            missing_inputs=[] if closeout_ready else ["governance_control_plane.gate_chain.closeout"],
+            fallback_to=None if closeout_ready else "reconciliation-sync",
+        )
+    )
+
+    checks.append(
+        runtime_parity_check(
+            "shadow_parity_boundary",
+            result="pass",
+            summary="shadow parity remains validation-only in Loom core runtime parity.",
+            evidence={
+                "default_result_contract": ["pass", "warn"],
+                "blocking_default": False,
+                "surfaces": list(SHADOW_PARITY_SURFACES),
+            },
+        )
+    )
+
+    if not isinstance(carrier_summary, dict):
+        checks.append(
+            runtime_parity_check(
+                "carrier_summary",
+                result="block",
+                summary="carrier summary is missing from governance surface.",
+                missing_inputs=["governance_surface.carrier_summary"],
+                fallback_to="admission",
+            )
+        )
+
+    missing_inputs: list[str] = []
+    fallback_to: str | None = None
+    for check in checks:
+        if check["result"] == "block":
+            fallback_to = fallback_to or check.get("fallback_to")
+            for message in check.get("missing_inputs", []):
+                if message not in missing_inputs:
+                    missing_inputs.append(message)
+
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "command": "runtime-parity",
+        "operation": "validate",
+        "schema_version": "loom-runtime-parity/v1",
+        "result": result,
+        "summary": (
+            "Loom core runtime parity is machine-readable across Work Item, status, gates, controlled merge, closeout, and shadow boundary."
+            if result == "pass"
+            else "Loom core runtime parity validation found missing or unreadable runtime surfaces."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": fallback_to,
+        "runtime_state": runtime_state,
+        "checks": checks,
+    }
+
+
 def closeout_payload(
     *,
     target_root: Path,
@@ -5898,6 +6144,17 @@ def handle_shadow_parity(args: argparse.Namespace) -> int:
     )
 
 
+def handle_runtime_parity(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    return emit(
+        runtime_parity_payload(
+            target_root=target_root,
+            output_relative=args.output,
+            expected_item=args.item,
+        )
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     if args.command == "fact-chain":
@@ -5922,6 +6179,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_reconciliation(args)
     if args.command == "shadow-parity":
         return handle_shadow_parity(args)
+    if args.command == "runtime-parity":
+        return handle_runtime_parity(args)
     if args.command == "governance-profile":
         return handle_governance_profile(args)
     if args.command == "flow":

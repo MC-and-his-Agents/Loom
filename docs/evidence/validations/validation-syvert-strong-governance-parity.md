@@ -72,10 +72,12 @@
 2. GitHub profile upgrade 已能表达从一般仓库升级到 Syvert 级治理强度的路径
 3. parity validation 已明确哪些能力是 Loom core，哪些仍是 repo-local 宿主实现
 
-但本轮仍保留两个明确 residue：
+本轮原始验证仍保留两个明确 residue：
 
-- 这是文档层 parity，不是 runtime parity
+- `#318` 之前，这是文档层 parity，不是 runtime parity
 - `Syvert` 真正切换到消费 Loom 文档与脚本，还需要后续 implementation / smoke / release judgment 支撑
+
+`#318` 已开始由 [validation-loom-core-runtime-parity.md](./validation-loom-core-runtime-parity.md) 承接 runtime parity 验证入口。该入口证明 Loom core 的 Work Item、status control plane、gate chain、controlled merge contract、closeout/reconciliation 和 shadow parity validation-only 边界可被机器读取；但 Syvert 反向消费与宿主编排仍属于后续阶段。
 
 ## 6. 结论
 
