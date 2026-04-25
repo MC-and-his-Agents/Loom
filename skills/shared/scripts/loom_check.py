@@ -92,6 +92,7 @@ CORE_DOCS = (
     "docs/methodology/templates/pull-request.md",
     "docs/evidence/extraction-ledger.md",
     "docs/evidence/landing-map.md",
+    "docs/evidence/validations/validation-closeout-reconciliation-blocking-gate.md",
     "docs/evidence/validations/validation-loom-core-runtime-parity.md",
     "docs/evidence/validations/validation-syvert-strong-governance-parity.md",
     "docs/adoption/rationale.md",
@@ -1118,10 +1119,14 @@ def require_reconciliation_payload(
         if not isinstance(finding, dict):
             failures.append(Failure(category, f"{context} reconciliation findings must be JSON objects"))
             continue
-        if finding.get("kind") not in {"absorbed_but_open", "parent_drift", "project_drift"}:
+        if finding.get("category") not in {"drift", "gate_failure"}:
+            failures.append(Failure(category, f"{context} reconciliation finding category must stay within the stable taxonomy"))
+        if finding.get("kind") not in {"merged_but_open", "absorbed_but_open", "parent_drift", "project_drift", "host_signal_drift"}:
             failures.append(Failure(category, f"{context} reconciliation finding kind must stay within the stable contract"))
         if finding.get("severity") not in {"warn", "fix-needed", "block"}:
             failures.append(Failure(category, f"{context} reconciliation finding severity must stay within the stable contract"))
+        if finding.get("fallback_to") not in {"reconciliation-sync", "manual-reconciliation", None}:
+            failures.append(Failure(category, f"{context} reconciliation finding fallback_to must stay within the stable contract"))
         if not isinstance(finding.get("subject"), str) or not finding.get("subject"):
             failures.append(Failure(category, f"{context} reconciliation findings must include non-empty `subject`"))
         if not isinstance(finding.get("evidence"), dict):
@@ -4692,18 +4697,20 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 "summary": "warn",
                 "missing_inputs": [],
                 "fallback_to": "manual-reconciliation",
-                "findings": [
-                    {
-                        "kind": "project_drift",
-                        "severity": "warn",
-                        "subject": "project 5",
-                        "evidence": {},
-                        "recommended_action": "review warning",
-                    }
-                ],
+                    "findings": [
+                        {
+                            "category": "drift",
+                            "kind": "project_drift",
+                            "severity": "warn",
+                            "subject": "project 5",
+                            "evidence": {},
+                            "recommended_action": "review warning",
+                            "fallback_to": "reconciliation-sync",
+                        }
+                    ],
+                },
             },
-        },
-    )
+        )
     if warn_payload_failures:
         failures.append(
             Failure(
@@ -4711,6 +4718,50 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 "`closeout-warn-does-not-block` synthetic payload must allow non-blocking reconciliation warnings",
             )
         )
+
+    valid_reconciliation_samples = [
+        ("merged_but_open", "fix-needed", "reconciliation-sync"),
+        ("absorbed_but_open", "fix-needed", "reconciliation-sync"),
+        ("parent_drift", "block", "manual-reconciliation"),
+        ("host_signal_drift", "block", "manual-reconciliation"),
+    ]
+    for kind, reconciliation_result_value, fallback_to in valid_reconciliation_samples:
+        sample_failures = []
+        require_closeout_reconciliation_contract(
+            sample_failures,
+            category="daily-execution-cli",
+            context=f"`closeout-{kind}`",
+            payload={
+                "result": "block",
+                "fallback_to": fallback_to,
+                "reconciliation": {
+                    "command": "reconciliation",
+                    "operation": "audit",
+                    "result": reconciliation_result_value,
+                    "summary": kind,
+                    "missing_inputs": [] if kind != "host_signal_drift" else ["github control plane"],
+                    "fallback_to": "manual-reconciliation",
+                    "findings": [
+                        {
+                            "category": "drift",
+                            "kind": kind,
+                            "severity": reconciliation_result_value,
+                            "subject": "closeout sample",
+                            "evidence": {},
+                            "recommended_action": "reconcile closeout sample",
+                            "fallback_to": fallback_to,
+                        }
+                    ],
+                },
+            },
+        )
+        if sample_failures:
+            failures.append(
+                Failure(
+                    "daily-execution-cli",
+                    f"`closeout-{kind}` synthetic payload must satisfy closeout reconciliation validation",
+                )
+            )
 
     return failures
 

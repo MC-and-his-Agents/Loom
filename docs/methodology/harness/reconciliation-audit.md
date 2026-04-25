@@ -13,16 +13,18 @@
 
 ## 3. 固定 findings
 
-当前冻结四类 finding：
+当前冻结五类 finding：
 
+- `merged_but_open`
+  - 当前 issue 对应的实现 PR 已 merged 且 merge commit 已进入主干，但 issue 仍 open
 - `absorbed_but_open`
-  - merge 已吸收实现，但事项仍 open
+  - 当前事项已被其他 merged work 证明吸收，但控制面仍 open
 - `parent_drift`
   - parent 与 child 的收口结论不一致
 - `project_drift`
   - issue / PR / project 状态未对齐
-- `merge_signal_drift`
-  - PR、merge commit、主干或 closeout basis 互相冲突
+- `host_signal_drift`
+  - GitHub issue、PR、project、branch 或 repository 信号不可读或互相冲突
 
 每条 finding 至少表达：
 
