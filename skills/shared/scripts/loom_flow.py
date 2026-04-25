@@ -312,8 +312,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "governance-profile",
         help="Read Loom governance maturity and upgrade requirements",
     )
-    governance_profile.add_argument("operation", choices=("status", "upgrade-plan", "binding"))
+    governance_profile.add_argument("operation", choices=("status", "upgrade-plan", "upgrade", "binding"))
     governance_profile.add_argument("--target", required=True, help="Target repository root")
+    governance_profile.add_argument("--to", choices=("standard", "strong"), help="Target maturity for governance-profile upgrade")
+    governance_profile.add_argument("--dry-run", action="store_true", default=True, help="Preview upgrade actions without writing files; this is the default")
+    governance_profile.add_argument("--apply", dest="dry_run", action="store_false", help="Apply Loom-owned scaffold writes")
+    governance_profile.add_argument("--force", action="store_true", help="Allow replacement of existing Loom-owned scaffold files during upgrade apply")
     governance_profile.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
     governance_profile.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
     governance_profile.add_argument("--phase", type=int, help="GitHub Phase issue number")
@@ -322,7 +326,6 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     governance_profile.add_argument("--pr", type=int, help="GitHub implementation PR number")
     governance_profile.add_argument("--branch", help="GitHub branch name bound to the work item")
     governance_profile.add_argument("--sync", action="store_true", help="Preview host binding repairs; writes are intentionally disabled in this phase")
-    governance_profile.add_argument("--dry-run", action="store_true", help="Preview binding sync actions without changing GitHub state")
 
     flow = subparsers.add_parser("flow", help="Run a bundled high-frequency Loom flow")
     flow.add_argument("operation", choices=("pre-review", "review", "spec-review", "resume", "handoff", "merge-ready"))
@@ -3573,6 +3576,141 @@ def governance_profile_payload(target_root: Path, operation: str) -> dict[str, A
     }
 
 
+UPGRADE_SCAFFOLD: dict[str, dict[str, str]] = {
+    ".loom/companion/manifest.json": json.dumps(
+        {
+            "schema_version": "loom-repo-companion-manifest/v1",
+            "companion_entry": ".loom/companion/AGENTS.md",
+            "repo_interface": ".loom/companion/repo-interface.json",
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+    + "\n",
+    ".loom/companion/repo-interface.json": json.dumps(
+        {
+            "schema_version": "loom-repo-interface/v2",
+            "companion_entry": ".loom/companion/AGENTS.md",
+            "repo_specific_requirements": {"review": [], "merge_ready": [], "closeout": []},
+            "specialized_gates": [],
+            "metadata_contract": {"fields": []},
+            "context_schema": {"fields": []},
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+    + "\n",
+    ".loom/companion/interop.json": json.dumps(
+        {
+            "schema_version": "loom-repo-interop/v1",
+            "host_adapters": [],
+            "repo_native_carriers": [],
+            "shadow_surfaces": {},
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+    + "\n",
+    ".loom/companion/AGENTS.md": "# Loom Repo Companion\n\n本文件承接 repo-local governance residue；Loom core 与 GitHub profile 规则仍以上游合同为准。\n",
+}
+
+
+def governance_upgrade_actions(target_root: Path, target_level: str, maturity: dict[str, Any]) -> list[dict[str, Any]]:
+    missing_by_level = maturity.get("missing_by_level")
+    missing = missing_by_level.get(target_level, []) if isinstance(missing_by_level, dict) else []
+    actions: list[dict[str, Any]] = []
+    for relative, content in UPGRADE_SCAFFOLD.items():
+        path = target_root / relative
+        owner = "loom-owned" if relative.startswith(".loom/") else "repo-owned"
+        actions.append(
+            {
+                "action": "write_scaffold" if not path.exists() else "keep_existing",
+                "path": relative,
+                "owner": owner,
+                "status": "present" if path.exists() else "planned",
+                "reason": "required by governance profile upgrade path",
+                "bytes": len(content.encode("utf-8")),
+            }
+        )
+    for item in missing if isinstance(missing, list) else []:
+        actions.append(
+            {
+                "action": "satisfy_missing_input",
+                "id": item,
+                "owner": "loom-owned" if str(item) in {"repo_interface", "repo_interop"} else "profile",
+                "status": "planned",
+                "reason": f"`{target_level}` maturity currently reports this missing input.",
+            }
+        )
+    return actions
+
+
+def governance_profile_upgrade_payload(
+    *,
+    target_root: Path,
+    target_level: str | None,
+    dry_run: bool,
+    force: bool,
+) -> dict[str, Any]:
+    if target_level is None:
+        return {
+            "command": "governance-profile",
+            "operation": "upgrade",
+            "result": "block",
+            "summary": "governance profile upgrade requires `--to standard` or `--to strong`.",
+            "missing_inputs": ["to"],
+            "fallback_to": "adoption",
+        }
+    base = governance_profile_payload(target_root, "upgrade-plan")
+    maturity = base.get("maturity") if isinstance(base.get("maturity"), dict) else {}
+    actions = governance_upgrade_actions(target_root, target_level, maturity if isinstance(maturity, dict) else {})
+    blockers: list[str] = []
+    written_files: list[str] = []
+    if not dry_run:
+        for action in actions:
+            if action.get("action") != "write_scaffold":
+                continue
+            relative = action.get("path")
+            if not isinstance(relative, str):
+                continue
+            if action.get("owner") != "loom-owned":
+                blockers.append(f"{relative} is repo-owned")
+                continue
+            path = target_root / relative
+            if path.exists() and not force:
+                blockers.append(f"{relative} already exists; use --force to replace Loom-owned scaffold")
+                continue
+            content = UPGRADE_SCAFFOLD.get(relative)
+            if content is None:
+                blockers.append(f"{relative} has no scaffold content")
+                continue
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+            written_files.append(relative)
+    result = "block" if blockers else "pass"
+    return {
+        "command": "governance-profile",
+        "operation": "upgrade",
+        "schema_version": "loom-governance-upgrade/v1",
+        "result": result,
+        "summary": (
+            f"governance profile upgrade toward `{target_level}` produced a dry-run action plan."
+            if dry_run and result == "pass"
+            else f"governance profile upgrade toward `{target_level}` applied Loom-owned scaffold writes."
+            if result == "pass"
+            else f"governance profile upgrade toward `{target_level}` is blocked by unsafe writes."
+        ),
+        "missing_inputs": blockers,
+        "fallback_to": None if result == "pass" else "adoption",
+        "target_maturity": target_level,
+        "dry_run": dry_run,
+        "force": force,
+        "actions": actions,
+        "written_files": written_files,
+        "maturity": maturity,
+    }
+
+
 def issue_binding_entry(role: str, number: int | None, payload: dict[str, Any] | None, errors: list[str]) -> dict[str, Any]:
     status = "present" if payload is not None else "missing"
     if errors:
@@ -3800,6 +3938,15 @@ def github_binding_payload(
 
 def handle_governance_profile(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
+    if args.operation == "upgrade":
+        return emit(
+            governance_profile_upgrade_payload(
+                target_root=target_root,
+                target_level=args.to,
+                dry_run=args.dry_run,
+                force=args.force,
+            )
+        )
     if args.operation == "binding":
         return emit(
             github_binding_payload(
