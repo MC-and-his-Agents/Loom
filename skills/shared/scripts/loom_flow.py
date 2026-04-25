@@ -276,6 +276,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=".loom/bootstrap/init-result.json",
         help="Init-result path relative to the target root",
     )
+    shadow.add_argument(
+        "--mode",
+        choices=("validation-only", "blocking"),
+        default="validation-only",
+        help="Shadow parity enforcement mode; defaults to validation-only.",
+    )
+    shadow.add_argument(
+        "--blocking",
+        action="store_true",
+        help="Shortcut for --mode blocking. This is explicit opt-in and never the default.",
+    )
 
     runtime_parity = subparsers.add_parser(
         "runtime-parity",
@@ -543,8 +554,11 @@ def shadow_parity_report(
     empty_report = {
         "surface": surface,
         "result": "unreadable",
+        "classification": "gate_failure",
+        "blocking": False,
         "summary": "shadow parity could not be evaluated for this surface.",
         "missing_inputs": [],
+        "recommended_action": "restore the declared Loom and repo-native shadow parity locators before treating this surface as authoritative.",
         "host_adapters": [],
         "repo_native_carriers": [],
         "loom_surface": {
@@ -633,8 +647,11 @@ def shadow_parity_report(
         return {
             "surface": surface,
             "result": "match",
+            "classification": None,
+            "blocking": False,
             "summary": "Loom and repo-native surfaces report the same normalized result.",
             "missing_inputs": [],
+            "recommended_action": "no shadow parity action required.",
             "host_adapters": relevant_host_adapters,
             "repo_native_carriers": relevant_repo_native_carriers,
             "loom_surface": loom_surface,
@@ -643,8 +660,11 @@ def shadow_parity_report(
     return {
         "surface": surface,
         "result": "mismatch",
+        "classification": "drift",
+        "blocking": False,
         "summary": "Loom and repo-native surfaces disagree on the normalized result.",
         "missing_inputs": [],
+        "recommended_action": "resolve the parity mismatch or explicitly choose the authoritative surface outside repo interop before enabling blocking consumption.",
         "host_adapters": relevant_host_adapters,
         "repo_native_carriers": relevant_repo_native_carriers,
         "loom_surface": loom_surface,
@@ -6122,6 +6142,7 @@ def handle_shadow_parity(args: argparse.Namespace) -> int:
     governance_surface = build_governance_surface(target_root)
     repo_interop = governance_surface.get("repo_interop")
     requested_surfaces = SHADOW_PARITY_SURFACES if args.surface == "all" else (args.surface,)
+    mode = "blocking" if args.blocking else args.mode
     reports = [
         shadow_parity_report(
             repo_interop,
@@ -6131,9 +6152,18 @@ def handle_shadow_parity(args: argparse.Namespace) -> int:
         for surface in requested_surfaces
     ]
 
-    result = "pass" if reports and all(report["result"] == "match" for report in reports) else "warn"
+    all_match = bool(reports) and all(report["result"] == "match" for report in reports)
+    blocking_reports = [report for report in reports if report.get("result") != "match"]
+    if mode == "blocking":
+        result = "pass" if all_match else "block"
+        for report in blocking_reports:
+            report["blocking"] = True
+    else:
+        result = "pass" if all_match else "warn"
     if result == "pass":
         summary = "shadow parity matches across all requested surfaces."
+    elif mode == "blocking":
+        summary = "shadow parity blocking mode found mismatch or unreadable surfaces."
     else:
         summaries = {report["result"] for report in reports}
         if "mismatch" in summaries:
@@ -6150,10 +6180,12 @@ def handle_shadow_parity(args: argparse.Namespace) -> int:
     return emit(
         {
             "command": "shadow-parity",
+            "mode": mode,
+            "blocking": mode == "blocking",
             "result": result,
             "summary": summary,
             "missing_inputs": missing_inputs,
-            "fallback_to": None,
+            "fallback_to": "manual-reconciliation" if result == "block" else None,
             "runtime_state": runtime_state,
             "governance_surface": governance_surface,
             "reports": reports,

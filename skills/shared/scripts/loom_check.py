@@ -94,6 +94,7 @@ CORE_DOCS = (
     "docs/evidence/landing-map.md",
     "docs/evidence/validations/validation-closeout-reconciliation-blocking-gate.md",
     "docs/evidence/validations/validation-loom-core-runtime-parity.md",
+    "docs/evidence/validations/validation-shadow-parity-blocking-gate.md",
     "docs/evidence/validations/validation-syvert-strong-governance-parity.md",
     "docs/adoption/rationale.md",
     "docs/adoption/routing-and-checkpoints.md",
@@ -969,10 +970,17 @@ def require_shadow_parity_payload(
         return
     if payload.get("command") != "shadow-parity":
         failures.append(Failure(category, f"{context} must report `command: shadow-parity`"))
-    if payload.get("result") not in {"pass", "warn"}:
-        failures.append(Failure(category, f"{context} result must be `pass` or `warn`"))
-    if payload.get("fallback_to") is not None:
-        failures.append(Failure(category, f"{context} fallback_to must remain `null`"))
+    mode = payload.get("mode", "validation-only")
+    if mode not in {"validation-only", "blocking"}:
+        failures.append(Failure(category, f"{context} mode must be `validation-only` or `blocking`"))
+    if payload.get("blocking") != (mode == "blocking"):
+        failures.append(Failure(category, f"{context} blocking flag must match mode"))
+    allowed_results = {"pass", "block"} if mode == "blocking" else {"pass", "warn"}
+    if payload.get("result") not in allowed_results:
+        failures.append(Failure(category, f"{context} result must stay within the stable mode-specific contract"))
+    expected_fallbacks = {"manual-reconciliation"} if payload.get("result") == "block" else {None}
+    if payload.get("fallback_to") not in expected_fallbacks:
+        failures.append(Failure(category, f"{context} fallback_to must match the shadow parity enforcement mode"))
     if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
         failures.append(Failure(category, f"{context} must include non-empty `summary`"))
     if not isinstance(payload.get("missing_inputs"), list):
@@ -1008,6 +1016,14 @@ def require_shadow_parity_payload(
             failures.append(Failure(category, f"{context} reports[{index}] must declare a known surface"))
         if report.get("result") not in {"match", "mismatch", "unreadable"}:
             failures.append(Failure(category, f"{context} reports[{index}] result must stay within the stable contract"))
+        if report.get("classification") not in {None, "drift", "gate_failure"}:
+            failures.append(Failure(category, f"{context} reports[{index}] classification must stay within the stable contract"))
+        if not isinstance(report.get("blocking"), bool):
+            failures.append(Failure(category, f"{context} reports[{index}] must include boolean `blocking`"))
+        if not isinstance(report.get("recommended_action"), str) or not report.get("recommended_action"):
+            failures.append(Failure(category, f"{context} reports[{index}] must include non-empty `recommended_action`"))
+        if mode == "blocking" and report.get("result") != "match" and report.get("blocking") is not True:
+            failures.append(Failure(category, f"{context} reports[{index}] must block non-matching reports in blocking mode"))
         if not isinstance(report.get("summary"), str) or not report.get("summary"):
             failures.append(Failure(category, f"{context} reports[{index}] must include non-empty `summary`"))
         if not isinstance(report.get("missing_inputs"), list):
@@ -5301,6 +5317,23 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
             if parity_payload.get("result") != "pass":
                 failures.append(Failure("repo-interop", "`shadow-parity` must pass when all declared surfaces match"))
 
+        blocking_match_payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "shadow-parity", "--target", str(present_target), "--blocking"],
+        )
+        if error:
+            failures.append(Failure("repo-interop", f"`shadow-parity --blocking` match sample failed: {error}"))
+        else:
+            require_shadow_parity_payload(
+                failures,
+                category="repo-interop",
+                context="`shadow-parity --blocking` match sample",
+                payload=blocking_match_payload,
+                expected_reports=4,
+            )
+            if blocking_match_payload.get("result") != "pass":
+                failures.append(Failure("repo-interop", "`shadow-parity --blocking` must pass when all declared surfaces match"))
+
         mismatch_target = base / "mismatch"
         shutil.copytree(present_target, mismatch_target)
         write_json(mismatch_target / ".loom/shadow/review-repo.json", {"decision": "block"})
@@ -5321,6 +5354,62 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
             reports = mismatch_payload.get("reports")
             if not isinstance(reports, list) or not reports or reports[0].get("result") != "mismatch":
                 failures.append(Failure("repo-interop", "`shadow-parity` mismatch sample must report `mismatch`"))
+
+        blocking_mismatch_payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "shadow-parity",
+                "--target",
+                str(mismatch_target),
+                "--surface",
+                "review",
+                "--mode",
+                "blocking",
+            ],
+        )
+        if error:
+            failures.append(Failure("repo-interop", f"`shadow-parity --mode blocking` mismatch sample failed: {error}"))
+        else:
+            require_shadow_parity_payload(
+                failures,
+                category="repo-interop",
+                context="`shadow-parity --mode blocking` mismatch sample",
+                payload=blocking_mismatch_payload,
+                expected_reports=1,
+            )
+            if blocking_mismatch_payload.get("result") != "block":
+                failures.append(Failure("repo-interop", "`shadow-parity --mode blocking` must block mismatches"))
+
+        unreadable_target = base / "unreadable"
+        shutil.copytree(present_target, unreadable_target)
+        (unreadable_target / ".loom/shadow/closeout-repo.json").unlink()
+        blocking_unreadable_payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "shadow-parity",
+                "--target",
+                str(unreadable_target),
+                "--surface",
+                "closeout",
+                "--blocking",
+            ],
+        )
+        if error:
+            failures.append(Failure("repo-interop", f"`shadow-parity --blocking` unreadable sample failed: {error}"))
+        else:
+            require_shadow_parity_payload(
+                failures,
+                category="repo-interop",
+                context="`shadow-parity --blocking` unreadable sample",
+                payload=blocking_unreadable_payload,
+                expected_reports=1,
+            )
+            if blocking_unreadable_payload.get("result") != "block":
+                failures.append(Failure("repo-interop", "`shadow-parity --blocking` must block unreadable surfaces"))
 
     return failures
 

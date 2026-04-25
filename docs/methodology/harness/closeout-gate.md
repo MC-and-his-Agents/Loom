@@ -53,6 +53,8 @@ closeout gate 用来回答两件事：
 - `fix-needed`：必须返回 `block`；先经 `reconciliation sync` 完成机械对齐，再重新执行 closeout check
 - `block`：必须返回 `block`；先消除硬冲突或缺失事实，且在 audit 重新达标前禁止任何 closeout sync 写入
 
+`shadow parity` 默认不进入 closeout 阻断面。只有 strong governance profile 或显式 opt-in 启用 blocking 消费时，closeout/review/merge-ready 才能把 shadow parity 的 `mismatch` / `unreadable` 当作阻断输入；启用点必须同时声明 owner、fallback、override path 与 authority-of-truth。
+
 这里的 `absorbed` 只表示 host merge 后可证明的实现吸收结论，不等于 `closed_out`。
 因此，`closeout check` 至少要能区分：
 
