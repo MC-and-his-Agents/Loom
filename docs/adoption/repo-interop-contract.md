@@ -123,12 +123,41 @@
 稳定约束：
 
 - parity compare 结果只允许 `match | mismatch | unreadable`
-- `shadow mode` 在本树内只做 validation / parity，不直接成为 merge gate
+- 默认 `shadow mode` 在本树内只做 validation / parity，不直接成为 merge gate
+- 只有显式 `blocking` 消费模式可以把 `mismatch` / `unreadable` 升级为阻断结果
 - `shadow_surfaces` 只描述比对入口，不声明“哪一方自动获胜”
 
-### 5.1 从 validation-only 升级前必须满足的证据标准
+### 5.1 blocking 消费模式
 
-在进入下一阶段之前，`shadow parity` 仍固定保持为 validation-only compare surface。
+`interop.json` 仍然只描述读取入口。它不得承载 blocking owner、override decision 或 final verdict。
+
+若 strong governance profile 显式启用 blocking 消费，启用点必须在 `interop.json` 之外声明：
+
+- owner
+- fallback
+- override path
+- authority-of-truth
+- live evidence
+
+默认命令仍是 validation-only：
+
+```bash
+python3 tools/loom_flow.py shadow-parity --target <repo>
+```
+
+blocking 模式必须显式开启：
+
+```bash
+python3 tools/loom_flow.py shadow-parity --target <repo> --blocking
+```
+
+blocking 模式只改变消费结果，不改变 `shadow_surfaces` schema：
+
+- `match` -> `pass`
+- `mismatch` -> `block`
+- `unreadable` -> `block`
+
+### 5.2 从默认 validation-only 升级前必须满足的证据标准
 
 要讨论是否从 validation-only 升级到更强治理面，必须同时满足以下条件：
 
@@ -151,13 +180,13 @@
 5. blocking ownership、override path、authority-of-truth 必须落在 `interop.json` 之外的权威合同
    - 例如 host action、closeout gate、review / checkpoint 合同
 
-只要以上任一条件未满足，`shadow parity` 就不得从 validation-only 升级。
+只要以上任一条件未满足，`shadow parity` 就不得成为默认 blocking gate。
 
-### 5.2 当前明确不做
+### 5.3 当前明确不做
 
 在本树当前阶段，明确不做以下升级：
 
-- 不把 `mismatch` 直接视为 blocking merge gate
+- 不把 `mismatch` 默认视为 blocking merge gate
 - 不把 `unreadable` 视为 repo-native 失败或 Loom 自动获胜
 - 不在 `interop.json` 中声明 blocking owner、override decision 或 final verdict
 - 不要求 `shadow parity` 代替 review、merge-ready 或 closeout 的正式 authority-of-truth
