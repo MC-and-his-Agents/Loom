@@ -92,6 +92,7 @@ CORE_DOCS = (
     "docs/methodology/templates/pull-request.md",
     "docs/evidence/extraction-ledger.md",
     "docs/evidence/landing-map.md",
+    "docs/evidence/validations/validation-loom-core-runtime-parity.md",
     "docs/evidence/validations/validation-syvert-strong-governance-parity.md",
     "docs/adoption/rationale.md",
     "docs/adoption/routing-and-checkpoints.md",
@@ -1162,6 +1163,68 @@ def require_closeout_reconciliation_contract(
             failures.append(Failure(category, f"{context} must point blocked reconciliation drift to `manual-reconciliation`"))
 
 
+def require_runtime_parity_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("command") != "runtime-parity":
+        failures.append(Failure(category, f"{context} must report `command: runtime-parity`"))
+    if payload.get("operation") != "validate":
+        failures.append(Failure(category, f"{context} must report `operation: validate`"))
+    if payload.get("schema_version") != "loom-runtime-parity/v1":
+        failures.append(Failure(category, f"{context} schema_version must be `loom-runtime-parity/v1`"))
+    if payload.get("result") not in {"pass", "block"}:
+        failures.append(Failure(category, f"{context} result must be `pass` or `block`"))
+    if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+        failures.append(Failure(category, f"{context} must include a non-empty `summary`"))
+    if not isinstance(payload.get("missing_inputs"), list):
+        failures.append(Failure(category, f"{context} must include `missing_inputs`"))
+    if payload.get("fallback_to") not in {None, "admission", "merge", "reconciliation-sync", "manual-runtime-reconciliation", "rebootstrap-runtime", "refresh-install", "loom-init"}:
+        failures.append(Failure(category, f"{context} fallback_to must stay within the stable runtime parity contract"))
+    require_runtime_state_payload(
+        failures,
+        category=category,
+        context=context,
+        payload=payload.get("runtime_state"),
+        expected_scene="repo-local-demo",
+        expected_carrier="repo-local-wrapper",
+        allowed_results={"pass"},
+    )
+    checks = payload.get("checks")
+    if not isinstance(checks, list):
+        failures.append(Failure(category, f"{context} must include `checks` as a list"))
+        return
+    required_checks = {
+        "work_item",
+        "status_control_plane",
+        "gate_chain",
+        "controlled_merge_contract",
+        "closeout_reconciliation",
+        "shadow_parity_boundary",
+    }
+    check_names = {check.get("name") for check in checks if isinstance(check, dict)}
+    if not required_checks.issubset(check_names):
+        failures.append(Failure(category, f"{context} must cover the stable runtime parity check set"))
+    for check in checks:
+        if not isinstance(check, dict):
+            failures.append(Failure(category, f"{context} checks must be JSON objects"))
+            continue
+        if check.get("result") not in {"pass", "block"}:
+            failures.append(Failure(category, f"{context} check `{check.get('name')}` result must be `pass` or `block`"))
+        if not isinstance(check.get("summary"), str) or not check.get("summary"):
+            failures.append(Failure(category, f"{context} check `{check.get('name')}` must include non-empty `summary`"))
+        if not isinstance(check.get("missing_inputs"), list):
+            failures.append(Failure(category, f"{context} check `{check.get('name')}` must include `missing_inputs`"))
+        if not isinstance(check.get("evidence"), dict):
+            failures.append(Failure(category, f"{context} check `{check.get('name')}` must include `evidence`"))
+
+
 def require_review_record_contract(
     failures: list[Failure],
     *,
@@ -2125,6 +2188,20 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             {"pass", "block"},
         ),
         (
+            "runtime-parity",
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "runtime-parity",
+                "validate",
+                "--target",
+                "examples/new-project",
+                "--item",
+                "INIT-0001",
+            ],
+            {"pass"},
+        ),
+        (
             "governance-profile-status",
             ["python3", "tools/loom_flow.py", "governance-profile", "status", "--target", "examples/new-project"],
             {"pass"},
@@ -2359,6 +2436,13 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures,
                 category="daily-execution-cli",
                 context="`loom_status`",
+                payload=payload,
+            )
+        if label == "runtime-parity":
+            require_runtime_parity_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`runtime-parity validate`",
                 payload=payload,
             )
         if label in {"governance-profile-status", "governance-profile-upgrade-plan"}:
