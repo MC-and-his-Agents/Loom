@@ -739,5 +739,36 @@
     },
     "summary": "repository is treated as new; Loom can plan the first governance carriers and bootstrap entrypoints without adding a second truth source.",
     "missing_inputs": []
+  },
+  "maturity_upgrade_path": {
+    "result": "block",
+    "current": "light",
+    "next": "standard",
+    "missing_inputs": [
+      "fr_work_item_layer",
+      "closeout_reconciliation_read"
+    ],
+    "missing_details": [
+      {
+        "id": "fr_work_item_layer",
+        "layer": "github-profile",
+        "required": true,
+        "defaulting": "profile",
+        "recommended_action": "declare the FR -> Work Item split through the GitHub profile upgrade path"
+      },
+      {
+        "id": "closeout_reconciliation_read",
+        "layer": "github-profile",
+        "required": true,
+        "defaulting": "profile",
+        "recommended_action": "install repo interop so closeout can consume reconciliation"
+      }
+    ],
+    "fallback_to": "adoption",
+    "upgrade_entry": "python3 .loom/bin/loom_flow.py governance-profile upgrade --target . --to standard --dry-run",
+    "validation_entries": [
+      "python3 .loom/bin/loom_flow.py governance-profile status --target .",
+      "python3 .loom/bin/loom_flow.py governance-profile upgrade-plan --target ."
+    ]
   }
 }
