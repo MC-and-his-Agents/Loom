@@ -94,6 +94,7 @@ CORE_DOCS = (
     "docs/evidence/landing-map.md",
     "docs/evidence/validations/validation-closeout-reconciliation-blocking-gate.md",
     "docs/evidence/validations/validation-github-profile-binding-orchestration.md",
+    "docs/evidence/validations/validation-github-profile-drift-reconciliation.md",
     "docs/evidence/validations/validation-loom-core-runtime-parity.md",
     "docs/evidence/validations/validation-shadow-parity-blocking-gate.md",
     "docs/evidence/validations/validation-syvert-strong-governance-parity.md",
@@ -1138,7 +1139,7 @@ def require_reconciliation_payload(
             continue
         if finding.get("category") not in {"drift", "gate_failure"}:
             failures.append(Failure(category, f"{context} reconciliation finding category must stay within the stable taxonomy"))
-        if finding.get("kind") not in {"merged_but_open", "absorbed_but_open", "parent_drift", "project_drift", "host_signal_drift"}:
+        if finding.get("kind") not in {"merged_but_open", "absorbed_but_open", "parent_drift", "project_drift", "host_signal_drift", "binding_failure", "merge_signal_drift"}:
             failures.append(Failure(category, f"{context} reconciliation finding kind must stay within the stable contract"))
         if finding.get("severity") not in {"warn", "fix-needed", "block"}:
             failures.append(Failure(category, f"{context} reconciliation finding severity must stay within the stable contract"))
@@ -1150,6 +1151,12 @@ def require_reconciliation_payload(
             failures.append(Failure(category, f"{context} reconciliation findings must include `evidence`"))
         if not isinstance(finding.get("recommended_action"), str) or not finding.get("recommended_action"):
             failures.append(Failure(category, f"{context} reconciliation findings must include non-empty `recommended_action`"))
+    binding = payload.get("binding")
+    if binding is not None:
+        if not isinstance(binding, dict):
+            failures.append(Failure(category, f"{context} binding must be an object when present"))
+        elif binding.get("schema_version") != "loom-github-binding/v1":
+            failures.append(Failure(category, f"{context} binding must use `loom-github-binding/v1`"))
 
 
 def require_closeout_reconciliation_contract(
@@ -4824,6 +4831,8 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         ("merged_but_open", "fix-needed", "reconciliation-sync"),
         ("absorbed_but_open", "fix-needed", "reconciliation-sync"),
         ("parent_drift", "block", "manual-reconciliation"),
+        ("binding_failure", "block", "manual-reconciliation"),
+        ("merge_signal_drift", "block", "manual-reconciliation"),
         ("host_signal_drift", "block", "manual-reconciliation"),
     ]
     for kind, reconciliation_result_value, fallback_to in valid_reconciliation_samples:
