@@ -12,6 +12,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from fact_chain_support import (
     STATUS_FIELDS,
@@ -305,8 +306,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "governance-profile",
         help="Read Loom governance maturity and upgrade requirements",
     )
-    governance_profile.add_argument("operation", choices=("status", "upgrade-plan"))
+    governance_profile.add_argument("operation", choices=("status", "upgrade-plan", "binding"))
     governance_profile.add_argument("--target", required=True, help="Target repository root")
+    governance_profile.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
+    governance_profile.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    governance_profile.add_argument("--phase", type=int, help="GitHub Phase issue number")
+    governance_profile.add_argument("--fr", type=int, help="GitHub FR issue number")
+    governance_profile.add_argument("--issue", type=int, help="GitHub Work Item issue number")
+    governance_profile.add_argument("--pr", type=int, help="GitHub implementation PR number")
+    governance_profile.add_argument("--branch", help="GitHub branch name bound to the work item")
+    governance_profile.add_argument("--sync", action="store_true", help="Preview host binding repairs; writes are intentionally disabled in this phase")
+    governance_profile.add_argument("--dry-run", action="store_true", help="Preview binding sync actions without changing GitHub state")
 
     flow = subparsers.add_parser("flow", help="Run a bundled high-frequency Loom flow")
     flow.add_argument("operation", choices=("pre-review", "review", "spec-review", "resume", "handoff", "merge-ready"))
@@ -837,6 +847,7 @@ def normalize_rest_issue(payload: dict[str, Any]) -> dict[str, Any]:
         "number": payload.get("number"),
         "state": github_issue_state(payload.get("state")),
         "title": payload.get("title"),
+        "body": payload.get("body"),
         "url": payload.get("html_url"),
     }
 
@@ -849,6 +860,7 @@ def normalize_rest_pr(payload: dict[str, Any]) -> dict[str, Any]:
         "number": payload.get("number"),
         "state": github_pr_state(payload),
         "title": payload.get("title"),
+        "body": payload.get("body"),
         "url": payload.get("html_url"),
         "isDraft": bool(payload.get("draft")),
         "mergedAt": payload.get("merged_at"),
@@ -871,6 +883,18 @@ def github_pr_payload(root: Path, owner: str, repo_name: str, pr_number: int) ->
     if errors or payload is None:
         return None, errors
     return normalize_rest_pr(payload), []
+
+
+def github_branch_payload(root: Path, owner: str, repo_name: str, branch_name: str) -> tuple[dict[str, Any] | None, list[str]]:
+    payload, errors = gh_rest_json(root, f"repos/{owner}/{repo_name}/branches/{quote(branch_name, safe='')}")
+    if errors or payload is None:
+        return None, errors
+    commit = payload.get("commit") if isinstance(payload.get("commit"), dict) else {}
+    return {
+        "name": payload.get("name") or branch_name,
+        "protected": bool(payload.get("protected")),
+        "commit": {"sha": commit.get("sha")} if isinstance(commit.get("sha"), str) else None,
+    }, []
 
 
 def gh_json_list(root: Path, args: list[str], key: str) -> tuple[list[dict[str, Any]], list[str]]:
@@ -3528,8 +3552,235 @@ def governance_profile_payload(target_root: Path, operation: str) -> dict[str, A
     }
 
 
+def issue_binding_entry(role: str, number: int | None, payload: dict[str, Any] | None, errors: list[str]) -> dict[str, Any]:
+    status = "present" if payload is not None else "missing"
+    if errors:
+        status = "unreadable"
+    return {
+        "role": role,
+        "number": number,
+        "status": status,
+        "state": payload.get("state") if payload else None,
+        "title": payload.get("title") if payload else None,
+        "url": payload.get("url") if payload else None,
+        "errors": errors,
+    }
+
+
+def text_mentions_issue(text: object, issue_number: int) -> bool:
+    if not isinstance(text, str):
+        return False
+    pattern = re.compile(rf"(?i)(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?|related)\s+#?{issue_number}\b|#{issue_number}\b")
+    return bool(pattern.search(text))
+
+
+def github_binding_payload(
+    *,
+    target_root: Path,
+    owner: str | None,
+    repo_name: str | None,
+    phase_number: int | None,
+    fr_number: int | None,
+    issue_number: int | None,
+    pr_number: int | None,
+    branch_name: str | None,
+    sync: bool,
+    dry_run: bool,
+) -> dict[str, Any]:
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    owner = owner or detected_owner
+    repo_name = repo_name or detected_repo
+    missing_inputs: list[str] = []
+    findings: list[dict[str, Any]] = []
+    repair_plan: list[dict[str, Any]] = []
+
+    if not owner or not repo_name:
+        missing_inputs.append("owner/repo")
+    if issue_number is None:
+        missing_inputs.append("work_item issue")
+    if sync and not dry_run:
+        missing_inputs.append("dry-run")
+        findings.append(
+            {
+                "category": "gate_failure",
+                "kind": "binding_failure",
+                "severity": "block",
+                "subject": "governance-profile binding sync",
+                "why_blocking": "binding sync is read-only in this phase unless --dry-run is set.",
+                "fallback_to": "github-profile-binding",
+                "evidence": {"sync": sync, "dry_run": dry_run},
+            }
+        )
+
+    phase_payload: dict[str, Any] | None = None
+    fr_payload: dict[str, Any] | None = None
+    issue_payload: dict[str, Any] | None = None
+    pr_payload: dict[str, Any] | None = None
+    branch_payload: dict[str, Any] | None = None
+    phase_errors: list[str] = []
+    fr_errors: list[str] = []
+    issue_errors: list[str] = []
+    pr_errors: list[str] = []
+    branch_errors: list[str] = []
+
+    if owner and repo_name:
+        if phase_number is not None:
+            phase_payload, phase_errors = github_issue_payload(target_root, owner, repo_name, phase_number)
+            missing_inputs.extend(f"phase: {message}" for message in phase_errors)
+        if fr_number is not None:
+            fr_payload, fr_errors = github_issue_payload(target_root, owner, repo_name, fr_number)
+            missing_inputs.extend(f"fr: {message}" for message in fr_errors)
+        if issue_number is not None:
+            issue_payload, issue_errors = github_issue_payload(target_root, owner, repo_name, issue_number)
+            missing_inputs.extend(f"work_item: {message}" for message in issue_errors)
+        if pr_number is not None:
+            pr_payload, pr_errors = github_pr_payload(target_root, owner, repo_name, pr_number)
+            missing_inputs.extend(f"pr: {message}" for message in pr_errors)
+
+    inferred_branch = branch_name
+    if inferred_branch is None and pr_payload is not None and isinstance(pr_payload.get("headRefName"), str):
+        inferred_branch = pr_payload.get("headRefName")
+    if owner and repo_name and inferred_branch:
+        branch_payload, branch_errors = github_branch_payload(target_root, owner, repo_name, inferred_branch)
+        missing_inputs.extend(f"branch: {message}" for message in branch_errors)
+
+    if issue_payload is not None and pr_payload is not None:
+        pr_body = pr_payload.get("body")
+        if not text_mentions_issue(pr_body, int(issue_payload.get("number") or issue_number or 0)):
+            findings.append(
+                {
+                    "category": "gate_failure",
+                    "kind": "binding_failure",
+                    "severity": "block",
+                    "subject": f"PR #{pr_number} -> Work Item #{issue_number}",
+                    "why_blocking": "implementation PR body does not mention the Work Item issue.",
+                    "fallback_to": "github-profile-binding",
+                    "evidence": {
+                        "pr_number": pr_number,
+                        "issue_number": issue_number,
+                        "expected_reference": f"#{issue_number}",
+                    },
+                }
+            )
+            repair_plan.append(
+                {
+                    "action": "update_pr_body",
+                    "subject": f"PR #{pr_number}",
+                    "body_append": f"\n\nRelated Work\n\n- Closes #{issue_number}\n",
+                    "mode": "dry-run" if dry_run else "not-applied",
+                }
+            )
+    if issue_payload is not None and fr_payload is not None and not text_mentions_issue(issue_payload.get("body"), int(fr_number or 0)):
+        findings.append(
+            {
+                "category": "gate_failure",
+                "kind": "binding_failure",
+                "severity": "block",
+                "subject": f"Work Item #{issue_number} -> FR #{fr_number}",
+                "why_blocking": "Work Item issue body does not mention the FR issue.",
+                "fallback_to": "github-profile-binding",
+                "evidence": {"work_item": issue_number, "fr": fr_number, "expected_reference": f"#{fr_number}"},
+            }
+        )
+    if fr_payload is not None and phase_payload is not None and not text_mentions_issue(fr_payload.get("body"), int(phase_number or 0)):
+        findings.append(
+            {
+                "category": "gate_failure",
+                "kind": "binding_failure",
+                "severity": "block",
+                "subject": f"FR #{fr_number} -> Phase #{phase_number}",
+                "why_blocking": "FR issue body does not mention the Phase issue.",
+                "fallback_to": "github-profile-binding",
+                "evidence": {"fr": fr_number, "phase": phase_number, "expected_reference": f"#{phase_number}"},
+            }
+        )
+
+    merge_commit = pr_payload.get("mergeCommit") if isinstance(pr_payload, dict) else None
+    merge_commit_sha = merge_commit.get("oid") if isinstance(merge_commit, dict) else None
+    target_branch = pr_payload.get("baseRefName") if isinstance(pr_payload, dict) else None
+    binding = {
+        "schema_version": "loom-github-binding/v1",
+        "repository": {"owner": owner, "name": repo_name},
+        "objects": {
+            "phase": issue_binding_entry("phase", phase_number, phase_payload, phase_errors),
+            "fr": issue_binding_entry("fr", fr_number, fr_payload, fr_errors),
+            "work_item": issue_binding_entry("work_item", issue_number, issue_payload, issue_errors),
+            "branch": {
+                "role": "branch",
+                "name": inferred_branch,
+                "status": "present" if branch_payload is not None else ("unreadable" if branch_errors else "missing"),
+                "head_sha": branch_payload.get("commit", {}).get("sha") if isinstance(branch_payload, dict) and isinstance(branch_payload.get("commit"), dict) else None,
+                "errors": branch_errors,
+            },
+            "implementation_pr": {
+                "role": "implementation_pr",
+                "number": pr_number,
+                "status": "present" if pr_payload is not None else ("unreadable" if pr_errors else "missing"),
+                "state": pr_payload.get("state") if pr_payload else None,
+                "isDraft": pr_payload.get("isDraft") if pr_payload else None,
+                "headRefName": pr_payload.get("headRefName") if pr_payload else None,
+                "baseRefName": pr_payload.get("baseRefName") if pr_payload else None,
+                "url": pr_payload.get("url") if pr_payload else None,
+                "errors": pr_errors,
+            },
+            "merge_commit": {
+                "role": "merge_commit",
+                "sha": merge_commit_sha,
+                "status": "present" if merge_commit_sha else "missing",
+            },
+            "target_branch": {
+                "role": "target_branch",
+                "name": target_branch,
+                "status": "present" if target_branch else "missing",
+            },
+        },
+        "chain": [
+            {"from": "phase", "to": "fr", "status": "present" if phase_payload and fr_payload else "missing"},
+            {"from": "fr", "to": "work_item", "status": "present" if fr_payload and issue_payload else "missing"},
+            {"from": "work_item", "to": "implementation_pr", "status": "present" if issue_payload and pr_payload else "missing"},
+            {"from": "implementation_pr", "to": "merge_commit", "status": "present" if merge_commit_sha else "missing"},
+            {"from": "merge_commit", "to": "target_branch", "status": "present" if merge_commit_sha and target_branch else "missing"},
+        ],
+        "findings": findings,
+        "repair_plan": repair_plan if sync or dry_run else [],
+    }
+    chain_complete = all(entry.get("status") == "present" for entry in binding["chain"])
+    if not chain_complete and "binding_chain" not in missing_inputs:
+        missing_inputs.append("binding_chain")
+    result = "pass" if not missing_inputs and not findings and chain_complete else "block"
+    return {
+        "command": "governance-profile",
+        "operation": "binding",
+        "schema_version": "loom-github-binding/v1",
+        "result": result,
+        "summary": (
+            "GitHub profile binding chain is readable."
+            if result == "pass"
+            else "GitHub profile binding chain is incomplete or inconsistent."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": None if result == "pass" else "github-profile-binding",
+        "binding": binding,
+    }
+
+
 def handle_governance_profile(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
+    if args.operation == "binding":
+        return emit(
+            github_binding_payload(
+                target_root=target_root,
+                owner=args.owner,
+                repo_name=args.repo_name,
+                phase_number=args.phase,
+                fr_number=args.fr,
+                issue_number=args.issue,
+                pr_number=args.pr,
+                branch_name=args.branch,
+                sync=args.sync,
+                dry_run=args.dry_run,
+            )
+        )
     return emit(governance_profile_payload(target_root, args.operation))
 
 

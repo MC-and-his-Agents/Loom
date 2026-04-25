@@ -93,6 +93,7 @@ CORE_DOCS = (
     "docs/evidence/extraction-ledger.md",
     "docs/evidence/landing-map.md",
     "docs/evidence/validations/validation-closeout-reconciliation-blocking-gate.md",
+    "docs/evidence/validations/validation-github-profile-binding-orchestration.md",
     "docs/evidence/validations/validation-loom-core-runtime-parity.md",
     "docs/evidence/validations/validation-shadow-parity-blocking-gate.md",
     "docs/evidence/validations/validation-syvert-strong-governance-parity.md",
@@ -1246,6 +1247,78 @@ def require_runtime_parity_payload(
             failures.append(Failure(category, f"{context} check `{check.get('name')}` must include `evidence`"))
 
 
+def require_github_binding_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("command") != "governance-profile":
+        failures.append(Failure(category, f"{context} must report `command: governance-profile`"))
+    if payload.get("operation") != "binding":
+        failures.append(Failure(category, f"{context} must report `operation: binding`"))
+    if payload.get("schema_version") != "loom-github-binding/v1":
+        failures.append(Failure(category, f"{context} schema_version must be `loom-github-binding/v1`"))
+    if payload.get("result") not in {"pass", "block"}:
+        failures.append(Failure(category, f"{context} result must be pass/block"))
+    if payload.get("fallback_to") not in {None, "github-profile-binding"}:
+        failures.append(Failure(category, f"{context} fallback_to must be null or `github-profile-binding`"))
+    if not isinstance(payload.get("missing_inputs"), list):
+        failures.append(Failure(category, f"{context} missing_inputs must be a list"))
+    binding = payload.get("binding")
+    if not isinstance(binding, dict):
+        failures.append(Failure(category, f"{context} must include `binding` as an object"))
+        return
+    if binding.get("schema_version") != "loom-github-binding/v1":
+        failures.append(Failure(category, f"{context}.binding schema_version must be `loom-github-binding/v1`"))
+    objects = binding.get("objects")
+    expected_objects = {"phase", "fr", "work_item", "branch", "implementation_pr", "merge_commit", "target_branch"}
+    if not isinstance(objects, dict) or set(objects) != expected_objects:
+        failures.append(Failure(category, f"{context}.binding.objects must expose the stable GitHub binding object set"))
+    chain = binding.get("chain")
+    expected_chain = [
+        ("phase", "fr"),
+        ("fr", "work_item"),
+        ("work_item", "implementation_pr"),
+        ("implementation_pr", "merge_commit"),
+        ("merge_commit", "target_branch"),
+    ]
+    if not isinstance(chain, list):
+        failures.append(Failure(category, f"{context}.binding.chain must be a list"))
+    else:
+        actual_chain = [
+            (entry.get("from"), entry.get("to"))
+            for entry in chain
+            if isinstance(entry, dict)
+        ]
+        if actual_chain != expected_chain:
+            failures.append(Failure(category, f"{context}.binding.chain must preserve Phase -> FR -> Work Item -> PR -> merge commit -> target branch order"))
+        for entry in chain:
+            if not isinstance(entry, dict):
+                failures.append(Failure(category, f"{context}.binding.chain entries must be objects"))
+                continue
+            if entry.get("status") not in {"present", "missing"}:
+                failures.append(Failure(category, f"{context}.binding.chain statuses must be present/missing"))
+    findings = binding.get("findings")
+    if not isinstance(findings, list):
+        failures.append(Failure(category, f"{context}.binding.findings must be a list"))
+        return
+    for finding in findings:
+        if not isinstance(finding, dict):
+            failures.append(Failure(category, f"{context}.binding.findings entries must be objects"))
+            continue
+        if finding.get("category") not in {"stale", "drift", "gate_failure"}:
+            failures.append(Failure(category, f"{context}.binding findings must use stable taxonomy categories"))
+        if finding.get("kind") != "binding_failure":
+            failures.append(Failure(category, f"{context}.binding findings must use `binding_failure` for orchestration gaps"))
+        if finding.get("fallback_to") != "github-profile-binding":
+            failures.append(Failure(category, f"{context}.binding findings must fallback to `github-profile-binding`"))
+
+
 def require_review_record_contract(
     failures: list[Failure],
     *,
@@ -2233,6 +2306,11 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             {"pass", "block"},
         ),
         (
+            "governance-profile-binding",
+            ["python3", "tools/loom_flow.py", "governance-profile", "binding", "--target", "."],
+            {"block"},
+        ),
+        (
             "flow-pre-review",
             [
                 "python3",
@@ -2478,6 +2556,13 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 category="daily-execution-cli",
                 context=f"`{label}` governance_control_plane",
                 payload=control_plane,
+            )
+        if label == "governance-profile-binding":
+            require_github_binding_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`governance-profile binding`",
+                payload=payload,
             )
         if label == "flow-pre-review":
             require_runtime_state_payload(
