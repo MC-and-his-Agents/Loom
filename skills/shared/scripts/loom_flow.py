@@ -3728,6 +3728,50 @@ def governance_profile_upgrade_payload(
     }
 
 
+def maturity_upgrade_path(governance_surface: dict[str, Any], target_root: Path) -> dict[str, Any]:
+    control_plane = governance_surface.get("governance_control_plane")
+    maturity = control_plane.get("maturity") if isinstance(control_plane, dict) else None
+    if not isinstance(maturity, dict):
+        return {
+            "result": "block",
+            "current": "unknown",
+            "next": None,
+            "missing_inputs": ["governance_control_plane.maturity"],
+            "missing_details": [],
+            "fallback_to": "admission",
+            "upgrade_entry": None,
+            "validation_entries": [],
+        }
+    current = maturity.get("current")
+    next_level = maturity.get("next")
+    missing_by_level = maturity.get("missing_by_level")
+    missing_details_by_level = maturity.get("missing_details_by_level")
+    missing_inputs = []
+    missing_details = []
+    if isinstance(next_level, str):
+        if isinstance(missing_by_level, dict) and isinstance(missing_by_level.get(next_level), list):
+            missing_inputs = list(missing_by_level[next_level])
+        if isinstance(missing_details_by_level, dict) and isinstance(missing_details_by_level.get(next_level), list):
+            missing_details = list(missing_details_by_level[next_level])
+    return {
+        "result": "pass" if next_level is None else "block",
+        "current": current,
+        "next": next_level,
+        "missing_inputs": missing_inputs,
+        "missing_details": missing_details,
+        "fallback_to": None if next_level is None else "adoption",
+        "upgrade_entry": (
+            f"python3 tools/loom_flow.py governance-profile upgrade --target {target_root} --to {next_level} --dry-run"
+            if isinstance(next_level, str)
+            else None
+        ),
+        "validation_entries": [
+            f"python3 tools/loom_flow.py governance-profile status --target {target_root}",
+            f"python3 tools/loom_flow.py governance-profile upgrade-plan --target {target_root}",
+        ],
+    }
+
+
 def issue_binding_entry(role: str, number: int | None, payload: dict[str, Any] | None, errors: list[str]) -> dict[str, Any]:
     status = "present" if payload is not None else "missing"
     if errors:
@@ -6349,6 +6393,7 @@ def handle_flow(args: argparse.Namespace) -> int:
 
     review_payload: dict[str, Any] | None = None
     governance_surface = build_governance_surface(target_root)
+    upgrade_path = maturity_upgrade_path(governance_surface, target_root)
     repo_interface = governance_surface.get("repo_interface")
     repo_specific_requirements: dict[str, Any] | None = None
 
@@ -6540,6 +6585,9 @@ def handle_flow(args: argparse.Namespace) -> int:
         for message in governance_surface.get("missing_inputs", []):
             if message not in missing_inputs:
                 missing_inputs.append(message)
+        for message in upgrade_path.get("missing_inputs", []):
+            if message not in missing_inputs:
+                missing_inputs.append(message)
 
     return emit(
         {
@@ -6558,6 +6606,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             "steps": steps,
             "runtime_state": runtime_state,
             **({"governance_surface": governance_surface} if args.operation == "resume" else {}),
+            **({"maturity_upgrade_path": upgrade_path} if args.operation == "resume" else {}),
             **(
                 {
                     "workspace": {

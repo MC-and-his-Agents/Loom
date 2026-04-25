@@ -95,6 +95,7 @@ CORE_DOCS = (
     "docs/evidence/validations/validation-closeout-reconciliation-blocking-gate.md",
     "docs/evidence/validations/validation-adoption-maturity-upgrade-automation.md",
     "docs/evidence/validations/validation-adoption-maturity-required-fields.md",
+    "docs/evidence/validations/validation-skills-consume-maturity-upgrade-path.md",
     "docs/evidence/validations/validation-github-profile-binding-orchestration.md",
     "docs/evidence/validations/validation-github-profile-drift-reconciliation.md",
     "docs/evidence/validations/validation-github-profile-graphql-budget-guard.md",
@@ -1386,6 +1387,35 @@ def require_governance_upgrade_payload(
             failures.append(Failure(category, f"{context} action status must be planned/present"))
         if action.get("action") == "satisfy_missing_input" and not isinstance(action.get("recommended_action"), str):
             failures.append(Failure(category, f"{context} missing-input actions must include recommended_action"))
+
+
+def require_maturity_upgrade_path(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must include maturity_upgrade_path"))
+        return
+    if payload.get("result") not in {"pass", "block"}:
+        failures.append(Failure(category, f"{context} result must be pass/block"))
+    if payload.get("current") not in {"unadopted", "light", "standard", "strong", "unknown"}:
+        failures.append(Failure(category, f"{context} current maturity must stay within the stable set"))
+    if payload.get("next") not in {None, "light", "standard", "strong"}:
+        failures.append(Failure(category, f"{context} next maturity must stay within the stable set"))
+    if not isinstance(payload.get("missing_inputs"), list):
+        failures.append(Failure(category, f"{context} missing_inputs must be a list"))
+    if not isinstance(payload.get("missing_details"), list):
+        failures.append(Failure(category, f"{context} missing_details must be a list"))
+    if payload.get("fallback_to") not in {None, "adoption", "admission"}:
+        failures.append(Failure(category, f"{context} fallback_to must be stable"))
+    if payload.get("next") is not None and not isinstance(payload.get("upgrade_entry"), str):
+        failures.append(Failure(category, f"{context} upgrade_entry must be present when next maturity exists"))
+    validation_entries = payload.get("validation_entries")
+    if not isinstance(validation_entries, list) or not validation_entries:
+        failures.append(Failure(category, f"{context} validation_entries must be non-empty"))
 
 
 def require_review_record_contract(
@@ -2733,6 +2763,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 category="daily-execution-cli",
                 context="`flow resume`",
                 payload=payload,
+            )
+            require_maturity_upgrade_path(
+                failures,
+                category="daily-execution-cli",
+                context="`flow resume`",
+                payload=payload.get("maturity_upgrade_path"),
             )
             steps = payload.get("steps")
             if not isinstance(steps, list):

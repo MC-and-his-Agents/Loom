@@ -970,6 +970,11 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
         ),
     }[scenario]
 
+    governance_surface = build_governance_surface(
+        target_root,
+        bootstrap_mode=True,
+        scenario_override=scenario,
+    )
     result = {
         "schema_version": "loom-init-output/v1",
         "generator": {
@@ -1059,13 +1064,53 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
             ),
         },
         "runtime_state": runtime_state_payload(target_root),
-        "governance_surface": build_governance_surface(
-            target_root,
-            bootstrap_mode=True,
-            scenario_override=scenario,
-        ),
+        "governance_surface": governance_surface,
+        "maturity_upgrade_path": init_maturity_upgrade_path(governance_surface),
     }
     return result
+
+
+def init_maturity_upgrade_path(governance_surface: dict[str, object]) -> dict[str, object]:
+    control_plane = governance_surface.get("governance_control_plane")
+    maturity = control_plane.get("maturity") if isinstance(control_plane, dict) else None
+    if not isinstance(maturity, dict):
+        return {
+            "result": "block",
+            "current": "unknown",
+            "next": None,
+            "missing_inputs": ["governance_control_plane.maturity"],
+            "missing_details": [],
+            "fallback_to": "admission",
+            "upgrade_entry": None,
+            "validation_entries": [],
+        }
+    next_level = maturity.get("next")
+    missing_by_level = maturity.get("missing_by_level")
+    missing_details_by_level = maturity.get("missing_details_by_level")
+    missing_inputs: list[object] = []
+    missing_details: list[object] = []
+    if isinstance(next_level, str):
+        if isinstance(missing_by_level, dict) and isinstance(missing_by_level.get(next_level), list):
+            missing_inputs = list(missing_by_level[next_level])
+        if isinstance(missing_details_by_level, dict) and isinstance(missing_details_by_level.get(next_level), list):
+            missing_details = list(missing_details_by_level[next_level])
+    return {
+        "result": "pass" if next_level is None else "block",
+        "current": maturity.get("current"),
+        "next": next_level,
+        "missing_inputs": missing_inputs,
+        "missing_details": missing_details,
+        "fallback_to": None if next_level is None else "adoption",
+        "upgrade_entry": (
+            f"python3 .loom/bin/loom_flow.py governance-profile upgrade --target . --to {next_level} --dry-run"
+            if isinstance(next_level, str)
+            else None
+        ),
+        "validation_entries": [
+            "python3 .loom/bin/loom_flow.py governance-profile status --target .",
+            "python3 .loom/bin/loom_flow.py governance-profile upgrade-plan --target .",
+        ],
+    }
 
 
 def render_loom_readme(result: dict[str, object]) -> str:
@@ -1481,6 +1526,7 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
             "initial_artifacts",
             "initial_work_items",
             "runtime_state",
+            "maturity_upgrade_path",
             "validation_and_closing",
         ):
             if key not in result:
