@@ -247,6 +247,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     closeout.add_argument("--issue", type=int, help="GitHub issue number to validate or sync")
     closeout.add_argument("--pr", type=int, help="GitHub pull request number to validate or sync")
     closeout.add_argument("--project", type=int, help="GitHub project number to validate or sync")
+    closeout.add_argument("--phase", type=int, help="GitHub Phase issue number")
+    closeout.add_argument("--fr", type=int, help="GitHub FR issue number")
+    closeout.add_argument("--branch", help="GitHub branch name bound to the work item")
     closeout.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
     closeout.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
     closeout.add_argument("--comment", help="Optional closeout comment for issue sync")
@@ -258,6 +261,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     reconciliation.add_argument("--issue", type=int, help="GitHub issue number to audit")
     reconciliation.add_argument("--pr", type=int, help="GitHub pull request number to audit")
     reconciliation.add_argument("--project", type=int, help="GitHub project number to audit")
+    reconciliation.add_argument("--phase", type=int, help="GitHub Phase issue number")
+    reconciliation.add_argument("--fr", type=int, help="GitHub FR issue number")
+    reconciliation.add_argument("--branch", help="GitHub branch name bound to the work item")
     reconciliation.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
     reconciliation.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
     reconciliation.add_argument("--comment", help="Optional closeout comment for issue sync")
@@ -3586,6 +3592,7 @@ def github_binding_payload(
     branch_name: str | None,
     sync: bool,
     dry_run: bool,
+    require_complete_chain: bool = True,
 ) -> dict[str, Any]:
     detected_owner, detected_repo = detect_github_repo(target_root)
     owner = owner or detected_owner
@@ -3744,7 +3751,19 @@ def github_binding_payload(
         "findings": findings,
         "repair_plan": repair_plan if sync or dry_run else [],
     }
-    chain_complete = all(entry.get("status") == "present" for entry in binding["chain"])
+    if require_complete_chain:
+        chain_complete = all(entry.get("status") == "present" for entry in binding["chain"])
+    else:
+        required_edges = []
+        if issue_number is not None and pr_number is not None:
+            required_edges.append(("work_item", "implementation_pr"))
+        if pr_number is not None and pr_payload is not None and pr_payload.get("state") == "MERGED":
+            required_edges.extend([("implementation_pr", "merge_commit"), ("merge_commit", "target_branch")])
+        chain_complete = all(
+            entry.get("status") == "present"
+            for entry in binding["chain"]
+            if (entry.get("from"), entry.get("to")) in required_edges
+        )
     if not chain_complete and "binding_chain" not in missing_inputs:
         missing_inputs.append("binding_chain")
     result = "pass" if not missing_inputs and not findings and chain_complete else "block"
@@ -4050,9 +4069,12 @@ def reconciliation_result(findings: list[dict[str, Any]]) -> str:
 def reconciliation_audit_payload(
     *,
     target_root: Path,
+    phase_number: int | None,
+    fr_number: int | None,
     issue_number: int | None,
     pr_number: int | None,
     project_number: int | None,
+    branch_name: str | None,
     owner: str,
     repo_name: str,
 ) -> tuple[dict[str, Any], list[str]]:
@@ -4061,6 +4083,36 @@ def reconciliation_audit_payload(
 
     if issue_number is None and pr_number is None and project_number is None:
         missing_inputs.append("issue/pr/project")
+
+    binding_payload = github_binding_payload(
+        target_root=target_root,
+        owner=owner,
+        repo_name=repo_name,
+        phase_number=phase_number,
+        fr_number=fr_number,
+        issue_number=issue_number,
+        pr_number=pr_number,
+        branch_name=branch_name,
+        sync=False,
+        dry_run=False,
+        require_complete_chain=False,
+    )
+    binding = binding_payload.get("binding") if isinstance(binding_payload.get("binding"), dict) else None
+    binding_findings = binding.get("findings") if isinstance(binding, dict) else None
+    if isinstance(binding_findings, list):
+        for finding in binding_findings:
+            if isinstance(finding, dict):
+                findings.append(
+                    make_reconciliation_finding(
+                        kind="binding_failure",
+                        severity="block",
+                        subject=str(finding.get("subject") or "github profile binding"),
+                        evidence={"binding": finding.get("evidence", {}), "binding_result": binding_payload.get("result")},
+                        recommended_action="repair the GitHub profile binding chain before reconciliation or closeout.",
+                        category="gate_failure",
+                        fallback_to="manual-reconciliation",
+                    )
+                )
 
     issue_payload: dict[str, Any] | None = None
     issue_id: str | None = None
@@ -4100,6 +4152,22 @@ def reconciliation_audit_payload(
                 if isinstance(oid, str) and oid:
                     merge_commit_sha = oid
                     merge_commit_in_main = contains_merged_commit(target_root, merge_commit_sha)
+            if pr_payload.get("state") == "MERGED" and (not merge_commit_sha or not merge_commit_in_main):
+                findings.append(
+                    make_reconciliation_finding(
+                        kind="merge_signal_drift",
+                        severity="block",
+                        subject=f"PR #{pr_number} merge signal",
+                        evidence={
+                            "pr_state": pr_payload.get("state"),
+                            "merge_commit": merge_commit_sha,
+                            "merge_commit_in_main": merge_commit_in_main,
+                        },
+                        recommended_action="repair or re-read the merge commit basis before closeout.",
+                        category="drift",
+                        fallback_to="manual-reconciliation",
+                    )
+                )
 
     merged_issue_open = False
     if issue_payload is not None and pr_payload is not None:
@@ -4187,7 +4255,15 @@ def reconciliation_audit_payload(
     if project_number is not None:
         project_context, project_errors = project_status_context(target_root, owner, project_number)
         if project_errors:
-            missing_inputs.extend(f"project: {message}" for message in project_errors)
+            if any("unknown owner type" in message for message in project_errors):
+                project_payload = {
+                    "number": project_number,
+                    "status": "unavailable",
+                    "reason": "GitHub ProjectV2 CLI owner resolution is unavailable in this environment.",
+                    "errors": project_errors,
+                }
+            else:
+                missing_inputs.extend(f"project: {message}" for message in project_errors)
         else:
             items = project_context["items"]
             issue_item = find_project_item(items, issue_number, "issue") if issue_number is not None else None
@@ -4304,6 +4380,7 @@ def reconciliation_audit_payload(
             "parent": parent_payload,
             "pr": pr_payload,
             "project": project_payload,
+            "binding": binding,
             "findings": findings,
         },
         [],
@@ -4699,9 +4776,12 @@ def runtime_parity_payload(
 def closeout_payload(
     *,
     target_root: Path,
+    phase_number: int | None,
+    fr_number: int | None,
     issue_number: int | None,
     pr_number: int | None,
     project_number: int | None,
+    branch_name: str | None,
     owner: str,
     repo_name: str,
     skip_gate: bool,
@@ -4733,9 +4813,12 @@ def closeout_payload(
     if issue_number is not None or pr_number is not None or project_number is not None:
         reconciliation_payload, reconciliation_errors = reconciliation_audit_payload(
             target_root=target_root,
+            phase_number=phase_number,
+            fr_number=fr_number,
             issue_number=issue_number,
             pr_number=pr_number,
             project_number=project_number,
+            branch_name=branch_name,
             owner=owner,
             repo_name=repo_name,
         )
@@ -4783,7 +4866,15 @@ def closeout_payload(
     if project_number is not None:
         project_context, project_errors = project_status_context(target_root, owner, project_number)
         if project_errors:
-            missing_inputs.extend(f"project: {message}" for message in project_errors)
+            if any("unknown owner type" in message for message in project_errors):
+                project_payload = {
+                    "number": project_number,
+                    "status": "unavailable",
+                    "reason": "GitHub ProjectV2 CLI owner resolution is unavailable in this environment.",
+                    "errors": project_errors,
+                }
+            else:
+                missing_inputs.extend(f"project: {message}" for message in project_errors)
         else:
             items = project_context["items"]
             issue_item = find_project_item(items, issue_number, "issue") if issue_number is not None else None
@@ -4882,9 +4973,12 @@ def handle_closeout(args: argparse.Namespace) -> int:
 
     payload, errors = closeout_payload(
         target_root=target_root,
+        phase_number=args.phase,
+        fr_number=args.fr,
         issue_number=args.issue,
         pr_number=args.pr,
         project_number=args.project,
+        branch_name=args.branch,
         owner=owner,
         repo_name=repo_name,
         skip_gate=args.skip_gate,
@@ -4988,9 +5082,12 @@ def handle_closeout(args: argparse.Namespace) -> int:
 
     refreshed_payload, errors = closeout_payload(
         target_root=target_root,
+        phase_number=args.phase,
+        fr_number=args.fr,
         issue_number=args.issue,
         pr_number=args.pr,
         project_number=args.project,
+        branch_name=args.branch,
         owner=owner,
         repo_name=repo_name,
         skip_gate=args.skip_gate,
@@ -5070,9 +5167,12 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
 
     payload, errors = reconciliation_audit_payload(
         target_root=target_root,
+        phase_number=args.phase,
+        fr_number=args.fr,
         issue_number=args.issue,
         pr_number=args.pr,
         project_number=args.project,
+        branch_name=args.branch,
         owner=owner,
         repo_name=repo_name,
     )
@@ -5230,9 +5330,12 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
 
     refreshed_payload, refreshed_errors = reconciliation_audit_payload(
         target_root=target_root,
+        phase_number=args.phase,
+        fr_number=args.fr,
         issue_number=args.issue,
         pr_number=args.pr,
         project_number=args.project,
+        branch_name=args.branch,
         owner=owner,
         repo_name=repo_name,
     )
