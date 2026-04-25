@@ -926,6 +926,21 @@ def gh_graphql(root: Path, query: str, variables: dict[str, Any]) -> tuple[dict[
     return data, []
 
 
+def graphql_budget_guard(scope: str, errors: list[str] | None = None) -> dict[str, Any]:
+    return {
+        "graphql_only": True,
+        "budget_scope": scope,
+        "status": "unavailable" if errors else "guarded",
+        "errors": list(errors or []),
+        "fallback_to": "manual-reconciliation" if errors else None,
+        "recommended_action": (
+            "Retry this GraphQL-only host read with explicit operator intent, or continue with REST-backed issue/PR evidence when ProjectV2/native sub-issue data is not required."
+            if errors
+            else "Use this GraphQL-only host read sparingly; high-frequency repo, issue, and PR reads must stay on REST."
+        ),
+    }
+
+
 def git_dirty_entries(root: Path) -> list[dict[str, str]]:
     result = run_git(root, ["status", "--porcelain=v1"])
     if result is None or result.returncode != 0:
@@ -3946,6 +3961,7 @@ query($id: ID!) {
             "id": entry.get("id"),
             "content": {"number": None, "type": "Issue"},
             "status": status_name,
+            "budget_guard": graphql_budget_guard("project_v2_item_field_values"),
         }, []
     return None, []
 
@@ -4022,6 +4038,7 @@ query($owner:String!, $name:String!, $number:Int!) {
     issue = repository.get("issue")
     if not isinstance(issue, dict):
         return None, [f"issue #{issue_number} is missing from GraphQL payload"]
+    issue["budget_guard"] = graphql_budget_guard("native_parent_sub_issue_tree")
     return issue, []
 
 
@@ -4131,6 +4148,7 @@ def reconciliation_audit_payload(
                     "status": "unavailable",
                     "reason": "GraphQL-only parent/sub-issue tree could not be read.",
                     "errors": issue_tree_errors,
+                    "budget_guard": graphql_budget_guard("native_parent_sub_issue_tree", issue_tree_errors),
                 }
             elif issue_tree is not None:
                 issue_payload = {**issue_payload, **issue_tree}
@@ -4261,16 +4279,21 @@ def reconciliation_audit_payload(
                     "status": "unavailable",
                     "reason": "GitHub ProjectV2 CLI owner resolution is unavailable in this environment.",
                     "errors": project_errors,
+                    "budget_guard": graphql_budget_guard("project_v2_status_surface", project_errors),
                 }
             else:
                 missing_inputs.extend(f"project: {message}" for message in project_errors)
         else:
             items = project_context["items"]
             issue_item = find_project_item(items, issue_number, "issue") if issue_number is not None else None
+            issue_item_budget_guard: dict[str, Any] | None = None
             if issue_item is None and issue_id is not None and issue_number is not None:
                 issue_item, issue_item_errors = project_item_for_issue(target_root, issue_id, project_number)
                 if issue_item_errors:
-                    missing_inputs.extend(f"project: {message}" for message in issue_item_errors)
+                    issue_item_budget_guard = graphql_budget_guard(
+                        "project_v2_issue_item_lookup",
+                        issue_item_errors,
+                    )
             pr_item = find_project_item(items, pr_number, "pr") if pr_number is not None else None
             project_payload = {
                 "number": project_number,
@@ -4280,6 +4303,8 @@ def reconciliation_audit_payload(
                 "issue_item": issue_item,
                 "pr_item": pr_item,
             }
+            if issue_item_budget_guard is not None:
+                project_payload["issue_item_budget_guard"] = issue_item_budget_guard
 
             if issue_number is not None:
                 expected_done = issue_payload is not None and (issue_payload.get("state") == "CLOSED" or merged_issue_open)
@@ -4872,16 +4897,21 @@ def closeout_payload(
                     "status": "unavailable",
                     "reason": "GitHub ProjectV2 CLI owner resolution is unavailable in this environment.",
                     "errors": project_errors,
+                    "budget_guard": graphql_budget_guard("project_v2_status_surface", project_errors),
                 }
             else:
                 missing_inputs.extend(f"project: {message}" for message in project_errors)
         else:
             items = project_context["items"]
             issue_item = find_project_item(items, issue_number, "issue") if issue_number is not None else None
+            issue_item_budget_guard: dict[str, Any] | None = None
             if issue_item is None and issue_id is not None and issue_number is not None:
                 issue_item, issue_item_errors = project_item_for_issue(target_root, issue_id, project_number)
                 if issue_item_errors:
-                    missing_inputs.extend(f"project: {message}" for message in issue_item_errors)
+                    issue_item_budget_guard = graphql_budget_guard(
+                        "project_v2_issue_item_lookup",
+                        issue_item_errors,
+                    )
             pr_item = find_project_item(items, pr_number, "pr") if pr_number is not None else None
             if issue_number is not None and issue_item is None:
                 missing_inputs.append("issue is missing from project")
@@ -4893,6 +4923,8 @@ def closeout_payload(
                 "issue_item": issue_item,
                 "pr_item": pr_item,
             }
+            if issue_item_budget_guard is not None:
+                project_payload["issue_item_budget_guard"] = issue_item_budget_guard
             for label, item in (("issue", issue_item), ("pr", pr_item)):
                 if item is None:
                     continue

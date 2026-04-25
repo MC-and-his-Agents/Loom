@@ -95,6 +95,7 @@ CORE_DOCS = (
     "docs/evidence/validations/validation-closeout-reconciliation-blocking-gate.md",
     "docs/evidence/validations/validation-github-profile-binding-orchestration.md",
     "docs/evidence/validations/validation-github-profile-drift-reconciliation.md",
+    "docs/evidence/validations/validation-github-profile-graphql-budget-guard.md",
     "docs/evidence/validations/validation-loom-core-runtime-parity.md",
     "docs/evidence/validations/validation-shadow-parity-blocking-gate.md",
     "docs/evidence/validations/validation-syvert-strong-governance-parity.md",
@@ -272,6 +273,8 @@ def iter_markdown_files(root: Path) -> list[Path]:
             continue
         relative = path.relative_to(root).as_posix()
         if any(relative == part or relative.startswith(f"{part}/") for part in skipped_parts):
+            continue
+        if any(part.startswith(".payload-build-") for part in path.relative_to(root).parts):
             continue
         if relative.startswith("packages/loom-installer/payload/"):
             continue
@@ -5559,6 +5562,31 @@ def check_generated_artifacts_untracked(root: Path) -> list[Failure]:
     ]
 
 
+def check_github_cli_budget(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    forbidden = tuple(f"gh {kind} view" for kind in ("repo", "issue", "pr"))
+    search_roots = [root / "skills/shared/scripts", root / "tools"]
+    for search_root in search_roots:
+        if not search_root.exists():
+            continue
+        for path in search_root.rglob("*.py"):
+            if path.name == "loom_check.py":
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            for needle in forbidden:
+                if needle in text:
+                    failures.append(
+                        Failure(
+                            "github-api-budget",
+                            f"`{needle}` must not be used in high-frequency implementation path `{path.relative_to(root)}`",
+                        )
+                    )
+    return failures
+
+
 def is_within(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
@@ -5596,6 +5624,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_repo_interop_contracts(root))
     failures.extend(check_node_installer(root))
     failures.extend(check_generated_artifacts_untracked(root))
+    failures.extend(check_github_cli_budget(root))
     failures.extend(check_markdown_links(root))
     return failures
 
