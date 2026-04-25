@@ -94,6 +94,7 @@ CORE_DOCS = (
     "docs/evidence/landing-map.md",
     "docs/evidence/validations/validation-closeout-reconciliation-blocking-gate.md",
     "docs/evidence/validations/validation-adoption-maturity-upgrade-automation.md",
+    "docs/evidence/validations/validation-adoption-maturity-required-fields.md",
     "docs/evidence/validations/validation-github-profile-binding-orchestration.md",
     "docs/evidence/validations/validation-github-profile-drift-reconciliation.md",
     "docs/evidence/validations/validation-github-profile-graphql-budget-guard.md",
@@ -832,6 +833,25 @@ def require_governance_control_plane(
         strong_requires = levels.get("strong", {}).get("requires") if isinstance(levels, dict) and isinstance(levels.get("strong"), dict) else None
         if not isinstance(strong_requires, list) or "github_controlled_merge" not in strong_requires:
             failures.append(Failure(category, f"{context}.maturity strong level must require GitHub controlled merge"))
+        required_fields = maturity.get("required_fields")
+        if not isinstance(required_fields, dict) or set(required_fields) != {"light", "standard", "strong"}:
+            failures.append(Failure(category, f"{context}.maturity required_fields must define light, standard, and strong"))
+        else:
+            for level, rows in required_fields.items():
+                if not isinstance(rows, list) or not rows:
+                    failures.append(Failure(category, f"{context}.maturity required_fields.{level} must be a non-empty list"))
+                    continue
+                for row in rows:
+                    if not isinstance(row, dict):
+                        failures.append(Failure(category, f"{context}.maturity required_fields.{level} entries must be objects"))
+                        continue
+                    if row.get("layer") not in {"core", "github-profile", "repo-owned-residue"}:
+                        failures.append(Failure(category, f"{context}.maturity required_fields.{level} layer must be stable"))
+                    if not isinstance(row.get("recommended_action"), str) or not row.get("recommended_action"):
+                        failures.append(Failure(category, f"{context}.maturity required_fields.{level} entries must include recommended_action"))
+        missing_details = maturity.get("missing_details_by_level")
+        if not isinstance(missing_details, dict) or set(missing_details) != {"light", "standard", "strong"}:
+            failures.append(Failure(category, f"{context}.maturity missing_details_by_level must define light, standard, and strong"))
 
 
 def require_locator_entry(
@@ -1364,6 +1384,8 @@ def require_governance_upgrade_payload(
             failures.append(Failure(category, f"{context} action owner must stay within the stable set"))
         if action.get("status") not in {"planned", "present"}:
             failures.append(Failure(category, f"{context} action status must be planned/present"))
+        if action.get("action") == "satisfy_missing_input" and not isinstance(action.get("recommended_action"), str):
+            failures.append(Failure(category, f"{context} missing-input actions must include recommended_action"))
 
 
 def require_review_record_contract(

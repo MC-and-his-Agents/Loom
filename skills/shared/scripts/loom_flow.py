@@ -3553,11 +3553,17 @@ def governance_profile_payload(target_root: Path, operation: str) -> dict[str, A
     current = maturity.get("current")
     next_level = maturity.get("next")
     missing_by_level = maturity.get("missing_by_level")
+    missing_details_by_level = maturity.get("missing_details_by_level")
     missing_inputs: list[Any] = []
+    missing_details: list[Any] = []
     if operation == "upgrade-plan" and isinstance(next_level, str) and isinstance(missing_by_level, dict):
         raw_missing = missing_by_level.get(next_level, [])
         if isinstance(raw_missing, list):
             missing_inputs = raw_missing
+        if isinstance(missing_details_by_level, dict):
+            raw_details = missing_details_by_level.get(next_level, [])
+            if isinstance(raw_details, list):
+                missing_details = raw_details
     result = "pass" if not missing_inputs else "block"
     summary = (
         f"governance profile is already at `{current}` maturity."
@@ -3570,6 +3576,8 @@ def governance_profile_payload(target_root: Path, operation: str) -> dict[str, A
         "result": result,
         "summary": summary,
         "missing_inputs": missing_inputs,
+        "missing_details": missing_details,
+        "recommended_action": "run governance-profile upgrade --dry-run" if result == "block" else None,
         "fallback_to": None if result == "pass" else "adoption",
         "maturity": maturity,
         "governance_control_plane": control_plane,
@@ -3617,7 +3625,9 @@ UPGRADE_SCAFFOLD: dict[str, dict[str, str]] = {
 
 def governance_upgrade_actions(target_root: Path, target_level: str, maturity: dict[str, Any]) -> list[dict[str, Any]]:
     missing_by_level = maturity.get("missing_by_level")
+    missing_details_by_level = maturity.get("missing_details_by_level")
     missing = missing_by_level.get(target_level, []) if isinstance(missing_by_level, dict) else []
+    missing_details = missing_details_by_level.get(target_level, []) if isinstance(missing_details_by_level, dict) else []
     actions: list[dict[str, Any]] = []
     for relative, content in UPGRADE_SCAFFOLD.items():
         path = target_root / relative
@@ -3633,12 +3643,19 @@ def governance_upgrade_actions(target_root: Path, target_level: str, maturity: d
             }
         )
     for item in missing if isinstance(missing, list) else []:
+        detail = next((row for row in missing_details if isinstance(row, dict) and row.get("id") == item), {})
         actions.append(
             {
                 "action": "satisfy_missing_input",
                 "id": item,
-                "owner": "loom-owned" if str(item) in {"repo_interface", "repo_interop"} else "profile",
+                "owner": (
+                    "loom-owned"
+                    if str(item) in {"repo_interface", "repo_interop"}
+                    else "profile"
+                ),
                 "status": "planned",
+                "layer": detail.get("layer"),
+                "recommended_action": detail.get("recommended_action"),
                 "reason": f"`{target_level}` maturity currently reports this missing input.",
             }
         )

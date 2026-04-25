@@ -146,6 +146,112 @@ MATURITY_LEVELS = {
         "summary": "Host-backed binding, reconciliation, controlled merge, and closeout gates are available.",
     },
 }
+MATURITY_REQUIRED_FIELDS = {
+    "light": [
+        {
+            "id": "work_item",
+            "layer": "core",
+            "required": True,
+            "defaulting": "generated",
+            "recommended_action": "run loom-init or restore the Work Item carrier",
+        },
+        {
+            "id": "recovery",
+            "layer": "core",
+            "required": True,
+            "defaulting": "generated",
+            "recommended_action": "restore the recovery carrier",
+        },
+        {
+            "id": "status_surface",
+            "layer": "core",
+            "required": True,
+            "defaulting": "generated",
+            "recommended_action": "restore the status surface carrier",
+        },
+        {
+            "id": "review",
+            "layer": "core",
+            "required": True,
+            "defaulting": "generated",
+            "recommended_action": "restore the review carrier",
+        },
+    ],
+    "standard": [
+        {
+            "id": "fr_work_item_layer",
+            "layer": "github-profile",
+            "required": True,
+            "defaulting": "profile",
+            "recommended_action": "declare the FR -> Work Item split through the GitHub profile upgrade path",
+        },
+        {
+            "id": "spec_path",
+            "layer": "core",
+            "required": True,
+            "defaulting": "generated",
+            "recommended_action": "install formal spec scaffold",
+        },
+        {
+            "id": "plan_path",
+            "layer": "core",
+            "required": True,
+            "defaulting": "generated",
+            "recommended_action": "install execution plan scaffold",
+        },
+        {
+            "id": "spec_gate",
+            "layer": "core",
+            "required": True,
+            "defaulting": "generated",
+            "recommended_action": "record or restore the spec review gate",
+        },
+        {
+            "id": "status_control_plane",
+            "layer": "core",
+            "required": True,
+            "defaulting": "builtin",
+            "recommended_action": "run loom_status or loom_check to rebuild the status control plane",
+        },
+        {
+            "id": "basic_host_binding",
+            "layer": "github-profile",
+            "required": True,
+            "defaulting": "profile",
+            "recommended_action": "run governance-profile binding and repair missing host bindings",
+        },
+        {
+            "id": "closeout_reconciliation_read",
+            "layer": "github-profile",
+            "required": True,
+            "defaulting": "profile",
+            "recommended_action": "install repo interop so closeout can consume reconciliation",
+        },
+    ],
+    "strong": [
+        {
+            "id": "repo_interface",
+            "layer": "repo-owned-residue",
+            "required": True,
+            "defaulting": "scaffold",
+            "recommended_action": "install or repair the repo companion interface",
+        },
+        {
+            "id": "repo_interop",
+            "layer": "repo-owned-residue",
+            "required": True,
+            "defaulting": "scaffold",
+            "recommended_action": "install or repair the repo interop contract",
+        },
+        {
+            "id": "github_controlled_merge",
+            "layer": "github-profile",
+            "required": True,
+            "defaulting": "host",
+            "recommended_action": "enable controlled merge binding and required host gates",
+        },
+    ],
+}
 
 
 def run_process(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -1033,9 +1139,16 @@ def maturity_status(
     }
     achieved: list[str] = []
     missing_by_level: dict[str, list[str]] = {}
+    missing_details_by_level: dict[str, list[dict[str, Any]]] = {}
     for level in ("light", "standard", "strong"):
         missing = [field for field in MATURITY_LEVELS[level]["requires"] if not facts.get(field)]
         missing_by_level[level] = missing
+        field_rows = MATURITY_REQUIRED_FIELDS.get(level, [])
+        missing_details_by_level[level] = [
+            row
+            for row in field_rows
+            if row["id"] in missing
+        ]
         if not missing:
             achieved.append(level)
             facts[level] = True
@@ -1051,7 +1164,9 @@ def maturity_status(
         "achieved": achieved,
         "next": next_level,
         "levels": MATURITY_LEVELS,
+        "required_fields": MATURITY_REQUIRED_FIELDS,
         "missing_by_level": missing_by_level,
+        "missing_details_by_level": missing_details_by_level,
     }
 
 

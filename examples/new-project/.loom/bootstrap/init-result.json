@@ -574,6 +574,112 @@
             "summary": "Host-backed binding, reconciliation, controlled merge, and closeout gates are available."
           }
         },
+        "required_fields": {
+          "light": [
+            {
+              "id": "work_item",
+              "layer": "core",
+              "required": true,
+              "defaulting": "generated",
+              "recommended_action": "run loom-init or restore the Work Item carrier"
+            },
+            {
+              "id": "recovery",
+              "layer": "core",
+              "required": true,
+              "defaulting": "generated",
+              "recommended_action": "restore the recovery carrier"
+            },
+            {
+              "id": "status_surface",
+              "layer": "core",
+              "required": true,
+              "defaulting": "generated",
+              "recommended_action": "restore the status surface carrier"
+            },
+            {
+              "id": "review",
+              "layer": "core",
+              "required": true,
+              "defaulting": "generated",
+              "recommended_action": "restore the review carrier"
+            }
+          ],
+          "standard": [
+            {
+              "id": "fr_work_item_layer",
+              "layer": "github-profile",
+              "required": true,
+              "defaulting": "profile",
+              "recommended_action": "declare the FR -> Work Item split through the GitHub profile upgrade path"
+            },
+            {
+              "id": "spec_path",
+              "layer": "core",
+              "required": true,
+              "defaulting": "generated",
+              "recommended_action": "install formal spec scaffold"
+            },
+            {
+              "id": "plan_path",
+              "layer": "core",
+              "required": true,
+              "defaulting": "generated",
+              "recommended_action": "install execution plan scaffold"
+            },
+            {
+              "id": "spec_gate",
+              "layer": "core",
+              "required": true,
+              "defaulting": "generated",
+              "recommended_action": "record or restore the spec review gate"
+            },
+            {
+              "id": "status_control_plane",
+              "layer": "core",
+              "required": true,
+              "defaulting": "builtin",
+              "recommended_action": "run loom_status or loom_check to rebuild the status control plane"
+            },
+            {
+              "id": "basic_host_binding",
+              "layer": "github-profile",
+              "required": true,
+              "defaulting": "profile",
+              "recommended_action": "run governance-profile binding and repair missing host bindings"
+            },
+            {
+              "id": "closeout_reconciliation_read",
+              "layer": "github-profile",
+              "required": true,
+              "defaulting": "profile",
+              "recommended_action": "install repo interop so closeout can consume reconciliation"
+            }
+          ],
+          "strong": [
+            {
+              "id": "repo_interface",
+              "layer": "repo-owned-residue",
+              "required": true,
+              "defaulting": "scaffold",
+              "recommended_action": "install or repair the repo companion interface"
+            },
+            {
+              "id": "repo_interop",
+              "layer": "repo-owned-residue",
+              "required": true,
+              "defaulting": "scaffold",
+              "recommended_action": "install or repair the repo interop contract"
+            },
+            {
+              "id": "github_controlled_merge",
+              "layer": "github-profile",
+              "required": true,
+              "defaulting": "host",
+              "recommended_action": "enable controlled merge binding and required host gates"
+            }
+          ]
+        },
         "missing_by_level": {
           "light": [],
           "standard": [
@@ -585,6 +691,48 @@
             "repo_interface",
             "repo_interop",
             "github_controlled_merge"
+          ]
+        },
+        "missing_details_by_level": {
+          "light": [],
+          "standard": [
+            {
+              "id": "fr_work_item_layer",
+              "layer": "github-profile",
+              "required": true,
+              "defaulting": "profile",
+              "recommended_action": "declare the FR -> Work Item split through the GitHub profile upgrade path"
+            },
+            {
+              "id": "closeout_reconciliation_read",
+              "layer": "github-profile",
+              "required": true,
+              "defaulting": "profile",
+              "recommended_action": "install repo interop so closeout can consume reconciliation"
+            }
+          ],
+          "strong": [
+            {
+              "id": "repo_interface",
+              "layer": "repo-owned-residue",
+              "required": true,
+              "defaulting": "scaffold",
+              "recommended_action": "install or repair the repo companion interface"
+            },
+            {
+              "id": "repo_interop",
+              "layer": "repo-owned-residue",
+              "required": true,
+              "defaulting": "scaffold",
+              "recommended_action": "install or repair the repo interop contract"
+            },
+            {
+              "id": "github_controlled_merge",
+              "layer": "github-profile",
+              "required": true,
+              "defaulting": "host",
+              "recommended_action": "enable controlled merge binding and required host gates"
+            }
           ]
         }
       }
