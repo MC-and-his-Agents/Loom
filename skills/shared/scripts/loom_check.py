@@ -93,6 +93,7 @@ CORE_DOCS = (
     "docs/evidence/extraction-ledger.md",
     "docs/evidence/landing-map.md",
     "docs/evidence/validations/validation-closeout-reconciliation-blocking-gate.md",
+    "docs/evidence/validations/validation-adoption-maturity-upgrade-automation.md",
     "docs/evidence/validations/validation-github-profile-binding-orchestration.md",
     "docs/evidence/validations/validation-github-profile-drift-reconciliation.md",
     "docs/evidence/validations/validation-github-profile-graphql-budget-guard.md",
@@ -1329,6 +1330,42 @@ def require_github_binding_payload(
             failures.append(Failure(category, f"{context}.binding findings must fallback to `github-profile-binding`"))
 
 
+def require_governance_upgrade_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("command") != "governance-profile":
+        failures.append(Failure(category, f"{context} must report `command: governance-profile`"))
+    if payload.get("operation") != "upgrade":
+        failures.append(Failure(category, f"{context} must report `operation: upgrade`"))
+    if payload.get("schema_version") != "loom-governance-upgrade/v1":
+        failures.append(Failure(category, f"{context} schema_version must be `loom-governance-upgrade/v1`"))
+    if payload.get("result") not in {"pass", "block"}:
+        failures.append(Failure(category, f"{context} result must be pass/block"))
+    if payload.get("target_maturity") not in {"standard", "strong"}:
+        failures.append(Failure(category, f"{context} target_maturity must be standard/strong"))
+    if not isinstance(payload.get("dry_run"), bool):
+        failures.append(Failure(category, f"{context} dry_run must be boolean"))
+    actions = payload.get("actions")
+    if not isinstance(actions, list) or not actions:
+        failures.append(Failure(category, f"{context} must include non-empty actions"))
+        return
+    for action in actions:
+        if not isinstance(action, dict):
+            failures.append(Failure(category, f"{context} actions must be objects"))
+            continue
+        if action.get("owner") not in {"loom-owned", "repo-owned", "profile"}:
+            failures.append(Failure(category, f"{context} action owner must stay within the stable set"))
+        if action.get("status") not in {"planned", "present"}:
+            failures.append(Failure(category, f"{context} action status must be planned/present"))
+
+
 def require_review_record_contract(
     failures: list[Failure],
     *,
@@ -2316,6 +2353,21 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             {"pass", "block"},
         ),
         (
+            "governance-profile-upgrade",
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "governance-profile",
+                "upgrade",
+                "--target",
+                "examples/new-project",
+                "--to",
+                "standard",
+                "--dry-run",
+            ],
+            {"pass"},
+        ),
+        (
             "governance-profile-binding",
             ["python3", "tools/loom_flow.py", "governance-profile", "binding", "--target", "."],
             {"block"},
@@ -2572,6 +2624,13 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures,
                 category="daily-execution-cli",
                 context="`governance-profile binding`",
+                payload=payload,
+            )
+        if label == "governance-profile-upgrade":
+            require_governance_upgrade_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`governance-profile upgrade`",
                 payload=payload,
             )
         if label == "flow-pre-review":
