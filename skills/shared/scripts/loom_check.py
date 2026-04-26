@@ -3711,6 +3711,27 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         elif payload.get("result") != "block":
             failures.append(Failure("daily-execution-cli", "`bootstrapped runtime-state` must block when the bootstrap manifest drifts"))
 
+        hash_drift_bootstrap = tmp_root / "hash-drift-bootstrapped-target"
+        shutil.copytree(example_target, hash_drift_bootstrap)
+        manifest_path = hash_drift_bootstrap / ".loom" / "bootstrap" / "manifest.json"
+        manifest = load_json_file(manifest_path)
+        if isinstance(manifest, dict):
+            artifacts = manifest.get("artifacts")
+            if isinstance(artifacts, list):
+                for artifact in artifacts:
+                    if isinstance(artifact, dict) and artifact.get("path") == ".loom/bin/runtime_state.py":
+                        artifact["sha256"] = "0" * 64
+            manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        payload, error = load_command_json(
+            root,
+            ["python3", ".loom/bin/loom_init.py", "runtime-state", "--target", "."],
+            cwd=hash_drift_bootstrap,
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`bootstrapped runtime-state` provenance hash drift failed unexpectedly: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`bootstrapped runtime-state` must block when runtime provenance hashes drift"))
+
     if shutil.which("git") is not None:
         with tempfile.TemporaryDirectory(prefix="loom-check-installed-pre-merge-") as tmp:
             tmp_root = Path(tmp)

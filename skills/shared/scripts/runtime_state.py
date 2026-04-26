@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 from pathlib import Path
 from typing import Any
@@ -83,6 +84,14 @@ def detect_carrier(caller_file: str) -> str | None:
     if installed_skills_root(caller_file) is not None:
         return "installed-skills-root"
     return None
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _default_scene_for_carrier(carrier: str) -> str:
@@ -284,6 +293,14 @@ def _validate_bootstrapped_runtime(caller_file: str) -> tuple[dict[str, Any], li
         runtime_file = runtime_root / Path(relative).name
         if not runtime_file.exists():
             errors.append(f"bootstrapped runtime file is missing: `{relative}`")
+            continue
+        expected_hash = artifact.get("sha256")
+        if not isinstance(expected_hash, str) or not expected_hash.strip():
+            errors.append(f"bootstrap runtime artifact `{relative}` must declare sha256 provenance")
+            continue
+        actual_hash = sha256_file(runtime_file)
+        if actual_hash != expected_hash:
+            errors.append(f"bootstrap runtime artifact `{relative}` sha256 drifted")
 
     status = "pass" if not errors else "block"
     summary = (
