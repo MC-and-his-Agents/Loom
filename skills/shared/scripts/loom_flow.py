@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -531,15 +532,110 @@ def load_repo_interop_contract(repo_interop: object, *, target_root: Path) -> tu
     return payload, []
 
 
-def normalized_shadow_value(path: Path) -> tuple[str | None, str | None]:
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def repo_relative_path(target_root: Path, relative: str) -> Path | None:
+    candidate = (target_root / relative).resolve()
+    try:
+        candidate.relative_to(target_root.resolve())
+    except ValueError:
+        return None
+    return candidate
+
+
+def validate_shadow_sources(payload: dict[str, Any], *, path: Path, target_root: Path) -> tuple[dict[str, Any], list[str]]:
+    source_files = payload.get("source_files")
+    source_sha256 = payload.get("source_sha256")
+    errors: list[str] = []
+    if not isinstance(source_files, list) or not source_files:
+        errors.append(f"shadow evidence `{path}` must declare non-empty `source_files`")
+        source_files = []
+    if not isinstance(source_sha256, dict) or not source_sha256:
+        errors.append(f"shadow evidence `{path}` must declare non-empty `source_sha256`")
+        source_sha256 = {}
+
+    normalized_sources: list[str] = []
+    for index, source in enumerate(source_files, start=1):
+        if not isinstance(source, str) or not source.strip():
+            errors.append(f"shadow evidence `{path}` source_files[{index}] must be a non-empty relative path")
+            continue
+        source = source.strip()
+        if Path(source).is_absolute() or ".." in Path(source).parts:
+            errors.append(f"shadow evidence `{path}` source `{source}` must stay inside the repository")
+            continue
+        source_path = repo_relative_path(target_root, source)
+        if source_path is None:
+            errors.append(f"shadow evidence `{path}` source `{source}` must stay inside the repository")
+            continue
+        if not source_path.exists() or source_path.is_dir():
+            errors.append(f"shadow evidence `{path}` source `{source}` must be an existing file")
+            continue
+        normalized_sources.append(source)
+
+    source_keys = set(normalized_sources)
+    hash_keys = {key for key in source_sha256.keys() if isinstance(key, str)}
+    if source_keys != hash_keys:
+        errors.append(f"shadow evidence `{path}` source_files and source_sha256 keys must match exactly")
+    for source in sorted(source_keys & hash_keys):
+        expected = source_sha256.get(source)
+        if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", expected):
+            errors.append(f"shadow evidence `{path}` source `{source}` must declare a 64-character sha256")
+            continue
+        actual = sha256_file(target_root / source)
+        if actual.lower() != expected.lower():
+            errors.append(f"shadow evidence `{path}` source `{source}` sha256 drifted")
+
+    return {
+        "source_files": normalized_sources,
+        "source_sha256": {source: source_sha256.get(source) for source in normalized_sources if isinstance(source_sha256.get(source), str)},
+    }, errors
+
+
+def declared_shadow_locators(interop_payload: dict[str, Any]) -> set[str]:
+    shadow_surfaces = interop_payload.get("shadow_surfaces")
+    declared: set[str] = set()
+    if not isinstance(shadow_surfaces, dict):
+        return declared
+    for entry in shadow_surfaces.values():
+        if not isinstance(entry, dict):
+            continue
+        for key in ("loom_locator", "repo_locator"):
+            value = entry.get(key)
+            if isinstance(value, str) and value.strip():
+                declared.add(value.strip())
+    return declared
+
+
+def undeclared_shadow_evidence_errors(target_root: Path, interop_payload: dict[str, Any]) -> list[str]:
+    shadow_root = target_root / ".loom/shadow"
+    if not shadow_root.exists():
+        return []
+    declared = declared_shadow_locators(interop_payload)
+    errors: list[str] = []
+    for path in sorted(shadow_root.glob("*.json")):
+        relative = path.relative_to(target_root).as_posix()
+        if relative == ".loom/shadow/shadow-parity.json":
+            continue
+        if relative not in declared:
+            errors.append(f"shadow evidence `{relative}` is not declared in repo interop shadow_surfaces")
+    return errors
+
+
+def normalized_shadow_value(path: Path, *, target_root: Path) -> tuple[dict[str, Any], str | None]:
     try:
         if path.is_dir():
-            return None, f"shadow parity locator points to a directory: {path}"
+            return {"normalized_value": None}, f"shadow parity locator points to a directory: {path}"
         raw_text = path.read_text(encoding="utf-8")
     except OSError as exc:
-        return None, f"cannot read shadow parity locator `{path}`: {exc.strerror or exc}"
+        return {"normalized_value": None}, f"cannot read shadow parity locator `{path}`: {exc.strerror or exc}"
     if not raw_text.strip():
-        return None, f"shadow parity locator is empty: {path}"
+        return {"normalized_value": None}, f"shadow parity locator is empty: {path}"
 
     try:
         payload = json.loads(raw_text)
@@ -547,21 +643,22 @@ def normalized_shadow_value(path: Path) -> tuple[str | None, str | None]:
         payload = None
 
     if isinstance(payload, dict):
+        source_evidence, source_errors = validate_shadow_sources(payload, path=path, target_root=target_root)
         for key in ("parity_value", "result", "decision", "status", "verdict", "value"):
             value = payload.get(key)
             if isinstance(value, (str, int, float, bool)) and str(value).strip():
-                return str(value).strip().lower(), None
-        return json.dumps(payload, ensure_ascii=False, sort_keys=True), None
+                return {**source_evidence, "normalized_value": str(value).strip().lower()}, "; ".join(source_errors) if source_errors else None
+        return {**source_evidence, "normalized_value": json.dumps(payload, ensure_ascii=False, sort_keys=True)}, "; ".join(source_errors) if source_errors else None
     if isinstance(payload, list):
-        return json.dumps(payload, ensure_ascii=False, sort_keys=True), None
+        return {"normalized_value": json.dumps(payload, ensure_ascii=False, sort_keys=True)}, f"shadow evidence `{path}` must be a JSON object with source_files/source_sha256"
     if isinstance(payload, (str, int, float, bool)) and str(payload).strip():
-        return str(payload).strip().lower(), None
+        return {"normalized_value": str(payload).strip().lower()}, f"shadow evidence `{path}` must be a JSON object with source_files/source_sha256"
 
     for line in raw_text.splitlines():
         stripped = line.strip()
         if stripped and not stripped.startswith("#"):
-            return stripped.lower(), None
-    return None, f"shadow parity locator does not expose a comparable value: {path}"
+            return {"normalized_value": stripped.lower()}, f"shadow evidence `{path}` must be a JSON object with source_files/source_sha256"
+    return {"normalized_value": None}, f"shadow parity locator does not expose a comparable value: {path}"
 
 
 def shadow_parity_report(
@@ -632,27 +729,42 @@ def shadow_parity_report(
     loom_path = target_root / str(loom_locator)
     repo_path = target_root / str(repo_locator)
 
-    loom_value, loom_error = normalized_shadow_value(loom_path)
-    repo_value, repo_error = normalized_shadow_value(repo_path)
+    loom_surface = {
+        "status": "missing",
+        "locator": str(loom_locator),
+        "normalized_value": None,
+    }
+    repo_surface = {
+        "status": "missing",
+        "locator": str(repo_locator),
+        "normalized_value": None,
+    }
+
+    global_errors = undeclared_shadow_evidence_errors(target_root, interop_payload)
+    loom_evidence, loom_error = normalized_shadow_value(loom_path, target_root=target_root)
+    repo_evidence, repo_error = normalized_shadow_value(repo_path, target_root=target_root)
+    loom_value = loom_evidence.get("normalized_value")
+    repo_value = repo_evidence.get("normalized_value")
 
     missing_inputs: list[str] = []
+    missing_inputs.extend(global_errors)
     if loom_error:
         missing_inputs.append(loom_error)
     if repo_error:
         missing_inputs.append(repo_error)
 
     loom_surface = {
+        **loom_evidence,
         "status": "readable" if loom_error is None else "missing",
         "locator": str(loom_locator),
-        "normalized_value": loom_value,
     }
     repo_surface = {
+        **repo_evidence,
         "status": "readable" if repo_error is None else "missing",
         "locator": str(repo_locator),
-        "normalized_value": repo_value,
     }
 
-    if loom_error or repo_error or loom_value is None or repo_value is None:
+    if global_errors or loom_error or repo_error or loom_value is None or repo_value is None:
         return {
             **empty_report,
             "summary": "shadow parity is unreadable because one or both declared surfaces cannot be normalized.",

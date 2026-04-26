@@ -131,7 +131,7 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "18c5dc39a4cd2982a40c729807b12c2b15efd41a2962719b5491b06dad83c028"
+      "sha256": "e8bc02d131b1007889b7f9b394b5b2d605c8bf790ba1baccc37da1e6aecbf46c"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -155,7 +155,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "3b2257fddc37fdb514953500a38e94ca241a5889a5c6343b975db5a1109bbff4"
+      "sha256": "e834612a8da8cd22cc13679b61529bc0074d0399004f4e4f45540d6b8f314c9a"
     },
     {
       "path": "AGENTS.md",
@@ -346,9 +346,14 @@
     "github_control_plane": {
       "repository": "MC-and-his-Agents/Loom",
       "default_branch": "main",
-      "branch_protection": "unknown",
-      "required_checks": "unknown",
-      "pr_reviews": "unknown"
+      "branch_protection": "enabled",
+      "required_checks": [
+        "py-compile",
+        "demo-bootstrap",
+        "repo-local-cli",
+        "loom-check"
+      ],
+      "pr_reviews": "not_required"
     },
     "repo_interface": {
       "availability": "absent",
@@ -433,7 +438,7 @@
           },
           "branch": {
             "status": "present",
-            "locator": "issue-351-bootstrap-active-item-lifecycle",
+            "locator": "issue-352-shadow-evidence-closure",
             "authority": "git"
           },
           "worktree": {
@@ -741,9 +746,7 @@
       }
     },
     "summary": "repository is treated as new; Loom can plan the first governance carriers and bootstrap entrypoints without adding a second truth source.",
-    "missing_inputs": [
-      "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/branches/main\": EOF"
-    ]
+    "missing_inputs": []
   },
   "maturity_upgrade_path": {
     "result": "block",

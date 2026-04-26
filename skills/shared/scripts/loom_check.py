@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import re
+import hashlib
 import shutil
 import subprocess
 import sys
@@ -1071,6 +1072,14 @@ def require_shadow_parity_payload(
             locator = surface_payload.get("locator")
             if not isinstance(locator, str) or not locator:
                 failures.append(Failure(category, f"{context} reports[{index}] `{surface_key}.locator` must be non-empty"))
+            if surface_payload.get("status") == "readable":
+                source_files = surface_payload.get("source_files")
+                source_sha256 = surface_payload.get("source_sha256")
+                if not isinstance(source_files, list) or not source_files:
+                    failures.append(Failure(category, f"{context} reports[{index}] `{surface_key}.source_files` must be non-empty for readable evidence"))
+                    source_files = []
+                if not isinstance(source_sha256, dict) or set(source_sha256) != set(source_files):
+                    failures.append(Failure(category, f"{context} reports[{index}] `{surface_key}.source_sha256` must match source_files exactly"))
 
 
 def require_host_lifecycle_payload(
@@ -5472,6 +5481,29 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
+    def sha256_file(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def write_shadow_evidence(target: Path, evidence: str, value_key: str, value: str, source: str) -> None:
+        source_path = target / source
+        source_path.parent.mkdir(parents=True, exist_ok=True)
+        if not source_path.exists():
+            write_json(source_path, {"value": value})
+        write_json(
+            target / evidence,
+            {
+                value_key: value,
+                "source_files": [source],
+                "source_sha256": {
+                    source: sha256_file(source_path),
+                },
+            },
+        )
+
     def install_interop(
         target: Path,
         *,
@@ -5484,17 +5516,21 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
         (target / ".loom" / "shadow").mkdir(parents=True, exist_ok=True)
         (target / "native" / "status").mkdir(parents=True, exist_ok=True)
         for relative, payload in {
-            ".loom/shadow/admission-loom.json": {"result": "pass"},
-            ".loom/shadow/admission-repo.json": {"result": "pass"},
-            ".loom/shadow/review-loom.json": {"decision": "allow"},
-            ".loom/shadow/review-repo.json": {"decision": "allow"},
-            ".loom/shadow/merge-ready-loom.json": {"status": "pass"},
-            ".loom/shadow/merge-ready-repo.json": {"status": "pass"},
-            ".loom/shadow/closeout-loom.json": {"status": "done"},
-            ".loom/shadow/closeout-repo.json": {"status": "done"},
             "host/guardian-review.json": {"verdict": "allow"},
+            "native/status/admission.json": {"result": "pass"},
+            "native/status/review.json": {"decision": "allow"},
+            "native/status/merge-ready.json": {"status": "pass"},
+            "native/status/closeout.json": {"status": "done"},
         }.items():
             write_json(target / relative, payload)
+        write_shadow_evidence(target, ".loom/shadow/admission-loom.json", "result", "pass", ".loom/status/current.md")
+        write_shadow_evidence(target, ".loom/shadow/admission-repo.json", "result", "pass", "native/status/admission.json")
+        write_shadow_evidence(target, ".loom/shadow/review-loom.json", "decision", "allow", "host/guardian-review.json")
+        write_shadow_evidence(target, ".loom/shadow/review-repo.json", "decision", "allow", "native/status/review.json")
+        write_shadow_evidence(target, ".loom/shadow/merge-ready-loom.json", "status", "pass", "host/guardian-review.json")
+        write_shadow_evidence(target, ".loom/shadow/merge-ready-repo.json", "status", "pass", "native/status/merge-ready.json")
+        write_shadow_evidence(target, ".loom/shadow/closeout-loom.json", "status", "done", ".loom/status/current.md")
+        write_shadow_evidence(target, ".loom/shadow/closeout-repo.json", "status", "done", "native/status/closeout.json")
         if interop is not None:
             write_json(companion_dir / "interop.json", interop)
 
@@ -5641,7 +5677,8 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
 
         mismatch_target = base / "mismatch"
         shutil.copytree(present_target, mismatch_target)
-        write_json(mismatch_target / ".loom/shadow/review-repo.json", {"decision": "block"})
+        write_json(mismatch_target / "native/status/review.json", {"decision": "block"})
+        write_shadow_evidence(mismatch_target, ".loom/shadow/review-repo.json", "decision", "block", "native/status/review.json")
         mismatch_payload, error = load_command_json(
             root,
             ["python3", "tools/loom_flow.py", "shadow-parity", "--target", str(mismatch_target), "--surface", "review"],
@@ -5715,6 +5752,93 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
             )
             if blocking_unreadable_payload.get("result") != "block":
                 failures.append(Failure("repo-interop", "`shadow-parity --blocking` must block unreadable surfaces"))
+
+        missing_hash_target = base / "missing-hash"
+        shutil.copytree(present_target, missing_hash_target)
+        write_json(
+            missing_hash_target / ".loom/shadow/review-repo.json",
+            {
+                "decision": "allow",
+                "source_files": ["native/status/review.json"],
+            },
+        )
+        missing_hash_payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "shadow-parity", "--target", str(missing_hash_target), "--surface", "review"],
+        )
+        if error:
+            failures.append(Failure("repo-interop", f"`shadow-parity` missing hash sample failed: {error}"))
+        else:
+            require_shadow_parity_payload(
+                failures,
+                category="repo-interop",
+                context="`shadow-parity` missing hash sample",
+                payload=missing_hash_payload,
+                expected_reports=1,
+            )
+            reports = missing_hash_payload.get("reports")
+            if not isinstance(reports, list) or not reports or reports[0].get("result") != "unreadable":
+                failures.append(Failure("repo-interop", "`shadow-parity` missing hash sample must report `unreadable`"))
+
+        partial_hash_target = base / "partial-hash"
+        shutil.copytree(present_target, partial_hash_target)
+        write_json(
+            partial_hash_target / ".loom/shadow/review-repo.json",
+            {
+                "decision": "allow",
+                "source_files": ["native/status/review.json", "host/guardian-review.json"],
+                "source_sha256": {
+                    "native/status/review.json": sha256_file(partial_hash_target / "native/status/review.json"),
+                },
+            },
+        )
+        partial_hash_payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "shadow-parity", "--target", str(partial_hash_target), "--surface", "review"],
+        )
+        if error:
+            failures.append(Failure("repo-interop", f"`shadow-parity` partial hash sample failed: {error}"))
+        else:
+            reports = partial_hash_payload.get("reports")
+            if not isinstance(reports, list) or not reports or reports[0].get("result") != "unreadable":
+                failures.append(Failure("repo-interop", "`shadow-parity` partial hash sample must report `unreadable`"))
+
+        hash_drift_target = base / "hash-drift"
+        shutil.copytree(present_target, hash_drift_target)
+        write_json(hash_drift_target / "native/status/review.json", {"decision": "changed-after-evidence"})
+        hash_drift_payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "shadow-parity", "--target", str(hash_drift_target), "--surface", "review"],
+        )
+        if error:
+            failures.append(Failure("repo-interop", f"`shadow-parity` hash drift sample failed: {error}"))
+        else:
+            reports = hash_drift_payload.get("reports")
+            if not isinstance(reports, list) or not reports or reports[0].get("result") != "unreadable":
+                failures.append(Failure("repo-interop", "`shadow-parity` hash drift sample must report `unreadable`"))
+
+        rogue_target = base / "rogue"
+        shutil.copytree(present_target, rogue_target)
+        write_json(
+            rogue_target / ".loom/shadow/rogue.json",
+            {
+                "result": "pass",
+                "source_files": ["native/status/review.json"],
+                "source_sha256": {
+                    "native/status/review.json": sha256_file(rogue_target / "native/status/review.json"),
+                },
+            },
+        )
+        rogue_payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "shadow-parity", "--target", str(rogue_target), "--surface", "review"],
+        )
+        if error:
+            failures.append(Failure("repo-interop", f"`shadow-parity` rogue evidence sample failed: {error}"))
+        else:
+            reports = rogue_payload.get("reports")
+            if not isinstance(reports, list) or not reports or reports[0].get("result") != "unreadable":
+                failures.append(Failure("repo-interop", "`shadow-parity` rogue evidence sample must report `unreadable`"))
 
     return failures
 
