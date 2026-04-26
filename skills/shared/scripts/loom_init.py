@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -26,6 +27,17 @@ GOVERNANCE_RUNTIME_SOURCE = "skills/shared/scripts/governance_surface.py"
 TOOL_VERSION = "1.3.0"
 CONTRACT_VERSION = "1.3.0"
 WORK_ITEM_ID = "INIT-0001"
+
+RUNTIME_ARTIFACT_SOURCES = {
+    ".loom/bin/loom_init.py": RUNTIME_SOURCE,
+    ".loom/bin/fact_chain_support.py": FACT_CHAIN_RUNTIME_SOURCE,
+    ".loom/bin/governance_surface.py": GOVERNANCE_RUNTIME_SOURCE,
+    ".loom/bin/loom_flow.py": FLOW_RUNTIME_SOURCE,
+    ".loom/bin/loom_status.py": STATUS_RUNTIME_SOURCE,
+    ".loom/bin/runtime_paths.py": "skills/shared/scripts/runtime_paths.py",
+    ".loom/bin/runtime_state.py": "skills/shared/scripts/runtime_state.py",
+    ".loom/bin/loom_check.py": CHECK_RUNTIME_SOURCE,
+}
 
 ROOT_BOUNDARY_FILES = (
     "AGENTS.md",
@@ -816,46 +828,14 @@ def initial_artifacts(target_root: Path, install_pr_template: bool, adoption_pat
             "kind": "capability-map",
             "source": "generated",
         },
-        {
-            "path": ".loom/bin/loom_init.py",
-            "kind": "loom-tool",
-            "source": RUNTIME_SOURCE,
-        },
-        {
-            "path": ".loom/bin/fact_chain_support.py",
-            "kind": "loom-tool-support",
-            "source": FACT_CHAIN_RUNTIME_SOURCE,
-        },
-        {
-            "path": ".loom/bin/governance_surface.py",
-            "kind": "loom-tool-support",
-            "source": GOVERNANCE_RUNTIME_SOURCE,
-        },
-        {
-            "path": ".loom/bin/loom_flow.py",
-            "kind": "loom-tool",
-            "source": FLOW_RUNTIME_SOURCE,
-        },
-        {
-            "path": ".loom/bin/loom_status.py",
-            "kind": "loom-tool",
-            "source": STATUS_RUNTIME_SOURCE,
-        },
-        {
-            "path": ".loom/bin/runtime_paths.py",
-            "kind": "loom-tool-support",
-            "source": "skills/shared/scripts/runtime_paths.py",
-        },
-        {
-            "path": ".loom/bin/runtime_state.py",
-            "kind": "loom-tool-support",
-            "source": "skills/shared/scripts/runtime_state.py",
-        },
-        {
-            "path": ".loom/bin/loom_check.py",
-            "kind": "loom-tool",
-            "source": CHECK_RUNTIME_SOURCE,
-        },
+        runtime_artifact(".loom/bin/loom_init.py", "loom-tool", RUNTIME_SOURCE),
+        runtime_artifact(".loom/bin/fact_chain_support.py", "loom-tool-support", FACT_CHAIN_RUNTIME_SOURCE),
+        runtime_artifact(".loom/bin/governance_surface.py", "loom-tool-support", GOVERNANCE_RUNTIME_SOURCE),
+        runtime_artifact(".loom/bin/loom_flow.py", "loom-tool", FLOW_RUNTIME_SOURCE),
+        runtime_artifact(".loom/bin/loom_status.py", "loom-tool", STATUS_RUNTIME_SOURCE),
+        runtime_artifact(".loom/bin/runtime_paths.py", "loom-tool-support", "skills/shared/scripts/runtime_paths.py"),
+        runtime_artifact(".loom/bin/runtime_state.py", "loom-tool-support", "skills/shared/scripts/runtime_state.py"),
+        runtime_artifact(".loom/bin/loom_check.py", "loom-tool", CHECK_RUNTIME_SOURCE),
     ]
     if uses_attach_only_path(adoption_path):
         artifacts.extend(
@@ -1360,6 +1340,34 @@ def copy_file(source: Path, target: Path, force: bool) -> bool:
     target.parent.mkdir(parents=True, exist_ok=True)
     content = source.read_text(encoding="utf-8")
     return write_text(target, content, force=force)
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def runtime_artifact(path: str, kind: str, source: str) -> dict[str, str]:
+    runtime_sources = {
+        ".loom/bin/loom_init.py": Path(__file__),
+        ".loom/bin/fact_chain_support.py": Path(__file__).with_name("fact_chain_support.py"),
+        ".loom/bin/governance_surface.py": Path(__file__).with_name("governance_surface.py"),
+        ".loom/bin/loom_flow.py": Path(__file__).with_name("loom_flow.py"),
+        ".loom/bin/loom_status.py": Path(__file__).with_name("loom_status.py"),
+        ".loom/bin/runtime_paths.py": Path(__file__).with_name("runtime_paths.py"),
+        ".loom/bin/runtime_state.py": Path(__file__).with_name("runtime_state.py"),
+        ".loom/bin/loom_check.py": Path(__file__).with_name("loom_check.py"),
+    }
+    source_path = runtime_sources[path]
+    return {
+        "path": path,
+        "kind": kind,
+        "source": source,
+        "sha256": sha256_file(source_path),
+    }
 
 
 def manifest_payload(result: dict[str, object]) -> dict[str, object]:
