@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -1745,12 +1746,16 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
             )
 
         for label, command, allowed in commands:
+            command_env = os.environ.copy()
+            for key in ("LOOM_SOURCE_REPO_ROOT", "LOOM_INSTALLED_SKILLS_ROOT", "LOOM_RUNTIME_SCENE"):
+                command_env.pop(key, None)
             result = subprocess.run(
                 command,
                 cwd=target_root,
                 check=False,
                 capture_output=True,
                 text=True,
+                env=command_env,
             )
             output = result.stdout.strip()
             if not output:

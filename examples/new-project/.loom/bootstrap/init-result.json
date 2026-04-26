@@ -430,7 +430,7 @@
           },
           "branch": {
             "status": "present",
-            "locator": "main",
+            "locator": "issue-349-runtime-env-poisoning",
             "authority": "git"
           },
           "worktree": {
