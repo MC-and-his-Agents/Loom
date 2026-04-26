@@ -3675,14 +3675,15 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             root,
             ["python3", ".loom/bin/loom_init.py", "runtime-state", "--target", "."],
             cwd=bootstrap_target,
+            env={"LOOM_SOURCE_REPO_ROOT": "/tmp/not-loom"},
         )
         if error:
-            failures.append(Failure("daily-execution-cli", f"`bootstrapped loom-init runtime-state` failed: {error}"))
+            failures.append(Failure("daily-execution-cli", f"`bootstrapped loom-init runtime-state with unrelated source env` failed: {error}"))
         else:
             require_runtime_state_payload(
                 failures,
                 category="daily-execution-cli",
-                context="`bootstrapped loom-init runtime-state`",
+                context="`bootstrapped loom-init runtime-state with unrelated source env`",
                 payload=payload.get("runtime_state"),
                 expected_scene="installed-runtime",
                 expected_carrier="bootstrapped-target-runtime",
