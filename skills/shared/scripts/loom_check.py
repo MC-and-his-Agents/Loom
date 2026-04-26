@@ -99,6 +99,7 @@ CORE_DOCS = (
     "docs/evidence/validations/validation-skills-consume-maturity-upgrade-path.md",
     "docs/evidence/validations/validation-adoption-gate-rollout.md",
     "docs/evidence/validations/validation-external-runtime-devendor-migration.md",
+    "docs/evidence/validations/validation-syvert-adversarial-adoption-fixture.md",
     "docs/evidence/validations/validation-github-profile-binding-orchestration.md",
     "docs/evidence/validations/validation-github-profile-drift-reconciliation.md",
     "docs/evidence/validations/validation-github-profile-graphql-budget-guard.md",
@@ -6077,6 +6078,395 @@ def check_external_runtime_devendor_contract(root: Path) -> list[Failure]:
     return failures
 
 
+def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
+    example_target = root / "examples/new-project"
+    if not example_target.exists():
+        return []
+
+    failures: list[Failure] = []
+
+    def write_json(path: Path, payload: object) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    def sha256_file(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def write_shadow_evidence(target: Path, evidence: str, value_key: str, value: str, source: str) -> None:
+        source_path = target / source
+        source_path.parent.mkdir(parents=True, exist_ok=True)
+        if not source_path.exists():
+            write_json(source_path, {"value": value})
+        write_json(
+            target / evidence,
+            {
+                value_key: value,
+                "source_files": [source],
+                "source_sha256": {
+                    source: sha256_file(source_path),
+                },
+            },
+        )
+
+    valid_interop = {
+        "schema_version": "loom-repo-interop/v1",
+        "host_adapters": [
+            {
+                "id": "guardian-review",
+                "summary": "Read repo-native review verdicts without reimplementing the host action.",
+                "surfaces": ["review", "merge_ready"],
+                "locator": "host/guardian-review.json",
+            }
+        ],
+        "repo_native_carriers": [
+            {
+                "id": "governance-status",
+                "summary": "Read repo-native governance status output without migrating carriers.",
+                "surfaces": ["admission", "review", "merge_ready", "closeout"],
+                "locator": "native/status",
+            }
+        ],
+        "shadow_surfaces": {
+            "admission": {
+                "summary": "Compare admission parity.",
+                "loom_locator": ".loom/shadow/admission-loom.json",
+                "repo_locator": ".loom/shadow/admission-repo.json",
+            },
+            "review": {
+                "summary": "Compare review parity.",
+                "loom_locator": ".loom/shadow/review-loom.json",
+                "repo_locator": ".loom/shadow/review-repo.json",
+            },
+            "merge_ready": {
+                "summary": "Compare merge-ready parity.",
+                "loom_locator": ".loom/shadow/merge-ready-loom.json",
+                "repo_locator": ".loom/shadow/merge-ready-repo.json",
+            },
+            "closeout": {
+                "summary": "Compare closeout parity.",
+                "loom_locator": ".loom/shadow/closeout-loom.json",
+                "repo_locator": ".loom/shadow/closeout-repo.json",
+            },
+        },
+    }
+
+    def install_strong_companion(target: Path) -> None:
+        companion = target / ".loom" / "companion"
+        companion.mkdir(parents=True, exist_ok=True)
+        for relative in (
+            ".loom/companion/README.md",
+            ".loom/companion/review.md",
+            ".loom/companion/merge-ready.md",
+            ".loom/companion/closeout.md",
+            ".loom/companion/specialized-gates.md",
+            ".loom/companion/metadata-contract.md",
+            ".loom/companion/context-schema.md",
+        ):
+            (target / relative).parent.mkdir(parents=True, exist_ok=True)
+            (target / relative).write_text("# Companion Fixture\n\nStable fixture authority.\n", encoding="utf-8")
+        write_json(
+            companion / "manifest.json",
+            {
+                "schema_version": "loom-repo-companion-manifest/v1",
+                "companion_entry": ".loom/companion/README.md",
+                "repo_interface": ".loom/companion/repo-interface.json",
+            },
+        )
+        write_json(
+            companion / "repo-interface.json",
+            {
+                "schema_version": "loom-repo-interface/v2",
+                "companion_entry": ".loom/companion/README.md",
+                "repo_specific_requirements": {
+                    "review": [],
+                    "merge_ready": [],
+                    "closeout": [],
+                },
+                "specialized_gates": [
+                    {
+                        "id": "repo-native-review",
+                        "summary": "Repo-native review stays repo-owned.",
+                        "locator": ".loom/companion/specialized-gates.md",
+                        "gate_type": "review",
+                    }
+                ],
+                "metadata_contract": {
+                    "fields": [
+                        {
+                            "id": "integration_check",
+                            "summary": "Repo-local integration metadata remains repo-owned.",
+                            "applicability_locator": ".loom/companion/metadata-contract.md",
+                            "authority_locator": ".loom/companion/review.md",
+                            "enforcement": "advisory",
+                        }
+                    ]
+                },
+                "context_schema": {
+                    "fields": [
+                        {
+                            "id": "item_key",
+                            "summary": "Repo-local item key mapping.",
+                            "type": "string",
+                            "required": True,
+                            "mapping_rule_locator": ".loom/companion/context-schema.md",
+                        }
+                    ]
+                },
+            },
+        )
+
+    def install_interop(target: Path) -> None:
+        (target / "host").mkdir(parents=True, exist_ok=True)
+        (target / "native" / "status").mkdir(parents=True, exist_ok=True)
+        for relative, payload in {
+            "host/guardian-review.json": {"decision": "allow"},
+            "native/status/admission.json": {"result": "pass"},
+            "native/status/review.json": {"decision": "allow"},
+            "native/status/merge-ready.json": {"status": "pass"},
+            "native/status/closeout.json": {"status": "done"},
+        }.items():
+            write_json(target / relative, payload)
+        write_shadow_evidence(target, ".loom/shadow/admission-loom.json", "result", "pass", ".loom/status/current.md")
+        write_shadow_evidence(target, ".loom/shadow/admission-repo.json", "result", "pass", "native/status/admission.json")
+        write_shadow_evidence(target, ".loom/shadow/review-loom.json", "decision", "allow", "host/guardian-review.json")
+        write_shadow_evidence(target, ".loom/shadow/review-repo.json", "decision", "allow", "native/status/review.json")
+        write_shadow_evidence(target, ".loom/shadow/merge-ready-loom.json", "status", "pass", "host/guardian-review.json")
+        write_shadow_evidence(target, ".loom/shadow/merge-ready-repo.json", "status", "pass", "native/status/merge-ready.json")
+        write_shadow_evidence(target, ".loom/shadow/closeout-loom.json", "status", "done", ".loom/status/current.md")
+        write_shadow_evidence(target, ".loom/shadow/closeout-repo.json", "status", "done", "native/status/closeout.json")
+        write_json(target / ".loom" / "companion" / "interop.json", valid_interop)
+
+    def git_init(target: Path) -> str | None:
+        for args in (
+            ["git", "init"],
+            ["git", "config", "user.email", "loom-check@example.com"],
+            ["git", "config", "user.name", "loom-check"],
+            ["git", "remote", "add", "origin", "https://github.com/MC-and-his-Agents/Loom.git"],
+            ["git", "add", "-f", "."],
+            ["git", "commit", "-m", "strong adoption fixture baseline"],
+        ):
+            result = run_command(root, args, cwd=target, timeout_seconds=30)
+            if result.returncode != 0:
+                failures.append(Failure("adversarial-adoption", f"`{' '.join(args)}` setup failed: {result.stderr.strip() or result.stdout.strip()}"))
+                return None
+        head = run_command(root, ["git", "rev-parse", "HEAD"], cwd=target, timeout_seconds=30)
+        if head.returncode != 0:
+            failures.append(Failure("adversarial-adoption", "`git rev-parse HEAD` setup failed"))
+            return None
+        return head.stdout.strip()
+
+    def install_fresh_reviews(target: Path, reviewed_head: str) -> None:
+        validation_summary = "Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist."
+        for suffix, kind in (("", "code_review"), (".spec", "spec_review")):
+            write_json(
+                target / ".loom" / "reviews" / f"INIT-0001{suffix}.json",
+                {
+                    "schema_version": "loom-review/v1",
+                    "item_id": "INIT-0001",
+                    "decision": "allow",
+                    "kind": kind,
+                    "summary": "Syvert-style strong adoption fixture review is fresh.",
+                    "reviewer": "loom-check",
+                    "reviewed_head": reviewed_head,
+                    "reviewed_validation_summary": validation_summary,
+                    "fallback_to": None,
+                    "findings": [],
+                    "blocking_issues": [],
+                    "follow_ups": [],
+                },
+            )
+
+    def prepare_strong_target(target: Path) -> str | None:
+        shutil.copytree(example_target, target)
+        install_strong_companion(target)
+        install_interop(target)
+        reviewed_head = git_init(target)
+        if reviewed_head is None:
+            return None
+        install_fresh_reviews(target, reviewed_head)
+        result = run_command(root, ["git", "add", "-f", ".loom/reviews"], cwd=target, timeout_seconds=30)
+        if result.returncode == 0:
+            result = run_command(root, ["git", "commit", "-m", "record fresh reviews"], cwd=target, timeout_seconds=30)
+        if result.returncode != 0:
+            failures.append(Failure("adversarial-adoption", f"fresh review setup failed: {result.stderr.strip() or result.stdout.strip()}"))
+            return None
+        head = run_command(root, ["git", "rev-parse", "HEAD"], cwd=target, timeout_seconds=30)
+        return head.stdout.strip() if head.returncode == 0 else reviewed_head
+
+    with tempfile.TemporaryDirectory(prefix="loom-check-syvert-adoption-") as tmp:
+        base = Path(tmp)
+        baseline = base / "baseline"
+        current_head = prepare_strong_target(baseline)
+        if current_head is None:
+            return failures
+        install_fresh_reviews(baseline, current_head)
+        run_command(root, ["git", "add", "-f", ".loom/reviews"], cwd=baseline, timeout_seconds=30)
+        run_command(root, ["git", "commit", "-m", "refresh reviews to current head"], cwd=baseline, timeout_seconds=30)
+
+        status_payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "governance-profile", "status", "--target", str(baseline)],
+        )
+        if error:
+            failures.append(Failure("adversarial-adoption", f"`governance-profile status` baseline failed: {error}"))
+        else:
+            maturity = status_payload.get("maturity")
+            if isinstance(maturity, dict) and maturity.get("current") == "strong":
+                pass
+            elif isinstance(maturity, dict):
+                missing_by_level = maturity.get("missing_by_level")
+                strong_missing = missing_by_level.get("strong") if isinstance(missing_by_level, dict) else []
+                if not isinstance(strong_missing, list) or "repo_interface" in strong_missing or "repo_interop" in strong_missing:
+                    failures.append(Failure("adversarial-adoption", "hostless baseline must still prove repo companion and interop carriers are present"))
+            else:
+                failures.append(Failure("adversarial-adoption", "baseline fixture must reach strong maturity when GitHub host signals are readable"))
+
+        for label, args, expected in (
+            ("runtime-parity", ["python3", str(baseline / ".loom/bin/loom_flow.py"), "runtime-parity", "validate", "--target", str(baseline)], "pass"),
+            ("shadow-parity", ["python3", "tools/loom_flow.py", "shadow-parity", "--target", str(baseline)], "pass"),
+            ("shadow-parity --blocking", ["python3", "tools/loom_flow.py", "shadow-parity", "--target", str(baseline), "--blocking"], "pass"),
+            ("flow resume", ["python3", "tools/loom_flow.py", "flow", "resume", "--target", str(baseline), "--item", "INIT-0001"], "pass"),
+        ):
+            payload, error = load_command_json(root, args)
+            if error:
+                failures.append(Failure("adversarial-adoption", f"`{label}` baseline failed: {error}"))
+            elif payload.get("result") != expected:
+                failures.append(Failure("adversarial-adoption", f"`{label}` baseline must return `{expected}`"))
+
+        poisoned_payload, error = load_command_json(
+            root,
+            ["python3", str(baseline / ".loom/bin/loom_init.py"), "runtime-state", "--target", str(baseline)],
+            env={"LOOM_SOURCE_REPO_ROOT": "/tmp/not-loom"},
+        )
+        if error:
+            failures.append(Failure("adversarial-adoption", f"env poisoning runtime-state failed: {error}"))
+        else:
+            runtime_state = poisoned_payload.get("runtime_state")
+            carrier = runtime_state.get("carrier") if isinstance(runtime_state, dict) else None
+            if carrier != "bootstrapped-target-runtime" or poisoned_payload.get("result") != "pass":
+                failures.append(Failure("adversarial-adoption", "env poisoning must not override bootstrapped target runtime detection"))
+
+        drift_target = base / "runtime-drift"
+        shutil.copytree(baseline, drift_target)
+        manifest_path = drift_target / ".loom/bootstrap/manifest.json"
+        manifest = load_json_file(manifest_path)
+        artifacts = manifest.get("artifacts") if isinstance(manifest, dict) else []
+        if isinstance(artifacts, list):
+            for artifact in artifacts:
+                if isinstance(artifact, dict) and artifact.get("path") == ".loom/bin/loom_init.py":
+                    artifact["sha256"] = "0" * 64
+                    break
+        write_json(manifest_path, manifest)
+        payload, error = load_command_json(
+            root,
+            ["python3", str(drift_target / ".loom/bin/loom_flow.py"), "runtime-parity", "validate", "--target", str(drift_target)],
+        )
+        if error:
+            failures.append(Failure("adversarial-adoption", f"runtime provenance drift sample failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("adversarial-adoption", "runtime provenance drift must block runtime-parity"))
+
+        rollover_target = base / "active-rollover"
+        shutil.copytree(baseline, rollover_target)
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "work-item",
+                "create",
+                "--target",
+                str(rollover_target),
+                "--item",
+                "WORK-0002",
+                "--goal",
+                "Validate active item rollover",
+                "--scope",
+                "Keep the fixture constrained to Loom carriers",
+                "--execution-path",
+                "execution/support",
+                "--workspace-entry",
+                ".",
+                "--validation-entry",
+                "python3 .loom/bin/loom_init.py verify --target .",
+                "--closing-condition",
+                "The active item can be read mechanically.",
+                "--init-recovery",
+                "--activate",
+            ],
+        )
+        if error:
+            failures.append(Failure("adversarial-adoption", f"active item rollover create failed: {error}"))
+        else:
+            resume_payload, resume_error = load_command_json(
+                root,
+                ["python3", "tools/loom_flow.py", "flow", "resume", "--target", str(rollover_target), "--item", "WORK-0002"],
+            )
+            item_id = resume_payload.get("item", {}).get("id") if isinstance(resume_payload, dict) and isinstance(resume_payload.get("item"), dict) else None
+            if resume_error:
+                failures.append(Failure("adversarial-adoption", f"active item rollover resume failed: {resume_error}"))
+            elif item_id != "WORK-0002":
+                failures.append(Failure("adversarial-adoption", "active item rollover must consume WORK-0002 instead of bootstrap INIT-0001"))
+
+        spoof_target = base / "metadata-spoof"
+        shutil.copytree(baseline, spoof_target)
+        work_item_path = spoof_target / ".loom/work-items/INIT-0001.md"
+        work_item_path.write_text(
+            work_item_path.read_text(encoding="utf-8").replace(
+                "- Goal: Bootstrap the first executable Loom path for this repository\n",
+                "- Goal: spoofed wrong goal\n- Goal: Bootstrap the first executable Loom path for this repository\n",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(root, ["python3", "tools/loom_flow.py", "fact-chain", "--target", str(spoof_target)])
+        if error:
+            failures.append(Failure("adversarial-adoption", f"metadata spoof sample failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("adversarial-adoption", "metadata spoofing must fail closed in the canonical section"))
+
+        shadow_target = base / "shadow-broken"
+        shutil.copytree(baseline, shadow_target)
+        shadow_payload = load_json_file(shadow_target / ".loom/shadow/review-repo.json")
+        if isinstance(shadow_payload, dict):
+            shadow_payload.pop("source_sha256", None)
+            write_json(shadow_target / ".loom/shadow/review-repo.json", shadow_payload)
+        warn_payload, warn_error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "shadow-parity", "--target", str(shadow_target), "--surface", "review"],
+        )
+        block_payload, block_error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "shadow-parity", "--target", str(shadow_target), "--surface", "review", "--blocking"],
+        )
+        if warn_error:
+            failures.append(Failure("adversarial-adoption", f"shadow evidence validation-only sample failed: {warn_error}"))
+        elif warn_payload.get("result") != "warn":
+            failures.append(Failure("adversarial-adoption", "broken shadow evidence must warn in validation-only mode"))
+        if block_error:
+            failures.append(Failure("adversarial-adoption", f"shadow evidence blocking sample failed: {block_error}"))
+        elif block_payload.get("result") != "block":
+            failures.append(Failure("adversarial-adoption", "broken shadow evidence must block in blocking mode"))
+
+        head_before_drift = run_command(root, ["git", "rev-parse", "HEAD"], cwd=baseline, timeout_seconds=30).stdout.strip()
+        (baseline / "implementation-drift.txt").write_text("changed after review\n", encoding="utf-8")
+        run_command(root, ["git", "add", "implementation-drift.txt"], cwd=baseline, timeout_seconds=30)
+        run_command(root, ["git", "commit", "-m", "implementation drift after review"], cwd=baseline, timeout_seconds=30)
+        binding_payload, binding_errors = review_head_binding(
+            baseline,
+            reviewed_head=head_before_drift,
+            allowed_paths=set(),
+        )
+        if not binding_errors or binding_payload.get("status") != "implementation-drift-only":
+            failures.append(Failure("adversarial-adoption", "review head binding must classify implementation drift after review"))
+
+    return failures
+
+
 def check_node_installer(root: Path) -> list[Failure]:
     category = "node-installer"
     failures: list[Failure] = []
@@ -6189,6 +6579,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_repo_companion_interface_contracts(root))
     failures.extend(check_repo_interop_contracts(root))
     failures.extend(check_external_runtime_devendor_contract(root))
+    failures.extend(check_adversarial_adoption_fixture(root))
     failures.extend(check_node_installer(root))
     failures.extend(check_generated_artifacts_untracked(root))
     failures.extend(check_github_cli_budget(root))
@@ -6197,7 +6588,7 @@ def collect_failures(root: Path) -> list[Failure]:
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 17
+    categories_checked = 18
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")
