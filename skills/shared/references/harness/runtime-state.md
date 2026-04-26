@@ -101,3 +101,17 @@
   - 回答仓库 Loom 装配态与治理载体/宿主控制面的落位
 
 这三者不得互相伪装成别名。
+
+## 7. Carrier transition invariants
+
+从 vendored `.loom/bin` runtime 迁移到 external runtime 时，`runtime-state` 必须保持 fail-closed：
+
+- bootstrapped target runtime 优先由当前入口路径和 `.loom/bootstrap/manifest.json` 判定
+- 外部 `LOOM_SOURCE_REPO_ROOT` 不得抢先改判 bootstrapped target runtime
+- `.loom/bootstrap/manifest.json` 中声明的 `.loom/bin/*` artifact 必须继续有 `sha256`
+- 若 vendored runtime 被删除，external runtime 必须提供 versioned runtime locator 和 rollback path
+- external runtime rehearsal 不得改写 `.loom/companion`、status、work item、review 或 shadow evidence 的 truth
+
+当前默认 carrier 仍是 vendored `.loom/bin`。external runtime 只能作为显式迁移目标，不能通过环境变量隐式启用。
+
+迁移合同见 [external-runtime-companion-contract.md](../adoption/external-runtime-companion-contract.md)。

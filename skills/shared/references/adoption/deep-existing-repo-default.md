@@ -2,14 +2,14 @@
 
 本文件定义 Loom 面向成熟既有治理重仓的默认接入策略。
 
-它不替代 `lightweight-retrofit-default`，而是作为 `complex-existing` 下的保守 attach path，服务已经拥有稳定根规则、统一验证入口与沉重 repo-specific gates 的仓库。
+它不替代 [lightweight-retrofit-default.md](./lightweight-retrofit-default.md)，而是作为 `complex-existing` 下的保守 attach path，服务已经拥有稳定根规则、统一验证入口与沉重 repo-specific gates 的仓库。
 
 ## 1. 适用场景
 
 当目标仓库同时满足以下条件时，默认采用本策略：
 
-- 属于既有仓库，且 `loom-init` 判断仍为 `复杂既有仓库`
-- 已有清晰的根级边界文档
+- 属于既有仓库，且 `loom-init` 判断仍为 `complex-existing`
+- 已有清晰的根级边界文档，例如 `AGENTS.md`、`WORKFLOW.md` 或等价根规则
 - 已有统一的仓库级验证入口
 - 已出现 `merge_review_semantic_overload`
 - 当前复杂度主要来自 review / guardian 负载、repo-specific gates、retained host actions 或 repo-native carriers，而不是 Loom 缺少 recovery/status carriers
@@ -44,6 +44,8 @@
 - 保留 repo-native carriers
 - 只追加 Loom-owned attach metadata 与 companion 入口
 
+换句话说，Loom 这一步接管的是入口与读面，不是宿主动作底层实现。
+
 ## 5. 默认不装配
 
 第一轮默认不装配：
@@ -60,5 +62,18 @@
 
 - 当前仓库需要 Loom-owned recovery carrier 承接多轮执行停点
 - repo-native carriers 无法稳定承接 recovery / review / closeout 真相
-- companion 之外还需要 Loom-owned `status control plane` 承接统一读面
+- companion 之外还需要 Loom-owned status surface 承接统一读面
 - repo-local attach 入口已经稳定，但下一轮需要 typed machine contract、interop 或 shadow parity
+
+## 7. Attach-only 之后的 external runtime 路径
+
+成熟既有仓库第一轮可以继续提交 vendored `.loom/bin`，因为它提供可审计 runtime provenance。
+
+只有在以下条件满足后，才应考虑 de-vendor：
+
+- `.loom/companion` 与 `interop.json` 已稳定
+- `runtime-state`、`governance-profile status`、`runtime-parity validate`、`shadow-parity` 都能读取同一治理载体
+- external runtime locator 已按 [external-runtime-companion-contract.md](./external-runtime-companion-contract.md) 版本化声明
+- rollback 能回到 vendored `.loom/bin` 或重新 bootstrap
+
+de-vendor 不得删除 repo-owned residue，也不得替代 guardian、integration contract、release / sprint 等仓库私有规则。

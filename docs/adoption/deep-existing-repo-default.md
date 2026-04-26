@@ -64,3 +64,16 @@
 - repo-native carriers 无法稳定承接 recovery / review / closeout 真相
 - companion 之外还需要 Loom-owned status surface 承接统一读面
 - repo-local attach 入口已经稳定，但下一轮需要 typed machine contract、interop 或 shadow parity
+
+## 7. Attach-only 之后的 external runtime 路径
+
+成熟既有仓库第一轮可以继续提交 vendored `.loom/bin`，因为它提供可审计 runtime provenance。
+
+只有在以下条件满足后，才应考虑 de-vendor：
+
+- `.loom/companion` 与 `interop.json` 已稳定
+- `runtime-state`、`governance-profile status`、`runtime-parity validate`、`shadow-parity` 都能读取同一治理载体
+- external runtime locator 已按 [external-runtime-companion-contract.md](./external-runtime-companion-contract.md) 版本化声明
+- rollback 能回到 vendored `.loom/bin` 或重新 bootstrap
+
+de-vendor 不得删除 repo-owned residue，也不得替代 guardian、integration contract、release / sprint 等仓库私有规则。

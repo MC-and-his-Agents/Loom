@@ -230,6 +230,8 @@ blocking 模式只改变消费结果，不改变 `shadow_surfaces` schema：
   - 承接 repo-specific rules、requirements、typed gates、metadata/context contract
 - `interop.json`
   - 承接 retained host action result、repo-native carrier 与 shadow parity 的只读入口
+- [external-runtime-companion-contract.md](./external-runtime-companion-contract.md)
+  - 承接从 vendored `.loom/bin` 到 versioned external Loom runtime 的迁移路径
 - [host-action-contract.md](../methodology/harness/host-action-contract.md)
   - 承接宿主动作 ownership、结果语义与 fallback discipline
 
@@ -237,5 +239,18 @@ blocking 模式只改变消费结果，不改变 `shadow_surfaces` schema：
 
 - 不把 interop 细节塞回 `repo-interface.json`
 - 不让 `interop.json` 承载运行态或 authored state
+- 不让 `interop.json` 承载 external-runtime locator、runtime version、rollback mode 或 runtime provenance
 - 不让 Loom 因为读取了 interop contract，就接管宿主底层实现
 - 不让 `interop.json` 定义 blocking owner、override path 或 final merge authority
+
+## 7. 与 external-runtime / de-vendor migration 的边界
+
+external-runtime 迁移只改变 Loom runtime 的执行来源，不改变 interop 读取的 repo-native truth。
+
+稳定约束：
+
+- `.loom/companion/interop.json` 在 vendored runtime 与 external runtime 下必须保持同一只读 locator 语义
+- `host_adapters`、`repo_native_carriers`、`shadow_surfaces` 不得因为 runtime locator 改变而改写 truth
+- shadow evidence envelope 的 `source_files` 与 `source_sha256` 必须继续以仓内文件为 authority
+- external-runtime locator 必须落在 [external-runtime-companion-contract.md](./external-runtime-companion-contract.md)，不得写入 `interop.json`
+- de-vendor 后的失败回滚必须回到 vendored `.loom/bin` 或重新 bootstrap，不得通过篡改 interop 结果伪装通过
