@@ -1627,24 +1627,23 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
                 ):
                     if field not in runtime_evidence_report:
                         errors.append(f"fact-chain: runtime_evidence is missing `{field}`")
-            matching_work_item = None
-            for work_item in validated_work_items:
-                if work_item.get("id") == current_item_id:
-                    matching_work_item = work_item
-                    break
-            if matching_work_item is None:
-                errors.append(f"init-result is missing the current work item `{current_item_id}`")
-            else:
+            bootstrap_work_item = next(
+                (work_item for work_item in validated_work_items if work_item.get("id") == WORK_ITEM_ID),
+                None,
+            )
+            if bootstrap_work_item is None:
+                errors.append(f"init-result is missing the bootstrap work item `{WORK_ITEM_ID}`")
+            elif current_item_id == WORK_ITEM_ID:
                 expected_init_fields = {
                     "recovery_entry": fact_chain_report["fact_chain"]["entry_points"]["recovery_entry"],
                     "validation_entry": fact_chain_report["facts"]["validation_entry"]["value"],
                     "workspace_entry": fact_chain_report["facts"]["workspace_entry"]["value"],
                 }
                 for field, expected_value in expected_init_fields.items():
-                    actual_value = matching_work_item.get(field)
+                    actual_value = bootstrap_work_item.get(field)
                     if actual_value != expected_value:
                         errors.append(
-                            f"init-result work item `{current_item_id}` has inconsistent `{field}`: "
+                            f"init-result bootstrap work item `{WORK_ITEM_ID}` has inconsistent `{field}`: "
                             f"expected `{expected_value}`, got `{actual_value}`"
                         )
 

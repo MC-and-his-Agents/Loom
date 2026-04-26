@@ -893,18 +893,60 @@ def first_match(directory: Path, suffix: str, root: Path) -> str:
     return ""
 
 
+def existing_locator(root: Path, relative: str | None) -> str:
+    if not relative:
+        return ""
+    return relative if (root / relative).exists() else ""
+
+
+def active_or_first(root: Path, relative: str | None, directory: Path, suffix: str) -> str:
+    return existing_locator(root, relative) or (first_match(directory, suffix, root) if directory.exists() else "")
+
+
+def current_review_locator(root: Path, review_dir: Path, item_id: str) -> str:
+    review_path = review_dir / f"{item_id}.json"
+    if review_path.exists():
+        return relative_locator(review_path, root)
+    return first_match(review_dir, ".json", root) if review_dir.exists() else ""
+
+
+def active_entry_points(root: Path) -> dict[str, str]:
+    init_result = root / ".loom/bootstrap/init-result.json"
+    try:
+        payload = json.loads(init_result.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    fact_chain = payload.get("fact_chain")
+    if not isinstance(fact_chain, dict):
+        return {}
+    entry_points = fact_chain.get("entry_points")
+    if not isinstance(entry_points, dict):
+        return {}
+    active: dict[str, str] = {}
+    for key in ("current_item_id", "work_item", "recovery_entry", "status_surface"):
+        value = entry_points.get(key)
+        if isinstance(value, str) and value.strip():
+            active[key] = value.strip()
+    return active
+
+
 def detect_carrier_summary(root: Path, *, repository_mode: str, planning_mode: bool) -> dict[str, dict[str, str]]:
+    active = active_entry_points(root)
+    active_item_id = active.get("current_item_id") or "INIT-0001"
     item_dir = root / ".loom/work-items"
     recovery_dir = root / ".loom/progress"
     review_dir = root / ".loom/reviews"
-    status_path = root / ".loom/status/current.md"
-    spec_path = root / ".loom/specs/INIT-0001/spec.md"
-    plan_path = root / ".loom/specs/INIT-0001/plan.md"
+    status_locator = active.get("status_surface") or ".loom/status/current.md"
+    status_path = root / status_locator
+    spec_path = root / f".loom/specs/{active_item_id}/spec.md"
+    plan_path = root / f".loom/specs/{active_item_id}/plan.md"
 
     present_locators = {
-        "work_item": first_match(item_dir, ".md", root) if item_dir.exists() else "",
-        "recovery": first_match(recovery_dir, ".md", root) if recovery_dir.exists() else "",
-        "review": first_match(review_dir, ".json", root) if review_dir.exists() else "",
+        "work_item": active_or_first(root, active.get("work_item"), item_dir, ".md"),
+        "recovery": active_or_first(root, active.get("recovery_entry"), recovery_dir, ".md"),
+        "review": current_review_locator(root, review_dir, active_item_id),
         "status_surface": relative_locator(status_path, root) if status_path.exists() else "",
         "spec_path": relative_locator(spec_path, root) if spec_path.exists() else "",
         "plan_path": relative_locator(plan_path, root) if plan_path.exists() else "",
@@ -922,11 +964,11 @@ def detect_carrier_summary(root: Path, *, repository_mode: str, planning_mode: b
     return summary
 
 
-def detect_execution_entry(root: Path, loom_state: str, *, bootstrap_mode: bool) -> str:
+def detect_execution_entry(root: Path, loom_state: str, *, bootstrap_mode: bool, active_item_id: str = "INIT-0001") -> str:
     if bootstrap_mode:
-        return "python3 .loom/bin/loom_flow.py flow resume --target . --item INIT-0001"
+        return f"python3 .loom/bin/loom_flow.py flow resume --target . --item {active_item_id}"
     if loom_state == "active":
-        return f"{command_prefix(root, 'loom_flow.py')} flow resume --target . --item INIT-0001"
+        return f"{command_prefix(root, 'loom_flow.py')} flow resume --target . --item {active_item_id}"
     if loom_state == "partial":
         return f"{command_prefix(root, 'loom_init.py')} route --target <repo> --task \"请接手当前事项并恢复上下文后继续推进\""
     return "unknown"
@@ -942,16 +984,16 @@ def detect_validation_entry(loom_state: str, *, bootstrap_mode: bool) -> str:
     return "unknown"
 
 
-def detect_review_merge_surface(root: Path, loom_state: str, *, bootstrap_mode: bool) -> dict[str, str]:
+def detect_review_merge_surface(root: Path, loom_state: str, *, bootstrap_mode: bool, active_item_id: str = "INIT-0001") -> dict[str, str]:
     pr_template = ".github/PULL_REQUEST_TEMPLATE.md" if file_exists(root, ".github/PULL_REQUEST_TEMPLATE.md") else "unknown"
     validation_surface = ".loom/status/current.md" if file_exists(root, ".loom/status/current.md") else "unknown"
     if bootstrap_mode and validation_surface == "unknown":
         validation_surface = ".loom/status/current.md"
 
     if bootstrap_mode:
-        merge_surface = "python3 .loom/bin/loom_flow.py checkpoint merge --target . --item INIT-0001"
+        merge_surface = f"python3 .loom/bin/loom_flow.py checkpoint merge --target . --item {active_item_id}"
     elif loom_state == "active":
-        merge_surface = f"{command_prefix(root, 'loom_flow.py')} checkpoint merge --target . [--item <id>]"
+        merge_surface = f"{command_prefix(root, 'loom_flow.py')} checkpoint merge --target . --item {active_item_id}"
     else:
         merge_surface = "unknown"
     return {
@@ -1207,11 +1249,12 @@ def build_governance_surface(
     loom_state = detect_loom_state(root)
     repository_mode = detect_repository_mode(root, loom_state, scenario_override=scenario_override)
     planning_mode = bootstrap_mode and repository_mode == "new" and loom_state != "active"
+    active_item_id = active_entry_points(root).get("current_item_id", "INIT-0001")
     carrier_summary = detect_carrier_summary(root, repository_mode=repository_mode, planning_mode=planning_mode)
     github_control_plane, github_missing = detect_github_control_plane(root)
-    execution_entry = detect_execution_entry(root, loom_state, bootstrap_mode=bootstrap_mode)
+    execution_entry = detect_execution_entry(root, loom_state, bootstrap_mode=bootstrap_mode, active_item_id=active_item_id)
     validation_entry = detect_validation_entry(loom_state, bootstrap_mode=bootstrap_mode)
-    review_merge_surface = detect_review_merge_surface(root, loom_state, bootstrap_mode=bootstrap_mode)
+    review_merge_surface = detect_review_merge_surface(root, loom_state, bootstrap_mode=bootstrap_mode, active_item_id=active_item_id)
     repo_interface, repo_interface_missing = detect_repo_interface(root)
     repo_interop, repo_interop_missing = detect_repo_interop(root)
     host_binding = detect_host_binding_surface(

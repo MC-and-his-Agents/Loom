@@ -1169,7 +1169,7 @@ def formal_spec_path(context: dict[str, Any]) -> str | None:
             return artifact
 
     fallback = context["target_root"] / ".loom/specs/INIT-0001/spec.md"
-    if fallback.exists():
+    if context["item_id"] == "INIT-0001" and fallback.exists():
         return ".loom/specs/INIT-0001/spec.md"
     return None
 
@@ -1182,12 +1182,15 @@ def spec_suite_paths(context: dict[str, Any]) -> dict[str, str]:
             "plan": f".loom/specs/{item_id}/plan.md",
             "implementation_contract": f".loom/specs/{item_id}/implementation-contract.md",
         },
-        {
-            "spec": ".loom/specs/INIT-0001/spec.md",
-            "plan": ".loom/specs/INIT-0001/plan.md",
-            "implementation_contract": ".loom/specs/INIT-0001/implementation-contract.md",
-        },
     ]
+    if item_id == "INIT-0001":
+        candidates.append(
+            {
+                "spec": ".loom/specs/INIT-0001/spec.md",
+                "plan": ".loom/specs/INIT-0001/plan.md",
+                "implementation_contract": ".loom/specs/INIT-0001/implementation-contract.md",
+            }
+        )
     for suite in candidates:
         if (context["target_root"] / suite["spec"]).exists():
             return suite
