@@ -18,7 +18,7 @@ from pathlib import Path
 
 from fact_chain_support import inspect_fact_chain
 from governance_surface import build_governance_surface
-from loom_flow import repo_specific_requirements_payload
+from loom_flow import repo_specific_requirements_payload, review_head_binding
 from runtime_paths import repo_local_root
 
 TOP_LEVEL_DIRS = (
@@ -2211,6 +2211,15 @@ def check_demo_fact_chain(root: Path) -> list[Failure]:
         failures.append(Failure("demo-fact-chain", detail))
     if report and report.get("fact_chain", {}).get("entry_points", {}).get("status_surface") != ".loom/status/current.md":
         failures.append(Failure("demo-fact-chain", "demo fact chain must point status_surface to `.loom/status/current.md`"))
+    head_result = run_command(root, ["git", "rev-parse", "HEAD"], timeout_seconds=30)
+    if head_result.returncode == 0:
+        head_binding, head_errors = review_head_binding(
+            root,
+            reviewed_head=head_result.stdout.strip(),
+            allowed_paths=set(),
+        )
+        if head_errors or head_binding.get("status") != "fresh":
+            failures.append(Failure("demo-fact-chain", "review head binding must report `fresh` for the current HEAD"))
     with tempfile.TemporaryDirectory(prefix="loom-check-metadata-spoof-") as tmp:
         spoof_target = Path(tmp) / "new-project"
         shutil.copytree(target, spoof_target)
@@ -4421,6 +4430,65 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 elif checkpoint_merge_payload.get("result") != "pass":
                     failures.append(Failure("daily-execution-cli", "`installed checkpoint merge` must pass for the positive chain"))
 
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "recovery",
+                        "writeback",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                        "--current-checkpoint",
+                        "merge checkpoint",
+                        "--current-stop",
+                        "Only Loom carrier status changed after review.",
+                        "--next-step",
+                        "Confirm carrier-only review head binding remains consumable.",
+                        "--latest-validation-summary",
+                        positive_summary,
+                    ],
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed recovery writeback carrier-only` failed: {error}"))
+                elif payload.get("result") != "pass":
+                    failures.append(Failure("daily-execution-cli", "`installed recovery writeback carrier-only` must pass"))
+                git_add = run_command(root, ["git", "add", "-f", ".loom/progress/INIT-0001.md", ".loom/status/current.md"], cwd=positive_target)
+                if git_add.returncode != 0:
+                    detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
+                    failures.append(Failure("daily-execution-cli", f"`installed carrier-only commit` add failed: {detail}"))
+                else:
+                    git_commit = run_command(
+                        root,
+                        ["git", "commit", "-m", "refresh carriers after review for #354"],
+                        cwd=positive_target,
+                    )
+                    if git_commit.returncode != 0:
+                        detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
+                        failures.append(Failure("daily-execution-cli", f"`installed carrier-only commit` failed: {detail}"))
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "checkpoint",
+                        "merge",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed checkpoint merge` carrier-only failed: {error}"))
+                elif payload.get("result") != "pass":
+                    failures.append(Failure("daily-execution-cli", "`installed checkpoint merge` must pass for carrier-only review head drift"))
+                elif "carrier-only" not in json.dumps(payload, ensure_ascii=False):
+                    failures.append(Failure("daily-execution-cli", "`installed checkpoint merge` must expose carrier-only review head binding"))
+
                 broken_install = tmp_root / "broken-install" / "skills"
                 shutil.copytree(root / "skills", broken_install)
                 (broken_install / "install-layout.json").unlink()
@@ -4601,6 +4669,8 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     failures.append(Failure("daily-execution-cli", f"`installed checkpoint merge` drift negative failed: {error}"))
                 elif payload.get("result") != "block":
                     failures.append(Failure("daily-execution-cli", "`installed checkpoint merge` must block when HEAD drifts beyond Loom carriers"))
+                elif "implementation-drift-only" not in json.dumps(payload, ensure_ascii=False):
+                    failures.append(Failure("daily-execution-cli", "`installed checkpoint merge` drift negative must expose implementation-drift-only review head binding"))
 
     gh_auth_probe = None
     if shutil.which("gh") is not None:

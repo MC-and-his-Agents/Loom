@@ -1329,7 +1329,7 @@ def review_head_binding(
     if not isinstance(current_head, str) or not current_head.strip():
         return payload, ["current HEAD is unavailable"]
     if reviewed_head == current_head:
-        payload["status"] = "current"
+        payload["status"] = "fresh"
         payload["stale"] = False
         return payload, []
 
@@ -1344,6 +1344,11 @@ def review_head_binding(
         payload["status"] = "carrier-only"
         payload["stale"] = False
         return payload, []
+
+    if disallowed_paths and len(disallowed_paths) == len(changed_paths):
+        payload["status"] = "implementation-drift-only"
+        payload["stale"] = True
+        return payload, ["review artifact has implementation drift after review"]
 
     payload["status"] = "stale"
     payload["stale"] = True
@@ -1372,7 +1377,7 @@ def spec_review_head_binding(
     if not isinstance(current_head, str) or not current_head.strip():
         return payload, ["current HEAD is unavailable"]
     if reviewed_head == current_head:
-        payload["status"] = "current"
+        payload["status"] = "fresh"
         payload["stale"] = False
         return payload, []
 
