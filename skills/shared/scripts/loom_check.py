@@ -2211,6 +2211,43 @@ def check_demo_fact_chain(root: Path) -> list[Failure]:
         failures.append(Failure("demo-fact-chain", detail))
     if report and report.get("fact_chain", {}).get("entry_points", {}).get("status_surface") != ".loom/status/current.md":
         failures.append(Failure("demo-fact-chain", "demo fact chain must point status_surface to `.loom/status/current.md`"))
+    with tempfile.TemporaryDirectory(prefix="loom-check-metadata-spoof-") as tmp:
+        spoof_target = Path(tmp) / "new-project"
+        shutil.copytree(target, spoof_target)
+        work_item_path = spoof_target / ".loom/work-items/INIT-0001.md"
+        work_item_text = work_item_path.read_text(encoding="utf-8")
+        work_item_path.write_text(
+            work_item_text.replace(
+                "- Goal: Bootstrap the first executable Loom path for this repository\n",
+                "- Goal: wrong spoofed goal\n- Goal: Bootstrap the first executable Loom path for this repository\n",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        _, spoof_errors = inspect_fact_chain(spoof_target)
+        if not any("duplicate field `Goal`" in error for error in spoof_errors):
+            failures.append(Failure("demo-fact-chain", "fact-chain parser must reject duplicate canonical metadata fields"))
+
+        runtime_spoof_target = Path(tmp) / "runtime-spoof"
+        shutil.copytree(target, runtime_spoof_target)
+        status_path = runtime_spoof_target / ".loom/status/current.md"
+        status_text = status_path.read_text(encoding="utf-8")
+        status_path.write_text(
+            status_text.replace(
+                "- Run Entry: not_applicable\n",
+                "- Run Entry: wrong-spoofed-run\n- Run Entry: not_applicable\n",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "fact-chain", "--target", str(runtime_spoof_target)],
+        )
+        if error:
+            failures.append(Failure("demo-fact-chain", f"`flow fact-chain` metadata spoof sample failed unexpectedly: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("demo-fact-chain", "`flow fact-chain` must not legacy-fallback past duplicate Runtime Evidence fields"))
     return failures
 
 
