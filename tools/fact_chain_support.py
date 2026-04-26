@@ -131,6 +131,7 @@ def parse_key_value_section(
         return {}, [f"{relative_path}: missing section `{section_name}`"]
 
     values: dict[str, str] = {}
+    seen: dict[str, str] = {}
     for raw_line in lines:
         stripped = raw_line.strip()
         if not stripped:
@@ -143,7 +144,15 @@ def parse_key_value_section(
         if label not in field_map:
             errors.append(f"{relative_path}: unexpected field `{label}` in `{section_name}`")
             continue
-        values[field_map[label]] = _clean_value(match.group(2))
+        canonical = field_map[label]
+        if canonical in seen:
+            errors.append(
+                f"{relative_path}: duplicate field `{label}` in `{section_name}` "
+                f"(canonical `{canonical}` already set by `{seen[canonical]}`)"
+            )
+            continue
+        seen[canonical] = label
+        values[canonical] = _clean_value(match.group(2))
 
     for label, canonical in field_map.items():
         if canonical not in values:

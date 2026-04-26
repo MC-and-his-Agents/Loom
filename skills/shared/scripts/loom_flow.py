@@ -2643,7 +2643,7 @@ def build_default_review_prompt(
 
 def load_fact_chain_report(target_root: Path, output_relative: str) -> tuple[dict[str, Any], list[str]]:
     report, errors = inspect_fact_chain(target_root, output_relative)
-    if errors and all("Runtime Evidence" in message for message in errors):
+    if errors and all("missing section `Runtime Evidence`" in message for message in errors):
         report, errors = inspect_fact_chain_legacy(target_root, output_relative)
     if errors:
         return {}, errors
