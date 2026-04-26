@@ -97,6 +97,7 @@ CORE_DOCS = (
     "docs/evidence/validations/validation-adoption-maturity-upgrade-automation.md",
     "docs/evidence/validations/validation-adoption-maturity-required-fields.md",
     "docs/evidence/validations/validation-skills-consume-maturity-upgrade-path.md",
+    "docs/evidence/validations/validation-adoption-gate-rollout.md",
     "docs/evidence/validations/validation-github-profile-binding-orchestration.md",
     "docs/evidence/validations/validation-github-profile-drift-reconciliation.md",
     "docs/evidence/validations/validation-github-profile-graphql-budget-guard.md",
@@ -857,6 +858,71 @@ def require_governance_control_plane(
         missing_details = maturity.get("missing_details_by_level")
         if not isinstance(missing_details, dict) or set(missing_details) != {"light", "standard", "strong"}:
             failures.append(Failure(category, f"{context}.maturity missing_details_by_level must define light, standard, and strong"))
+        require_adoption_gate_rollout_payload(
+            failures,
+            category=category,
+            context=f"{context}.maturity.gate_rollout",
+            payload=maturity.get("gate_rollout"),
+        )
+
+
+def require_adoption_gate_rollout_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("schema_version") != "loom-adoption-gate-rollout/v1":
+        failures.append(Failure(category, f"{context} schema_version must be `loom-adoption-gate-rollout/v1`"))
+    if payload.get("default_mode") != "advisory":
+        failures.append(Failure(category, f"{context} default_mode must remain advisory"))
+    if payload.get("current_mode") not in {"advisory", "blocking", "rollback"}:
+        failures.append(Failure(category, f"{context} current_mode must stay within advisory/blocking/rollback"))
+    if payload.get("recommended_mode") not in {"advisory", "blocking", "rollback"}:
+        failures.append(Failure(category, f"{context} recommended_mode must stay within advisory/blocking/rollback"))
+    if not isinstance(payload.get("blocking_allowed"), bool):
+        failures.append(Failure(category, f"{context} blocking_allowed must be boolean"))
+    modes = payload.get("allowed_modes")
+    if not isinstance(modes, dict) or set(modes) != {"advisory", "blocking", "rollback"}:
+        failures.append(Failure(category, f"{context} allowed_modes must define advisory, blocking, and rollback"))
+    else:
+        for mode, entry in modes.items():
+            if not isinstance(entry, dict):
+                failures.append(Failure(category, f"{context}.allowed_modes.{mode} must be an object"))
+                continue
+            if not isinstance(entry.get("summary"), str) or not entry.get("summary"):
+                failures.append(Failure(category, f"{context}.allowed_modes.{mode} must include summary"))
+            if not isinstance(entry.get("blocking"), bool):
+                failures.append(Failure(category, f"{context}.allowed_modes.{mode} must include boolean blocking"))
+    preconditions = payload.get("blocking_preconditions")
+    if not isinstance(preconditions, list) or not preconditions:
+        failures.append(Failure(category, f"{context} blocking_preconditions must be non-empty"))
+    else:
+        ids = {entry.get("id") for entry in preconditions if isinstance(entry, dict)}
+        if not {"strong_maturity", "adversarial_adoption_checks", "rollback_switch"}.issubset(ids):
+            failures.append(Failure(category, f"{context} blocking_preconditions must include strong maturity, adversarial checks, and rollback switch"))
+        for entry in preconditions:
+            if not isinstance(entry, dict):
+                failures.append(Failure(category, f"{context} blocking_preconditions entries must be objects"))
+                continue
+            if entry.get("status") not in {"pass", "missing", "block"}:
+                failures.append(Failure(category, f"{context} blocking precondition status must be stable"))
+            if entry.get("layer") not in {"core", "github-profile", "repo-owned-residue"}:
+                failures.append(Failure(category, f"{context} blocking precondition layer must be stable"))
+            if not isinstance(entry.get("recommended_action"), str) or not entry.get("recommended_action"):
+                failures.append(Failure(category, f"{context} blocking preconditions must include recommended_action"))
+    rollback = payload.get("rollback")
+    if not isinstance(rollback, dict):
+        failures.append(Failure(category, f"{context} rollback must be an object"))
+    else:
+        if rollback.get("mode") != "rollback" or rollback.get("switch_to") != "advisory":
+            failures.append(Failure(category, f"{context} rollback must switch back to advisory"))
+        if not isinstance(rollback.get("recommended_action"), str) or not rollback.get("recommended_action"):
+            failures.append(Failure(category, f"{context} rollback must include recommended_action"))
 
 
 def require_locator_entry(
@@ -1385,6 +1451,12 @@ def require_governance_upgrade_payload(
         failures.append(Failure(category, f"{context} target_maturity must be standard/strong"))
     if not isinstance(payload.get("dry_run"), bool):
         failures.append(Failure(category, f"{context} dry_run must be boolean"))
+    require_adoption_gate_rollout_payload(
+        failures,
+        category=category,
+        context=f"{context}.gate_rollout",
+        payload=payload.get("gate_rollout"),
+    )
     actions = payload.get("actions")
     if not isinstance(actions, list) or not actions:
         failures.append(Failure(category, f"{context} must include non-empty actions"))
@@ -1428,6 +1500,12 @@ def require_maturity_upgrade_path(
     validation_entries = payload.get("validation_entries")
     if not isinstance(validation_entries, list) or not validation_entries:
         failures.append(Failure(category, f"{context} validation_entries must be non-empty"))
+    require_adoption_gate_rollout_payload(
+        failures,
+        category=category,
+        context=f"{context}.gate_rollout",
+        payload=payload.get("gate_rollout"),
+    )
 
 
 def require_review_record_contract(

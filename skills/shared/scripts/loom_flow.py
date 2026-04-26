@@ -3672,6 +3672,7 @@ def governance_profile_payload(target_root: Path, operation: str) -> dict[str, A
 
     current = maturity.get("current")
     next_level = maturity.get("next")
+    gate_rollout = maturity.get("gate_rollout")
     missing_by_level = maturity.get("missing_by_level")
     missing_details_by_level = maturity.get("missing_details_by_level")
     missing_inputs: list[Any] = []
@@ -3700,6 +3701,7 @@ def governance_profile_payload(target_root: Path, operation: str) -> dict[str, A
         "recommended_action": "run governance-profile upgrade --dry-run" if result == "block" else None,
         "fallback_to": None if result == "pass" else "adoption",
         "maturity": maturity,
+        "gate_rollout": gate_rollout,
         "governance_control_plane": control_plane,
     }
 
@@ -3845,6 +3847,7 @@ def governance_profile_upgrade_payload(
         "actions": actions,
         "written_files": written_files,
         "maturity": maturity,
+        "gate_rollout": maturity.get("gate_rollout") if isinstance(maturity, dict) else None,
     }
 
 
@@ -3864,6 +3867,7 @@ def maturity_upgrade_path(governance_surface: dict[str, Any], target_root: Path)
         }
     current = maturity.get("current")
     next_level = maturity.get("next")
+    gate_rollout = maturity.get("gate_rollout")
     missing_by_level = maturity.get("missing_by_level")
     missing_details_by_level = maturity.get("missing_details_by_level")
     missing_inputs = []
@@ -3889,6 +3893,7 @@ def maturity_upgrade_path(governance_surface: dict[str, Any], target_root: Path)
             f"python3 tools/loom_flow.py governance-profile status --target {target_root}",
             f"python3 tools/loom_flow.py governance-profile upgrade-plan --target {target_root}",
         ],
+        "gate_rollout": gate_rollout,
     }
 
 
