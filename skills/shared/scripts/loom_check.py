@@ -3468,6 +3468,72 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         elif payload.get("result") != "pass":
             failures.append(Failure("daily-execution-cli", "`work-item update` must pass on a clean temp copy"))
 
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_init.py",
+                "verify",
+                "--target",
+                str(authoring_target),
+            ],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`loom-init verify` active item rollover failed: {error}"))
+        elif payload.get("ok") is not True:
+            failures.append(Failure("daily-execution-cli", "`loom-init verify` must pass after active item rollover"))
+
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_status.py",
+                "--target",
+                str(authoring_target),
+                "--item",
+                "NEXT-0001",
+            ],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`loom-status` active item rollover failed: {error}"))
+        else:
+            current_item = payload.get("item", {}).get("id") if isinstance(payload.get("item"), dict) else None
+            if current_item != "NEXT-0001":
+                failures.append(Failure("daily-execution-cli", "`loom-status` must report the rolled-over active item"))
+            governance_surface = payload.get("governance_surface")
+            if isinstance(governance_surface, dict):
+                carrier_summary = governance_surface.get("carrier_summary")
+                if isinstance(carrier_summary, dict):
+                    work_item = carrier_summary.get("work_item")
+                    recovery = carrier_summary.get("recovery")
+                    if isinstance(work_item, dict) and work_item.get("locator") != ".loom/work-items/NEXT-0001.md":
+                        failures.append(Failure("daily-execution-cli", "`loom-status` carrier summary must point to the active Work Item"))
+                    if isinstance(recovery, dict) and recovery.get("locator") != ".loom/progress/NEXT-0001.md":
+                        failures.append(Failure("daily-execution-cli", "`loom-status` carrier summary must point to the active recovery entry"))
+                execution_entry = str(governance_surface.get("execution_entry", ""))
+                if "--item NEXT-0001" not in execution_entry:
+                    failures.append(Failure("daily-execution-cli", "`loom-status` execution entry must resume the active Work Item"))
+
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "flow",
+                "spec-review",
+                "--target",
+                str(authoring_target),
+                "--item",
+                "NEXT-0001",
+            ],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`flow spec-review` active item rollover failed: {error}"))
+        elif payload.get("result") not in {"block", "fallback"}:
+            failures.append(Failure("daily-execution-cli", "`flow spec-review` must not pass when the active item has no spec suite"))
+        elif ".loom/specs/INIT-0001/spec.md" in json.dumps(payload, ensure_ascii=False):
+            failures.append(Failure("daily-execution-cli", "`flow spec-review` must not fall back to the bootstrap spec suite for a rolled-over active item"))
+
         findings_path = authoring_target / ".loom" / "review-findings.json"
         findings_path.parent.mkdir(parents=True, exist_ok=True)
         findings_path.write_text(
