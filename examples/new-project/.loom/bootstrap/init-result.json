@@ -155,7 +155,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "8a5ee386532ac7772563ced89cb644ffb1eb00087d7c77ee1a661de88ce717b3"
+      "sha256": "08c96b9c1f54270c1c7544733f97199debac4d15e318348c3f702910249deb38"
     },
     {
       "path": "AGENTS.md",
@@ -438,7 +438,7 @@
           },
           "branch": {
             "status": "present",
-            "locator": "issue-356-external-runtime-devendor",
+            "locator": "issue-357-syvert-adversarial-fixture",
             "authority": "git"
           },
           "worktree": {
