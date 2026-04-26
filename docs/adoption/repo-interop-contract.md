@@ -126,8 +126,41 @@
 - 默认 `shadow mode` 在本树内只做 validation / parity，不直接成为 merge gate
 - 只有显式 `blocking` 消费模式可以把 `mismatch` / `unreadable` 升级为阻断结果
 - `shadow_surfaces` 只描述比对入口，不声明“哪一方自动获胜”
+- `loom_locator` 与 `repo_locator` 必须指向 shadow evidence envelope，而不是裸状态值
 
-### 5.1 blocking 消费模式
+### 5.1 shadow evidence envelope
+
+每个 shadow evidence JSON 必须包含：
+
+- `source_files`
+- `source_sha256`
+- 一个可比较值字段：`parity_value | result | decision | status | verdict | value`
+
+`source_files` 必须是非空数组，且只允许仓库内相对路径。`source_sha256` 必须以相同 key set 记录这些 source file 的 sha256。
+
+示例：
+
+```json
+{
+  "result": "pass",
+  "source_files": ["native/status/review.json"],
+  "source_sha256": {
+    "native/status/review.json": "..."
+  }
+}
+```
+
+运行时必须校验：
+
+- source 文件存在且不是目录
+- source 路径不得是绝对路径，不得越出仓库
+- `source_files` 与 `source_sha256` key set 完全一致
+- sha256 必须匹配当前文件内容
+- `.loom/shadow/*.json` 中除 `.loom/shadow/shadow-parity.json` 外，只允许被 `shadow_surfaces` 显式声明
+
+任一条件失败时，对应 surface 必须进入 `unreadable`，blocking 模式下升级为 `block`。
+
+### 5.2 blocking 消费模式
 
 `interop.json` 仍然只描述读取入口。它不得承载 blocking owner、override decision 或 final verdict。
 
