@@ -98,6 +98,7 @@ CORE_DOCS = (
     "docs/evidence/validations/validation-adoption-maturity-required-fields.md",
     "docs/evidence/validations/validation-skills-consume-maturity-upgrade-path.md",
     "docs/evidence/validations/validation-adoption-gate-rollout.md",
+    "docs/evidence/validations/validation-external-runtime-devendor-migration.md",
     "docs/evidence/validations/validation-github-profile-binding-orchestration.md",
     "docs/evidence/validations/validation-github-profile-drift-reconciliation.md",
     "docs/evidence/validations/validation-github-profile-graphql-budget-guard.md",
@@ -111,6 +112,7 @@ CORE_DOCS = (
     "docs/adoption/routing-and-checkpoints.md",
     "docs/adoption/github-profile.md",
     "docs/adoption/github-profile-upgrade.md",
+    "docs/adoption/external-runtime-companion-contract.md",
     "docs/adoption/lightweight-retrofit-default.md",
     "docs/adoption/repo-companion-contract.md",
     "docs/adoption/repo-interop-contract.md",
@@ -6028,6 +6030,53 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
     return failures
 
 
+def check_external_runtime_devendor_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    required_anchors = {
+        "docs/adoption/external-runtime-companion-contract.md": [
+            "vendored `.loom/bin`",
+            "runtime_locator",
+            "versioned external Loom runtime",
+            "rollback",
+            ".loom/companion/interop.json",
+        ],
+        "docs/adoption/repo-interop-contract.md": [
+            "external-runtime",
+            "de-vendor",
+            "runtime locator",
+            "interop",
+        ],
+        "docs/adoption/repo-companion-contract.md": [
+            "external-runtime",
+            "runtime locator",
+            "repo-interface.json",
+        ],
+        "skills/shared/references/harness/runtime-state.md": [
+            "Carrier transition invariants",
+            "LOOM_SOURCE_REPO_ROOT",
+            "external runtime",
+            "vendored `.loom/bin`",
+        ],
+        "docs/evidence/validations/validation-external-runtime-devendor-migration.md": [
+            "external-runtime",
+            "de-vendor",
+            "rollback",
+            "advisory",
+        ],
+    }
+    for relative, anchors in required_anchors.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            failures.append(Failure("external-runtime-devendor", f"`{relative}` is unreadable: {exc}"))
+            continue
+        for anchor in anchors:
+            if anchor not in text:
+                failures.append(Failure("external-runtime-devendor", f"`{relative}` must mention `{anchor}`"))
+    return failures
+
+
 def check_node_installer(root: Path) -> list[Failure]:
     category = "node-installer"
     failures: list[Failure] = []
@@ -6139,6 +6188,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_daily_execution_cli(root))
     failures.extend(check_repo_companion_interface_contracts(root))
     failures.extend(check_repo_interop_contracts(root))
+    failures.extend(check_external_runtime_devendor_contract(root))
     failures.extend(check_node_installer(root))
     failures.extend(check_generated_artifacts_untracked(root))
     failures.extend(check_github_cli_budget(root))

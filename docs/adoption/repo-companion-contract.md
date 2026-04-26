@@ -261,14 +261,17 @@
 - retained host action result 的 locator
 - repo-native carrier truth 的 locator
 - `shadow parity` compare surface 的 locator
+- external-runtime locator、runtime version、fallback runtime 或 de-vendor rollback mode
 
 这些入口固定属于 [repo-interop-contract.md](../adoption/repo-interop-contract.md)。
+external-runtime 迁移路径固定属于 [external-runtime-companion-contract.md](./external-runtime-companion-contract.md)。
 
 明确禁止事项：
 
 - 不得把 guardian / integration / ruleset / merge-native verdict 的结果 locator 写进 `metadata_contract`
 - 不得把 `shadow_surfaces` 的 `loom_locator` / `repo_locator` 回塞到 `repo-interface.json`
 - 不得把 `blocking ownership`、`override path`、`authority-of-truth` 写成 `metadata_contract` 字段
+- 不得把 external-runtime 的 runtime locator 或 rollback switch 写进 `repo-interface.json`
 
 ### 4.5 `context_schema`
 
