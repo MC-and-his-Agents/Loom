@@ -1066,6 +1066,7 @@ def init_maturity_upgrade_path(governance_surface: dict[str, object]) -> dict[st
             "validation_entries": [],
         }
     next_level = maturity.get("next")
+    gate_rollout = maturity.get("gate_rollout")
     missing_by_level = maturity.get("missing_by_level")
     missing_details_by_level = maturity.get("missing_details_by_level")
     missing_inputs: list[object] = []
@@ -1091,6 +1092,7 @@ def init_maturity_upgrade_path(governance_surface: dict[str, object]) -> dict[st
             "python3 .loom/bin/loom_flow.py governance-profile status --target .",
             "python3 .loom/bin/loom_flow.py governance-profile upgrade-plan --target .",
         ],
+        "gate_rollout": gate_rollout,
     }
 
 

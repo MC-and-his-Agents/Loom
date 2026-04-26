@@ -113,7 +113,7 @@
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "fc819d8172a1525c4fb86cbee680110c655101b6d6db7471a4d6c50d5c0bc1fc"
+      "sha256": "8fc0f350f55fa068b4b69854fb81f3b45fbace5bf384f900a63aeb9adfd87c1b"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
@@ -125,13 +125,13 @@
       "path": ".loom/bin/governance_surface.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/governance_surface.py",
-      "sha256": "d12f21d009a5127a4b0aba70bc23e111a51a490017879ee59d51c22db65b5f0a"
+      "sha256": "2f873ee4ddd170af4a835da24bafa59f6e5561ee74360faf71e98e8480100a72"
     },
     {
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "b35e0e598743b84c21d8ec9b56ff0146a411c0aaf8c29a982d7a21d53044a808"
+      "sha256": "7d4f476d8117a6b9d264a71f8300f229bf511dd9e1fb2b29636990c16c6d197d"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -155,7 +155,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "8a5c1ccde7193facdb348896a3dda9f19b42ea874da1c4744e402e07f951ba50"
+      "sha256": "1acd2461b1150b9d4c328571c849556e1b3b36dd9595254643aa046367b66009"
     },
     {
       "path": "AGENTS.md",
@@ -438,7 +438,7 @@
           },
           "branch": {
             "status": "present",
-            "locator": "issue-354-review-head-binding",
+            "locator": "issue-355-adoption-gate-rollout",
             "authority": "git"
           },
           "worktree": {
@@ -742,6 +742,52 @@
               "recommended_action": "enable controlled merge binding and required host gates"
             }
           ]
+        },
+        "gate_rollout": {
+          "schema_version": "loom-adoption-gate-rollout/v1",
+          "default_mode": "advisory",
+          "current_mode": "advisory",
+          "recommended_mode": "advisory",
+          "allowed_modes": {
+            "advisory": {
+              "summary": "Default mode for newly adopted repositories; Loom reports gate signals without becoming the blocking authority.",
+              "blocking": false
+            },
+            "blocking": {
+              "summary": "Explicit opt-in mode for strong governance repositories after adversarial adoption checks pass.",
+              "blocking": true
+            },
+            "rollback": {
+              "summary": "Emergency switch back to advisory consumption when runtime, evidence, or host bindings drift.",
+              "blocking": false
+            }
+          },
+          "blocking_allowed": false,
+          "blocking_preconditions": [
+            {
+              "id": "strong_maturity",
+              "status": "missing",
+              "layer": "github-profile",
+              "recommended_action": "upgrade the repository to strong maturity before enabling blocking gates"
+            },
+            {
+              "id": "adversarial_adoption_checks",
+              "status": "missing",
+              "layer": "core",
+              "recommended_action": "run the Loom-owned Syvert-style adversarial adoption fixture and record the validation evidence"
+            },
+            {
+              "id": "rollback_switch",
+              "status": "pass",
+              "layer": "core",
+              "recommended_action": "keep rollback available by switching gate mode back to advisory and rerunning governance-profile status"
+            }
+          ],
+          "rollback": {
+            "mode": "rollback",
+            "switch_to": "advisory",
+            "recommended_action": "disable blocking consumption, preserve evidence, repair drift, then rerun adversarial adoption checks before re-enabling blocking"
+          }
         }
       }
     },
@@ -777,6 +823,52 @@
     "validation_entries": [
       "python3 .loom/bin/loom_flow.py governance-profile status --target .",
       "python3 .loom/bin/loom_flow.py governance-profile upgrade-plan --target ."
-    ]
+    ],
+    "gate_rollout": {
+      "schema_version": "loom-adoption-gate-rollout/v1",
+      "default_mode": "advisory",
+      "current_mode": "advisory",
+      "recommended_mode": "advisory",
+      "allowed_modes": {
+        "advisory": {
+          "summary": "Default mode for newly adopted repositories; Loom reports gate signals without becoming the blocking authority.",
+          "blocking": false
+        },
+        "blocking": {
+          "summary": "Explicit opt-in mode for strong governance repositories after adversarial adoption checks pass.",
+          "blocking": true
+        },
+        "rollback": {
+          "summary": "Emergency switch back to advisory consumption when runtime, evidence, or host bindings drift.",
+          "blocking": false
+        }
+      },
+      "blocking_allowed": false,
+      "blocking_preconditions": [
+        {
+          "id": "strong_maturity",
+          "status": "missing",
+          "layer": "github-profile",
+          "recommended_action": "upgrade the repository to strong maturity before enabling blocking gates"
+        },
+        {
+          "id": "adversarial_adoption_checks",
+          "status": "missing",
+          "layer": "core",
+          "recommended_action": "run the Loom-owned Syvert-style adversarial adoption fixture and record the validation evidence"
+        },
+        {
+          "id": "rollback_switch",
+          "status": "pass",
+          "layer": "core",
+          "recommended_action": "keep rollback available by switching gate mode back to advisory and rerunning governance-profile status"
+        }
+      ],
+      "rollback": {
+        "mode": "rollback",
+        "switch_to": "advisory",
+        "recommended_action": "disable blocking consumption, preserve evidence, repair drift, then rerun adversarial adoption checks before re-enabling blocking"
+      }
+    }
   }
 }

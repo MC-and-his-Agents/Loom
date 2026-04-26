@@ -252,6 +252,58 @@ MATURITY_REQUIRED_FIELDS = {
         },
     ],
 }
+ADOPTION_GATE_ROLLOUT_MODES = {
+    "advisory": {
+        "summary": "Default mode for newly adopted repositories; Loom reports gate signals without becoming the blocking authority.",
+        "blocking": False,
+    },
+    "blocking": {
+        "summary": "Explicit opt-in mode for strong governance repositories after adversarial adoption checks pass.",
+        "blocking": True,
+    },
+    "rollback": {
+        "summary": "Emergency switch back to advisory consumption when runtime, evidence, or host bindings drift.",
+        "blocking": False,
+    },
+}
+
+
+def adoption_gate_rollout_status(*, maturity_current: str) -> dict[str, Any]:
+    blocking_preconditions = [
+        {
+            "id": "strong_maturity",
+            "status": "pass" if maturity_current == "strong" else "missing",
+            "layer": "github-profile",
+            "recommended_action": "upgrade the repository to strong maturity before enabling blocking gates",
+        },
+        {
+            "id": "adversarial_adoption_checks",
+            "status": "missing",
+            "layer": "core",
+            "recommended_action": "run the Loom-owned Syvert-style adversarial adoption fixture and record the validation evidence",
+        },
+        {
+            "id": "rollback_switch",
+            "status": "pass",
+            "layer": "core",
+            "recommended_action": "keep rollback available by switching gate mode back to advisory and rerunning governance-profile status",
+        },
+    ]
+    blocking_allowed = all(entry["status"] == "pass" for entry in blocking_preconditions)
+    return {
+        "schema_version": "loom-adoption-gate-rollout/v1",
+        "default_mode": "advisory",
+        "current_mode": "advisory",
+        "recommended_mode": "blocking" if blocking_allowed else "advisory",
+        "allowed_modes": ADOPTION_GATE_ROLLOUT_MODES,
+        "blocking_allowed": blocking_allowed,
+        "blocking_preconditions": blocking_preconditions,
+        "rollback": {
+            "mode": "rollback",
+            "switch_to": "advisory",
+            "recommended_action": "disable blocking consumption, preserve evidence, repair drift, then rerun adversarial adoption checks before re-enabling blocking",
+        },
+    }
 
 
 def run_process(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -1209,6 +1261,7 @@ def maturity_status(
         "required_fields": MATURITY_REQUIRED_FIELDS,
         "missing_by_level": missing_by_level,
         "missing_details_by_level": missing_details_by_level,
+        "gate_rollout": adoption_gate_rollout_status(maturity_current=current),
     }
 
 

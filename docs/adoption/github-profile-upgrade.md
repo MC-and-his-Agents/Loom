@@ -83,3 +83,28 @@ GitHub strong governance 的目标不是复制 Syvert 的文件名，而是达�
 - 不把 Syvert 的 repo-local 命名直接抄成 Loom 默认规则
 - 不要求所有 adopted repo 一次性切到 `strong`
 - 不把 validation-only parity 直接升级成 blocking host policy
+
+## 8. Gate rollout 合同
+
+GitHub profile adoption 的 gate 消费模式固定为三态：
+
+- `advisory`
+  - 新接入仓库的默认模式。
+  - Loom 可以报告 review、merge-ready、closeout、shadow parity 与 reconciliation 信号，但不得直接成为 blocking authority。
+- `blocking`
+  - 只能由 strong governance profile 显式启用。
+  - 启用前必须满足 strong maturity、adversarial adoption checks、rollback switch 三个前置条件。
+  - 不能把新仓库或未完成 hardening 的仓库直接切到 blocking。
+- `rollback`
+  - 当 runtime、evidence、host binding、review head 或 metadata parsing 出现漂移时，必须能回退到 advisory。
+  - rollback 不删除证据，只暂停 blocking 消费，直到重新通过 adversarial adoption checks。
+
+`governance-profile upgrade-plan` 必须输出：
+
+- `gate_rollout.default_mode`
+- `gate_rollout.current_mode`
+- `gate_rollout.recommended_mode`
+- `gate_rollout.blocking_preconditions`
+- `gate_rollout.rollback`
+
+默认建议必须保持 `advisory`。只有当所有 blocking 前置条件都有版本控制内证据时，才允许建议进入 `blocking`。
