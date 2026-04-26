@@ -6315,8 +6315,17 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             failures.append(Failure("adversarial-adoption", f"`governance-profile status` baseline failed: {error}"))
         else:
             maturity = status_payload.get("maturity")
-            if not isinstance(maturity, dict) or maturity.get("current") != "strong":
-                failures.append(Failure("adversarial-adoption", "baseline fixture must reach strong maturity"))
+            missing_inputs = status_payload.get("missing_inputs")
+            host_unavailable = isinstance(missing_inputs, list) and any("GitHub CLI" in str(entry) or "GH_TOKEN" in str(entry) for entry in missing_inputs)
+            if isinstance(maturity, dict) and maturity.get("current") == "strong":
+                pass
+            elif host_unavailable:
+                repo_interface = status_payload.get("governance_control_plane", {}).get("maturity", {}).get("missing_by_level", {}) if isinstance(status_payload.get("governance_control_plane"), dict) else {}
+                strong_missing = repo_interface.get("strong") if isinstance(repo_interface, dict) else []
+                if not isinstance(strong_missing, list) or "repo_interface" in strong_missing or "repo_interop" in strong_missing:
+                    failures.append(Failure("adversarial-adoption", "hostless baseline must still prove repo companion and interop carriers are present"))
+            else:
+                failures.append(Failure("adversarial-adoption", "baseline fixture must reach strong maturity when GitHub host signals are readable"))
 
         for label, args, expected in (
             ("runtime-parity", ["python3", str(baseline / ".loom/bin/loom_flow.py"), "runtime-parity", "validate", "--target", str(baseline)], "pass"),
