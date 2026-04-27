@@ -8,6 +8,7 @@ import re
 import subprocess
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from runtime_paths import installed_skill_script
 
@@ -357,7 +358,7 @@ def detect_github_repo(root: Path) -> tuple[str | None, str | None]:
     remote = git_remote_origin(root)
     if not remote:
         return None, None
-    match = re.search(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/.]+)(?:\.git)?$", remote)
+    match = re.search(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?$", remote)
     if not match:
         return None, None
     return match.group("owner"), match.group("repo")
@@ -474,6 +475,16 @@ def relative_locator_from_value(root: Path, raw_locator: object) -> str | None:
     return str(locator_path)
 
 
+def locator_boundary_error(raw_locator: object, *, label: str) -> str:
+    if not isinstance(raw_locator, str) or not raw_locator.strip():
+        return f"{label} must be a non-empty string"
+    locator = raw_locator.strip()
+    locator_path = Path(locator)
+    if locator_path.is_absolute() or ".." in locator_path.parts:
+        return f"{label} must stay within the repository root: {locator}"
+    return f"{label} must stay within the repository root: {locator}"
+
+
 def resolve_locator(root: Path, raw_locator: object) -> tuple[str | None, Path | None]:
     locator = relative_locator_from_value(root, raw_locator)
     if locator is None:
@@ -494,7 +505,7 @@ def locator_status_entry(
 ) -> tuple[dict[str, str], str | None]:
     locator, target = resolve_locator(root, raw_locator)
     if locator is None or target is None:
-        return carrier_entry("missing", "unknown", source), f"{source} is missing a valid locator"
+        return carrier_entry("missing", "unknown", source), locator_boundary_error(raw_locator, label=source)
     if not target.exists():
         return carrier_entry("missing", locator, source), f"{source} points to missing path `{locator}`"
     return carrier_entry("present", locator, source), None
@@ -520,7 +531,7 @@ def validate_repo_specific_requirement(
         missing_inputs.append(f"{prefix} enforcement must be `blocking` or `advisory`")
     locator, target = resolve_locator(root, entry.get("locator"))
     if locator is None or target is None:
-        missing_inputs.append(f"{prefix} locator must be a non-empty string")
+        missing_inputs.append(locator_boundary_error(entry.get("locator"), label=f"{prefix} locator"))
     elif not target.exists():
         missing_inputs.append(f"{prefix} locator points to missing path `{locator}`")
     return missing_inputs
@@ -542,7 +553,7 @@ def validate_specialized_gate(
             missing_inputs.append(f"{prefix} missing `{field}`")
     locator, target = resolve_locator(root, entry.get("locator"))
     if locator is None or target is None:
-        missing_inputs.append(f"{prefix} locator must be a non-empty string")
+        missing_inputs.append(locator_boundary_error(entry.get("locator"), label=f"{prefix} locator"))
     elif not target.exists():
         missing_inputs.append(f"{prefix} locator points to missing path `{locator}`")
     gate_type = entry.get("gate_type")
@@ -582,7 +593,7 @@ def validate_metadata_contract(
         for locator_field in ("applicability_locator", "authority_locator"):
             locator, target = resolve_locator(root, field.get(locator_field))
             if locator is None or target is None:
-                missing_inputs.append(f"{field_prefix} `{locator_field}` must be a non-empty string")
+                missing_inputs.append(locator_boundary_error(field.get(locator_field), label=f"{field_prefix} `{locator_field}`"))
             elif not target.exists():
                 missing_inputs.append(f"{field_prefix} `{locator_field}` points to missing path `{locator}`")
     return missing_inputs
@@ -616,7 +627,7 @@ def validate_context_schema(
             missing_inputs.append(f"{field_prefix} `required` must be a boolean")
         locator, target = resolve_locator(root, field.get("mapping_rule_locator"))
         if locator is None or target is None:
-            missing_inputs.append(f"{field_prefix} `mapping_rule_locator` must be a non-empty string")
+            missing_inputs.append(locator_boundary_error(field.get("mapping_rule_locator"), label=f"{field_prefix} `mapping_rule_locator`"))
         elif not target.exists():
             missing_inputs.append(f"{field_prefix} `mapping_rule_locator` points to missing path `{locator}`")
     return missing_inputs
@@ -648,7 +659,7 @@ def validate_repo_interop_collection_entry(
                 )
     locator, target = resolve_locator(root, entry.get("locator"))
     if locator is None or target is None:
-        missing_inputs.append(f"{prefix} locator must be a non-empty string")
+        missing_inputs.append(locator_boundary_error(entry.get("locator"), label=f"{prefix} locator"))
     elif not target.exists():
         missing_inputs.append(f"{prefix} locator points to missing path `{locator}`")
     return missing_inputs
@@ -670,7 +681,7 @@ def validate_shadow_surface(
     for locator_field in ("loom_locator", "repo_locator"):
         locator, target = resolve_locator(root, entry.get(locator_field))
         if locator is None or target is None:
-            missing_inputs.append(f"{prefix} `{locator_field}` must be a non-empty string")
+            missing_inputs.append(locator_boundary_error(entry.get(locator_field), label=f"{prefix} `{locator_field}`"))
         elif not target.exists():
             missing_inputs.append(f"{prefix} `{locator_field}` points to missing path `{locator}`")
     return missing_inputs
@@ -1089,7 +1100,8 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
         missing_inputs.append("github control plane: default branch is unavailable")
         return surface, missing_inputs
 
-    branch_payload, branch_errors = gh_json(root, ["api", f"repos/{owner}/{repo}/branches/{surface['default_branch']}"])
+    encoded_branch = quote(str(surface["default_branch"]), safe="")
+    branch_payload, branch_errors = gh_json(root, ["api", f"repos/{owner}/{repo}/branches/{encoded_branch}"])
     if branch_errors or branch_payload is None:
         missing_inputs.extend(f"github control plane: {message}" for message in branch_errors)
         return surface, missing_inputs

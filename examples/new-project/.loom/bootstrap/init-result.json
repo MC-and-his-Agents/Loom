@@ -119,19 +119,19 @@
       "path": ".loom/bin/fact_chain_support.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/fact_chain_support.py",
-      "sha256": "406352215e9ff1c582d750761b911bd227c99b3cc29d3710143554ced7f9e080"
+      "sha256": "8ec28a37277dbf4e6e0af5965cf98da4ec3e8a0b29cb325309c08b22ab976a91"
     },
     {
       "path": ".loom/bin/governance_surface.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/governance_surface.py",
-      "sha256": "82109bad507ea760c7df3a401b648b34c35da03f8f85eb40481834e44b29ed0f"
+      "sha256": "fcd116cdadbe674f13fbe841e5af86d8bb48fe6c924305949ea1ed1abc955d44"
     },
     {
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "bf786adc12a26073ab1bc613bff32ee28bf6fde360ec0b32f1005476e7ab4fd7"
+      "sha256": "e9b376551600383e95e4f707557bb957edf51cd9ee2263587b8b6109088b737c"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -149,13 +149,13 @@
       "path": ".loom/bin/runtime_state.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/runtime_state.py",
-      "sha256": "5c5e096dbea072ab8e4f305ac06ee5d983e0bade519f6bea7fd119a92de52f09"
+      "sha256": "3375830ede9bec65083d9ee6cfac5f5a7e3bd781ef90c78a087c39d37f2cfab2"
     },
     {
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "a9dd05951078041b280b03791dfb5f55d1da9cf038e76801bae8533dda1b2c97"
+      "sha256": "6c31df1995034f10c7dd769b5c174a3e580f3078e586d53faa6b9994c3d7bb98"
     },
     {
       "path": "AGENTS.md",
@@ -438,7 +438,7 @@
           },
           "branch": {
             "status": "present",
-            "locator": "issue-380-carrier-refresh-shadow-summary",
+            "locator": "issue-382-downstream-carrier-compat",
             "authority": "git"
           },
           "worktree": {
