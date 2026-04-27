@@ -93,3 +93,4 @@ go.work.sum
 plugins/loom/
 packages/skills/
 packages/loom-installer/payload/
+.worktrees/

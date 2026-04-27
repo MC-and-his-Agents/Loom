@@ -468,10 +468,9 @@ def relative_locator_from_value(root: Path, raw_locator: object) -> str | None:
         return None
     locator_path = Path(locator)
     if locator_path.is_absolute():
-        try:
-            return str(locator_path.relative_to(root))
-        except ValueError:
-            return str(locator_path)
+        return None
+    if ".." in locator_path.parts:
+        return None
     return str(locator_path)
 
 
@@ -479,7 +478,12 @@ def resolve_locator(root: Path, raw_locator: object) -> tuple[str | None, Path |
     locator = relative_locator_from_value(root, raw_locator)
     if locator is None:
         return None, None
-    return locator, (root / locator).resolve()
+    target = (root / locator).resolve()
+    try:
+        target.relative_to(root.resolve())
+    except ValueError:
+        return None, None
+    return locator, target
 
 
 def locator_status_entry(

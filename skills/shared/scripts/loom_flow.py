@@ -24,6 +24,7 @@ from fact_chain_support import (
     parse_key_value_section,
     parse_recovery_entry,
     parse_work_item,
+    resolve_repo_relative_path,
 )
 from governance_surface import build_governance_surface
 from runtime_paths import shared_asset, shared_script
@@ -440,7 +441,20 @@ def repo_specific_requirements_payload(
         if isinstance(repo_specific_locator, dict)
         else ".loom/companion/repo-interface.json"
     )
-    repo_specific_path = target_root / str(declared_locator)
+    repo_specific_path, locator_errors = resolve_repo_relative_path(
+        target_root,
+        str(declared_locator),
+        label="repo companion requirements locator",
+    )
+    if locator_errors:
+        return {
+            **empty_payload,
+            "result": "block",
+            "summary": "repo companion requirements locator is unsafe.",
+            "missing_inputs": locator_errors,
+            "fallback_to": repo_specific_default_fallback(surface),
+        }
+    assert repo_specific_path is not None
     blocking: list[dict[str, Any]] = []
     advisory: list[dict[str, Any]] = []
     declared: list[dict[str, Any]] = []
@@ -522,7 +536,14 @@ def load_repo_interop_contract(repo_interop: object, *, target_root: Path) -> tu
         if isinstance(contract_locator, dict)
         else ".loom/companion/interop.json"
     )
-    interop_path = target_root / str(declared_locator)
+    interop_path, locator_errors = resolve_repo_relative_path(
+        target_root,
+        str(declared_locator),
+        label="repo interop contract locator",
+    )
+    if locator_errors:
+        return None, locator_errors
+    assert interop_path is not None
     try:
         payload = load_json_file(interop_path)
     except (FileNotFoundError, json.JSONDecodeError, OSError):
@@ -541,12 +562,8 @@ def sha256_file(path: Path) -> str:
 
 
 def repo_relative_path(target_root: Path, relative: str) -> Path | None:
-    candidate = (target_root / relative).resolve()
-    try:
-        candidate.relative_to(target_root.resolve())
-    except ValueError:
-        return None
-    return candidate
+    candidate, errors = resolve_repo_relative_path(target_root, relative, label="repo locator")
+    return None if errors else candidate
 
 
 def validate_shadow_sources(payload: dict[str, Any], *, path: Path, target_root: Path) -> tuple[dict[str, Any], list[str]]:
@@ -726,8 +743,26 @@ def shadow_parity_report(
 
     loom_locator = declared_surface.get("loom_locator")
     repo_locator = declared_surface.get("repo_locator")
-    loom_path = target_root / str(loom_locator)
-    repo_path = target_root / str(repo_locator)
+    loom_path, loom_locator_errors = resolve_repo_relative_path(
+        target_root,
+        str(loom_locator),
+        label=f"shadow surface `{surface}` loom_locator",
+    )
+    repo_path, repo_locator_errors = resolve_repo_relative_path(
+        target_root,
+        str(repo_locator),
+        label=f"shadow surface `{surface}` repo_locator",
+    )
+    if loom_locator_errors or repo_locator_errors:
+        return {
+            **empty_report,
+            "summary": "shadow parity is unavailable because a declared surface locator is unsafe.",
+            "missing_inputs": [*loom_locator_errors, *repo_locator_errors],
+            "host_adapters": relevant_host_adapters,
+            "repo_native_carriers": relevant_repo_native_carriers,
+        }
+    assert loom_path is not None
+    assert repo_path is not None
 
     loom_surface = {
         "status": "missing",
@@ -1166,7 +1201,10 @@ def render_status_surface(report: dict[str, Any], runtime_evidence: dict[str, di
 
 
 def sync_status_surface(target_root: Path, output_relative: str, runtime_evidence: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], list[str]]:
-    output_path = target_root / output_relative
+    output_path, output_errors = resolve_repo_relative_path(target_root, output_relative, label="init-result locator")
+    if output_errors:
+        return {}, output_errors
+    assert output_path is not None
     try:
         init_result = load_json_file(output_path)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
@@ -1182,9 +1220,15 @@ def sync_status_surface(target_root: Path, output_relative: str, runtime_evidenc
     work_item_ref = str(entry_points.get("work_item", ""))
     recovery_ref = str(entry_points.get("recovery_entry", ""))
     status_ref = str(entry_points.get("status_surface", ""))
-    work_item_path = target_root / work_item_ref
-    recovery_path = target_root / recovery_ref
-    status_path = target_root / status_ref
+    work_item_path, work_item_errors = resolve_repo_relative_path(target_root, work_item_ref, label="work item locator")
+    recovery_path, recovery_errors = resolve_repo_relative_path(target_root, recovery_ref, label="recovery entry locator")
+    status_path, status_errors = resolve_repo_relative_path(target_root, status_ref, label="status surface locator")
+    locator_errors = [*work_item_errors, *recovery_errors, *status_errors]
+    if locator_errors:
+        return {}, locator_errors
+    assert work_item_path is not None
+    assert recovery_path is not None
+    assert status_path is not None
     if not work_item_path.exists() or not recovery_path.exists():
         return {}, ["fact-chain carrier is missing during status sync"]
     work_item, work_item_errors = parse_work_item(work_item_path, target_root)
@@ -1228,7 +1272,10 @@ def sync_status_surface(target_root: Path, output_relative: str, runtime_evidenc
 
 
 def read_runtime_evidence(target_root: Path, status_relative: str) -> tuple[dict[str, dict[str, Any]], list[str]]:
-    status_path = target_root / status_relative
+    status_path, locator_errors = resolve_repo_relative_path(target_root, status_relative, label="status surface locator")
+    if locator_errors:
+        return {}, locator_errors
+    assert status_path is not None
     if not status_path.exists():
         return {}, [f"missing status surface: {status_relative}"]
     sections = markdown_sections(status_path)
@@ -1690,10 +1737,10 @@ def target_relative_label(target_root: Path, path: Path) -> str:
 
 
 def load_findings_file(target_root: Path, findings_file: str) -> tuple[list[dict[str, Any]] | None, list[str]]:
-    findings_path = Path(findings_file).expanduser()
-    if not findings_path.is_absolute():
-        findings_path = (target_root / findings_path).resolve()
-
+    findings_path, locator_errors = resolve_repo_relative_path(target_root, findings_file, label="findings file locator")
+    if locator_errors:
+        return None, locator_errors
+    assert findings_path is not None
     label = target_relative_label(target_root, findings_path)
     try:
         payload = json.loads(findings_path.read_text(encoding="utf-8"))
@@ -1715,7 +1762,10 @@ def load_review_record(
     review_file: str | None = None,
 ) -> tuple[dict[str, Any] | None, str, list[str]]:
     relative = review_file or default_review_path(item_id)
-    review_path = target_root / relative
+    review_path, locator_errors = resolve_repo_relative_path(target_root, relative, label="review artifact locator")
+    if locator_errors:
+        return None, relative, locator_errors
+    assert review_path is not None
     if not review_path.exists():
         return None, relative, []
     try:
@@ -2322,7 +2372,14 @@ def active_workspace_conflicts(target_root: Path, item_id: str, workspace_entry:
         if str(parsed_item["workspace_entry"]) != workspace_entry:
             continue
         recovery_rel = str(parsed_item["recovery_entry"])
-        recovery_path = target_root / recovery_rel
+        recovery_path, recovery_errors = resolve_repo_relative_path(
+            target_root,
+            recovery_rel,
+            label="work item recovery entry locator",
+        )
+        if recovery_errors or recovery_path is None:
+            conflicts.append(other_item_id)
+            continue
         if not recovery_path.exists():
             conflicts.append(other_item_id)
             continue
@@ -2445,14 +2502,36 @@ def load_context(target_root: Path, output_relative: str, expected_item: str | N
     if workspace_path is None:
         return {}, [f"unable to resolve workspace entry: {workspace_entry}"]
 
+    work_item_path, work_item_errors = resolve_repo_relative_path(
+        target_root,
+        str(report["fact_chain"]["entry_points"]["work_item"]),
+        label="work item locator",
+    )
+    recovery_path, recovery_errors = resolve_repo_relative_path(
+        target_root,
+        str(report["fact_chain"]["entry_points"]["recovery_entry"]),
+        label="recovery entry locator",
+    )
+    status_path, status_errors = resolve_repo_relative_path(
+        target_root,
+        str(report["fact_chain"]["entry_points"]["status_surface"]),
+        label="status surface locator",
+    )
+    locator_errors = [*work_item_errors, *recovery_errors, *status_errors]
+    if locator_errors:
+        return {}, locator_errors
+    assert work_item_path is not None
+    assert recovery_path is not None
+    assert status_path is not None
+
     context = {
         "target_root": target_root,
         "output_relative": output_relative,
         "report": report,
         "item_id": item_id,
-        "work_item_path": target_root / report["fact_chain"]["entry_points"]["work_item"],
-        "recovery_path": target_root / report["fact_chain"]["entry_points"]["recovery_entry"],
-        "status_path": target_root / report["fact_chain"]["entry_points"]["status_surface"],
+        "work_item_path": work_item_path,
+        "recovery_path": recovery_path,
+        "status_path": status_path,
         "workspace_entry": workspace_entry,
         "workspace_path": workspace_path,
         "validation_entry": str(facts["validation_entry"]["value"]),
@@ -2659,7 +2738,10 @@ def load_fact_chain_report(target_root: Path, output_relative: str) -> tuple[dic
 
 def inspect_fact_chain_legacy(target_root: Path, output_relative: str) -> tuple[dict[str, Any], list[str]]:
     errors: list[str] = []
-    output_path = target_root / output_relative
+    output_path, output_errors = resolve_repo_relative_path(target_root, output_relative, label="init-result locator")
+    if output_errors:
+        return {}, output_errors
+    assert output_path is not None
     if not output_path.exists():
         return {}, [f"missing init-result: {output_relative}"]
 
@@ -2698,9 +2780,17 @@ def inspect_fact_chain_legacy(target_root: Path, output_relative: str) -> tuple[
     if errors:
         return {}, errors
 
-    work_item_path = target_root / str(work_item_ref)
-    recovery_path = target_root / str(recovery_ref)
-    status_path = target_root / str(status_ref)
+    work_item_path, work_item_path_errors = resolve_repo_relative_path(target_root, str(work_item_ref), label="work item locator")
+    recovery_path, recovery_path_errors = resolve_repo_relative_path(target_root, str(recovery_ref), label="recovery entry locator")
+    status_path, status_path_errors = resolve_repo_relative_path(target_root, str(status_ref), label="status surface locator")
+    errors.extend(work_item_path_errors)
+    errors.extend(recovery_path_errors)
+    errors.extend(status_path_errors)
+    if errors:
+        return {}, errors
+    assert work_item_path is not None
+    assert recovery_path is not None
+    assert status_path is not None
     for label, path in (
         ("work_item", work_item_path),
         ("recovery_entry", recovery_path),
@@ -5991,7 +6081,19 @@ def handle_review(args: argparse.Namespace) -> int:
             "normalized_findings": args.normalized_findings,
         },
     }
-    review_abs = target_root / review_path
+    review_abs, review_path_errors = resolve_repo_relative_path(target_root, review_path, label="review artifact locator")
+    if review_path_errors:
+        return emit(
+            {
+                "command": "review",
+                "operation": "record",
+                "result": "block",
+                "summary": "review record refused an unsafe review artifact locator.",
+                "missing_inputs": review_path_errors,
+                "fallback_to": "build",
+            }
+        )
+    assert review_abs is not None
     review_abs.parent.mkdir(parents=True, exist_ok=True)
     write_json_file(review_abs, review_payload)
 
@@ -6124,7 +6226,10 @@ def update_active_entry_points(
     recovery_entry: str,
     status_surface: str,
 ) -> None:
-    output_path = target_root / output_relative
+    output_path, output_errors = resolve_repo_relative_path(target_root, output_relative, label="init-result locator")
+    if output_errors:
+        raise RuntimeError("; ".join(output_errors))
+    assert output_path is not None
     payload = load_json_file(output_path)
     fact_chain = payload.get("fact_chain")
     if not isinstance(fact_chain, dict):
@@ -6141,7 +6246,19 @@ def update_active_entry_points(
 
 def handle_work_item(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
-    output_path = target_root / args.output
+    output_path, output_errors = resolve_repo_relative_path(target_root, args.output, label="init-result locator")
+    if output_errors:
+        return emit(
+            {
+                "command": "work-item",
+                "operation": args.operation,
+                "result": "block",
+                "summary": "work-item command requires a safe init-result fact-chain locator.",
+                "missing_inputs": output_errors,
+                "fallback_to": "admission",
+            }
+        )
+    assert output_path is not None
     if not output_path.exists():
         return emit(
             {
@@ -6155,11 +6272,37 @@ def handle_work_item(args: argparse.Namespace) -> int:
         )
 
     work_item_relative = f".loom/work-items/{args.item}.md"
-    work_item_path = target_root / work_item_relative
+    work_item_path, work_item_path_errors = resolve_repo_relative_path(
+        target_root,
+        work_item_relative,
+        label="work item locator",
+    )
     recovery_relative = args.recovery_entry or f".loom/progress/{args.item}.md"
-    recovery_path = target_root / recovery_relative
+    recovery_path, recovery_path_errors = resolve_repo_relative_path(
+        target_root,
+        recovery_relative,
+        label="recovery entry locator",
+    )
     review_relative = default_review_path(args.item)
+    review_path, review_path_errors = resolve_repo_relative_path(target_root, review_relative, label="review locator")
     status_relative = ".loom/status/current.md"
+    status_path, status_path_errors = resolve_repo_relative_path(target_root, status_relative, label="status surface locator")
+    locator_errors = [*work_item_path_errors, *recovery_path_errors, *review_path_errors, *status_path_errors]
+    if locator_errors:
+        return emit(
+            {
+                "command": "work-item",
+                "operation": args.operation,
+                "result": "block",
+                "summary": "work-item command refused unsafe repo locator input.",
+                "missing_inputs": locator_errors,
+                "fallback_to": "admission",
+            }
+        )
+    assert work_item_path is not None
+    assert recovery_path is not None
+    assert review_path is not None
+    assert status_path is not None
     runtime_evidence: dict[str, dict[str, Any]] | None = None
 
     if args.operation == "create":
@@ -6218,7 +6361,6 @@ def handle_work_item(args: argparse.Namespace) -> int:
         }
         work_item_path.parent.mkdir(parents=True, exist_ok=True)
         work_item_path.write_text(render_work_item(work_item_payload), encoding="utf-8")
-        review_path = target_root / review_relative
         review_path.parent.mkdir(parents=True, exist_ok=True)
         review_path.write_text(
             json.dumps(
