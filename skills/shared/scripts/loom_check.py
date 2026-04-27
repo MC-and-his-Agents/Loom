@@ -2535,6 +2535,11 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             {"pass"},
         ),
         (
+            "adopt-verify",
+            ["python3", "tools/loom_flow.py", "adopt", "verify", "--target", "examples/new-project", "--item", "INIT-0001"],
+            {"pass"},
+        ),
+        (
             "governance-profile-status",
             ["python3", "tools/loom_flow.py", "governance-profile", "status", "--target", "examples/new-project"],
             {"pass"},
@@ -2798,6 +2803,21 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 context="`runtime-parity validate`",
                 payload=payload,
             )
+        if label == "adopt-verify":
+            if payload.get("command") != "adopt" or payload.get("operation") != "verify":
+                failures.append(Failure("daily-execution-cli", "`adopt verify` must report command/operation"))
+            if payload.get("schema_version") != "loom-adoption-verify/v1":
+                failures.append(Failure("daily-execution-cli", "`adopt verify` must report schema v1"))
+            roundtrip = payload.get("producer_consumer_roundtrip")
+            if not isinstance(roundtrip, dict):
+                failures.append(Failure("daily-execution-cli", "`adopt verify` must include producer_consumer_roundtrip"))
+            else:
+                consumer = roundtrip.get("consumer")
+                bypass = roundtrip.get("bypass_check")
+                if not isinstance(consumer, dict) or consumer.get("result") != "pass":
+                    failures.append(Failure("daily-execution-cli", "`adopt verify` generated body must pass consumer validation"))
+                if not isinstance(bypass, dict) or bypass.get("result") != "pass":
+                    failures.append(Failure("daily-execution-cli", "`adopt verify` must prove required section deletion blocks"))
         if label in {"governance-profile-status", "governance-profile-upgrade-plan"}:
             if payload.get("command") != "governance-profile":
                 failures.append(Failure("daily-execution-cli", f"`{label}` must report `command: governance-profile`"))
@@ -6543,15 +6563,20 @@ def check_node_installer(root: Path) -> list[Failure]:
         ["npm", "test"],
         ["npm", "pack", "--dry-run"],
     )
-    for args in commands:
-        try:
-            result = run_command(root, args, cwd=package_root, timeout_seconds=300)
-        except subprocess.TimeoutExpired:
-            failures.append(Failure(category, f"`{' '.join(args)}` timed out"))
-            continue
-        if result.returncode != 0:
-            detail = result.stderr.strip() or result.stdout.strip() or "command failed without output"
-            failures.append(Failure(category, f"`{' '.join(args)}` failed: {detail}"))
+    with tempfile.TemporaryDirectory(prefix="loom-check-npm-cache-") as cache_dir:
+        npm_env = {
+            "npm_config_cache": cache_dir,
+            "NPM_CONFIG_CACHE": cache_dir,
+        }
+        for args in commands:
+            try:
+                result = run_command(root, args, cwd=package_root, env=npm_env, timeout_seconds=300)
+            except subprocess.TimeoutExpired:
+                failures.append(Failure(category, f"`{' '.join(args)}` timed out"))
+                continue
+            if result.returncode != 0:
+                detail = result.stderr.strip() or result.stdout.strip() or "command failed without output"
+                failures.append(Failure(category, f"`{' '.join(args)}` failed: {detail}"))
     return failures
 
 

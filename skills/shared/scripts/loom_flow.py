@@ -36,6 +36,14 @@ PR_TEMPLATE_SECTIONS = (
     "## Risks And Follow-ups",
     "## Related Work",
 )
+ADOPTION_PR_BODY_SECTIONS = (*PR_TEMPLATE_SECTIONS, "## Review Artifacts")
+ADOPTION_REVIEW_ARTIFACT_LABELS = (
+    "Active Work Item",
+    "Active Recovery Entry",
+    "Status Surface",
+    "Review Record",
+    "Spec Review Record",
+)
 
 OWNED_TEMP_ROOTS = (
     ".loom/.tmp",
@@ -156,6 +164,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     runtime_state.add_argument("--target", required=True, help="Target repository root")
     runtime_state.add_argument("--item", help="Expected current item id")
     runtime_state.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+
+    adopt = subparsers.add_parser("adopt", help="Validate Loom downstream adoption contracts")
+    adopt.add_argument("operation", choices=("verify",))
+    adopt.add_argument("--target", required=True, help="Target repository root")
+    adopt.add_argument("--item", help="Expected current item id")
+    adopt.add_argument(
         "--output",
         default=".loom/bootstrap/init-result.json",
         help="Init-result path relative to the target root",
@@ -2353,6 +2371,96 @@ def check_pr_template(target_root: Path) -> tuple[dict[str, Any], list[str]]:
     }, missing
 
 
+def render_adoption_pr_body(context: dict[str, Any]) -> str:
+    item_id = context["item_id"]
+    review_record = context["review_entry"]
+    spec_review_record = default_spec_review_path(item_id)
+    return (
+        "## Summary\n\n"
+        f"- Problem: Adopt Loom governance carriers for `{item_id}`.\n"
+        "- Scope: Loom-owned carrier and review metadata only.\n\n"
+        "## Validation\n\n"
+        "- [x] Verified by Loom adoption round-trip.\n\n"
+        "## Risks And Follow-ups\n\n"
+        "- Risks: None identified by the generated adoption body.\n"
+        "- Follow-ups: Keep repo-specific gates repo-owned.\n\n"
+        "## Related Work\n\n"
+        f"- Issue: {item_id}\n"
+        f"- Spec / plan: .loom/specs/{item_id}/spec.md\n\n"
+        "## Review Artifacts\n\n"
+        f"- Active Work Item: {context['report']['fact_chain']['entry_points']['work_item']}\n"
+        f"- Active Recovery Entry: {context['report']['fact_chain']['entry_points']['recovery_entry']}\n"
+        f"- Status Surface: {context['report']['fact_chain']['entry_points']['status_surface']}\n"
+        f"- Review Record: {review_record}\n"
+        f"- Spec Review Record: {spec_review_record}\n"
+    )
+
+
+def adoption_pr_body_sections(body: str) -> dict[str, str]:
+    sections: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in body.splitlines():
+        if line.startswith("## "):
+            current = line.strip()
+            sections[current] = []
+            continue
+        if current is not None:
+            sections[current].append(line.rstrip())
+    return {section: "\n".join(lines).strip() for section, lines in sections.items()}
+
+
+def parse_review_artifact_locators(section: str) -> tuple[dict[str, str], list[str]]:
+    locators: dict[str, str] = {}
+    errors: list[str] = []
+    for raw_line in section.splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+        match = re.match(r"^- ([^:]+):\s*(.+?)\s*$", stripped)
+        if not match:
+            errors.append(f"invalid Review Artifacts bullet: {stripped}")
+            continue
+        label = match.group(1).strip()
+        value = match.group(2).strip().strip("`")
+        if label in locators:
+            errors.append(f"duplicate Review Artifacts field: {label}")
+            continue
+        locators[label] = value
+    for label in ADOPTION_REVIEW_ARTIFACT_LABELS:
+        if label not in locators:
+            errors.append(f"Review Artifacts missing `{label}`")
+    return locators, errors
+
+
+def validate_adoption_pr_body(body: str, *, target_root: Path) -> dict[str, Any]:
+    sections = adoption_pr_body_sections(body)
+    missing_sections = [section for section in ADOPTION_PR_BODY_SECTIONS if section not in sections]
+    missing_inputs: list[str] = [f"PR body missing section: {section}" for section in missing_sections]
+    artifact_section = sections.get("## Review Artifacts", "")
+    locators, locator_errors = parse_review_artifact_locators(artifact_section)
+    missing_inputs.extend(locator_errors)
+
+    locator_status: dict[str, dict[str, Any]] = {}
+    for label, locator in locators.items():
+        path, errors = resolve_repo_relative_path(target_root, locator, label=f"Review Artifacts `{label}`")
+        exists = bool(path and path.exists() and path.is_file())
+        if errors:
+            missing_inputs.extend(errors)
+        elif not exists:
+            missing_inputs.append(f"Review Artifacts `{label}` points to missing file: {locator}")
+        locator_status[label] = {
+            "locator": locator,
+            "status": "present" if exists and not errors else "missing",
+        }
+
+    return {
+        "result": "pass" if not missing_inputs else "block",
+        "missing_inputs": missing_inputs,
+        "sections": {section: section in sections for section in ADOPTION_PR_BODY_SECTIONS},
+        "review_artifacts": locator_status,
+    }
+
+
 def active_workspace_conflicts(target_root: Path, item_id: str, workspace_entry: str) -> list[str]:
     work_items_dir = target_root / ".loom/work-items"
     if not work_items_dir.exists():
@@ -3686,6 +3794,101 @@ def handle_runtime_state(args: argparse.Namespace) -> int:
             "runtime_state": runtime_state,
         }
     )
+
+
+def adoption_verify_payload(target_root: Path, output_relative: str, expected_item: str | None) -> dict[str, Any]:
+    runtime_state = runtime_state_payload(target_root)
+    context, context_errors = load_context(target_root, output_relative, expected_item)
+    pr_template, pr_template_errors = check_pr_template(target_root)
+    governance_surface = build_governance_surface(target_root)
+
+    if context_errors:
+        return {
+            "command": "adopt",
+            "operation": "verify",
+            "schema_version": "loom-adoption-verify/v1",
+            "result": "block",
+            "summary": "adoption verify could not read the Loom fact chain.",
+            "missing_inputs": [f"fact-chain: {message}" for message in context_errors],
+            "fallback_to": "adoption",
+            "runtime_state": runtime_state,
+            "governance_surface": governance_surface,
+            "pr_template": pr_template,
+        }
+
+    produced_body = render_adoption_pr_body(context)
+    produced_validation = validate_adoption_pr_body(produced_body, target_root=target_root)
+    bypass_body = produced_body.replace("\n## Review Artifacts\n\n", "\n## Omitted Review Artifacts\n\n", 1)
+    bypass_validation = validate_adoption_pr_body(bypass_body, target_root=target_root)
+
+    review_record, review_path, review_errors = load_review_record(target_root, context["item_id"], context["review_entry"])
+    spec_review_record, spec_review_path, spec_review_errors = load_review_record(
+        target_root,
+        context["item_id"],
+        default_spec_review_path(context["item_id"]),
+    )
+    review_missing = list(review_errors)
+    if review_record is None and not review_errors:
+        review_missing.append(f"missing review artifact: {review_path}")
+    spec_review_missing = list(spec_review_errors)
+    if spec_review_record is None and not spec_review_errors:
+        spec_review_missing.append(f"missing spec review artifact: {spec_review_path}")
+
+    missing_inputs: list[str] = []
+    if runtime_state.get("result") != "pass":
+        missing_inputs.extend(str(message) for message in runtime_state.get("missing_inputs", []))
+    missing_inputs.extend(pr_template_errors)
+    missing_inputs.extend(produced_validation["missing_inputs"])
+    missing_inputs.extend(review_missing)
+    missing_inputs.extend(spec_review_missing)
+    if bypass_validation["result"] != "block":
+        missing_inputs.append("consumer bypass check failed: removing Review Artifacts must block")
+
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "command": "adopt",
+        "operation": "verify",
+        "schema_version": "loom-adoption-verify/v1",
+        "result": result,
+        "summary": (
+            "downstream adoption producer/consumer round-trip is valid."
+            if result == "pass"
+            else "downstream adoption round-trip has blocking contract gaps."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": None if result == "pass" else "adoption",
+        "runtime_state": runtime_state,
+        "governance_surface": governance_surface,
+        "pr_template": pr_template,
+        "producer_consumer_roundtrip": {
+            "producer": {
+                "status": "pass",
+                "body_sections": list(ADOPTION_PR_BODY_SECTIONS),
+            },
+            "consumer": produced_validation,
+            "bypass_check": {
+                "scenario": "Review Artifacts section omitted",
+                "result": "pass" if bypass_validation["result"] == "block" else "block",
+                "consumer_result": bypass_validation["result"],
+                "missing_inputs": bypass_validation["missing_inputs"],
+            },
+        },
+        "reviews": {
+            "implementation": {
+                "path": review_path,
+                "status": "present" if review_record is not None and not review_errors else "missing",
+            },
+            "spec": {
+                "path": spec_review_path,
+                "status": "present" if spec_review_record is not None and not spec_review_errors else "missing",
+            },
+        },
+    }
+
+
+def handle_adopt(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    return emit(adoption_verify_payload(target_root, args.output, args.item))
 
 
 def host_lifecycle_payload(context: dict[str, Any]) -> dict[str, Any]:
@@ -7076,6 +7279,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_fact_chain(args)
     if args.command == "runtime-state":
         return handle_runtime_state(args)
+    if args.command == "adopt":
+        return handle_adopt(args)
     if args.command == "runtime-evidence":
         return handle_runtime_evidence(args)
     if args.command == "state-check":
