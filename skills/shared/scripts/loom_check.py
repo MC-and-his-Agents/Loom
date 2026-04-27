@@ -2540,6 +2540,11 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             {"pass"},
         ),
         (
+            "carrier-refresh",
+            ["python3", "tools/loom_flow.py", "carrier", "refresh", "--target", "examples/new-project", "--item", "INIT-0001", "--dry-run"],
+            {"pass"},
+        ),
+        (
             "governance-profile-status",
             ["python3", "tools/loom_flow.py", "governance-profile", "status", "--target", "examples/new-project"],
             {"pass"},
@@ -2818,6 +2823,13 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     failures.append(Failure("daily-execution-cli", "`adopt verify` generated body must pass consumer validation"))
                 if not isinstance(bypass, dict) or bypass.get("result") != "pass":
                     failures.append(Failure("daily-execution-cli", "`adopt verify` must prove required section deletion blocks"))
+        if label == "carrier-refresh":
+            if payload.get("command") != "carrier" or payload.get("operation") != "refresh":
+                failures.append(Failure("daily-execution-cli", "`carrier refresh` must report command/operation"))
+            if payload.get("schema_version") != "loom-carrier-refresh/v1":
+                failures.append(Failure("daily-execution-cli", "`carrier refresh` must report schema v1"))
+            if not isinstance(payload.get("actions"), list):
+                failures.append(Failure("daily-execution-cli", "`carrier refresh` must include actions"))
         if label in {"governance-profile-status", "governance-profile-upgrade-plan"}:
             if payload.get("command") != "governance-profile":
                 failures.append(Failure("daily-execution-cli", f"`{label}` must report `command: governance-profile`"))
@@ -6450,6 +6462,43 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             failures.append(Failure("adversarial-adoption", f"runtime provenance drift sample failed: {error}"))
         elif payload.get("result") != "block":
             failures.append(Failure("adversarial-adoption", "runtime provenance drift must block runtime-parity"))
+
+        carrier_refresh_target = base / "carrier-refresh"
+        shutil.copytree(baseline, carrier_refresh_target)
+        carrier_manifest_path = carrier_refresh_target / ".loom/bootstrap/manifest.json"
+        carrier_manifest = load_json_file(carrier_manifest_path)
+        carrier_artifacts = carrier_manifest.get("artifacts") if isinstance(carrier_manifest, dict) else []
+        if isinstance(carrier_artifacts, list):
+            for artifact in carrier_artifacts:
+                if isinstance(artifact, dict) and artifact.get("path") == ".loom/bin/loom_flow.py":
+                    artifact["sha256"] = "1" * 64
+                    break
+        write_json(carrier_manifest_path, carrier_manifest)
+        dry_run_payload, dry_run_error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "carrier", "refresh", "--target", str(carrier_refresh_target), "--dry-run"],
+        )
+        if dry_run_error:
+            failures.append(Failure("adversarial-adoption", f"carrier refresh dry-run sample failed: {dry_run_error}"))
+        else:
+            refresh_needed = dry_run_payload.get("refresh_needed")
+            if dry_run_payload.get("result") != "pass" or not isinstance(refresh_needed, list) or not refresh_needed:
+                failures.append(Failure("adversarial-adoption", "carrier refresh dry-run must report runtime provenance refresh-needed"))
+        write_payload, write_error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "carrier", "refresh", "--target", str(carrier_refresh_target), "--write"],
+        )
+        if write_error:
+            failures.append(Failure("adversarial-adoption", f"carrier refresh write sample failed: {write_error}"))
+        else:
+            after_payload, after_error = load_command_json(
+                root,
+                ["python3", "tools/loom_flow.py", "carrier", "refresh", "--target", str(carrier_refresh_target), "--dry-run"],
+            )
+            if after_error:
+                failures.append(Failure("adversarial-adoption", f"carrier refresh after-write sample failed: {after_error}"))
+            elif after_payload.get("refresh_needed"):
+                failures.append(Failure("adversarial-adoption", "carrier refresh --write must clear runtime provenance drift"))
 
         rollover_target = base / "active-rollover"
         shutil.copytree(baseline, rollover_target)

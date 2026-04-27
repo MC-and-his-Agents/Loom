@@ -7,7 +7,7 @@
     "contract_version": "1.3.0"
   },
   "run": {
-    "target": "/Users/mc/dev/Loom/examples/new-project",
+    "target": "/private/tmp/Loom-zero-friction/examples/new-project",
     "scenario": "新项目",
     "scenario_key": "new",
     "integration_mode": "root",
@@ -131,7 +131,7 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "9376481f98f539c0b6aaf72df42e647f320a0e6050e14cd2e1cf0c37240b79cd"
+      "sha256": "02f9b19b65ad580aaee0431a1f5151ac87a4755c95d4045168efb9624f44a558"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -155,7 +155,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "9a8b31917b244172681a542256994d97de9a7b54869e7e9e7bf5747e8759ae69"
+      "sha256": "984cb68a9c5c95e268810b1a6a3c90590bb410b399b2d7ea60efe3da5c377689"
     },
     {
       "path": "AGENTS.md",
@@ -263,12 +263,12 @@
     "scene": "repo-local-demo",
     "carrier": "repo-local-wrapper",
     "entry_family": "loom-init",
-    "install_root": "/Users/mc/dev/Loom/skills",
-    "runtime_root": "/Users/mc/dev/Loom/skills/shared/scripts",
-    "registry_path": "/Users/mc/dev/Loom/skills/registry.json",
-    "layout_or_manifest_path": "/Users/mc/dev/Loom/skills/install-layout.json",
-    "source_repo_root": "/Users/mc/dev/Loom",
-    "target_root": "/Users/mc/dev/Loom/examples/new-project",
+    "install_root": "/private/tmp/Loom-zero-friction/skills",
+    "runtime_root": "/private/tmp/Loom-zero-friction/skills/shared/scripts",
+    "registry_path": "/private/tmp/Loom-zero-friction/skills/registry.json",
+    "layout_or_manifest_path": "/private/tmp/Loom-zero-friction/skills/install-layout.json",
+    "source_repo_root": "/private/tmp/Loom-zero-friction",
+    "target_root": "/private/tmp/Loom-zero-friction/examples/new-project",
     "checks": {
       "scene_marker": {
         "status": "pass",
@@ -278,21 +278,21 @@
         "status": "pass",
         "summary": "carrier layout exposes an installed skills root and shared runtime tree.",
         "evidence": {
-          "install_root": "/Users/mc/dev/Loom/skills"
+          "install_root": "/private/tmp/Loom-zero-friction/skills"
         }
       },
       "registry_contract": {
         "status": "pass",
         "summary": "registry, upgrade contract, and skill entrypoints are consistent.",
         "evidence": {
-          "path": "/Users/mc/dev/Loom/skills/registry.json"
+          "path": "/private/tmp/Loom-zero-friction/skills/registry.json"
         }
       },
       "shared_runtime": {
         "status": "pass",
         "summary": "shared runtime scripts are present and executable roots can be resolved.",
         "evidence": {
-          "path": "/Users/mc/dev/Loom/skills/shared/scripts"
+          "path": "/private/tmp/Loom-zero-friction/skills/shared/scripts"
         }
       },
       "referenced_resources": {
@@ -438,12 +438,12 @@
           },
           "branch": {
             "status": "present",
-            "locator": "issue-369-adopt-verify",
+            "locator": "issue-370-carrier-refresh",
             "authority": "git"
           },
           "worktree": {
             "status": "present",
-            "locator": "/Users/mc/dev/Loom",
+            "locator": "/private/tmp/Loom-zero-friction",
             "authority": "git"
           },
           "implementation_pr": {
