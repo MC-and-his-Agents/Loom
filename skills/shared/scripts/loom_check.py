@@ -2545,6 +2545,11 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             {"pass"},
         ),
         (
+            "host-binding-validate",
+            ["python3", "tools/loom_flow.py", "host-binding", "validate", "--target", ".", "--owner", "MC-and-his-Agents", "--repo", "Loom", "--branch", "main"],
+            {"pass"},
+        ),
+        (
             "governance-profile-status",
             ["python3", "tools/loom_flow.py", "governance-profile", "status", "--target", "examples/new-project"],
             {"pass"},
@@ -2830,6 +2835,14 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(Failure("daily-execution-cli", "`carrier refresh` must report schema v1"))
             if not isinstance(payload.get("actions"), list):
                 failures.append(Failure("daily-execution-cli", "`carrier refresh` must include actions"))
+        if label == "host-binding-validate":
+            if payload.get("command") != "host-binding" or payload.get("operation") != "validate":
+                failures.append(Failure("daily-execution-cli", "`host-binding validate` must report command/operation"))
+            if payload.get("schema_version") != "loom-host-binding/v1":
+                failures.append(Failure("daily-execution-cli", "`host-binding validate` must report schema v1"))
+            branch = payload.get("branch")
+            if not isinstance(branch, dict) or branch.get("status") != "present":
+                failures.append(Failure("daily-execution-cli", "`host-binding validate --branch main` must read the branch via REST"))
         if label in {"governance-profile-status", "governance-profile-upgrade-plan"}:
             if payload.get("command") != "governance-profile":
                 failures.append(Failure("daily-execution-cli", f"`{label}` must report `command: governance-profile`"))

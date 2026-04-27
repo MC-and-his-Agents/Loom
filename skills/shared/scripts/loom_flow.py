@@ -13,7 +13,9 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote
+from urllib.request import Request, urlopen
 
 from fact_chain_support import (
     STATUS_FIELDS,
@@ -190,6 +192,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     carrier.add_argument("--dry-run", action="store_true", default=True, help="Preview refresh actions without writing files; this is the default")
     carrier.add_argument("--write", dest="dry_run", action="store_false", help="Write Loom-owned carrier metadata refreshes")
+
+    host_binding = subparsers.add_parser("host-binding", help="Validate host issue, PR, branch, and SHA bindings")
+    host_binding.add_argument("operation", choices=("validate",))
+    host_binding.add_argument("--target", required=True, help="Target repository root")
+    host_binding.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
+    host_binding.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    host_binding.add_argument("--issue", type=int, help="GitHub Work Item issue number")
+    host_binding.add_argument("--pr", type=int, help="GitHub implementation PR number")
+    host_binding.add_argument("--branch", help="GitHub branch name")
+    host_binding.add_argument("--head-sha", help="Implementation head SHA to validate")
+    host_binding.add_argument("--base-sha", help="Base SHA used for diff validation")
 
     state = subparsers.add_parser(
         "state-check",
@@ -1013,7 +1026,71 @@ def gh_json(root: Path, args: list[str]) -> tuple[dict[str, Any] | None, list[st
 
 
 def gh_rest_json(root: Path, path: str) -> tuple[dict[str, Any] | None, list[str]]:
-    return gh_json(root, ["api", path])
+    payload, errors = gh_json(root, ["api", path])
+    if payload is not None or not errors:
+        return payload, errors
+    fallback_payload, fallback_errors = github_public_rest_json(path)
+    if fallback_payload is not None:
+        return fallback_payload, []
+    return None, errors + [f"public REST fallback: {message}" for message in fallback_errors]
+
+
+def github_public_rest_json(path: str) -> tuple[dict[str, Any] | None, list[str]]:
+    url = f"https://api.github.com/{path.lstrip('/')}"
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "loom-governance-runtime",
+    }
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = Request(url, headers=headers)
+    try:
+        with urlopen(request, timeout=20) as response:
+            text = response.read().decode("utf-8")
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace").strip()
+        return None, [f"HTTP {exc.code} {exc.reason}: {detail or url}"]
+    except URLError as exc:
+        return None, [f"REST request failed: {exc.reason}"]
+    except OSError as exc:
+        return None, [f"REST request failed: {exc}"]
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        return None, [f"invalid JSON from public REST endpoint: {exc.msg}"]
+    if not isinstance(payload, dict):
+        return None, ["public REST endpoint did not return a JSON object"]
+    return payload, []
+
+
+def github_public_rest_list(path: str) -> tuple[list[dict[str, Any]], list[str]]:
+    url = f"https://api.github.com/{path.lstrip('/')}"
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "loom-governance-runtime",
+    }
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = Request(url, headers=headers)
+    try:
+        with urlopen(request, timeout=20) as response:
+            text = response.read().decode("utf-8")
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace").strip()
+        return [], [f"HTTP {exc.code} {exc.reason}: {detail or url}"]
+    except URLError as exc:
+        return [], [f"REST request failed: {exc.reason}"]
+    except OSError as exc:
+        return [], [f"REST request failed: {exc}"]
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        return [], [f"invalid JSON from public REST endpoint: {exc.msg}"]
+    if not isinstance(payload, list):
+        return [], ["public REST endpoint did not return a list"]
+    return [entry for entry in payload if isinstance(entry, dict)], []
 
 
 def github_issue_state(value: Any) -> str:
@@ -4111,6 +4188,168 @@ def carrier_refresh_payload(target_root: Path, output_relative: str, expected_it
 def handle_carrier(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
     return emit(carrier_refresh_payload(target_root, args.output, args.item, dry_run=args.dry_run))
+
+
+def github_commit_pulls(root: Path, owner: str, repo_name: str, head_sha: str) -> tuple[list[dict[str, Any]], list[str]]:
+    path = f"repos/{owner}/{repo_name}/commits/{head_sha}/pulls"
+    result = run_process(
+        [
+            "gh",
+            "api",
+            path,
+            "-H",
+            "Accept: application/vnd.github+json",
+        ],
+        root,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "gh api commit pulls failed"
+        pulls, fallback_errors = github_public_rest_list(path)
+        if pulls:
+            return pulls, []
+        return [], [detail, *[f"public REST fallback: {message}" for message in fallback_errors]]
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        return [], [f"invalid JSON from commit pulls REST endpoint: {exc.msg}"]
+    if not isinstance(payload, list):
+        return [], ["commit pulls REST endpoint did not return a list"]
+    return [entry for entry in payload if isinstance(entry, dict)], []
+
+
+def host_binding_validate_payload(
+    *,
+    target_root: Path,
+    owner: str | None,
+    repo_name: str | None,
+    issue_number: int | None,
+    pr_number: int | None,
+    branch_name: str | None,
+    head_sha: str | None,
+    base_sha: str | None,
+) -> dict[str, Any]:
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    owner = owner or detected_owner
+    repo_name = repo_name or detected_repo
+    missing_inputs: list[str] = []
+    inferences: list[dict[str, Any]] = []
+
+    if not owner or not repo_name:
+        missing_inputs.append("owner/repo")
+
+    inferred_pr = pr_number
+    inferred_branch = branch_name
+    if owner and repo_name and head_sha and inferred_pr is None:
+        pulls, pull_errors = github_commit_pulls(target_root, owner, repo_name, head_sha)
+        if pull_errors:
+            missing_inputs.extend(f"head_sha: {message}" for message in pull_errors)
+        elif len(pulls) == 1:
+            inferred_pr = int(pulls[0].get("number"))
+            head = pulls[0].get("head")
+            if inferred_branch is None and isinstance(head, dict) and isinstance(head.get("ref"), str):
+                inferred_branch = head.get("ref")
+            inferences.append({"from": "head_sha", "to": "pr", "status": "inferred", "pr": inferred_pr})
+        elif len(pulls) > 1:
+            missing_inputs.append("head_sha resolves to multiple PRs; pass --pr explicitly")
+        else:
+            missing_inputs.append("issue_or_pr_binding")
+
+    if inferred_branch is None and head_sha is None and inferred_pr is None and issue_number is None:
+        missing_inputs.append("branch | head-sha | pr | issue")
+
+    branch_payload: dict[str, Any] | None = None
+    branch_errors: list[str] = []
+    if owner and repo_name and inferred_branch:
+        branch_payload, branch_errors = github_branch_payload(target_root, owner, repo_name, inferred_branch)
+        missing_inputs.extend(f"branch: {message}" for message in branch_errors)
+
+    binding_payload = github_binding_payload(
+        target_root=target_root,
+        owner=owner,
+        repo_name=repo_name,
+        phase_number=None,
+        fr_number=None,
+        issue_number=issue_number,
+        pr_number=inferred_pr,
+        branch_name=inferred_branch,
+        sync=False,
+        dry_run=True,
+        require_complete_chain=False,
+    )
+    binding_missing = [
+        message
+        for message in binding_payload.get("missing_inputs", [])
+        if message not in {"work_item issue", "binding_chain"}
+    ]
+    if issue_number is not None or inferred_pr is not None:
+        missing_inputs.extend(str(message) for message in binding_missing)
+    findings = binding_payload.get("binding", {}).get("findings") if isinstance(binding_payload.get("binding"), dict) else []
+    if findings:
+        missing_inputs.append("binding_findings")
+
+    sha_validation: dict[str, Any] = {
+        "head_sha": head_sha,
+        "base_sha": base_sha,
+        "status": "not_requested" if not head_sha else "validated",
+    }
+    if head_sha and branch_payload is not None:
+        branch_head = branch_payload.get("commit", {}).get("sha") if isinstance(branch_payload.get("commit"), dict) else None
+        sha_validation["branch_head_sha"] = branch_head
+        if branch_head and branch_head != head_sha:
+            sha_validation["status"] = "drift"
+            missing_inputs.append("head_sha does not match branch head")
+    if base_sha and head_sha:
+        changed_paths, diff_errors = git_changed_paths(target_root, base_sha, head_sha)
+        sha_validation["diff"] = {"changed_paths": changed_paths, "errors": diff_errors}
+        if diff_errors:
+            missing_inputs.extend(f"diff: {message}" for message in diff_errors)
+
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "command": "host-binding",
+        "operation": "validate",
+        "schema_version": "loom-host-binding/v1",
+        "result": result,
+        "summary": (
+            "host binding inputs are readable and sufficiently bound."
+            if result == "pass"
+            else "host binding inputs are missing or ambiguous."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": None if result == "pass" else "github-profile-binding",
+        "repository": {"owner": owner, "name": repo_name},
+        "inputs": {
+            "issue": issue_number,
+            "pr": pr_number,
+            "branch": branch_name,
+            "head_sha": head_sha,
+            "base_sha": base_sha,
+        },
+        "inferences": inferences,
+        "binding": binding_payload.get("binding"),
+        "branch": {
+            "name": inferred_branch,
+            "status": "present" if branch_payload is not None else ("unreadable" if branch_errors else "not_requested"),
+            "errors": branch_errors,
+        },
+        "sha_validation": sha_validation,
+    }
+
+
+def handle_host_binding(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    return emit(
+        host_binding_validate_payload(
+            target_root=target_root,
+            owner=args.owner,
+            repo_name=args.repo_name,
+            issue_number=args.issue,
+            pr_number=args.pr,
+            branch_name=args.branch,
+            head_sha=args.head_sha,
+            base_sha=args.base_sha,
+        )
+    )
 
 
 def host_lifecycle_payload(context: dict[str, Any]) -> dict[str, Any]:
@@ -7505,6 +7744,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_adopt(args)
     if args.command == "carrier":
         return handle_carrier(args)
+    if args.command == "host-binding":
+        return handle_host_binding(args)
     if args.command == "runtime-evidence":
         return handle_runtime_evidence(args)
     if args.command == "state-check":
