@@ -481,8 +481,8 @@ def locator_boundary_error(raw_locator: object, *, label: str) -> str:
     locator = raw_locator.strip()
     locator_path = Path(locator)
     if locator_path.is_absolute() or ".." in locator_path.parts:
-        return f"{label} must stay within the repository root: {locator}"
-    return f"{label} must stay within the repository root: {locator}"
+        return f"{label} must stay inside the repository and within the repository root: {locator}"
+    return f"{label} must stay inside the repository and within the repository root: {locator}"
 
 
 def resolve_locator(root: Path, raw_locator: object) -> tuple[str | None, Path | None]:
