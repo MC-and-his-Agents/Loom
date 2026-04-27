@@ -6453,7 +6453,11 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                 "repo_locator": "../outside.json",
             },
         )
-        if not any("must stay inside the repository" in error for error in shadow_anchor_errors):
+        if not any(
+            "must stay inside the repository" in error
+            and "must stay within the repository root" in error
+            for error in shadow_anchor_errors
+        ):
             failures.append(Failure("adversarial-adoption", "shadow surface path-boundary errors must expose a stable repository anchor"))
 
         spec_contract_target = base / "spec-contract"
