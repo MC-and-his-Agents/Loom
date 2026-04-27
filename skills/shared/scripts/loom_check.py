@@ -272,6 +272,7 @@ def check_required_paths(root: Path, category: str, paths: tuple[str, ...]) -> l
 def iter_markdown_files(root: Path) -> list[Path]:
     skipped_parts = {
         ".git",
+        ".worktrees",
         "node_modules",
         "dist",
         "payload",
@@ -6336,6 +6337,66 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                 failures.append(Failure("adversarial-adoption", f"`{label}` baseline failed: {error}"))
             elif payload.get("result") != expected:
                 failures.append(Failure("adversarial-adoption", f"`{label}` baseline must return `{expected}`"))
+
+        path_escape_payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "fact-chain", "--target", str(baseline), "--output", "../outside-init-result.json"],
+        )
+        if error:
+            failures.append(Failure("adversarial-adoption", f"path escape fact-chain sample failed: {error}"))
+        elif path_escape_payload.get("result") != "block":
+            failures.append(Failure("adversarial-adoption", "fact-chain must block init-result locators that escape the target root"))
+
+        escape_work_item_payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "work-item",
+                "create",
+                "--target",
+                str(baseline),
+                "--item",
+                "ESCAPE-0001",
+                "--goal",
+                "Reject path escape",
+                "--scope",
+                "Exercise repo-relative locator hardening",
+                "--execution-path",
+                "execution/support",
+                "--workspace-entry",
+                ".",
+                "--validation-entry",
+                "python3 .loom/bin/loom_init.py verify --target .",
+                "--closing-condition",
+                "Unsafe locators are blocked.",
+                "--recovery-entry",
+                "../escape.md",
+                "--init-recovery",
+            ],
+        )
+        if error:
+            failures.append(Failure("adversarial-adoption", f"path escape work-item sample failed: {error}"))
+        elif escape_work_item_payload.get("result") != "block":
+            failures.append(Failure("adversarial-adoption", "work-item create must block recovery locators that escape the target root"))
+
+        shadow_escape_target = base / "shadow-locator-escape"
+        shutil.copytree(baseline, shadow_escape_target)
+        interop_path = shadow_escape_target / ".loom/companion/interop.json"
+        interop_payload = load_json_file(interop_path)
+        shadow_surfaces = interop_payload.get("shadow_surfaces") if isinstance(interop_payload, dict) else None
+        review_surface = shadow_surfaces.get("review") if isinstance(shadow_surfaces, dict) else None
+        if isinstance(review_surface, dict):
+            review_surface["loom_locator"] = "/tmp/outside-shadow-evidence.json"
+            write_json(interop_path, interop_payload)
+        shadow_escape_payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "shadow-parity", "--target", str(shadow_escape_target), "--surface", "review", "--blocking"],
+        )
+        if error:
+            failures.append(Failure("adversarial-adoption", f"path escape shadow-parity sample failed: {error}"))
+        elif shadow_escape_payload.get("result") != "block":
+            failures.append(Failure("adversarial-adoption", "shadow-parity blocking mode must reject absolute shadow locators"))
 
         poisoned_payload, error = load_command_json(
             root,

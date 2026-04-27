@@ -183,7 +183,25 @@ def parse_list_section(sections: dict[str, list[str]], section_name: str, relati
 
 
 def _relative(path: Path, root: Path) -> str:
-    return str(path.relative_to(root))
+    return str(path.resolve().relative_to(root.resolve()))
+
+
+def resolve_repo_relative_path(target_root: Path, relative: str, *, label: str) -> tuple[Path | None, list[str]]:
+    """Resolve a repository locator while rejecting absolute paths and path escapes."""
+    if not isinstance(relative, str) or not relative.strip():
+        return None, [f"{label} must be a non-empty repo-relative path"]
+    locator = relative.strip()
+    candidate_raw = Path(locator)
+    if candidate_raw.is_absolute():
+        return None, [f"{label} must be repo-relative, got absolute path: {locator}"]
+    if ".." in candidate_raw.parts:
+        return None, [f"{label} must stay inside the target repository: {locator}"]
+    candidate = (target_root / candidate_raw).resolve()
+    try:
+        candidate.relative_to(target_root.resolve())
+    except ValueError:
+        return None, [f"{label} must stay inside the target repository: {locator}"]
+    return candidate, []
 
 
 def parse_work_item(path: Path, root: Path) -> tuple[dict[str, object], list[str]]:
@@ -301,7 +319,10 @@ def inspect_fact_chain(
     output_relative: str = ".loom/bootstrap/init-result.json",
 ) -> tuple[dict[str, object], list[str]]:
     errors: list[str] = []
-    output_path = target_root / output_relative
+    output_path, output_errors = resolve_repo_relative_path(target_root, output_relative, label="init-result locator")
+    if output_errors:
+        return {}, output_errors
+    assert output_path is not None
     if not output_path.exists():
         return {}, [f"missing init-result: {output_relative}"]
 
@@ -346,9 +367,29 @@ def inspect_fact_chain(
     if errors:
         return {}, errors
 
-    work_item_path = target_root / str(work_item_ref)
-    recovery_path = target_root / str(recovery_ref)
-    status_path = target_root / str(status_ref)
+    work_item_path, work_item_path_errors = resolve_repo_relative_path(
+        target_root,
+        str(work_item_ref),
+        label="init-result.fact_chain.entry_points.work_item",
+    )
+    recovery_path, recovery_path_errors = resolve_repo_relative_path(
+        target_root,
+        str(recovery_ref),
+        label="init-result.fact_chain.entry_points.recovery_entry",
+    )
+    status_path, status_path_errors = resolve_repo_relative_path(
+        target_root,
+        str(status_ref),
+        label="init-result.fact_chain.entry_points.status_surface",
+    )
+    errors.extend(work_item_path_errors)
+    errors.extend(recovery_path_errors)
+    errors.extend(status_path_errors)
+    if errors:
+        return {}, errors
+    assert work_item_path is not None
+    assert recovery_path is not None
+    assert status_path is not None
     for label, path in (
         ("work_item", work_item_path),
         ("recovery_entry", recovery_path),
