@@ -4044,6 +4044,16 @@ def refresh_shadow_evidence_actions(target_root: Path) -> list[dict[str, Any]]:
         return actions
     for path in sorted(shadow_root.glob("*.json")):
         relative = path.relative_to(target_root).as_posix()
+        if relative == ".loom/shadow/shadow-parity.json":
+            actions.append(
+                {
+                    "path": relative,
+                    "kind": "shadow-evidence-summary",
+                    "status": "skipped",
+                    "summary": "shadow-parity.json is an aggregate command output; per-surface evidence carries source hashes.",
+                }
+            )
+            continue
         try:
             payload = load_json_file(path)
         except (OSError, ValueError, json.JSONDecodeError) as exc:
