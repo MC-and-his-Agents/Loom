@@ -195,12 +195,12 @@ def resolve_repo_relative_path(target_root: Path, relative: str, *, label: str) 
     if candidate_raw.is_absolute():
         return None, [f"{label} must be repo-relative, got absolute path: {locator}"]
     if ".." in candidate_raw.parts:
-        return None, [f"{label} must stay inside the target repository: {locator}"]
+        return None, [f"{label} must stay inside the target repository and within the target root: {locator}"]
     candidate = (target_root / candidate_raw).resolve()
     try:
         candidate.relative_to(target_root.resolve())
     except ValueError:
-        return None, [f"{label} must stay inside the target repository: {locator}"]
+        return None, [f"{label} must stay inside the target repository and within the target root: {locator}"]
     return candidate, []
 
 

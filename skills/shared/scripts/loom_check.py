@@ -17,6 +17,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from fact_chain_support import inspect_fact_chain
+import governance_surface as governance_surface_module
+import loom_flow as loom_flow_module
+import runtime_state as runtime_state_module
 from governance_surface import build_governance_surface
 from loom_flow import repo_specific_requirements_payload, review_head_binding
 from runtime_paths import repo_local_root
@@ -6346,6 +6349,109 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
 
     with tempfile.TemporaryDirectory(prefix="loom-check-syvert-adoption-") as tmp:
         base = Path(tmp)
+
+        original_governance_remote = governance_surface_module.git_remote_origin
+        original_flow_remote = loom_flow_module.git_remote_origin
+        try:
+            governance_surface_module.git_remote_origin = lambda _root: "git@github.com:owner/foo.bar.git"
+            loom_flow_module.git_remote_origin = lambda _root: "git@github.com:owner/foo.bar.git"
+            if governance_surface_module.detect_github_repo(base) != ("owner", "foo.bar"):
+                failures.append(Failure("adversarial-adoption", "governance surface must accept dotted GitHub repository names"))
+            if loom_flow_module.detect_github_repo(base) != ("owner", "foo.bar"):
+                failures.append(Failure("adversarial-adoption", "loom flow must accept dotted GitHub repository names"))
+        finally:
+            governance_surface_module.git_remote_origin = original_governance_remote
+            loom_flow_module.git_remote_origin = original_flow_remote
+
+        branch_calls: list[list[str]] = []
+        original_detect_repo = governance_surface_module.detect_github_repo
+        original_rest_json = governance_surface_module.gh_rest_json
+        original_gh_json = governance_surface_module.gh_json
+        try:
+            governance_surface_module.detect_github_repo = lambda _root: ("owner", "foo.bar")
+            governance_surface_module.gh_rest_json = lambda _root, _path: ({"full_name": "owner/foo.bar", "default_branch": "release/main"}, [])
+
+            def fake_gh_json(_root: Path, args: list[str]) -> tuple[dict[str, object], list[str]]:
+                branch_calls.append(args)
+                return {"protected": False}, []
+
+            governance_surface_module.gh_json = fake_gh_json
+            _, errors = governance_surface_module.detect_github_control_plane(base)
+            if errors:
+                failures.append(Failure("adversarial-adoption", f"governance surface slash-branch fixture failed: {'; '.join(errors)}"))
+            elif not branch_calls or "repos/owner/foo.bar/branches/release%2Fmain" not in branch_calls[0]:
+                failures.append(Failure("adversarial-adoption", "GitHub branch REST endpoint must encode slash-containing branch names"))
+        finally:
+            governance_surface_module.detect_github_repo = original_detect_repo
+            governance_surface_module.gh_rest_json = original_rest_json
+            governance_surface_module.gh_json = original_gh_json
+
+        merge_calls: list[list[str]] = []
+        original_run_git = loom_flow_module.run_git
+        try:
+            def fake_run_git(_root: Path, args: list[str]):
+                merge_calls.append(args)
+
+                class Result:
+                    returncode = 0
+
+                return Result()
+
+            loom_flow_module.run_git = fake_run_git
+            if not loom_flow_module.contains_merged_commit(base, "abc123", "release/main"):
+                failures.append(Failure("adversarial-adoption", "target-branch merge containment fixture unexpectedly failed"))
+            expected_fetch = ["fetch", "origin", "refs/heads/release/main:refs/remotes/origin/release/main"]
+            if not merge_calls or merge_calls[0] != expected_fetch:
+                failures.append(Failure("adversarial-adoption", "merge commit containment must fetch the explicit target branch"))
+        finally:
+            loom_flow_module.run_git = original_run_git
+
+        path_contract_target = base / "path-contract"
+        path_contract_target.mkdir()
+        (path_contract_target / "install-layout.json").write_text('{"required_paths":["../outside"]}', encoding="utf-8")
+        payload, errors, _ = runtime_state_module._validate_install_layout(path_contract_target)
+        if payload.get("status") != "block" or not any("must stay inside" in error for error in errors):
+            failures.append(Failure("adversarial-adoption", "install-layout runtime paths must not escape the runtime root"))
+
+        (path_contract_target / "upgrade-contract.json").write_text('{"upgrade_policy":{"refresh_required":["layout_manifest"]}}', encoding="utf-8")
+        (path_contract_target / "registry.json").write_text(
+            '{"install_layout":"install-layout.json","upgrade_contract":"upgrade-contract.json","entries":[{"id":"x","executable":"../outside-exec","manifest":"../outside-manifest.json"}]}',
+            encoding="utf-8",
+        )
+        payload, errors, _ = runtime_state_module._validate_registry_contract(path_contract_target)
+        if payload.get("status") != "block" or not any("must stay inside" in error for error in errors):
+            failures.append(Failure("adversarial-adoption", "registry executable and manifest paths must not escape the runtime root"))
+
+        spec_contract_target = base / "spec-contract"
+        (spec_contract_target / ".loom/specs/INIT-0001").mkdir(parents=True)
+        (spec_contract_target / ".loom/specs/INIT-0001/spec.md").write_text("bootstrap spec\n", encoding="utf-8")
+        context = {
+            "item_id": "WORK-0002",
+            "target_root": spec_contract_target,
+            "associated_artifacts": [".loom/specs/INIT-0001/spec.md"],
+        }
+        if loom_flow_module.formal_spec_path(context) is not None:
+            failures.append(Failure("adversarial-adoption", "active Work Items must not fall back to bootstrap INIT specs"))
+
+        semantics_target = base / "shadow-semantics"
+        (semantics_target / ".loom/shadow").mkdir(parents=True)
+        (semantics_target / "loom.md").write_text("loom\n", encoding="utf-8")
+        write_json(
+            semantics_target / ".loom/shadow/review-loom.json",
+            {
+                "parity_value": "review-v1",
+                "source_semantics": "requires spec review",
+                "source_files": ["loom.md"],
+                "source_sha256": {"loom.md": sha256_file(semantics_target / "loom.md")},
+            },
+        )
+        normalized, _ = loom_flow_module.normalized_shadow_value(
+            semantics_target / ".loom/shadow/review-loom.json",
+            target_root=semantics_target,
+        )
+        if "requires spec review" not in str(normalized.get("normalized_value")):
+            failures.append(Failure("adversarial-adoption", "shadow parity normalization must retain declared source semantics"))
+
         baseline = base / "baseline"
         current_head = prepare_strong_target(baseline)
         if current_head is None:

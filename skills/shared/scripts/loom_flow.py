@@ -707,7 +707,23 @@ def normalized_shadow_value(path: Path, *, target_root: Path) -> tuple[dict[str,
         for key in ("parity_value", "result", "decision", "status", "verdict", "value"):
             value = payload.get(key)
             if isinstance(value, (str, int, float, bool)) and str(value).strip():
-                return {**source_evidence, "normalized_value": str(value).strip().lower()}, "; ".join(source_errors) if source_errors else None
+                comparable: object = str(value).strip().lower()
+                semantic_evidence = {
+                    semantic_key: payload[semantic_key]
+                    for semantic_key in ("source_semantics", "evidence_body")
+                    if semantic_key in payload
+                }
+                if semantic_evidence:
+                    comparable = {
+                        "value": comparable,
+                        **semantic_evidence,
+                    }
+                normalized = (
+                    comparable
+                    if isinstance(comparable, str)
+                    else json.dumps(comparable, ensure_ascii=False, sort_keys=True)
+                )
+                return {**source_evidence, "normalized_value": normalized}, "; ".join(source_errors) if source_errors else None
         return {**source_evidence, "normalized_value": json.dumps(payload, ensure_ascii=False, sort_keys=True)}, "; ".join(source_errors) if source_errors else None
     if isinstance(payload, list):
         return {"normalized_value": json.dumps(payload, ensure_ascii=False, sort_keys=True)}, f"shadow evidence `{path}` must be a JSON object with source_files/source_sha256"
@@ -978,7 +994,7 @@ def detect_github_repo(root: Path) -> tuple[str | None, str | None]:
     remote = git_remote_origin(root)
     if not remote:
         return None, None
-    match = re.search(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/.]+)(?:\.git)?$", remote)
+    match = re.search(r"github\.com[:/](?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?$", remote)
     if not match:
         return None, None
     return match.group("owner"), match.group("repo")
@@ -1431,7 +1447,11 @@ def formal_spec_path(context: dict[str, Any]) -> str | None:
         return preferred
 
     for artifact in context.get("associated_artifacts", []):
-        if isinstance(artifact, str) and artifact.endswith("/spec.md") and (context["target_root"] / artifact).exists():
+        if (
+            isinstance(artifact, str)
+            and artifact == preferred
+            and (context["target_root"] / artifact).exists()
+        ):
             return artifact
 
     fallback = context["target_root"] / ".loom/specs/INIT-0001/spec.md"
@@ -5139,9 +5159,13 @@ query($owner:String!, $name:String!, $number:Int!) {
     return issue, []
 
 
-def contains_merged_commit(root: Path, merge_commit_sha: str) -> bool:
-    run_git(root, ["fetch", "origin", "main"])
-    contains = run_git(root, ["merge-base", "--is-ancestor", merge_commit_sha, "origin/main"])
+def contains_merged_commit(root: Path, merge_commit_sha: str, target_branch: str = "main") -> bool:
+    remote_ref = f"refs/remotes/origin/{target_branch}"
+    fetched_ref = f"refs/heads/{target_branch}:{remote_ref}"
+    fetched = run_git(root, ["fetch", "origin", fetched_ref])
+    if fetched is None or fetched.returncode != 0:
+        return False
+    contains = run_git(root, ["merge-base", "--is-ancestor", merge_commit_sha, remote_ref])
     return contains is not None and contains.returncode == 0
 
 
@@ -5266,7 +5290,9 @@ def reconciliation_audit_payload(
                 oid = merge_commit.get("oid")
                 if isinstance(oid, str) and oid:
                     merge_commit_sha = oid
-                    merge_commit_in_main = contains_merged_commit(target_root, merge_commit_sha)
+                    base_ref = pr_payload.get("baseRefName")
+                    target_branch = base_ref if isinstance(base_ref, str) and base_ref else "main"
+                    merge_commit_in_main = contains_merged_commit(target_root, merge_commit_sha, target_branch)
             if pr_payload.get("state") == "MERGED" and (not merge_commit_sha or not merge_commit_in_main):
                 findings.append(
                     make_reconciliation_finding(
@@ -6755,7 +6781,7 @@ def handle_review(args: argparse.Namespace) -> int:
             "normalized_findings": args.normalized_findings,
         },
     }
-    review_abs, review_path_errors = resolve_repo_relative_path(target_root, review_path, label="review artifact locator")
+    review_abs, review_path_errors = resolve_repo_relative_path(target_root, review_path, label="review artifact path")
     if review_path_errors:
         return emit(
             {
