@@ -100,6 +100,7 @@ CORE_DOCS = (
     "docs/evidence/validations/validation-adoption-gate-rollout.md",
     "docs/evidence/validations/validation-external-runtime-devendor-migration.md",
     "docs/evidence/validations/validation-syvert-adversarial-adoption-fixture.md",
+    "docs/evidence/validations/validation-zero-friction-adoption-hardening.md",
     "docs/evidence/validations/validation-github-profile-binding-orchestration.md",
     "docs/evidence/validations/validation-github-profile-drift-reconciliation.md",
     "docs/evidence/validations/validation-github-profile-graphql-budget-guard.md",
