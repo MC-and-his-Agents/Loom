@@ -6422,6 +6422,40 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
         if payload.get("status") != "block" or not any("must stay inside" in error for error in errors):
             failures.append(Failure("adversarial-adoption", "registry executable and manifest paths must not escape the runtime root"))
 
+        fact_chain_escape = base / "fact-chain-error-anchor"
+        (fact_chain_escape / ".loom/bootstrap").mkdir(parents=True)
+        write_json(
+            fact_chain_escape / ".loom/bootstrap/init-result.json",
+            {
+                "schema_version": "loom-init-output/v1",
+                "fact_chain": {
+                    "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
+                    "mode": "work-item + recovery-entry + derived status-surface",
+                    "entry_points": {
+                        "current_item_id": "INIT-0001",
+                        "work_item": "../outside.md",
+                        "recovery_entry": ".loom/progress/INIT-0001.md",
+                        "status_surface": ".loom/status/current.md",
+                    }
+                },
+            },
+        )
+        _, errors = inspect_fact_chain(fact_chain_escape)
+        if not any("must stay within the target root" in error for error in errors):
+            failures.append(Failure("adversarial-adoption", "fact-chain path-boundary errors must expose a stable target-root anchor"))
+
+        shadow_anchor_errors = governance_surface_module.validate_shadow_surface(
+            root=base,
+            surface="review",
+            entry={
+                "summary": "review parity",
+                "loom_locator": ".loom/shadow/review-loom.json",
+                "repo_locator": "../outside.json",
+            },
+        )
+        if not any("must stay inside the repository" in error for error in shadow_anchor_errors):
+            failures.append(Failure("adversarial-adoption", "shadow surface path-boundary errors must expose a stable repository anchor"))
+
         spec_contract_target = base / "spec-contract"
         (spec_contract_target / ".loom/specs/INIT-0001").mkdir(parents=True)
         (spec_contract_target / ".loom/specs/INIT-0001/spec.md").write_text("bootstrap spec\n", encoding="utf-8")
