@@ -26,6 +26,7 @@ from fact_chain_support import (
     parse_key_value_section,
     parse_recovery_entry,
     parse_work_item,
+    path_boundary_missing_details,
     resolve_repo_relative_path,
 )
 from governance_surface import build_governance_surface
@@ -609,6 +610,17 @@ def repo_relative_path(target_root: Path, relative: str) -> Path | None:
     return None if errors else candidate
 
 
+def path_boundary_details_from_messages(errors: list[str]) -> list[dict[str, object]]:
+    details: list[dict[str, object]] = []
+    for message in errors:
+        if "must stay" not in message and "repo-relative" not in message and "non-empty repo-relative" not in message:
+            continue
+        label = message.split(" must ", 1)[0] if " must " in message else "repo locator"
+        locator = message.rsplit(": ", 1)[-1] if ": " in message else ""
+        details.extend(path_boundary_missing_details(label=label, locator=locator, errors=[message]))
+    return details
+
+
 def validate_shadow_sources(payload: dict[str, Any], *, path: Path, target_root: Path) -> tuple[dict[str, Any], list[str]]:
     source_files = payload.get("source_files")
     source_sha256 = payload.get("source_sha256")
@@ -766,10 +778,16 @@ def shadow_parity_report(
     }
     interop_payload, interop_errors = load_repo_interop_contract(repo_interop, target_root=target_root)
     if interop_errors:
-        return {
+        missing_details = path_boundary_details_from_messages(interop_errors)
+        payload = {
             **empty_report,
             "summary": "shadow parity is unavailable because the repo interop contract is missing or incomplete.",
             "missing_inputs": interop_errors,
+        }
+        if missing_details:
+            payload["missing_details"] = missing_details
+        return {
+            **payload,
         }
     if not isinstance(interop_payload, dict):
         return empty_report
@@ -813,10 +831,23 @@ def shadow_parity_report(
         label=f"shadow surface `{surface}` repo_locator",
     )
     if loom_locator_errors or repo_locator_errors:
+        missing_details = [
+            *path_boundary_missing_details(
+                label=f"shadow surface `{surface}` loom_locator",
+                locator=loom_locator,
+                errors=loom_locator_errors,
+            ),
+            *path_boundary_missing_details(
+                label=f"shadow surface `{surface}` repo_locator",
+                locator=repo_locator,
+                errors=repo_locator_errors,
+            ),
+        ]
         return {
             **empty_report,
             "summary": "shadow parity is unavailable because a declared surface locator is unsafe.",
             "missing_inputs": [*loom_locator_errors, *repo_locator_errors],
+            "missing_details": missing_details,
             "host_adapters": relevant_host_adapters,
             "repo_native_carriers": relevant_repo_native_carriers,
         }
@@ -7738,25 +7769,32 @@ def handle_shadow_parity(args: argparse.Namespace) -> int:
             summary = "shadow parity could not fully read the declared governance surfaces."
 
     missing_inputs: list[str] = []
+    missing_details: list[Any] = []
     for report in reports:
         for message in report.get("missing_inputs", []):
             if message not in missing_inputs:
                 missing_inputs.append(message)
+        details = report.get("missing_details")
+        if isinstance(details, list):
+            for detail in details:
+                if detail not in missing_details:
+                    missing_details.append(detail)
 
-    return emit(
-        {
-            "command": "shadow-parity",
-            "mode": mode,
-            "blocking": mode == "blocking",
-            "result": result,
-            "summary": summary,
-            "missing_inputs": missing_inputs,
-            "fallback_to": "manual-reconciliation" if result == "block" else None,
-            "runtime_state": runtime_state,
-            "governance_surface": governance_surface,
-            "reports": reports,
-        }
-    )
+    payload = {
+        "command": "shadow-parity",
+        "mode": mode,
+        "blocking": mode == "blocking",
+        "result": result,
+        "summary": summary,
+        "missing_inputs": missing_inputs,
+        "fallback_to": "manual-reconciliation" if result == "block" else None,
+        "runtime_state": runtime_state,
+        "governance_surface": governance_surface,
+        "reports": reports,
+    }
+    if missing_details:
+        payload["missing_details"] = missing_details
+    return emit(payload)
 
 
 def handle_runtime_parity(args: argparse.Namespace) -> int:

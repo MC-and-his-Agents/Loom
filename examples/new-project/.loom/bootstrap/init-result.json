@@ -119,19 +119,19 @@
       "path": ".loom/bin/fact_chain_support.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/fact_chain_support.py",
-      "sha256": "e5c52cda01f1107cafcd00bf2d37feaa167f1acd5152fc8f41f28ee3255a7d52"
+      "sha256": "78cf0d0022a4c03933a5e46cba676e80cafa5d0802fb95191a761ec9f9417e65"
     },
     {
       "path": ".loom/bin/governance_surface.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/governance_surface.py",
-      "sha256": "c8be9d24fe9afad7ffce1d1e7eb7394ce28ae7f3eeb5243a9b7bc9a854e9871f"
+      "sha256": "902bba15e9da421b9a48a051940a67a2b019cd14b938d8acd2679c760734b2f5"
     },
     {
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "e9b376551600383e95e4f707557bb957edf51cd9ee2263587b8b6109088b737c"
+      "sha256": "2a0e0c49c268e6d00cffbabc11f985a00b7a700adbe7bb6efa4f2da7c08c10fd"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -155,7 +155,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "50a031d3cda589e4f020639d0305370281ce6d3e644e14aaa8c9ba090773d15f"
+      "sha256": "5fbb3018d4ac1764d711bca30f5d4ce1a0466015856a99c59fa4a1d25f732a7b"
     },
     {
       "path": "AGENTS.md",
@@ -438,7 +438,7 @@
           },
           "branch": {
             "status": "present",
-            "locator": "issue-384-path-boundary-error-anchors",
+            "locator": "issue-388-structured-path-boundary-errors",
             "authority": "git"
           },
           "worktree": {
