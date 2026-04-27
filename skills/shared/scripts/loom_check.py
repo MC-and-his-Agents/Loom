@@ -6376,12 +6376,47 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             ("shadow-parity", ["python3", "tools/loom_flow.py", "shadow-parity", "--target", str(baseline)], "pass"),
             ("shadow-parity --blocking", ["python3", "tools/loom_flow.py", "shadow-parity", "--target", str(baseline), "--blocking"], "pass"),
             ("flow resume", ["python3", "tools/loom_flow.py", "flow", "resume", "--target", str(baseline), "--item", "INIT-0001"], "pass"),
+            ("adopt verify", ["python3", "tools/loom_flow.py", "adopt", "verify", "--target", str(baseline), "--item", "INIT-0001"], "pass"),
         ):
             payload, error = load_command_json(root, args)
             if error:
                 failures.append(Failure("adversarial-adoption", f"`{label}` baseline failed: {error}"))
             elif payload.get("result") != expected:
                 failures.append(Failure("adversarial-adoption", f"`{label}` baseline must return `{expected}`"))
+            elif label == "adopt verify":
+                roundtrip = payload.get("producer_consumer_roundtrip")
+                deleted_section = (
+                    roundtrip.get("bypass_check")
+                    if isinstance(roundtrip, dict)
+                    else None
+                )
+                if not isinstance(deleted_section, dict) or deleted_section.get("consumer_result") != "block":
+                    failures.append(Failure("adversarial-adoption", "`adopt verify` must prove required Review Artifacts deletion cannot bypass the consumer"))
+
+        sha_only_payload, sha_only_error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "host-binding",
+                "validate",
+                "--target",
+                str(baseline),
+                "--owner",
+                "MC-and-his-Agents",
+                "--repo",
+                "Loom",
+                "--head-sha",
+                current_head,
+            ],
+            timeout_seconds=60,
+        )
+        if sha_only_error:
+            failures.append(Failure("adversarial-adoption", f"SHA-only host-binding negative sample failed: {sha_only_error}"))
+        else:
+            missing_inputs = sha_only_payload.get("missing_inputs")
+            if sha_only_payload.get("result") != "block" or not isinstance(missing_inputs, list) or not missing_inputs:
+                failures.append(Failure("adversarial-adoption", "SHA-only host-binding must fail closed when REST cannot prove issue or PR binding"))
 
         path_escape_payload, error = load_command_json(
             root,
@@ -6572,28 +6607,66 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
         elif payload.get("result") != "block":
             failures.append(Failure("adversarial-adoption", "metadata spoofing must fail closed in the canonical section"))
 
-        shadow_target = base / "shadow-broken"
-        shutil.copytree(baseline, shadow_target)
-        shadow_payload = load_json_file(shadow_target / ".loom/shadow/review-repo.json")
-        if isinstance(shadow_payload, dict):
-            shadow_payload.pop("source_sha256", None)
-            write_json(shadow_target / ".loom/shadow/review-repo.json", shadow_payload)
-        warn_payload, warn_error = load_command_json(
-            root,
-            ["python3", "tools/loom_flow.py", "shadow-parity", "--target", str(shadow_target), "--surface", "review"],
-        )
-        block_payload, block_error = load_command_json(
-            root,
-            ["python3", "tools/loom_flow.py", "shadow-parity", "--target", str(shadow_target), "--surface", "review", "--blocking"],
-        )
-        if warn_error:
-            failures.append(Failure("adversarial-adoption", f"shadow evidence validation-only sample failed: {warn_error}"))
-        elif warn_payload.get("result") != "warn":
-            failures.append(Failure("adversarial-adoption", "broken shadow evidence must warn in validation-only mode"))
-        if block_error:
-            failures.append(Failure("adversarial-adoption", f"shadow evidence blocking sample failed: {block_error}"))
-        elif block_payload.get("result") != "block":
-            failures.append(Failure("adversarial-adoption", "broken shadow evidence must block in blocking mode"))
+        def assert_broken_shadow_evidence(
+            label: str,
+            mutate: object,
+            *,
+            expect_validation_warn: bool = True,
+        ) -> None:
+            shadow_target = base / f"shadow-broken-{label}"
+            shutil.copytree(baseline, shadow_target)
+            if callable(mutate):
+                mutate(shadow_target)
+            warn_payload, warn_error = load_command_json(
+                root,
+                ["python3", "tools/loom_flow.py", "shadow-parity", "--target", str(shadow_target), "--surface", "review"],
+            )
+            block_payload, block_error = load_command_json(
+                root,
+                ["python3", "tools/loom_flow.py", "shadow-parity", "--target", str(shadow_target), "--surface", "review", "--blocking"],
+            )
+            if warn_error:
+                failures.append(Failure("adversarial-adoption", f"shadow evidence `{label}` validation-only sample failed: {warn_error}"))
+            elif expect_validation_warn and warn_payload.get("result") != "warn":
+                failures.append(Failure("adversarial-adoption", f"shadow evidence `{label}` must warn in validation-only mode"))
+            if block_error:
+                failures.append(Failure("adversarial-adoption", f"shadow evidence `{label}` blocking sample failed: {block_error}"))
+            elif block_payload.get("result") != "block":
+                failures.append(Failure("adversarial-adoption", f"shadow evidence `{label}` must block in blocking mode"))
+
+        def remove_source_hash(target: Path) -> None:
+            shadow_payload = load_json_file(target / ".loom/shadow/review-repo.json")
+            if isinstance(shadow_payload, dict):
+                shadow_payload.pop("source_sha256", None)
+                write_json(target / ".loom/shadow/review-repo.json", shadow_payload)
+
+        def partial_source_hash(target: Path) -> None:
+            shadow_payload = load_json_file(target / ".loom/shadow/review-repo.json")
+            if isinstance(shadow_payload, dict):
+                shadow_payload["source_files"] = ["native/status/review.json", "host/guardian-review.json"]
+                shadow_payload["source_sha256"] = {"native/status/review.json": sha256_file(target / "native/status/review.json")}
+                write_json(target / ".loom/shadow/review-repo.json", shadow_payload)
+
+        def drift_source_hash(target: Path) -> None:
+            shadow_payload = load_json_file(target / ".loom/shadow/review-repo.json")
+            if isinstance(shadow_payload, dict):
+                shadow_payload["source_sha256"] = {"native/status/review.json": "0" * 64}
+                write_json(target / ".loom/shadow/review-repo.json", shadow_payload)
+
+        def undeclared_shadow_evidence(target: Path) -> None:
+            write_json(
+                target / ".loom/shadow/rogue.json",
+                {
+                    "result": "pass",
+                    "source_files": ["native/status/review.json"],
+                    "source_sha256": {"native/status/review.json": sha256_file(target / "native/status/review.json")},
+                },
+            )
+
+        assert_broken_shadow_evidence("missing-hash", remove_source_hash)
+        assert_broken_shadow_evidence("partial-hash", partial_source_hash)
+        assert_broken_shadow_evidence("hash-drift", drift_source_hash)
+        assert_broken_shadow_evidence("undeclared", undeclared_shadow_evidence, expect_validation_warn=False)
 
         head_before_drift = run_command(root, ["git", "rev-parse", "HEAD"], cwd=baseline, timeout_seconds=30).stdout.strip()
         (baseline / "implementation-drift.txt").write_text("changed after review\n", encoding="utf-8")
@@ -6606,6 +6679,14 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
         )
         if not binding_errors or binding_payload.get("status") != "implementation-drift-only":
             failures.append(Failure("adversarial-adoption", "review head binding must classify implementation drift after review"))
+        drift_refresh_payload, drift_refresh_error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "carrier", "refresh", "--target", str(baseline), "--dry-run"],
+        )
+        if drift_refresh_error:
+            failures.append(Failure("adversarial-adoption", f"carrier refresh implementation-drift sample failed: {drift_refresh_error}"))
+        elif drift_refresh_payload.get("result") != "block":
+            failures.append(Failure("adversarial-adoption", "carrier refresh must block implementation drift instead of refreshing review metadata"))
 
     return failures
 

@@ -4146,9 +4146,9 @@ def carrier_refresh_payload(target_root: Path, output_relative: str, expected_it
                 allowed_paths=allowed_paths,
             )
             review_status = {"path": review_path, "head_binding": binding, "missing_inputs": binding_errors}
-            if binding.get("status") == "implementation-drift-only":
+            if binding.get("status") in {"implementation-drift-only", "stale"}:
                 review_status["status"] = "block"
-                missing_inputs.append("review artifact is stale because implementation drift is present")
+                missing_inputs.append("review artifact is stale because non-carrier drift is present")
             elif binding.get("status") == "carrier-only":
                 review_status["status"] = "refresh-needed"
             else:

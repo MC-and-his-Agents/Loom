@@ -131,7 +131,7 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "174f6f787703e98462a6231eab451c66a53d8448ad26081d8e30e1a2ee3ac0e3"
+      "sha256": "55f9d625dfb3cf35e7d0f849878700b29a099975831b5caccb3ce87fa4134def"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -155,7 +155,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "d2210ea508da857c7e885b6ce6c318a934d982653a5a0c600ade1212641c755a"
+      "sha256": "0c3378d7c3da8caede613f26c5d4d705117bde4c69df24653b54c99b143f4b97"
     },
     {
       "path": "AGENTS.md",
@@ -438,7 +438,7 @@
           },
           "branch": {
             "status": "present",
-            "locator": "issue-371-host-binding-validate",
+            "locator": "issue-372-zero-friction-fixture",
             "authority": "git"
           },
           "worktree": {
