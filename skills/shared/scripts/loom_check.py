@@ -6514,6 +6514,14 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
 
         carrier_refresh_target = base / "carrier-refresh"
         shutil.copytree(baseline, carrier_refresh_target)
+        write_json(
+            carrier_refresh_target / ".loom/shadow/shadow-parity.json",
+            {
+                "schema_version": "loom-shadow-parity/v1",
+                "result": "pass",
+                "summary": "Aggregate shadow parity output is not per-surface hash evidence.",
+            },
+        )
         carrier_manifest_path = carrier_refresh_target / ".loom/bootstrap/manifest.json"
         carrier_manifest = load_json_file(carrier_manifest_path)
         carrier_artifacts = carrier_manifest.get("artifacts") if isinstance(carrier_manifest, dict) else []
@@ -6533,6 +6541,16 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             refresh_needed = dry_run_payload.get("refresh_needed")
             if dry_run_payload.get("result") != "pass" or not isinstance(refresh_needed, list) or not refresh_needed:
                 failures.append(Failure("adversarial-adoption", "carrier refresh dry-run must report runtime provenance refresh-needed"))
+            actions = dry_run_payload.get("actions")
+            summary_actions = [
+                action
+                for action in actions
+                if isinstance(action, dict)
+                and action.get("path") == ".loom/shadow/shadow-parity.json"
+                and action.get("status") == "skipped"
+            ] if isinstance(actions, list) else []
+            if not summary_actions:
+                failures.append(Failure("adversarial-adoption", "carrier refresh must skip aggregate shadow-parity.json without requiring source hashes"))
         write_payload, write_error = load_command_json(
             root,
             ["python3", "tools/loom_flow.py", "carrier", "refresh", "--target", str(carrier_refresh_target), "--write"],
