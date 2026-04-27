@@ -1062,6 +1062,26 @@ def require_repo_specific_requirements_payload(
             failures.append(Failure(category, f"{context} declared requirements must split cleanly into blocking and advisory"))
 
 
+def require_missing_details(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    details: object,
+) -> None:
+    if not isinstance(details, list):
+        failures.append(Failure(category, f"{context} must be a list"))
+        return
+    for index, detail in enumerate(details):
+        if not isinstance(detail, dict):
+            failures.append(Failure(category, f"{context}[{index}] must be an object"))
+            continue
+        for field in ("category", "kind", "scope", "label", "locator", "message"):
+            value = detail.get(field)
+            if not isinstance(value, str) or not value:
+                failures.append(Failure(category, f"{context}[{index}] missing `{field}`"))
+
+
 def require_shadow_parity_payload(
     failures: list[Failure],
     *,
@@ -1090,6 +1110,14 @@ def require_shadow_parity_payload(
         failures.append(Failure(category, f"{context} must include non-empty `summary`"))
     if not isinstance(payload.get("missing_inputs"), list):
         failures.append(Failure(category, f"{context} must include `missing_inputs`"))
+    top_level_details = payload.get("missing_details")
+    if top_level_details is not None:
+        require_missing_details(
+            failures,
+            category=category,
+            context=f"{context}.missing_details",
+            details=top_level_details,
+        )
     require_runtime_state_payload(
         failures,
         category=category,
@@ -1133,6 +1161,14 @@ def require_shadow_parity_payload(
             failures.append(Failure(category, f"{context} reports[{index}] must include non-empty `summary`"))
         if not isinstance(report.get("missing_inputs"), list):
             failures.append(Failure(category, f"{context} reports[{index}] must include `missing_inputs`"))
+        report_details = report.get("missing_details")
+        if report_details is not None:
+            require_missing_details(
+                failures,
+                category=category,
+                context=f"{context} reports[{index}].missing_details",
+                details=report_details,
+            )
         for key in ("host_adapters", "repo_native_carriers"):
             if not isinstance(report.get(key), list):
                 failures.append(Failure(category, f"{context} reports[{index}] must include `{key}` as a list"))
@@ -6460,6 +6496,43 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
         ):
             failures.append(Failure("adversarial-adoption", "shadow surface path-boundary errors must expose a stable repository anchor"))
 
+        shadow_boundary_target = base / "shadow-structured-boundary"
+        (shadow_boundary_target / ".loom/companion").mkdir(parents=True)
+        write_json(
+            shadow_boundary_target / ".loom/companion/interop.json",
+            {
+                "schema_version": "loom-repo-interop/v1",
+                "host_adapters": [],
+                "repo_native_carriers": [],
+                "shadow_surfaces": {
+                    "review": {
+                        "summary": "review parity",
+                        "loom_locator": "../outside-loom.json",
+                        "repo_locator": "../outside-repo.json",
+                    }
+                },
+            },
+        )
+        shadow_boundary_report = loom_flow_module.shadow_parity_report(
+            {
+                "availability": "present",
+                "contract": {"locator": ".loom/companion/interop.json"},
+            },
+            target_root=shadow_boundary_target,
+            surface="review",
+        )
+        shadow_boundary_details = shadow_boundary_report.get("missing_details")
+        if not isinstance(shadow_boundary_details, list) or not any(
+            isinstance(detail, dict)
+            and detail.get("category") == "path_boundary"
+            and detail.get("kind") == "repo_locator_escape"
+            and detail.get("scope") == "repository_root"
+            and detail.get("label") == "shadow surface `review` repo_locator"
+            and detail.get("locator") == "../outside-repo.json"
+            for detail in shadow_boundary_details
+        ):
+            failures.append(Failure("adversarial-adoption", "shadow parity path-boundary failures must expose structured missing_details"))
+
         spec_contract_target = base / "spec-contract"
         (spec_contract_target / ".loom/specs/INIT-0001").mkdir(parents=True)
         (spec_contract_target / ".loom/specs/INIT-0001/spec.md").write_text("bootstrap spec\n", encoding="utf-8")
@@ -6622,6 +6695,15 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             failures.append(Failure("adversarial-adoption", f"path escape shadow-parity sample failed: {error}"))
         elif shadow_escape_payload.get("result") != "block":
             failures.append(Failure("adversarial-adoption", "shadow-parity blocking mode must reject absolute shadow locators"))
+        else:
+            shadow_escape_details = shadow_escape_payload.get("missing_details")
+            if not isinstance(shadow_escape_details, list) or not any(
+                isinstance(detail, dict)
+                and detail.get("category") == "path_boundary"
+                and "loom_locator" in str(detail.get("label", ""))
+                for detail in shadow_escape_details
+            ):
+                failures.append(Failure("adversarial-adoption", "shadow-parity CLI payload must aggregate structured path-boundary missing_details"))
 
         poisoned_payload, error = load_command_json(
             root,

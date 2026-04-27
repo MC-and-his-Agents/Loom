@@ -204,6 +204,40 @@ def resolve_repo_relative_path(target_root: Path, relative: str, *, label: str) 
     return candidate, []
 
 
+def path_boundary_missing_details(*, label: str, locator: object, errors: list[str]) -> list[dict[str, object]]:
+    """Return stable machine-readable details for repo locator boundary failures."""
+    locator_text = "" if locator is None else str(locator)
+    details: list[dict[str, object]] = []
+    for message in errors:
+        if "non-empty" in message:
+            kind = "empty_locator"
+        elif "absolute path" in message or "repo-relative" in message:
+            kind = "absolute_locator"
+        else:
+            kind = "repo_locator_escape"
+
+        scopes: list[str] = []
+        if "target root" in message:
+            scopes.append("target_root")
+        if "repository" in message or "repo-relative" in message:
+            scopes.append("repository_root")
+        if not scopes:
+            scopes.append("repository_root")
+
+        for scope in scopes:
+            details.append(
+                {
+                    "category": "path_boundary",
+                    "kind": kind,
+                    "scope": scope,
+                    "label": label,
+                    "locator": locator_text,
+                    "message": message,
+                }
+            )
+    return details
+
+
 def parse_work_item(path: Path, root: Path) -> tuple[dict[str, object], list[str]]:
     relative_path = _relative(path, root)
     sections = markdown_sections(path)
