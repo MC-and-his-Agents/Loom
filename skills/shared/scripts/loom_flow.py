@@ -179,6 +179,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Init-result path relative to the target root",
     )
 
+    carrier = subparsers.add_parser("carrier", help="Refresh Loom-owned carrier metadata")
+    carrier.add_argument("operation", choices=("refresh",))
+    carrier.add_argument("--target", required=True, help="Target repository root")
+    carrier.add_argument("--item", help="Expected current item id")
+    carrier.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+    carrier.add_argument("--dry-run", action="store_true", default=True, help="Preview refresh actions without writing files; this is the default")
+    carrier.add_argument("--write", dest="dry_run", action="store_false", help="Write Loom-owned carrier metadata refreshes")
+
     state = subparsers.add_parser(
         "state-check",
         help="Check active-state consistency, checkpoint completeness, and scope overflow signals",
@@ -3891,6 +3903,216 @@ def handle_adopt(args: argparse.Namespace) -> int:
     return emit(adoption_verify_payload(target_root, args.output, args.item))
 
 
+def runtime_artifact_updates(target_root: Path, payload: dict[str, Any], *, source: str) -> list[dict[str, Any]]:
+    artifacts = payload.get("artifacts")
+    if not isinstance(artifacts, list):
+        artifacts = payload.get("initial_artifacts")
+    if not isinstance(artifacts, list):
+        return []
+    updates: list[dict[str, Any]] = []
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        relative = artifact.get("path")
+        if not isinstance(relative, str) or not relative.startswith(".loom/bin/"):
+            continue
+        path, errors = resolve_repo_relative_path(target_root, relative, label=f"{source} artifact path")
+        if errors or path is None or not path.exists() or not path.is_file():
+            updates.append(
+                {
+                    "path": relative,
+                    "source": source,
+                    "status": "block",
+                    "missing_inputs": errors or [f"missing runtime artifact: {relative}"],
+                }
+            )
+            continue
+        expected = sha256_file(path)
+        current = artifact.get("sha256")
+        updates.append(
+            {
+                "path": relative,
+                "source": source,
+                "status": "current" if current == expected else "refresh-needed",
+                "current_sha256": current if isinstance(current, str) else None,
+                "expected_sha256": expected,
+            }
+        )
+    return updates
+
+
+def apply_runtime_artifact_updates(payload: dict[str, Any], updates: list[dict[str, Any]], *, source: str) -> None:
+    artifacts = payload.get("artifacts")
+    if not isinstance(artifacts, list):
+        artifacts = payload.get("initial_artifacts")
+    if not isinstance(artifacts, list):
+        return
+    expected_by_path = {
+        update["path"]: update.get("expected_sha256")
+        for update in updates
+        if update.get("source") == source and update.get("status") == "refresh-needed"
+    }
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        relative = artifact.get("path")
+        if isinstance(relative, str) and relative in expected_by_path:
+            artifact["sha256"] = expected_by_path[relative]
+
+
+def refresh_shadow_evidence_actions(target_root: Path) -> list[dict[str, Any]]:
+    actions: list[dict[str, Any]] = []
+    shadow_root = target_root / ".loom/shadow"
+    if not shadow_root.exists():
+        return actions
+    for path in sorted(shadow_root.glob("*.json")):
+        relative = path.relative_to(target_root).as_posix()
+        try:
+            payload = load_json_file(path)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            actions.append({"path": relative, "kind": "shadow-evidence", "status": "block", "missing_inputs": [str(exc)]})
+            continue
+        if not isinstance(payload, dict):
+            actions.append({"path": relative, "kind": "shadow-evidence", "status": "block", "missing_inputs": ["shadow evidence must be a JSON object"]})
+            continue
+        source_files = payload.get("source_files")
+        if not isinstance(source_files, list) or not source_files:
+            actions.append({"path": relative, "kind": "shadow-evidence", "status": "block", "missing_inputs": ["source_files"]})
+            continue
+        refreshed: dict[str, str] = {}
+        missing: list[str] = []
+        for source in source_files:
+            if not isinstance(source, str):
+                missing.append("source_files entries must be strings")
+                continue
+            source_path, errors = resolve_repo_relative_path(target_root, source, label=f"{relative} source")
+            if errors or source_path is None or not source_path.exists() or source_path.is_dir():
+                missing.extend(errors or [f"missing source file: {source}"])
+                continue
+            refreshed[source] = sha256_file(source_path)
+        if missing:
+            actions.append({"path": relative, "kind": "shadow-evidence", "status": "block", "missing_inputs": missing})
+            continue
+        current = payload.get("source_sha256")
+        actions.append(
+            {
+                "path": relative,
+                "kind": "shadow-evidence",
+                "status": "current" if current == refreshed else "refresh-needed",
+                "expected_source_sha256": refreshed,
+            }
+        )
+    return actions
+
+
+def apply_shadow_evidence_actions(target_root: Path, actions: list[dict[str, Any]]) -> None:
+    for action in actions:
+        if action.get("kind") != "shadow-evidence" or action.get("status") != "refresh-needed":
+            continue
+        relative = action.get("path")
+        expected = action.get("expected_source_sha256")
+        if not isinstance(relative, str) or not isinstance(expected, dict):
+            continue
+        path, errors = resolve_repo_relative_path(target_root, relative, label="shadow evidence path")
+        if errors or path is None:
+            continue
+        payload = load_json_file(path)
+        if isinstance(payload, dict):
+            payload["source_sha256"] = expected
+            write_json_file(path, payload)
+
+
+def carrier_refresh_payload(target_root: Path, output_relative: str, expected_item: str | None, *, dry_run: bool) -> dict[str, Any]:
+    runtime_state = runtime_state_payload(target_root)
+    context, context_errors = load_context(target_root, output_relative, expected_item)
+    missing_inputs: list[str] = [f"fact-chain: {message}" for message in context_errors]
+
+    manifest_path, manifest_path_errors = resolve_repo_relative_path(target_root, ".loom/bootstrap/manifest.json", label="bootstrap manifest")
+    init_path, init_path_errors = resolve_repo_relative_path(target_root, output_relative, label="init-result locator")
+    missing_inputs.extend(manifest_path_errors)
+    missing_inputs.extend(init_path_errors)
+    manifest_payload: dict[str, Any] = {}
+    init_payload: dict[str, Any] = {}
+    for label, path in (("manifest", manifest_path), ("init-result", init_path)):
+        if path is None:
+            continue
+        try:
+            payload = load_json_file(path)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            missing_inputs.append(f"invalid {label}: {exc}")
+            continue
+        if label == "manifest":
+            manifest_payload = payload
+        else:
+            init_payload = payload
+
+    actions: list[dict[str, Any]] = []
+    actions.extend(runtime_artifact_updates(target_root, manifest_payload, source="manifest"))
+    actions.extend(runtime_artifact_updates(target_root, init_payload, source="init-result"))
+    actions.extend(refresh_shadow_evidence_actions(target_root))
+    for action in actions:
+        if action.get("status") == "block":
+            missing_inputs.extend(str(message) for message in action.get("missing_inputs", []))
+
+    review_status: dict[str, Any] = {"status": "not_checked"}
+    if not context_errors:
+        assert context
+        review_record, review_path, review_errors = load_review_record(target_root, context["item_id"], context["review_entry"])
+        spec_review_path = default_spec_review_path(context["item_id"])
+        allowed_paths = allowed_post_review_carrier_paths(context, review_path, spec_review_path)
+        if review_errors or review_record is None:
+            review_status = {"status": "missing", "path": review_path, "missing_inputs": review_errors or [f"missing review artifact: {review_path}"]}
+        else:
+            binding, binding_errors = review_head_binding(
+                target_root,
+                reviewed_head=str(review_record.get("reviewed_head", "")),
+                allowed_paths=allowed_paths,
+            )
+            review_status = {"path": review_path, "head_binding": binding, "missing_inputs": binding_errors}
+            if binding.get("status") == "implementation-drift-only":
+                review_status["status"] = "block"
+                missing_inputs.append("review artifact is stale because implementation drift is present")
+            elif binding.get("status") == "carrier-only":
+                review_status["status"] = "refresh-needed"
+            else:
+                review_status["status"] = "current"
+
+    if not dry_run and not missing_inputs:
+        if manifest_path is not None:
+            apply_runtime_artifact_updates(manifest_payload, actions, source="manifest")
+            write_json_file(manifest_path, manifest_payload)
+        if init_path is not None:
+            apply_runtime_artifact_updates(init_payload, actions, source="init-result")
+            write_json_file(init_path, init_payload)
+        apply_shadow_evidence_actions(target_root, actions)
+
+    refresh_needed = [action for action in actions if action.get("status") == "refresh-needed"]
+    result = "block" if missing_inputs else "pass"
+    return {
+        "command": "carrier",
+        "operation": "refresh",
+        "schema_version": "loom-carrier-refresh/v1",
+        "result": result,
+        "summary": (
+            "carrier refresh completed." if result == "pass" and not dry_run
+            else "carrier refresh dry-run completed." if result == "pass"
+            else "carrier refresh found blocking drift."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": None if result == "pass" else "adoption",
+        "dry_run": dry_run,
+        "runtime_state": runtime_state,
+        "actions": actions,
+        "refresh_needed": refresh_needed,
+        "review": review_status,
+    }
+
+
+def handle_carrier(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    return emit(carrier_refresh_payload(target_root, args.output, args.item, dry_run=args.dry_run))
+
+
 def host_lifecycle_payload(context: dict[str, Any]) -> dict[str, Any]:
     branch = git_branch(context["target_root"])
     purity = purity_report_from_context(context)
@@ -7281,6 +7503,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_runtime_state(args)
     if args.command == "adopt":
         return handle_adopt(args)
+    if args.command == "carrier":
+        return handle_carrier(args)
     if args.command == "runtime-evidence":
         return handle_runtime_evidence(args)
     if args.command == "state-check":
