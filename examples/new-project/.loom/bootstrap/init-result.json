@@ -131,7 +131,7 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "e5ff7344c5d62306ee30254113538739137a175350847ed51e9fff8270c77505"
+      "sha256": "9376481f98f539c0b6aaf72df42e647f320a0e6050e14cd2e1cf0c37240b79cd"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -155,7 +155,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "7cb6094384b6d6c6ad1842e9197e9d1211230adbae068f524ea1c8360bc87712"
+      "sha256": "9a8b31917b244172681a542256994d97de9a7b54869e7e9e7bf5747e8759ae69"
     },
     {
       "path": "AGENTS.md",
@@ -438,7 +438,7 @@
           },
           "branch": {
             "status": "present",
-            "locator": "issue-368-path-boundary-hardening",
+            "locator": "issue-369-adopt-verify",
             "authority": "git"
           },
           "worktree": {
