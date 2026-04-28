@@ -230,6 +230,8 @@ blocking 模式只改变消费结果，不改变 `shadow_surfaces` schema：
   - 承接 repo-specific rules、requirements、typed gates、metadata/context contract
 - `interop.json`
   - 承接 retained host action result、repo-native carrier 与 shadow parity 的只读入口
+- [zero-friction-adoption-contract.md](./zero-friction-adoption-contract.md)
+  - 承接 agent-assisted adoption 中生成或更新 `interop.json` 的读、判断、回写与验证闭环
 - [external-runtime-companion-contract.md](./external-runtime-companion-contract.md)
   - 承接从 vendored `.loom/bin` 到 versioned external Loom runtime 的迁移路径
 - [host-action-contract.md](../methodology/harness/host-action-contract.md)
@@ -242,6 +244,7 @@ blocking 模式只改变消费结果，不改变 `shadow_surfaces` schema：
 - 不让 `interop.json` 承载 external-runtime locator、runtime version、rollback mode 或 runtime provenance
 - 不让 Loom 因为读取了 interop contract，就接管宿主底层实现
 - 不让 `interop.json` 定义 blocking owner、override path 或 final merge authority
+- 不让 zero-friction adoption 把 validation-only shadow parity 自动升级成 blocking gate
 
 ## 7. 与 external-runtime / de-vendor migration 的边界
 

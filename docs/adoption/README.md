@@ -18,6 +18,7 @@
 - 事项分流、checkpoint 与入口策略：[routing-and-checkpoints.md](./routing-and-checkpoints.md)
 - `repo companion` 主合同：[repo-companion-contract.md](./repo-companion-contract.md)
 - `repo interop` 主合同：[repo-interop-contract.md](./repo-interop-contract.md)
+- agent-assisted zero-friction adoption 合同：[zero-friction-adoption-contract.md](./zero-friction-adoption-contract.md)
 - 小型既有仓库的默认 retrofit 策略：[lightweight-retrofit-default.md](./lightweight-retrofit-default.md)
 - 成熟治理重仓的默认 attach 策略：[deep-existing-repo-default.md](./deep-existing-repo-default.md)
 - GitHub 默认治理实现 profile：[github-profile.md](./github-profile.md)
@@ -27,4 +28,5 @@
 
 - 核心：`EXT-0005`、`EXT-0010`、`EXT-0021`、`EXT-0030`
 - 采用路径：`EXT-0007`、`EXT-0019`、`EXT-0024`、`EXT-0032`、`EXT-0044`、`EXT-0045`、`EXT-0046`、`EXT-0047`
+- agent-assisted adoption：`EXT-0056`
 - 待验证能力：`EXT-0020`、`EXT-0027`、`EXT-0043`

@@ -37,11 +37,12 @@
 
 ## 4. 默认接入方式
 
-如果目标仓库已经有稳定的根级边界文档，默认采用 `companion docs` 接入：
+如果目标仓库已经有稳定的根级边界文档，默认采用 `repo companion` 接入，并按 [zero-friction-adoption-contract.md](./zero-friction-adoption-contract.md) 完成 `read -> judge -> write -> verify`：
 
 - 保留原有根规则文档
-- 只追加治理伴随文档与职责映射
+- 只追加 repo companion、职责映射与必要验证入口
 - 不在第一轮重写整个根级规则体系
+- 不把轻量 retrofit 升级成 unattended strong adoption
 
 ## 5. 默认不装配
 

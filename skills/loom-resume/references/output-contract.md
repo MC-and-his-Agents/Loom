@@ -48,6 +48,12 @@
   - `workspace_entry`、解析后的现场路径、现场是否存在
 - `recovery`
   - 恢复入口、当前停点、下一步、阻断项、最近验证摘要
+  - 若上一轮来自 `loom-adopt`，还应给出：
+    - `adoption_source`
+    - `companion_locator`
+    - `interop_locator`
+    - `post_adoption_next_step`
+    - `adoption_verify_summary`
 - `checkpoint`
   - 原始 checkpoint 文本与归一化后的 checkpoint
 - `state_check`

@@ -46,6 +46,9 @@
   - 稳定落点：`skills/loom-init/references/output-contract.md`
 - `repo interop` 主合同
   - 稳定落点：`adoption/repo-interop-contract.md`
+- zero-friction adoption 合同
+  - 稳定落点：`adoption/zero-friction-adoption-contract.md`
+  - 入口消费：`skills/loom-adopt/SKILL.md`; `skills/loom-adopt/references/input-signals.md`; `skills/loom-adopt/references/output-contract.md`; `skills/loom-resume/SKILL.md`
 - `skills` 分发与适配合同
   - 稳定落点：`skills/distribution-and-adapter-contract.md`
   - 入口消费：`skills/README.md`
@@ -113,3 +116,4 @@
 | EXT-0053 | `needs_validation` | `archive-only` | `parking` | `#277` 已把升级前提写成版本化证据标准：需要至少两个新增 live adopted repo、四个 surface 的版本化 parity 记录、稳定 mismatch 分型、可证明的 gate 收益，以及落在 `interop.json` 之外的 blocking ownership / override / authority-of-truth；在此之前继续停在待验证区 |
 | EXT-0054 | `keep` | `harness/host-issue-binding.md`; `harness/status-surface-contract.md`; `harness/governance-failure-taxonomy.md`; `harness/gate-chain.md`; `harness/controlled-merge.md`; `governance/governance-maturity-model.md`; `adoption/github-profile.md`; `adoption/github-profile-upgrade.md` | `core/profile` | `#298-#309` 已把 Syvert 级治理能力拆成 Loom core 控制面与 GitHub profile 自动化，不复制 Syvert 私有文件名 |
 | EXT-0055 | `keep` | `harness/gate-chain.md`; `harness/merge-checkpoint.md`; `harness/closeout-gate.md`; `harness/status-surface.md` | `core` | formal spec、implementation review、merge-ready、controlled merge 与 closeout 已收成强前置消费链，后序成功不得覆盖前序 gate 缺失 |
+| EXT-0056 | `keep` | `adoption/zero-friction-adoption-contract.md`; `skills/loom-adopt/SKILL.md`; `skills/loom-adopt/references/input-signals.md`; `skills/loom-adopt/references/output-contract.md`; `skills/loom-resume/SKILL.md`; `skills/loom-resume/references/output-contract.md` | `core/adoption` | `#410` 把 agent-assisted zero-friction adoption 收成 `read -> judge -> write -> verify` 入口合同，消费 `repo companion` / `repo interop` 边界但不新增事实载体、不推广 Syvert guardian，也不要求 unattended strong adoption |
