@@ -1,6 +1,6 @@
 {
   "name": "@mc-and-his-agents/loom-installer",
-  "version": "0.1.46",
+  "version": "0.1.47",
   "description": "Node installer for Loom plugin and single-skill installation surfaces.",
   "type": "module",
   "bin": {
