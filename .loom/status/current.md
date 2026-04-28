@@ -12,19 +12,19 @@
 - Validation Entry: python3 .loom/bin/loom_init.py verify --target .
 - Closing Condition: The generated entry, work item, recovery entry, and templates are readable and verified
 - Current Checkpoint: merge checkpoint
-- Current Stop: Self-governance PR3 evidence is ready for PR, CI, merge, and issue closeout.
-- Next Step: Open PR3, wait for CI, squash merge, then close #433, #430, and #427 with validation basis.
+- Current Stop: Behavior-first operating-layer closeout slice is on PR #476 with local gates and root carriers aligned.
+- Next Step: Wait for PR #476 CI/review, merge through GitHub, then reconcile #440-#446, #474, #447-#473, and #439.
 - Blockers: None recorded.
-- Latest Validation Summary: Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist.
+- Latest Validation Summary: Root .loom/bin verify passed; carrier refresh dry-run has no runtime provenance drift; loom_check gates cover behavior-first docs, locators, and carrier evidence.
 - Recovery Boundary: Bootstrap result at `.loom/bootstrap/init-result.json`; bootstrap manifest at `.loom/bootstrap/manifest.json`.
-- Current Lane: self-governance closeout
+- Current Lane: behavior-first operating-layer closeout
 
 ## Self-Governance Binding
 
 - Managed Scope: Loom core and product iteration
-- Next Managed Phase: #410 Phase: Agent-assisted zero-friction adoption
-- Next Managed FRs: #411 #412 #413 #414
-- Next Managed Work Items: #415-#426
+- Next Managed Phase: #439 Phase: Behavior-first project operating layer
+- Next Managed FRs: #440 #441 #442 #443 #444 #445 #446 #474
+- Next Managed Work Items: #447-#473
 - Companion Entry: .loom/companion/README.md
 - Repo Interface: .loom/companion/repo-interface.json
 - Repo Interop: .loom/companion/interop.json
