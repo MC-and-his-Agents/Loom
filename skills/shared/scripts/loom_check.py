@@ -2410,6 +2410,103 @@ def check_demo_repo_local_cli(root: Path) -> list[Failure]:
     return failures
 
 
+def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    carrier_root = root / ".loom"
+    if not carrier_root.exists():
+        return failures
+
+    required_paths = (
+        ".loom/bootstrap/manifest.json",
+        ".loom/bootstrap/init-result.json",
+        ".loom/bin/loom_init.py",
+        ".loom/bin/loom_flow.py",
+        ".loom/work-items/INIT-0001.md",
+        ".loom/progress/INIT-0001.md",
+        ".loom/reviews/INIT-0001.json",
+        ".loom/status/current.md",
+    )
+    failures.extend(check_required_paths(root, "root-self-adoption", required_paths))
+
+    commands = (
+        (
+            "root verify",
+            ["python3", ".loom/bin/loom_init.py", "verify", "--target", "."],
+            "loom-init-verify",
+            {"ok": True},
+        ),
+        (
+            "root governance status",
+            ["python3", ".loom/bin/loom_flow.py", "governance-profile", "status", "--target", "."],
+            "governance-status",
+            {"result": "pass"},
+        ),
+        (
+            "root runtime parity",
+            ["python3", ".loom/bin/loom_flow.py", "runtime-parity", "validate", "--target", "."],
+            "runtime-parity",
+            {"result": "pass", "schema_version": "loom-runtime-parity/v1"},
+        ),
+        (
+            "root adopt verify",
+            ["python3", ".loom/bin/loom_flow.py", "adopt", "verify", "--target", ".", "--item", "INIT-0001"],
+            "adopt-verify",
+            {"result": "pass", "schema_version": "loom-adoption-verify/v1"},
+        ),
+        (
+            "root carrier refresh",
+            ["python3", ".loom/bin/loom_flow.py", "carrier", "refresh", "--target", ".", "--dry-run"],
+            "carrier-refresh",
+            {"result": "pass", "schema_version": "loom-carrier-refresh/v1"},
+        ),
+    )
+    for label, args, kind, expected in commands:
+        payload, error = load_command_json(root, args)
+        if error:
+            failures.append(Failure("root-self-adoption", f"`{label}` failed: {error}"))
+            continue
+        for key, value in expected.items():
+            if payload.get(key) != value:
+                failures.append(Failure("root-self-adoption", f"`{label}` must report `{key}: {value}`"))
+        runtime_payload = payload.get("runtime_state")
+        if kind == "loom-init-verify":
+            runtime_payload = payload.get("runtime_state")
+        if runtime_payload is not None:
+            require_runtime_state_payload(
+                failures,
+                category="root-self-adoption",
+                context=f"`{label}`",
+                payload=runtime_payload,
+                expected_scene="installed-runtime",
+                expected_carrier="bootstrapped-target-runtime",
+                allowed_results={"pass"},
+            )
+        if kind == "governance-status":
+            maturity = payload.get("maturity")
+            if not isinstance(maturity, dict) or maturity.get("current") not in {"light", "standard", "strong"}:
+                failures.append(Failure("root-self-adoption", "`root governance status` must report adopted maturity"))
+        if kind == "runtime-parity":
+            checks = payload.get("checks")
+            names = {check.get("name") for check in checks if isinstance(check, dict)} if isinstance(checks, list) else set()
+            if "shadow_parity_boundary" not in names or "controlled_merge_contract" not in names:
+                failures.append(Failure("root-self-adoption", "`root runtime parity` must cover shadow and controlled merge boundaries"))
+        if kind == "adopt-verify":
+            roundtrip = payload.get("producer_consumer_roundtrip")
+            if not isinstance(roundtrip, dict):
+                failures.append(Failure("root-self-adoption", "`root adopt verify` must include producer_consumer_roundtrip"))
+            elif roundtrip.get("bypass_check", {}).get("result") != "pass":
+                failures.append(Failure("root-self-adoption", "`root adopt verify` must prove required section deletion blocks"))
+        if kind == "carrier-refresh":
+            if payload.get("refresh_needed") not in ([], None):
+                failures.append(Failure("root-self-adoption", "`root carrier refresh --dry-run` must not report runtime provenance drift"))
+            review = payload.get("review")
+            if isinstance(review, dict):
+                head_binding = review.get("head_binding")
+                if isinstance(head_binding, dict) and head_binding.get("status") == "stale":
+                    failures.append(Failure("root-self-adoption", "`root carrier refresh --dry-run` must detect stale review head binding"))
+    return failures
+
+
 def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
     failures: list[Failure] = []
     with tempfile.TemporaryDirectory(prefix="loom-check-deep-existing-") as tmp:
@@ -7449,6 +7546,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_demo_assets(root))
     failures.extend(check_demo_fact_chain(root))
     failures.extend(check_demo_repo_local_cli(root))
+    failures.extend(check_root_self_adoption_carrier(root))
     failures.extend(check_deep_existing_repo_bootstrap(root))
     failures.extend(check_daily_execution_cli(root))
     failures.extend(check_repo_companion_interface_contracts(root))
@@ -7463,7 +7561,7 @@ def collect_failures(root: Path) -> list[Failure]:
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 18
+    categories_checked = 19
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")
