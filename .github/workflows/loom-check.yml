@@ -56,6 +56,21 @@ jobs:
             exit 1
           fi
 
+  root-self-governance:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate root self-governance carrier
+        run: |
+          python3 .loom/bin/loom_init.py verify --target .
+          python3 .loom/bin/loom_flow.py governance-profile status --target .
+          python3 .loom/bin/loom_flow.py runtime-parity validate --target .
+          python3 .loom/bin/loom_flow.py adopt verify --target . --item INIT-0001
+          python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run
+
   loom-check:
     runs-on: ubuntu-latest
     permissions:
