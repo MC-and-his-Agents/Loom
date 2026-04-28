@@ -64,6 +64,8 @@ jobs:
         run: npm pack --dry-run
 
       - name: Run loom check
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: make loom-check
 
       - name: Resolve release state

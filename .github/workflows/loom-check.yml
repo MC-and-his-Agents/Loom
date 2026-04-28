@@ -64,6 +64,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Validate root self-governance carrier
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           python3 .loom/bin/loom_init.py verify --target .
           python3 .loom/bin/loom_flow.py governance-profile status --target .
@@ -83,4 +85,6 @@ jobs:
         with:
           node-version: '20'
       - name: Run loom check
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: make loom-check
