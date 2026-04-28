@@ -5125,7 +5125,11 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         except subprocess.TimeoutExpired:
             gh_auth_probe = None
     gh_auth_ready = gh_auth_probe is not None and gh_auth_probe.returncode == 0
-    if gh_auth_ready:
+    # GitHub Actions' ephemeral token is enough for self-governance host binding
+    # reads, but it is not a stable authority for historical live issue/PR/project
+    # samples. Keep those samples as local authenticated coverage instead of
+    # making CI depend on mutable host permissions.
+    if gh_auth_ready and os.environ.get("GITHUB_ACTIONS") != "true":
         with tempfile.TemporaryDirectory(prefix="loom-check-installed-post-merge-") as tmp:
             tmp_root = Path(tmp)
             install_root = tmp_root / "installed" / "skills"
