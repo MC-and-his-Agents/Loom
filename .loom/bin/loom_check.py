@@ -2417,6 +2417,7 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
         return failures
 
     required_paths = (
+        ".agents/plugins/marketplace.json",
         ".loom/bootstrap/manifest.json",
         ".loom/bootstrap/init-result.json",
         ".loom/bin/loom_init.py",
@@ -2532,6 +2533,145 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
                     failures.append(Failure("root-self-adoption", "`root shadow parity` must consume the root repo companion interface"))
                 if not isinstance(repo_interop, dict) or repo_interop.get("availability") != "present":
                     failures.append(Failure("root-self-adoption", "`root shadow parity` must consume the root repo interop contract"))
+    failures.extend(check_root_self_plugin_install(root))
+    return failures
+
+
+def check_root_self_plugin_install(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    marketplace_path = root / ".agents/plugins/marketplace.json"
+    if not marketplace_path.exists():
+        return failures
+    try:
+        marketplace = load_json_file(marketplace_path)
+    except json.JSONDecodeError as exc:
+        return [Failure("root-self-plugin", f"`.agents/plugins/marketplace.json` is invalid JSON: {exc.msg}")]
+    if not isinstance(marketplace, dict):
+        return [Failure("root-self-plugin", "`.agents/plugins/marketplace.json` must contain a JSON object")]
+    plugins = marketplace.get("plugins")
+    if not isinstance(plugins, list):
+        failures.append(Failure("root-self-plugin", "`marketplace.plugins` must be a list"))
+        plugins = []
+    loom_entry = next(
+        (
+            entry
+            for entry in plugins
+            if isinstance(entry, dict) and entry.get("name") == "loom"
+        ),
+        None,
+    )
+    if not isinstance(loom_entry, dict):
+        failures.append(Failure("root-self-plugin", "Codex marketplace must declare the `loom` plugin"))
+    else:
+        source = loom_entry.get("source")
+        if not isinstance(source, dict) or source.get("source") != "local":
+            failures.append(Failure("root-self-plugin", "Codex marketplace `loom` entry must use a local source"))
+        if not isinstance(source, dict) or source.get("path") != "./plugins/loom":
+            failures.append(Failure("root-self-plugin", "Codex marketplace `loom` entry must point to `./plugins/loom`"))
+
+    package_root = root / "packages/loom-installer"
+    cli_entry = package_root / "dist/src/cli.js"
+    package_json = package_root / "package.json"
+    if not package_json.exists():
+        failures.append(Failure("root-self-plugin", "installer package must exist for self-plugin verification"))
+        return failures
+
+    with tempfile.TemporaryDirectory(prefix="loom-root-self-plugin-") as tmp:
+        tmp_root = Path(tmp)
+        target = tmp_root / "target"
+        home = tmp_root / "home"
+        target.mkdir(parents=True, exist_ok=True)
+        home.mkdir(parents=True, exist_ok=True)
+        env = {
+            "HOME": str(home),
+            "CODEX_HOME": str(home / ".codex"),
+            "LOOM_INSTALLER_BUILD_TIMESTAMP": "2026-01-01T00:00:00.000Z",
+        }
+        commands: list[tuple[str, list[str], Path]] = []
+        if not (package_root / "node_modules/.bin/tsc").exists():
+            commands.append(
+                (
+                    "install self-plugin build dependencies",
+                    ["npm", "ci", "--prefix", str(package_root)],
+                    root,
+                )
+            )
+        commands.extend(
+            (
+                (
+                    "build self-plugin installer",
+                    ["npm", "--prefix", str(package_root), "run", "build"],
+                    root,
+                ),
+                (
+                    "install self-plugin payload",
+                    [
+                        "node",
+                        str(cli_entry),
+                        "add",
+                        "plugin",
+                        "--host",
+                        "codex",
+                        "--target",
+                        str(target),
+                        "--force",
+                        "--json",
+                    ],
+                    root,
+                ),
+            )
+        )
+        for label, args, cwd in commands:
+            try:
+                result = run_command(root, args, cwd=cwd, env=env, timeout_seconds=300)
+            except subprocess.TimeoutExpired:
+                failures.append(Failure("root-self-plugin", f"`{label}` timed out"))
+                return failures
+            if result.returncode != 0:
+                detail = result.stderr.strip() or result.stdout.strip() or "command failed without output"
+                failures.append(Failure("root-self-plugin", f"`{label}` failed: {detail}"))
+                return failures
+
+        installed_marketplace = target / ".agents/plugins/marketplace.json"
+        plugin_root = target / "plugins/loom"
+        expected_paths = (
+            plugin_root / ".codex-plugin/plugin.json",
+            plugin_root / "skills/registry.json",
+            plugin_root / "skills/install-layout.json",
+            plugin_root / "skills/shared/scripts/loom_init.py",
+            plugin_root / "skills/loom-init/SKILL.md",
+        )
+        for path in expected_paths:
+            if not path.exists():
+                failures.append(Failure("root-self-plugin", f"self-plugin install is missing `{path.relative_to(target).as_posix()}`"))
+        try:
+            installed = load_json_file(installed_marketplace)
+        except (FileNotFoundError, json.JSONDecodeError) as exc:
+            failures.append(Failure("root-self-plugin", f"installed marketplace is unreadable: {exc}"))
+        else:
+            installed_plugins = installed.get("plugins") if isinstance(installed, dict) else None
+            installed_entry = None
+            if isinstance(installed_plugins, list):
+                installed_entry = next(
+                    (
+                        entry
+                        for entry in installed_plugins
+                        if isinstance(entry, dict) and entry.get("name") == "loom"
+                    ),
+                    None,
+                )
+            installed_source = installed_entry.get("source") if isinstance(installed_entry, dict) else None
+            if not isinstance(installed_source, dict) or installed_source.get("path") != "./plugins/loom":
+                failures.append(Failure("root-self-plugin", "installed marketplace must point `loom` to `./plugins/loom`"))
+        if plugin_root.exists():
+            generated_cache = [
+                path.relative_to(target).as_posix()
+                for path in plugin_root.rglob("*")
+                if "__pycache__" in path.parts or path.suffix == ".pyc"
+            ]
+            if generated_cache:
+                preview = ", ".join(generated_cache[:5])
+                failures.append(Failure("root-self-plugin", f"self-plugin payload must exclude Python cache artifacts: {preview}"))
     return failures
 
 
@@ -7593,7 +7733,7 @@ def collect_failures(root: Path) -> list[Failure]:
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 19
+    categories_checked = 20
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")
