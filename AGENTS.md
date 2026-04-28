@@ -2,19 +2,20 @@
 
 ## 项目使命
 
-Loom 是一个面向智能体优先项目的上游治理与执行编排仓库。
+Loom 是一个面向智能体优先项目的 agent-first project operating layer 仓库。
 
 它要复用的不是业务代码，而是项目如何被组织、如何进入执行、如何跨多轮持续推进、如何进入 merge-ready、以及如何收口的能力。
 
-Loom 当前冻结的三层目标态是：
+Loom 当前冻结的 operating planes 是：
 
 - `governance truth`
 - `harness orchestration`
+- `behavior and test evidence`
 - `executable SKILLS`
 
 ## 宪法规则
 
-1. Loom 是上游治理与执行编排仓库，不是业务模板仓库。
+1. Loom 是 agent-first project operating layer 仓库，不是业务模板仓库。
 2. Loom 只沉淀多仓实证下成立的结构、机制、模板和教训，不复制单一仓库的历史形态。
 3. `Syvert` 与 `WebEnvoy` 都是正反并存的实践来源；任何单仓经验都不得直接被当作 Loom 默认内核。
 4. `governance`、`harness`、`templates`、`adoption`、`skills` 必须边界清晰，不得混成单一说明文档。
@@ -26,6 +27,8 @@ Loom 当前冻结的三层目标态是：
 10. 禁止把某个下游仓库当前的目录名、命名习惯或门禁细节，未经抽象直接提升为 Loom 默认规则。
 11. Loom 默认追求 `merge-readiness-centered` 的治理流程，不把 final review 当作第一次系统性发现问题的场所。
 12. Loom 不要求自研 GitHub、CI、review engine、`git worktree` 或 `gh` 的底层实现，但必须能统一编排和消费这些宿主能力。
+13. `governance truth` 是 Loom operating layer 的一个 plane，不得把 Loom 重新收窄成治理套件或流程框架。
+14. Superpowers-derived discipline 只能作为安装、发现、入口、触发、行为回归与宿主适配边界的抽象证据吸收；不得新增 `docs/superpowers/*`，不得复制 Superpowers skill 文本、hooks 或文件布局作为 Loom core。
 
 ## 权威来源
 
@@ -99,3 +102,4 @@ Loom 当前不是：
 - 从零重写 GitHub、CI、code review、`git worktree` 或 `gh` 的底层产品
 - 只靠 prompt 运转的文档仓库
 - 已经定型的 profile 系统
+- Superpowers 的分支文档树或 skill/file layout 镜像

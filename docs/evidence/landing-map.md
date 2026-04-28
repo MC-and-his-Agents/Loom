@@ -14,9 +14,11 @@
 ## Area Map
 
 - `governance/`
-  - 原则、审查模型、成熟度与关闭语义
+  - operating layer 中的 governance truth plane：原则、审查模型、成熟度与关闭语义
 - `harness/`
   - work item、执行上下文、工作现场、恢复模型、状态面、纯度与自动化前置
+- `behavior and test evidence`
+  - 由 harness、templates、review、status、merge-ready 与 closeout 共同消费的行为证据与测试证据，不单独新增并行目录
 - `templates/`
   - 正式规约模板、PR 模板
 - `adoption/`
@@ -52,10 +54,14 @@
 - `skills` 分发与适配合同
   - 稳定落点：`skills/distribution-and-adapter-contract.md`
   - 入口消费：`skills/README.md`
+- Superpowers-derived discipline 抽象边界
+  - 稳定落点：`skills/distribution-and-adapter-contract.md`; `harness/automation-frontload.md`; `harness/gate-chain.md`; `harness/status-surface.md`
+  - 入口消费：`skills/README.md`; `skills/loom-init/SKILL.md`
 补充约束：
 
 - `repo companion` contract 的唯一主落点固定为 `adoption/repo-companion-contract.md`
 - 历史材料中的 `companion docs` 仅作为迁移表述保留，不再作为新的正式落点名
+- 不新增 `docs/superpowers/*`，不把 Superpowers skill 文本、hooks 或文件布局复制成 Loom core；只吸收可抽象为 operating-layer contract 的执行纪律。
 
 ## Item Map
 
@@ -117,3 +123,5 @@
 | EXT-0054 | `keep` | `harness/host-issue-binding.md`; `harness/status-surface-contract.md`; `harness/governance-failure-taxonomy.md`; `harness/gate-chain.md`; `harness/controlled-merge.md`; `governance/governance-maturity-model.md`; `adoption/github-profile.md`; `adoption/github-profile-upgrade.md` | `core/profile` | `#298-#309` 已把 Syvert 级治理能力拆成 Loom core 控制面与 GitHub profile 自动化，不复制 Syvert 私有文件名 |
 | EXT-0055 | `keep` | `harness/gate-chain.md`; `harness/merge-checkpoint.md`; `harness/closeout-gate.md`; `harness/status-surface.md` | `core` | formal spec、implementation review、merge-ready、controlled merge 与 closeout 已收成强前置消费链，后序成功不得覆盖前序 gate 缺失 |
 | EXT-0056 | `keep` | `adoption/zero-friction-adoption-contract.md`; `skills/loom-adopt/SKILL.md`; `skills/loom-adopt/references/input-signals.md`; `skills/loom-adopt/references/output-contract.md`; `skills/loom-resume/SKILL.md`; `skills/loom-resume/references/output-contract.md` | `core/adoption` | `#410` 把 agent-assisted zero-friction adoption 收成 `read -> judge -> write -> verify` 入口合同，消费 `repo companion` / `repo interop` 边界但不新增事实载体、不推广 Syvert guardian，也不要求 unattended strong adoption |
+| EXT-0057 | `keep` | `skills/distribution-and-adapter-contract.md`; `harness/automation-frontload.md`; `harness/gate-chain.md`; `harness/status-surface.md`; `skills/README.md`; `skills/loom-init/SKILL.md` | `core` | `#439` 把 Superpowers-derived execution discipline 抽象吸收到 operating-layer contracts：安装发现、场景入口、行为回归、subagent ownership 与 adapter 边界；不新增 `docs/superpowers/*`，不复制 Superpowers skill/file layout |
+| EXT-0058 | `keep` | `templates/spec-suite.md`; `harness/work-item-contract.md`; `harness/checkpoint-model.md`; `harness/gate-chain.md`; `harness/status-surface.md`; `harness/closeout-gate.md`; `governance/review-model.md`; `skills/loom-init/SKILL.md` | `core` | `#439/#441/#442` 把 BDD/TDD 双重证据循环接入 Work Item、spec、plan、build checkpoint、review、merge-ready 与 closeout；纯文档事项不被强制套成实现仪式 |

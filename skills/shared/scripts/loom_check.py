@@ -19,6 +19,7 @@ from pathlib import Path
 from fact_chain_support import inspect_fact_chain
 import governance_surface as governance_surface_module
 import loom_flow as loom_flow_module
+import loom_status as loom_status_module
 import runtime_state as runtime_state_module
 from governance_surface import build_governance_surface
 from loom_flow import allowed_post_review_carrier_paths, repo_specific_requirements_payload, review_head_binding
@@ -1921,14 +1922,14 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
     if not isinstance(contract, dict):
         return [Failure(category, "`skills/loom-init/contract.json` must be a JSON object")]
 
-    if "skills-first methodology repository" not in readme:
-        failures.append(Failure(category, "`README.md` must present Loom as a skills-first methodology repository"))
+    if "agent-first project operating layer" not in readme:
+        failures.append(Failure(category, "`README.md` must present Loom as an agent-first project operating layer"))
     if "Advanced / Compatibility" not in readme:
         failures.append(Failure(category, "`README.md` must keep single-skill installation as an advanced compatibility path"))
     if "[中文版本](./README.zh-CN.md)" not in readme or "[English version](./README.md)" not in readme_zh:
         failures.append(Failure(category, "root README language switch links must stay in sync"))
-    if "以 skills 为先的方法论仓库" not in readme_zh:
-        failures.append(Failure(category, "`README.zh-CN.md` must preserve the Chinese repository positioning"))
+    if "agent-first project operating layer" not in readme_zh:
+        failures.append(Failure(category, "`README.zh-CN.md` must preserve the Chinese operating-layer positioning"))
     if "unique root entry" not in skills_readme:
         failures.append(Failure(category, "`skills/README.md` must keep `loom-init` as the unique root entry"))
     if "[中文版本](./README.zh-CN.md)" not in skills_readme or "[English version](./README.md)" not in skills_readme_zh:
@@ -6038,7 +6039,10 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
             "checkpoints.md",
             "metadata-contract.md",
             "context-schema.md",
+            "review-instructions/spec.md",
+            "review-instructions/implementation.md",
         ):
+            (companion_dir / doc).parent.mkdir(parents=True, exist_ok=True)
             (companion_dir / doc).write_text(f"# {doc}\n", encoding="utf-8")
         if manifest is not None:
             write_json(companion_dir / "manifest.json", manifest)
@@ -6099,6 +6103,16 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
                 "gate_type": "review",
             }
         ],
+        "review_instruction_locators": {
+            "spec_review": {
+                "locator": ".loom/companion/review-instructions/spec.md",
+                "mode": "repo_declared",
+            },
+            "implementation_review": {
+                "locator": ".loom/companion/review-instructions/implementation.md",
+                "mode": "repo_declared",
+            },
+        },
         "metadata_contract": {
             "fields": [
                 {
@@ -6800,6 +6814,142 @@ def check_external_runtime_devendor_contract(root: Path) -> list[Failure]:
         for anchor in anchors:
             if anchor not in text:
                 failures.append(Failure("external-runtime-devendor", f"`{relative}` must mention `{anchor}`"))
+    return failures
+
+
+def check_status_closeout_binding_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    seen: dict[str, object] = {}
+    original_closeout_payload = loom_status_module.closeout_payload
+
+    def fake_closeout_payload(**kwargs: object) -> tuple[dict[str, object], list[str]]:
+        seen.update(kwargs)
+        return (
+            {
+                "result": "pass",
+                "summary": "synthetic closeout payload",
+                "missing_inputs": [],
+                "fallback_to": None,
+                "reconciliation": {
+                    "result": "pass",
+                    "findings": [],
+                },
+            },
+            [],
+        )
+
+    try:
+        loom_status_module.closeout_payload = fake_closeout_payload
+        payload = loom_status_module.full_closeout_status_payload(
+            root,
+            phase_number=439,
+            fr_number=474,
+            issue_number=1,
+            pr_number=2,
+            project_number=3,
+            branch_name="feat/review-locators",
+            owner="owner",
+            repo_name="repo",
+            github_status={"repository": "owner/repo"},
+            github_errors=[],
+        )
+    finally:
+        loom_status_module.closeout_payload = original_closeout_payload
+
+    if payload.get("result") != "pass":
+        failures.append(Failure("daily-execution-cli", "`loom_status` synthetic closeout payload must pass"))
+    expected = {
+        "phase_number": 439,
+        "fr_number": 474,
+        "issue_number": 1,
+        "pr_number": 2,
+        "project_number": 3,
+        "branch_name": "feat/review-locators",
+        "owner": "owner",
+        "repo_name": "repo",
+        "skip_gate": False,
+    }
+    for field, value in expected.items():
+        if seen.get(field) != value:
+            failures.append(Failure("daily-execution-cli", f"`loom_status` closeout must forward `{field}` to closeout_payload"))
+    return failures
+
+
+def check_behavior_first_locator_contracts(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    required_anchors = {
+        "docs/adoption/repo-companion-contract.md": [
+            "review_instruction_locators",
+            "spec_review",
+            "implementation_review",
+            "repo_declared | loom_default",
+            "behavior evidence",
+            "test evidence",
+            "fresh verification evidence",
+            "不得把 `spec_review.md`、`code_review.md` 或任何 Syvert-style 路径硬编码成 Loom 默认查找路径",
+            "不得承接 review disposition",
+        ],
+        "docs/adoption/repo-interop-contract.md": [
+            "spec review / implementation review instruction locator",
+            "repo-interface.json",
+            "review_instruction_locators",
+        ],
+        "docs/adoption/deep-existing-repo-default.md": [
+            "review_instruction_locators",
+            "repo-owned instruction locator",
+            "不得让 Loom 猜测 `spec_review.md`、`code_review.md` 或 Syvert-style 文件名",
+        ],
+        "docs/adoption/lightweight-retrofit-default.md": [
+            "review_instruction_locators",
+            "loom_default",
+            "不是自动猜测 `spec_review.md`、`code_review.md` 或任何单仓历史路径",
+        ],
+        "docs/adoption/github-profile-upgrade.md": [
+            "review instruction locators for spec review and implementation review",
+            "repo-owned review instruction locator",
+            "不能猜测 `spec_review.md`、`code_review.md` 或 Syvert-style 路径",
+        ],
+        "docs/methodology/harness/status-surface.md": [
+            "fresh verification evidence",
+            "behavior evidence / test evidence",
+            "stale",
+        ],
+        "docs/methodology/harness/review-execution.md": [
+            "findings[].disposition",
+            "behavior/test evidence",
+            "subagent 输出只能作为 review 输入证据",
+        ],
+        "docs/methodology/harness/merge-checkpoint.md": [
+            "fresh verification evidence",
+            "review disposition",
+            "ownership 分配修正点",
+        ],
+        "skills/shared/references/adoption/deep-existing-repo-default.md": [
+            "review_instruction_locators",
+            "repo-owned instruction locator",
+            "不得让 Loom 猜测 `spec_review.md`、`code_review.md` 或 Syvert-style 文件名",
+        ],
+        "skills/shared/references/adoption/lightweight-retrofit-default.md": [
+            "review_instruction_locators",
+            "loom_default",
+            "不是自动猜测 `spec_review.md`、`code_review.md` 或任何单仓历史路径",
+        ],
+        "skills/shared/references/adoption/github-profile-upgrade.md": [
+            "review instruction locators for spec review and implementation review",
+            "repo-owned review instruction locator",
+            "不能猜测 `spec_review.md`、`code_review.md` 或 Syvert-style 路径",
+        ],
+    }
+    for relative, anchors in required_anchors.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            failures.append(Failure("behavior-first-locators", f"`{relative}` is unreadable: {exc}"))
+            continue
+        for anchor in anchors:
+            if anchor not in text:
+                failures.append(Failure("behavior-first-locators", f"`{relative}` must mention `{anchor}`"))
     return failures
 
 
@@ -7920,6 +8070,115 @@ def check_github_cli_budget(root: Path) -> list[Failure]:
     return failures
 
 
+def check_operating_layer_contract(root: Path) -> list[Failure]:
+    required_anchors = {
+        "README.md": [
+            "agent-first project operating layer",
+            "behavior evidence",
+            "test evidence",
+            "trunk truth",
+        ],
+        "README.zh-CN.md": [
+            "agent-first project operating layer",
+            "行为证据",
+            "测试证据",
+            "主干真相",
+        ],
+        "VISION.md": [
+            "agent-first project operating layer",
+            "Behavior and Test Evidence",
+            "BDD/TDD",
+        ],
+        "AGENTS.md": [
+            "agent-first project operating layer",
+            "behavior and test evidence",
+            "Superpowers-derived discipline",
+            "不得新增 `docs/superpowers/*`",
+        ],
+        "docs/evidence/extraction-ledger.md": [
+            "EXT-0057",
+            "Superpowers-derived execution discipline",
+            "EXT-0058",
+            "dual evidence loop",
+        ],
+        "docs/evidence/landing-map.md": [
+            "behavior and test evidence",
+            "Superpowers-derived discipline",
+            "不新增 `docs/superpowers/*`",
+        ],
+        "docs/methodology/templates/spec-suite.md": [
+            "BDD 外环",
+            "TDD 内环",
+            "behavior evidence",
+            "test evidence",
+            "fresh verification evidence",
+        ],
+        "skills/shared/references/templates/spec-suite.md": [
+            "BDD 外环",
+            "TDD 内环",
+            "behavior evidence",
+            "test evidence",
+            "fresh verification evidence",
+        ],
+        "docs/methodology/harness/status-surface.md": [
+            "behavior evidence",
+            "test evidence",
+            "fresh verification evidence",
+            "stale",
+            "not_applicable",
+        ],
+        "skills/shared/references/harness/status-surface.md": [
+            "behavior evidence",
+            "test evidence",
+            "fresh verification evidence",
+            "stale",
+            "not_applicable",
+        ],
+        "docs/methodology/harness/review-execution.md": [
+            "review_instruction_locators",
+            "disposition.status",
+            "repeated blocker",
+            "subagent",
+        ],
+        "skills/shared/references/harness/review-execution.md": [
+            "review_instruction_locators",
+            "disposition.status",
+            "repeated blocker",
+            "subagent",
+        ],
+        "docs/adoption/repo-companion-contract.md": [
+            "review_instruction_locators",
+            "spec_review",
+            "implementation_review",
+            "repo_declared | loom_default",
+            "不得把 `spec_review.md`、`code_review.md` 或任何 Syvert-style 路径硬编码",
+        ],
+        "docs/adoption/repo-interop-contract.md": [
+            "review instruction locator",
+            "repo-interface.json",
+            "review_instruction_locators",
+        ],
+    }
+    failures: list[Failure] = []
+    for relative, anchors in required_anchors.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            failures.append(Failure("operating-layer-contract", f"`{relative}` is unreadable: {exc}"))
+            continue
+        for anchor in anchors:
+            if anchor not in text:
+                failures.append(Failure("operating-layer-contract", f"`{relative}` must mention `{anchor}`"))
+
+    forbidden_paths = [path for path in (root / "docs").rglob("*") if "superpowers" in path.parts]
+    if forbidden_paths:
+        preview = ", ".join(str(path.relative_to(root)) for path in forbidden_paths[:4])
+        failures.append(Failure("operating-layer-contract", f"`docs/superpowers/*` must not be introduced: {preview}"))
+
+    return failures
+
+
 def is_within(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
@@ -7957,16 +8216,19 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_repo_companion_interface_contracts(root))
     failures.extend(check_repo_interop_contracts(root))
     failures.extend(check_external_runtime_devendor_contract(root))
+    failures.extend(check_status_closeout_binding_contract(root))
+    failures.extend(check_behavior_first_locator_contracts(root))
     failures.extend(check_adversarial_adoption_fixture(root))
     failures.extend(check_node_installer(root))
     failures.extend(check_generated_artifacts_untracked(root))
     failures.extend(check_github_cli_budget(root))
+    failures.extend(check_operating_layer_contract(root))
     failures.extend(check_markdown_links(root))
     return failures
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 20
+    categories_checked = 23
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")

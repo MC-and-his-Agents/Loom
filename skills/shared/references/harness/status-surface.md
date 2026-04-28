@@ -30,6 +30,8 @@ Loom 当前至少要求状态面能展示：
 - 当前阻断项
 - 下一步
 - 最近验证摘要
+- behavior evidence / test evidence 覆盖状态
+- fresh verification evidence 的 `head_sha` / 范围 / 摘要绑定
 
 这些字段必须从已有主真相派生，不允许手工维护第二套 authored 值：
 
@@ -39,6 +41,12 @@ Loom 当前至少要求状态面能展示：
   - 从恢复主入口、review record 与 merge checkpoint 派生
 - `当前工作现场`、`当前恢复主入口`、`当前 review 入口`、`验证入口`
   - 从 `Work Item` 与 `init-result` 的 carrier 定位派生
+- `behavior_evidence`
+  - 从 spec 场景、验证记录、review record 与运行证据 locator 派生
+- `test_evidence`
+  - 从 plan 测试策略、自动检查、人工验证记录与验证摘要派生
+- `fresh_verification_evidence`
+  - 从当前 `HEAD`、当前范围、当前恢复摘要与最近验证记录的绑定关系派生
 
 ## 3. `Runtime Evidence` 固定区块
 
@@ -108,6 +116,22 @@ Loom 固化的是“可读取、可验证”的能力目标，不固化具体可
 - `Run Entry`、`Logs Entry`、`Diagnostics Entry`、`Lane Entry` 为 `not_applicable`
 
 `not_applicable` 只说明该字段当前不适用，不说明验证已自动通过。
+
+## 5.1 行为 / 测试证据展示
+
+状态面展示行为证据与测试证据时，至少应区分：
+
+- `present`
+  - 当前证据存在，且绑定当前 `HEAD`、范围与恢复摘要
+- `stale`
+  - 证据存在，但不再覆盖当前受审对象
+- `missing`
+  - 当前 gate 必需的证据不存在
+- `not_applicable`
+  - 当前事项不涉及对应证据类型，且原因与 spec / plan / recovery 不冲突
+
+`fresh verification evidence` 只能由 `present` 且绑定当前对象的 behavior evidence / test evidence 组合派生。
+若验证结果来自较早 `HEAD`、较早范围、过时恢复摘要，或来自未整合的 subagent 输出，状态面必须显示为 `stale` 或 `missing`，不得显示为 fresh。
 
 ## 6. 边界约束
 

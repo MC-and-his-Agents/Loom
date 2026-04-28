@@ -41,8 +41,11 @@
 
 - 保留原有根规则文档
 - 只追加 repo companion、职责映射与必要验证入口
+- 在 `repo-interface.json` 中显式声明 `review_instruction_locators`；已有规则用 repo-owned locator，确无规则时才声明 `loom_default`
 - 不在第一轮重写整个根级规则体系
 - 不把轻量 retrofit 升级成 unattended strong adoption
+
+轻量仓库可以从 Loom default review instruction 起步，但这个选择必须是显式 locator 合同，而不是自动猜测 `spec_review.md`、`code_review.md` 或任何单仓历史路径。
 
 ## 5. 默认不装配
 

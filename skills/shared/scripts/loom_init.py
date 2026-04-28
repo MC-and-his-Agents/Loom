@@ -1215,6 +1215,10 @@ def repo_interface_payload() -> dict[str, object]:
         "companion_entry": ".loom/companion/README.md",
         "repo_specific_requirements": {"review": [], "merge_ready": [], "closeout": []},
         "specialized_gates": [],
+        "review_instruction_locators": {
+            "spec_review": {"locator": "loom_default", "mode": "loom_default"},
+            "implementation_review": {"locator": "loom_default", "mode": "loom_default"},
+        },
         "metadata_contract": {"fields": []},
         "context_schema": {"fields": []},
     }

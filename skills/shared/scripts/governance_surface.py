@@ -37,6 +37,8 @@ REPO_INTERFACE_V1_SCHEMA = "loom-repo-interface/v1"
 REPO_INTERFACE_V2_SCHEMA = "loom-repo-interface/v2"
 REPO_INTERFACE_SCHEMAS = {REPO_INTERFACE_V1_SCHEMA, REPO_INTERFACE_V2_SCHEMA}
 REPO_INTERFACE_ENFORCEMENT = {"blocking", "advisory"}
+REPO_INTERFACE_REVIEW_INSTRUCTION_MODES = {"repo_declared", "loom_default"}
+REPO_INTERFACE_REVIEW_INSTRUCTION_KEYS = {"spec_review", "implementation_review"}
 REPO_INTERFACE_GATE_TYPES = {
     "admission",
     "pre_review",
@@ -48,7 +50,7 @@ REPO_INTERFACE_GATE_TYPES = {
 REPO_INTERFACE_CONTEXT_TYPES = {"string", "integer", "number", "boolean"}
 REPO_INTERFACE_MANIFEST_KEYS = {"schema_version", "companion_entry", "repo_interface"}
 REPO_INTERFACE_V1_KEYS = {"schema_version", "companion_entry", "repo_specific_requirements", "specialized_gates"}
-REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {"metadata_contract", "context_schema"}
+REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {"review_instruction_locators", "metadata_contract", "context_schema"}
 REPO_INTEROP_AVAILABILITY = {"absent", "incomplete", "present"}
 REPO_INTEROP_SCHEMA = "loom-repo-interop/v1"
 REPO_INTEROP_KEYS = {"schema_version", "host_adapters", "repo_native_carriers", "shadow_surfaces"}
@@ -564,6 +566,39 @@ def validate_specialized_gate(
     return missing_inputs
 
 
+def validate_review_instruction_locators(
+    *,
+    root: Path,
+    entry: object,
+) -> list[str]:
+    prefix = "review_instruction_locators"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"]
+    missing_inputs: list[str] = []
+    extra = set(entry) - REPO_INTERFACE_REVIEW_INSTRUCTION_KEYS
+    if extra:
+        missing_inputs.append(f"{prefix} contains unsupported keys: {', '.join(sorted(extra))}")
+    for key in sorted(REPO_INTERFACE_REVIEW_INSTRUCTION_KEYS):
+        locator_entry = entry.get(key)
+        if not isinstance(locator_entry, dict):
+            missing_inputs.append(f"{prefix}.{key} must be an object")
+            continue
+        mode = locator_entry.get("mode")
+        if mode not in REPO_INTERFACE_REVIEW_INSTRUCTION_MODES:
+            missing_inputs.append(f"{prefix}.{key}.mode must be `repo_declared` or `loom_default`")
+        locator = locator_entry.get("locator")
+        if mode == "loom_default":
+            if locator not in (None, "", "loom_default"):
+                missing_inputs.append(f"{prefix}.{key}.locator must be omitted or `loom_default` when mode is `loom_default`")
+            continue
+        locator_value, target = resolve_locator(root, locator)
+        if locator_value is None or target is None:
+            missing_inputs.append(locator_boundary_error(locator, label=f"{prefix}.{key}.locator"))
+        elif not target.exists():
+            missing_inputs.append(f"{prefix}.{key}.locator points to missing path `{locator_value}`")
+    return missing_inputs
+
+
 def validate_metadata_contract(
     *,
     root: Path,
@@ -822,6 +857,14 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
                     )
 
             if interface_schema == REPO_INTERFACE_V2_SCHEMA:
+                review_instruction_locators = interface_payload.get("review_instruction_locators")
+                if review_instruction_locators is not None:
+                    missing_inputs.extend(
+                        validate_review_instruction_locators(
+                            root=root,
+                            entry=review_instruction_locators,
+                        )
+                    )
                 metadata_contract = interface_payload.get("metadata_contract")
                 if metadata_contract is not None:
                     missing_inputs.extend(

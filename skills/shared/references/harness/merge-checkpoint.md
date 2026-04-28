@@ -16,6 +16,7 @@
 - 当前 head 是否仍在已批准范围内
 - 当前执行材料是否已经完整到足以进入主干
 - 当前自动检查、验证摘要、review 结论与宿主 merge 控制面是否共同支持 `GitHub controlled merge`
+- 当前 behavior evidence / test evidence 是否仍是 fresh verification evidence
 
 它不承担第一次高质量语义判断，也不替代 governance 的前置准入与 reviewer 的审查职责。
 字段归属以 [fact-chain-contract.md](./fact-chain-contract.md) 为准。
@@ -29,6 +30,9 @@
 - 自动检查结果
 - 正式 review record
 - 最近验证摘要
+- behavior evidence
+- test evidence
+- fresh verification evidence 的 `head_sha` / 范围 / 恢复摘要绑定
 - 运行时证据或 `not_applicable` 声明
 - 风险与回滚边界
 - 未决阻断项
@@ -54,6 +58,10 @@
   - 只能从 `work item.review_entry` 指向的 review record 读取
   - 其中 `findings` 是 review/disposition 的权威字段；`blocking_issues` / `follow_ups` 只作兼容投影
   - 即使 formal review 由默认 engine 产出，`merge gate` 也只消费回写后的 review record，不直接读取 engine raw output 或 evidence 文件
+- behavior evidence / test evidence
+  - 只能从 spec、plan、验证摘要、review record 与状态控制面的派生读面消费
+  - 必须绑定当前 `HEAD`、当前范围与当前恢复摘要
+  - 未整合的 subagent 输出不得作为 fresh verification evidence
 - `status control plane`
   - 只允许作为派生汇总读面，不得替代上述主真相
 
@@ -78,9 +86,13 @@
   - 回到 [automation-frontload.md](./automation-frontload.md) 对应检查面
 - 缺验证摘要、运行证据或 `not_applicable` 声明
   - 回到 [status-surface.md](./status-surface.md) 与实际验证入口
+- 缺 behavior evidence、test evidence 或 fresh verification evidence
+  - 回到 spec / plan / 验证入口补齐证据或声明 `not_applicable`
 - 缺 formal review、review stale 或 reviewer 明确要求回退
   - 回到 [review-execution.md](./review-execution.md) 或 `build gate`
   - 若 review 之后只提交了 `review_entry`、recovery 主入口或状态面这类 Loom carrier 更新，不应误判成 stale
+- review disposition 未处理、deferred 缺少后续承接，或 repeated blocker 尚未 root-cause 处理
+  - 回到 review record / 前序 gate / ownership 分配修正点
 - 缺停点、下一步、风险或回滚边界
   - 回到 [recovery-model.md](./recovery-model.md)
 - head 已超出批准范围或事项边界失真
@@ -93,6 +105,7 @@
 - `merge gate` 消费 reviewer、自动检查和运行证据的结果，不重新发明第二套审查体系
 - `merge gate` 只消费单一 review record，不为 findings / disposition 再引入第二 authored artifact
 - `merge gate` 不直接消费 Codex output、prompt、logs 或其他 review evidence 文件
+- `merge gate` 不把旧验证、未绑定当前 `HEAD` 的测试结果或未整合的 subagent 输出当作 fresh verification evidence
 - `merge gate` 只回答“是否可进入 GitHub controlled merge”，进入主干后的 issue / project / main 收口由 [closeout-gate.md](./closeout-gate.md) 承接
 - `merge gate` 不负责定义成熟度、关闭语义或事项是否值得做；这些属于 `governance/`
 - `merge gate` 不得补读另一份 authored 状态摘要来替代恢复主入口

@@ -57,6 +57,18 @@
 这些文件共同表达的不是零散脚本集合，而是从 `Work Item` / fact-chain 到 review / merge / closeout 的统一编排链路。
 当 Loom 需要调用 GitHub、CI、review engine、`git worktree` 或其他宿主能力时，也应先通过 [host-action-contract.md](./host-action-contract.md) 收口结果与去向，再由各专题文件承接细节，而不是在外部再复制一套真相。
 
+## 行为优先执行层
+
+Loom 的默认执行层以 BDD 外环和 TDD 内环组合运行：
+
+- BDD 外环来自正式 spec 的可观察场景，回答“什么行为必须成立”
+- TDD 内环来自 plan / implementation 的测试策略，回答“实现如何以测试或等价检查证明推进”
+- `behavior evidence` 证明场景成立；`test evidence` 证明测试、检查或人工验证已经执行
+- `fresh verification evidence` 表示证据覆盖当前 `HEAD`、当前范围与当前恢复摘要，不得复用 stale 结果放行
+
+这些语义不要求纯文档事项强制写测试，但要求每个 gate 能读到行为证据、测试证据或明确的 `not_applicable`。
+当 execution 由多个 subagent 分工推进时，主执行者必须把各 subagent 的 owned output、验证结果、阻断项和偏离范围情况整合回单一恢复入口、review record 或对应 gate 输入；subagent 输出本身不构成第二真相源。
+
 ## 目录约束
 
 - 本目录优先表达可执行规则与编排责任，不在多个文件并行复述同一条执行链路

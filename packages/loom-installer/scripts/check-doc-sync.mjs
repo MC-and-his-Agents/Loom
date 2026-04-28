@@ -10,7 +10,7 @@ const requiredNeedles = [
   {
     path: 'README.md',
     needles: [
-      'skills-first methodology repository',
+      'agent-first project operating layer',
       'Fetch and follow instructions from https://raw.githubusercontent.com/MC-and-his-Agents/Loom/refs/heads/main/.codex/INSTALL.md',
       'npx @mc-and-his-agents/loom-installer add plugin --host codex',
       'Advanced / Compatibility',
@@ -20,7 +20,7 @@ const requiredNeedles = [
   {
     path: 'README.zh-CN.md',
     needles: [
-      '以 skills 为先的方法论仓库',
+      'agent-first project operating layer',
       'Fetch and follow instructions from https://raw.githubusercontent.com/MC-and-his-Agents/Loom/refs/heads/main/.codex/INSTALL.md',
       'npx @mc-and-his-agents/loom-installer add plugin --host codex',
       '高级 / 兼容',

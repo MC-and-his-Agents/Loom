@@ -2,20 +2,23 @@
 
 Language: English | [中文版本](./README.zh-CN.md)
 
-Loom is a skills-first methodology repository for agent coding workflows.
+Loom is an agent-first project operating layer.
 
-It gives coding agents a governance-shaped execution path across adopt, resume, review, merge-ready, handoff, and closeout. The goal is not to produce business code faster at any cost, but to keep work from stopping at "files changed" and to converge on a real merge-ready and closeout-complete state.
+It gives coding agents a behavior-first execution path across adopt, resume, spec, plan, build checkpoints, review, merge-ready, handoff, and closeout. The goal is not to produce business code faster at any cost, but to keep work from stopping at "files changed" and to converge on a state where goals, behavior evidence, test evidence, review state, trunk truth, and host control plane all agree.
 
 ## How It Works
 
-Loom is installed as a complete skills library. Agents start from `loom-init`, then route into the right scenario skill based on the task and repository state.
+Loom remains a plugin / SKILLS / CLI product. The plugin exposes install, discovery, and invocation; `SKILLS` expose scenario operations; the CLI and fixtures provide machine checks; docs remain the repository truth for methodology, harness, adoption, templates, and evidence.
+
+Agents start from `loom-init`, then route into the right scenario skill based on the task and repository state.
 
 The core execution model is:
 
 1. `loom-init` decides whether the current work should adopt, resume, review, hand off, retire, or validate merge readiness.
 2. Scenario skills run the concrete workflow and consume the shared Loom runtime contract.
-3. Methodology and architecture documents stay behind the skills layer, so users do not need to study Loom internals before starting.
-4. Runtime evidence, review records, merge checkpoints, and closeout checks keep repository state aligned.
+3. Work Item, spec, plan, build checkpoint, review, merge-ready, and closeout consume a dual evidence loop: behavior evidence describes the observable contract, and test evidence proves the implementation loop.
+4. Methodology and architecture documents stay behind the skills layer, so users do not need to study Loom internals before starting.
+5. Runtime evidence, review records, merge checkpoints, and closeout checks keep repository state aligned.
 
 ## Install
 
@@ -118,6 +121,6 @@ An individually installed skill only exposes that skill to the host. If you need
 
 ## Philosophy
 
-Loom is merge-readiness-centered. Review, validation, host state, and closeout are separate surfaces, but they must converge. If any one of them is still open, the work should not be treated as finished.
+Loom is merge-readiness-centered and behavior-first. Review, validation, host state, behavior evidence, test evidence, and closeout are separate surfaces, but they must converge. If any one of them is still open, the work should not be treated as finished.
 
-Loom is not a business template, a code generator, or a replacement for GitHub, CI, review engines, or `git worktree`. It is a methodology layer plus executable skills so agents can consume those host capabilities consistently.
+Loom is not a business template, a code generator, or a replacement for GitHub, CI, review engines, or `git worktree`. It is a project operating layer with executable skills so agents can consume those host capabilities consistently.

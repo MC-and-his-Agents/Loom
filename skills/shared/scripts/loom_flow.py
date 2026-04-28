@@ -582,6 +582,10 @@ def default_repo_interface() -> dict[str, Any]:
         "companion_entry": ".loom/companion/README.md",
         "repo_specific_requirements": {"review": [], "merge_ready": [], "closeout": []},
         "specialized_gates": [],
+        "review_instruction_locators": {
+            "spec_review": {"locator": "loom_default", "mode": "loom_default"},
+            "implementation_review": {"locator": "loom_default", "mode": "loom_default"},
+        },
         "metadata_contract": {"fields": []},
         "context_schema": {"fields": []},
     }
@@ -5769,14 +5773,51 @@ query($owner:String!, $name:String!, $number:Int!) {
     return issue, []
 
 
-def contains_merged_commit(root: Path, merge_commit_sha: str, target_branch: str = "main") -> bool:
+def github_compare_contains_commit(
+    root: Path,
+    *,
+    owner: str,
+    repo_name: str,
+    merge_commit_sha: str,
+    target_branch: str,
+) -> bool:
+    payload, errors = gh_rest_json(
+        root,
+        f"repos/{owner}/{repo_name}/compare/{quote(merge_commit_sha, safe='')}...{quote(target_branch, safe='')}",
+    )
+    if errors or payload is None:
+        return False
+    return payload.get("status") in {"ahead", "identical"}
+
+
+def contains_merged_commit(
+    root: Path,
+    merge_commit_sha: str,
+    target_branch: str = "main",
+    *,
+    owner: str | None = None,
+    repo_name: str | None = None,
+) -> bool:
     remote_ref = f"refs/remotes/origin/{target_branch}"
     fetched_ref = f"refs/heads/{target_branch}:{remote_ref}"
     fetched = run_git(root, ["fetch", "origin", fetched_ref])
-    if fetched is None or fetched.returncode != 0:
+    if fetched is not None and fetched.returncode == 0:
+        contains = run_git(root, ["merge-base", "--is-ancestor", merge_commit_sha, remote_ref])
+        if contains is not None and contains.returncode == 0:
+            return True
+    if owner is None or repo_name is None:
+        detected_owner, detected_repo = detect_github_repo(root)
+        owner = owner or detected_owner
+        repo_name = repo_name or detected_repo
+    if not owner or not repo_name:
         return False
-    contains = run_git(root, ["merge-base", "--is-ancestor", merge_commit_sha, remote_ref])
-    return contains is not None and contains.returncode == 0
+    return github_compare_contains_commit(
+        root,
+        owner=owner,
+        repo_name=repo_name,
+        merge_commit_sha=merge_commit_sha,
+        target_branch=target_branch,
+    )
 
 
 def make_reconciliation_finding(
