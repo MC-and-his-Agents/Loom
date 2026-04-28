@@ -202,6 +202,6 @@ function installForHost(input: {
   }
   const skill = resolveSkillRecord(manifest, parsed.skillId ?? '');
   return host === 'codex'
-    ? installCodexSkill(env, packageRoot, skill, parsed.options.force)
+    ? installCodexSkill(env, targetRoot, packageRoot, skill, parsed.options.force)
     : installClaudeSkill(targetRoot, packageRoot, skill, parsed.options.force);
 }

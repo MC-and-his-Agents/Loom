@@ -8,7 +8,7 @@
       "name": "loom",
       "source": {
         "source": "local",
-        "path": "./plugins/loom"
+        "path": "./"
       },
       "policy": {
         "installation": "AVAILABLE",

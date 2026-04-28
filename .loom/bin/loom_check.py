@@ -2566,16 +2566,24 @@ def check_root_self_plugin_install(root: Path) -> list[Failure]:
         source = loom_entry.get("source")
         if not isinstance(source, dict) or source.get("source") != "local":
             failures.append(Failure("root-self-plugin", "Codex marketplace `loom` entry must use a local source"))
-        if not isinstance(source, dict) or source.get("path") != "./plugins/loom":
-            failures.append(Failure("root-self-plugin", "Codex marketplace `loom` entry must point to `./plugins/loom`"))
+        if not isinstance(source, dict) or source.get("path") != "./":
+            failures.append(Failure("root-self-plugin", "Codex marketplace `loom` entry must point to the Loom plugin root `./`"))
+
+    root_plugin_paths = (
+        ".codex-plugin/plugin.json",
+        "skills/registry.json",
+        "skills/install-layout.json",
+        "skills/shared/scripts/loom_init.py",
+        "skills/loom-init/SKILL.md",
+    )
+    failures.extend(check_required_paths(root, "root-self-plugin", root_plugin_paths))
 
     package_root = root / "packages/loom-installer"
     cli_entry = package_root / "dist/src/cli.js"
     package_json = package_root / "package.json"
     if not package_json.exists():
-        failures.append(Failure("root-self-plugin", "installer package must exist for self-plugin verification"))
+        failures.append(Failure("root-self-plugin", "installer package must exist for downstream plugin verification"))
         return failures
-
     with tempfile.TemporaryDirectory(prefix="loom-root-self-plugin-") as tmp:
         tmp_root = Path(tmp)
         target = tmp_root / "target"
@@ -2599,12 +2607,12 @@ def check_root_self_plugin_install(root: Path) -> list[Failure]:
         commands.extend(
             (
                 (
-                    "build self-plugin installer",
+                    "build downstream plugin installer",
                     ["npm", "--prefix", str(package_root), "run", "build"],
                     root,
                 ),
                 (
-                    "install self-plugin payload",
+                    "install downstream plugin payload",
                     [
                         "node",
                         str(cli_entry),
@@ -2643,7 +2651,7 @@ def check_root_self_plugin_install(root: Path) -> list[Failure]:
         )
         for path in expected_paths:
             if not path.exists():
-                failures.append(Failure("root-self-plugin", f"self-plugin install is missing `{path.relative_to(target).as_posix()}`"))
+                failures.append(Failure("root-self-plugin", f"downstream plugin install is missing `{path.relative_to(target).as_posix()}`"))
         try:
             installed = load_json_file(installed_marketplace)
         except (FileNotFoundError, json.JSONDecodeError) as exc:
@@ -2671,7 +2679,7 @@ def check_root_self_plugin_install(root: Path) -> list[Failure]:
             ]
             if generated_cache:
                 preview = ", ".join(generated_cache[:5])
-                failures.append(Failure("root-self-plugin", f"self-plugin payload must exclude Python cache artifacts: {preview}"))
+                failures.append(Failure("root-self-plugin", f"downstream plugin payload must exclude Python cache artifacts: {preview}"))
     return failures
 
 

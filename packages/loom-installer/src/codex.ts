@@ -1,13 +1,6 @@
-import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { InstallResult, PayloadManifest, PayloadSkillRecord, ResolvedEnv } from './types.js';
 import { InstallerError, copyTree, dirExists, ensureDirectory, fileExists, readJson, replaceTree, writeJson } from './utils.js';
-
-interface CodexSkillBlock {
-  raw: string;
-  path: string | null;
-  enabled: boolean | null;
-}
 
 function codexMarketplacePath(targetRoot: string): string {
   return join(targetRoot, '.agents', 'plugins', 'marketplace.json');
@@ -71,78 +64,6 @@ function ensureMarketplace(targetRoot: string, force: boolean): string[] {
   return [marketplacePath];
 }
 
-function parseSkillBlocks(content: string): CodexSkillBlock[] {
-  const lines = content.split('\n');
-  const blocks: CodexSkillBlock[] = [];
-  for (let index = 0; index < lines.length; index += 1) {
-    if (lines[index].trim() !== '[[skills.config]]') {
-      continue;
-    }
-    const blockLines = [lines[index]];
-    index += 1;
-    while (index < lines.length && !lines[index].trim().startsWith('[[')) {
-      blockLines.push(lines[index]);
-      index += 1;
-    }
-    index -= 1;
-    const raw = blockLines.join('\n');
-    const pathMatch = raw.match(/^path\s*=\s*"([^"]+)"/m);
-    const enabledMatch = raw.match(/^enabled\s*=\s*(true|false)/m);
-    blocks.push({
-      raw,
-      path: pathMatch?.[1] ?? null,
-      enabled: enabledMatch ? enabledMatch[1] === 'true' : null,
-    });
-  }
-  return blocks;
-}
-
-function upsertSkillBlock(configPath: string, desiredSkillPath: string, skillId: string, force: boolean): void {
-  const content = fileExists(configPath) ? readFileSync(configPath, 'utf8') : '';
-  const blocks = parseSkillBlocks(content);
-  const skillDir = skillId.startsWith('loom-') ? skillId : `loom-${skillId}`;
-  const conflicting = blocks.filter((block) => {
-    if (!block.path) {
-      return false;
-    }
-    return block.path.endsWith(`/${skillDir}/SKILL.md`) && block.path !== desiredSkillPath;
-  });
-  if (conflicting.length > 0 && !force) {
-    throw new InstallerError(
-      `Codex already has ${skillId} from a different path`,
-      `Codex already has ${skillId} from a different path`,
-    );
-  }
-
-  let nextContent = content;
-  for (const block of conflicting) {
-    nextContent = nextContent.replace(`${block.raw}\n`, '').replace(block.raw, '');
-  }
-
-  const existingBlock = parseSkillBlocks(nextContent).find((block) => block.path === desiredSkillPath);
-  if (existingBlock) {
-    const enabledBlock = existingBlock.raw.match(/^enabled\s*=\s*false/m)
-      ? existingBlock.raw.replace(/^enabled\s*=\s*false/m, 'enabled = true')
-      : existingBlock.enabled === null
-        ? `${existingBlock.raw}\nenabled = true`
-        : existingBlock.raw;
-    nextContent = nextContent.replace(existingBlock.raw, enabledBlock);
-  } else {
-    if (nextContent && !nextContent.endsWith('\n')) {
-      nextContent += '\n';
-    }
-    nextContent += `\n[[skills.config]]\npath = ${JSON.stringify(desiredSkillPath)}\nenabled = true\n`;
-  }
-
-  ensureDirectory(join(configPath, '..'));
-  writeFileSync(configPath, nextContent.replace(/^\n+/, ''), 'utf8');
-}
-
-function verifySkillEnabled(configPath: string, desiredSkillPath: string): boolean {
-  const content = fileExists(configPath) ? readFileSync(configPath, 'utf8') : '';
-  return parseSkillBlocks(content).some((block) => block.path === desiredSkillPath && block.enabled !== false);
-}
-
 export function installCodexPlugin(
   targetRoot: string,
   packageRoot: string,
@@ -193,23 +114,23 @@ export function installCodexPlugin(
 }
 
 export function installCodexSkill(
-  env: ResolvedEnv,
+  _env: ResolvedEnv,
+  targetRoot: string,
   packageRoot: string,
   skill: PayloadSkillRecord,
   force: boolean,
 ): InstallResult {
   const skillDirName = skill.id.startsWith('loom-') ? skill.id : `loom-${skill.id}`;
   const sourceDir = join(packageRoot, 'payload', skill.relative_path);
-  const targetDir = join(env.codexHome, 'skills', skillDirName);
+  const targetDir = join(targetRoot, '.agents', 'skills', skillDirName);
   const skillMarkdownPath = join(targetDir, 'SKILL.md');
-  const configPath = join(env.codexHome, 'config.toml');
 
-  ensureDirectory(join(env.codexHome, 'skills'));
+  ensureDirectory(join(targetRoot, '.agents', 'skills'));
   if (dirExists(targetDir)) {
     if (!force && !fileExists(skillMarkdownPath)) {
       throw new InstallerError(
-        `existing Codex skill directory is not Loom-managed: ${targetDir}`,
-        `refusing to take over non-Loom Codex skill directory: ${targetDir}`,
+        `target already contains .agents/skills/${skillDirName} but it is not a Loom skill: ${targetDir}`,
+        `refusing to take over non-Loom repo skill directory: ${targetDir}`,
       );
     }
     replaceTree(sourceDir, targetDir);
@@ -217,22 +138,20 @@ export function installCodexSkill(
     copyTree(sourceDir, targetDir, true);
   }
 
-  ensureDirectory(env.codexHome);
-  upsertSkillBlock(configPath, skillMarkdownPath, skill.id, force);
-  if (!verifySkillEnabled(configPath, skillMarkdownPath)) {
-    throw new InstallerError(`Codex config did not enable ${skill.id}`);
+  if (!fileExists(skillMarkdownPath)) {
+    throw new InstallerError(`Codex repo skill install is missing SKILL.md: ${skillMarkdownPath}`);
   }
 
   return {
     mode: 'skill',
     host: 'codex',
     status: 'installed',
-    installed_paths: [targetDir, configPath],
+    installed_paths: [targetDir],
     verification: [
       `verified skill payload at ${targetDir}`,
-      `verified skills.config entry for ${skill.id}`,
+      `verified repo skill discovery path at ${skillMarkdownPath}`,
     ],
-    warnings: ['Codex single-skill install exposes only the named skill, not the full Loom plugin surface.'],
+    warnings: ['Codex repo-scoped single-skill install exposes only the named skill, not the full Loom plugin surface.'],
     fail_closed_reason: null,
   };
 }

@@ -282,8 +282,8 @@ Node installer 的最小 verify 输出必须覆盖：
   - repo-local `.codex-plugin/` + `skills/`
   - `.agents/plugins/marketplace.json`
 - Codex single-skill
-  - `~/.codex/skills/<skill-id>/`
-  - `~/.codex/config.toml` `[[skills.config]]`
+  - repo-scoped `<target>/.agents/skills/<skill-id>/`
+  - user-scoped `~/.agents/skills/<skill-id>/` when installed manually outside a repo
 - Claude plugin
   - repo-local `.claude/marketplaces/loom-local/`
   - `claude plugin marketplace add`
