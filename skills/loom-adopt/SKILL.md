@@ -31,6 +31,7 @@ description: 负责把仓库接入 Loom 的初始化场景入口。Use when Code
   - `AGENTS.md`
   - `README.md`
 - 初始化相关稳定规则
+  - [../shared/references/adoption/zero-friction-adoption-contract.md](../shared/references/adoption/zero-friction-adoption-contract.md)
   - [../shared/references/adoption/lightweight-retrofit-default.md](../shared/references/adoption/lightweight-retrofit-default.md)
   - [../shared/references/adoption/routing-and-checkpoints.md](../shared/references/adoption/routing-and-checkpoints.md)
   - [../shared/references/harness/fact-chain-contract.md](../shared/references/harness/fact-chain-contract.md)
@@ -50,10 +51,17 @@ description: 负责把仓库接入 Loom 的初始化场景入口。Use when Code
 
 执行顺序固定为：
 
-1. 先判断这是 `新项目`、`小型既有仓库` 还是 `复杂既有仓库`
-2. 再给出本轮启用能力、暂不启用能力与升级触发条件
-3. 若用户要求实际落盘，再执行 `bootstrap --write`
-4. 落盘后必须能用 `verify` 与 `fact-chain` 复读
+1. `read`
+   - 读取目标仓库根规则、验证入口、已有治理载体、repo-specific gates、retained host actions、repo-native carriers、现有 companion / interop locator
+2. `judge`
+   - 判断这是 `新项目`、`小型既有仓库` 还是 `复杂既有仓库`
+   - 输出本轮启用能力、暂不启用能力、升级触发条件、source locator、write target 与 validation command
+3. `write`
+   - 只有用户要求实际落盘时才执行 `bootstrap --write`
+   - 写入目标不得新增平行事实链或把 repo-owned residue 改写成 Loom core 规则
+4. `verify`
+   - 落盘后必须能用 `verify` 与 `fact-chain` 复读
+   - 验证 generated companion / interop locator 存在或 intentionally absent，并输出 resume guidance
 
 ## 4. 输出要求
 
@@ -68,6 +76,10 @@ description: 负责把仓库接入 Loom 的初始化场景入口。Use when Code
 - 首批工件与首批事项
 - 事实链入口
 - 验证入口
+- decision prompt 字段、source locator、writeback target 与 verification evidence
+- generated companion / interop 边界
+- adoption verify closure
+- post-adoption resume guidance
 - 当前不启用什么，以及为什么
 
 ## 5. 完成标准
@@ -78,3 +90,6 @@ description: 负责把仓库接入 Loom 的初始化场景入口。Use when Code
 - `bootstrap` 输出能解释为什么是这条 adoption 路径
 - `verify` 与 `fact-chain` 都能消费落盘结果
 - 结果没有引入新的事实链载体或平行状态源
+- generated companion / interop locator 已存在，或被明确标记为 intentionally absent
+- repo-specific 判断都有 source locator、reasoning、writeback target 与 verification evidence
+- resume 能识别 adoption 后的 continuation entry，或明确回退到 admission / adoption verify

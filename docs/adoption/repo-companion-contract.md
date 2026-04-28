@@ -324,6 +324,8 @@ external-runtime 迁移路径固定属于 [external-runtime-companion-contract.m
 
 `repo companion` 是仓库级 adoption 主合同。
 
+agent-assisted adoption 的读、判断、回写与验证闭环由 [zero-friction-adoption-contract.md](./zero-friction-adoption-contract.md) 承接。该从属合同只能消费本文件已经冻结的 manifest、`repo-interface.json`、metadata/context 与 ownership 边界，不得把 companion 扩成运行态真相源。
+
 若后续需要 companion-oriented workflow 或 migration 文档：
 
 - 只能作为从属合同

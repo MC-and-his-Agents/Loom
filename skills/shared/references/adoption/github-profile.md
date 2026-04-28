@@ -61,6 +61,8 @@ GitHub profile 至少应能表达：
 
 这些槽位不要求必须采用 Syvert 的文件名，但必须让 Loom 能稳定读取与继续执行。
 
+agent-assisted 低摩擦接入闭环见 [zero-friction-adoption-contract.md](./zero-friction-adoption-contract.md)。zero-friction adoption 可以帮助仓库进入 light 或 attach-only 起点，但不能跳过 `standard` 直接宣称 `strong`，也不能把 validation-only parity 自动升级为 blocking gate。
+
 ## 6. 三档接入
 
 ### Light

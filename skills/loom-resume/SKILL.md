@@ -39,6 +39,16 @@ description: 负责恢复当前事项的执行入口。Use when Codex needs to t
 4. 从当前恢复入口读取 `next_step`、`blockers`、`latest_validation_summary`
 5. 从事实链读取当前 checkpoint
 
+如果上一轮入口是 `loom-adopt`，`flow resume` 只能把 adoption 输出当作 locator 与 control-plane context：
+
+- adoption source
+- companion locator
+- interop locator
+- adoption verify summary
+- post-adoption next step
+
+随后仍按固定读取链路恢复；不得把 adoption 输出当作新的事实源，也不得因为 adoption dry-run 自动猜测下一步。
+
 这个 skill 不做以下事情：
 
 - 不回写恢复入口

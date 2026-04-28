@@ -108,3 +108,33 @@ GitHub profile adoption 的 gate 消费模式固定为三态：
 - `gate_rollout.rollback`
 
 默认建议必须保持 `advisory`。只有当所有 blocking 前置条件都有版本控制内证据时，才允许建议进入 `blocking`。
+
+## 9. Agent-assisted upgrade plan 输出
+
+`governance-profile upgrade-plan` 是 GitHub profile 升级的默认读取入口。它不得只返回缺字段列表；必须把缺口展开成固定的 read / judge / write / verify adoption workflow。
+
+稳定输出至少包含：
+
+- `loom-adoption-decisions/v1`
+  - 每个 judgment 固定包含 `id`、`question`、`source_locator`、`reasoning`、`write_targets`、`verification_commands`、`status`
+  - `status` 只能表达为 `answered | missing | blocked`
+- `loom-guided-adoption-plan/v1`
+  - 将每个 judgment 展开为 `read -> judge -> write -> verify` 步骤
+  - 不写状态，只给下一步执行所需 locator、write target 与验证命令
+- `loom-companion-generation/v1`
+  - 预览或记录 `.loom/companion/manifest.json`、`repo-interface.json`、`interop.json` 的生成状态
+  - 不生成 repo-native shadow verdict；shadow parity 只能消费 `interop.json` 中声明的只读 locator
+  - 默认 dry-run；只有显式 `--apply` 才能写入
+
+升级计划必须覆盖：
+
+- FR / Work Item 分层
+- closeout / reconciliation read surface
+- repo companion contract
+- repo interop contract
+- GitHub controlled merge
+- repo-specific residue
+- authority boundary
+- guardian / integration contract 作为 repo-native evidence 的读取边界
+
+这些判断只服务于 GitHub profile 采用和升级；不得把 Syvert guardian 规则、单仓命名或 repo-local gate 细节提升为 Loom core 默认规则。

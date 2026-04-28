@@ -70,6 +70,8 @@ Loom 当前至少应支持三类正式判断点：
 
 这些分流和 checkpoint 规则，最终应由初始化 `SKILL` 转化成实际提问、决策与装配逻辑。
 
+agent-assisted adoption 的固定提问字段、source locator、write target 与 verify closure 由 [zero-friction-adoption-contract.md](./zero-friction-adoption-contract.md) 承接；本文不展开执行侧回写或放行细节。
+
 ## 7. 与 `harness/` 的关系
 
 `adoption/` 只保留：

@@ -75,6 +75,9 @@ GitHub host 下的 strong governance 默认要求：
 
 - 默认升级顺序见 [github-profile-upgrade.md](./github-profile-upgrade.md)
 - 成熟治理重仓的 attach-only 路径见 [deep-existing-repo-default.md](./deep-existing-repo-default.md)
+- agent-assisted 低摩擦接入闭环见 [zero-friction-adoption-contract.md](./zero-friction-adoption-contract.md)
+
+zero-friction adoption 可以帮助仓库进入 light 或 attach-only 起点，但不能跳过 `standard` 直接宣称 `strong`，也不能把 validation-only parity 自动升级为 blocking gate。
 
 ## 7. 非 GitHub 宿主
 

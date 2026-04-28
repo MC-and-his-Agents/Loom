@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -110,6 +111,42 @@ ENGINE_FAILURE_REASONS = {
     "repo_diff_detected",
 }
 SHADOW_PARITY_SURFACES = ("admission", "review", "merge_ready", "closeout")
+ADOPTION_DECISIONS_SCHEMA = "loom-adoption-decisions/v1"
+GUIDED_ADOPTION_PLAN_SCHEMA = "loom-guided-adoption-plan/v1"
+COMPANION_GENERATION_SCHEMA = "loom-companion-generation/v1"
+
+ADOPTION_DECISION_QUESTIONS: dict[str, str] = {
+    "fr_work_item_layer": "Which host planning object owns the FR layer, and how does each FR point to its Work Item?",
+    "closeout_reconciliation_read": "Which repo-native or host-owned closeout and reconciliation result should Loom read without taking ownership?",
+    "repo_interface": "Which repo-specific requirements, specialized gates, metadata contracts, or context fields must remain repo companion-owned?",
+    "repo_interop": "Which retained host action results, repo-native carriers, and shadow parity surfaces should Loom read?",
+    "github_controlled_merge": "Which GitHub-controlled merge evidence proves the host merge boundary is ready without Loom taking over the host action?",
+    "repo_specific_residue": "Which repo-specific residue must stay repo-owned instead of becoming Loom core?",
+    "authority_boundary": "Where is the authority-of-truth for repo-native results, overrides, and fallback decisions?",
+    "guardian_integration_contract": "Which guardian or integration-contract verdicts should be read as repo-native evidence rather than promoted into Loom core?",
+}
+
+ADOPTION_DECISION_SOURCES: dict[str, str] = {
+    "fr_work_item_layer": "docs/adoption/github-profile-upgrade.md",
+    "closeout_reconciliation_read": "docs/adoption/repo-interop-contract.md",
+    "repo_interface": "docs/adoption/repo-companion-contract.md",
+    "repo_interop": "docs/adoption/repo-interop-contract.md",
+    "github_controlled_merge": "docs/adoption/github-profile.md",
+    "repo_specific_residue": "docs/adoption/repo-companion-contract.md",
+    "authority_boundary": "docs/adoption/repo-interop-contract.md",
+    "guardian_integration_contract": "docs/adoption/repo-interop-contract.md",
+}
+
+ADOPTION_DECISION_WRITE_TARGETS: dict[str, list[str]] = {
+    "fr_work_item_layer": [".loom/companion/repo-interface.json"],
+    "closeout_reconciliation_read": [".loom/companion/interop.json"],
+    "repo_interface": [".loom/companion/manifest.json", ".loom/companion/repo-interface.json"],
+    "repo_interop": [".loom/companion/interop.json"],
+    "github_controlled_merge": [],
+    "repo_specific_residue": [".loom/companion/README.md", ".loom/companion/repo-interface.json"],
+    "authority_boundary": [".loom/companion/interop.json"],
+    "guardian_integration_contract": [".loom/companion/interop.json"],
+}
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -416,6 +453,293 @@ def runtime_state_block_payload(
     return payload
 
 
+def command_target(target_root: Path) -> str:
+    return shlex.quote(str(target_root))
+
+
+def adoption_validation_commands(target_root: Path) -> list[str]:
+    target = command_target(target_root)
+    return [
+        f"python3 tools/loom_flow.py governance-profile upgrade-plan --target {target}",
+        f"python3 tools/loom_flow.py adopt verify --target {target}",
+    ]
+
+
+def adoption_decision_reasoning(decision_id: str, detail: dict[str, Any]) -> str:
+    if decision_id == "guardian_integration_contract":
+        return "Guardian and integration-contract verdicts are repo-native evidence; Loom may read them through interop but must not promote their rules into core."
+    if decision_id == "authority_boundary":
+        return "Blocking ownership, fallback, override, and authority-of-truth stay outside interop; interop only declares read locators."
+    if decision_id == "repo_specific_residue":
+        return "Repo-specific rules and residue stay in repo companion so Loom can consume them without turning single-repo practice into defaults."
+    recommended = detail.get("recommended_action")
+    if isinstance(recommended, str) and recommended:
+        return recommended
+    return "This judgment is required before Loom can turn adoption guidance into generated writeback and verification evidence."
+
+
+def adoption_judgment_status(decision_id: str, missing: set[str]) -> str:
+    if decision_id in missing:
+        return "blocked" if not ADOPTION_DECISION_WRITE_TARGETS.get(decision_id) else "missing"
+    if decision_id == "repo_specific_residue" and "repo_interface" in missing:
+        return "missing"
+    if decision_id in {"authority_boundary", "guardian_integration_contract"} and "repo_interop" in missing:
+        return "missing"
+    return "answered"
+
+
+def adoption_decisions_payload(
+    target_root: Path,
+    *,
+    target_level: str | None,
+    maturity: dict[str, Any],
+) -> dict[str, Any]:
+    missing_by_level = maturity.get("missing_by_level")
+    missing_details_by_level = maturity.get("missing_details_by_level")
+    missing = (
+        list(missing_by_level.get(target_level, []))
+        if isinstance(missing_by_level, dict) and isinstance(target_level, str)
+        else []
+    )
+    details = (
+        list(missing_details_by_level.get(target_level, []))
+        if isinstance(missing_details_by_level, dict) and isinstance(target_level, str)
+        else []
+    )
+    detail_by_id = {row.get("id"): row for row in details if isinstance(row, dict)}
+    missing_set = {str(item) for item in missing}
+    ordered_ids = list(dict.fromkeys([*missing, "repo_specific_residue", "authority_boundary", "guardian_integration_contract"]))
+    judgments: list[dict[str, Any]] = []
+    for raw_id in ordered_ids:
+        decision_id = str(raw_id)
+        detail = detail_by_id.get(decision_id, {})
+        source_locator = ADOPTION_DECISION_SOURCES.get(decision_id, "docs/adoption/github-profile-upgrade.md")
+        write_targets = ADOPTION_DECISION_WRITE_TARGETS.get(decision_id, [".loom/companion/repo-interface.json"])
+        verification_commands = adoption_validation_commands(target_root)
+        if decision_id in {"repo_interop", "closeout_reconciliation_read", "authority_boundary", "guardian_integration_contract"}:
+            verification_commands.append(f"python3 tools/loom_flow.py shadow-parity --target {command_target(target_root)}")
+        judgments.append(
+            {
+                "id": decision_id,
+                "question": ADOPTION_DECISION_QUESTIONS.get(decision_id, f"How should Loom satisfy `{decision_id}` without creating a second truth source?"),
+                "source_locator": source_locator,
+                "reasoning": adoption_decision_reasoning(decision_id, detail),
+                "write_targets": write_targets,
+                "verification_commands": verification_commands,
+                "status": adoption_judgment_status(decision_id, missing_set),
+                "layer": detail.get("layer"),
+            }
+        )
+    return {
+        "schema_version": ADOPTION_DECISIONS_SCHEMA,
+        "target_maturity": target_level,
+        "summary": "Fixed adoption judgments bind every repo-specific decision to source locators, write targets, and verification commands.",
+        "judgments": judgments,
+    }
+
+
+def guided_adoption_plan_payload(decisions: dict[str, Any]) -> dict[str, Any]:
+    steps: list[dict[str, Any]] = []
+    for judgment in decisions.get("judgments", []):
+        if not isinstance(judgment, dict):
+            continue
+        for phase, action in (
+            ("read", f"Read `{judgment.get('source_locator')}` and the target repository surface that motivated `{judgment.get('id')}`."),
+            ("judge", str(judgment.get("question"))),
+            ("write", "Apply only the declared write targets; leave repo-owned residue repo-owned."),
+            ("verify", "Run the declared verification commands and keep the evidence with the adoption closeout."),
+        ):
+            steps.append(
+                {
+                    "phase": phase,
+                    "judgment_id": judgment.get("id"),
+                    "action": action,
+                    "source_locator": judgment.get("source_locator"),
+                    "write_targets": list(judgment.get("write_targets", [])),
+                    "verification_commands": list(judgment.get("verification_commands", [])),
+                    "status": judgment.get("status"),
+                }
+            )
+    return {
+        "schema_version": GUIDED_ADOPTION_PLAN_SCHEMA,
+        "phase_order": ["read", "judge", "write", "verify"],
+        "summary": "Agent-assisted adoption proceeds through read, judge, write, and verify without requiring hand-authored companion or interop evidence.",
+        "steps": steps,
+    }
+
+
+def default_companion_manifest() -> dict[str, Any]:
+    return {
+        "schema_version": "loom-repo-companion-manifest/v1",
+        "companion_entry": ".loom/companion/README.md",
+        "repo_interface": ".loom/companion/repo-interface.json",
+    }
+
+
+def default_repo_interface() -> dict[str, Any]:
+    return {
+        "schema_version": "loom-repo-interface/v2",
+        "companion_entry": ".loom/companion/README.md",
+        "repo_specific_requirements": {"review": [], "merge_ready": [], "closeout": []},
+        "specialized_gates": [],
+        "metadata_contract": {"fields": []},
+        "context_schema": {"fields": []},
+    }
+
+
+def default_repo_interop() -> dict[str, Any]:
+    return {
+        "schema_version": "loom-repo-interop/v1",
+        "host_adapters": [],
+        "repo_native_carriers": [
+            {
+                "id": "generated-companion-residue",
+                "summary": "Repo-owned adoption residue generated as explicit write targets; Loom reads it without promoting the repo-specific rules into core.",
+                "surfaces": list(SHADOW_PARITY_SURFACES),
+                "locator": ".loom/companion",
+            }
+        ],
+        "shadow_surfaces": {
+            surface: {
+                "summary": f"Compare {surface} parity between Loom and the repo-native result.",
+                "loom_locator": f".loom/shadow/{surface.replace('_', '-')}-loom.json",
+                "repo_locator": f".loom/shadow/{surface.replace('_', '-')}-repo.json",
+            }
+            for surface in SHADOW_PARITY_SURFACES
+        },
+    }
+
+
+def default_shadow_source(target_root: Path, *, surface: str, side: str) -> str | None:
+    loom_sources = {
+        "admission": [".loom/work-items/INIT-0001.md", ".loom/status/current.md", ".loom/README.md"],
+        "review": [".loom/reviews/INIT-0001.json", ".loom/status/current.md", ".loom/README.md"],
+        "merge_ready": [".loom/status/current.md", ".github/PULL_REQUEST_TEMPLATE.md", ".loom/README.md"],
+        "closeout": [".loom/status/current.md", ".loom/README.md"],
+    }
+    repo_sources = {
+        "admission": [".loom/companion/checkpoints.md", ".loom/companion/README.md"],
+        "review": [".loom/companion/review.md", ".loom/companion/README.md"],
+        "merge_ready": [".loom/companion/merge-ready.md", ".loom/companion/README.md"],
+        "closeout": [".loom/companion/closeout.md", ".loom/companion/README.md"],
+    }
+    candidates = loom_sources.get(surface, []) if side == "loom" else repo_sources.get(surface, [])
+    for candidate in candidates:
+        if (target_root / candidate).exists():
+            return candidate
+    return None
+
+
+def companion_text_payloads() -> dict[str, str]:
+    return {
+        ".loom/companion/README.md": (
+            "# Repo Companion\n\n"
+            "This companion records repo-specific adoption residue while Loom core remains the upstream governance source.\n"
+        ),
+        ".loom/companion/review.md": "# Companion Review Surface\n",
+        ".loom/companion/merge-ready.md": "# Companion Merge-Ready Surface\n",
+        ".loom/companion/closeout.md": "# Companion Closeout Surface\n",
+        ".loom/companion/checkpoints.md": "# Companion Checkpoints\n",
+    }
+
+
+def companion_json_payloads() -> dict[str, dict[str, Any]]:
+    return {
+        ".loom/companion/manifest.json": default_companion_manifest(),
+        ".loom/companion/repo-interface.json": default_repo_interface(),
+        ".loom/companion/interop.json": default_repo_interop(),
+    }
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def shadow_evidence_payload(target_root: Path, *, source: str, value: str) -> dict[str, Any]:
+    source_path = target_root / source
+    return {
+        "result": value,
+        "source_files": [source],
+        "source_sha256": {source: sha256_file(source_path)},
+    }
+
+
+def companion_artifact_rows(target_root: Path, *, written_files: list[str] | None = None) -> list[dict[str, Any]]:
+    written = set(written_files or [])
+    paths = [
+        *companion_text_payloads().keys(),
+        *companion_json_payloads().keys(),
+    ]
+    rows = []
+    for relative in paths:
+        path = target_root / relative
+        rows.append(
+            {
+                "path": relative,
+                "kind": "json" if relative.endswith(".json") else "text",
+                "owner": "repo-owned" if relative.startswith(".loom/companion/") else "loom-owned",
+                "action": "keep_existing" if path.exists() and relative not in written else "write_scaffold",
+                "status": "written" if relative in written else "present" if path.exists() else "planned",
+                "source_judgment": "repo_interop" if "interop" in relative or "/shadow/" in relative else "repo_interface",
+            }
+        )
+    return rows
+
+
+def apply_companion_generation(target_root: Path, *, force: bool) -> tuple[list[str], list[str]]:
+    blockers: list[str] = []
+    written: list[str] = []
+    for relative, content in companion_text_payloads().items():
+        path = target_root / relative
+        if path.exists():
+            if path.read_text(encoding="utf-8") != content:
+                blockers.append(f"refusing to overwrite repo-owned adoption artifact: {relative}")
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        written.append(relative)
+    for relative, payload in companion_json_payloads().items():
+        path = target_root / relative
+        content = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+        if path.exists():
+            if path.read_text(encoding="utf-8") != content:
+                blockers.append(f"refusing to overwrite repo-owned adoption artifact: {relative}")
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        written.append(relative)
+    return written, blockers
+
+
+def companion_generation_payload(
+    target_root: Path,
+    decisions: dict[str, Any],
+    *,
+    dry_run: bool,
+    written_files: list[str] | None = None,
+    blockers: list[str] | None = None,
+) -> dict[str, Any]:
+    missing_inputs = blockers or []
+    return {
+        "schema_version": COMPANION_GENERATION_SCHEMA,
+        "result": "block" if missing_inputs else "pass",
+        "summary": "repo companion and interop artifacts are generated from bounded adoption decisions.",
+        "dry_run": dry_run,
+        "source_decisions": [
+            judgment.get("id")
+            for judgment in decisions.get("judgments", [])
+            if isinstance(judgment, dict)
+        ],
+        "artifacts": companion_artifact_rows(target_root, written_files=written_files),
+        "missing_inputs": missing_inputs,
+        "verification_commands": adoption_validation_commands(target_root),
+    }
+
+
 def repo_specific_default_fallback(surface: str) -> str:
     return {
         "spec_review": "build",
@@ -434,6 +758,7 @@ def repo_specific_requirements_payload(
     empty_payload = {
         "surface": surface,
         "result": "pass",
+        "source_locator": None,
         "declared_requirements": [],
         "blocking_requirements": [],
         "advisory_requirements": [],
@@ -553,6 +878,7 @@ def repo_specific_requirements_payload(
     return {
         "surface": surface,
         "result": result,
+        "source_locator": declared_locator,
         "declared_requirements": declared,
         "blocking_requirements": blocking,
         "advisory_requirements": advisory,
@@ -2673,6 +2999,186 @@ def validate_adoption_pr_body(body: str, *, target_root: Path) -> dict[str, Any]
     }
 
 
+def judgment_closure_payload(
+    target_root: Path,
+    decisions: dict[str, Any],
+    companion_generation: dict[str, Any],
+    governance_surface: dict[str, Any],
+) -> dict[str, Any]:
+    missing_inputs: list[str] = []
+    required_fields = {"id", "question", "source_locator", "reasoning", "write_targets", "verification_commands", "status"}
+    for judgment in decisions.get("judgments", []):
+        if not isinstance(judgment, dict):
+            missing_inputs.append("judgment is not an object")
+            continue
+        missing = sorted(required_fields - set(judgment))
+        if missing:
+            missing_inputs.append(f"judgment `{judgment.get('id')}` missing fields: {', '.join(missing)}")
+        for target in judgment.get("write_targets", []):
+            if not isinstance(target, str):
+                missing_inputs.append(f"judgment `{judgment.get('id')}` has non-string write target")
+                continue
+            path, errors = resolve_repo_relative_path(target_root, target, label=f"judgment `{judgment.get('id')}` write target")
+            missing_inputs.extend(errors)
+            if path is not None and not path.exists():
+                missing_inputs.append(f"judgment `{judgment.get('id')}` write target missing: {target}")
+        if not judgment.get("verification_commands"):
+            missing_inputs.append(f"judgment `{judgment.get('id')}` missing verification commands")
+    repo_interface = governance_surface.get("repo_interface")
+    if isinstance(repo_interface, dict) and repo_interface.get("availability") not in {"present", "absent"}:
+        missing_inputs.extend(f"repo_interface: {message}" for message in repo_interface.get("missing_inputs", []))
+    repo_interop = governance_surface.get("repo_interop")
+    if isinstance(repo_interop, dict) and repo_interop.get("availability") not in {"present", "absent"}:
+        missing_inputs.extend(f"repo_interop: {message}" for message in repo_interop.get("missing_inputs", []))
+    if companion_generation.get("result") != "pass":
+        missing_inputs.extend(str(message) for message in companion_generation.get("missing_inputs", []))
+    return {
+        "result": "pass" if not missing_inputs else "block",
+        "summary": (
+            "adoption judgments have source locators, reasoning, write targets, and verification evidence."
+            if not missing_inputs
+            else "adoption judgment closure is incomplete."
+        ),
+        "missing_inputs": list(dict.fromkeys(missing_inputs)),
+    }
+
+
+def local_command_json(target_root: Path, args: list[str]) -> tuple[dict[str, Any] | None, list[str]]:
+    result = run_process([sys.executable, str(Path(__file__)), *args], target_root)
+    if not result.stdout.strip():
+        detail = result.stderr.strip() or "command produced no JSON output"
+        return None, [detail]
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        return None, [f"invalid JSON from {' '.join(args)}: {exc.msg}"]
+    if not isinstance(payload, dict):
+        return None, [f"{' '.join(args)} did not return a JSON object"]
+    return payload, []
+
+
+def generated_companion_consumption_payload(
+    target_root: Path,
+    expected_item: str | None,
+    governance_surface: dict[str, Any],
+) -> dict[str, Any]:
+    missing_inputs: list[str] = []
+    repo_interface = governance_surface.get("repo_interface")
+    repo_interop = governance_surface.get("repo_interop")
+    governance_status = "pass"
+    if not isinstance(repo_interface, dict) or repo_interface.get("availability") != "present":
+        governance_status = "block"
+        missing_inputs.append("governance_surface did not consume generated repo companion interface")
+    if not isinstance(repo_interop, dict) or repo_interop.get("availability") != "present":
+        governance_status = "block"
+        missing_inputs.append("governance_surface did not consume generated repo interop contract")
+
+    item_args = ["--item", expected_item] if expected_item else []
+    review_payload, review_errors = local_command_json(
+        target_root,
+        ["flow", "review", "--target", str(target_root), *item_args],
+    )
+    merge_payload, merge_errors = local_command_json(
+        target_root,
+        ["flow", "merge-ready", "--target", str(target_root), *item_args],
+    )
+    shadow_payload, shadow_errors = local_command_json(
+        target_root,
+        ["shadow-parity", "--target", str(target_root)],
+    )
+
+    def flow_consumption(payload: dict[str, Any] | None, errors: list[str], *, surface: str) -> dict[str, Any]:
+        if errors or payload is None:
+            return {"status": "block", "missing_inputs": errors or [f"{surface} flow did not return JSON"]}
+        requirements = payload.get("repo_specific_requirements")
+        if not isinstance(requirements, dict):
+            return {
+                "status": "block",
+                "result": payload.get("result"),
+                "missing_inputs": [f"{surface} flow did not expose repo_specific_requirements"],
+            }
+        if requirements.get("source_locator") != ".loom/companion/repo-interface.json":
+            return {
+                "status": "block",
+                "result": payload.get("result"),
+                "repo_specific_requirements": requirements,
+                "missing_inputs": [f"{surface} flow did not consume .loom/companion/repo-interface.json"],
+            }
+        return {
+            "status": "pass" if payload.get("result") == "pass" else "consumed",
+            "result": payload.get("result"),
+            "summary": payload.get("summary"),
+            "repo_specific_requirements": requirements,
+            "missing_inputs": [],
+        }
+
+    review = flow_consumption(review_payload, review_errors, surface="review")
+    merge_ready = flow_consumption(merge_payload, merge_errors, surface="merge_ready")
+    if shadow_errors or shadow_payload is None:
+        shadow_parity = {"status": "block", "missing_inputs": shadow_errors or ["shadow parity did not return JSON"]}
+    else:
+        reports = shadow_payload.get("reports")
+        shadow_missing = list(shadow_payload.get("missing_inputs", [])) if isinstance(shadow_payload.get("missing_inputs"), list) else []
+        if shadow_payload.get("result") != "pass":
+            shadow_missing.append(f"shadow parity result was {shadow_payload.get('result')}")
+        if not isinstance(reports, list) or not reports:
+            shadow_parity = {
+                "status": "block",
+                "result": shadow_payload.get("result"),
+                "missing_inputs": ["shadow parity did not expose per-surface reports"],
+            }
+        elif shadow_missing:
+            shadow_parity = {
+                "status": "block",
+                "result": shadow_payload.get("result"),
+                "summary": shadow_payload.get("summary"),
+                "missing_inputs": shadow_missing,
+            }
+        else:
+            report_rows = [
+                {
+                    "surface": report.get("surface"),
+                    "result": report.get("result"),
+                    "loom_locator": report.get("loom_surface", {}).get("locator") if isinstance(report.get("loom_surface"), dict) else None,
+                    "repo_locator": report.get("repo_surface", {}).get("locator") if isinstance(report.get("repo_surface"), dict) else None,
+                }
+                for report in reports
+                if isinstance(report, dict)
+            ]
+            report_missing = [
+                f"shadow parity surface {row.get('surface')} did not match"
+                for row in report_rows
+                if row.get("result") != "match"
+            ]
+            shadow_parity = {
+                "status": "pass" if not report_missing else "block",
+                "result": shadow_payload.get("result"),
+                "summary": shadow_payload.get("summary"),
+                "reports": report_rows,
+                "missing_inputs": report_missing,
+            }
+
+    for label, entry in (("review", review), ("merge_ready", merge_ready), ("shadow_parity", shadow_parity)):
+        if entry.get("status") not in {"pass", "consumed"}:
+            for message in entry.get("missing_inputs", []):
+                missing_inputs.append(f"{label}: {message}")
+
+    return {
+        "schema_version": "loom-generated-companion-consumption/v1",
+        "result": "pass" if not missing_inputs else "block",
+        "summary": "generated companion and interop carriers were consumed through governance_surface, review, merge-ready, and shadow parity.",
+        "missing_inputs": missing_inputs,
+        "governance_surface": {
+            "status": governance_status,
+            "repo_interface_availability": repo_interface.get("availability") if isinstance(repo_interface, dict) else None,
+            "repo_interop_availability": repo_interop.get("availability") if isinstance(repo_interop, dict) else None,
+        },
+        "review": review,
+        "merge_ready": merge_ready,
+        "shadow_parity": shadow_parity,
+    }
+
+
 def active_workspace_conflicts(target_root: Path, item_id: str, workspace_entry: str) -> list[str]:
     work_items_dir = target_root / ".loom/work-items"
     if not work_items_dir.exists():
@@ -4056,6 +4562,17 @@ def adoption_verify_payload(target_root: Path, output_relative: str, expected_it
     if bypass_validation["result"] != "block":
         missing_inputs.append("consumer bypass check failed: removing Review Artifacts must block")
 
+    control_plane = governance_surface.get("governance_control_plane")
+    maturity = control_plane.get("maturity") if isinstance(control_plane, dict) else {}
+    target_level = maturity.get("next") if isinstance(maturity, dict) and isinstance(maturity.get("next"), str) else maturity.get("current") if isinstance(maturity, dict) and isinstance(maturity.get("current"), str) else None
+    decisions = adoption_decisions_payload(target_root, target_level=target_level, maturity=maturity if isinstance(maturity, dict) else {})
+    guided_plan = guided_adoption_plan_payload(decisions)
+    generation = companion_generation_payload(target_root, decisions, dry_run=True)
+    closure = judgment_closure_payload(target_root, decisions, generation, governance_surface)
+    consumption = generated_companion_consumption_payload(target_root, context["item_id"], governance_surface)
+    missing_inputs.extend(closure["missing_inputs"])
+    missing_inputs.extend(consumption["missing_inputs"])
+
     result = "pass" if not missing_inputs else "block"
     return {
         "command": "adopt",
@@ -4095,6 +4612,11 @@ def adoption_verify_payload(target_root: Path, output_relative: str, expected_it
                 "status": "present" if spec_review_record is not None and not spec_review_errors else "missing",
             },
         },
+        "adoption_decisions": decisions,
+        "guided_adoption_plan": guided_plan,
+        "companion_generation": generation,
+        "generated_companion_consumption": consumption,
+        "judgment_closure": closure,
     }
 
 
@@ -4568,6 +5090,7 @@ def governance_profile_payload(target_root: Path, operation: str) -> dict[str, A
 
     current = maturity.get("current")
     next_level = maturity.get("next")
+    target_level = next_level if isinstance(next_level, str) else current if isinstance(current, str) else None
     gate_rollout = maturity.get("gate_rollout")
     missing_by_level = maturity.get("missing_by_level")
     missing_details_by_level = maturity.get("missing_details_by_level")
@@ -4587,6 +5110,9 @@ def governance_profile_payload(target_root: Path, operation: str) -> dict[str, A
         if operation == "status" or result == "pass"
         else f"governance profile can upgrade toward `{next_level}` after the missing contracts are installed."
     )
+    decisions = adoption_decisions_payload(target_root, target_level=target_level, maturity=maturity)
+    guided_plan = guided_adoption_plan_payload(decisions)
+    generation = companion_generation_payload(target_root, decisions, dry_run=True)
     return {
         "command": "governance-profile",
         "operation": operation,
@@ -4599,45 +5125,18 @@ def governance_profile_payload(target_root: Path, operation: str) -> dict[str, A
         "maturity": maturity,
         "gate_rollout": gate_rollout,
         "governance_control_plane": control_plane,
+        "adoption_decisions": decisions,
+        "guided_adoption_plan": guided_plan,
+        "companion_generation": generation,
     }
 
 
-UPGRADE_SCAFFOLD: dict[str, dict[str, str]] = {
-    ".loom/companion/manifest.json": json.dumps(
-        {
-            "schema_version": "loom-repo-companion-manifest/v1",
-            "companion_entry": ".loom/companion/AGENTS.md",
-            "repo_interface": ".loom/companion/repo-interface.json",
-        },
-        ensure_ascii=False,
-        indent=2,
-    )
-    + "\n",
-    ".loom/companion/repo-interface.json": json.dumps(
-        {
-            "schema_version": "loom-repo-interface/v2",
-            "companion_entry": ".loom/companion/AGENTS.md",
-            "repo_specific_requirements": {"review": [], "merge_ready": [], "closeout": []},
-            "specialized_gates": [],
-            "metadata_contract": {"fields": []},
-            "context_schema": {"fields": []},
-        },
-        ensure_ascii=False,
-        indent=2,
-    )
-    + "\n",
-    ".loom/companion/interop.json": json.dumps(
-        {
-            "schema_version": "loom-repo-interop/v1",
-            "host_adapters": [],
-            "repo_native_carriers": [],
-            "shadow_surfaces": {},
-        },
-        ensure_ascii=False,
-        indent=2,
-    )
-    + "\n",
-    ".loom/companion/AGENTS.md": "# Loom Repo Companion\n\n本文件承接 repo-local governance residue；Loom core 与 GitHub profile 规则仍以上游合同为准。\n",
+UPGRADE_SCAFFOLD: dict[str, str] = {
+    **companion_text_payloads(),
+    **{
+        relative: json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+        for relative, payload in companion_json_payloads().items()
+    },
 }
 
 
@@ -4701,28 +5200,19 @@ def governance_profile_upgrade_payload(
     actions = governance_upgrade_actions(target_root, target_level, maturity if isinstance(maturity, dict) else {})
     blockers: list[str] = []
     written_files: list[str] = []
+    decisions = adoption_decisions_payload(target_root, target_level=target_level, maturity=maturity if isinstance(maturity, dict) else {})
     if not dry_run:
-        for action in actions:
-            if action.get("action") != "write_scaffold":
-                continue
-            relative = action.get("path")
-            if not isinstance(relative, str):
-                continue
-            if action.get("owner") != "loom-owned":
-                blockers.append(f"{relative} is repo-owned")
-                continue
-            path = target_root / relative
-            if path.exists() and not force:
-                blockers.append(f"{relative} already exists; use --force to replace Loom-owned scaffold")
-                continue
-            content = UPGRADE_SCAFFOLD.get(relative)
-            if content is None:
-                blockers.append(f"{relative} has no scaffold content")
-                continue
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content, encoding="utf-8")
-            written_files.append(relative)
+        written_files, companion_blockers = apply_companion_generation(target_root, force=force)
+        blockers.extend(companion_blockers)
     result = "block" if blockers else "pass"
+    guided_plan = guided_adoption_plan_payload(decisions)
+    generation = companion_generation_payload(
+        target_root,
+        decisions,
+        dry_run=dry_run,
+        written_files=written_files,
+        blockers=blockers,
+    )
     return {
         "command": "governance-profile",
         "operation": "upgrade",
@@ -4744,6 +5234,9 @@ def governance_profile_upgrade_payload(
         "written_files": written_files,
         "maturity": maturity,
         "gate_rollout": maturity.get("gate_rollout") if isinstance(maturity, dict) else None,
+        "adoption_decisions": decisions,
+        "guided_adoption_plan": guided_plan,
+        "companion_generation": generation,
     }
 
 
@@ -4763,6 +5256,7 @@ def maturity_upgrade_path(governance_surface: dict[str, Any], target_root: Path)
         }
     current = maturity.get("current")
     next_level = maturity.get("next")
+    target_level = next_level if isinstance(next_level, str) else current if isinstance(current, str) else None
     gate_rollout = maturity.get("gate_rollout")
     missing_by_level = maturity.get("missing_by_level")
     missing_details_by_level = maturity.get("missing_details_by_level")
@@ -4773,6 +5267,8 @@ def maturity_upgrade_path(governance_surface: dict[str, Any], target_root: Path)
             missing_inputs = list(missing_by_level[next_level])
         if isinstance(missing_details_by_level, dict) and isinstance(missing_details_by_level.get(next_level), list):
             missing_details = list(missing_details_by_level[next_level])
+    decisions = adoption_decisions_payload(target_root, target_level=target_level, maturity=maturity)
+    guided_plan = guided_adoption_plan_payload(decisions)
     return {
         "result": "pass" if next_level is None else "block",
         "current": current,
@@ -4781,15 +5277,17 @@ def maturity_upgrade_path(governance_surface: dict[str, Any], target_root: Path)
         "missing_details": missing_details,
         "fallback_to": None if next_level is None else "adoption",
         "upgrade_entry": (
-            f"python3 tools/loom_flow.py governance-profile upgrade --target {target_root} --to {next_level} --dry-run"
+            f"python3 tools/loom_flow.py governance-profile upgrade --target {command_target(target_root)} --to {next_level} --dry-run"
             if isinstance(next_level, str)
             else None
         ),
         "validation_entries": [
-            f"python3 tools/loom_flow.py governance-profile status --target {target_root}",
-            f"python3 tools/loom_flow.py governance-profile upgrade-plan --target {target_root}",
+            f"python3 tools/loom_flow.py governance-profile status --target {command_target(target_root)}",
+            f"python3 tools/loom_flow.py governance-profile upgrade-plan --target {command_target(target_root)}",
         ],
         "gate_rollout": gate_rollout,
+        "adoption_decisions": decisions,
+        "guided_adoption_plan": guided_plan,
     }
 
 
@@ -7745,12 +8243,44 @@ def handle_flow(args: argparse.Namespace) -> int:
             if message not in missing_inputs:
                 missing_inputs.append(message)
     if args.operation == "resume":
-        for message in governance_surface.get("missing_inputs", []):
-            if message not in missing_inputs:
-                missing_inputs.append(message)
-        for message in upgrade_path.get("missing_inputs", []):
-            if message not in missing_inputs:
-                missing_inputs.append(message)
+        repo_interface = governance_surface.get("repo_interface")
+        repo_interop = governance_surface.get("repo_interop")
+        adoption_workflow_active = (
+            isinstance(repo_interface, dict)
+            and repo_interface.get("availability") in {"companion_docs_only", "incomplete"}
+        ) or (
+            isinstance(repo_interop, dict)
+            and repo_interop.get("availability") == "incomplete"
+        )
+        if adoption_workflow_active:
+            for message in governance_surface.get("missing_inputs", []):
+                if message not in missing_inputs:
+                    missing_inputs.append(message)
+            for message in upgrade_path.get("missing_inputs", []):
+                if message not in missing_inputs:
+                    missing_inputs.append(message)
+        if adoption_workflow_active and missing_inputs and result == "pass":
+            result = "block"
+            fallback_to = fallback_to or "adoption"
+            summary = "resume flow rebuilt context but found adoption guidance gaps before execution can continue."
+    adoption_guidance = None
+    if args.operation == "resume":
+        guided = upgrade_path.get("guided_adoption_plan") if isinstance(upgrade_path, dict) else None
+        decisions = upgrade_path.get("adoption_decisions") if isinstance(upgrade_path, dict) else None
+        next_step = None
+        if isinstance(guided, dict):
+            for step in guided.get("steps", []):
+                if isinstance(step, dict) and step.get("status") in {"missing", "blocked"}:
+                    next_step = step
+                    break
+        adoption_guidance = {
+            "schema_version": "loom-adoption-resume-guidance/v1",
+            "result": upgrade_path.get("result") if isinstance(upgrade_path, dict) else "block",
+            "summary": "resume exposes the next adoption read/judge/write/verify step without writing adoption state.",
+            "next_step": next_step,
+            "adoption_decisions": decisions,
+            "guided_adoption_plan": guided,
+        }
 
     return emit(
         {
@@ -7770,6 +8300,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             "runtime_state": runtime_state,
             **({"governance_surface": governance_surface} if args.operation == "resume" else {}),
             **({"maturity_upgrade_path": upgrade_path} if args.operation == "resume" else {}),
+            **({"adoption_guidance": adoption_guidance} if args.operation == "resume" else {}),
             **(
                 {
                     "workspace": {
@@ -7800,6 +8331,13 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "next_step": context["next_step"],
                         "blockers": context["blockers"],
                         "latest_validation_summary": context["latest_validation_summary"],
+                        "adoption_source": "maturity_upgrade_path",
+                        "companion_locator": ".loom/companion/repo-interface.json",
+                        "interop_locator": ".loom/companion/interop.json",
+                        "post_adoption_next_step": adoption_guidance.get("next_step") if isinstance(adoption_guidance, dict) else None,
+                        "adoption_verify_summary": (
+                            f"python3 tools/loom_flow.py adopt verify --target {command_target(target_root)} --item {context['item_id']}"
+                        ),
                     },
                 }
                 if args.operation == "resume"

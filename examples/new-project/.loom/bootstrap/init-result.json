@@ -7,7 +7,7 @@
     "contract_version": "1.3.0"
   },
   "run": {
-    "target": "/Users/mc/dev/Loom/examples/new-project",
+    "target": "/Users/mc/dev/Loom/.worktrees/feat-410-zero-friction-adoption/examples/new-project",
     "scenario": "新项目",
     "scenario_key": "new",
     "integration_mode": "root",
@@ -113,7 +113,7 @@
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "5d6bca788639db8d58548ebf2b0603e4286262d8847003babf817639b5308424"
+      "sha256": "3c1abea7e4c213b6b386e0ab8fe3e5ddd555a8d52519e2f2b7241c9aa3a4fdc5"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
@@ -131,7 +131,7 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "f8fe63875c5abce92281c4fce0fa329c3584a25a85c131ba2d0364ac39b78997"
+      "sha256": "888d21bc3783bfe38a1bc4ab21aae6993abfc6d790b2835d2fc944b2124ef37c"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -155,7 +155,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "e3ac079dcea1e0e5b790feaeb447604f7dbd44d31a5631ed82b0bdab9451bb30"
+      "sha256": "f538d3eb69ca041486805cb1ce4c8a81c514c3e9888b0f7463b91a48f8bda5bb"
     },
     {
       "path": "AGENTS.md",
@@ -263,12 +263,12 @@
     "scene": "repo-local-demo",
     "carrier": "repo-local-wrapper",
     "entry_family": "loom-init",
-    "install_root": "/Users/mc/dev/Loom/skills",
-    "runtime_root": "/Users/mc/dev/Loom/skills/shared/scripts",
-    "registry_path": "/Users/mc/dev/Loom/skills/registry.json",
-    "layout_or_manifest_path": "/Users/mc/dev/Loom/skills/install-layout.json",
-    "source_repo_root": "/Users/mc/dev/Loom",
-    "target_root": "/Users/mc/dev/Loom/examples/new-project",
+    "install_root": "/Users/mc/dev/Loom/.worktrees/feat-410-zero-friction-adoption/skills",
+    "runtime_root": "/Users/mc/dev/Loom/.worktrees/feat-410-zero-friction-adoption/skills/shared/scripts",
+    "registry_path": "/Users/mc/dev/Loom/.worktrees/feat-410-zero-friction-adoption/skills/registry.json",
+    "layout_or_manifest_path": "/Users/mc/dev/Loom/.worktrees/feat-410-zero-friction-adoption/skills/install-layout.json",
+    "source_repo_root": "/Users/mc/dev/Loom/.worktrees/feat-410-zero-friction-adoption",
+    "target_root": "/Users/mc/dev/Loom/.worktrees/feat-410-zero-friction-adoption/examples/new-project",
     "checks": {
       "scene_marker": {
         "status": "pass",
@@ -278,21 +278,21 @@
         "status": "pass",
         "summary": "carrier layout exposes an installed skills root and shared runtime tree.",
         "evidence": {
-          "install_root": "/Users/mc/dev/Loom/skills"
+          "install_root": "/Users/mc/dev/Loom/.worktrees/feat-410-zero-friction-adoption/skills"
         }
       },
       "registry_contract": {
         "status": "pass",
         "summary": "registry, upgrade contract, and skill entrypoints are consistent.",
         "evidence": {
-          "path": "/Users/mc/dev/Loom/skills/registry.json"
+          "path": "/Users/mc/dev/Loom/.worktrees/feat-410-zero-friction-adoption/skills/registry.json"
         }
       },
       "shared_runtime": {
         "status": "pass",
         "summary": "shared runtime scripts are present and executable roots can be resolved.",
         "evidence": {
-          "path": "/Users/mc/dev/Loom/skills/shared/scripts"
+          "path": "/Users/mc/dev/Loom/.worktrees/feat-410-zero-friction-adoption/skills/shared/scripts"
         }
       },
       "referenced_resources": {
@@ -356,53 +356,53 @@
       "pr_reviews": "not_required"
     },
     "repo_interface": {
-      "availability": "absent",
+      "availability": "present",
       "manifest": {
-        "status": "missing",
+        "status": "present",
         "locator": ".loom/companion/manifest.json",
-        "source": "companion manifest"
+        "source": "repository scan"
       },
       "companion_entry": {
-        "status": "missing",
-        "locator": "unknown",
-        "source": "repo companion manifest"
+        "status": "present",
+        "locator": ".loom/companion/README.md",
+        "source": "repo companion interface.companion_entry"
       },
       "repo_specific_requirements": {
-        "status": "missing",
-        "locator": "unknown",
-        "source": "repo companion interface"
+        "status": "present",
+        "locator": ".loom/companion/repo-interface.json",
+        "source": "repo companion manifest.repo_interface"
       },
       "specialized_gates": {
-        "status": "missing",
-        "locator": "unknown",
-        "source": "repo companion interface"
+        "status": "present",
+        "locator": ".loom/companion/repo-interface.json",
+        "source": "repo companion manifest.repo_interface"
       },
-      "summary": "no repo companion interface is declared for this repository.",
+      "summary": "repo companion manifest and machine-readable repo interface are readable.",
       "missing_inputs": []
     },
     "repo_interop": {
-      "availability": "absent",
+      "availability": "present",
       "contract": {
-        "status": "missing",
+        "status": "present",
         "locator": ".loom/companion/interop.json",
         "source": "repository scan"
       },
       "host_adapters": {
-        "status": "missing",
-        "locator": "unknown",
+        "status": "present",
+        "locator": ".loom/companion/interop.json",
         "source": "repo interop contract"
       },
       "repo_native_carriers": {
-        "status": "missing",
-        "locator": "unknown",
+        "status": "present",
+        "locator": ".loom/companion/interop.json",
         "source": "repo interop contract"
       },
       "shadow_surfaces": {
-        "status": "missing",
-        "locator": "unknown",
+        "status": "present",
+        "locator": ".loom/companion/interop.json",
         "source": "repo interop contract"
       },
-      "summary": "no repo interop contract is declared for this repository.",
+      "summary": "repo interop contract is readable for host adapters, repo-native carriers, and shadow parity.",
       "missing_inputs": []
     },
     "governance_control_plane": {
@@ -438,12 +438,12 @@
           },
           "branch": {
             "status": "present",
-            "locator": "fix/codex-repo-plugin-skill-layout",
+            "locator": "feat/410-zero-friction-adoption",
             "authority": "git"
           },
           "worktree": {
             "status": "present",
-            "locator": "/Users/mc/dev/Loom",
+            "locator": "/Users/mc/dev/Loom/.worktrees/feat-410-zero-friction-adoption",
             "authority": "git"
           },
           "implementation_pr": {
@@ -457,7 +457,7 @@
             "authority": "host"
           },
           "closeout": {
-            "status": "host-managed",
+            "status": "present",
             "locator": "reconciliation audit + closeout gate",
             "authority": "loom + host"
           }
@@ -544,11 +544,13 @@
       ],
       "maturity": {
         "schema_version": "loom-governance-maturity/v1",
-        "current": "light",
+        "current": "strong",
         "achieved": [
-          "light"
+          "light",
+          "standard",
+          "strong"
         ],
-        "next": "standard",
+        "next": null,
         "levels": {
           "light": {
             "requires": [
@@ -690,58 +692,13 @@
         },
         "missing_by_level": {
           "light": [],
-          "standard": [
-            "fr_work_item_layer",
-            "closeout_reconciliation_read"
-          ],
-          "strong": [
-            "standard",
-            "repo_interface",
-            "repo_interop",
-            "github_controlled_merge"
-          ]
+          "standard": [],
+          "strong": []
         },
         "missing_details_by_level": {
           "light": [],
-          "standard": [
-            {
-              "id": "fr_work_item_layer",
-              "layer": "github-profile",
-              "required": true,
-              "defaulting": "profile",
-              "recommended_action": "declare the FR -> Work Item split through the GitHub profile upgrade path"
-            },
-            {
-              "id": "closeout_reconciliation_read",
-              "layer": "github-profile",
-              "required": true,
-              "defaulting": "profile",
-              "recommended_action": "install repo interop so closeout can consume reconciliation"
-            }
-          ],
-          "strong": [
-            {
-              "id": "repo_interface",
-              "layer": "repo-owned-residue",
-              "required": true,
-              "defaulting": "scaffold",
-              "recommended_action": "install or repair the repo companion interface"
-            },
-            {
-              "id": "repo_interop",
-              "layer": "repo-owned-residue",
-              "required": true,
-              "defaulting": "scaffold",
-              "recommended_action": "install or repair the repo interop contract"
-            },
-            {
-              "id": "github_controlled_merge",
-              "layer": "github-profile",
-              "required": true,
-              "defaulting": "host",
-              "recommended_action": "enable controlled merge binding and required host gates"
-            }
-          ]
+          "standard": [],
+          "strong": []
         },
         "gate_rollout": {
           "schema_version": "loom-adoption-gate-rollout/v1",
@@ -766,7 +723,7 @@
           "blocking_preconditions": [
             {
               "id": "strong_maturity",
-              "status": "missing",
+              "status": "pass",
               "layer": "github-profile",
               "recommended_action": "upgrade the repository to strong maturity before enabling blocking gates"
             },
@@ -795,31 +752,13 @@
     "missing_inputs": []
   },
   "maturity_upgrade_path": {
-    "result": "block",
-    "current": "light",
-    "next": "standard",
-    "missing_inputs": [
-      "fr_work_item_layer",
-      "closeout_reconciliation_read"
-    ],
-    "missing_details": [
-      {
-        "id": "fr_work_item_layer",
-        "layer": "github-profile",
-        "required": true,
-        "defaulting": "profile",
-        "recommended_action": "declare the FR -> Work Item split through the GitHub profile upgrade path"
-      },
-      {
-        "id": "closeout_reconciliation_read",
-        "layer": "github-profile",
-        "required": true,
-        "defaulting": "profile",
-        "recommended_action": "install repo interop so closeout can consume reconciliation"
-      }
-    ],
-    "fallback_to": "adoption",
-    "upgrade_entry": "python3 .loom/bin/loom_flow.py governance-profile upgrade --target . --to standard --dry-run",
+    "result": "pass",
+    "current": "strong",
+    "next": null,
+    "missing_inputs": [],
+    "missing_details": [],
+    "fallback_to": null,
+    "upgrade_entry": null,
     "validation_entries": [
       "python3 .loom/bin/loom_flow.py governance-profile status --target .",
       "python3 .loom/bin/loom_flow.py governance-profile upgrade-plan --target ."
@@ -847,7 +786,7 @@
       "blocking_preconditions": [
         {
           "id": "strong_maturity",
-          "status": "missing",
+          "status": "pass",
           "layer": "github-profile",
           "recommended_action": "upgrade the repository to strong maturity before enabling blocking gates"
         },

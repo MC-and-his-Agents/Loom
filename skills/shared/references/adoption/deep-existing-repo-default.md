@@ -43,6 +43,7 @@
 - 保留 retained host actions 的宿主 ownership
 - 保留 repo-native carriers
 - 只追加 Loom-owned attach metadata 与 companion 入口
+- 按 [zero-friction-adoption-contract.md](./zero-friction-adoption-contract.md) 生成或更新 companion / interop locator，并用 verify 证明边界没有漂移
 
 换句话说，Loom 这一步接管的是入口与读面，不是宿主动作底层实现。
 
