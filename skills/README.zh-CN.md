@@ -59,7 +59,9 @@ Loom 支持两种入口模式：
 ```bash
 git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom
 mkdir -p ~/.agents/skills
-ln -s ~/.codex/loom/skills ~/.agents/skills/loom
+for skill in ~/.codex/loom/skills/loom-*; do
+  ln -sfn "$skill" "$HOME/.agents/skills/$(basename "$skill")"
+done
 ```
 
 npm installer 也可以安装完整 plugin surface：

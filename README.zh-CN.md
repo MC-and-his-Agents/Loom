@@ -32,7 +32,9 @@ Fetch and follow instructions from https://raw.githubusercontent.com/MC-and-his-
 ```bash
 git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom
 mkdir -p ~/.agents/skills
-ln -s ~/.codex/loom/skills ~/.agents/skills/loom
+for skill in ~/.codex/loom/skills/loom-*; do
+  ln -sfn "$skill" "$HOME/.agents/skills/$(basename "$skill")"
+done
 ```
 
 安装后请重启 Codex，让原生 skills discovery 重新加载 Loom skills。

@@ -226,13 +226,12 @@ test('codex plugin install lets --force take over conflicting marketplace entry'
   assert.equal(marketplace.plugins[0].source.path, './plugins/loom');
 });
 
-test('codex skill install writes skills.config entry', () => {
+test('codex skill install writes repo-scoped .agents skill', () => {
   const base = fixtureRoot();
   const envSource = prepareEnv(base);
   mkdirSync(envSource.CODEX_HOME!, { recursive: true });
   const repoRoot = join(base, 'repo');
   mkdirSync(repoRoot, { recursive: true });
-  writeFileSync(join(envSource.CODEX_HOME!, 'config.toml'), 'model = "gpt-5"\n', 'utf8');
 
   const parsed: ParsedCommand = {
     mode: 'skill',
@@ -245,31 +244,20 @@ test('codex skill install writes skills.config entry', () => {
     },
   };
   const result = runInstaller(parsed, envSource, packageRoot());
-  const config = readFileSync(join(envSource.CODEX_HOME!, 'config.toml'), 'utf8');
+  const skillPath = join(repoRoot, '.agents', 'skills', 'loom-review', 'SKILL.md');
   assert.equal(result.mode, 'skill');
-  assert.match(config, /\[\[skills\.config\]\]/);
-  assert.match(config, /loom-review\/SKILL\.md/);
-  assert.match(config, /enabled = true/);
+  assert.equal(existsSync(skillPath), true);
+  assert.equal(existsSync(join(envSource.CODEX_HOME!, 'config.toml')), false);
 });
 
-test('codex skill install fails closed on conflicting skills.config entry without force', () => {
+test('codex skill install fails closed on conflicting repo skill directory without force', () => {
   const base = fixtureRoot();
   const envSource = prepareEnv(base);
   mkdirSync(envSource.CODEX_HOME!, { recursive: true });
   const repoRoot = join(base, 'repo');
   mkdirSync(repoRoot, { recursive: true });
-  writeFileSync(
-    join(envSource.CODEX_HOME!, 'config.toml'),
-    [
-      'model = "gpt-5"',
-      '',
-      '[[skills.config]]',
-      'path = "/tmp/other/loom-review/SKILL.md"',
-      'enabled = true',
-      '',
-    ].join('\n'),
-    'utf8',
-  );
+  mkdirSync(join(repoRoot, '.agents', 'skills', 'loom-review'), { recursive: true });
+  writeFileSync(join(repoRoot, '.agents', 'skills', 'loom-review', 'README.md'), '# Not a Loom skill\n', 'utf8');
 
   const parsed: ParsedCommand = {
     mode: 'skill',
@@ -282,27 +270,17 @@ test('codex skill install fails closed on conflicting skills.config entry withou
     },
   };
 
-  assert.throws(() => runInstaller(parsed, envSource, packageRoot()), /already has loom-review from a different path/);
+  assert.throws(() => runInstaller(parsed, envSource, packageRoot()), /not a Loom skill/);
 });
 
-test('codex skill install lets --force take over conflicting skills.config entry', () => {
+test('codex skill install lets --force take over conflicting repo skill directory', () => {
   const base = fixtureRoot();
   const envSource = prepareEnv(base);
   mkdirSync(envSource.CODEX_HOME!, { recursive: true });
   const repoRoot = join(base, 'repo');
   mkdirSync(repoRoot, { recursive: true });
-  writeFileSync(
-    join(envSource.CODEX_HOME!, 'config.toml'),
-    [
-      'model = "gpt-5"',
-      '',
-      '[[skills.config]]',
-      'path = "/tmp/other/loom-review/SKILL.md"',
-      'enabled = true',
-      '',
-    ].join('\n'),
-    'utf8',
-  );
+  mkdirSync(join(repoRoot, '.agents', 'skills', 'loom-review'), { recursive: true });
+  writeFileSync(join(repoRoot, '.agents', 'skills', 'loom-review', 'README.md'), '# Not a Loom skill\n', 'utf8');
 
   const parsed: ParsedCommand = {
     mode: 'skill',
@@ -316,10 +294,10 @@ test('codex skill install lets --force take over conflicting skills.config entry
   };
 
   const result = runInstaller(parsed, envSource, packageRoot());
-  const config = readFileSync(join(envSource.CODEX_HOME!, 'config.toml'), 'utf8');
+  const skillPath = join(repoRoot, '.agents', 'skills', 'loom-review', 'SKILL.md');
   assert.equal(result.mode, 'skill');
-  assert.doesNotMatch(config, /\/tmp\/other\/loom-review\/SKILL\.md/);
-  assert.match(config, /loom-review\/SKILL\.md/);
+  assert.equal(existsSync(skillPath), true);
+  assert.equal(existsSync(join(repoRoot, '.agents', 'skills', 'loom-review', 'README.md')), false);
 });
 
 test('single-skill installs stay scoped to the named skill for codex', () => {
@@ -343,6 +321,7 @@ test('single-skill installs stay scoped to the named skill for codex', () => {
   const result = runInstaller(parsed, envSource, packageRoot());
   assert.equal(result.mode, 'skill');
   assert.match(result.warnings[0] ?? '', /only the named skill, not the full Loom plugin surface/);
+  assert.equal(existsSync(join(repoRoot, '.agents', 'skills', 'loom-init', 'SKILL.md')), true);
   assert.equal(existsSync(join(repoRoot, 'plugins', 'loom')), false);
   assert.equal(existsSync(join(repoRoot, '.agents', 'plugins', 'marketplace.json')), false);
 });

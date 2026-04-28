@@ -1,6 +1,6 @@
 # Installing Loom for Codex
 
-Enable Loom skills in Codex via native skill discovery. Clone the repository and symlink the canonical `skills/` library.
+Enable Loom skills in Codex via native skill discovery. Clone the repository and symlink each public Loom skill directory.
 
 ## Prerequisites
 
@@ -15,11 +15,13 @@ Enable Loom skills in Codex via native skill discovery. Clone the repository and
    git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom
    ```
 
-2. Create the skills symlink:
+2. Create skill symlinks:
 
    ```bash
    mkdir -p ~/.agents/skills
-   ln -s ~/.codex/loom/skills ~/.agents/skills/loom
+   for skill in ~/.codex/loom/skills/loom-*; do
+     ln -sfn "$skill" "$HOME/.agents/skills/$(basename "$skill")"
+   done
    ```
 
 3. Restart Codex.
@@ -27,8 +29,8 @@ Enable Loom skills in Codex via native skill discovery. Clone the repository and
 ## Verify
 
 ```bash
-ls -la ~/.agents/skills/loom
-ls ~/.agents/skills/loom/loom-init/SKILL.md
+ls -la ~/.agents/skills/loom-init
+ls ~/.agents/skills/loom-init/SKILL.md
 ```
 
 ## Update
@@ -42,7 +44,7 @@ The skills update through the symlink.
 ## Uninstall
 
 ```bash
-rm ~/.agents/skills/loom
+rm ~/.agents/skills/loom-*
 ```
 
 Optionally delete the clone:

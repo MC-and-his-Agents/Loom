@@ -31,7 +31,7 @@ const requiredNeedles = [
     path: '.codex/INSTALL.md',
     needles: [
       'git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom',
-      'ln -s ~/.codex/loom/skills ~/.agents/skills/loom',
+      'ln -sfn "$skill" "$HOME/.agents/skills/$(basename "$skill")"',
       'Restart Codex',
     ],
   },
@@ -60,6 +60,7 @@ const requiredNeedles = [
     needles: [
       '@mc-and-his-agents/loom-installer',
       'repo-local `.codex-plugin/` + `skills/`',
+      'repo-scoped `<target>/.agents/skills/<skill-id>/`',
       'main 分支是真相源',
       'publish 成功后再创建 `loom-installer-v<version>` git tag 与同名前缀的 GitHub Release',
     ],
