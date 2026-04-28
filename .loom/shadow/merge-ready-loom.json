@@ -9,7 +9,7 @@
     "skills/shared/scripts/loom_check.py"
   ],
   "source_sha256": {
-    ".github/workflows/loom-check.yml": "b25709d55b50bec8da2b87dc7e11b84deaa0cf17d826ec565861de9ba5b28818",
+    ".github/workflows/loom-check.yml": "94497e146bf2ff0d8652c56bdde95fe9743f76dcfd666f8a3d04b22a8d32d787",
     "skills/shared/scripts/loom_check.py": "2cdb2020693be82bf2a17bec90c03d0f00ea0eba69b25387a9c6f6ffd4d0b033"
   }
 }
