@@ -33,6 +33,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--issue", type=int, help="Optional GitHub issue number to include")
     parser.add_argument("--pr", type=int, help="Optional GitHub pull request number to include")
     parser.add_argument("--project", type=int, help="Optional GitHub project number to include in closeout")
+    parser.add_argument("--phase", type=int, help="Optional GitHub phase issue number to include in closeout")
+    parser.add_argument("--fr", type=int, help="Optional GitHub FR issue number to include in closeout")
+    parser.add_argument("--branch", help="Optional implementation branch name to include in closeout")
     parser.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
     parser.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
     return parser.parse_args(argv)
@@ -278,15 +281,25 @@ def repository_parts(github_status: dict[str, object], owner: str | None, repo_n
 def full_closeout_status_payload(
     root: Path,
     *,
+    phase_number: int | None,
+    fr_number: int | None,
     issue_number: int | None,
     pr_number: int | None,
     project_number: int | None,
+    branch_name: str | None,
     owner: str | None,
     repo_name: str | None,
     github_status: dict[str, object],
     github_errors: list[str],
 ) -> dict[str, object]:
-    if issue_number is None and pr_number is None and project_number is None:
+    if (
+        phase_number is None
+        and fr_number is None
+        and issue_number is None
+        and pr_number is None
+        and project_number is None
+        and branch_name is None
+    ):
         return closeout_status_payload(github_status=github_status, github_errors=github_errors)
 
     owner, repo_name = repository_parts(github_status, owner, repo_name)
@@ -314,9 +327,12 @@ def full_closeout_status_payload(
 
     payload, errors = closeout_payload(
         target_root=root,
+        phase_number=phase_number,
+        fr_number=fr_number,
         issue_number=issue_number,
         pr_number=pr_number,
         project_number=project_number,
+        branch_name=branch_name,
         owner=owner,
         repo_name=repo_name,
         skip_gate=False,
@@ -410,9 +426,12 @@ def main(argv: list[str]) -> int:
     )
     closeout = full_closeout_status_payload(
         target_root,
+        phase_number=args.phase,
+        fr_number=args.fr,
         issue_number=args.issue,
         pr_number=args.pr,
         project_number=args.project,
+        branch_name=args.branch,
         owner=args.owner,
         repo_name=args.repo_name,
         github_status=github_status,

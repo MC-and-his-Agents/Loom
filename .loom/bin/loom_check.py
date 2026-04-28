@@ -19,6 +19,7 @@ from pathlib import Path
 from fact_chain_support import inspect_fact_chain
 import governance_surface as governance_surface_module
 import loom_flow as loom_flow_module
+import loom_status as loom_status_module
 import runtime_state as runtime_state_module
 from governance_surface import build_governance_surface
 from loom_flow import allowed_post_review_carrier_paths, repo_specific_requirements_payload, review_head_binding
@@ -1515,6 +1516,24 @@ def require_governance_upgrade_payload(
             failures.append(Failure(category, f"{context} action status must be planned/present"))
         if action.get("action") == "satisfy_missing_input" and not isinstance(action.get("recommended_action"), str):
             failures.append(Failure(category, f"{context} missing-input actions must include recommended_action"))
+    require_adoption_decisions_payload(
+        failures,
+        category=category,
+        context=f"{context}.adoption_decisions",
+        payload=payload.get("adoption_decisions"),
+    )
+    require_guided_adoption_plan_payload(
+        failures,
+        category=category,
+        context=f"{context}.guided_adoption_plan",
+        payload=payload.get("guided_adoption_plan"),
+    )
+    require_companion_generation_payload(
+        failures,
+        category=category,
+        context=f"{context}.companion_generation",
+        payload=payload.get("companion_generation"),
+    )
 
 
 def require_maturity_upgrade_path(
@@ -1550,6 +1569,126 @@ def require_maturity_upgrade_path(
         context=f"{context}.gate_rollout",
         payload=payload.get("gate_rollout"),
     )
+    if payload.get("result") == "block":
+        require_adoption_decisions_payload(
+            failures,
+            category=category,
+            context=f"{context}.adoption_decisions",
+            payload=payload.get("adoption_decisions"),
+        )
+        require_guided_adoption_plan_payload(
+            failures,
+            category=category,
+            context=f"{context}.guided_adoption_plan",
+            payload=payload.get("guided_adoption_plan"),
+        )
+
+
+def require_adoption_decisions_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("schema_version") != "loom-adoption-decisions/v1":
+        failures.append(Failure(category, f"{context} schema_version must be `loom-adoption-decisions/v1`"))
+    judgments = payload.get("judgments")
+    if not isinstance(judgments, list) or not judgments:
+        failures.append(Failure(category, f"{context} must include non-empty judgments"))
+        return
+    required_fields = {"id", "question", "source_locator", "reasoning", "write_targets", "verification_commands", "status"}
+    for judgment in judgments:
+        if not isinstance(judgment, dict):
+            failures.append(Failure(category, f"{context} judgments must be objects"))
+            continue
+        missing = sorted(required_fields - set(judgment))
+        if missing:
+            failures.append(Failure(category, f"{context} judgment `{judgment.get('id')}` missing fields: {', '.join(missing)}"))
+        if judgment.get("status") not in {"answered", "missing", "blocked"}:
+            failures.append(Failure(category, f"{context} judgment status must be answered/missing/blocked"))
+        for field in ("id", "question", "source_locator", "reasoning"):
+            if not isinstance(judgment.get(field), str) or not judgment.get(field):
+                failures.append(Failure(category, f"{context} judgment `{judgment.get('id')}` must include non-empty `{field}`"))
+        if not isinstance(judgment.get("write_targets"), list):
+            failures.append(Failure(category, f"{context} judgment `{judgment.get('id')}` write_targets must be a list"))
+        if not isinstance(judgment.get("verification_commands"), list) or not judgment.get("verification_commands"):
+            failures.append(Failure(category, f"{context} judgment `{judgment.get('id')}` verification_commands must be non-empty"))
+
+
+def require_guided_adoption_plan_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("schema_version") != "loom-guided-adoption-plan/v1":
+        failures.append(Failure(category, f"{context} schema_version must be `loom-guided-adoption-plan/v1`"))
+    if payload.get("phase_order") != ["read", "judge", "write", "verify"]:
+        failures.append(Failure(category, f"{context} phase_order must be read/judge/write/verify"))
+    steps = payload.get("steps")
+    if not isinstance(steps, list) or not steps:
+        failures.append(Failure(category, f"{context} must include non-empty steps"))
+        return
+    for step in steps:
+        if not isinstance(step, dict):
+            failures.append(Failure(category, f"{context} steps must be objects"))
+            continue
+        if step.get("phase") not in {"read", "judge", "write", "verify"}:
+            failures.append(Failure(category, f"{context} step phase must be read/judge/write/verify"))
+        if not isinstance(step.get("judgment_id"), str) or not step.get("judgment_id"):
+            failures.append(Failure(category, f"{context} step must include judgment_id"))
+        if not isinstance(step.get("action"), str) or not step.get("action"):
+            failures.append(Failure(category, f"{context} step must include action"))
+        if not isinstance(step.get("source_locator"), str) or not step.get("source_locator"):
+            failures.append(Failure(category, f"{context} step must include source_locator"))
+        if not isinstance(step.get("write_targets"), list):
+            failures.append(Failure(category, f"{context} step write_targets must be a list"))
+        if not isinstance(step.get("verification_commands"), list) or not step.get("verification_commands"):
+            failures.append(Failure(category, f"{context} step verification_commands must be non-empty"))
+
+
+def require_companion_generation_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("schema_version") != "loom-companion-generation/v1":
+        failures.append(Failure(category, f"{context} schema_version must be `loom-companion-generation/v1`"))
+    if payload.get("result") not in {"pass", "block"}:
+        failures.append(Failure(category, f"{context} result must be pass/block"))
+    artifacts = payload.get("artifacts")
+    if not isinstance(artifacts, list) or not artifacts:
+        failures.append(Failure(category, f"{context} must include non-empty artifacts"))
+        return
+    required_paths = {
+        ".loom/companion/manifest.json",
+        ".loom/companion/repo-interface.json",
+        ".loom/companion/interop.json",
+    }
+    actual_paths = {artifact.get("path") for artifact in artifacts if isinstance(artifact, dict)}
+    if not required_paths.issubset(actual_paths):
+        failures.append(Failure(category, f"{context} artifacts must include manifest, repo-interface, and interop"))
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            failures.append(Failure(category, f"{context} artifacts must be objects"))
+            continue
+        if artifact.get("status") not in {"planned", "present", "written"}:
+            failures.append(Failure(category, f"{context} artifact status must be planned/present/written"))
+        if artifact.get("owner") not in {"loom-owned", "repo-owned"}:
+            failures.append(Failure(category, f"{context} artifact owner must be loom-owned/repo-owned"))
 
 
 def require_review_record_contract(
@@ -1783,14 +1922,14 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
     if not isinstance(contract, dict):
         return [Failure(category, "`skills/loom-init/contract.json` must be a JSON object")]
 
-    if "skills-first methodology repository" not in readme:
-        failures.append(Failure(category, "`README.md` must present Loom as a skills-first methodology repository"))
+    if "agent-first project operating layer" not in readme:
+        failures.append(Failure(category, "`README.md` must present Loom as an agent-first project operating layer"))
     if "Advanced / Compatibility" not in readme:
         failures.append(Failure(category, "`README.md` must keep single-skill installation as an advanced compatibility path"))
     if "[中文版本](./README.zh-CN.md)" not in readme or "[English version](./README.md)" not in readme_zh:
         failures.append(Failure(category, "root README language switch links must stay in sync"))
-    if "以 skills 为先的方法论仓库" not in readme_zh:
-        failures.append(Failure(category, "`README.zh-CN.md` must preserve the Chinese repository positioning"))
+    if "agent-first project operating layer" not in readme_zh:
+        failures.append(Failure(category, "`README.zh-CN.md` must preserve the Chinese operating-layer positioning"))
     if "unique root entry" not in skills_readme:
         failures.append(Failure(category, "`skills/README.md` must keep `loom-init` as the unique root entry"))
     if "[中文版本](./README.zh-CN.md)" not in skills_readme or "[English version](./README.md)" not in skills_readme_zh:
@@ -3141,6 +3280,43 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     failures.append(Failure("daily-execution-cli", "`adopt verify` generated body must pass consumer validation"))
                 if not isinstance(bypass, dict) or bypass.get("result") != "pass":
                     failures.append(Failure("daily-execution-cli", "`adopt verify` must prove required section deletion blocks"))
+            require_adoption_decisions_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`adopt verify`.adoption_decisions",
+                payload=payload.get("adoption_decisions"),
+            )
+            require_guided_adoption_plan_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`adopt verify`.guided_adoption_plan",
+                payload=payload.get("guided_adoption_plan"),
+            )
+            closure = payload.get("judgment_closure")
+            if not isinstance(closure, dict):
+                failures.append(Failure("daily-execution-cli", "`adopt verify` must include judgment_closure"))
+            elif closure.get("result") not in {"pass", "block"}:
+                failures.append(Failure("daily-execution-cli", "`adopt verify` judgment_closure result must be pass/block"))
+            consumption = payload.get("generated_companion_consumption")
+            if not isinstance(consumption, dict):
+                failures.append(Failure("daily-execution-cli", "`adopt verify` must include generated_companion_consumption"))
+            else:
+                if consumption.get("result") != "pass":
+                    failures.append(Failure("daily-execution-cli", "`adopt verify` generated_companion_consumption must pass"))
+                if consumption.get("missing_inputs") not in ([], None):
+                    failures.append(Failure("daily-execution-cli", "`adopt verify` generated_companion_consumption must not hide missing inputs"))
+                for consumer in ("governance_surface", "review", "merge_ready", "shadow_parity"):
+                    entry = consumption.get(consumer)
+                    if not isinstance(entry, dict) or entry.get("status") not in {"pass", "consumed"}:
+                        failures.append(Failure("daily-execution-cli", f"`adopt verify` must consume generated companion through {consumer}"))
+                for consumer in ("review", "merge_ready"):
+                    entry = consumption.get(consumer)
+                    requirements = entry.get("repo_specific_requirements") if isinstance(entry, dict) else None
+                    if not isinstance(requirements, dict) or requirements.get("source_locator") != ".loom/companion/repo-interface.json":
+                        failures.append(Failure("daily-execution-cli", f"`adopt verify` {consumer} must consume generated repo-interface locator"))
+                shadow = consumption.get("shadow_parity")
+                if not isinstance(shadow, dict) or shadow.get("result") != "pass" or shadow.get("missing_inputs") not in ([], None):
+                    failures.append(Failure("daily-execution-cli", "`adopt verify` shadow parity consumption must be a clean pass"))
         if label == "carrier-refresh":
             if payload.get("command") != "carrier" or payload.get("operation") != "refresh":
                 failures.append(Failure("daily-execution-cli", "`carrier refresh` must report command/operation"))
@@ -3169,6 +3345,25 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 context=f"`{label}` governance_control_plane",
                 payload=control_plane,
             )
+            if label == "governance-profile-upgrade-plan":
+                require_adoption_decisions_payload(
+                    failures,
+                    category="daily-execution-cli",
+                    context="`governance-profile upgrade-plan`.adoption_decisions",
+                    payload=payload.get("adoption_decisions"),
+                )
+                require_guided_adoption_plan_payload(
+                    failures,
+                    category="daily-execution-cli",
+                    context="`governance-profile upgrade-plan`.guided_adoption_plan",
+                    payload=payload.get("guided_adoption_plan"),
+                )
+                require_companion_generation_payload(
+                    failures,
+                    category="daily-execution-cli",
+                    context="`governance-profile upgrade-plan`.companion_generation",
+                    payload=payload.get("companion_generation"),
+                )
         if label == "governance-profile-binding":
             require_github_binding_payload(
                 failures,
@@ -3268,6 +3463,16 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 context="`flow resume`",
                 payload=payload.get("maturity_upgrade_path"),
             )
+            adoption_guidance = payload.get("adoption_guidance")
+            if not isinstance(adoption_guidance, dict):
+                failures.append(Failure("daily-execution-cli", "`flow resume` must include adoption_guidance"))
+            else:
+                require_guided_adoption_plan_payload(
+                    failures,
+                    category="daily-execution-cli",
+                    context="`flow resume`.adoption_guidance.guided_adoption_plan",
+                    payload=adoption_guidance.get("guided_adoption_plan"),
+                )
             steps = payload.get("steps")
             if not isinstance(steps, list):
                 failures.append(Failure("daily-execution-cli", "`flow resume` must include `steps`"))
@@ -5819,6 +6024,8 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
         legacy_docs_only: bool = False,
     ) -> None:
         companion_dir = target / ".loom" / "companion"
+        if companion_dir.exists():
+            shutil.rmtree(companion_dir)
         companion_dir.mkdir(parents=True, exist_ok=True)
         if legacy_docs_only:
             (companion_dir / "README.md").write_text("# Legacy Companion Docs\n", encoding="utf-8")
@@ -5832,7 +6039,10 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
             "checkpoints.md",
             "metadata-contract.md",
             "context-schema.md",
+            "review-instructions/spec.md",
+            "review-instructions/implementation.md",
         ):
+            (companion_dir / doc).parent.mkdir(parents=True, exist_ok=True)
             (companion_dir / doc).write_text(f"# {doc}\n", encoding="utf-8")
         if manifest is not None:
             write_json(companion_dir / "manifest.json", manifest)
@@ -5893,6 +6103,16 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
                 "gate_type": "review",
             }
         ],
+        "review_instruction_locators": {
+            "spec_review": {
+                "locator": ".loom/companion/review-instructions/spec.md",
+                "mode": "repo_declared",
+            },
+            "implementation_review": {
+                "locator": ".loom/companion/review-instructions/implementation.md",
+                "mode": "repo_declared",
+            },
+        },
         "metadata_contract": {
             "fields": [
                 {
@@ -5922,6 +6142,7 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
 
         absent_target = base / "absent"
         shutil.copytree(example_target, absent_target)
+        shutil.rmtree(absent_target / ".loom" / "companion", ignore_errors=True)
         absent_surface = build_governance_surface(absent_target)
         repo_interface = absent_surface.get("repo_interface")
         require_repo_interface_payload(
@@ -6286,6 +6507,7 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
 
         absent_target = base / "absent"
         shutil.copytree(example_target, absent_target)
+        (absent_target / ".loom" / "companion" / "interop.json").unlink(missing_ok=True)
         absent_surface = build_governance_surface(absent_target)
         repo_interop = absent_surface.get("repo_interop")
         require_repo_interop_payload(
@@ -6592,6 +6814,142 @@ def check_external_runtime_devendor_contract(root: Path) -> list[Failure]:
         for anchor in anchors:
             if anchor not in text:
                 failures.append(Failure("external-runtime-devendor", f"`{relative}` must mention `{anchor}`"))
+    return failures
+
+
+def check_status_closeout_binding_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    seen: dict[str, object] = {}
+    original_closeout_payload = loom_status_module.closeout_payload
+
+    def fake_closeout_payload(**kwargs: object) -> tuple[dict[str, object], list[str]]:
+        seen.update(kwargs)
+        return (
+            {
+                "result": "pass",
+                "summary": "synthetic closeout payload",
+                "missing_inputs": [],
+                "fallback_to": None,
+                "reconciliation": {
+                    "result": "pass",
+                    "findings": [],
+                },
+            },
+            [],
+        )
+
+    try:
+        loom_status_module.closeout_payload = fake_closeout_payload
+        payload = loom_status_module.full_closeout_status_payload(
+            root,
+            phase_number=439,
+            fr_number=474,
+            issue_number=1,
+            pr_number=2,
+            project_number=3,
+            branch_name="feat/review-locators",
+            owner="owner",
+            repo_name="repo",
+            github_status={"repository": "owner/repo"},
+            github_errors=[],
+        )
+    finally:
+        loom_status_module.closeout_payload = original_closeout_payload
+
+    if payload.get("result") != "pass":
+        failures.append(Failure("daily-execution-cli", "`loom_status` synthetic closeout payload must pass"))
+    expected = {
+        "phase_number": 439,
+        "fr_number": 474,
+        "issue_number": 1,
+        "pr_number": 2,
+        "project_number": 3,
+        "branch_name": "feat/review-locators",
+        "owner": "owner",
+        "repo_name": "repo",
+        "skip_gate": False,
+    }
+    for field, value in expected.items():
+        if seen.get(field) != value:
+            failures.append(Failure("daily-execution-cli", f"`loom_status` closeout must forward `{field}` to closeout_payload"))
+    return failures
+
+
+def check_behavior_first_locator_contracts(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    required_anchors = {
+        "docs/adoption/repo-companion-contract.md": [
+            "review_instruction_locators",
+            "spec_review",
+            "implementation_review",
+            "repo_declared | loom_default",
+            "behavior evidence",
+            "test evidence",
+            "fresh verification evidence",
+            "不得把 `spec_review.md`、`code_review.md` 或任何 Syvert-style 路径硬编码成 Loom 默认查找路径",
+            "不得承接 review disposition",
+        ],
+        "docs/adoption/repo-interop-contract.md": [
+            "spec review / implementation review instruction locator",
+            "repo-interface.json",
+            "review_instruction_locators",
+        ],
+        "docs/adoption/deep-existing-repo-default.md": [
+            "review_instruction_locators",
+            "repo-owned instruction locator",
+            "不得让 Loom 猜测 `spec_review.md`、`code_review.md` 或 Syvert-style 文件名",
+        ],
+        "docs/adoption/lightweight-retrofit-default.md": [
+            "review_instruction_locators",
+            "loom_default",
+            "不是自动猜测 `spec_review.md`、`code_review.md` 或任何单仓历史路径",
+        ],
+        "docs/adoption/github-profile-upgrade.md": [
+            "review instruction locators for spec review and implementation review",
+            "repo-owned review instruction locator",
+            "不能猜测 `spec_review.md`、`code_review.md` 或 Syvert-style 路径",
+        ],
+        "docs/methodology/harness/status-surface.md": [
+            "fresh verification evidence",
+            "behavior evidence / test evidence",
+            "stale",
+        ],
+        "docs/methodology/harness/review-execution.md": [
+            "findings[].disposition",
+            "behavior/test evidence",
+            "subagent 输出只能作为 review 输入证据",
+        ],
+        "docs/methodology/harness/merge-checkpoint.md": [
+            "fresh verification evidence",
+            "review disposition",
+            "ownership 分配修正点",
+        ],
+        "skills/shared/references/adoption/deep-existing-repo-default.md": [
+            "review_instruction_locators",
+            "repo-owned instruction locator",
+            "不得让 Loom 猜测 `spec_review.md`、`code_review.md` 或 Syvert-style 文件名",
+        ],
+        "skills/shared/references/adoption/lightweight-retrofit-default.md": [
+            "review_instruction_locators",
+            "loom_default",
+            "不是自动猜测 `spec_review.md`、`code_review.md` 或任何单仓历史路径",
+        ],
+        "skills/shared/references/adoption/github-profile-upgrade.md": [
+            "review instruction locators for spec review and implementation review",
+            "repo-owned review instruction locator",
+            "不能猜测 `spec_review.md`、`code_review.md` 或 Syvert-style 路径",
+        ],
+    }
+    for relative, anchors in required_anchors.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            failures.append(Failure("behavior-first-locators", f"`{relative}` is unreadable: {exc}"))
+            continue
+        for anchor in anchors:
+            if anchor not in text:
+                failures.append(Failure("behavior-first-locators", f"`{relative}` must mention `{anchor}`"))
     return failures
 
 
@@ -7032,6 +7390,16 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                 failures.append(Failure("adversarial-adoption", f"`{label}` baseline failed: {error}"))
             elif payload.get("result") != expected:
                 failures.append(Failure("adversarial-adoption", f"`{label}` baseline must return `{expected}`"))
+            elif label == "shadow-parity":
+                for report in payload.get("reports", []) if isinstance(payload.get("reports"), list) else []:
+                    if not isinstance(report, dict):
+                        continue
+                    loom_surface = report.get("loom_surface")
+                    repo_surface = report.get("repo_surface")
+                    loom_sources = set(loom_surface.get("source_files", [])) if isinstance(loom_surface, dict) and isinstance(loom_surface.get("source_files"), list) else set()
+                    repo_sources = set(repo_surface.get("source_files", [])) if isinstance(repo_surface, dict) and isinstance(repo_surface.get("source_files"), list) else set()
+                    if loom_sources and repo_sources and loom_sources == repo_sources:
+                        failures.append(Failure("adversarial-adoption", "`shadow-parity` generated Loom and repo-native surfaces must not be backed by identical source files"))
             elif label == "adopt verify":
                 roundtrip = payload.get("producer_consumer_roundtrip")
                 deleted_section = (
@@ -7041,6 +7409,13 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                 )
                 if not isinstance(deleted_section, dict) or deleted_section.get("consumer_result") != "block":
                     failures.append(Failure("adversarial-adoption", "`adopt verify` must prove required Review Artifacts deletion cannot bypass the consumer"))
+                consumption = payload.get("generated_companion_consumption")
+                if not isinstance(consumption, dict):
+                    failures.append(Failure("adversarial-adoption", "`adopt verify` must report generated companion reverse-consumption"))
+                else:
+                    shadow = consumption.get("shadow_parity")
+                    if not isinstance(shadow, dict) or shadow.get("status") not in {"pass", "consumed"}:
+                        failures.append(Failure("adversarial-adoption", "`adopt verify` must consume generated interop through shadow parity"))
 
         sha_only_payload, sha_only_error = load_command_json(
             root,
@@ -7695,6 +8070,115 @@ def check_github_cli_budget(root: Path) -> list[Failure]:
     return failures
 
 
+def check_operating_layer_contract(root: Path) -> list[Failure]:
+    required_anchors = {
+        "README.md": [
+            "agent-first project operating layer",
+            "behavior evidence",
+            "test evidence",
+            "trunk truth",
+        ],
+        "README.zh-CN.md": [
+            "agent-first project operating layer",
+            "行为证据",
+            "测试证据",
+            "主干真相",
+        ],
+        "VISION.md": [
+            "agent-first project operating layer",
+            "Behavior and Test Evidence",
+            "BDD/TDD",
+        ],
+        "AGENTS.md": [
+            "agent-first project operating layer",
+            "behavior and test evidence",
+            "Superpowers-derived discipline",
+            "不得新增 `docs/superpowers/*`",
+        ],
+        "docs/evidence/extraction-ledger.md": [
+            "EXT-0057",
+            "Superpowers-derived execution discipline",
+            "EXT-0058",
+            "dual evidence loop",
+        ],
+        "docs/evidence/landing-map.md": [
+            "behavior and test evidence",
+            "Superpowers-derived discipline",
+            "不新增 `docs/superpowers/*`",
+        ],
+        "docs/methodology/templates/spec-suite.md": [
+            "BDD 外环",
+            "TDD 内环",
+            "behavior evidence",
+            "test evidence",
+            "fresh verification evidence",
+        ],
+        "skills/shared/references/templates/spec-suite.md": [
+            "BDD 外环",
+            "TDD 内环",
+            "behavior evidence",
+            "test evidence",
+            "fresh verification evidence",
+        ],
+        "docs/methodology/harness/status-surface.md": [
+            "behavior evidence",
+            "test evidence",
+            "fresh verification evidence",
+            "stale",
+            "not_applicable",
+        ],
+        "skills/shared/references/harness/status-surface.md": [
+            "behavior evidence",
+            "test evidence",
+            "fresh verification evidence",
+            "stale",
+            "not_applicable",
+        ],
+        "docs/methodology/harness/review-execution.md": [
+            "review_instruction_locators",
+            "disposition.status",
+            "repeated blocker",
+            "subagent",
+        ],
+        "skills/shared/references/harness/review-execution.md": [
+            "review_instruction_locators",
+            "disposition.status",
+            "repeated blocker",
+            "subagent",
+        ],
+        "docs/adoption/repo-companion-contract.md": [
+            "review_instruction_locators",
+            "spec_review",
+            "implementation_review",
+            "repo_declared | loom_default",
+            "不得把 `spec_review.md`、`code_review.md` 或任何 Syvert-style 路径硬编码",
+        ],
+        "docs/adoption/repo-interop-contract.md": [
+            "review instruction locator",
+            "repo-interface.json",
+            "review_instruction_locators",
+        ],
+    }
+    failures: list[Failure] = []
+    for relative, anchors in required_anchors.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            failures.append(Failure("operating-layer-contract", f"`{relative}` is unreadable: {exc}"))
+            continue
+        for anchor in anchors:
+            if anchor not in text:
+                failures.append(Failure("operating-layer-contract", f"`{relative}` must mention `{anchor}`"))
+
+    forbidden_paths = [path for path in (root / "docs").rglob("*") if "superpowers" in path.parts]
+    if forbidden_paths:
+        preview = ", ".join(str(path.relative_to(root)) for path in forbidden_paths[:4])
+        failures.append(Failure("operating-layer-contract", f"`docs/superpowers/*` must not be introduced: {preview}"))
+
+    return failures
+
+
 def is_within(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
@@ -7732,16 +8216,19 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_repo_companion_interface_contracts(root))
     failures.extend(check_repo_interop_contracts(root))
     failures.extend(check_external_runtime_devendor_contract(root))
+    failures.extend(check_status_closeout_binding_contract(root))
+    failures.extend(check_behavior_first_locator_contracts(root))
     failures.extend(check_adversarial_adoption_fixture(root))
     failures.extend(check_node_installer(root))
     failures.extend(check_generated_artifacts_untracked(root))
     failures.extend(check_github_cli_budget(root))
+    failures.extend(check_operating_layer_contract(root))
     failures.extend(check_markdown_links(root))
     return failures
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 20
+    categories_checked = 23
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")

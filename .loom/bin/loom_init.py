@@ -27,6 +27,7 @@ GOVERNANCE_RUNTIME_SOURCE = "skills/shared/scripts/governance_surface.py"
 TOOL_VERSION = "1.3.0"
 CONTRACT_VERSION = "1.3.0"
 WORK_ITEM_ID = "INIT-0001"
+SHADOW_PARITY_SURFACES = ("admission", "review", "merge_ready", "closeout")
 
 RUNTIME_ARTIFACT_SOURCES = {
     ".loom/bin/loom_init.py": RUNTIME_SOURCE,
@@ -1200,6 +1201,89 @@ def render_companion_closeout() -> str:
     )
 
 
+def companion_manifest_payload() -> dict[str, object]:
+    return {
+        "schema_version": "loom-repo-companion-manifest/v1",
+        "companion_entry": ".loom/companion/README.md",
+        "repo_interface": ".loom/companion/repo-interface.json",
+    }
+
+
+def repo_interface_payload() -> dict[str, object]:
+    return {
+        "schema_version": "loom-repo-interface/v2",
+        "companion_entry": ".loom/companion/README.md",
+        "repo_specific_requirements": {"review": [], "merge_ready": [], "closeout": []},
+        "specialized_gates": [],
+        "review_instruction_locators": {
+            "spec_review": {"locator": "loom_default", "mode": "loom_default"},
+            "implementation_review": {"locator": "loom_default", "mode": "loom_default"},
+        },
+        "metadata_contract": {"fields": []},
+        "context_schema": {"fields": []},
+    }
+
+
+def repo_interop_payload() -> dict[str, object]:
+    return {
+        "schema_version": "loom-repo-interop/v1",
+        "host_adapters": [],
+        "repo_native_carriers": [
+            {
+                "id": "generated-companion-residue",
+                "summary": "Repo-owned adoption residue generated as explicit write targets; Loom reads it without promoting the repo-specific rules into core.",
+                "surfaces": list(SHADOW_PARITY_SURFACES),
+                "locator": ".loom/companion",
+            }
+        ],
+        "shadow_surfaces": {
+            surface: {
+                "summary": f"Compare {surface} parity between Loom and the repo-native result.",
+                "loom_locator": f".loom/shadow/{surface.replace('_', '-')}-loom.json",
+                "repo_locator": f".loom/shadow/{surface.replace('_', '-')}-repo.json",
+            }
+            for surface in SHADOW_PARITY_SURFACES
+        },
+    }
+
+
+def default_shadow_source(target_root: Path, *, surface: str, side: str) -> str | None:
+    loom_sources = {
+        "admission": [".loom/work-items/INIT-0001.md", ".loom/status/current.md", ".loom/README.md"],
+        "review": [".loom/reviews/INIT-0001.json", ".loom/status/current.md", ".loom/README.md"],
+        "merge_ready": [".loom/status/current.md", ".github/PULL_REQUEST_TEMPLATE.md", ".loom/README.md"],
+        "closeout": [".loom/status/current.md", ".loom/README.md"],
+    }
+    repo_sources = {
+        "admission": [".loom/companion/checkpoints.md", ".loom/companion/README.md"],
+        "review": [".loom/companion/review.md", ".loom/companion/README.md"],
+        "merge_ready": [".loom/companion/merge-ready.md", ".loom/companion/README.md"],
+        "closeout": [".loom/companion/closeout.md", ".loom/companion/README.md"],
+    }
+    candidates = loom_sources.get(surface, []) if side == "loom" else repo_sources.get(surface, [])
+    for candidate in candidates:
+        if (target_root / candidate).exists():
+            return candidate
+    return None
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def shadow_evidence_payload(target_root: Path, *, source: str, value: str) -> dict[str, object]:
+    source_path = target_root / source
+    return {
+        "result": value,
+        "source_files": [source],
+        "source_sha256": {source: sha256_file(source_path)},
+    }
+
+
 def render_work_item(result: dict[str, object]) -> str:
     item = result["initial_work_items"][0]
     return (
@@ -1408,17 +1492,17 @@ def scaffold_target(
         (output_path, result, "json"),
         (target_root / ".loom/bootstrap/manifest.json", manifest_payload(result), "json"),
         (target_root / ".loom/bootstrap/capability-map.md", render_capability_map(result), "text"),
+        (target_root / ".loom/companion/README.md", render_companion_readme(result), "text"),
+        (target_root / ".loom/companion/manifest.json", companion_manifest_payload(), "json"),
+        (target_root / ".loom/companion/repo-interface.json", repo_interface_payload(), "json"),
+        (target_root / ".loom/companion/interop.json", repo_interop_payload(), "json"),
+        (target_root / ".loom/companion/checkpoints.md", render_companion_checkpoints(), "text"),
+        (target_root / ".loom/companion/review.md", render_companion_review(), "text"),
+        (target_root / ".loom/companion/merge-ready.md", render_companion_merge_ready(), "text"),
+        (target_root / ".loom/companion/closeout.md", render_companion_closeout(), "text"),
     ]
     if attach_only:
-        writes.extend(
-            [
-                (target_root / ".loom/companion/README.md", render_companion_readme(result), "text"),
-                (target_root / ".loom/companion/checkpoints.md", render_companion_checkpoints(), "text"),
-                (target_root / ".loom/companion/review.md", render_companion_review(), "text"),
-                (target_root / ".loom/companion/merge-ready.md", render_companion_merge_ready(), "text"),
-                (target_root / ".loom/companion/closeout.md", render_companion_closeout(), "text"),
-            ]
-        )
+        pass
     else:
         writes.extend(
             [
@@ -1435,6 +1519,19 @@ def scaffold_target(
         if changed:
             written += 1
             touched.append(str(path.relative_to(target_root)))
+
+    for surface in SHADOW_PARITY_SURFACES:
+        value = "done" if surface == "closeout" else "pass"
+        for side in ("loom", "repo"):
+            evidence_source = default_shadow_source(target_root, surface=surface, side=side)
+            if evidence_source is None:
+                continue
+            relative = f".loom/shadow/{surface.replace('_', '-')}-{side}.json"
+            path = target_root / relative
+            payload = shadow_evidence_payload(target_root, source=evidence_source, value=value)
+            if write_json(path, payload, force=force):
+                written += 1
+                touched.append(relative)
 
     for source, destination in (
         (Path(__file__), target_root / ".loom/bin/loom_init.py"),
@@ -1512,17 +1609,25 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
             ".loom/bin/runtime_paths.py",
             ".loom/bin/runtime_state.py",
             ".loom/bin/loom_check.py",
+            ".loom/companion/README.md",
+            ".loom/companion/manifest.json",
+            ".loom/companion/repo-interface.json",
+            ".loom/companion/interop.json",
+            ".loom/companion/checkpoints.md",
+            ".loom/companion/review.md",
+            ".loom/companion/merge-ready.md",
+            ".loom/companion/closeout.md",
+            ".loom/shadow/admission-loom.json",
+            ".loom/shadow/admission-repo.json",
+            ".loom/shadow/review-loom.json",
+            ".loom/shadow/review-repo.json",
+            ".loom/shadow/merge-ready-loom.json",
+            ".loom/shadow/merge-ready-repo.json",
+            ".loom/shadow/closeout-loom.json",
+            ".loom/shadow/closeout-repo.json",
         ]
         if attach_only:
-            required_paths.extend(
-                [
-                    ".loom/companion/README.md",
-                    ".loom/companion/checkpoints.md",
-                    ".loom/companion/review.md",
-                    ".loom/companion/merge-ready.md",
-                    ".loom/companion/closeout.md",
-                ]
-            )
+            pass
         else:
             required_paths.extend(
                 [
