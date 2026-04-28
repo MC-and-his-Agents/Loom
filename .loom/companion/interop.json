@@ -1,0 +1,49 @@
+{
+  "schema_version": "loom-repo-interop/v1",
+  "host_adapters": [
+    {
+      "id": "github-actions-root-self-governance",
+      "summary": "Read GitHub Actions checks that consume the root Loom carrier.",
+      "surfaces": [
+        "build",
+        "merge_ready"
+      ],
+      "locator": ".github/workflows/loom-check.yml"
+    }
+  ],
+  "repo_native_carriers": [
+    {
+      "id": "loom-self-governance-evidence",
+      "summary": "Repo-local evidence that binds #410 to the Loom self-managed workflow.",
+      "surfaces": [
+        "admission",
+        "review",
+        "merge_ready",
+        "closeout"
+      ],
+      "locator": "docs/evidence/validations/validation-loom-self-governance-adoption.md"
+    }
+  ],
+  "shadow_surfaces": {
+    "admission": {
+      "summary": "Compare self-governance admission parity between Loom and repo-local evidence.",
+      "loom_locator": ".loom/shadow/admission-loom.json",
+      "repo_locator": ".loom/shadow/admission-repo.json"
+    },
+    "review": {
+      "summary": "Compare self-governance review parity between Loom and repo-local evidence.",
+      "loom_locator": ".loom/shadow/review-loom.json",
+      "repo_locator": ".loom/shadow/review-repo.json"
+    },
+    "merge_ready": {
+      "summary": "Compare self-governance merge-ready parity between Loom and repo-local evidence.",
+      "loom_locator": ".loom/shadow/merge-ready-loom.json",
+      "repo_locator": ".loom/shadow/merge-ready-repo.json"
+    },
+    "closeout": {
+      "summary": "Compare self-governance closeout parity between Loom and repo-local evidence.",
+      "loom_locator": ".loom/shadow/closeout-loom.json",
+      "repo_locator": ".loom/shadow/closeout-repo.json"
+    }
+  }
+}

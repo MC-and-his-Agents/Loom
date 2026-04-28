@@ -2421,10 +2421,15 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
         ".loom/bootstrap/init-result.json",
         ".loom/bin/loom_init.py",
         ".loom/bin/loom_flow.py",
+        ".loom/companion/README.md",
+        ".loom/companion/manifest.json",
+        ".loom/companion/repo-interface.json",
+        ".loom/companion/interop.json",
         ".loom/work-items/INIT-0001.md",
         ".loom/progress/INIT-0001.md",
         ".loom/reviews/INIT-0001.json",
         ".loom/status/current.md",
+        "docs/evidence/validations/validation-loom-self-governance-adoption.md",
     )
     failures.extend(check_required_paths(root, "root-self-adoption", required_paths))
 
@@ -2459,6 +2464,12 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
             "carrier-refresh",
             {"result": "pass", "schema_version": "loom-carrier-refresh/v1"},
         ),
+        (
+            "root shadow parity",
+            ["python3", ".loom/bin/loom_flow.py", "shadow-parity", "--target", "."],
+            "shadow-parity",
+            {"result": "pass"},
+        ),
     )
     for label, args, kind, expected in commands:
         payload, error = load_command_json(root, args)
@@ -2483,8 +2494,8 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
             )
         if kind == "governance-status":
             maturity = payload.get("maturity")
-            if not isinstance(maturity, dict) or maturity.get("current") not in {"light", "standard", "strong"}:
-                failures.append(Failure("root-self-adoption", "`root governance status` must report adopted maturity"))
+            if not isinstance(maturity, dict) or maturity.get("current") != "strong":
+                failures.append(Failure("root-self-adoption", "`root governance status` must report strong maturity after self-management binding"))
         if kind == "runtime-parity":
             checks = payload.get("checks")
             names = {check.get("name") for check in checks if isinstance(check, dict)} if isinstance(checks, list) else set()
@@ -2504,6 +2515,23 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
                 head_binding = review.get("head_binding")
                 if isinstance(head_binding, dict) and head_binding.get("status") == "stale":
                     failures.append(Failure("root-self-adoption", "`root carrier refresh --dry-run` must detect stale review head binding"))
+        if kind == "shadow-parity":
+            reports = payload.get("reports")
+            report_surfaces = {
+                report.get("surface")
+                for report in reports
+                if isinstance(report, dict)
+            } if isinstance(reports, list) else set()
+            if report_surfaces != {"admission", "review", "merge_ready", "closeout"}:
+                failures.append(Failure("root-self-adoption", "`root shadow parity` must cover admission, review, merge_ready, and closeout"))
+            surface = payload.get("governance_surface")
+            if isinstance(surface, dict):
+                repo_interface = surface.get("repo_interface")
+                repo_interop = surface.get("repo_interop")
+                if not isinstance(repo_interface, dict) or repo_interface.get("availability") != "present":
+                    failures.append(Failure("root-self-adoption", "`root shadow parity` must consume the root repo companion interface"))
+                if not isinstance(repo_interop, dict) or repo_interop.get("availability") != "present":
+                    failures.append(Failure("root-self-adoption", "`root shadow parity` must consume the root repo interop contract"))
     return failures
 
 

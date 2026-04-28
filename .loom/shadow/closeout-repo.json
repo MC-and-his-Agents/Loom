@@ -1,0 +1,15 @@
+{
+  "schema_version": "loom-shadow-evidence/v1",
+  "surface": "closeout",
+  "side": "repo",
+  "result": "pass",
+  "parity_value": "self-governance-advisory-pass",
+  "source_files": [
+    "docs/evidence/validations/validation-loom-self-governance-adoption.md",
+    ".loom/companion/README.md"
+  ],
+  "source_sha256": {
+    "docs/evidence/validations/validation-loom-self-governance-adoption.md": "879c238c172a38bdef43ce1e8e731830beba7a88995e28c543317017cd757ab9",
+    ".loom/companion/README.md": "542c46089dceb64cadc1f8b2f2615feb959a95cf7a645c218f8746e1194cbff0"
+  }
+}

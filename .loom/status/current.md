@@ -23,8 +23,8 @@
 
 - Item Key: INIT-0001
 - Item Type: work_item
-- Phase: not_declared
-- FR: not_declared
+- Phase: #410 Phase: Agent-assisted zero-friction adoption
+- FR: #411-#414
 - Release: not_declared
 - Sprint: not_declared
 - Head SHA: bootstrap-placeholder
@@ -36,6 +36,18 @@
 - Spec Review Status: pending
 - Review Head Status: bootstrap-placeholder
 - Merge Gate Status: pending
+
+## Self-Governance Binding
+
+- Managed Scope: Loom core and product iteration
+- Next Managed Phase: #410 Phase: Agent-assisted zero-friction adoption
+- Next Managed FRs: #411 #412 #413 #414
+- Next Managed Work Items: #415-#426
+- Companion Entry: .loom/companion/README.md
+- Repo Interface: .loom/companion/repo-interface.json
+- Repo Interop: .loom/companion/interop.json
+- Evidence Entry: docs/evidence/validations/validation-loom-self-governance-adoption.md
+- Boundary: downstream examples and adopted repositories remain fixtures, not root truth
 
 ## Runtime Evidence
 
