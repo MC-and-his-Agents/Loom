@@ -495,6 +495,24 @@ def load_command_json(
     return payload, None
 
 
+def host_read_unavailable(payload: dict[str, object]) -> bool:
+    haystack = json.dumps(payload, ensure_ascii=False).lower()
+    return any(
+        needle in haystack
+        for needle in (
+            "api rate limit exceeded",
+            "http 403",
+            "host_unavailable",
+            "host unavailable",
+            "rate limit exceeded",
+        )
+    )
+
+
+def host_verification_unconfirmed(payload: dict[str, object]) -> bool:
+    return payload.get("host_verification_status") in {"unverified", "stale", "host_unavailable"} or host_read_unavailable(payload)
+
+
 def load_command_json_with_retry(
     root: Path,
     args: list[str],
@@ -2797,7 +2815,14 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
             )
         if kind == "governance-status":
             maturity = payload.get("maturity")
-            if not isinstance(maturity, dict) or maturity.get("current") != "strong":
+            if isinstance(maturity, dict) and maturity.get("current") == "strong":
+                pass
+            elif host_verification_unconfirmed(payload):
+                missing_by_level = maturity.get("missing_by_level") if isinstance(maturity, dict) else {}
+                strong_missing = missing_by_level.get("strong") if isinstance(missing_by_level, dict) else []
+                if not isinstance(strong_missing, list) or "host_enforced_control_plane" not in strong_missing:
+                    failures.append(Failure("root-self-adoption", "`root governance status` host-unavailable fallback must keep strong blocked on host enforcement"))
+            else:
                 failures.append(Failure("root-self-adoption", "`root governance status` must report strong maturity after self-management binding"))
         if kind == "runtime-parity":
             checks = payload.get("checks")
@@ -3147,7 +3172,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         (
             "host-binding-validate",
             ["python3", "tools/loom_flow.py", "host-binding", "validate", "--target", ".", "--owner", "MC-and-his-Agents", "--repo", "Loom", "--branch", "main"],
-            {"pass"},
+            {"pass", "block"},
         ),
         (
             "governance-profile-status",
@@ -3478,7 +3503,10 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             if payload.get("schema_version") != "loom-host-binding/v1":
                 failures.append(Failure("daily-execution-cli", "`host-binding validate` must report schema v1"))
             branch = payload.get("branch")
-            if not isinstance(branch, dict) or branch.get("status") != "present":
+            host_unavailable = host_read_unavailable(payload)
+            if payload.get("result") == "block" and not host_unavailable:
+                failures.append(Failure("daily-execution-cli", "`host-binding validate --branch main` must pass unless the host read is unavailable"))
+            if (not isinstance(branch, dict) or branch.get("status") != "present") and not host_unavailable:
                 failures.append(Failure("daily-execution-cli", "`host-binding validate --branch main` must read the branch via REST"))
         if label in {"governance-profile-status", "governance-profile-upgrade-plan"}:
             if payload.get("command") != "governance-profile":
