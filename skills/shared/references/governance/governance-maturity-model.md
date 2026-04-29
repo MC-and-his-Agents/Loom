@@ -22,6 +22,8 @@ Loom 当前冻结三档成熟度：
 
 `light` 适用于只需要最小执行入口与基本 review / merge 纪律的仓库。
 
+Fresh adoption 默认最高只能到 `light`。repo-local aliases、workflow 文件或 companion scaffold 不等于宿主强制控制面。
+
 至少必须具备：
 
 - `Work Item` 作为唯一默认执行入口
@@ -63,6 +65,7 @@ Loom 当前冻结三档成熟度：
 - 强前置 `gate chain`
 - `GitHub controlled merge`
 - merge 后 `closeout + reconciliation` 一体化
+- 已验证的宿主强制控制面：branch protection 或 ruleset、required checks、PR merge path、controlled merge basis、closeout basis
 - 可验证的 GitHub profile upgrade 路径
 - parity validation 证据
 
@@ -84,6 +87,7 @@ Loom 当前冻结三档成熟度：
 - 需要统一 host binding、merge control 与 closeout control plane
 - 需要用统一 taxonomy 暴露 stale / drift / gate failure
 - 需要对 adopted repo 给出可检查的 parity / upgrade judgment
+- 宿主 branch protection 或 ruleset、required checks、PR merge path、controlled merge basis、closeout basis 都能被 verified host read 证明
 
 ## 6. 阻断条件
 
@@ -93,6 +97,8 @@ Loom 当前冻结三档成熟度：
 - formal spec 路径仍可绕过 `spec review`
 - `status control plane` 仍由多个 skill 各自拼装
 - merge / closeout 仍缺稳定 binding chain
+- 宿主控制面为 `unverified`、`stale` 或 `host_unavailable`
+- 只有 local gate starter 或 workflow 文件，但 required checks / branch protection / ruleset 未被宿主强制
 - parity 仍只有口头比较，没有版本控制内证据
 
 ## 7. 与 adoption / check / status 的关系

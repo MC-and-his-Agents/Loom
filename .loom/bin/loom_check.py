@@ -495,6 +495,24 @@ def load_command_json(
     return payload, None
 
 
+def host_read_unavailable(payload: dict[str, object]) -> bool:
+    haystack = json.dumps(payload, ensure_ascii=False).lower()
+    return any(
+        needle in haystack
+        for needle in (
+            "api rate limit exceeded",
+            "http 403",
+            "host_unavailable",
+            "host unavailable",
+            "rate limit exceeded",
+        )
+    )
+
+
+def host_verification_unconfirmed(payload: dict[str, object]) -> bool:
+    return payload.get("host_verification_status") in {"unverified", "stale", "host_unavailable"} or host_read_unavailable(payload)
+
+
 def load_command_json_with_retry(
     root: Path,
     args: list[str],
@@ -987,6 +1005,13 @@ def require_governance_control_plane(
         strong_requires = levels.get("strong", {}).get("requires") if isinstance(levels, dict) and isinstance(levels.get("strong"), dict) else None
         if not isinstance(strong_requires, list) or "github_controlled_merge" not in strong_requires:
             failures.append(Failure(category, f"{context}.maturity strong level must require GitHub controlled merge"))
+        elif not {
+            "host_enforced_control_plane",
+            "pr_merge_path",
+            "controlled_merge_basis",
+            "closeout_basis",
+        }.issubset(set(strong_requires)):
+            failures.append(Failure(category, f"{context}.maturity strong level must require verified host enforcement and closeout basis"))
         required_fields = maturity.get("required_fields")
         if not isinstance(required_fields, dict) or set(required_fields) != {"light", "standard", "strong"}:
             failures.append(Failure(category, f"{context}.maturity required_fields must define light, standard, and strong"))
@@ -1006,6 +1031,11 @@ def require_governance_control_plane(
         missing_details = maturity.get("missing_details_by_level")
         if not isinstance(missing_details, dict) or set(missing_details) != {"light", "standard", "strong"}:
             failures.append(Failure(category, f"{context}.maturity missing_details_by_level must define light, standard, and strong"))
+        fresh_adoption = maturity.get("fresh_adoption")
+        if not isinstance(fresh_adoption, dict):
+            failures.append(Failure(category, f"{context}.maturity fresh_adoption must be an object"))
+        elif fresh_adoption.get("max_default_maturity") != "light":
+            failures.append(Failure(category, f"{context}.maturity fresh_adoption max_default_maturity must stay light"))
         require_adoption_gate_rollout_payload(
             failures,
             category=category,
@@ -2785,7 +2815,14 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
             )
         if kind == "governance-status":
             maturity = payload.get("maturity")
-            if not isinstance(maturity, dict) or maturity.get("current") != "strong":
+            if isinstance(maturity, dict) and maturity.get("current") == "strong":
+                pass
+            elif host_verification_unconfirmed(payload):
+                missing_by_level = maturity.get("missing_by_level") if isinstance(maturity, dict) else {}
+                strong_missing = missing_by_level.get("strong") if isinstance(missing_by_level, dict) else []
+                if not isinstance(strong_missing, list) or "host_enforced_control_plane" not in strong_missing:
+                    failures.append(Failure("root-self-adoption", "`root governance status` host-unavailable fallback must keep strong blocked on host enforcement"))
+            else:
                 failures.append(Failure("root-self-adoption", "`root governance status` must report strong maturity after self-management binding"))
         if kind == "runtime-parity":
             checks = payload.get("checks")
@@ -3135,7 +3172,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         (
             "host-binding-validate",
             ["python3", "tools/loom_flow.py", "host-binding", "validate", "--target", ".", "--owner", "MC-and-his-Agents", "--repo", "Loom", "--branch", "main"],
-            {"pass"},
+            {"pass", "block"},
         ),
         (
             "governance-profile-status",
@@ -3466,7 +3503,10 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             if payload.get("schema_version") != "loom-host-binding/v1":
                 failures.append(Failure("daily-execution-cli", "`host-binding validate` must report schema v1"))
             branch = payload.get("branch")
-            if not isinstance(branch, dict) or branch.get("status") != "present":
+            host_unavailable = host_read_unavailable(payload)
+            if payload.get("result") == "block" and not host_unavailable:
+                failures.append(Failure("daily-execution-cli", "`host-binding validate --branch main` must pass unless the host read is unavailable"))
+            if (not isinstance(branch, dict) or branch.get("status") != "present") and not host_unavailable:
                 failures.append(Failure("daily-execution-cli", "`host-binding validate --branch main` must read the branch via REST"))
         if label in {"governance-profile-status", "governance-profile-upgrade-plan"}:
             if payload.get("command") != "governance-profile":
@@ -3481,6 +3521,15 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 context=f"`{label}` governance_control_plane",
                 payload=control_plane,
             )
+            maturity = payload.get("maturity")
+            if isinstance(maturity, dict):
+                current = maturity.get("current")
+                if current == "strong":
+                    failures.append(Failure("daily-execution-cli", "`examples/new-project` fresh adoption must not default to strong maturity"))
+                missing_by_level = maturity.get("missing_by_level")
+                strong_missing = missing_by_level.get("strong") if isinstance(missing_by_level, dict) else []
+                if not isinstance(strong_missing, list) or "host_enforced_control_plane" not in strong_missing:
+                    failures.append(Failure("daily-execution-cli", "`examples/new-project` strong upgrade-plan must expose missing host enforcement"))
             if label == "governance-profile-upgrade-plan":
                 require_adoption_decisions_payload(
                     failures,
