@@ -987,6 +987,13 @@ def require_governance_control_plane(
         strong_requires = levels.get("strong", {}).get("requires") if isinstance(levels, dict) and isinstance(levels.get("strong"), dict) else None
         if not isinstance(strong_requires, list) or "github_controlled_merge" not in strong_requires:
             failures.append(Failure(category, f"{context}.maturity strong level must require GitHub controlled merge"))
+        elif not {
+            "host_enforced_control_plane",
+            "pr_merge_path",
+            "controlled_merge_basis",
+            "closeout_basis",
+        }.issubset(set(strong_requires)):
+            failures.append(Failure(category, f"{context}.maturity strong level must require verified host enforcement and closeout basis"))
         required_fields = maturity.get("required_fields")
         if not isinstance(required_fields, dict) or set(required_fields) != {"light", "standard", "strong"}:
             failures.append(Failure(category, f"{context}.maturity required_fields must define light, standard, and strong"))
@@ -1006,6 +1013,11 @@ def require_governance_control_plane(
         missing_details = maturity.get("missing_details_by_level")
         if not isinstance(missing_details, dict) or set(missing_details) != {"light", "standard", "strong"}:
             failures.append(Failure(category, f"{context}.maturity missing_details_by_level must define light, standard, and strong"))
+        fresh_adoption = maturity.get("fresh_adoption")
+        if not isinstance(fresh_adoption, dict):
+            failures.append(Failure(category, f"{context}.maturity fresh_adoption must be an object"))
+        elif fresh_adoption.get("max_default_maturity") != "light":
+            failures.append(Failure(category, f"{context}.maturity fresh_adoption max_default_maturity must stay light"))
         require_adoption_gate_rollout_payload(
             failures,
             category=category,
@@ -3481,6 +3493,15 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 context=f"`{label}` governance_control_plane",
                 payload=control_plane,
             )
+            maturity = payload.get("maturity")
+            if isinstance(maturity, dict):
+                current = maturity.get("current")
+                if current == "strong":
+                    failures.append(Failure("daily-execution-cli", "`examples/new-project` fresh adoption must not default to strong maturity"))
+                missing_by_level = maturity.get("missing_by_level")
+                strong_missing = missing_by_level.get("strong") if isinstance(missing_by_level, dict) else []
+                if not isinstance(strong_missing, list) or "host_enforced_control_plane" not in strong_missing:
+                    failures.append(Failure("daily-execution-cli", "`examples/new-project` strong upgrade-plan must expose missing host enforcement"))
             if label == "governance-profile-upgrade-plan":
                 require_adoption_decisions_payload(
                     failures,

@@ -224,7 +224,16 @@ MATURITY_LEVELS = {
         "summary": "Formal spec, spec gate, status control plane, basic host binding, and closeout/reconciliation reads are available.",
     },
     "strong": {
-        "requires": ["standard", "repo_interface", "repo_interop", "github_controlled_merge"],
+        "requires": [
+            "standard",
+            "repo_interface",
+            "repo_interop",
+            "host_enforced_control_plane",
+            "pr_merge_path",
+            "controlled_merge_basis",
+            "closeout_basis",
+            "github_controlled_merge",
+        ],
         "summary": "Host-backed binding, reconciliation, controlled merge, and closeout gates are available.",
     },
 }
@@ -331,6 +340,34 @@ MATURITY_REQUIRED_FIELDS = {
             "required": True,
             "defaulting": "host",
             "recommended_action": "enable controlled merge binding and required host gates",
+        },
+        {
+            "id": "host_enforced_control_plane",
+            "layer": "github-profile",
+            "required": True,
+            "defaulting": "host",
+            "recommended_action": "verify branch protection or ruleset enforcement plus required checks before claiming strong governance",
+        },
+        {
+            "id": "pr_merge_path",
+            "layer": "github-profile",
+            "required": True,
+            "defaulting": "host",
+            "recommended_action": "prove the PR merge path is host-owned and readable before strong governance",
+        },
+        {
+            "id": "controlled_merge_basis",
+            "layer": "github-profile",
+            "required": True,
+            "defaulting": "host",
+            "recommended_action": "prove controlled merge depends on verified host checks instead of local aliases",
+        },
+        {
+            "id": "closeout_basis",
+            "layer": "github-profile",
+            "required": True,
+            "defaulting": "host",
+            "recommended_action": "prove closeout consumes merge commit and reconciliation basis before strong governance",
         },
     ],
 }
@@ -1620,6 +1657,7 @@ def detect_host_binding_surface(
 
 def maturity_status(
     *,
+    repository_mode: str,
     carrier_summary: dict[str, dict[str, str]],
     repo_interface: dict[str, Any],
     repo_interop: dict[str, Any],
@@ -1639,22 +1677,54 @@ def maturity_status(
     repo_interop_present = repo_interop.get("availability") == "present"
     basic_host_binding_present = host_binding.get("result") == "pass"
     github_control_plane_present = github_control_plane.get("default_branch") != "unknown"
+    host_enforcement = github_control_plane.get("host_enforcement")
+    host_enforced_control_plane = (
+        isinstance(host_enforcement, dict)
+        and host_enforcement.get("verification_status") == "verified"
+        and host_enforcement.get("branch_protection_or_ruleset") is True
+        and host_enforcement.get("required_checks") is True
+    )
+    required_objects = host_binding.get("required_objects")
+    implementation_pr = required_objects.get("implementation_pr") if isinstance(required_objects, dict) else None
+    merge_commit = required_objects.get("merge_commit") if isinstance(required_objects, dict) else None
+    closeout = required_objects.get("closeout") if isinstance(required_objects, dict) else None
+    pr_merge_path = (
+        isinstance(implementation_pr, dict)
+        and implementation_pr.get("authority") == "host"
+        and implementation_pr.get("status") in {"host-managed", "present"}
+    )
+    controlled_merge_basis = host_enforced_control_plane and github_control_plane_present and pr_merge_path
+    closeout_basis = (
+        repo_interop_present
+        and isinstance(merge_commit, dict)
+        and merge_commit.get("authority") == "host"
+        and isinstance(closeout, dict)
+        and closeout.get("status") == "present"
+    )
     facts = {
         **carrier_present,
         "light": False,
         "standard": False,
-        "fr_work_item_layer": repo_interface_present,
+        "fr_work_item_layer": repo_interface_present and repository_mode != "new",
         "spec_gate": spec_gate_present,
         "status_control_plane": True,
-        "basic_host_binding": basic_host_binding_present,
-        "closeout_reconciliation_read": repo_interop_present,
+        "basic_host_binding": basic_host_binding_present and repository_mode != "new",
+        "closeout_reconciliation_read": repo_interop_present and repository_mode != "new",
         "repo_interface": repo_interface_present,
         "repo_interop": repo_interop_present,
+        "host_enforced_control_plane": host_enforced_control_plane and repository_mode != "new",
+        "pr_merge_path": pr_merge_path and repository_mode != "new",
+        "controlled_merge_basis": controlled_merge_basis and repository_mode != "new",
+        "closeout_basis": closeout_basis and repository_mode != "new",
         "github_controlled_merge": (
-            github_control_plane_present
+            repository_mode != "new"
+            and github_control_plane_present
             and basic_host_binding_present
             and repo_interface_present
             and repo_interop_present
+            and host_enforced_control_plane
+            and controlled_merge_basis
+            and closeout_basis
         ),
     }
     achieved: list[str] = []
@@ -1687,12 +1757,18 @@ def maturity_status(
         "required_fields": MATURITY_REQUIRED_FIELDS,
         "missing_by_level": missing_by_level,
         "missing_details_by_level": missing_details_by_level,
+        "fresh_adoption": {
+            "repository_mode": repository_mode,
+            "max_default_maturity": "light",
+            "applied": repository_mode == "new",
+        },
         "gate_rollout": adoption_gate_rollout_status(maturity_current=current),
     }
 
 
 def governance_control_plane(
     *,
+    repository_mode: str,
     carrier_summary: dict[str, dict[str, str]],
     github_control_plane: dict[str, Any],
     repo_interface: dict[str, Any],
@@ -1714,6 +1790,7 @@ def governance_control_plane(
         "taxonomy": GATE_FAILURE_TAXONOMY,
         "gate_chain": GATE_CHAIN,
         "maturity": maturity_status(
+            repository_mode=repository_mode,
             carrier_summary=carrier_summary,
             repo_interface=repo_interface,
             repo_interop=repo_interop,
@@ -1750,6 +1827,7 @@ def build_governance_surface(
     workspace_profile = detect_workspace_profile(root, host_binding=host_binding)
     gate_starter = detect_gate_starter(root)
     control_plane = governance_control_plane(
+        repository_mode=repository_mode,
         carrier_summary=carrier_summary,
         github_control_plane=github_control_plane,
         repo_interface=repo_interface,
