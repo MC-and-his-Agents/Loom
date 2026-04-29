@@ -3832,6 +3832,7 @@ def purity_report_from_context(context: dict[str, Any], fact_chain_errors: list[
 
 def base_workspace_payload(context: dict[str, Any], operation: str) -> dict[str, Any]:
     purity = purity_report_from_context(context)
+    workspace_profile = workspace_profile_from_context(context)
     return {
         "command": "workspace",
         "operation": operation,
@@ -3845,6 +3846,7 @@ def base_workspace_payload(context: dict[str, Any], operation: str) -> dict[str,
             "entry": context["workspace_entry"],
             "path": relative_to_root(context["workspace_path"], context["target_root"]),
             "exists": context["workspace_path"].exists(),
+            "profile": workspace_profile,
         },
         "recovery": {
             "path": str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"]),
@@ -3859,6 +3861,39 @@ def base_workspace_payload(context: dict[str, Any], operation: str) -> dict[str,
         "purity": purity,
         "missing_inputs": [],
         "fallback_to": None,
+    }
+
+
+def select_workspace_profile_name(workspace_entry: str, item_id: str) -> tuple[str, str]:
+    normalized = workspace_entry.strip().replace("\\", "/")
+    if normalized == ".":
+        return "single-workspace", "workspace_entry points at the repository root"
+    if normalized.startswith(".worktrees/") or (item_id and item_id in normalized):
+        return "per-item-worktree", "workspace_entry is item-scoped or under `.worktrees/`"
+    return "attach-existing", "workspace_entry points at an existing repo-defined workspace"
+
+
+def workspace_profile_from_context(context: dict[str, Any]) -> dict[str, Any]:
+    selected, reason = select_workspace_profile_name(context["workspace_entry"], context["item_id"])
+    return {
+        "schema_version": "loom-workspace-profile/v1",
+        "selected": selected,
+        "selection_reason": reason,
+        "workspace_entry": context["workspace_entry"],
+        "workspace_path": relative_to_root(context["workspace_path"], context["target_root"]),
+        "workspace_exists": context["workspace_path"].exists(),
+        "host_worktree": {
+            "ownership": "host",
+            "cwd_within_repo": current_cwd_relative(context["target_root"]) or "outside_target_repo",
+            "status": "host_managed",
+        },
+        "recommended_action": (
+            "keep workspace_entry as `.` unless isolation becomes necessary"
+            if selected == "single-workspace"
+            else "ensure workspace, branch, Work Item, and PR bindings stay aligned"
+            if selected == "per-item-worktree"
+            else "keep repo-specific workspace locator declared and host lifecycle ownership external"
+        ),
     }
 
 
@@ -5023,6 +5058,7 @@ def handle_host_binding(args: argparse.Namespace) -> int:
 def host_lifecycle_payload(context: dict[str, Any]) -> dict[str, Any]:
     branch = git_branch(context["target_root"])
     purity = purity_report_from_context(context)
+    workspace_profile = workspace_profile_from_context(context)
     worktree_root = current_cwd_relative(context["target_root"])
     branch_status = "report_only" if branch else "host_managed_without_local_branch"
     pr_status = "report_only"
@@ -5053,6 +5089,7 @@ def host_lifecycle_payload(context: dict[str, Any]) -> dict[str, Any]:
                 "ownership": "loom",
                 "entry": context["workspace_entry"],
                 "path": relative_to_root(context["workspace_path"], context["target_root"]),
+                "profile": workspace_profile,
                 "lifecycle_entry": "python3 .loom/bin/loom_flow.py workspace create|locate|cleanup|retire",
             },
             "branch": {
@@ -5096,6 +5133,7 @@ def governance_profile_payload(target_root: Path, operation: str) -> dict[str, A
     next_level = maturity.get("next")
     target_level = next_level if isinstance(next_level, str) else current if isinstance(current, str) else None
     gate_rollout = maturity.get("gate_rollout")
+    workspace_profile = control_plane.get("workspace_profile") if isinstance(control_plane, dict) else None
     missing_by_level = maturity.get("missing_by_level")
     missing_details_by_level = maturity.get("missing_details_by_level")
     missing_inputs: list[Any] = []
@@ -5127,6 +5165,7 @@ def governance_profile_payload(target_root: Path, operation: str) -> dict[str, A
         "recommended_action": "run governance-profile upgrade --dry-run" if result == "block" else None,
         "fallback_to": None if result == "pass" else "adoption",
         "maturity": maturity,
+        "workspace_profile": workspace_profile,
         "gate_rollout": gate_rollout,
         "governance_control_plane": control_plane,
         "adoption_decisions": decisions,
@@ -5201,6 +5240,7 @@ def governance_profile_upgrade_payload(
         }
     base = governance_profile_payload(target_root, "upgrade-plan")
     maturity = base.get("maturity") if isinstance(base.get("maturity"), dict) else {}
+    workspace_profile = base.get("workspace_profile")
     actions = governance_upgrade_actions(target_root, target_level, maturity if isinstance(maturity, dict) else {})
     blockers: list[str] = []
     written_files: list[str] = []
@@ -5237,6 +5277,7 @@ def governance_profile_upgrade_payload(
         "actions": actions,
         "written_files": written_files,
         "maturity": maturity,
+        "workspace_profile": workspace_profile,
         "gate_rollout": maturity.get("gate_rollout") if isinstance(maturity, dict) else None,
         "adoption_decisions": decisions,
         "guided_adoption_plan": guided_plan,

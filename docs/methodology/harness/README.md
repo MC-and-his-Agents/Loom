@@ -29,6 +29,8 @@
   - 定义 `admission` / `build` checkpoint 的输入、输出、失败语义与回退去向
 - [workspace-model.md](./workspace-model.md)
   - 定义执行现场的隔离、定位与 clean state 要求
+- [workspace-profile.md](./workspace-profile.md)
+  - 定义 `single-workspace`、`per-item-worktree`、`attach-existing` 三类默认现场装配 profile
 - `workspace-lifecycle.md`
   - 定义 `create`、`locate`、`cleanup`、`retire` 与 `purity-check` 的生命周期合同
 - [host-action-contract.md](./host-action-contract.md)
