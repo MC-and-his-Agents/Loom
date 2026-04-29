@@ -125,6 +125,16 @@
     "closeout": []
   },
   "specialized_gates": [],
+  "review_instruction_locators": {
+    "spec_review": {
+      "locator": ".loom/companion/review-instructions/spec.md",
+      "mode": "repo_declared"
+    },
+    "implementation_review": {
+      "locator": ".loom/companion/review-instructions/implementation.md",
+      "mode": "repo_declared"
+    }
+  },
   "metadata_contract": {
     "fields": []
   },
@@ -136,12 +146,14 @@
 
 `v2` 在 `v1` 之上新增两个可选顶层 section：
 
+- `review_instruction_locators`
 - `metadata_contract`
 - `context_schema`
 
 稳定约束：
 
 - `metadata_contract` 与 `context_schema` 只在 `v2` 合法
+- `review_instruction_locators` 只在 `v2` 合法
 - `v2` 不改变 `repo_specific_requirements` 与 `specialized_gates` 的既有纪律
 - `v2` 不把 repo runtime state、review summary、validation status 或 retained host action result 写入 `repo-interface.json`
 
@@ -171,7 +183,39 @@
 - `gate_type` 只允许 `admission | pre_review | review | build | merge_ready | closeout`
 - `gate_type` 只用于说明 gate 所属 Loom surface，不承载 repo-specific 运行态细节
 
-### 4.4 `metadata_contract`
+### 4.4 `review_instruction_locators`
+
+`review_instruction_locators` 用于声明仓库已有 review instruction 的机读入口。它回答的是：
+
+- formal spec review 应读取哪份 repo-owned instruction
+- implementation review 应读取哪份 repo-owned instruction
+- 目标仓库是否显式选择 Loom default review instruction
+
+当前固定 key：
+
+- `spec_review`
+- `implementation_review`
+
+每个 locator entry 固定字段：
+
+- `locator`
+- `mode`
+
+其中：
+
+- `locator` 必须指向仓内可读路径
+- `mode` 只允许 `repo_declared | loom_default`
+
+稳定约束：
+
+- 成熟既有仓库和 deep-existing attach path 必须优先声明 repo-owned locator，不得让 Loom 猜测文件名
+- lightweight / new repository 可以显式使用 `loom_default`，但仍必须把选择写进 `repo-interface.json`
+- 不得把 `spec_review.md`、`code_review.md` 或任何 Syvert-style 路径硬编码成 Loom 默认查找路径
+- repo-owned instruction 应说明该仓库如何检查 behavior evidence、test evidence 与 fresh verification evidence
+- `review_instruction_locators` 只定位 review instruction，不承载 review verdict、review summary、finding disposition、validation status 或 retained host action result
+- missing、unreadable 或 unsafe locator 在 mature / deep-existing 仓库中必须 fail closed；轻量仓库必须显式声明 `loom_default` 才能走默认 instruction
+
+### 4.5 `metadata_contract`
 
 `metadata_contract` 用于声明 repo-specific metadata block 的 locator contract，而不是把这些字段抬升为 Loom core 默认字段或通用 schema。
 
@@ -216,7 +260,7 @@
 - 它们不得被回写成 Loom core 默认字段名
 - Loom 不为它们提供跨仓统一 taxonomy 承诺
 
-### 4.4.1 明确禁止上移的字段模式
+### 4.5.1 明确禁止上移的字段模式
 
 `metadata_contract` 不得承接以下字段模式：
 
@@ -239,7 +283,7 @@
 
 它们不能因为“看起来像 metadata”就被回塞到 `repo-interface.json`。
 
-### 4.4.2 与 `context_schema` 的边界
+### 4.5.2 与 `context_schema` 的边界
 
 `metadata_contract` 与 `context_schema` 的分工固定如下：
 
@@ -254,7 +298,7 @@
 - 不得在 `context_schema` 中伪装声明 repo-native metadata block 的 authority locator
 - 不得把同一字段同时当作“必传上下文字段”和“repo-local metadata result 字段”写成单一 Loom core 默认概念
 
-### 4.4.3 与 `interop.json` 的边界
+### 4.5.3 与 `interop.json` 的边界
 
 `metadata_contract` 不得声明以下 locator：
 
@@ -273,7 +317,7 @@ external-runtime 迁移路径固定属于 [external-runtime-companion-contract.m
 - 不得把 `blocking ownership`、`override path`、`authority-of-truth` 写成 `metadata_contract` 字段
 - 不得把 external-runtime 的 runtime locator 或 rollback switch 写进 `repo-interface.json`
 
-### 4.5 `context_schema`
+### 4.6 `context_schema`
 
 `context_schema` 用于声明 repo-specific required context fields 与映射规则，不暗含单一 Loom 通用字段模型。
 
@@ -291,12 +335,13 @@ external-runtime 迁移路径固定属于 [external-runtime-companion-contract.m
 - `required` 必须是布尔值
 - `mapping_rule_locator` 指向仓库如何把宿主上下文映射到该字段的权威说明
 
-### 4.6 纪律重申
+### 4.7 纪律重申
 
 无论 `v1` 或 `v2`，以下纪律保持不变：
 
 - `manifest.json` 仍 locator-only
 - `repo-interface.json` 仍不承载运行态、review summary、current stop、validation status 或 host action result
+- `review_instruction_locators` 只承接 repo-owned review instruction 入口，不得承接 review disposition 或 review result
 - `metadata_contract` 仍只是 repo-specific metadata block 的 locator contract，不定义 Loom core 默认 taxonomy
 - repo-specific 规则仍通过 companion 合同挂接，不得伪装成 Loom core 默认规则
 - host adapter / repo-native carrier / shadow parity 入口继续留在独立的 `interop.json`，不得回塞到 `repo-interface.json`

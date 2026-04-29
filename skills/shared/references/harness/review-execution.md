@@ -25,6 +25,15 @@ Loom 把 review 分成四层：
 3. `review record`
    - 把 formal review 结论写入单一 authored review record
 
+正式 review 必须消费 BDD/TDD 双循环的当前证据：
+
+- BDD 外环
+  - 检查实现是否覆盖 spec 中的可观察场景
+- TDD 内环
+  - 检查 plan 中承诺的测试、检查或人工验证是否形成 test evidence
+- fresh verification evidence
+  - 检查 behavior evidence / test evidence 是否绑定当前 `reviewed_head` 与当前验证摘要
+
 ## 2. 唯一 review 载体
 
 正式 review 结论必须落在唯一 `review_entry` 指向的 review record。
@@ -45,6 +54,8 @@ Loom 把 review 分成四层：
 
 默认 engine 当前固定为 Codex。
 若 engine 不可用、schema 漂移、runtime 冲突或运行后改动了 tracked repo 内容，`review run` 必须返回 `block`，并指向 manual review 继续写回同一 `review record`；不得把这类失败伪装成 gate fallback。
+
+成熟既有仓库可以通过 repo companion 的 `review_instruction_locators` 声明 spec review 与 implementation review 的 repo-owned instruction 入口。正式 review 必须先消费这些 locator；缺失、不可读或越界时 fail closed，不得猜测 `spec_review.md`、`code_review.md` 或任何 Syvert-style 路径。
 
 ## 3. review record 最小字段
 
@@ -71,11 +82,29 @@ review record 至少应包含：
 - `severity` 当前稳定值为 `warn`、`block`
 - `rebuttal` 当前稳定值为 `null` 或非空字符串
 - `disposition` 当前稳定值为 `null` 或对象；对象内的 `status` 只允许 `accepted`、`rejected`、`deferred`
+- `disposition.status = accepted` 表示 finding 已确认需要处理，必须由后续实现、验证或 follow-up 承接
+- `disposition.status = rejected` 必须包含可审查理由，并且不得遮蔽仍然缺失的 behavior/test evidence
+- `disposition.status = deferred` 必须绑定后续事项或显式非当前范围理由，不得作为 merge gate 默认放行
 - `blocking_issues` / `follow_ups` 只是从 `findings` 投影出的兼容字段，不构成第二真相源
 - `consumed_inputs.engine_adapter`、`consumed_inputs.engine_evidence`、`consumed_inputs.normalized_findings`
   - 只记录 evidence 来源，不构成第二 authored truth
+- `consumed_inputs.behavior_evidence` 与 `consumed_inputs.test_evidence`
+  - 只记录 review 消费的证据 locator / 摘要 / fresh 绑定，不构成第二 authored truth
 
-## 4. 与 gate chain 的边界
+## 4. repeated blocker 与 root cause
+
+正式 review 不只看单个 finding 是否存在，也要识别同类阻断是否重复出现。
+
+若同一类 block finding、同一测试失败、同一行为证据缺口或同一 review disposition 在多轮中重复出现，review record 必须把它升级为 root-cause/repeated-blocker 处理：
+
+- finding 应标记重复阻断的证据来源
+- `summary` 应说明为什么单点修复不足
+- `fallback_to` 应指向需要重做的前序 gate、验证入口或计划修正点
+- merge gate 不得在 repeated blocker 未被 accepted/rejected/deferred 且有证据支撑前放行
+
+subagent 输出只能作为 review 输入证据。主执行者必须先把它整合到实现、验证摘要、review record 或 recovery；未整合的 subagent 结论不得直接成为 reviewer 结论。
+
+## 5. 与 gate chain 的边界
 
 `review gate` 固定只做机械消费：
 
@@ -85,16 +114,18 @@ review record 至少应包含：
   - 若 `HEAD` 在 review 之后只新增了 Loom 自身的 review / recovery / status carriers 提交，允许继续消费
   - 一旦 `HEAD` 还包含其他路径漂移，仍按 review stale 处理
 - 校验 `reviewed_validation_summary` 是否仍匹配当前 recovery 的 `latest_validation_summary`
+- 校验 review record 消费的 behavior evidence / test evidence 是否仍是 fresh
 - `decision: allow` 才算 review gate 已通过
 - `decision: block` 返回 `block`
 - `decision: fallback` 按 `fallback_to` 返回 `fallback`
 - 如需读取阻断或后续事项，只能优先消费同一 review record 内的 `findings`
+- 如需读取 review disposition，只能消费同一 review record 中的 `findings[].disposition`
 
 它不得直接消费 engine raw output、prompt、日志或其他 evidence 文件。
 
 `merge gate` 进一步只消费通过后的 review record 与宿主控制面，不再重做实现审查。
 
-## 5. 非目标
+## 6. 非目标
 
 - 不把 review 结论写回 recovery entry 或 `status control plane`
 - 不让 PR 模板充当正式 review 真相

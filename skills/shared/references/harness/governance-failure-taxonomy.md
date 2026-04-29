@@ -129,6 +129,37 @@ closeout 阶段发现的控制面对齐漂移。
 
 验证证据、回滚边界或 closeout basis 缺失到无法继续放行。
 
+最小触发条件至少包括其一：
+
+- behavior evidence 缺失，且当前事项没有有效 `not_applicable`
+- test evidence 缺失，且 plan / recovery 没有说明等价验证路径
+- 最近验证不绑定当前 `HEAD`、当前范围或当前恢复摘要
+- 证据只存在于未整合的 subagent 输出、会话文本或 engine raw output 中
+- review disposition 的 accepted / rejected / deferred 结论缺少可审查依据
+
+默认影响：
+
+- 阻断 review 对应 finding 的关闭
+- 阻断 `merge-ready`
+- 阻断 closeout 对 `absorbed` / `closed_out` 的证明
+
+### 5.5 `repeated_blocker`
+
+同类阻断跨多轮、跨同一 gate 或跨多个 subagent 输出重复出现，说明当前处理方式没有解决 root cause。
+
+最小触发条件至少包括其一：
+
+- 同一测试、检查或行为场景连续失败
+- 同类 review block finding 在 disposition 后再次出现
+- 同一 evidence gap 在 build / review / merge-ready 中重复阻断
+- 多个 subagent 独立报告同一类范围、设计或验证缺口
+
+默认影响：
+
+- 当前 gate 必须 `block` 或 `fallback`
+- 状态面必须暴露 root-cause/repeated-blocker 信号
+- 后续处理必须回到计划、实现路径、验证设计或 ownership 分配修正，不得继续只做局部表面修复
+
 ## 6. 输出纪律
 
 每条治理失败至少要暴露：
@@ -146,6 +177,7 @@ closeout 阶段发现的控制面对齐漂移。
 - `category` 只允许 `stale` / `drift` / `gate_failure`
 - `kind` 必须来自本文件冻结的子类
 - `fallback_to` 只能指向已存在的前序 gate 或专门同步入口
+- repeated blocker 必须带上 root-cause 假设、重复证据与下一步验证方式
 
 ## 7. 与统一状态控制面的关系
 

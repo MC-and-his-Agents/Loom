@@ -134,7 +134,8 @@ GitHub profile adoption 的 gate 消费模式固定为三态：
 - repo interop contract
 - GitHub controlled merge
 - repo-specific residue
+- review instruction locators for spec review and implementation review
 - authority boundary
 - guardian / integration contract 作为 repo-native evidence 的读取边界
 
-这些判断只服务于 GitHub profile 采用和升级；不得把 Syvert guardian 规则、单仓命名或 repo-local gate 细节提升为 Loom core 默认规则。
+这些判断只服务于 GitHub profile 采用和升级；不得把 Syvert guardian 规则、单仓命名或 repo-local gate 细节提升为 Loom core 默认规则。升级计划必须要求 mature / deep-existing 仓库声明 repo-owned review instruction locator，不能猜测 `spec_review.md`、`code_review.md` 或 Syvert-style 路径。

@@ -2,11 +2,11 @@
 
 ## 愿景
 
-Loom 希望成为智能体优先软件项目的通用治理与执行编排底座。
+Loom 希望成为智能体优先软件项目的 agent-first project operating layer。
 
 它要复用的，不是业务代码，而是项目如何被组织、如何进入执行、如何跨多轮持续推进、如何进入 merge-ready、以及如何收口的能力。
 
-如果 Loom 成立，新项目将不再从“空仓库 + 临时约定 + 分散上下文”开始，而是从一套可持续的运行结构开始。
+如果 Loom 成立，新项目将不再从“空仓库 + 临时约定 + 分散上下文”开始，而是从一套可持续、可验证、可由 agent 直接操作的运行结构开始。
 
 ## 核心判断
 
@@ -15,8 +15,8 @@ Loom 建立在以下判断上：
 1. 真正稀缺的不是代码生成，而是持续有序执行。
    当人和智能体都能更快产出代码时，真正决定项目质量的，是执行秩序、状态连续性和审查收口能力。
 
-2. 治理必须进入仓库，而不能只停留在会话里。
-   如果目标、边界、风险、验证和恢复信息没有进入版本控制，项目就无法长期协作。
+2. 治理真相必须成为 operating plane，而不能只停留在会话里。
+   如果目标、边界、风险、验证和恢复信息没有进入版本控制，项目就无法长期协作；但治理真相只是 Loom operating layer 的一个 plane，不等同于整个产品定位。
 
 3. 长任务与宿主控制面都必须依赖 harness，而不是依赖上下文记忆。
    对多轮推进事项而言，checkpoint、resume、状态查看、受控入口，以及对 GitHub / review / merge / closeout 的统一编排都不是附加功能，而是基础设施。
@@ -24,27 +24,32 @@ Loom 建立在以下判断上：
 4. `SKILLS` 应成为可执行系统入口，而不只是路由说明。
    `SKILLS` 应直接帮助人和智能体启动新项目、接手老项目、打开执行回合、进入 review、推进 merge-ready 和执行 closeout，但不应替代治理真相源。
 
-5. 可复用的对象应是运行模型。
+5. Behavior-first 执行应成为 Loom 的外部契约。
+   Work Item、spec、plan、build checkpoint、review、merge-ready 和 closeout 都应能消费行为证据与测试证据；BDD 描述外部可观察行为，TDD 驱动内部实现证据，但纯文档事项不应被强行套成单一实现仪式。
+
+6. 可复用的对象应是运行模型。
    大多数项目不共享产品代码，但共享许多执行问题。Loom 要复用的是这些问题的解决结构。
 
-6. 项目吞吐应围绕 `merge-ready` 收敛，而不是把 final review 当作第一次系统性发现问题的地方。
+7. 项目吞吐应围绕 `merge-ready` 收敛，而不是把 final review 当作第一次系统性发现问题的地方。
    review、guardian、CI、merge gate 与 closeout 应被拆成不同层级，并在受控流程中提前暴露问题。
 
-7. Loom 不要求自研所有底层宿主能力。
+8. Loom 不要求自研所有底层宿主能力。
    只要治理真相和编排语义由 Loom 持有，`gh`、`git worktree`、review engine、CI、project API 等都可以作为 Loom harness 的被编排对象。
 
-## Loom 的三层模型
+## Loom 的 Operating Planes
 
-Loom 的三层模型是：
+Loom 的 operating layer 由以下 planes 协同组成：
 
 - `Governance Truth`
   - 负责事项、状态机、checkpoint、成熟度、关闭语义与审查职责的制度真相
 - `Harness Orchestration`
   - 负责 repo 内执行机制与宿主能力编排，包括工作现场、恢复、review/merge/closeout、GitHub 与 host tooling 的统一调用语义
+- `Behavior and Test Evidence`
+  - 负责把 BDD/TDD 双重证据循环带入 Work Item、spec、plan、build checkpoint、review、merge-ready 和 closeout
 - `Executable SKILLS`
   - 负责按场景暴露一等入口，让 agent 可以直接进入 adopt、resume、review、merge-ready、closeout 等动作
 
-Loom 的目标不是让这三层混在一起，而是让它们边界清晰、协同工作，并最终表现为一套可执行的治理操作系统。
+Loom 的目标不是让这些 planes 混在一起，而是让它们边界清晰、协同工作，并最终表现为一套可执行的项目运行层。
 
 ## Loom 不解决什么
 
@@ -76,6 +81,7 @@ Loom 的长期目标是让一个项目可以稳定获得以下能力：
 - 新项目可以快速采用 Loom，而不是复制一堆历史文档
 - 新项目启动和老项目接手都可以通过 Loom `SKILLS` 直接进入受控执行回合
 - 治理和 harness 可以作为上游能力独立迭代
+- 行为证据与测试证据可以被 review、gate、status 和 closeout 稳定消费
 - 项目在多轮执行中仍然能保持清晰状态
 - 审查、门禁、merge-ready 和收口在不同仓库中保持稳定一致
 - 团队认为 Loom 的价值是“让项目能长期有序运行”，而不只是“提供了一些自动化脚本”

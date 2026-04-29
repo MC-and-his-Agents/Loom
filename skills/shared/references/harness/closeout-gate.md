@@ -32,6 +32,8 @@ closeout gate 用来回答两件事：
 - 事项对应实现是否已达到 `absorbed`
 - merged PR 是否已进入 `origin/main`
 - project 中对应 issue 的状态
+- merge-ready 消费过的 behavior evidence / test evidence 摘要
+- 主干包含合并结果后仍可回链的 fresh verification evidence
 
 若这些事实不一致，结果必须返回 `block`。
 
@@ -52,6 +54,13 @@ closeout gate 用来回答两件事：
 - `warn`：必须显式挂到 closeout 输出，但不默认阻断
 - `fix-needed`：必须返回 `block`；先经 `reconciliation sync` 完成机械对齐，再重新执行 closeout check
 - `block`：必须返回 `block`；先消除硬冲突或缺失事实，且在 audit 重新达标前禁止任何 closeout sync 写入
+
+closeout 消费 behavior/test evidence 的语义如下：
+
+- 它不重新执行 BDD/TDD 判断，只校验 merge-ready 放行所消费的证据仍可回链当前 merged result
+- 若证据只覆盖 merge 前 `HEAD`，必须能通过 PR / merge commit / main 包含关系证明该证据仍覆盖当前主干结果
+- 若 closeout 发现主干、issue、project 或 evidence locator 无法互相回链，必须返回 `block`
+- 若 subagent 输出没有被整合到 review record、验证摘要或 merge-ready basis，closeout 不得把它作为 `absorbed` 或 `closed_out` 依据
 
 这里的 `absorbed` 只表示 host merge 后可证明的实现吸收结论，不等于 `closed_out`。
 因此，`closeout check` 至少要能区分：
