@@ -54,3 +54,4 @@ Loom 当前不固化：
 
 branch、PR 与 git worktree 的宿主边界见 [host-lifecycle-boundary.md](./host-lifecycle-boundary.md)。
 `active issue` 绑定消费见 [host-issue-binding.md](./host-issue-binding.md)。
+默认 workspace profile 见 [workspace-profile.md](./workspace-profile.md)。

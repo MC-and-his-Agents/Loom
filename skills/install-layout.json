@@ -40,6 +40,7 @@
     "shared/references/harness/runtime-state.md",
     "shared/references/harness/work-item-contract.md",
     "shared/references/harness/workspace-model.md",
+    "shared/references/harness/workspace-profile.md",
     "shared/references/harness/automation-frontload.md",
     "shared/references/harness/workspace-and-purity.md",
     "shared/references/harness/execution-context.md",

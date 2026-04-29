@@ -76,6 +76,7 @@ CORE_DOCS = (
     "docs/methodology/harness/execution-chain.md",
     "docs/methodology/harness/checkpoint-model.md",
     "docs/methodology/harness/workspace-model.md",
+    "docs/methodology/harness/workspace-profile.md",
     "docs/methodology/harness/workspace-lifecycle.md",
     "docs/methodology/harness/host-action-contract.md",
     "docs/methodology/harness/host-lifecycle-boundary.md",
@@ -185,6 +186,7 @@ AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT = (
     "docs/methodology/harness/execution-chain.md",
     "docs/methodology/harness/checkpoint-model.md",
     "docs/methodology/harness/workspace-model.md",
+    "docs/methodology/harness/workspace-profile.md",
     "docs/methodology/harness/workspace-lifecycle.md",
     "docs/methodology/harness/recovery-model.md",
     "docs/methodology/harness/status-surface.md",
@@ -736,12 +738,47 @@ def require_governance_surface(
         context=f"{context} governance_surface.repo_interop",
         payload=governance_surface.get("repo_interop"),
     )
+    require_workspace_profile_payload(
+        failures,
+        category=category,
+        context=f"{context} governance_surface.workspace_profile",
+        payload=governance_surface.get("workspace_profile"),
+    )
     require_governance_control_plane(
         failures,
         category=category,
         context=f"{context} governance_surface.governance_control_plane",
         payload=governance_surface.get("governance_control_plane"),
     )
+
+
+def require_workspace_profile_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("schema_version") != "loom-workspace-profile/v1":
+        failures.append(Failure(category, f"{context} schema_version must be `loom-workspace-profile/v1`"))
+    if payload.get("selected") not in {"single-workspace", "per-item-worktree", "attach-existing", "unknown"}:
+        failures.append(Failure(category, f"{context} selected profile must stay within the stable set"))
+    if payload.get("result") not in {"pass", "block"}:
+        failures.append(Failure(category, f"{context} result must be pass/block"))
+    if not isinstance(payload.get("missing_inputs"), list):
+        failures.append(Failure(category, f"{context} missing_inputs must be a list"))
+    for field in ("workspace_entry", "workspace_path", "recommended_action"):
+        value = payload.get(field)
+        if not isinstance(value, str) or not value:
+            failures.append(Failure(category, f"{context}.{field} must be a non-empty string"))
+    host_worktree = payload.get("host_worktree")
+    if not isinstance(host_worktree, dict):
+        failures.append(Failure(category, f"{context}.host_worktree must be an object"))
+    elif host_worktree.get("ownership") != "host":
+        failures.append(Failure(category, f"{context}.host_worktree ownership must stay `host`"))
 
 
 def require_governance_control_plane(
@@ -782,6 +819,13 @@ def require_governance_control_plane(
             failures.append(Failure(category, f"{context}.host_binding.required_objects must expose the stable host binding object set"))
         elif required_objects.get("work_item", {}).get("authority") != "loom fact chain":
             failures.append(Failure(category, f"{context}.host_binding work_item authority must remain Loom fact chain"))
+
+    require_workspace_profile_payload(
+        failures,
+        category=category,
+        context=f"{context}.workspace_profile",
+        payload=payload.get("workspace_profile"),
+    )
 
     taxonomy = payload.get("taxonomy")
     expected_taxonomy = {

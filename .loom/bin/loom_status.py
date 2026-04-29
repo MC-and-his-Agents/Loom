@@ -409,6 +409,7 @@ def main(argv: list[str]) -> int:
     review = implementation_review_status_payload(context)
     merge_ready = checkpoint_payload("merge", context)
     governance_surface = build_governance_surface(target_root)
+    workspace_profile = governance_surface.get("workspace_profile")
     github_status, github_errors = github_status_payload(
         target_root,
         issue_number=args.issue,
@@ -490,6 +491,7 @@ def main(argv: list[str]) -> int:
             "review": review,
             "merge_ready": merge_ready,
             "closeout": closeout,
+            "workspace_profile": workspace_profile,
             "governance_status": control_status,
             "governance_surface": governance_surface,
             "github": github_status,

@@ -33,6 +33,23 @@ PLANNED_LOCATORS = {
 REPO_INTERFACE_SURFACES = ("review", "merge_ready", "closeout")
 REPO_INTERFACE_AVAILABILITY = {"absent", "companion_docs_only", "incomplete", "present"}
 REPO_INTERFACE_MANIFEST_SCHEMA = "loom-repo-companion-manifest/v1"
+WORKSPACE_PROFILE_CONTRACTS = {
+    "single-workspace": {
+        "summary": "Use the repository root as the Loom execution workspace.",
+        "host_worktree_required": False,
+        "recommended_action": "keep workspace_entry as `.` unless isolation becomes necessary",
+    },
+    "per-item-worktree": {
+        "summary": "Use one isolated workspace per Work Item, usually backed by host git worktree.",
+        "host_worktree_required": True,
+        "recommended_action": "ensure workspace, branch, Work Item, and PR bindings stay aligned",
+    },
+    "attach-existing": {
+        "summary": "Attach Loom to an existing repo-defined workspace without taking over host lifecycle actions.",
+        "host_worktree_required": False,
+        "recommended_action": "declare the repo-specific workspace locator and keep host lifecycle ownership external",
+    },
+}
 REPO_INTERFACE_V1_SCHEMA = "loom-repo-interface/v1"
 REPO_INTERFACE_V2_SCHEMA = "loom-repo-interface/v2"
 REPO_INTERFACE_SCHEMAS = {REPO_INTERFACE_V1_SCHEMA, REPO_INTERFACE_V2_SCHEMA}
@@ -1047,6 +1064,72 @@ def active_entry_points(root: Path) -> dict[str, str]:
     return active
 
 
+def work_item_workspace_entry(root: Path) -> str:
+    active = active_entry_points(root)
+    locator = active.get("work_item")
+    if not locator:
+        return ""
+    resolved_locator, work_item_path = resolve_locator(root, locator)
+    if resolved_locator is None or work_item_path is None:
+        return ""
+    try:
+        text = work_item_path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    match = re.search(r"^- Workspace Entry:\s*(.+?)\s*$", text, flags=re.MULTILINE)
+    return match.group(1).strip() if match else ""
+
+
+def select_workspace_profile(workspace_entry: str, item_id: str) -> tuple[str, str]:
+    if not workspace_entry:
+        return "unknown", "workspace_entry is not readable"
+    normalized = workspace_entry.strip().replace("\\", "/")
+    if normalized == ".":
+        return "single-workspace", "workspace_entry points at the repository root"
+    if normalized.startswith(".worktrees/") or (item_id and item_id in normalized):
+        return "per-item-worktree", "workspace_entry is item-scoped or under `.worktrees/`"
+    return "attach-existing", "workspace_entry points at an existing repo-defined workspace"
+
+
+def detect_workspace_profile(root: Path, *, host_binding: dict[str, Any]) -> dict[str, Any]:
+    active = active_entry_points(root)
+    item_id = active.get("current_item_id", "")
+    workspace_entry = work_item_workspace_entry(root)
+    selected, reason = select_workspace_profile(workspace_entry, item_id)
+    locator, workspace_path = resolve_locator(root, workspace_entry)
+    missing_inputs: list[str] = []
+    if not workspace_entry:
+        missing_inputs.append("missing_workspace_entry")
+    elif locator is None or workspace_path is None:
+        missing_inputs.append("workspace_escape")
+    elif not workspace_path.exists():
+        missing_inputs.append("workspace_missing")
+    required_objects = host_binding.get("required_objects") if isinstance(host_binding, dict) else None
+    worktree = required_objects.get("worktree") if isinstance(required_objects, dict) else None
+    worktree_status = worktree.get("status") if isinstance(worktree, dict) else "unknown"
+    return {
+        "schema_version": "loom-workspace-profile/v1",
+        "selected": selected,
+        "selection_reason": reason,
+        "profiles": WORKSPACE_PROFILE_CONTRACTS,
+        "workspace_entry": workspace_entry or "unknown",
+        "workspace_path": locator or "unknown",
+        "workspace_exists": bool(workspace_path and workspace_path.exists()),
+        "host_worktree": {
+            "ownership": "host",
+            "status": worktree_status,
+            "locator": worktree.get("locator", "unknown") if isinstance(worktree, dict) else "unknown",
+        },
+        "result": "pass" if not missing_inputs else "block",
+        "missing_inputs": missing_inputs,
+        "recommended_action": (
+            WORKSPACE_PROFILE_CONTRACTS[selected]["recommended_action"]
+            if selected in WORKSPACE_PROFILE_CONTRACTS
+            else "restore the Work Item workspace_entry before running workspace profile checks"
+        ),
+    }
+
+
 def bootstrap_host_binding_branch(root: Path) -> str:
     init_result = root / ".loom/bootstrap/init-result.json"
     try:
@@ -1369,6 +1452,7 @@ def governance_control_plane(
     repo_interface: dict[str, Any],
     repo_interop: dict[str, Any],
     host_binding: dict[str, Any],
+    workspace_profile: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "schema_version": GOVERNANCE_CONTROL_VERSION,
@@ -1377,6 +1461,7 @@ def governance_control_plane(
             "illegal_entry_fallbacks": WORK_ITEM_ENFORCEMENT_FALLBACKS,
             "result": "pass" if carrier_summary.get("work_item", {}).get("status") == "present" else "block",
         },
+        "workspace_profile": workspace_profile,
         "host_binding": host_binding,
         "taxonomy": GATE_FAILURE_TAXONOMY,
         "gate_chain": GATE_CHAIN,
@@ -1414,12 +1499,14 @@ def build_governance_surface(
         repo_interface=repo_interface,
         repo_interop=repo_interop,
     )
+    workspace_profile = detect_workspace_profile(root, host_binding=host_binding)
     control_plane = governance_control_plane(
         carrier_summary=carrier_summary,
         github_control_plane=github_control_plane,
         repo_interface=repo_interface,
         repo_interop=repo_interop,
         host_binding=host_binding,
+        workspace_profile=workspace_profile,
     )
 
     missing_inputs: list[str] = []
@@ -1455,6 +1542,7 @@ def build_governance_surface(
         "github_control_plane": github_control_plane,
         "repo_interface": repo_interface,
         "repo_interop": repo_interop,
+        "workspace_profile": workspace_profile,
         "governance_control_plane": control_plane,
         "summary": summary,
         "missing_inputs": list(dict.fromkeys(missing_inputs)),
