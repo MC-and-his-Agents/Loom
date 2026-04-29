@@ -2600,7 +2600,7 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
             "root carrier refresh",
             ["python3", ".loom/bin/loom_flow.py", "carrier", "refresh", "--target", ".", "--dry-run"],
             "carrier-refresh",
-            {"result": "pass", "schema_version": "loom-carrier-refresh/v1"},
+            {"schema_version": "loom-carrier-refresh/v1"},
         ),
         (
             "root shadow parity",
@@ -2646,13 +2646,24 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
             elif roundtrip.get("bypass_check", {}).get("result") != "pass":
                 failures.append(Failure("root-self-adoption", "`root adopt verify` must prove required section deletion blocks"))
         if kind == "carrier-refresh":
-            if payload.get("refresh_needed") not in ([], None):
-                failures.append(Failure("root-self-adoption", "`root carrier refresh --dry-run` must not report runtime provenance drift"))
             review = payload.get("review")
+            head_binding = review.get("head_binding") if isinstance(review, dict) else None
+            review_is_stale = isinstance(head_binding, dict) and head_binding.get("status") == "stale"
+            if payload.get("result") != "pass" and not review_is_stale:
+                failures.append(Failure("root-self-adoption", "`root carrier refresh` must report `result: pass` unless review head binding is stale"))
+            refresh_needed = payload.get("refresh_needed")
+            runtime_refresh_needed = [
+                action
+                for action in refresh_needed
+                if isinstance(action, dict)
+                and isinstance(action.get("path"), str)
+                and action.get("path", "").startswith(".loom/bin/")
+            ] if isinstance(refresh_needed, list) else []
+            if runtime_refresh_needed:
+                failures.append(Failure("root-self-adoption", "`root carrier refresh --dry-run` must not report runtime provenance drift"))
             if isinstance(review, dict):
-                head_binding = review.get("head_binding")
-                if isinstance(head_binding, dict) and head_binding.get("status") == "stale":
-                    failures.append(Failure("root-self-adoption", "`root carrier refresh --dry-run` must detect stale review head binding"))
+                if review_is_stale and review.get("status") not in {"block", "refresh-needed"}:
+                    failures.append(Failure("root-self-adoption", "`root carrier refresh --dry-run` must expose stale review head binding as refresh-needed review metadata"))
         if kind == "shadow-parity":
             reports = payload.get("reports")
             report_surfaces = {
