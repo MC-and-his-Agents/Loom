@@ -5135,6 +5135,27 @@ def governance_profile_payload(target_root: Path, operation: str) -> dict[str, A
     gate_rollout = maturity.get("gate_rollout")
     workspace_profile = control_plane.get("workspace_profile") if isinstance(control_plane, dict) else None
     gate_starter = control_plane.get("gate_starter") if isinstance(control_plane, dict) else None
+    github_control_plane = governance_surface.get("github_control_plane")
+    ci_check_presence = (
+        github_control_plane.get("ci_check_presence")
+        if isinstance(github_control_plane, dict)
+        else None
+    )
+    host_enforcement = (
+        github_control_plane.get("host_enforcement")
+        if isinstance(github_control_plane, dict)
+        else None
+    )
+    api_snapshot = (
+        github_control_plane.get("api_snapshot")
+        if isinstance(github_control_plane, dict)
+        else None
+    )
+    host_verification_status = (
+        api_snapshot.get("verification_status")
+        if isinstance(api_snapshot, dict)
+        else "unverified"
+    )
     missing_by_level = maturity.get("missing_by_level")
     missing_details_by_level = maturity.get("missing_details_by_level")
     missing_inputs: list[Any] = []
@@ -5168,6 +5189,9 @@ def governance_profile_payload(target_root: Path, operation: str) -> dict[str, A
         "maturity": maturity,
         "workspace_profile": workspace_profile,
         "gate_starter": gate_starter,
+        "ci_check_presence": ci_check_presence,
+        "host_enforcement": host_enforcement,
+        "host_verification_status": host_verification_status,
         "gate_rollout": gate_rollout,
         "governance_control_plane": control_plane,
         "adoption_decisions": decisions,
@@ -5244,6 +5268,9 @@ def governance_profile_upgrade_payload(
     maturity = base.get("maturity") if isinstance(base.get("maturity"), dict) else {}
     workspace_profile = base.get("workspace_profile")
     gate_starter = base.get("gate_starter")
+    ci_check_presence = base.get("ci_check_presence")
+    host_enforcement = base.get("host_enforcement")
+    host_verification_status = base.get("host_verification_status")
     actions = governance_upgrade_actions(target_root, target_level, maturity if isinstance(maturity, dict) else {})
     blockers: list[str] = []
     written_files: list[str] = []
@@ -5282,6 +5309,9 @@ def governance_profile_upgrade_payload(
         "maturity": maturity,
         "workspace_profile": workspace_profile,
         "gate_starter": gate_starter,
+        "ci_check_presence": ci_check_presence,
+        "host_enforcement": host_enforcement,
+        "host_verification_status": host_verification_status,
         "gate_rollout": maturity.get("gate_rollout") if isinstance(maturity, dict) else None,
         "adoption_decisions": decisions,
         "guided_adoption_plan": guided_plan,

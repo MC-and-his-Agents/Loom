@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -97,6 +98,20 @@ GATE_STARTER_ALIASES = {
         "summary": "Audit closeout drift without mutating host state.",
     },
 }
+HOST_API_BUDGET_CONTRACT = {
+    "schema_version": "loom-host-api-budget/v1",
+    "default_non_merge_read_mode": "cached_non_merge",
+    "merge_gate_read_mode": "uncached_live_gate",
+    "cache_scope": "process",
+    "rest_first": True,
+    "graphql_allowed_when": "REST cannot express the required relationship",
+    "search_endpoint": "not_in_hot_path",
+    "polling": "not_in_hot_path",
+    "rate_limit_policy": "consume x-ratelimit-* headers from natural responses when available; do not call /rate_limit just to inspect budget",
+    "github_actions_budget": "design for GITHUB_TOKEN per-repository hourly request limits",
+}
+GITHUB_STABLE_CHECK_NAMES = ("py-compile", "demo-bootstrap", "repo-local-cli", "loom-check")
+_GITHUB_API_CACHE: dict[tuple[str, ...], Any] = {}
 REPO_INTERFACE_V1_SCHEMA = "loom-repo-interface/v1"
 REPO_INTERFACE_V2_SCHEMA = "loom-repo-interface/v2"
 REPO_INTERFACE_SCHEMAS = {REPO_INTERFACE_V1_SCHEMA, REPO_INTERFACE_V2_SCHEMA}
@@ -430,7 +445,15 @@ def detect_github_repo(root: Path) -> tuple[str | None, str | None]:
     return match.group("owner"), match.group("repo")
 
 
-def gh_json(root: Path, args: list[str]) -> tuple[dict[str, Any] | None, list[str]]:
+def gh_json_value(
+    root: Path,
+    args: list[str],
+    *,
+    read_mode: str = "cached_non_merge",
+) -> tuple[Any | None, list[str]]:
+    cache_key = tuple(args)
+    if read_mode == "cached_non_merge" and cache_key in _GITHUB_API_CACHE:
+        return deepcopy(_GITHUB_API_CACHE[cache_key]), []
     result = run_process(["gh", *args], root)
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip() or "gh command failed"
@@ -439,9 +462,27 @@ def gh_json(root: Path, args: list[str]) -> tuple[dict[str, Any] | None, list[st
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         return None, [f"invalid JSON from gh {' '.join(args)}: {exc.msg}"]
+    if read_mode == "cached_non_merge":
+        _GITHUB_API_CACHE[cache_key] = deepcopy(payload)
+    return payload, []
+
+
+def gh_json(root: Path, args: list[str]) -> tuple[dict[str, Any] | None, list[str]]:
+    payload, errors = gh_json_value(root, args)
+    if errors:
+        return None, errors
     if not isinstance(payload, dict):
         return None, [f"gh {' '.join(args)} did not return a JSON object"]
     return payload, []
+
+
+def gh_json_list(root: Path, args: list[str]) -> tuple[list[dict[str, Any]], list[str]]:
+    payload, errors = gh_json_value(root, args)
+    if errors:
+        return [], errors
+    if not isinstance(payload, list):
+        return [], [f"gh {' '.join(args)} did not return a JSON list"]
+    return [entry for entry in payload if isinstance(entry, dict)], []
 
 
 def gh_rest_json(root: Path, path: str) -> tuple[dict[str, Any] | None, list[str]]:
@@ -1310,24 +1351,75 @@ def detect_review_merge_surface(root: Path, loom_state: str, *, bootstrap_mode: 
     }
 
 
+def host_api_snapshot(
+    *,
+    requests: list[dict[str, Any]],
+    errors: list[str],
+    required_live: bool = False,
+) -> dict[str, Any]:
+    verification_status = "verified" if not errors else "unverified"
+    return {
+        "schema_version": "loom-host-api-snapshot/v1",
+        "read_mode": "uncached_live_gate" if required_live else "cached_non_merge",
+        "verification_status": verification_status,
+        "fallback_status": None if verification_status == "verified" else "host_unavailable",
+        "cache_scope": "none" if required_live else "process",
+        "requests": requests,
+        "errors": errors,
+        "budget": HOST_API_BUDGET_CONTRACT,
+    }
+
+
+def local_workflow_presence(root: Path) -> dict[str, Any]:
+    workflow_path = root / ".github/workflows/loom-check.yml"
+    return {
+        "schema_version": "loom-ci-check-presence/v1",
+        "workflow_exists": workflow_path.exists(),
+        "workflow_locator": ".github/workflows/loom-check.yml",
+        "stable_check_names": list(GITHUB_STABLE_CHECK_NAMES),
+        "check_ran": "unknown",
+        "required_checks_configured": "unknown",
+        "host_enforcement_status": "unverified",
+        "recommended_action": "install the workflow and configure its stable check names as host-required checks",
+    }
+
+
 def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
     owner, repo = detect_github_repo(root)
+    requests: list[dict[str, Any]] = []
+    snapshot_errors: list[str] = []
+    ci_presence = local_workflow_presence(root)
     surface: dict[str, Any] = {
         "repository": f"{owner}/{repo}" if owner and repo else "unknown",
         "default_branch": "unknown",
         "branch_protection": "unknown",
         "required_checks": "unknown",
         "pr_reviews": "unknown",
+        "rulesets": {
+            "status": "unknown",
+            "enforced": "unknown",
+            "count": "unknown",
+        },
+        "ci_check_presence": ci_presence,
+        "host_enforcement": {
+            "branch_protection_or_ruleset": "unknown",
+            "required_checks": "unknown",
+            "verification_status": "unverified",
+        },
+        "api_snapshot": host_api_snapshot(requests=requests, errors=["not read yet"]),
     }
     missing_inputs: list[str] = []
 
     if not owner or not repo:
         missing_inputs.append("cannot resolve GitHub repository from git origin")
+        surface["api_snapshot"] = host_api_snapshot(requests=requests, errors=missing_inputs)
         return surface, missing_inputs
 
+    requests.append({"method": "GET", "path": f"repos/{owner}/{repo}", "purpose": "repository default branch"})
     repo_payload, repo_errors = gh_rest_json(root, f"repos/{owner}/{repo}")
     if repo_errors or repo_payload is None:
         missing_inputs.extend(f"github control plane: {message}" for message in repo_errors)
+        surface["api_snapshot"] = host_api_snapshot(requests=requests, errors=missing_inputs)
         return surface, missing_inputs
 
     full_name = repo_payload.get("full_name")
@@ -1338,12 +1430,15 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
         surface["default_branch"] = branch_name
     if surface["default_branch"] == "unknown":
         missing_inputs.append("github control plane: default branch is unavailable")
+        surface["api_snapshot"] = host_api_snapshot(requests=requests, errors=missing_inputs)
         return surface, missing_inputs
 
     encoded_branch = quote(str(surface["default_branch"]), safe="")
+    requests.append({"method": "GET", "path": f"repos/{owner}/{repo}/branches/{encoded_branch}", "purpose": "branch protection"})
     branch_payload, branch_errors = gh_json(root, ["api", f"repos/{owner}/{repo}/branches/{encoded_branch}"])
     if branch_errors or branch_payload is None:
         missing_inputs.extend(f"github control plane: {message}" for message in branch_errors)
+        surface["api_snapshot"] = host_api_snapshot(requests=requests, errors=missing_inputs)
         return surface, missing_inputs
 
     protected = branch_payload.get("protected")
@@ -1363,6 +1458,76 @@ def detect_github_control_plane(root: Path) -> tuple[dict[str, Any], list[str]]:
             surface["pr_reviews"] = "required"
         elif surface["branch_protection"] == "enabled":
             surface["pr_reviews"] = "not_required"
+    required_checks = surface["required_checks"]
+    if isinstance(required_checks, list):
+        ci_presence["required_checks_configured"] = all(name in required_checks for name in GITHUB_STABLE_CHECK_NAMES)
+    ci_presence["host_enforcement_status"] = (
+        "verified"
+        if surface["branch_protection"] == "enabled" and ci_presence["required_checks_configured"] is True
+        else "unverified"
+    )
+
+    requests.append({"method": "GET", "path": f"repos/{owner}/{repo}/actions/workflows", "purpose": "workflow presence"})
+    workflows_payload, workflow_errors = gh_json(root, ["api", f"repos/{owner}/{repo}/actions/workflows"])
+    if workflows_payload is not None:
+        workflows = workflows_payload.get("workflows")
+        if isinstance(workflows, list):
+            ci_presence["workflow_exists"] = any(
+                isinstance(item, dict) and item.get("path") == ".github/workflows/loom-check.yml"
+                for item in workflows
+            ) or bool(ci_presence["workflow_exists"])
+    else:
+        snapshot_errors.extend(f"github workflow read: {message}" for message in workflow_errors)
+
+    requests.append({"method": "GET", "path": f"repos/{owner}/{repo}/commits/{encoded_branch}/check-runs", "purpose": "recent check runs"})
+    check_runs_payload, check_run_errors = gh_json(
+        root,
+        [
+            "api",
+            "-H",
+            "Accept: application/vnd.github+json",
+            f"repos/{owner}/{repo}/commits/{encoded_branch}/check-runs",
+        ],
+    )
+    if check_runs_payload is not None:
+        check_runs = check_runs_payload.get("check_runs")
+        if isinstance(check_runs, list):
+            seen_checks = {
+                item.get("name")
+                for item in check_runs
+                if isinstance(item, dict) and isinstance(item.get("name"), str)
+            }
+            ci_presence["check_ran"] = all(name in seen_checks for name in GITHUB_STABLE_CHECK_NAMES)
+    else:
+        snapshot_errors.extend(f"github check-runs read: {message}" for message in check_run_errors)
+
+    requests.append({"method": "GET", "path": f"repos/{owner}/{repo}/rulesets", "purpose": "branch ruleset enforcement"})
+    rulesets, ruleset_errors = gh_json_list(root, ["api", f"repos/{owner}/{repo}/rulesets"])
+    if ruleset_errors:
+        surface["rulesets"] = {"status": "unverified", "enforced": "unknown", "count": "unknown"}
+        snapshot_errors.extend(f"github rulesets read: {message}" for message in ruleset_errors)
+    else:
+        enforced_rulesets = [
+            entry
+            for entry in rulesets
+            if entry.get("target") in {"branch", "push"} and entry.get("enforcement") == "active"
+        ]
+        surface["rulesets"] = {
+            "status": "verified",
+            "enforced": bool(enforced_rulesets),
+            "count": len(rulesets),
+        }
+
+    branch_or_ruleset = surface["branch_protection"] == "enabled" or surface["rulesets"].get("enforced") is True
+    required_checks_configured = ci_presence.get("required_checks_configured") is True
+    surface["host_enforcement"] = {
+        "branch_protection_or_ruleset": bool(branch_or_ruleset),
+        "required_checks": bool(required_checks_configured),
+        "workflow_exists": bool(ci_presence.get("workflow_exists")),
+        "check_ran": ci_presence.get("check_ran"),
+        "verification_status": "verified" if not snapshot_errors else "unverified",
+    }
+    surface["api_snapshot"] = host_api_snapshot(requests=requests, errors=snapshot_errors)
     return surface, missing_inputs
 
 
