@@ -37,6 +37,8 @@
   - 定义 `create`、`locate`、`cleanup`、`retire` 与 `purity-check` 的生命周期合同
 - [host-action-contract.md](./host-action-contract.md)
   - 定义现有 host-facing actions 的统一结果、`fallback_to` 与 ownership 合同
+- [host-api-budget.md](./host-api-budget.md)
+  - 定义 GitHub REST / GraphQL 读取预算、快照、缓存与 fallback 语义
 - [host-lifecycle-boundary.md](./host-lifecycle-boundary.md)
   - 定义 Loom 与宿主 branch / PR / git worktree 生命周期的边界
 - [host-issue-binding.md](./host-issue-binding.md)

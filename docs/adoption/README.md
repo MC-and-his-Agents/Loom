@@ -23,6 +23,7 @@
 - 成熟治理重仓的默认 attach 策略：[deep-existing-repo-default.md](./deep-existing-repo-default.md)
 - GitHub 默认治理实现 profile：[github-profile.md](./github-profile.md)
 - GitHub profile 升级路径：[github-profile-upgrade.md](./github-profile-upgrade.md)
+- CI required checks bootstrap：[ci-required-checks-bootstrap.md](./ci-required-checks-bootstrap.md)
 
 边界约束：
 

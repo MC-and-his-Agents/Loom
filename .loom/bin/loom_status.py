@@ -411,6 +411,9 @@ def main(argv: list[str]) -> int:
     governance_surface = build_governance_surface(target_root)
     workspace_profile = governance_surface.get("workspace_profile")
     gate_starter = governance_surface.get("gate_starter")
+    github_control_plane = governance_surface.get("github_control_plane")
+    ci_check_presence = github_control_plane.get("ci_check_presence") if isinstance(github_control_plane, dict) else None
+    host_enforcement = github_control_plane.get("host_enforcement") if isinstance(github_control_plane, dict) else None
     github_status, github_errors = github_status_payload(
         target_root,
         issue_number=args.issue,
@@ -494,6 +497,8 @@ def main(argv: list[str]) -> int:
             "closeout": closeout,
             "workspace_profile": workspace_profile,
             "gate_starter": gate_starter,
+            "ci_check_presence": ci_check_presence,
+            "host_enforcement": host_enforcement,
             "governance_status": control_status,
             "governance_surface": governance_surface,
             "github": github_status,

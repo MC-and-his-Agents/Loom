@@ -80,6 +80,7 @@ CORE_DOCS = (
     "docs/methodology/harness/repo-local-gate-starter.md",
     "docs/methodology/harness/workspace-lifecycle.md",
     "docs/methodology/harness/host-action-contract.md",
+    "docs/methodology/harness/host-api-budget.md",
     "docs/methodology/harness/host-lifecycle-boundary.md",
     "docs/methodology/harness/reconciliation-audit.md",
     "docs/methodology/harness/recovery-model.md",
@@ -119,6 +120,7 @@ CORE_DOCS = (
     "docs/adoption/routing-and-checkpoints.md",
     "docs/adoption/github-profile.md",
     "docs/adoption/github-profile-upgrade.md",
+    "docs/adoption/ci-required-checks-bootstrap.md",
     "docs/adoption/external-runtime-companion-contract.md",
     "docs/adoption/lightweight-retrofit-default.md",
     "docs/adoption/repo-companion-contract.md",
@@ -727,6 +729,40 @@ def require_governance_surface(
             or (isinstance(required_checks, list) and all(isinstance(item, str) and item for item in required_checks))
         ):
             failures.append(Failure(category, f"{context} governance_surface `github_control_plane.required_checks` must be `unknown` or a string list"))
+        ci_presence = github_control_plane.get("ci_check_presence")
+        if not isinstance(ci_presence, dict):
+            failures.append(Failure(category, f"{context} governance_surface `github_control_plane.ci_check_presence` must be an object"))
+        else:
+            stable_names = ci_presence.get("stable_check_names")
+            required_names = {"py-compile", "demo-bootstrap", "repo-local-cli", "loom-check"}
+            if not isinstance(stable_names, list) or not required_names.issubset(set(stable_names)):
+                failures.append(Failure(category, f"{context} governance_surface `github_control_plane.ci_check_presence.stable_check_names` must include Loom's stable checks"))
+            if ci_presence.get("host_enforcement_status") not in {"verified", "unverified", "stale", "host_unavailable"}:
+                failures.append(Failure(category, f"{context} governance_surface `github_control_plane.ci_check_presence.host_enforcement_status` must be stable"))
+        host_enforcement = github_control_plane.get("host_enforcement")
+        if not isinstance(host_enforcement, dict):
+            failures.append(Failure(category, f"{context} governance_surface `github_control_plane.host_enforcement` must be an object"))
+        elif host_enforcement.get("verification_status") not in {"verified", "unverified", "stale", "host_unavailable"}:
+            failures.append(Failure(category, f"{context} governance_surface `github_control_plane.host_enforcement.verification_status` must be stable"))
+        rulesets = github_control_plane.get("rulesets")
+        if not isinstance(rulesets, dict):
+            failures.append(Failure(category, f"{context} governance_surface `github_control_plane.rulesets` must be an object"))
+        elif rulesets.get("status") not in {"verified", "unverified", "unknown"}:
+            failures.append(Failure(category, f"{context} governance_surface `github_control_plane.rulesets.status` must be stable"))
+        api_snapshot = github_control_plane.get("api_snapshot")
+        if not isinstance(api_snapshot, dict):
+            failures.append(Failure(category, f"{context} governance_surface `github_control_plane.api_snapshot` must be an object"))
+        else:
+            if api_snapshot.get("schema_version") != "loom-host-api-snapshot/v1":
+                failures.append(Failure(category, f"{context} governance_surface `github_control_plane.api_snapshot.schema_version` must be `loom-host-api-snapshot/v1`"))
+            if api_snapshot.get("read_mode") not in {"cached_non_merge", "uncached_live_gate"}:
+                failures.append(Failure(category, f"{context} governance_surface `github_control_plane.api_snapshot.read_mode` must be stable"))
+            if api_snapshot.get("verification_status") not in {"verified", "unverified", "stale", "host_unavailable"}:
+                failures.append(Failure(category, f"{context} governance_surface `github_control_plane.api_snapshot.verification_status` must be stable"))
+            if not isinstance(api_snapshot.get("requests"), list):
+                failures.append(Failure(category, f"{context} governance_surface `github_control_plane.api_snapshot.requests` must be a list"))
+            if not isinstance(api_snapshot.get("errors"), list):
+                failures.append(Failure(category, f"{context} governance_surface `github_control_plane.api_snapshot.errors` must be a list"))
 
     require_repo_interface_payload(
         failures,
@@ -7310,6 +7346,92 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             governance_surface_module.detect_github_repo = original_detect_repo
             governance_surface_module.gh_rest_json = original_rest_json
             governance_surface_module.gh_json = original_gh_json
+
+        original_detect_repo = governance_surface_module.detect_github_repo
+        original_rest_json = governance_surface_module.gh_rest_json
+        original_gh_json = governance_surface_module.gh_json
+        original_gh_json_list = governance_surface_module.gh_json_list
+        try:
+            governance_surface_module.detect_github_repo = lambda _root: ("owner", "repo")
+            governance_surface_module.gh_rest_json = lambda _root, _path: ({"full_name": "owner/repo", "default_branch": "main"}, [])
+
+            def fake_control_plane_json(_root: Path, args: list[str]) -> tuple[dict[str, object], list[str]]:
+                endpoint = args[-1]
+                if endpoint == "repos/owner/repo/branches/main":
+                    return {
+                        "protected": True,
+                        "protection": {
+                            "required_status_checks": {
+                                "contexts": ["py-compile", "demo-bootstrap", "repo-local-cli", "loom-check"]
+                            },
+                            "required_pull_request_reviews": {},
+                        },
+                    }, []
+                if endpoint == "repos/owner/repo/actions/workflows":
+                    return {"workflows": [{"path": ".github/workflows/loom-check.yml"}]}, []
+                if endpoint == "repos/owner/repo/commits/main/check-runs":
+                    return {
+                        "check_runs": [
+                            {"name": "py-compile"},
+                            {"name": "demo-bootstrap"},
+                            {"name": "repo-local-cli"},
+                            {"name": "loom-check"},
+                        ]
+                    }, []
+                return {}, []
+
+            governance_surface_module.gh_json = fake_control_plane_json
+            governance_surface_module.gh_json_list = lambda _root, _args: ([{"target": "branch", "enforcement": "active"}], [])
+            surface, errors = governance_surface_module.detect_github_control_plane(base)
+            if errors:
+                failures.append(Failure("adversarial-adoption", f"host control-plane verified fixture failed: {'; '.join(errors)}"))
+            elif surface.get("api_snapshot", {}).get("verification_status") != "verified":
+                failures.append(Failure("adversarial-adoption", "host control-plane fixture must produce a verified API snapshot"))
+            elif surface.get("host_enforcement", {}).get("required_checks") is not True:
+                failures.append(Failure("adversarial-adoption", "required checks fixture must be host-enforced only when stable check names are configured"))
+            elif surface.get("rulesets", {}).get("enforced") is not True:
+                failures.append(Failure("adversarial-adoption", "ruleset fixture must report active branch ruleset enforcement"))
+        finally:
+            governance_surface_module.detect_github_repo = original_detect_repo
+            governance_surface_module.gh_rest_json = original_rest_json
+            governance_surface_module.gh_json = original_gh_json
+            governance_surface_module.gh_json_list = original_gh_json_list
+
+        original_detect_repo = governance_surface_module.detect_github_repo
+        original_rest_json = governance_surface_module.gh_rest_json
+        original_gh_json = governance_surface_module.gh_json
+        original_gh_json_list = governance_surface_module.gh_json_list
+        try:
+            governance_surface_module.detect_github_repo = lambda _root: ("owner", "repo")
+            governance_surface_module.gh_rest_json = lambda _root, _path: ({"full_name": "owner/repo", "default_branch": "main"}, [])
+
+            def fake_unverified_json(_root: Path, args: list[str]) -> tuple[dict[str, object] | None, list[str]]:
+                endpoint = args[-1]
+                if endpoint == "repos/owner/repo/branches/main":
+                    return {
+                        "protected": True,
+                        "protection": {
+                            "required_status_checks": {"contexts": ["py-compile"]},
+                        },
+                    }, []
+                return None, ["host unavailable"]
+
+            governance_surface_module.gh_json = fake_unverified_json
+            governance_surface_module.gh_json_list = lambda _root, _args: ([], ["host unavailable"])
+            surface, errors = governance_surface_module.detect_github_control_plane(base)
+            if errors:
+                failures.append(Failure("adversarial-adoption", f"optional host control-plane reads must not become missing inputs: {'; '.join(errors)}"))
+            elif surface.get("api_snapshot", {}).get("verification_status") != "unverified":
+                failures.append(Failure("adversarial-adoption", "failed optional host reads must surface as unverified"))
+            elif surface.get("rulesets", {}).get("status") != "unverified":
+                failures.append(Failure("adversarial-adoption", "ruleset read failure must not be projected as an empty ruleset list"))
+            elif surface.get("host_enforcement", {}).get("required_checks") is not False:
+                failures.append(Failure("adversarial-adoption", "partial required checks must not pass host enforcement"))
+        finally:
+            governance_surface_module.detect_github_repo = original_detect_repo
+            governance_surface_module.gh_rest_json = original_rest_json
+            governance_surface_module.gh_json = original_gh_json
+            governance_surface_module.gh_json_list = original_gh_json_list
 
         merge_calls: list[list[str]] = []
         original_run_git = loom_flow_module.run_git
