@@ -6,7 +6,7 @@
   "summary": "Behavior-first operating-layer closeout slice reviewed after root runtime, companion, status carrier synchronization, and installer version-gate repair.",
   "reviewer": "codex-review",
   "reviewed_head": "b3a7216e2dd868c8b08ca33b62a58fac5235818d",
-  "reviewed_validation_summary": "Root .loom/bin verify passed; installer version bump gate passed for 0.1.55 -> 0.1.56; installer doc sync, payload drift, and tests passed; loom_check gates cover behavior-first docs, locators, and carrier evidence.",
+  "reviewed_validation_summary": "Root .loom/bin verify passed; carrier refresh dry-run has no runtime provenance drift; loom_check gates cover behavior-first docs, locators, and carrier evidence.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
