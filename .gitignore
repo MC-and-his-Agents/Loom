@@ -20,6 +20,9 @@ pnpm-debug.log*
 .env
 .env.*
 *.local
+.agents/plugins/
+.codex/
+.claude/marketplaces/
 
 # Archives
 *.zip
@@ -90,7 +93,9 @@ vendor/
 go.work.sum
 
 # Loom generated release artifacts
-plugins/loom/
+plugins/loom/*
+!plugins/loom/.codex-plugin/
+!plugins/loom/.codex-plugin/plugin.json
 packages/skills/
 packages/loom-installer/payload/
 .worktrees/

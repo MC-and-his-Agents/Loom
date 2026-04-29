@@ -41,7 +41,7 @@ Options：
 
 ## Payload Model
 
-发布包会包含生成出来的 payload。该 payload 会在 build、pack 和 publish 阶段，从 canonical root `.codex-plugin/` 与 `skills/` 源动态生成。
+发布包会包含生成出来的 payload。该 payload 会在 build、pack 和 publish 阶段，从 canonical `plugins/loom/.codex-plugin/` manifest 与 `skills/` 源动态生成。
 
 生成出来的 payload 目录不会提交到 git。Build 步骤会以确定性方式重建它们，`check:payload` 会校验重建稳定性。
 

@@ -27,7 +27,7 @@ Loom 保持 plugin / SKILLS / CLI 的产品形态。Plugin 承接安装、发现
 可以直接这样告诉 Codex：
 
 ```text
-Fetch and follow instructions from https://raw.githubusercontent.com/MC-and-his-Agents/Loom/refs/heads/main/.codex/INSTALL.md
+Fetch and follow instructions from https://raw.githubusercontent.com/MC-and-his-Agents/Loom/refs/heads/main/docs/adoption/codex-install.md
 ```
 
 也可以手动安装：
@@ -95,7 +95,7 @@ Loom 当前暴露一个 root entry 和八个 scenario skills：
 | `loom-merge-ready` | 验证 merge readiness。 |
 | `loom-retire` | 在不丢弃用户改动的前提下清理并退场。 |
 
-Canonical skills library 位于 [skills/](./skills/)。生成出来的 plugin 和 single-skill payload 不再提交到仓库；release tooling 会从根级 canonical `.codex-plugin/` 与 `skills/` 真相源动态构建它们。
+Canonical skills library 位于 [skills/](./skills/)。Canonical Codex plugin manifest 位于 [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/)；生成出来的 plugin 和 single-skill payload 不再提交到仓库，release tooling 会从这些真相源动态构建它们。
 
 ## 高级 / 兼容
 

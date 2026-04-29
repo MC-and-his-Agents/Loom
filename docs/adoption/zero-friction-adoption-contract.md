@@ -15,7 +15,7 @@ zero-friction adoption 的目标是让 agent 能从 Loom 输出独立完成一�
 
 稳定边界：
 
-- 不把 Syvert guardian 规则提升为 Loom core 默认规则
+- 不把任何下游仓库的 repo-native review / guardian 规则提升为 Loom core 默认规则
 - 不要求 fully unattended one-command strong adoption
 - 不把 `repo companion` 或 `repo interop` 写成第二套运行态真相
 - 不让 generated files 接管 branch、PR、worktree、merge、ruleset 或 host action 的底层实现

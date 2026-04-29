@@ -67,9 +67,9 @@
 - stale / drift 仍由不同入口各自解释
 - GitHub profile 升级结果无法被后续 gate 稳定消费
 
-## 6. Syvert parity 目标
+## 6. Strong governance parity 目标
 
-GitHub strong governance 的目标不是复制 Syvert 的文件名，而是达到与 Syvert 同等级的治理能力：
+GitHub strong governance 的目标不是复制任何下游仓库的文件名，而是达到可验证的 strong governance 能力基准：
 
 - 唯一执行入口
 - formal spec 前置 gate
@@ -80,7 +80,7 @@ GitHub strong governance 的目标不是复制 Syvert 的文件名，而是达�
 
 ## 7. 非目标
 
-- 不把 Syvert 的 repo-local 命名直接抄成 Loom 默认规则
+- 不把任何下游仓库的 repo-local 命名直接抄成 Loom 默认规则
 - 不要求所有 adopted repo 一次性切到 `strong`
 - 不把 validation-only parity 直接升级成 blocking host policy
 
@@ -138,4 +138,4 @@ GitHub profile adoption 的 gate 消费模式固定为三态：
 - authority boundary
 - guardian / integration contract 作为 repo-native evidence 的读取边界
 
-这些判断只服务于 GitHub profile 采用和升级；不得把 Syvert guardian 规则、单仓命名或 repo-local gate 细节提升为 Loom core 默认规则。升级计划必须要求 mature / deep-existing 仓库声明 repo-owned review instruction locator，不能猜测 `spec_review.md`、`code_review.md` 或 Syvert-style 路径。
+这些判断只服务于 GitHub profile 采用和升级；不得把任何下游仓库的 repo-native review / guardian 规则、单仓命名或 repo-local gate 细节提升为 Loom core 默认规则。升级计划必须要求 mature / deep-existing 仓库声明 repo-owned review instruction locator，不能猜测 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 路径。

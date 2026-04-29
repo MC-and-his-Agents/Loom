@@ -27,7 +27,7 @@ The core execution model is:
 You can tell Codex:
 
 ```text
-Fetch and follow instructions from https://raw.githubusercontent.com/MC-and-his-Agents/Loom/refs/heads/main/.codex/INSTALL.md
+Fetch and follow instructions from https://raw.githubusercontent.com/MC-and-his-Agents/Loom/refs/heads/main/docs/adoption/codex-install.md
 ```
 
 Or install Loom manually:
@@ -95,7 +95,7 @@ Loom exposes one root entry and eight scenario skills:
 | `loom-merge-ready` | Validates merge readiness. |
 | `loom-retire` | Cleans up and exits without discarding user changes. |
 
-The canonical skills library lives under [skills/](./skills/). Generated plugin payloads and single-skill payloads are not committed. Release tooling builds them dynamically from the canonical root `.codex-plugin/` and `skills/` sources.
+The canonical skills library lives under [skills/](./skills/). The canonical Codex plugin manifest lives under [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/). Generated plugin payloads and single-skill payloads are not committed. Release tooling builds them dynamically from those sources.
 
 ## Advanced / Compatibility
 

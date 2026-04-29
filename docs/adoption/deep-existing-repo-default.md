@@ -48,7 +48,7 @@
 
 换句话说，Loom 这一步接管的是入口与读面，不是宿主动作底层实现。
 
-成熟既有仓库不得让 Loom 猜测 `spec_review.md`、`code_review.md` 或 Syvert-style 文件名。缺失、不可读或越界的 review instruction locator 必须在进入正式 review 前 fail closed。
+成熟既有仓库不得让 Loom 猜测 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 文件名。缺失、不可读或越界的 review instruction locator 必须在进入正式 review 前 fail closed。
 
 ## 5. 默认不装配
 

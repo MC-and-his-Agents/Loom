@@ -198,7 +198,7 @@ blocking 模式只改变消费结果，不改变 `shadow_surfaces` schema：
 要讨论是否从 validation-only 升级到更强治理面，必须同时满足以下条件：
 
 1. 至少两个新增的 live adopted repo
-   - 不得只重复消费当前 `Syvert` / `WebEnvoy` 基线表述
+   - 不得只重复消费当前下游基线样本表述
 2. 每个样本都提供版本化 parity 记录
    - 至少覆盖 `admission`
    - `review`

@@ -9,7 +9,7 @@ loom-demo-new-project:
 	python3 tools/loom_init.py bootstrap --target examples/new-project --write --force --verify --install-pr-template
 
 loom-self-plugin-check:
-	test -f .codex-plugin/plugin.json
+	test -f plugins/loom/.codex-plugin/plugin.json
 	test -f skills/registry.json
 	test -f skills/loom-init/SKILL.md
-	test -f .agents/plugins/marketplace.json
+	test ! -f .agents/plugins/marketplace.json

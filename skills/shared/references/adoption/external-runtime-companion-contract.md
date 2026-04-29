@@ -21,7 +21,7 @@ external-runtime 的目标是让成熟 adopted repo 最终可以：
 
 - `loom_init verify` 已经要求 `.loom/bin/*` 与 `.loom/bootstrap/manifest.json` 一致
 - manifest 中的 runtime artifact `sha256` 是当前 fail-closed trust boundary
-- Syvert-style strong adoption 仍需要本地可审计 runtime provenance
+- strong-governance adopted repo 仍需要本地可审计 runtime provenance
 
 因此，external-runtime 只是一条显式迁移路径，不是当前默认安装形态。
 

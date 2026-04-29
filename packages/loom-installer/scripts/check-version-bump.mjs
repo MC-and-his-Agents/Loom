@@ -12,7 +12,7 @@ const baseRef = baseArgIndex >= 0 ? process.argv[baseArgIndex + 1] : 'origin/mai
 
 const behaviorPrefixes = [
   'packages/loom-installer/src/',
-  '.codex-plugin/',
+  'plugins/loom/.codex-plugin/',
   'skills/',
 ];
 

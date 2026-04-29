@@ -53,7 +53,7 @@ Loom 把 review 分成三层：
 默认 engine 当前固定为 Codex。
 若 engine 不可用、schema 漂移、runtime 冲突或运行后改动了 tracked repo 内容，`review run` 必须返回 `block`，并指向 manual review 继续写回同一 `review record`；不得把这类失败伪装成 checkpoint fallback。
 
-成熟既有仓库可以通过 repo companion 的 `review_instruction_locators` 声明 spec review 与 implementation review 的 repo-owned instruction 入口。正式 review 必须先消费这些 locator；缺失、不可读或越界时 fail closed，不得猜测 `spec_review.md`、`code_review.md` 或任何 Syvert-style 路径。
+成熟既有仓库可以通过 repo companion 的 `review_instruction_locators` 声明 spec review 与 implementation review 的 repo-owned instruction 入口。正式 review 必须先消费这些 locator；缺失、不可读或越界时 fail closed，不得猜测 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 路径。
 
 ## 3. review record 最小字段
 

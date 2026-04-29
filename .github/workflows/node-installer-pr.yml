@@ -4,12 +4,13 @@ on:
   pull_request:
     paths:
       - 'packages/loom-installer/**'
-      - '.codex-plugin/**'
+      - 'plugins/loom/.codex-plugin/**'
       - 'skills/**'
       - 'README.md'
       - 'skills/README.md'
       - 'skills/distribution-and-adapter-contract.md'
       - 'skills/shared/scripts/loom_check.py'
+      - 'plugins/loom/.codex-plugin/plugin.json'
       - '.github/workflows/node-installer-pr.yml'
       - '.github/workflows/node-installer-release.yml'
       - '.github/workflows/loom-check.yml'

@@ -17,7 +17,7 @@ Loom 当前冻结的 operating planes 是：
 
 1. Loom 是 agent-first project operating layer 仓库，不是业务模板仓库。
 2. Loom 只沉淀多仓实证下成立的结构、机制、模板和教训，不复制单一仓库的历史形态。
-3. `Syvert` 与 `WebEnvoy` 都是正反并存的实践来源；任何单仓经验都不得直接被当作 Loom 默认内核。
+3. 下游仓库样本都是正反并存的实践来源；任何单仓经验都不得直接被当作 Loom 默认内核。
 4. `governance`、`harness`、`templates`、`adoption`、`skills` 必须边界清晰，不得混成单一说明文档。
 5. `keep` 条目进入 Loom 当前核心落点；`adapt` 条目进入候选落点；`needs_validation` 条目进入待验证区。
 6. 先冻结目标态与职责边界，再推进实现拆分、装配入口与 profile。
@@ -28,7 +28,7 @@ Loom 当前冻结的 operating planes 是：
 11. Loom 默认追求 `merge-readiness-centered` 的治理流程，不把 final review 当作第一次系统性发现问题的场所。
 12. Loom 不要求自研 GitHub、CI、review engine、`git worktree` 或 `gh` 的底层实现，但必须能统一编排和消费这些宿主能力。
 13. `governance truth` 是 Loom operating layer 的一个 plane，不得把 Loom 重新收窄成治理套件或流程框架。
-14. Superpowers-derived discipline 只能作为安装、发现、入口、触发、行为回归与宿主适配边界的抽象证据吸收；不得新增 `docs/superpowers/*`，不得复制 Superpowers skill 文本、hooks 或文件布局作为 Loom core。
+14. 外部方法论来源只能作为安装、发现、入口、触发、行为回归与宿主适配边界的抽象证据吸收；不得新增来源专属文档树，不得复制外部 skill 文本、hooks 或文件布局作为 Loom core。
 
 ## 权威来源
 
@@ -102,4 +102,4 @@ Loom 当前不是：
 - 从零重写 GitHub、CI、code review、`git worktree` 或 `gh` 的底层产品
 - 只靠 prompt 运转的文档仓库
 - 已经定型的 profile 系统
-- Superpowers 的分支文档树或 skill/file layout 镜像
+- 外部来源的分支文档树或 skill/file layout 镜像

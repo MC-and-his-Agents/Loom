@@ -210,7 +210,7 @@
 
 - 成熟既有仓库和 deep-existing attach path 必须优先声明 repo-owned locator，不得让 Loom 猜测文件名
 - lightweight / new repository 可以显式使用 `loom_default`，但仍必须把选择写进 `repo-interface.json`
-- 不得把 `spec_review.md`、`code_review.md` 或任何 Syvert-style 路径硬编码成 Loom 默认查找路径
+- 不得把 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 路径硬编码成 Loom 默认查找路径
 - repo-owned instruction 应说明该仓库如何检查 behavior evidence、test evidence 与 fresh verification evidence
 - `review_instruction_locators` 只定位 review instruction，不承载 review verdict、review summary、finding disposition、validation status 或 retained host action result
 - missing、unreadable 或 unsafe locator 在 mature / deep-existing 仓库中必须 fail closed；轻量仓库必须显式声明 `loom_default` 才能走默认 instruction

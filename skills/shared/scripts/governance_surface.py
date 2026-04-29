@@ -283,7 +283,7 @@ def adoption_gate_rollout_status(*, maturity_current: str) -> dict[str, Any]:
             "id": "adversarial_adoption_checks",
             "status": "missing",
             "layer": "core",
-            "recommended_action": "run the Loom-owned Syvert-style adversarial adoption fixture and record the validation evidence",
+            "recommended_action": "run the Loom-owned strong-governance adversarial adoption fixture and record the validation evidence",
         },
         {
             "id": "rollback_switch",
