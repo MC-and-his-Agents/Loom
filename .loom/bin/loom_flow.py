@@ -5134,6 +5134,7 @@ def governance_profile_payload(target_root: Path, operation: str) -> dict[str, A
     target_level = next_level if isinstance(next_level, str) else current if isinstance(current, str) else None
     gate_rollout = maturity.get("gate_rollout")
     workspace_profile = control_plane.get("workspace_profile") if isinstance(control_plane, dict) else None
+    gate_starter = control_plane.get("gate_starter") if isinstance(control_plane, dict) else None
     missing_by_level = maturity.get("missing_by_level")
     missing_details_by_level = maturity.get("missing_details_by_level")
     missing_inputs: list[Any] = []
@@ -5166,6 +5167,7 @@ def governance_profile_payload(target_root: Path, operation: str) -> dict[str, A
         "fallback_to": None if result == "pass" else "adoption",
         "maturity": maturity,
         "workspace_profile": workspace_profile,
+        "gate_starter": gate_starter,
         "gate_rollout": gate_rollout,
         "governance_control_plane": control_plane,
         "adoption_decisions": decisions,
@@ -5241,6 +5243,7 @@ def governance_profile_upgrade_payload(
     base = governance_profile_payload(target_root, "upgrade-plan")
     maturity = base.get("maturity") if isinstance(base.get("maturity"), dict) else {}
     workspace_profile = base.get("workspace_profile")
+    gate_starter = base.get("gate_starter")
     actions = governance_upgrade_actions(target_root, target_level, maturity if isinstance(maturity, dict) else {})
     blockers: list[str] = []
     written_files: list[str] = []
@@ -5278,6 +5281,7 @@ def governance_profile_upgrade_payload(
         "written_files": written_files,
         "maturity": maturity,
         "workspace_profile": workspace_profile,
+        "gate_starter": gate_starter,
         "gate_rollout": maturity.get("gate_rollout") if isinstance(maturity, dict) else None,
         "adoption_decisions": decisions,
         "guided_adoption_plan": guided_plan,
