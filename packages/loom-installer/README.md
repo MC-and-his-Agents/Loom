@@ -41,7 +41,7 @@ Options:
 
 ## Payload Model
 
-The published package includes a generated payload. The payload is generated from the canonical root `.codex-plugin/` and `skills/` sources during build, pack, and publish.
+The published package includes a generated payload. The payload is generated from the canonical `plugins/loom/.codex-plugin/` manifest and `skills/` sources during build, pack, and publish.
 
 Generated payload directories are not committed to git. The build step recreates them deterministically, and `check:payload` verifies rebuild stability.
 

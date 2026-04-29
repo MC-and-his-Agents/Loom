@@ -26,11 +26,10 @@ from loom_flow import allowed_post_review_carrier_paths, repo_specific_requireme
 from runtime_paths import repo_local_root
 
 TOP_LEVEL_DIRS = (
-    ".codex",
-    ".codex-plugin",
     "docs",
     "examples",
     "packages",
+    "plugins",
     "skills",
     "tools",
 )
@@ -56,8 +55,8 @@ CORE_DOCS = (
     ".github/workflows/loom-check.yml",
     ".github/workflows/node-installer-pr.yml",
     ".github/workflows/node-installer-release.yml",
-    ".codex/INSTALL.md",
-    ".codex-plugin/plugin.json",
+    "plugins/loom/.codex-plugin/plugin.json",
+    "docs/adoption/codex-install.md",
     "docs/architecture/governance-design.md",
     "docs/architecture/harness-design.md",
     "docs/architecture/system-design.md",
@@ -195,7 +194,7 @@ AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT = (
 )
 
 GENERATED_TRACKED_PATHS = (
-    "plugins/loom",
+    "plugins/loom/skills",
     "packages/skills",
     "packages/loom-installer/payload",
 )
@@ -2556,7 +2555,6 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
         return failures
 
     required_paths = (
-        ".agents/plugins/marketplace.json",
         ".loom/bootstrap/manifest.json",
         ".loom/bootstrap/init-result.json",
         ".loom/bin/loom_init.py",
@@ -2602,7 +2600,7 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
             "root carrier refresh",
             ["python3", ".loom/bin/loom_flow.py", "carrier", "refresh", "--target", ".", "--dry-run"],
             "carrier-refresh",
-            {"result": "pass", "schema_version": "loom-carrier-refresh/v1"},
+            {"schema_version": "loom-carrier-refresh/v1"},
         ),
         (
             "root shadow parity",
@@ -2648,13 +2646,24 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
             elif roundtrip.get("bypass_check", {}).get("result") != "pass":
                 failures.append(Failure("root-self-adoption", "`root adopt verify` must prove required section deletion blocks"))
         if kind == "carrier-refresh":
-            if payload.get("refresh_needed") not in ([], None):
-                failures.append(Failure("root-self-adoption", "`root carrier refresh --dry-run` must not report runtime provenance drift"))
             review = payload.get("review")
+            head_binding = review.get("head_binding") if isinstance(review, dict) else None
+            review_is_stale = isinstance(head_binding, dict) and head_binding.get("status") == "stale"
+            if payload.get("result") != "pass" and not review_is_stale:
+                failures.append(Failure("root-self-adoption", "`root carrier refresh` must report `result: pass` unless review head binding is stale"))
+            refresh_needed = payload.get("refresh_needed")
+            runtime_refresh_needed = [
+                action
+                for action in refresh_needed
+                if isinstance(action, dict)
+                and isinstance(action.get("path"), str)
+                and action.get("path", "").startswith(".loom/bin/")
+            ] if isinstance(refresh_needed, list) else []
+            if runtime_refresh_needed:
+                failures.append(Failure("root-self-adoption", "`root carrier refresh --dry-run` must not report runtime provenance drift"))
             if isinstance(review, dict):
-                head_binding = review.get("head_binding")
-                if isinstance(head_binding, dict) and head_binding.get("status") == "stale":
-                    failures.append(Failure("root-self-adoption", "`root carrier refresh --dry-run` must detect stale review head binding"))
+                if review_is_stale and review.get("status") not in {"block", "refresh-needed"}:
+                    failures.append(Failure("root-self-adoption", "`root carrier refresh --dry-run` must expose stale review head binding as refresh-needed review metadata"))
         if kind == "shadow-parity":
             reports = payload.get("reports")
             report_surfaces = {
@@ -2679,37 +2688,11 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
 def check_root_self_plugin_install(root: Path) -> list[Failure]:
     failures: list[Failure] = []
     marketplace_path = root / ".agents/plugins/marketplace.json"
-    if not marketplace_path.exists():
-        return failures
-    try:
-        marketplace = load_json_file(marketplace_path)
-    except json.JSONDecodeError as exc:
-        return [Failure("root-self-plugin", f"`.agents/plugins/marketplace.json` is invalid JSON: {exc.msg}")]
-    if not isinstance(marketplace, dict):
-        return [Failure("root-self-plugin", "`.agents/plugins/marketplace.json` must contain a JSON object")]
-    plugins = marketplace.get("plugins")
-    if not isinstance(plugins, list):
-        failures.append(Failure("root-self-plugin", "`marketplace.plugins` must be a list"))
-        plugins = []
-    loom_entry = next(
-        (
-            entry
-            for entry in plugins
-            if isinstance(entry, dict) and entry.get("name") == "loom"
-        ),
-        None,
-    )
-    if not isinstance(loom_entry, dict):
-        failures.append(Failure("root-self-plugin", "Codex marketplace must declare the `loom` plugin"))
-    else:
-        source = loom_entry.get("source")
-        if not isinstance(source, dict) or source.get("source") != "local":
-            failures.append(Failure("root-self-plugin", "Codex marketplace `loom` entry must use a local source"))
-        if not isinstance(source, dict) or source.get("path") != "./":
-            failures.append(Failure("root-self-plugin", "Codex marketplace `loom` entry must point to the Loom plugin root `./`"))
+    if marketplace_path.exists():
+        failures.append(Failure("root-self-plugin", "root `.agents/plugins/marketplace.json` is repo-local installed state and must not be committed upstream"))
 
     root_plugin_paths = (
-        ".codex-plugin/plugin.json",
+        "plugins/loom/.codex-plugin/plugin.json",
         "skills/registry.json",
         "skills/install-layout.json",
         "skills/shared/scripts/loom_init.py",
@@ -6886,7 +6869,7 @@ def check_behavior_first_locator_contracts(root: Path) -> list[Failure]:
             "behavior evidence",
             "test evidence",
             "fresh verification evidence",
-            "不得把 `spec_review.md`、`code_review.md` 或任何 Syvert-style 路径硬编码成 Loom 默认查找路径",
+            "不得把 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 路径硬编码成 Loom 默认查找路径",
             "不得承接 review disposition",
         ],
         "docs/adoption/repo-interop-contract.md": [
@@ -6897,7 +6880,7 @@ def check_behavior_first_locator_contracts(root: Path) -> list[Failure]:
         "docs/adoption/deep-existing-repo-default.md": [
             "review_instruction_locators",
             "repo-owned instruction locator",
-            "不得让 Loom 猜测 `spec_review.md`、`code_review.md` 或 Syvert-style 文件名",
+            "不得让 Loom 猜测 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 文件名",
         ],
         "docs/adoption/lightweight-retrofit-default.md": [
             "review_instruction_locators",
@@ -6907,7 +6890,7 @@ def check_behavior_first_locator_contracts(root: Path) -> list[Failure]:
         "docs/adoption/github-profile-upgrade.md": [
             "review instruction locators for spec review and implementation review",
             "repo-owned review instruction locator",
-            "不能猜测 `spec_review.md`、`code_review.md` 或 Syvert-style 路径",
+            "不能猜测 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 路径",
         ],
         "docs/methodology/harness/status-surface.md": [
             "fresh verification evidence",
@@ -6927,7 +6910,7 @@ def check_behavior_first_locator_contracts(root: Path) -> list[Failure]:
         "skills/shared/references/adoption/deep-existing-repo-default.md": [
             "review_instruction_locators",
             "repo-owned instruction locator",
-            "不得让 Loom 猜测 `spec_review.md`、`code_review.md` 或 Syvert-style 文件名",
+            "不得让 Loom 猜测 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 文件名",
         ],
         "skills/shared/references/adoption/lightweight-retrofit-default.md": [
             "review_instruction_locators",
@@ -6937,7 +6920,7 @@ def check_behavior_first_locator_contracts(root: Path) -> list[Failure]:
         "skills/shared/references/adoption/github-profile-upgrade.md": [
             "review instruction locators for spec review and implementation review",
             "repo-owned review instruction locator",
-            "不能猜测 `spec_review.md`、`code_review.md` 或 Syvert-style 路径",
+            "不能猜测 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 路径",
         ],
     }
     for relative, anchors in required_anchors.items():
@@ -7144,7 +7127,7 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                     "item_id": "INIT-0001",
                     "decision": "allow",
                     "kind": kind,
-                    "summary": "Syvert-style strong adoption fixture review is fresh.",
+                    "summary": "Strong-governance adoption fixture review is fresh.",
                     "reviewer": "loom-check",
                     "reviewed_head": reviewed_head,
                     "reviewed_validation_summary": validation_summary,
@@ -8092,8 +8075,8 @@ def check_operating_layer_contract(root: Path) -> list[Failure]:
         "AGENTS.md": [
             "agent-first project operating layer",
             "behavior and test evidence",
-            "Superpowers-derived discipline",
-            "不得新增 `docs/superpowers/*`",
+            "外部方法论来源",
+            "不得新增来源专属文档树",
         ],
         "docs/evidence/extraction-ledger.md": [
             "EXT-0057",
@@ -8151,7 +8134,7 @@ def check_operating_layer_contract(root: Path) -> list[Failure]:
             "spec_review",
             "implementation_review",
             "repo_declared | loom_default",
-            "不得把 `spec_review.md`、`code_review.md` 或任何 Syvert-style 路径硬编码",
+            "不得把 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 路径硬编码",
         ],
         "docs/adoption/repo-interop-contract.md": [
             "review instruction locator",

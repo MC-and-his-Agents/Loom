@@ -1,7 +1,7 @@
 {
   "name": "loom",
   "version": "0.4.0",
-  "description": "Loom skills-first methodology library for merge-ready-centered agent workflows.",
+  "description": "Loom agent-first project operating layer for merge-ready-centered workflows.",
   "author": {
     "name": "MC and his Agents",
     "email": "opensource@mc-and-his-agents.dev",
@@ -19,7 +19,7 @@
   "interface": {
     "displayName": "Loom",
     "shortDescription": "整包暴露 Loom scenario skills，并默认从 loom-init 进入。",
-    "longDescription": "Loom 以根级 skills/ 作为 canonical skills library；安装后由 loom-init 路由到 adopt、resume、review、merge-ready、retire 等场景入口。",
+    "longDescription": "Loom 以 skills/ 作为 canonical skills library；安装后由 loom-init 路由到 adopt、resume、review、merge-ready、retire 等场景入口。",
     "developerName": "MC and his Agents",
     "category": "Productivity",
     "capabilities": [

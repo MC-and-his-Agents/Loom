@@ -11,7 +11,7 @@ const requiredNeedles = [
     path: 'README.md',
     needles: [
       'agent-first project operating layer',
-      'Fetch and follow instructions from https://raw.githubusercontent.com/MC-and-his-Agents/Loom/refs/heads/main/.codex/INSTALL.md',
+      'Fetch and follow instructions from https://raw.githubusercontent.com/MC-and-his-Agents/Loom/refs/heads/main/docs/adoption/codex-install.md',
       'npx @mc-and-his-agents/loom-installer add plugin --host codex',
       'Advanced / Compatibility',
       '[中文版本](./README.zh-CN.md)',
@@ -21,14 +21,14 @@ const requiredNeedles = [
     path: 'README.zh-CN.md',
     needles: [
       'agent-first project operating layer',
-      'Fetch and follow instructions from https://raw.githubusercontent.com/MC-and-his-Agents/Loom/refs/heads/main/.codex/INSTALL.md',
+      'Fetch and follow instructions from https://raw.githubusercontent.com/MC-and-his-Agents/Loom/refs/heads/main/docs/adoption/codex-install.md',
       'npx @mc-and-his-agents/loom-installer add plugin --host codex',
       '高级 / 兼容',
       '[English version](./README.md)',
     ],
   },
   {
-    path: '.codex/INSTALL.md',
+    path: 'docs/adoption/codex-install.md',
     needles: [
       'git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom',
       'ln -sfn "$skill" "$HOME/.agents/skills/$(basename "$skill")"',
@@ -59,7 +59,7 @@ const requiredNeedles = [
     path: 'skills/distribution-and-adapter-contract.md',
     needles: [
       '@mc-and-his-agents/loom-installer',
-      'repo-local `.codex-plugin/` + `skills/`',
+      'upstream `plugins/loom/.codex-plugin/` manifest + canonical `skills/`',
       'repo-scoped `<target>/.agents/skills/<skill-id>/`',
       'main 分支是真相源',
       'publish 成功后再创建 `loom-installer-v<version>` git tag 与同名前缀的 GitHub Release',
@@ -73,7 +73,7 @@ const requiredNeedles = [
       'Python `>=3.10`, recommended `3.11+`',
       'add plugin',
       'add skill <skill-id>',
-      'payload is generated from the canonical root `.codex-plugin/` and `skills/` sources',
+      'payload is generated from the canonical `plugins/loom/.codex-plugin/` manifest and `skills/` sources',
       '[中文版本](./README.zh-CN.md)',
     ],
   },
@@ -85,7 +85,7 @@ const requiredNeedles = [
       'Python `>=3.10`，推荐 `3.11+`',
       'add plugin',
       'add skill <skill-id>',
-      'canonical root `.codex-plugin/` 与 `skills/` 源',
+      'canonical `plugins/loom/.codex-plugin/` manifest 与 `skills/` 源',
       '[English version](./README.md)',
     ],
   },

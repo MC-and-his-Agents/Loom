@@ -7,7 +7,7 @@ on:
       - main
     paths:
       - 'packages/loom-installer/**'
-      - '.codex-plugin/**'
+      - 'plugins/loom/.codex-plugin/**'
       - 'skills/**'
       - 'README.md'
       - 'skills/README.md'
@@ -82,7 +82,7 @@ jobs:
 
           CHANGED_FILES=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}")
           FILTERED_CHANGED=$CHANGED_FILES
-          if printf '%s\n' "$FILTERED_CHANGED" | grep -E '^(packages/loom-installer/src/|packages/loom-installer/scripts/build-payload\.mjs|packages/loom-installer/package.json|\.codex-plugin/|skills/)' >/dev/null; then
+          if printf '%s\n' "$FILTERED_CHANGED" | grep -E '^(packages/loom-installer/src/|packages/loom-installer/scripts/build-payload\.mjs|packages/loom-installer/package.json|plugins/loom/\.codex-plugin/|skills/)' >/dev/null; then
             echo "behavior_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "behavior_changed=false" >> "$GITHUB_OUTPUT"
