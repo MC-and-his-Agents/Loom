@@ -50,6 +50,53 @@ WORKSPACE_PROFILE_CONTRACTS = {
         "recommended_action": "declare the repo-specific workspace locator and keep host lifecycle ownership external",
     },
 }
+GATE_STARTER_ALIASES = {
+    "verify": {
+        "surface": "verification",
+        "entrypoint": ".loom/bin/loom_init.py",
+        "command": "python3 .loom/bin/loom_init.py verify --target .",
+        "authority": "local",
+        "enforcement": "advisory",
+        "host_enforcement": False,
+        "summary": "Run the repo-local Loom bootstrap verification entry.",
+    },
+    "status": {
+        "surface": "status",
+        "entrypoint": ".loom/bin/loom_status.py",
+        "command": "python3 .loom/bin/loom_status.py --target . --item <current-item>",
+        "authority": "local",
+        "enforcement": "advisory",
+        "host_enforcement": False,
+        "summary": "Read the repo-local Loom status surface.",
+    },
+    "merge-ready": {
+        "surface": "merge_ready",
+        "entrypoint": ".loom/bin/loom_flow.py",
+        "command": "python3 .loom/bin/loom_flow.py flow merge-ready --target . --item <current-item>",
+        "authority": "local",
+        "enforcement": "advisory",
+        "host_enforcement": False,
+        "summary": "Run Loom's local merge-ready orchestration without taking over host merge controls.",
+    },
+    "closeout-check": {
+        "surface": "closeout",
+        "entrypoint": ".loom/bin/loom_flow.py",
+        "command": "python3 .loom/bin/loom_flow.py closeout check --target .",
+        "authority": "local",
+        "enforcement": "advisory",
+        "host_enforcement": False,
+        "summary": "Check closeout readiness against local Loom carriers and readable host inputs.",
+    },
+    "reconciliation-audit": {
+        "surface": "reconciliation",
+        "entrypoint": ".loom/bin/loom_flow.py",
+        "command": "python3 .loom/bin/loom_flow.py reconciliation audit --target .",
+        "authority": "local",
+        "enforcement": "advisory",
+        "host_enforcement": False,
+        "summary": "Audit closeout drift without mutating host state.",
+    },
+}
 REPO_INTERFACE_V1_SCHEMA = "loom-repo-interface/v1"
 REPO_INTERFACE_V2_SCHEMA = "loom-repo-interface/v2"
 REPO_INTERFACE_SCHEMAS = {REPO_INTERFACE_V1_SCHEMA, REPO_INTERFACE_V2_SCHEMA}
@@ -1130,6 +1177,40 @@ def detect_workspace_profile(root: Path, *, host_binding: dict[str, Any]) -> dic
     }
 
 
+def detect_gate_starter(root: Path) -> dict[str, Any]:
+    active = active_entry_points(root)
+    item_id = active.get("current_item_id", "INIT-0001")
+    aliases: dict[str, dict[str, Any]] = {}
+    missing_entrypoints: list[str] = []
+    for alias, contract in GATE_STARTER_ALIASES.items():
+        row = dict(contract)
+        command = str(row["command"]).replace("<current-item>", item_id)
+        row["command"] = command
+        entrypoint = root / str(row["entrypoint"])
+        row["runtime_present"] = entrypoint.exists()
+        if not entrypoint.exists() and str(row["entrypoint"]) not in missing_entrypoints:
+            missing_entrypoints.append(str(row["entrypoint"]))
+        aliases[alias] = row
+    runtime_status = "present" if not missing_entrypoints else "missing"
+    return {
+        "schema_version": "loom-gate-starter/v1",
+        "aliases": aliases,
+        "runtime_status": runtime_status,
+        "authority": "local",
+        "enforcement": "advisory",
+        "host_enforcement": False,
+        "host_enforcement_status": "not_host_enforced",
+        "result": "pass",
+        "missing_inputs": [],
+        "missing_entrypoints": missing_entrypoints,
+        "recommended_action": (
+            "run the repo-local aliases as advisory Loom checks, then configure host-required checks separately"
+            if not missing_entrypoints
+            else "install or refresh repo-local Loom runtime entries before using gate starter aliases"
+        ),
+    }
+
+
 def bootstrap_host_binding_branch(root: Path) -> str:
     init_result = root / ".loom/bootstrap/init-result.json"
     try:
@@ -1453,6 +1534,7 @@ def governance_control_plane(
     repo_interop: dict[str, Any],
     host_binding: dict[str, Any],
     workspace_profile: dict[str, Any],
+    gate_starter: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "schema_version": GOVERNANCE_CONTROL_VERSION,
@@ -1462,6 +1544,7 @@ def governance_control_plane(
             "result": "pass" if carrier_summary.get("work_item", {}).get("status") == "present" else "block",
         },
         "workspace_profile": workspace_profile,
+        "gate_starter": gate_starter,
         "host_binding": host_binding,
         "taxonomy": GATE_FAILURE_TAXONOMY,
         "gate_chain": GATE_CHAIN,
@@ -1500,6 +1583,7 @@ def build_governance_surface(
         repo_interop=repo_interop,
     )
     workspace_profile = detect_workspace_profile(root, host_binding=host_binding)
+    gate_starter = detect_gate_starter(root)
     control_plane = governance_control_plane(
         carrier_summary=carrier_summary,
         github_control_plane=github_control_plane,
@@ -1507,6 +1591,7 @@ def build_governance_surface(
         repo_interop=repo_interop,
         host_binding=host_binding,
         workspace_profile=workspace_profile,
+        gate_starter=gate_starter,
     )
 
     missing_inputs: list[str] = []
@@ -1543,6 +1628,7 @@ def build_governance_surface(
         "repo_interface": repo_interface,
         "repo_interop": repo_interop,
         "workspace_profile": workspace_profile,
+        "gate_starter": gate_starter,
         "governance_control_plane": control_plane,
         "summary": summary,
         "missing_inputs": list(dict.fromkeys(missing_inputs)),

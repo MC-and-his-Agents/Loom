@@ -410,6 +410,7 @@ def main(argv: list[str]) -> int:
     merge_ready = checkpoint_payload("merge", context)
     governance_surface = build_governance_surface(target_root)
     workspace_profile = governance_surface.get("workspace_profile")
+    gate_starter = governance_surface.get("gate_starter")
     github_status, github_errors = github_status_payload(
         target_root,
         issue_number=args.issue,
@@ -492,6 +493,7 @@ def main(argv: list[str]) -> int:
             "merge_ready": merge_ready,
             "closeout": closeout,
             "workspace_profile": workspace_profile,
+            "gate_starter": gate_starter,
             "governance_status": control_status,
             "governance_surface": governance_surface,
             "github": github_status,

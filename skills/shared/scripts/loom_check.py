@@ -77,6 +77,7 @@ CORE_DOCS = (
     "docs/methodology/harness/checkpoint-model.md",
     "docs/methodology/harness/workspace-model.md",
     "docs/methodology/harness/workspace-profile.md",
+    "docs/methodology/harness/repo-local-gate-starter.md",
     "docs/methodology/harness/workspace-lifecycle.md",
     "docs/methodology/harness/host-action-contract.md",
     "docs/methodology/harness/host-lifecycle-boundary.md",
@@ -187,6 +188,7 @@ AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT = (
     "docs/methodology/harness/checkpoint-model.md",
     "docs/methodology/harness/workspace-model.md",
     "docs/methodology/harness/workspace-profile.md",
+    "docs/methodology/harness/repo-local-gate-starter.md",
     "docs/methodology/harness/workspace-lifecycle.md",
     "docs/methodology/harness/recovery-model.md",
     "docs/methodology/harness/status-surface.md",
@@ -744,6 +746,12 @@ def require_governance_surface(
         context=f"{context} governance_surface.workspace_profile",
         payload=governance_surface.get("workspace_profile"),
     )
+    require_gate_starter_payload(
+        failures,
+        category=category,
+        context=f"{context} governance_surface.gate_starter",
+        payload=governance_surface.get("gate_starter"),
+    )
     require_governance_control_plane(
         failures,
         category=category,
@@ -779,6 +787,52 @@ def require_workspace_profile_payload(
         failures.append(Failure(category, f"{context}.host_worktree must be an object"))
     elif host_worktree.get("ownership") != "host":
         failures.append(Failure(category, f"{context}.host_worktree ownership must stay `host`"))
+
+
+def require_gate_starter_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("schema_version") != "loom-gate-starter/v1":
+        failures.append(Failure(category, f"{context} schema_version must be `loom-gate-starter/v1`"))
+    if payload.get("authority") != "local":
+        failures.append(Failure(category, f"{context} authority must stay `local`"))
+    if payload.get("enforcement") != "advisory":
+        failures.append(Failure(category, f"{context} enforcement must stay `advisory`"))
+    if payload.get("host_enforcement") is not False:
+        failures.append(Failure(category, f"{context} host_enforcement must stay false"))
+    if payload.get("host_enforcement_status") != "not_host_enforced":
+        failures.append(Failure(category, f"{context} host_enforcement_status must stay `not_host_enforced`"))
+    if payload.get("result") != "pass":
+        failures.append(Failure(category, f"{context} result must stay pass because aliases are local starter definitions"))
+    aliases = payload.get("aliases")
+    required_aliases = {"verify", "status", "merge-ready", "closeout-check", "reconciliation-audit"}
+    if not isinstance(aliases, dict):
+        failures.append(Failure(category, f"{context}.aliases must be an object"))
+        return
+    missing_aliases = sorted(required_aliases - set(aliases.keys()))
+    if missing_aliases:
+        failures.append(Failure(category, f"{context}.aliases is missing {', '.join(missing_aliases)}"))
+    for alias, row in aliases.items():
+        if not isinstance(row, dict):
+            failures.append(Failure(category, f"{context}.aliases.{alias} must be an object"))
+            continue
+        if row.get("authority") != "local":
+            failures.append(Failure(category, f"{context}.aliases.{alias}.authority must stay `local`"))
+        if row.get("enforcement") != "advisory":
+            failures.append(Failure(category, f"{context}.aliases.{alias}.enforcement must stay `advisory`"))
+        if row.get("host_enforcement") is not False:
+            failures.append(Failure(category, f"{context}.aliases.{alias}.host_enforcement must stay false"))
+        for field in ("surface", "entrypoint", "command", "summary"):
+            value = row.get(field)
+            if not isinstance(value, str) or not value:
+                failures.append(Failure(category, f"{context}.aliases.{alias}.{field} must be a non-empty string"))
 
 
 def require_governance_control_plane(
@@ -825,6 +879,12 @@ def require_governance_control_plane(
         category=category,
         context=f"{context}.workspace_profile",
         payload=payload.get("workspace_profile"),
+    )
+    require_gate_starter_payload(
+        failures,
+        category=category,
+        context=f"{context}.gate_starter",
+        payload=payload.get("gate_starter"),
     )
 
     taxonomy = payload.get("taxonomy")
@@ -2501,6 +2561,19 @@ def check_demo_assets(root: Path) -> list[Failure]:
         run = init_result.get("run")
         if not isinstance(run, dict) or run.get("scenario_key") != "new":
             failures.append(Failure("demo-assets", "demo init-result must keep `scenario_key` as `new`"))
+        governance_surface = init_result.get("governance_surface")
+        if not isinstance(governance_surface, dict):
+            failures.append(Failure("demo-assets", "demo init-result must include governance_surface"))
+        else:
+            require_gate_starter_payload(
+                failures,
+                category="demo-assets",
+                context="demo init-result governance_surface.gate_starter",
+                payload=governance_surface.get("gate_starter"),
+            )
+            gate_starter = governance_surface.get("gate_starter")
+            if isinstance(gate_starter, dict) and gate_starter.get("host_enforcement") is not False:
+                failures.append(Failure("demo-assets", "demo gate starter must not claim host enforcement"))
     return failures
 
 
