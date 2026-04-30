@@ -39,7 +39,7 @@
     ]
   },
   "routing": {
-    "reference": "../route-matrix.md",
+    "reference": ".loom-runtime/route-matrix.md",
     "priority_order": [
       "explicit skill name",
       "task signal routing",
@@ -49,10 +49,10 @@
   },
   "artifact_mapping": {
     "rules": [
-      "../shared/references/governance",
-      "../shared/references/harness",
-      "../shared/references/templates",
-      "../shared/references/adoption"
+      ".loom-runtime/shared/references/governance",
+      ".loom-runtime/shared/references/harness",
+      ".loom-runtime/shared/references/templates",
+      ".loom-runtime/shared/references/adoption"
     ],
     "skill_refs": [
       "references/input-signals.md",
@@ -69,8 +69,8 @@
     ]
   },
   "installation": {
-    "registry": "../registry.json",
-    "upgrade_contract": "../upgrade-contract.json",
-    "layout_manifest": "../install-layout.json"
+    "registry": ".loom-runtime/registry.json",
+    "upgrade_contract": ".loom-runtime/upgrade-contract.json",
+    "layout_manifest": ".loom-runtime/install-layout.json"
   }
 }

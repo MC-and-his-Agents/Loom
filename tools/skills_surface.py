@@ -1,0 +1,457 @@
+#!/usr/bin/env python3
+"""Generate and verify the checked-in Loom skills install surface."""
+
+from __future__ import annotations
+
+import argparse
+import filecmp
+import json
+import os
+import re
+import runpy
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import Any
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SOURCE_ROOT = REPO_ROOT / "src" / "skills"
+TARGET_ROOT = REPO_ROOT / "skills"
+PLUGIN_MANIFEST = REPO_ROOT / "plugins" / "loom" / ".codex-plugin" / "plugin.json"
+REPO_VERSION_FILE = REPO_ROOT / "VERSION"
+PRIVATE_RUNTIME_DIR = ".loom-runtime"
+SKILL_PACKAGE_VERSION = "1.0.0"
+RUNTIME_CORE_VERSION = "1.0.0"
+HOST_ADAPTER_VERSION = "1.0.0"
+SOURCE_REVISION = "repository-working-tree"
+IGNORED_NAMES = {"__pycache__", ".DS_Store"}
+TEXT_SUFFIXES = {".json", ".md", ".py", ".txt", ".yaml", ".yml"}
+
+
+def read_json(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def should_ignore(path: Path) -> bool:
+    return path.name in IGNORED_NAMES or path.name.endswith(".pyc") or path.name == PRIVATE_RUNTIME_DIR
+
+
+def copy_tree(source: Path, target: Path) -> None:
+    if target.exists():
+        shutil.rmtree(target)
+
+    def ignore(_directory: str, names: list[str]) -> set[str]:
+        return {name for name in names if should_ignore(Path(name))}
+
+    shutil.copytree(source, target, ignore=ignore)
+
+
+def repo_version() -> str:
+    return REPO_VERSION_FILE.read_text(encoding="utf-8").strip()
+
+
+def source_repository() -> str:
+    return "https://github.com/MC-and-his-Agents/Loom"
+
+
+def public_skill_entries(source_root: Path) -> list[dict[str, Any]]:
+    registry = read_json(source_root / "registry.json")
+    entries = registry.get("entries")
+    if not isinstance(entries, list) or not entries:
+        raise RuntimeError("src/skills/registry.json must declare public entries")
+    for entry in entries:
+        if not isinstance(entry, dict) or not isinstance(entry.get("id"), str):
+            raise RuntimeError("src/skills/registry.json contains an invalid entry")
+    return entries
+
+
+def runtime_script(skill_id: str) -> str:
+    return "loom_init.py" if skill_id in {"loom-init", "loom-adopt"} else "loom_flow.py"
+
+
+def skill_launcher(contract: dict[str, Any]) -> str:
+    entrypoint = contract.get("entrypoint")
+    if not isinstance(entrypoint, dict):
+        raise RuntimeError(f"{contract.get('id', '<unknown>')} contract is missing entrypoint")
+    for key in ("script", "bootstrap_cli", "orchestration_cli", "route_cli"):
+        value = entrypoint.get(key)
+        if isinstance(value, str) and value:
+            return value
+    raise RuntimeError(f"{contract.get('id', '<unknown>')} contract does not declare a launcher")
+
+
+def write_wrapper(skill_id: str, target: Path) -> None:
+    script = runtime_script(skill_id)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env python3",
+                "from __future__ import annotations",
+                "",
+                "import os",
+                "import runpy",
+                "import sys",
+                "from pathlib import Path",
+                "",
+                "SCRIPT_PATH = Path(__file__).resolve()",
+                "PACKAGE_ROOT = SCRIPT_PATH.parents[1]",
+                f'RUNTIME_ROOT = PACKAGE_ROOT / "{PRIVATE_RUNTIME_DIR}"',
+                "",
+                'os.environ.setdefault("LOOM_INSTALLED_SKILLS_ROOT", str(RUNTIME_ROOT))',
+                f'os.environ.setdefault("LOOM_PACKAGE_SKILL_ID", "{skill_id}")',
+                'sys.path.insert(0, str(RUNTIME_ROOT / "shared/scripts"))',
+                f'runpy.run_path(RUNTIME_ROOT / "shared/scripts/{script}", run_name="__main__")',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    target.chmod(0o755)
+
+
+def relative_posix(from_dir: Path, target: Path) -> str:
+    return os.path.relpath(target, from_dir).replace(os.sep, "/")
+
+
+MARKDOWN_LINK_RE = re.compile(r"(!?\[[^\]]*\]\()([^)#][^) ]*)([^)]*\))")
+
+
+def rewrite_markdown_links(text: str, source_file: Path, source_skill_root: Path, package_file: Path, package_root: Path) -> str:
+    source_parent = source_file.parent
+    package_parent = package_file.parent
+
+    def replace(match: re.Match[str]) -> str:
+        prefix, target, suffix = match.groups()
+        if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target) or target.startswith("#"):
+            return match.group(0)
+        if not target.startswith("../"):
+            return match.group(0)
+        fragment = ""
+        clean_target = target
+        if "#" in target:
+            clean_target, fragment = target.split("#", 1)
+            fragment = "#" + fragment
+        resolved = (source_parent / clean_target).resolve()
+        try:
+            resolved.relative_to(source_skill_root.resolve())
+            return match.group(0)
+        except ValueError:
+            pass
+        try:
+            runtime_relative = resolved.relative_to(SOURCE_ROOT.resolve())
+        except ValueError:
+            return match.group(0)
+        rewritten = relative_posix(package_parent, package_root / PRIVATE_RUNTIME_DIR / runtime_relative)
+        return f"{prefix}{rewritten}{fragment}{suffix}"
+
+    return MARKDOWN_LINK_RE.sub(replace, text)
+
+
+def rewrite_skill_text_files(source_skill_root: Path, package_root: Path) -> None:
+    for package_file in package_root.rglob("*"):
+        if not package_file.is_file() or PRIVATE_RUNTIME_DIR in package_file.parts or package_file.suffix not in {".md", ".yaml", ".yml"}:
+            continue
+        source_file = source_skill_root / package_file.relative_to(package_root)
+        if not source_file.exists():
+            continue
+        original = package_file.read_text(encoding="utf-8")
+        rewritten = rewrite_markdown_links(original, source_file, source_skill_root, package_file, package_root)
+        if rewritten != original:
+            package_file.write_text(rewritten, encoding="utf-8")
+
+
+def map_contract_value(value: Any, source_base: Path, source_skill_root: Path, package_base: Path, package_root: Path) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: map_contract_value(child, source_base, source_skill_root, package_base, package_root)
+            for key, child in value.items()
+        }
+    if isinstance(value, list):
+        return [map_contract_value(child, source_base, source_skill_root, package_base, package_root) for child in value]
+    if not isinstance(value, str) or not value.startswith("../"):
+        return value
+
+    resolved = (source_base / value).resolve()
+    try:
+        resolved.relative_to(source_skill_root.resolve())
+        return value
+    except ValueError:
+        pass
+    try:
+        runtime_relative = resolved.relative_to(SOURCE_ROOT.resolve())
+    except ValueError:
+        return value
+    return relative_posix(package_base, package_root / PRIVATE_RUNTIME_DIR / runtime_relative)
+
+
+def rewrite_contract(source_contract: Path, package_contract: Path, source_skill_root: Path, package_root: Path) -> dict[str, Any]:
+    contract = read_json(source_contract)
+    rewritten = map_contract_value(contract, source_contract.parent, source_skill_root, package_contract.parent, package_root)
+    write_json(package_contract, rewritten)
+    return rewritten
+
+
+def write_package_metadata(
+    package_root: Path,
+    contract: dict[str, Any],
+    registry: dict[str, Any],
+    plugin_manifest: dict[str, Any],
+) -> None:
+    skill_id = contract["id"]
+    launcher = skill_launcher(contract)
+    write_json(
+        package_root / "loom-package.json",
+        {
+            "schema_version": "loom-skill-package/v1",
+            "package_type": "single-skill",
+            "package_id": skill_id,
+            "display_name": contract.get("display_name", skill_id),
+            "repo_version": repo_version(),
+            "source_repository": source_repository(),
+            "source_revision": SOURCE_REVISION,
+            "skill_package_version": SKILL_PACKAGE_VERSION,
+            "skill_contract_version": contract.get("contract_version"),
+            "registry_version": registry.get("registry_version"),
+            "runtime_core_version": RUNTIME_CORE_VERSION,
+            "runtime_root": PRIVATE_RUNTIME_DIR,
+            "launcher": launcher,
+            "root_entry": bool(contract.get("root_entry")),
+            "plugin_surface_version": plugin_manifest.get("version"),
+            "host_adapter_version": plugin_manifest.get("x-loom", {}).get("host_adapter_version", HOST_ADAPTER_VERSION),
+            "full_repo_install_surface": False,
+            "fail_closed_on": [
+                "missing SKILL.md",
+                "missing contract.json",
+                "missing launcher",
+                "missing package metadata",
+                "missing package-internal runtime",
+                "package-external runtime reference",
+                "runtime registry or install-layout drift",
+            ],
+        },
+    )
+
+
+def generate_surface(source_root: Path = SOURCE_ROOT, target_root: Path = TARGET_ROOT) -> None:
+    if not source_root.exists():
+        raise RuntimeError(f"missing source skills root: {source_root}")
+    registry = read_json(source_root / "registry.json")
+    plugin_manifest = read_json(PLUGIN_MANIFEST)
+
+    staging = Path(tempfile.mkdtemp(prefix="loom-skills-surface-"))
+    try:
+        generated = staging / "skills"
+        copy_tree(source_root, generated)
+        for entry in public_skill_entries(source_root):
+            skill_id = entry["id"]
+            source_skill_root = source_root / skill_id
+            package_root = generated / skill_id
+            if not source_skill_root.exists():
+                raise RuntimeError(f"missing public skill source: {source_skill_root}")
+
+            runtime_root = package_root / PRIVATE_RUNTIME_DIR
+            copy_tree(source_root, runtime_root)
+
+            scripts_dir = package_root / "scripts"
+            if scripts_dir.exists():
+                shutil.rmtree(scripts_dir)
+            source_contract = source_skill_root / "contract.json"
+            package_contract = package_root / "contract.json"
+            rewritten_contract = rewrite_contract(source_contract, package_contract, source_skill_root, package_root)
+            write_wrapper(skill_id, package_root / skill_launcher(rewritten_contract))
+            rewrite_skill_text_files(source_skill_root, package_root)
+            write_package_metadata(package_root, rewritten_contract, registry, plugin_manifest)
+
+        if target_root.exists():
+            shutil.rmtree(target_root)
+        shutil.move(str(generated), str(target_root))
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+
+def comparable_files(root: Path) -> list[Path]:
+    files: list[Path] = []
+    for path in root.rglob("*"):
+        if should_ignore(path):
+            continue
+        if path.is_file():
+            files.append(path.relative_to(root))
+    return sorted(files)
+
+
+def compare_trees(expected: Path, actual: Path) -> list[str]:
+    errors: list[str] = []
+    expected_files = comparable_files(expected)
+    actual_files = comparable_files(actual)
+    if expected_files != actual_files:
+        missing = sorted(set(expected_files) - set(actual_files))
+        extra = sorted(set(actual_files) - set(expected_files))
+        if missing:
+            errors.append("missing generated files: " + ", ".join(str(path) for path in missing[:20]))
+        if extra:
+            errors.append("unexpected generated files: " + ", ".join(str(path) for path in extra[:20]))
+        return errors
+    for relative in expected_files:
+        expected_path = expected / relative
+        actual_path = actual / relative
+        if not filecmp.cmp(expected_path, actual_path, shallow=False):
+            errors.append(f"generated file drift: {relative}")
+        expected_exec = bool(expected_path.stat().st_mode & 0o111)
+        actual_exec = bool(actual_path.stat().st_mode & 0o111)
+        if expected_exec != actual_exec:
+            errors.append(f"generated executable bit drift: {relative}")
+    return errors
+
+
+def iter_text_files(root: Path) -> list[Path]:
+    return [path for path in root.rglob("*") if path.is_file() and path.suffix in TEXT_SUFFIXES]
+
+
+def assert_no_package_external_links(package_root: Path) -> list[str]:
+    errors: list[str] = []
+    for path in iter_text_files(package_root):
+        if PRIVATE_RUNTIME_DIR in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for match in MARKDOWN_LINK_RE.finditer(text):
+            target = match.group(2)
+            if not target.startswith("../"):
+                continue
+            clean_target = target.split("#", 1)[0]
+            resolved = (path.parent / clean_target).resolve()
+            try:
+                resolved.relative_to(package_root.resolve())
+            except ValueError:
+                errors.append(f"{path.relative_to(package_root)} links outside package: {target}")
+        if path.suffix == ".json":
+            payload = json.loads(text)
+            errors.extend(assert_json_paths_inside_package(payload, path, package_root))
+    return errors
+
+
+def assert_json_paths_inside_package(payload: Any, path: Path, package_root: Path) -> list[str]:
+    errors: list[str] = []
+    if isinstance(payload, dict):
+        for value in payload.values():
+            errors.extend(assert_json_paths_inside_package(value, path, package_root))
+    elif isinstance(payload, list):
+        for value in payload:
+            errors.extend(assert_json_paths_inside_package(value, path, package_root))
+    elif isinstance(payload, str) and payload.startswith("../"):
+        resolved = (path.parent / payload).resolve()
+        try:
+            resolved.relative_to(package_root.resolve())
+        except ValueError:
+            errors.append(f"{path.relative_to(package_root)} references outside package: {payload}")
+    return errors
+
+
+def validate_skill_package(package_root: Path, skill_id: str) -> list[str]:
+    errors: list[str] = []
+    metadata_path = package_root / "loom-package.json"
+    contract_path = package_root / "contract.json"
+    if not (package_root / "SKILL.md").is_file():
+        errors.append(f"{skill_id}: missing SKILL.md")
+    if not contract_path.is_file():
+        errors.append(f"{skill_id}: missing contract.json")
+        return errors
+    if not metadata_path.is_file():
+        errors.append(f"{skill_id}: missing loom-package.json")
+        return errors
+    contract = read_json(contract_path)
+    metadata = read_json(metadata_path)
+    launcher = metadata.get("launcher")
+    runtime_root = metadata.get("runtime_root")
+    if metadata.get("schema_version") != "loom-skill-package/v1":
+        errors.append(f"{skill_id}: unsupported loom-package schema")
+    if metadata.get("package_id") != skill_id:
+        errors.append(f"{skill_id}: package_id mismatch")
+    if metadata.get("skill_contract_version") != contract.get("contract_version"):
+        errors.append(f"{skill_id}: contract version metadata mismatch")
+    if not isinstance(launcher, str) or not (package_root / launcher).is_file():
+        errors.append(f"{skill_id}: launcher is missing: {launcher}")
+    if not isinstance(runtime_root, str) or not (package_root / runtime_root / "shared" / "scripts").is_dir():
+        errors.append(f"{skill_id}: runtime root is missing shared scripts")
+    for required in ("registry.json", "install-layout.json", "upgrade-contract.json", "route-matrix.md"):
+        if not (package_root / str(runtime_root) / required).exists():
+            errors.append(f"{skill_id}: runtime missing {required}")
+    errors.extend(f"{skill_id}: {error}" for error in assert_no_package_external_links(package_root))
+    return errors
+
+
+def run_launcher_smoke(package_root: Path, skill_id: str) -> list[str]:
+    metadata = read_json(package_root / "loom-package.json")
+    launcher = package_root / metadata["launcher"]
+    args = [sys.executable, str(launcher), "runtime-state", "--target", str(REPO_ROOT)]
+    if skill_id not in {"loom-init", "loom-adopt"}:
+        args.extend(["--item", "INIT-0001"])
+    result = subprocess.run(args, cwd=REPO_ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode != 0:
+        return [f"{skill_id}: launcher runtime-state failed: {(result.stderr or result.stdout).strip()}"]
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        return [f"{skill_id}: launcher did not emit JSON runtime-state: {exc.msg}"]
+    runtime_state = payload.get("runtime_state")
+    if not isinstance(runtime_state, dict) or runtime_state.get("scene") != "installed-runtime":
+        return [f"{skill_id}: launcher did not report installed-runtime"]
+    return []
+
+
+def verify_surface(root: Path = TARGET_ROOT, *, run_launchers: bool = True) -> list[str]:
+    errors: list[str] = []
+    registry = read_json(root / "registry.json")
+    for entry in registry.get("entries", []):
+        skill_id = entry["id"]
+        package_root = root / skill_id
+        errors.extend(validate_skill_package(package_root, skill_id))
+        if run_launchers and not errors:
+            errors.extend(run_launcher_smoke(package_root, skill_id))
+    return errors
+
+
+def check_surface() -> None:
+    with tempfile.TemporaryDirectory(prefix="loom-skills-check-") as tmp:
+        expected = Path(tmp) / "skills"
+        generate_surface(SOURCE_ROOT, expected)
+        drift = compare_trees(expected, TARGET_ROOT)
+        if drift:
+            raise RuntimeError("skills surface drift detected:\n" + "\n".join(drift[:80]))
+    errors = verify_surface(TARGET_ROOT)
+    if errors:
+        raise RuntimeError("skills surface validation failed:\n" + "\n".join(errors[:80]))
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers.add_parser("generate", help="rebuild root skills/ from src/skills/")
+    subparsers.add_parser("check", help="verify generated skills/ has no drift and is self-contained")
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    try:
+        if args.command == "generate":
+            generate_surface()
+            print("skills surface generated from src/skills")
+        elif args.command == "check":
+            check_surface()
+            print("skills surface check: OK")
+    except Exception as exc:
+        print(f"skills surface {args.command} failed: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

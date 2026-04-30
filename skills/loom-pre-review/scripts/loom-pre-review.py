@@ -7,8 +7,10 @@ import sys
 from pathlib import Path
 
 SCRIPT_PATH = Path(__file__).resolve()
-SKILLS_ROOT = SCRIPT_PATH.parents[2]
+PACKAGE_ROOT = SCRIPT_PATH.parents[1]
+RUNTIME_ROOT = PACKAGE_ROOT / ".loom-runtime"
 
-os.environ.setdefault("LOOM_INSTALLED_SKILLS_ROOT", str(SKILLS_ROOT))
-sys.path.insert(0, str(SKILLS_ROOT / "shared/scripts"))
-runpy.run_path(SKILLS_ROOT / "shared/scripts/loom_flow.py", run_name="__main__")
+os.environ.setdefault("LOOM_INSTALLED_SKILLS_ROOT", str(RUNTIME_ROOT))
+os.environ.setdefault("LOOM_PACKAGE_SKILL_ID", "loom-pre-review")
+sys.path.insert(0, str(RUNTIME_ROOT / "shared/scripts"))
+runpy.run_path(RUNTIME_ROOT / "shared/scripts/loom_flow.py", run_name="__main__")
