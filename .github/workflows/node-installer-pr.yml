@@ -5,9 +5,16 @@ on:
     paths:
       - 'packages/loom-installer/**'
       - 'plugins/loom/.codex-plugin/**'
+      - 'src/skills/**'
       - 'skills/**'
+      - 'tools/skills_surface.py'
+      - 'tools/host_adapter_check.py'
+      - 'tools/version_surface_check.py'
       - 'README.md'
+      - 'README.zh-CN.md'
+      - 'docs/adoption/**'
       - 'skills/README.md'
+      - 'skills/README.zh-CN.md'
       - 'skills/distribution-and-adapter-contract.md'
       - 'skills/shared/scripts/loom_check.py'
       - 'plugins/loom/.codex-plugin/plugin.json'
@@ -47,6 +54,15 @@ jobs:
 
       - name: Check doc sync
         run: npm --prefix packages/loom-installer run check:docs
+
+      - name: Check generated skills surface
+        run: npm --prefix packages/loom-installer run check:distribution
+
+      - name: Check host adapter matrix
+        run: npm --prefix packages/loom-installer run check:hosts
+
+      - name: Check version surfaces
+        run: npm --prefix packages/loom-installer run check:versions
 
       - name: Check payload drift
         run: npm --prefix packages/loom-installer run check:payload
