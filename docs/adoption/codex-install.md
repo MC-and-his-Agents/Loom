@@ -1,6 +1,6 @@
 # Installing Loom for Codex
 
-Enable Loom skills in Codex via native skill discovery. Clone the repository and symlink each public Loom skill directory.
+Enable Loom skills in Codex via native skill discovery. Clone the repository and symlink each generated public Loom skill package.
 
 ## Prerequisites
 
@@ -26,11 +26,14 @@ Enable Loom skills in Codex via native skill discovery. Clone the repository and
 
 3. Restart Codex.
 
+Codex should start from `loom-init` after discovery reloads. The npm installer is not the Codex default path; it remains available for adapter-specific and single-skill helper flows.
+
 ## Verify
 
 ```bash
 ls -la ~/.agents/skills/loom-init
 ls ~/.agents/skills/loom-init/SKILL.md
+ls ~/.agents/skills/loom-init/loom-package.json
 ```
 
 ## Update
@@ -40,6 +43,12 @@ cd ~/.codex/loom && git pull
 ```
 
 The skills update through the symlink.
+
+Run this from a Loom checkout when validating the generated install surface:
+
+```bash
+make skills-check
+```
 
 ## Uninstall
 

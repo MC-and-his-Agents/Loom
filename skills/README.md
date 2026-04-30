@@ -2,9 +2,9 @@
 
 Language: English | [中文版本](./README.zh-CN.md)
 
-`skills/` is the canonical skills library for Loom.
+`skills/` is the generated, checked-in Loom skills install surface. The editable source truth lives in `src/skills/`.
 
-When Loom is installed through Codex native skill discovery, a host plugin, or the npm installer, this directory is the user-facing execution surface. Methodology and architecture documents stay behind this layer; users should enter through skills instead of internal governance docs.
+When Loom is installed through Codex native skill discovery, a host plugin, or the npm installer, this directory is the user-facing execution surface. Each `skills/<skill-id>` directory is also a self-contained single-skill package. Methodology and architecture documents stay behind this layer; users should enter through skills instead of internal governance docs.
 
 By default, start from `loom-init`. It is the unique root entry for Loom and is responsible for two things:
 
@@ -71,6 +71,8 @@ npx @mc-and-his-agents/loom-installer add plugin --host codex
 npx @mc-and-his-agents/loom-installer add plugin --host claude
 ```
 
+The npm installer is an adapter/helper path, not the Codex default.
+
 ## Advanced / Compatibility
 
 Single-skill installation is supported for advanced compatibility, not as the default user journey:
@@ -82,6 +84,8 @@ npx @mc-and-his-agents/loom-installer add skill <skill-id> --host claude
 
 A single installed skill only exposes that named skill to the host. It does not expose the full `loom-init` routing surface unless `loom-init` itself is installed, and it should not be presented as the complete Loom experience.
 
+Every generated single-skill package contains `loom-package.json`, a package-internal `.loom-runtime/`, and a launcher that resolves runtime from inside the package.
+
 ## Internal Contracts
 
 These files are part of the runtime contract and should remain stable:
@@ -92,3 +96,10 @@ These files are part of the runtime contract and should remain stable:
 - [distribution-and-adapter-contract.md](./distribution-and-adapter-contract.md)
 
 Shared runtime scripts, assets, and references live under [shared/](./shared/). They are consumed by scenario skills and by release tooling when generating plugin or single-skill payloads.
+
+Generated surface checks:
+
+```bash
+python3 tools/skills_surface.py generate
+make skills-check
+```

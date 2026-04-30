@@ -8,7 +8,7 @@ Loom 是一个 agent-first project operating layer。
 
 ## 工作方式
 
-Loom 保持 plugin / SKILLS / CLI 的产品形态。Plugin 承接安装、发现和调用；`SKILLS` 暴露场景操作；CLI 与 fixtures 提供机器校验；docs 继续作为 methodology、harness、adoption、templates 和 evidence 的仓库真相。
+Loom 保持 full repo / plugin / SKILLS / CLI 的产品形态。默认安装模型是完整仓库安装加宿主原生或宿主适配的 skill discovery；`SKILLS` 暴露场景操作；宿主 adapter 承接安装和 bootstrap wiring；CLI 与 fixtures 提供机器校验；docs 继续作为 methodology、harness、adoption、templates 和 evidence 的仓库真相。
 
 智能体从 `loom-init` 起步，再根据当前任务和仓库状态路由到合适的 scenario skill。
 
@@ -42,9 +42,9 @@ done
 
 安装后请重启 Codex，让原生 skills discovery 重新加载 Loom skills。
 
-### npm Installer
+### Adapter Installer
 
-如果你希望通过 installer 把 plugin 接到目标仓库，可以使用：
+npm installer 不是 Codex 默认路径。需要 adapter 托管的 plugin 安装、single-skill helper 或 installer verification output 时再使用：
 
 ```bash
 npx @mc-and-his-agents/loom-installer add plugin --host codex
@@ -64,7 +64,7 @@ npx loom-installer add plugin --host claude
 - Node `>=20`
 - Python `>=3.10`，推荐 `3.11+`
 
-Installer 负责安装、发现和校验；Loom 的实际执行仍然运行在 skills library 随附的 Python runtime 上。
+Installer 会报告它触达的 distribution layer 和 version context；Loom 的实际执行仍然运行在生成 skills surface 随附的 Python runtime 上。
 
 ## 基本工作流
 
@@ -95,7 +95,7 @@ Loom 当前暴露一个 root entry 和八个 scenario skills：
 | `loom-merge-ready` | 验证 merge readiness。 |
 | `loom-retire` | 在不丢弃用户改动的前提下清理并退场。 |
 
-Canonical skills library 位于 [skills/](./skills/)。Canonical Codex plugin manifest 位于 [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/)；生成出来的 plugin 和 single-skill payload 不再提交到仓库，release tooling 会从这些真相源动态构建它们。
+可编辑 skills 源码真相位于 [src/skills/](./src/skills/)。生成且提交的安装表面位于 [skills/](./skills/)。每个 `skills/<skill-id>` 都是带 `loom-package.json` 和 `.loom-runtime/` 的自包含 single-skill package。Canonical Codex plugin manifest 位于 [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/)。
 
 ## 高级 / 兼容
 
@@ -106,7 +106,7 @@ npx @mc-and-his-agents/loom-installer add skill loom-retire --host codex
 npx @mc-and-his-agents/loom-installer add skill loom-retire --host claude
 ```
 
-单独安装的 skill 只会向宿主暴露该 skill 本身。如果你需要 `loom-init` 路由能力和完整 scenario surface，请安装完整 Loom plugin 或整包 skills library。
+单独安装的 skill 只会向宿主暴露该 skill 本身。如果你需要 `loom-init` 路由能力和完整 scenario surface，请安装完整仓库和完整生成 skills surface。
 
 ## 维护者文档
 
@@ -116,6 +116,9 @@ npx @mc-and-his-agents/loom-installer add skill loom-retire --host claude
 - 方法论文档：[docs/methodology/](./docs/methodology/)
 - 架构说明：[docs/architecture/](./docs/architecture/)
 - 接入合同：[docs/adoption/](./docs/adoption/)
+- 统一安装体验：[docs/adoption/unified-install-experience.md](./docs/adoption/unified-install-experience.md)
+- 宿主适配矩阵：[docs/adoption/host-adapter-matrix.md](./docs/adoption/host-adapter-matrix.md)
+- 版本权威图：[docs/adoption/version-authority-map.md](./docs/adoption/version-authority-map.md)
 - 证据台账：[docs/evidence/](./docs/evidence/)
 - 分发合同：[skills/distribution-and-adapter-contract.md](./skills/distribution-and-adapter-contract.md)
 

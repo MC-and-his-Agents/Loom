@@ -2,7 +2,7 @@
 
 ## 定位
 
-本文定义 Loom `v0.4.0` 在 `skills/` 层的最小分发与适配合同。
+本文定义 Loom Phase #496 之后在 `skills/` 层的最小分发与适配合同。
 
 它回答的不是某个宿主如何实现交互，而是 Loom 对外发布时，以下四层 repo-local 交付面在 `skills` 维度上如何成立：
 
@@ -14,7 +14,11 @@
 本文默认前提：
 
 - `SKILLS` 是入口层，不是事实真相源
-- 治理规则、执行机制、模板约束在安装态由 `skills/shared/references/` 暴露稳定读面；repo-local 源码真相维护在 `docs/methodology/` 与 `docs/adoption/`
+- `src/skills/` 是可编辑 skills 源真相
+- 根 `skills/` 是由 `src/skills/` 生成、提交到仓库、供宿主直接发现的安装表面
+- 治理规则、执行机制、模板约束在安装态由 full-repo `skills/shared/references/` 或 single-skill package-local `.loom-runtime/` 暴露稳定读面；repo-local 源码真相维护在 `docs/methodology/` 与 `docs/adoption/`
+- 默认分发模型是完整仓库安装加宿主原生或 adapter skill discovery
+- Codex、Claude Code、OpenCode、Gemini、Cursor 的一致体验定义见 `docs/adoption/host-adapter-matrix.md`
 - 宿主可以不同，但 Loom 对入口层的最小能力边界应保持稳定
 - 当前版本判断是 `major but still pre-1`
 
@@ -23,7 +27,7 @@
 Loom 当前把 `skills` 公开面分成三层：
 
 - 用户首层公开面
-  - 根 `README.md` 的三条 repo-local 路径与安装 / 快速开始
+  - 根 `README.md` 的完整仓库安装、宿主发现与快速开始
   - `skills/README.md` 的入口层总览
   - `skills/loom-init/SKILL.md` 的 root entry 首屏
 - 单 skill 正式交付面
@@ -48,7 +52,7 @@ Loom 当前把 `skills` 公开面分成三层：
 
 ### 1. `repo-local plugin`
 
-- 默认安装对象
+- adapter-managed 安装对象，不是 Codex 默认安装对象
 - 负责把 `loom-init` 与其余 scenario skills 暴露给宿主
 - 对用户承诺完整 Loom 的入口面，而不是单个 skill 的局部能力
 
@@ -63,7 +67,7 @@ Loom 当前把 `skills` 公开面分成三层：
 
 - 用户执行面
 - 回答“当前该进入哪个动作”
-- 保持 `loom-init` 的唯一 root entry 身份与 7 个 scenario skills 的稳定分工
+- 保持 `loom-init` 的唯一 root entry 身份与 8 个 scenario skills 的稳定分工
 
 ### 4. `single-skill standard-skill packages`
 
@@ -80,7 +84,7 @@ Loom 当前对 `skills` 的稳定公开接口分成三组。
 
 - `loom-init` 作为唯一 root entry 的入口身份
 - 显式进入某个 scenario skill，或在未显式指定时由 `loom-init` 做场景路由
-- 7 个 scenario skills 的稳定分工
+- 8 个 scenario skills 的稳定分工
 
 ### 单 skill package 公开面
 
@@ -104,7 +108,7 @@ Loom 当前对 `skills` 的稳定公开接口分成三组。
 
 ## 三、分发对象
 
-`skills/` 的分发对象，是可被宿主装配和调用的入口合同，而不是一整套宿主产品体验。
+根 `skills/` 的分发对象，是可被宿主装配和调用的生成后入口合同，而不是可编辑源真相，也不是一整套宿主产品体验。
 
 对 Loom 而言，`skills/` 至少承担以下发布面：
 
@@ -121,9 +125,17 @@ Loom 当前对 `skills` 的稳定公开接口分成三组。
 - 运行态识别面
   - 允许宿主区分 `repo-local-demo`、`installed-runtime`、`upgrade-rehearsal`，并在当前入口不可运行时暴露 fail-closed 原因
 - shared runtime / resources
-  - 允许宿主直接安装 skill-local `scripts/` 与 `shared/scripts/assets/references`，而不是把 repo-local `tools/` 当成入口成功
+  - 允许宿主直接安装 skill-local `scripts/` 与 package-local `.loom-runtime/`，而不是把 repo-local `tools/` 当成入口成功
 
 因此，`skills/` 的“发布”不等于发布一批提示词文件；它发布的是可被宿主发现、安装、升级和调用的入口合同集合。
+
+生成关系固定如下：
+
+- `src/skills/` 承接可编辑 source truth
+- 根 `skills/` 承接已提交 generated install surface
+- `skills/<skill-id>` 同时承接 host discovery package 与 self-contained single-skill package
+- `skills/<skill-id>/.loom-runtime/` 承接该 package 的最小运行闭包
+- `skills/<skill-id>/loom-package.json` 承接 package 级机器可读版本与边界 metadata
 
 ## 四、`bootstrap/root contract` 与深知识库的关系
 
@@ -133,7 +145,7 @@ Loom 当前对 `skills` 的稳定公开接口分成三组。
 
 - 识别当前任务或仓库是否需要进入 Loom 运行模型
 - 判断应装配哪些入口能力与首批落点
-- 把后续工作导向 `skills/shared/references/` 中稳定暴露的治理 / 执行 / 模板 / 采用读面，以及具体 skill 引用
+- 把后续工作导向 full-repo `skills/shared/references/` 或 package-local `.loom-runtime/` 中稳定暴露的治理 / 执行 / 模板 / 采用读面，以及具体 skill 引用
 - 暴露稳定的最小输入合同与输出合同
 
 深知识库的职责应保留在被引用的规范、规则、模板与参考材料中。两者关系如下：
@@ -143,7 +155,7 @@ Loom 当前对 `skills` 的稳定公开接口分成三组。
 - `bootstrap/root contract` 可以编排与引用，但不应内联复制大段规则真相
 - 当深知识发生升级时，应优先更新被引用落点，而不是让多个 skill 各自复制一份解释
 
-如果某项知识必须长期维护、需要跨 skill 共享、或会影响治理与执行真相，它不应沉积在 root skill 本体中，而应进入 repo-local 内核区域并镜像到安装态所需的 `skills/shared/references/`。
+如果某项知识必须长期维护、需要跨 skill 共享、或会影响治理与执行真相，它不应沉积在 root skill 本体中，而应进入 repo-local 内核区域并镜像到安装态所需的 `src/skills/shared/references/`，再生成到根 `skills/` 和 package-local `.loom-runtime/`。
 
 ## 五、单 skill package 的最小合同
 
@@ -152,6 +164,7 @@ Loom 当前对 `skills` 的稳定公开接口分成三组。
 - package 能稳定声明它交付的是哪个标准 skill
 - package 能暴露该 skill 的最小输入、输出与引用关系
 - package 能定位其 launcher / shim、skill-local `scripts/` 与所需私有 runtime / resources
+- package 必须包含 `loom-package.json` 与 package-local `.loom-runtime/`
 - package 能明确说明它不承诺整包 Loom 默认能力
 - package 若缺失所需 shared runtime / resources、合同漂移或运行态冲突，必须 fail-closed
 
@@ -194,7 +207,7 @@ Loom 对宿主只要求最小合同，不要求统一实现形态。
 - 宿主能够安装一个或多个 Loom 入口对象
 - 安装物能够声明自身标识、类型与版本
 - 安装物能够定位其 root 入口或单 skill 入口与被引用资源
-- 安装物能够在 `skills/` 安装根内部定位 skill-local `scripts/` 与 `shared/scripts/assets/references`
+- 安装物能够在 `skills/` 安装根内部定位 skill-local `scripts/` 与 package-local `.loom-runtime/`
 - 宿主能够把 installed runtime、repo-local demo 与 upgrade rehearsal 区分为稳定可读状态
 - 若 shared runtime / resources 缺失、合同漂移或运行态冲突，宿主必须 fail-closed，而不是继续报告“可运行”
 
@@ -214,12 +227,15 @@ Loom 对宿主只要求最小合同，不要求统一实现形态。
 
 Loom 当前仓库内以机读工件承接这组最小合同：
 
+- `VERSION`
 - `skills/registry.json`
 - `skills/install-layout.json`
 - `skills/route-matrix.md`
 - `skills/loom-init/contract.json`
 - `skills/<scenario>/contract.json`
+- `skills/<skill-id>/loom-package.json`
 - `skills/upgrade-contract.json`
+- `docs/adoption/version-authority-map.md`
 
 Loom 在此层不规定包管理器、注册中心、目录布局或分发协议；这些属于宿主实现，而不是 Loom 内核。
 
@@ -245,8 +261,9 @@ Loom 当前为宿主适配固定承认一个 Node installer：
 
 Node installer 的职责边界：
 
-- 负责安装、发现与验证
-- 不替代 `skills/shared/scripts/*` 与各场景 skill 的 Python runtime
+- 负责 adapter-managed 安装、single-skill 安装与验证
+- 不作为 Codex 默认安装入口
+- 不替代 `src/skills/shared/scripts/*`、package-local `.loom-runtime/` 与各场景 skill 的 Python runtime
 - 不把单 skill 安装伪装成完整 Loom 安装
 - 对安装失败维持 fail-closed
 - main 分支是真相源
@@ -256,8 +273,8 @@ Node installer 的职责边界：
 
 Node installer 当前打包的正式安装源：
 
-- plugin payload：发布时由 `plugins/loom/.codex-plugin/` manifest 与 `skills/` 生成
-- single-skill payload：发布时由 canonical `skills/` 临时生成
+- plugin payload：发布时由 `plugins/loom/.codex-plugin/` manifest 与生成后的根 `skills/` 表面构建
+- single-skill payload：发布时由生成后的根 `skills/<skill-id>` package 构建
 
 Node installer 的最小 preflight 必须覆盖：
 
@@ -271,15 +288,19 @@ Node installer 的最小 verify 输出必须覆盖：
 
 - `mode`
 - `host`
+- `distribution_layer`
 - `installed_paths`
+- `version_context`
 - `verification`
 - `warnings`
+- `failed_layer`
 - `fail_closed_reason`
 
 当前宿主映射固定如下：
 
 - Codex plugin
-  - upstream `plugins/loom/.codex-plugin/` manifest + canonical `skills/`
+  - adapter-managed path, not Codex default
+  - upstream `plugins/loom/.codex-plugin/` manifest + generated root `skills/`
   - `.agents/plugins/marketplace.json`
 - Codex single-skill
   - repo-scoped `<target>/.agents/skills/<skill-id>/`
@@ -290,6 +311,9 @@ Node installer 的最小 verify 输出必须覆盖：
   - `claude plugin install loom@loom-local`
 - Claude single-skill
   - `<target>/.claude/skills/<skill-id>/`
+- OpenCode / Gemini / Cursor
+  - full repo install plus host adapter discovery as documented in `docs/adoption/host-adapter-matrix.md`
+  - static verification is required until an executable host CLI is available in the local gate environment
 
 这些路径与命令属于 adapter surface，不反向提升为 Loom 内核规则。
 
