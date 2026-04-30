@@ -136,6 +136,7 @@ export function installClaudePlugin(
   return {
     mode: 'plugin',
     host: 'claude',
+    distribution_layer: 'host-adapter-plugin',
     status: /already installed/i.test(installOutput) ? 'already-installed' : 'installed',
     installed_paths: [marketplaceRoot, marketplaceManifestPath, pluginTarget, claudePluginManifestPath],
     verification: [
@@ -144,6 +145,8 @@ export function installClaudePlugin(
       'verified `claude plugin list --json` contains loom',
     ],
     warnings: ['Claude plugin install goes through the official CLI and does not replace the Python runtime.'],
+    version_context: null,
+    failed_layer: null,
     fail_closed_reason: null,
   };
 }
@@ -181,6 +184,7 @@ export function installClaudeSkill(
   return {
     mode: 'skill',
     host: 'claude',
+    distribution_layer: 'generated-single-skill',
     status: 'installed',
     installed_paths: [targetDir],
     verification: [
@@ -188,6 +192,8 @@ export function installClaudeSkill(
       `verified discoverable SKILL.md at ${skillMarkdownPath}`,
     ],
     warnings: ['Claude single-skill install relies on project-level `.claude/skills` discovery and does not expose the full Loom plugin surface.'],
+    version_context: null,
+    failed_layer: null,
     fail_closed_reason: null,
   };
 }

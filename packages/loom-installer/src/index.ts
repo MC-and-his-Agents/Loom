@@ -1,6 +1,6 @@
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Host, CliOptions, InstallResult, Mode, PayloadManifest, ResolvedEnv } from './types.js';
+import { Host, CliOptions, InstallResult, Mode, PayloadManifest, PayloadSkillRecord, ResolvedEnv, VersionContext } from './types.js';
 import { InstallerError, assert, dirExists, ensureTargetWritable, runCommand } from './utils.js';
 import { loadPayloadManifest, resolveSkillRecord, verifyPayload } from './payload.js';
 import { installCodexPlugin, installCodexSkill } from './codex.js';
@@ -155,8 +155,15 @@ export function ensureClaudeCliWhenNeeded(host: Host, mode: Mode, env: ResolvedE
 }
 
 export function formatResult(result: InstallResult): string {
+  const version = result.version_context;
   return [
     `${result.host} ${result.mode}: ${result.status}`,
+    `layer: ${result.distribution_layer}`,
+    ...(version
+      ? [
+          `versions: repo=${version.repo_version} installer=${version.installer_package_version} plugin=${version.plugin_surface_version} registry=${version.skills_registry_version}`,
+        ]
+      : []),
     ...result.verification.map((line) => `- ${line}`),
     ...result.warnings.map((line) => `! ${line}`),
   ].join('\n');
@@ -183,7 +190,31 @@ export function runInstaller(parsed: ParsedCommand, envSource: NodeJS.ProcessEnv
     manifest,
   });
   result.warnings.unshift(...warnings);
-  return result;
+  return withVersionContext(result, manifest, parsed.mode === 'skill' ? resolveSkillRecord(manifest, parsed.skillId ?? '') : undefined);
+}
+
+function payloadVersionContext(manifest: PayloadManifest, skill?: PayloadSkillRecord): VersionContext {
+  return {
+    ...manifest.version_context,
+    source_repository: manifest.source_repository,
+    source_commit: manifest.source_commit,
+    source_ref: manifest.source_ref,
+    ...(skill
+      ? {
+          skill_package_id: skill.id,
+          skill_package_version: skill.skill_package_version,
+          skill_contract_version: skill.contract_version,
+          runtime_core_version: skill.runtime_core_version,
+        }
+      : {}),
+  };
+}
+
+function withVersionContext(result: InstallResult, manifest: PayloadManifest, skill?: PayloadSkillRecord): InstallResult {
+  return {
+    ...result,
+    version_context: payloadVersionContext(manifest, skill),
+  };
 }
 
 function installForHost(input: {

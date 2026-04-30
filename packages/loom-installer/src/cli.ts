@@ -7,10 +7,13 @@ function errorResult(message: string): InstallResult {
   return {
     mode: 'plugin',
     host: 'codex',
+    distribution_layer: 'host-adapter-plugin',
     status: 'installed',
     installed_paths: [],
     verification: [],
     warnings: [],
+    version_context: null,
+    failed_layer: 'cli',
     fail_closed_reason: message,
   };
 }

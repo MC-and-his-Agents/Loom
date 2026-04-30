@@ -77,6 +77,15 @@ const requiredNeedles = [
     ],
   },
   {
+    path: 'docs/adoption/version-authority-map.md',
+    needles: [
+      'Versions are not globally synchronized',
+      'installer package version',
+      'plugin surface version',
+      'skill_package_version',
+    ],
+  },
+  {
     path: 'packages/loom-installer/README.md',
     needles: [
       'npm install -D @mc-and-his-agents/loom-installer',

@@ -102,6 +102,7 @@ export function installCodexPlugin(
   return {
     mode: 'plugin',
     host: 'codex',
+    distribution_layer: 'host-adapter-plugin',
     status: 'installed',
     installed_paths: installedPaths,
     verification: [
@@ -109,6 +110,8 @@ export function installCodexPlugin(
       `verified marketplace entry at ${codexMarketplacePath(targetRoot)}`,
     ],
     warnings,
+    version_context: null,
+    failed_layer: null,
     fail_closed_reason: null,
   };
 }
@@ -145,6 +148,7 @@ export function installCodexSkill(
   return {
     mode: 'skill',
     host: 'codex',
+    distribution_layer: 'generated-single-skill',
     status: 'installed',
     installed_paths: [targetDir],
     verification: [
@@ -152,6 +156,8 @@ export function installCodexSkill(
       `verified repo skill discovery path at ${skillMarkdownPath}`,
     ],
     warnings: ['Codex repo-scoped single-skill install exposes only the named skill, not the full Loom plugin surface.'],
+    version_context: null,
+    failed_layer: null,
     fail_closed_reason: null,
   };
 }
