@@ -1,4 +1,4 @@
-.PHONY: loom-check check skills-check version-surface-check loom-demo-new-project loom-self-plugin-check
+.PHONY: loom-check check skills-check host-adapter-check version-surface-check loom-demo-new-project loom-self-plugin-check
 
 loom-check: loom-self-plugin-check loom-demo-new-project
 	python3 tools/loom_check.py
@@ -6,10 +6,13 @@ loom-check: loom-self-plugin-check loom-demo-new-project
 skills-check:
 	python3 tools/skills_surface.py check
 
+host-adapter-check:
+	python3 tools/host_adapter_check.py
+
 version-surface-check:
 	python3 tools/version_surface_check.py
 
-check: skills-check version-surface-check loom-check
+check: skills-check host-adapter-check version-surface-check loom-check
 
 loom-demo-new-project:
 	python3 tools/loom_init.py bootstrap --target examples/new-project --write --force --verify --install-pr-template

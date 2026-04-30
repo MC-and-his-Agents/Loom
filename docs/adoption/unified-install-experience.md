@@ -84,4 +84,4 @@ Across Codex, Claude Code, OpenCode, Gemini, and Cursor, the user-facing experie
 
 ## Version Context
 
-Loom does not use one global version line for every surface. User-facing install and upgrade docs must link to [version-authority-map.md](./version-authority-map.md) when describing repository versions, GitHub releases, installer versions, plugin surface versions, host adapter versions, generated single-skill package versions, skills registry and contract versions, runtime/core versions, or external runtime schemas.
+Loom does not use one global version line for every surface. User-facing install and upgrade docs must refer to `version-authority-map.md` when describing repository versions, GitHub releases, installer versions, plugin surface versions, host adapter versions, generated single-skill package versions, skills registry and contract versions, runtime/core versions, or external runtime schemas.
