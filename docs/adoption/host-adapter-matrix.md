@@ -48,7 +48,7 @@ Adapters must surface machine-readable version context instead of implying one g
 - plugin surface: the host plugin manifest, such as `plugins/loom/.codex-plugin/plugin.json`
 - installer: `packages/loom-installer/package.json`
 
-The authority rules for these surfaces live in [version-authority-map.md](./version-authority-map.md).
+The authority rules for these surfaces live in `version-authority-map.md`.
 
 ## Fail-Closed Conditions
 
