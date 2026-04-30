@@ -10,6 +10,6 @@
   ],
   "source_sha256": {
     ".github/workflows/loom-check.yml": "94497e146bf2ff0d8652c56bdde95fe9743f76dcfd666f8a3d04b22a8d32d787",
-    "skills/shared/scripts/loom_check.py": "e0d0178b76619a82a6d616db872a57efaea90e635bfe0883ef318e42e937232c"
+    "skills/shared/scripts/loom_check.py": "b0b313d362912d5b71b0c3897a64cb7073720041c8c4cdd67ba939f6312c5a50"
   }
 }

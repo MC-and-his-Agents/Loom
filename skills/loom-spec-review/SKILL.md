@@ -24,7 +24,7 @@ description: 负责 formal spec review 执行层。Use when Codex needs to revie
 
 如果任务其实是在做初始化、恢复执行、review 前预检、implementation review、handoff、retire 或 merge-ready，应回到 root route matrix，让 `loom-init` 路由到对应场景：
 
-- [../route-matrix.md](../route-matrix.md)
+- [../route-matrix.md](.loom-runtime/route-matrix.md)
 
 ## 2. 固定入口
 

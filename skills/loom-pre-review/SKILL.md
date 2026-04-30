@@ -20,7 +20,7 @@ description: 负责统一 review 前检查。Use when Codex needs a single pre-r
 
 如果任务其实是在做初始化、恢复执行、handoff、retire 或 merge-ready，应回到 root route matrix，让 `loom-init` 路由到对应场景：
 
-- [../route-matrix.md](../route-matrix.md)
+- [../route-matrix.md](.loom-runtime/route-matrix.md)
 
 ## 2. 固定入口
 

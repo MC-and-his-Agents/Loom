@@ -21,7 +21,7 @@ description: 负责恢复当前事项的执行入口。Use when Codex needs to t
 
 如果任务其实是在做初始化、review 前检查、handoff、retire 或 merge-ready，应回到 root route matrix，让 `loom-init` 把任务路由到对应场景：
 
-- [../route-matrix.md](../route-matrix.md)
+- [../route-matrix.md](.loom-runtime/route-matrix.md)
 
 ## 2. 固定入口
 

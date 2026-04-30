@@ -20,7 +20,7 @@ description: 负责把仓库接入 Loom 的初始化场景入口。Use when Code
 
 若任务其实是接手当前事项、review 前检查、交接、retire 或 merge-ready，应回到 root route matrix，转向对应场景 skill：
 
-- [../route-matrix.md](../route-matrix.md)
+- [../route-matrix.md](.loom-runtime/route-matrix.md)
 
 ## 2. 读取顺序
 
@@ -31,12 +31,12 @@ description: 负责把仓库接入 Loom 的初始化场景入口。Use when Code
   - `AGENTS.md`
   - `README.md`
 - 初始化相关稳定规则
-  - [../shared/references/adoption/zero-friction-adoption-contract.md](../shared/references/adoption/zero-friction-adoption-contract.md)
-  - [../shared/references/adoption/lightweight-retrofit-default.md](../shared/references/adoption/lightweight-retrofit-default.md)
-  - [../shared/references/adoption/routing-and-checkpoints.md](../shared/references/adoption/routing-and-checkpoints.md)
-  - [../shared/references/harness/fact-chain-contract.md](../shared/references/harness/fact-chain-contract.md)
-  - [../loom-init/references/input-signals.md](../loom-init/references/input-signals.md)
-  - [../loom-init/references/output-contract.md](../loom-init/references/output-contract.md)
+  - [../shared/references/adoption/zero-friction-adoption-contract.md](.loom-runtime/shared/references/adoption/zero-friction-adoption-contract.md)
+  - [../shared/references/adoption/lightweight-retrofit-default.md](.loom-runtime/shared/references/adoption/lightweight-retrofit-default.md)
+  - [../shared/references/adoption/routing-and-checkpoints.md](.loom-runtime/shared/references/adoption/routing-and-checkpoints.md)
+  - [../shared/references/harness/fact-chain-contract.md](.loom-runtime/shared/references/harness/fact-chain-contract.md)
+  - [../loom-init/references/input-signals.md](.loom-runtime/loom-init/references/input-signals.md)
+  - [../loom-init/references/output-contract.md](.loom-runtime/loom-init/references/output-contract.md)
 - 本 skill 的场景合同
   - [references/input-signals.md](./references/input-signals.md)
   - [references/output-contract.md](./references/output-contract.md)
@@ -67,7 +67,7 @@ description: 负责把仓库接入 Loom 的初始化场景入口。Use when Code
 
 输出必须直接遵守初始化输出合同，而不是另写一套 adopt 专属真相：
 
-- [../loom-init/references/output-contract.md](../loom-init/references/output-contract.md)
+- [../loom-init/references/output-contract.md](.loom-runtime/loom-init/references/output-contract.md)
 
 至少要明确：
 

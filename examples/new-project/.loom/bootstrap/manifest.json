@@ -47,19 +47,19 @@
       "path": ".loom/bin/governance_surface.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/governance_surface.py",
-      "sha256": "86fcf5773a9d202b43778fa1e646ee7d2ac2070cab93ce2023520880ccbf0e8c"
+      "sha256": "85039f034e25144fa2ba5fedaf6fbac1367a726ece9a77580bbf18bcbf97b996"
     },
     {
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "caddfce59885b7f7afbc2bd91f325fb73fe7450934f42addaee15cc857b1e447"
+      "sha256": "d67ffd22cacad33d25e1a4ef5dc90b57eb7143aae7a9a65420fcbdcb38fc701d"
     },
     {
       "path": ".loom/bin/loom_status.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_status.py",
-      "sha256": "78572efeeafe7dbb82e75fd86ad80a5fdc8447ef85ba5e26eb72c0bd448ccfe0"
+      "sha256": "229ecdf3171aab0df302fd9662f5a9ce6371e7b8f194ece341909d38ce268bed"
     },
     {
       "path": ".loom/bin/runtime_paths.py",
@@ -77,7 +77,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "efd1e2f54ff23130c22d6a1e7adc3620930add76b098e430c97568130695d3f8"
+      "sha256": "b0b313d362912d5b71b0c3897a64cb7073720041c8c4cdd67ba939f6312c5a50"
     },
     {
       "path": "AGENTS.md",
