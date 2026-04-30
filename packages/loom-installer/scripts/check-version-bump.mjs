@@ -21,7 +21,11 @@ const behaviorPaths = [
   'packages/loom-installer/scripts/build-payload.mjs',
 ];
 
-const ignoredBehaviorPaths = [];
+const ignoredBehaviorPaths = [
+  'skills/README.md',
+  'skills/README.zh-CN.md',
+  'skills/distribution-and-adapter-contract.md',
+];
 
 function git(args) {
   return execFileSync('git', args, {

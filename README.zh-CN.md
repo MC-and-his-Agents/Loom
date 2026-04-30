@@ -95,7 +95,7 @@ Loom 当前暴露一个 root entry 和八个 scenario skills：
 | `loom-merge-ready` | 验证 merge readiness。 |
 | `loom-retire` | 在不丢弃用户改动的前提下清理并退场。 |
 
-可编辑 skills 源码真相位于 [src/skills/](./src/skills/)。生成且提交的安装表面位于 [skills/](./skills/)。每个 `skills/<skill-id>` 都是带 `loom-package.json` 和 `.loom-runtime/` 的自包含 single-skill package。Canonical Codex plugin manifest 位于 [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/)。
+可编辑 skills 源码真相位于 `src/skills/`。生成且提交的安装表面位于 [skills/](./skills/)。每个 `skills/<skill-id>` 都是带 `loom-package.json` 和 `.loom-runtime/` 的自包含 single-skill package。Canonical Codex plugin manifest 位于 [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/)。
 
 ## 高级 / 兼容
 
@@ -117,7 +117,7 @@ npx @mc-and-his-agents/loom-installer add skill loom-retire --host claude
 - 架构说明：[docs/architecture/](./docs/architecture/)
 - 接入合同：[docs/adoption/](./docs/adoption/)
 - 统一安装体验：[docs/adoption/unified-install-experience.md](./docs/adoption/unified-install-experience.md)
-- 宿主适配矩阵：[docs/adoption/host-adapter-matrix.md](./docs/adoption/host-adapter-matrix.md)
+- 宿主适配矩阵：`docs/adoption/host-adapter-matrix.md`
 - 版本权威图：[docs/adoption/version-authority-map.md](./docs/adoption/version-authority-map.md)
 - 证据台账：[docs/evidence/](./docs/evidence/)
 - 分发合同：[skills/distribution-and-adapter-contract.md](./skills/distribution-and-adapter-contract.md)

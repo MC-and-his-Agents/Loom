@@ -95,7 +95,7 @@ Loom exposes one root entry and eight scenario skills:
 | `loom-merge-ready` | Validates merge readiness. |
 | `loom-retire` | Cleans up and exits without discarding user changes. |
 
-The editable skills source lives under [src/skills/](./src/skills/). The generated and checked-in install surface lives under [skills/](./skills/). Each `skills/<skill-id>` directory is a self-contained single-skill package with `loom-package.json` and `.loom-runtime/`. The canonical Codex plugin manifest lives under [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/).
+The editable skills source lives under `src/skills/`. The generated and checked-in install surface lives under [skills/](./skills/). Each `skills/<skill-id>` directory is a self-contained single-skill package with `loom-package.json` and `.loom-runtime/`. The canonical Codex plugin manifest lives under [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/).
 
 ## Advanced / Compatibility
 
@@ -117,7 +117,7 @@ An individually installed skill only exposes that skill to the host. If you need
 - Architecture docs: [docs/architecture/](./docs/architecture/)
 - Adoption contracts: [docs/adoption/](./docs/adoption/)
 - Unified install experience: [docs/adoption/unified-install-experience.md](./docs/adoption/unified-install-experience.md)
-- Host adapter matrix: [docs/adoption/host-adapter-matrix.md](./docs/adoption/host-adapter-matrix.md)
+- Host adapter matrix: `docs/adoption/host-adapter-matrix.md`
 - Version authority map: [docs/adoption/version-authority-map.md](./docs/adoption/version-authority-map.md)
 - Evidence ledger: [docs/evidence/](./docs/evidence/)
 - Distribution contract: [skills/distribution-and-adapter-contract.md](./skills/distribution-and-adapter-contract.md)
