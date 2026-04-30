@@ -88,10 +88,15 @@ test('payload manifest excludes python cache artifacts', () => {
 test('payload manifest tracks loom-spec-review as a public skill', () => {
   const manifest = JSON.parse(readFileSync(join(packageRoot(), 'payload', 'manifest.json'), 'utf8'));
   assert.equal(Array.isArray(manifest.skills), true);
-  assert.equal(
-    manifest.skills.some((entry: { id: string; relative_path: string }) => entry.id === 'loom-spec-review' && entry.relative_path === 'skills/loom-spec-review'),
-    true,
-  );
+  const skill = manifest.skills.find((entry: { id: string }) => entry.id === 'loom-spec-review');
+  assert.equal(skill.relative_path, 'skills/loom-spec-review');
+  assert.equal(skill.package_metadata, 'loom-package.json');
+  assert.equal(skill.runtime_root, '.loom-runtime');
+  assert.equal(typeof skill.skill_package_version, 'string');
+  assert.equal(typeof skill.runtime_core_version, 'string');
+  assert.equal(typeof manifest.version_context.repo_version, 'string');
+  assert.equal(typeof manifest.version_context.installer_package_version, 'string');
+  assert.equal(typeof manifest.version_context.plugin_surface_version, 'string');
 });
 
 test('payload bundles shared references and runtime paths required by install layout', () => {
@@ -155,6 +160,8 @@ test('codex plugin install writes marketplace entry', () => {
   const result = runInstaller(parsed, envSource, packageRoot());
   const marketplace = JSON.parse(readFileSync(join(repoRoot, '.agents', 'plugins', 'marketplace.json'), 'utf8'));
   assert.equal(result.host, 'codex');
+  assert.equal(result.distribution_layer, 'host-adapter-plugin');
+  assert.equal(result.version_context?.plugin_surface_version, '0.4.0');
   assert.equal(marketplace.plugins[0].name, 'loom');
   assert.equal(marketplace.plugins[0].source.path, './plugins/loom');
 });
@@ -246,6 +253,9 @@ test('codex skill install writes repo-scoped .agents skill', () => {
   const result = runInstaller(parsed, envSource, packageRoot());
   const skillPath = join(repoRoot, '.agents', 'skills', 'loom-review', 'SKILL.md');
   assert.equal(result.mode, 'skill');
+  assert.equal(result.distribution_layer, 'generated-single-skill');
+  assert.equal(result.version_context?.skill_package_id, 'loom-review');
+  assert.equal(typeof result.version_context?.skill_package_version, 'string');
   assert.equal(existsSync(skillPath), true);
   assert.equal(existsSync(join(envSource.CODEX_HOME!, 'config.toml')), false);
 });
@@ -400,5 +410,8 @@ test('cli emits structured json on success', () => {
   const payload = JSON.parse(output);
   assert.equal(payload.host, 'codex');
   assert.equal(payload.mode, 'plugin');
+  assert.equal(payload.distribution_layer, 'host-adapter-plugin');
+  assert.equal(payload.version_context.plugin_surface_version, '0.4.0');
+  assert.equal(payload.failed_layer, null);
   assert.equal(payload.fail_closed_reason, null);
 });

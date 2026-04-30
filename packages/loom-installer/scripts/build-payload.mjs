@@ -12,8 +12,9 @@ const pluginManifestSource = join(repoRoot, 'plugins', 'loom', '.codex-plugin');
 const skillsSourceRoot = join(repoRoot, 'skills');
 const pluginManifestPath = join(pluginManifestSource, 'plugin.json');
 const installLayoutPath = join(skillsSourceRoot, 'install-layout.json');
-const privateRuntimeDir = '.loom-runtime';
 const payloadLockDir = join(packageRoot, '.payload-lock');
+const repoVersionPath = join(repoRoot, 'VERSION');
+const packageJsonPath = join(packageRoot, 'package.json');
 
 function sleep(milliseconds) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
@@ -108,57 +109,6 @@ function requiredInstallLayoutPaths() {
   return layout.required_paths;
 }
 
-function runtimeScript(skillId) {
-  return skillId === 'loom-init' || skillId === 'loom-adopt' ? 'loom_init.py' : 'loom_flow.py';
-}
-
-function writeSingleSkillWrapper(skillId, targetPath) {
-  const script = runtimeScript(skillId);
-  writeFileSync(
-    targetPath,
-    [
-      '#!/usr/bin/env python3',
-      'from __future__ import annotations',
-      '',
-      'import os',
-      'import runpy',
-      'import sys',
-      'from pathlib import Path',
-      '',
-      'SCRIPT_PATH = Path(__file__).resolve()',
-      'PACKAGE_ROOT = SCRIPT_PATH.parents[1]',
-      `RUNTIME_ROOT = PACKAGE_ROOT / "${privateRuntimeDir}"`,
-      '',
-      'os.environ.setdefault("LOOM_INSTALLED_SKILLS_ROOT", str(RUNTIME_ROOT))',
-      `os.environ.setdefault("LOOM_PACKAGE_SKILL_ID", "${skillId}")`,
-      'sys.path.insert(0, str(RUNTIME_ROOT / "shared/scripts"))',
-      `runpy.run_path(RUNTIME_ROOT / "shared/scripts/${script}", run_name="__main__")`,
-      '',
-    ].join('\n'),
-    { encoding: 'utf8', mode: 0o755 },
-  );
-}
-
-function copyTopLevelSkillSurface(skillId, targetRoot) {
-  const sourceRoot = join(skillsSourceRoot, skillId);
-  const targetSkillRoot = join(targetRoot, skillId);
-  const packageSkillRoot = targetRoot;
-  copyDirectoryFiltered(sourceRoot, packageSkillRoot);
-  rmSync(join(packageSkillRoot, 'scripts'), { recursive: true, force: true });
-  mkdirSync(join(packageSkillRoot, 'scripts'), { recursive: true });
-  const entrypoint = readJson(join(sourceRoot, 'contract.json')).entrypoint ?? {};
-  const executable = entrypoint.script ?? entrypoint.bootstrap_cli ?? entrypoint.orchestration_cli ?? entrypoint.route_cli;
-  if (!executable || typeof executable !== 'string') {
-    throw new Error(`${skillId}/contract.json must declare entrypoint.script`);
-  }
-  writeSingleSkillWrapper(skillId, join(packageSkillRoot, executable));
-  rmSync(targetSkillRoot, { recursive: true, force: true });
-}
-
-function copyFullRuntime(runtimeRoot) {
-  copyDirectoryFiltered(skillsSourceRoot, runtimeRoot);
-}
-
 function verifyRequiredPaths(rootDir, requiredPaths, label) {
   const missing = [];
   for (const requiredPath of requiredPaths) {
@@ -190,16 +140,24 @@ function buildSingleSkillPayloads(currentPayloadRoot, entries, requiredPaths) {
       throw new Error(`missing skill source: ${sourceDir}`);
     }
     const contract = readJson(join(sourceDir, 'contract.json'));
+    const packageMetadata = readJson(join(sourceDir, 'loom-package.json'));
     const packageDir = join(skillsPayloadRoot, skillId);
     mkdirSync(packageDir, { recursive: true });
-    copyTopLevelSkillSurface(skillId, packageDir);
-    const runtimeRoot = join(packageDir, privateRuntimeDir);
-    copyFullRuntime(runtimeRoot);
+    copyDirectoryFiltered(sourceDir, packageDir);
+    const runtimeRoot = join(packageDir, packageMetadata.runtime_root ?? '.loom-runtime');
     verifyRequiredPaths(runtimeRoot, requiredPaths, `single-skill runtime for ${skillId}`);
+    if (!existsSync(join(packageDir, 'SKILL.md')) || !existsSync(join(packageDir, 'loom-package.json'))) {
+      throw new Error(`single-skill package for ${skillId} is incomplete`);
+    }
     skills.push({
       id: contract.id,
       display_name: contract.display_name,
       contract_version: contract.contract_version,
+      skill_package_version: packageMetadata.skill_package_version,
+      runtime_core_version: packageMetadata.runtime_core_version,
+      package_metadata: 'loom-package.json',
+      runtime_root: packageMetadata.runtime_root,
+      launcher: packageMetadata.launcher,
       relative_path: `skills/${skillId}`,
     });
   }
@@ -254,15 +212,27 @@ function buildPayload() {
     verifyRequiredPaths(join(pluginTarget, 'skills'), requiredPaths, 'plugin payload');
     const skillRecords = buildSingleSkillPayloads(stagingRoot, publicSkillEntries(), requiredPaths);
     const pluginManifest = readJson(pluginManifestPath);
+    const packageJson = readJson(packageJsonPath);
+    const repoVersion = readFileSync(repoVersionPath, 'utf8').trim();
+    const registry = readJson(join(skillsSourceRoot, 'registry.json'));
     const files = collectFiles(stagingRoot).filter((entry) => entry.path !== 'manifest.json');
+    const hostAdapterVersion = pluginManifest['x-loom']?.host_adapter_version ?? '1.0.0';
 
     const manifest = {
       schema_version: 'loom-installer-payload/v1',
-      loom_version: pluginManifest.version,
+      loom_version: repoVersion,
       source_repository: 'https://github.com/MC-and-his-Agents/Loom',
       source_commit: gitValue(['rev-parse', 'HEAD'], 'unknown'),
       source_ref: gitValue(['rev-parse', '--abbrev-ref', 'HEAD'], 'unknown'),
       built_at: process.env.LOOM_INSTALLER_BUILD_TIMESTAMP ?? new Date().toISOString(),
+      version_context: {
+        repo_version: repoVersion,
+        installer_package_version: packageJson.version,
+        plugin_surface_version: pluginManifest.version,
+        host_adapter_version: hostAdapterVersion,
+        skills_registry_version: registry.registry_version,
+        runtime_core_version: skillRecords[0]?.runtime_core_version ?? '1.0.0',
+      },
       runtime: {
         python_minimum: '3.10',
         python_recommended: '3.11+',
@@ -270,6 +240,7 @@ function buildPayload() {
       plugin: {
         name: pluginManifest.name,
         version: pluginManifest.version,
+        host_adapter_version: hostAdapterVersion,
         relative_path: 'plugin/loom',
       },
       skills: skillRecords,
