@@ -24,6 +24,10 @@
 - GitHub 默认治理实现 profile：[github-profile.md](./github-profile.md)
 - GitHub profile 升级路径：[github-profile-upgrade.md](./github-profile-upgrade.md)
 - CI required checks bootstrap：[ci-required-checks-bootstrap.md](./ci-required-checks-bootstrap.md)
+- 统一安装体验：[unified-install-experience.md](./unified-install-experience.md)
+- 宿主适配矩阵：`host-adapter-matrix.md`
+- 单 skill 安装合同：[single-skill-contract.md](./single-skill-contract.md)
+- 版本权威图：[version-authority-map.md](./version-authority-map.md)
 
 边界约束：
 

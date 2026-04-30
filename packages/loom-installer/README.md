@@ -2,9 +2,9 @@
 
 Language: English | [中文版本](./README.zh-CN.md)
 
-Loom npm / npx installer.
+Loom npm / npx adapter helper and verifier.
 
-The primary install mode is the complete Loom plugin surface. Single-skill install remains available for compatibility and advanced use.
+The default Loom install model is full repository install plus native or host skill discovery. This package remains available for adapter-managed plugin installs, single-skill helper flows, and verification output.
 
 ## Commands
 
@@ -41,9 +41,11 @@ Options:
 
 ## Payload Model
 
-The published package includes a generated payload. The payload is generated from the canonical `plugins/loom/.codex-plugin/` manifest and `skills/` sources during build, pack, and publish.
+The published package includes a generated payload. The payload is generated from the canonical `plugins/loom/.codex-plugin/` manifest and the checked-in generated `skills/` install surface during build, pack, and publish.
 
-Generated payload directories are not committed to git. The build step recreates them deterministically, and `check:payload` verifies rebuild stability.
+Generated payload directories are not committed to git. The build step recreates them deterministically, and `check:payload` verifies rebuild stability. The root `skills/` surface itself is committed and verified with `check:distribution`.
+
+Installer JSON output reports `distribution_layer`, `version_context`, and `failed_layer` so callers can distinguish host adapter plugin installs from generated single-skill installs.
 
 ## Release Notes
 

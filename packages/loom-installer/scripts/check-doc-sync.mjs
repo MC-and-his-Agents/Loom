@@ -12,7 +12,9 @@ const requiredNeedles = [
     needles: [
       'agent-first project operating layer',
       'Fetch and follow instructions from https://raw.githubusercontent.com/MC-and-his-Agents/Loom/refs/heads/main/docs/adoption/codex-install.md',
-      'npx @mc-and-his-agents/loom-installer add plugin --host codex',
+      'The npm installer is not the Codex default path',
+      'src/skills/',
+      'docs/adoption/unified-install-experience.md',
       'Advanced / Compatibility',
       '[中文版本](./README.zh-CN.md)',
     ],
@@ -22,7 +24,9 @@ const requiredNeedles = [
     needles: [
       'agent-first project operating layer',
       'Fetch and follow instructions from https://raw.githubusercontent.com/MC-and-his-Agents/Loom/refs/heads/main/docs/adoption/codex-install.md',
-      'npx @mc-and-his-agents/loom-installer add plugin --host codex',
+      'npm installer 不是 Codex 默认路径',
+      'src/skills/',
+      'docs/adoption/unified-install-experience.md',
       '高级 / 兼容',
       '[English version](./README.md)',
     ],
@@ -32,13 +36,16 @@ const requiredNeedles = [
     needles: [
       'git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom',
       'ln -sfn "$skill" "$HOME/.agents/skills/$(basename "$skill")"',
+      'loom-package.json',
       'Restart Codex',
     ],
   },
   {
     path: 'skills/README.md',
     needles: [
-      'canonical skills library',
+      'generated, checked-in Loom skills install surface',
+      'src/skills/',
+      'loom-package.json',
       'unique root entry',
       'Advanced / Compatibility',
       'npx @mc-and-his-agents/loom-installer add skill <skill-id>',
@@ -48,7 +55,9 @@ const requiredNeedles = [
   {
     path: 'skills/README.zh-CN.md',
     needles: [
-      'canonical skills library',
+      '生成且提交的 skills install surface',
+      'src/skills/',
+      'loom-package.json',
       '唯一的 root entry',
       'Advanced / Compatibility',
       'npx @mc-and-his-agents/loom-installer add skill <skill-id>',
@@ -59,7 +68,9 @@ const requiredNeedles = [
     path: 'skills/distribution-and-adapter-contract.md',
     needles: [
       '@mc-and-his-agents/loom-installer',
-      'upstream `plugins/loom/.codex-plugin/` manifest + canonical `skills/`',
+      'upstream `plugins/loom/.codex-plugin/` manifest + generated root `skills/`',
+      'distribution_layer',
+      'version_context',
       'repo-scoped `<target>/.agents/skills/<skill-id>/`',
       'main 分支是真相源',
       'publish 成功后再创建 `loom-installer-v<version>` git tag 与同名前缀的 GitHub Release',
@@ -73,7 +84,9 @@ const requiredNeedles = [
       'Python `>=3.10`, recommended `3.11+`',
       'add plugin',
       'add skill <skill-id>',
-      'payload is generated from the canonical `plugins/loom/.codex-plugin/` manifest and `skills/` sources',
+      'The default Loom install model is full repository install plus native or host skill discovery.',
+      'payload is generated from the canonical `plugins/loom/.codex-plugin/` manifest and the checked-in generated `skills/` install surface',
+      'distribution_layer',
       '[中文版本](./README.zh-CN.md)',
     ],
   },
@@ -85,9 +98,23 @@ const requiredNeedles = [
       'Python `>=3.10`，推荐 `3.11+`',
       'add plugin',
       'add skill <skill-id>',
-      'canonical `plugins/loom/.codex-plugin/` manifest 与 `skills/` 源',
+      'Loom 默认安装模型是完整仓库安装加宿主原生或宿主适配的 skill discovery',
+      'canonical `plugins/loom/.codex-plugin/` manifest 与已提交的生成 `skills/` install surface',
+      'distribution_layer',
       '[English version](./README.md)',
     ],
+  },
+  {
+    path: 'docs/adoption/unified-install-experience.md',
+    needles: ['full repository install', 'src/skills/', 'skills/<skill-id>', 'loom-init', 'single-skill'],
+  },
+  {
+    path: 'docs/adoption/single-skill-contract.md',
+    needles: ['loom-package.json', '.loom-runtime/', 'fail closed', 'make skills-check'],
+  },
+  {
+    path: 'docs/adoption/version-authority-map.md',
+    needles: ['Versions are not globally synchronized', 'installer package version', 'plugin surface version', 'skill_package_version'],
   },
 ];
 

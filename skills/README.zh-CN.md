@@ -2,9 +2,9 @@
 
 语言：中文 | [English version](./README.md)
 
-`skills/` 是 Loom 的 canonical skills library。
+`skills/` 是 Loom 生成且提交的 skills install surface。可编辑源码真相位于 `src/skills/`。
 
-当 Loom 通过 Codex 原生 skill discovery、宿主 plugin 或 npm installer 安装时，这个目录就是面向用户的执行表面。方法论和架构文档位于这层之后，用户通常应该从 skills 进入，而不是先读内部治理文档。
+当 Loom 通过 Codex 原生 skill discovery、宿主 plugin 或 npm installer 安装时，这个目录就是面向用户的执行表面。每个 `skills/<skill-id>` 也都是自包含 single-skill package。方法论和架构文档位于这层之后，用户通常应该从 skills 进入，而不是先读内部治理文档。
 
 默认从 `loom-init` 开始。它是 Loom 唯一的 root entry，负责两件事：
 
@@ -71,6 +71,8 @@ npx @mc-and-his-agents/loom-installer add plugin --host codex
 npx @mc-and-his-agents/loom-installer add plugin --host claude
 ```
 
+npm installer 是 adapter/helper 路径，不是 Codex 默认路径。
+
 ## Advanced / Compatibility
 
 单 skill 安装保留为高级兼容路径，但不再是默认用户路径：
@@ -82,6 +84,8 @@ npx @mc-and-his-agents/loom-installer add skill <skill-id> --host claude
 
 单独安装的 skill 只会向宿主暴露该 skill 本身。除非安装的就是 `loom-init`，否则它不会暴露完整的 `loom-init` 路由面，也不应被表述成完整的 Loom 体验。
 
+每个生成 single-skill package 都包含 `loom-package.json`、包内 `.loom-runtime/`，以及从包内解析 runtime 的 launcher。
+
 ## Internal Contracts
 
 以下文件属于 runtime contract，应保持稳定：
@@ -92,3 +96,10 @@ npx @mc-and-his-agents/loom-installer add skill <skill-id> --host claude
 - [distribution-and-adapter-contract.md](./distribution-and-adapter-contract.md)
 
 共享 runtime scripts、assets 和 references 位于 [shared/](./shared/)。它们会被 scenario skills 和 release tooling 一起消费，用来生成 plugin 或 single-skill payload。
+
+生成表面检查：
+
+```bash
+python3 tools/skills_surface.py generate
+make skills-check
+```

@@ -2,9 +2,9 @@
 
 语言：中文 | [English version](./README.md)
 
-Loom 的 npm / npx installer。
+Loom 的 npm / npx adapter helper 和 verifier。
 
-主安装模式是完整 Loom plugin surface。单 skill 安装仍然保留，用于兼容和高级场景。
+Loom 默认安装模型是完整仓库安装加宿主原生或宿主适配的 skill discovery。这个 package 保留给 adapter 托管的 plugin 安装、single-skill helper 和 verification output。
 
 ## Commands
 
@@ -41,9 +41,11 @@ Options：
 
 ## Payload Model
 
-发布包会包含生成出来的 payload。该 payload 会在 build、pack 和 publish 阶段，从 canonical `plugins/loom/.codex-plugin/` manifest 与 `skills/` 源动态生成。
+发布包会包含生成出来的 payload。该 payload 会在 build、pack 和 publish 阶段，从 canonical `plugins/loom/.codex-plugin/` manifest 与已提交的生成 `skills/` install surface 动态生成。
 
-生成出来的 payload 目录不会提交到 git。Build 步骤会以确定性方式重建它们，`check:payload` 会校验重建稳定性。
+生成出来的 payload 目录不会提交到 git。Build 步骤会以确定性方式重建它们，`check:payload` 会校验重建稳定性。根 `skills/` surface 本身会提交，并通过 `check:distribution` 校验。
+
+Installer JSON output 会报告 `distribution_layer`、`version_context` 和 `failed_layer`，让调用方区分 host adapter plugin install 与 generated single-skill install。
 
 ## Release Notes
 

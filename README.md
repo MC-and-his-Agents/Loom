@@ -8,7 +8,7 @@ It gives coding agents a behavior-first execution path across adopt, resume, spe
 
 ## How It Works
 
-Loom remains a plugin / SKILLS / CLI product. The plugin exposes install, discovery, and invocation; `SKILLS` expose scenario operations; the CLI and fixtures provide machine checks; docs remain the repository truth for methodology, harness, adoption, templates, and evidence.
+Loom remains a full-repo / plugin / SKILLS / CLI product. The default install model is full repository install plus native or host skill discovery. `SKILLS` expose scenario operations; host adapters expose install and bootstrap wiring; the CLI and fixtures provide machine checks; docs remain the repository truth for methodology, harness, adoption, templates, and evidence.
 
 Agents start from `loom-init`, then route into the right scenario skill based on the task and repository state.
 
@@ -42,9 +42,9 @@ done
 
 Restart Codex after installation so native skill discovery reloads the Loom skills.
 
-### npm Installer
+### Adapter Installer
 
-If you want to attach the Loom plugin surface to a target repository through the installer:
+The npm installer is not the Codex default path. Use it when you need an adapter-managed plugin install, single-skill helper flow, or installer verification output:
 
 ```bash
 npx @mc-and-his-agents/loom-installer add plugin --host codex
@@ -64,7 +64,7 @@ Requirements:
 - Node `>=20`
 - Python `>=3.10`, recommended `3.11+`
 
-The installer is responsible for install, discovery, and verification. Loom execution still runs on the Python runtime bundled with the skills library.
+The installer reports the distribution layer and version context it touched. Loom execution still runs on the Python runtime bundled with the generated skills surface.
 
 ## Basic Workflow
 
@@ -95,7 +95,7 @@ Loom exposes one root entry and eight scenario skills:
 | `loom-merge-ready` | Validates merge readiness. |
 | `loom-retire` | Cleans up and exits without discarding user changes. |
 
-The canonical skills library lives under [skills/](./skills/). The canonical Codex plugin manifest lives under [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/). Generated plugin payloads and single-skill payloads are not committed. Release tooling builds them dynamically from those sources.
+The editable skills source lives under `src/skills/`. The generated and checked-in install surface lives under [skills/](./skills/). Each `skills/<skill-id>` directory is a self-contained single-skill package with `loom-package.json` and `.loom-runtime/`. The canonical Codex plugin manifest lives under [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/).
 
 ## Advanced / Compatibility
 
@@ -106,7 +106,7 @@ npx @mc-and-his-agents/loom-installer add skill loom-retire --host codex
 npx @mc-and-his-agents/loom-installer add skill loom-retire --host claude
 ```
 
-An individually installed skill only exposes that skill to the host. If you need `loom-init` routing and the full scenario surface, install the full Loom plugin or the complete skills library.
+An individually installed skill only exposes that skill to the host. If you need `loom-init` routing and the full scenario surface, install the full repository and complete generated skills surface.
 
 ## Maintainer Docs
 
@@ -116,6 +116,9 @@ An individually installed skill only exposes that skill to the host. If you need
 - Methodology docs: [docs/methodology/](./docs/methodology/)
 - Architecture docs: [docs/architecture/](./docs/architecture/)
 - Adoption contracts: [docs/adoption/](./docs/adoption/)
+- Unified install experience: [docs/adoption/unified-install-experience.md](./docs/adoption/unified-install-experience.md)
+- Host adapter matrix: `docs/adoption/host-adapter-matrix.md`
+- Version authority map: [docs/adoption/version-authority-map.md](./docs/adoption/version-authority-map.md)
 - Evidence ledger: [docs/evidence/](./docs/evidence/)
 - Distribution contract: [skills/distribution-and-adapter-contract.md](./skills/distribution-and-adapter-contract.md)
 
