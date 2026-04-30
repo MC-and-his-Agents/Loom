@@ -10,6 +10,13 @@
   "homepage": "https://github.com/MC-and-his-Agents/Loom",
   "repository": "https://github.com/MC-and-his-Agents/Loom",
   "license": "MIT",
+  "x-loom": {
+    "plugin_surface_version": "0.4.0",
+    "host_adapter_version": "1.0.0",
+    "version_authority": "docs/adoption/version-authority-map.md",
+    "default_entry": "loom-init",
+    "distribution_model": "full-repo-native-skill-discovery"
+  },
   "keywords": [
     "loom",
     "agent-workflow",
