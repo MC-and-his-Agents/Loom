@@ -18,6 +18,8 @@
   - `state-check` 的结果、摘要、阻断项与检查分项
 - `runtime_evidence`
   - 5 项运行时证据对象，保留 `present` 与 `not_applicable`
+- `execution_ledger`
+  - recovery-bound ledger 的 completeness 与 freshness；缺失、stale、第二 locator 或 forbidden authored recovery fields 必须阻断
 - `build_checkpoint`
   - `checkpoint build` 的结果、摘要、阻断项与回退去向
 - `merge_checkpoint`

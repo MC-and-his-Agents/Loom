@@ -84,3 +84,20 @@ Loom 当前不固化：
 - review 消费它们来判断实现是否覆盖行为契约
 - merge-ready 消费它们来判断当前 `HEAD` 是否仍有 fresh verification evidence
 - closeout 消费它们来判断进入主干后的结果是否足以支持 `absorbed` / `closed_out`
+
+## 6. 与 Execution Ledger 的映射
+
+正式规约套件只提供 locator / evidence 输入，不维护恢复状态。
+
+默认映射如下：
+
+| 模板输出 | ledger 字段 | 归属边界 |
+| --- | --- | --- |
+| `spec.md` 的验收标准与行为证据 | `acceptance_locator` | 只说明验收和行为证据入口 |
+| `plan.md` 的阶段、验证方式与测试策略 | `plan_locator` | 只说明执行计划入口 |
+| checkpoint / review / gate 输出 | `validation_evidence_locator` | 只说明验证证据入口 |
+| `handoff` 输出或交接说明 | `handoff_notes_locator` | 只说明交接入口 |
+
+纯文档事项可在对应字段声明 `not_applicable`，但必须与 spec / plan / recovery 中的事实不冲突。
+
+模板不得 authored `next_step`、`blockers`、`latest_validation_summary`。这些字段只能由 recovery 主入口维护，再由 fact-chain、resume、handoff 与 merge-ready 消费。

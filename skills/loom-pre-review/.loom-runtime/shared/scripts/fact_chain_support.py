@@ -68,6 +68,15 @@ RUNTIME_EVIDENCE_FIELDS = {
     "Lane Entry": "lane_entry",
 }
 
+EXECUTION_LEDGER_FIELDS = {
+    "Ledger Binding": "ledger_binding",
+    "Plan Locator": "plan_locator",
+    "Acceptance Locator": "acceptance_locator",
+    "Validation Evidence Locator": "validation_evidence_locator",
+    "Handoff Notes Locator": "handoff_notes_locator",
+    "Evidence Freshness": "evidence_freshness",
+}
+
 PROVENANCE_KINDS = {
     "authored_truth",
     "host_control_mirror",
@@ -114,6 +123,7 @@ FIELD_LABELS = {
 }
 
 RUNTIME_EVIDENCE_FIELD_LABELS = {canonical: label for label, canonical in RUNTIME_EVIDENCE_FIELDS.items()}
+EXECUTION_LEDGER_FIELD_LABELS = {canonical: label for label, canonical in EXECUTION_LEDGER_FIELDS.items()}
 
 
 def load_json_file(path: Path) -> dict[str, object]:
@@ -280,15 +290,70 @@ def parse_work_item(path: Path, root: Path) -> tuple[dict[str, object], list[str
     return data, errors
 
 
-def parse_recovery_entry(path: Path, root: Path) -> tuple[dict[str, str], list[str]]:
+def parse_execution_ledger(
+    sections: dict[str, list[str]],
+    relative_path: str,
+    recovery_ref: str,
+) -> tuple[dict[str, str], list[str]]:
+    ledger, errors = parse_key_value_section(
+        sections,
+        "Execution Ledger",
+        EXECUTION_LEDGER_FIELDS,
+        relative_path,
+    )
+    section_lines = sections.get("Execution Ledger", [])
+    forbidden_labels = {
+        label
+        for label, canonical in DYNAMIC_FACT_FIELDS.items()
+        if canonical in {"next_step", "blockers", "latest_validation_summary"}
+    }
+    for raw_line in section_lines:
+        match = KEY_VALUE_BULLET_RE.match(raw_line.strip())
+        if not match:
+            continue
+        label = match.group(1).strip()
+        if label in forbidden_labels:
+            errors.append(f"{relative_path}: `Execution Ledger` must not author `{label}`")
+
+    if errors:
+        return ledger, errors
+
+    binding = ledger["ledger_binding"]
+    if binding not in {"recovery_entry", recovery_ref}:
+        errors.append(
+            f"{relative_path}: `Execution Ledger` must bind to `recovery_entry` or `{recovery_ref}`, got `{binding}`"
+        )
+    freshness = ledger["evidence_freshness"].strip().lower()
+    if freshness not in {"current", "not_applicable"}:
+        errors.append(
+            f"{relative_path}: `Execution Ledger` evidence must be `current` or `not_applicable`, got `{ledger['evidence_freshness']}`"
+        )
+    for field_name in ("plan_locator", "acceptance_locator", "validation_evidence_locator", "handoff_notes_locator"):
+        value = ledger[field_name]
+        if not value.strip():
+            errors.append(
+                f"{relative_path}: `Execution Ledger` `{EXECUTION_LEDGER_FIELD_LABELS[field_name]}` must be non-empty or `not_applicable`"
+            )
+    return ledger, errors
+
+
+def parse_recovery_entry(path: Path, root: Path, recovery_ref: str | None = None) -> tuple[dict[str, str], list[str]]:
     relative_path = _relative(path, root)
     sections = markdown_sections(path)
     dynamic_facts, errors = parse_key_value_section(sections, "Dynamic Facts", DYNAMIC_FACT_FIELDS, relative_path)
+    execution_ledger, ledger_errors = parse_execution_ledger(
+        sections,
+        relative_path,
+        recovery_ref or relative_path,
+    )
+    errors.extend(ledger_errors)
 
     for forbidden_key in FORBIDDEN_STATIC_KEYS:
         if forbidden_key in dynamic_facts:
             errors.append(f"{relative_path}: `{forbidden_key}` must not be authored in `Dynamic Facts`")
 
+    if execution_ledger:
+        dynamic_facts["execution_ledger"] = execution_ledger
     return dynamic_facts, errors
 
 
@@ -479,6 +544,7 @@ def build_fact_report(
     recovery_entry: dict[str, str],
     status_surface: dict[str, str],
     runtime_evidence: dict[str, str],
+    execution_ledger: dict[str, str],
     status_sources: dict[str, str],
     expected_status: dict[str, str],
     expected_sources: dict[str, str],
@@ -533,6 +599,17 @@ def build_fact_report(
         if field_name in runtime_evidence
         for value in (runtime_evidence[field_name],)
     }
+    ledger_missing = [
+        canonical
+        for canonical in EXECUTION_LEDGER_FIELDS.values()
+        if not str(execution_ledger.get(canonical, "")).strip()
+    ]
+    ledger_freshness = execution_ledger.get("evidence_freshness", "")
+    ledger_status = "complete"
+    if ledger_missing:
+        ledger_status = "missing"
+    elif ledger_freshness == "not_applicable":
+        ledger_status = "not_applicable"
 
     surface_status = "fresh"
     if stale_fields:
@@ -563,6 +640,16 @@ def build_fact_report(
         "provenance": provenance,
         "facts": facts,
         "runtime_evidence": runtime_evidence_report,
+        "execution_ledger": {
+            "authoritative_carrier": "recovery_entry",
+            "authoritative_path": recovery_ref,
+            "status": ledger_status,
+            "completeness": "complete" if not ledger_missing else "missing",
+            "freshness": ledger_freshness,
+            "fields": execution_ledger,
+            "missing_fields": ledger_missing,
+            "forbidden_authored_fields": [],
+        },
         "derived_status_surface": {
             "path": status_ref,
             "status": surface_status,
@@ -710,7 +797,27 @@ def inspect_fact_chain(
         return {}, errors
 
     work_item, work_item_errors = parse_work_item(work_item_path, target_root)
-    recovery_entry, recovery_errors = parse_recovery_entry(recovery_path, target_root)
+    ledger_locator_keys = (
+        "execution_ledger",
+        "execution_ledger_entry",
+        "ledger",
+        "ledger_entry",
+    )
+    declared_ledger_locators = {
+        key: value
+        for key, value in entry_points.items()
+        if key in ledger_locator_keys and isinstance(value, str) and value
+    }
+    if declared_ledger_locators:
+        unique_ledger_locators = set(declared_ledger_locators.values())
+        if unique_ledger_locators != {str(recovery_ref)}:
+            errors.append(
+                "init-result.fact_chain.entry_points declares a second execution ledger locator; "
+                f"ledger must bind to recovery_entry `{recovery_ref}`"
+            )
+    if errors:
+        return {}, errors
+    recovery_entry, recovery_errors = parse_recovery_entry(recovery_path, target_root, str(recovery_ref))
     status_surface, runtime_evidence, status_sources, status_errors = parse_status_surface(status_path, target_root)
     parse_errors = work_item_errors + recovery_errors + status_errors
     errors.extend(parse_errors)
@@ -893,6 +1000,18 @@ def inspect_fact_chain(
         )
         for field_name, value in runtime_evidence.items()
     )
+    execution_ledger = dict(recovery_entry.get("execution_ledger", {}))
+    provenance.append(
+        _provenance_entry(
+            kind="authored_truth",
+            carrier="recovery_entry",
+            path=str(recovery_ref),
+            field="Execution Ledger",
+            authority="recovery_entry",
+            freshness=execution_ledger.get("evidence_freshness", "missing"),
+            trusted_because="execution ledger is a locator/evidence view bound to the recovery entry, not a second recovery state source",
+        )
+    )
 
     report = build_fact_report(
         target_root=target_root,
@@ -907,6 +1026,7 @@ def inspect_fact_chain(
         recovery_entry=recovery_entry,
         status_surface=status_surface,
         runtime_evidence=runtime_evidence,
+        execution_ledger=dict(recovery_entry.get("execution_ledger", {})),
         status_sources=status_sources,
         expected_status=expected_status,
         expected_sources=expected_sources,

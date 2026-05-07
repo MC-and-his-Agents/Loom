@@ -87,7 +87,27 @@
 - `recovery_boundary`
 - `current_lane`
 
-### 3.4 `gates`
+### 3.4 `execution_ledger`
+
+至少包含：
+
+- `authoritative_carrier`
+- `authoritative_path`
+- `completeness`
+- `freshness`
+- `fields`
+  - `ledger_binding`
+  - `plan_locator`
+  - `acceptance_locator`
+  - `validation_evidence_locator`
+  - `handoff_notes_locator`
+  - `evidence_freshness`
+- `missing_fields`
+- `forbidden_authored_fields`
+
+该字段组只展示 recovery-bound ledger 的派生结论。它不得 authored `next_step`、`blockers` 或 `latest_validation_summary`。
+
+### 3.5 `gates`
 
 固定包含：
 
@@ -105,7 +125,7 @@
 - `consumed_prerequisites`
 - `blocking_failures`
 
-### 3.5 `binding`
+### 3.6 `binding`
 
 至少包含：
 
@@ -118,7 +138,7 @@
 - `merge_commit_sha`
 - `target_branch`
 
-### 3.6 `taxonomy`
+### 3.7 `taxonomy`
 
 至少包含：
 
@@ -127,7 +147,7 @@
 - `drift`
 - `gate_failures`
 
-### 3.7 `github`
+### 3.8 `github`
 
 至少包含：
 

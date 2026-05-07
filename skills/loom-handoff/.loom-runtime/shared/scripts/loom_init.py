@@ -1316,7 +1316,14 @@ def render_progress(result: dict[str, object]) -> str:
         "- Blockers: None recorded.\n"
         "- Latest Validation Summary: Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist.\n"
         "- Recovery Boundary: Bootstrap result at `.loom/bootstrap/init-result.json`; bootstrap manifest at `.loom/bootstrap/manifest.json`.\n"
-        "- Current Lane: bootstrap verification only\n"
+        "- Current Lane: bootstrap verification only\n\n"
+        "## Execution Ledger\n\n"
+        "- Ledger Binding: recovery_entry\n"
+        "- Plan Locator: .loom/specs/INIT-0001/plan.md\n"
+        "- Acceptance Locator: .loom/specs/INIT-0001/spec.md\n"
+        "- Validation Evidence Locator: python3 .loom/bin/loom_init.py verify --target .\n"
+        "- Handoff Notes Locator: not_applicable\n"
+        "- Evidence Freshness: current\n"
     )
 
 

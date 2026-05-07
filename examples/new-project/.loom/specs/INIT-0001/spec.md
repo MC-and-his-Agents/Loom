@@ -12,6 +12,8 @@
 
 ## Key Scenarios
 
+Use these scenarios as the BDD outer loop. Each scenario should describe observable behavior, not implementation steps.
+
 ### Scenario 1
 
 Given
@@ -34,6 +36,14 @@ When
 Then
 - the system still behaves within the intended boundary
 
+## Behavior Evidence
+
+- Scenario coverage:
+- Expected evidence locator:
+- Freshness rule:
+- Execution ledger acceptance locator:
+- `not_applicable` rationale, if this is not a behavior-bearing change:
+
 ## Exceptions And Boundaries
 
 - Failure modes:
@@ -46,3 +56,4 @@ Then
 - [ ] Key scenarios are covered
 - [ ] Important boundary behavior is defined
 - [ ] Validation evidence is identified
+- [ ] Behavior evidence can be consumed by review, merge-ready, and closeout

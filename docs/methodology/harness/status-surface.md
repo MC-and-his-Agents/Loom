@@ -138,7 +138,20 @@
 `fresh verification evidence` 只能由 `present` 且绑定当前对象的 behavior evidence / test evidence 组合派生。
 若验证结果来自较早 `HEAD`、较早范围、过时恢复摘要，或来自未整合的 subagent 输出，状态面必须显示为 `stale` 或 `missing`，不得显示为 fresh。
 
-## 5. gate 可消费判定
+## 5. Execution Ledger 派生展示
+
+状态面可以展示 execution ledger 的派生结论，但不得 authored ledger 字段。
+
+可展示字段限于：
+
+- `ledger_locator`
+- `ledger_completeness`
+- `ledger_freshness`
+- `ledger_conflict`
+
+这些结论必须来自 fact-chain 对 recovery 主入口的解析。若 ledger 缺失、stale、绑定到第二 locator，或 authored recovery forbidden fields，状态面和 `loom_status` 都必须输出 blocking / stale 结论，而不是用状态面内容覆盖 recovery。
+
+## 6. gate 可消费判定
 
 状态面必须明确区分：
 

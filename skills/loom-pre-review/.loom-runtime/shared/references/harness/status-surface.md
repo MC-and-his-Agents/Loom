@@ -1,46 +1,66 @@
 # Status Surface
 
-本文件定义 Loom 当前最小状态面合同。
+本文件定义 Loom `status control plane v2` 的字段语义与读取纪律。
 
-本文件当前承接：
-
-- `EXT-0035`
+统一对象组见 [status-surface-contract.md](./status-surface-contract.md)。
+失败分类见 [governance-failure-taxonomy.md](./governance-failure-taxonomy.md)。
 
 ## 1. 能力定位
 
-状态面用于快速读取当前执行状态和运行事实。
+状态面用于在单一读面里暴露当前治理现场。
 
-它服务读取，不服务并行记账。
-本文件把“状态读取字段”和“运行时证据入口”明确拆开定义。
-字段归属与派生关系以 [fact-chain-contract.md](./fact-chain-contract.md) 为准。
-在强治理控制面里，它就是共享的 `status control plane`。
+它至少应回答：
 
-## 2. 状态读取字段
+- 当前是谁在执行
+- 当前走到哪一个 gate
+- 前序 gate 是否可继续消费
+- 当前有哪些 `stale` / `drift` / `gate_failure`
+- merge 与 closeout 是否已有足够 basis
+- 当前 behavior evidence / test evidence 是否覆盖当前范围
+- 最近验证是否仍是 fresh verification evidence
 
-Loom 当前至少要求状态面能展示：
+状态面不是 runtime state，也不是 runtime evidence ledger。它只消费这些来源并给出当前可读的 derived control-plane 结论。
 
-- 当前 `Work Item`
-- 当前执行路径
-- 当前 checkpoint 阶段
-- 当前 gate chain 位置
-- 当前工作现场
-- 当前恢复主入口
-- 当前 review 入口
-- 当前环境 lane
-- 当前阻断项
-- 下一步
-- 最近验证摘要
-- behavior evidence / test evidence 覆盖状态
-- fresh verification evidence 的 `head_sha` / 范围 / 摘要绑定
+## 2. 字段派生原则
 
-这些字段必须从已有主真相派生，不允许手工维护第二套 authored 值：
+所有字段都必须从既有主真相或 host signals 派生：
 
-- `当前 Work Item`、`当前执行路径`
+- `item`
   - 从 `Work Item` 派生
-- `当前 checkpoint 阶段`、`当前 gate chain 位置`、`当前阻断项`、`下一步`、`最近验证摘要`、`当前环境 lane`
-  - 从恢复主入口、review record 与 merge checkpoint 派生
-- `当前工作现场`、`当前恢复主入口`、`当前 review 入口`、`验证入口`
-  - 从 `Work Item` 与 `init-result` 的 carrier 定位派生
+- `checkpoint`、`recovery`
+  - 从恢复主入口派生
+- `gates.spec_review`、`gates.implementation_review`
+  - 从 review records 派生
+- `gates.merge_ready`
+  - 从 merge checkpoint 派生
+- `gates.controlled_merge`
+  - 从受控合并输出与 host merge signals 派生
+- `gates.closeout`
+  - 从 closeout / reconciliation 结果派生
+- `binding`
+  - 从 host binding surface 派生
+- `github`
+  - 从 host / control-plane mirror 派生
+- retained host / repo-native result
+  - 作为 evidence provenance 或 gate 前置结果派生
+- `taxonomy`
+  - 从统一失败分类派生
+
+禁止手工维护第二套 authored 状态摘要。
+
+每个影响放行的派生值必须保留来源说明：
+
+- 来源层级
+  - authored truth、host/control-plane mirror、retained result 或 derived surface
+- 来源 locator
+- 与当前 `item_id`、`HEAD`、范围、reviewed head、PR 或 merge commit 的绑定
+- fresh / stale / missing / unreadable / not_applicable 判断
+
+缺少上述来源说明时，该字段不可消费。
+混合来源的字段组必须能下钻到字段级 provenance，不能用组级 provenance 掩盖局部 stale / drift。
+
+行为证据与测试证据也只能派生读取：
+
 - `behavior_evidence`
   - 从 spec 场景、验证记录、review record 与运行证据 locator 派生
 - `test_evidence`
@@ -48,11 +68,28 @@ Loom 当前至少要求状态面能展示：
 - `fresh_verification_evidence`
   - 从当前 `HEAD`、当前范围、当前恢复摘要与最近验证记录的绑定关系派生
 
-## 3. `Runtime Evidence` 固定区块
+状态面可以展示这些字段，但不得在状态面内 authored 第二份结论。
 
-状态面若承接运行时证据，必须提供固定标题区块 `Runtime Evidence`。
+## 3. 必备展示面
 
-该区块固定为以下 5 个字段，字段不得缺失：
+统一状态面至少要展示：
+
+- 当前 `Work Item`
+- 当前 gate 与下一 gate
+- 当前恢复停点
+- formal spec 路径是否需要 `spec_review`
+- implementation review 是否 stale
+- `merge-ready` 是否受前序 gate 阻断
+- `controlled merge` 是否满足宿主条件
+- `closeout` / `reconciliation` 是否存在 drift
+- 当前活跃 failures 列表
+- BDD 外环场景的证据覆盖状态
+- TDD 内环测试或等价检查的证据覆盖状态
+- fresh verification evidence 的 `head_sha` / 范围 / 摘要绑定
+
+## 4. `Runtime Evidence`
+
+若事项涉及运行面，状态面必须继续提供固定区块 `Runtime Evidence`：
 
 - `Run Entry`
 - `Logs Entry`
@@ -60,64 +97,32 @@ Loom 当前至少要求状态面能展示：
 - `Verification Entry`
 - `Lane Entry`
 
-每个字段的值只能是：
+字段值只能是：
 
-- locator 字符串
+- locator
 - `not_applicable`
 
-## 3.1 字段合同矩阵
+字段缺失永远是错误，不等同于不适用。
 
-| 字段 | 最小语义 | 允许值 | `not_applicable` 允许条件 |
-| --- | --- | --- | --- |
-| `Run Entry` | 告诉执行者去哪启动当前事项运行面 | locator / `not_applicable` | 事项不涉及可运行系统 |
-| `Logs Entry` | 告诉执行者去哪看运行输出或日志 | locator / `not_applicable` | 无运行进程或无日志载体 |
-| `Diagnostics Entry` | 指向指标、trace 或等价诊断入口 | locator / `not_applicable` | 当前事项没有诊断面 |
-| `Verification Entry` | 指向 UI/API/E2E 等可验证入口 | locator / `not_applicable` | 事项不涉及可验证运行结果 |
-| `Lane Entry` | 指向当前 lane 的运行/诊断读取入口 | locator / `not_applicable` | 事项没有 lane 区分 |
+## 4.1 `runtime_state` / `runtime_evidence` / status control plane
 
-判定规则：
+三者职责固定区分：
 
-- 字段缺失始终是错误，不等同于 `not_applicable`。
-- `not_applicable` 必须按字段判断，不能整组一刀切。
-- 若某字段标记 `not_applicable`，应与 `current_lane`、`execution_path`、`latest_validation_summary` 等事实不冲突。
+- `runtime_state`
+  - 描述 Loom runtime / launcher / carrier 是否可运行、当前入口属于什么安装场景、缺少什么运行输入，以及 lane、run、logs、diagnostics 的 locator 或宿主运行对象状态
+  - 可以阻断命令启动
+  - 不承载事项进度、recovery state、validation verdict、review 结论、merge-ready 结论或 closeout 结论
+- `runtime_evidence`
+  - 描述已经被验证或审查消费的运行证据及其绑定，证明 run / logs / diagnostics / verification / lane 证据在哪里
+  - 不承载下一步、当前停点、blocking owner 或最终 gate verdict
+- status control plane
+  - 汇总 authored truth、host mirror、retained result 与 runtime evidence，输出 `pass | block`、taxonomy 与 provenance
+  - 不反向写入 runtime_state，也不把 runtime_state 当成事项状态面
 
-## 4. 运行时证据入口语义
+若 runtime_state 与 runtime_evidence 的绑定不一致，状态面必须把相关 evidence 标记为 `stale` 或 `unreadable`。若调用方试图用 runtime_state 代替恢复主入口或 status control plane，必须视为 parallel truth 风险并阻断。
+`runtime_evidence` 的 `present`、`not_applicable`、`stale`、`missing` 结论仍由状态面或 fact-chain 根据当前 `HEAD`、范围与恢复摘要派生；`Runtime Evidence` 区块本身只提供 locator 读面。
 
-最小证据类别对应如下：
-
-- `Run Entry`
-  - 当前工作现场对应的运行入口
-- `Logs Entry`
-  - 日志或等价运行输出入口
-- `Diagnostics Entry`
-  - 指标、trace 或其他等价诊断入口至少一种
-- `Verification Entry`
-  - UI、接口或端到端结果中的至少一种 agent 可验证入口
-- `Lane Entry`
-  - 当前环境 lane 对应的诊断或读取入口
-
-Loom 固化的是“可读取、可验证”的能力目标，不固化具体可观测工具栈。
-
-## 5. `not_applicable` 语义
-
-若事项不涉及可运行系统，状态面应明确标出运行时证据为 `not_applicable`，而不是伪造运行入口。
-
-典型场景包括：
-
-- 纯文档事项
-- 纯治理规则调整
-- 仅结构整理、尚无运行载体的事项
-
-`not_applicable` 可以按字段逐项声明。
-
-例如：
-
-- `Verification Entry` 可读
-- `Run Entry`、`Logs Entry`、`Diagnostics Entry`、`Lane Entry` 为 `not_applicable`
-
-`not_applicable` 只说明该字段当前不适用，不说明验证已自动通过。
-
-## 5.1 行为 / 测试证据展示
+## 4.2 行为 / 测试证据展示
 
 状态面展示行为证据与测试证据时，至少应区分：
 
@@ -133,16 +138,80 @@ Loom 固化的是“可读取、可验证”的能力目标，不固化具体可
 `fresh verification evidence` 只能由 `present` 且绑定当前对象的 behavior evidence / test evidence 组合派生。
 若验证结果来自较早 `HEAD`、较早范围、过时恢复摘要，或来自未整合的 subagent 输出，状态面必须显示为 `stale` 或 `missing`，不得显示为 fresh。
 
-## 6. 边界约束
+## 5. Execution Ledger 派生展示
 
-- 禁止手工维护第二套平行真相
-- 状态面负责读取，不重复承接正式规则定义
-- 状态面若展示的 `next_step`、`blockers`、`latest_validation_summary` 与恢复主入口不一致，应视为事实链断裂
-- `Runtime Evidence` 的 5 个字段必须全部出现；不允许用“缺字段”表达不适用
-- 运行时证据入口不等于完整 observability 平台设计；本文件只要求最小可读入口
-- 状态面可以展示 `spec gate`、`review gate`、`merge gate`，但这些值只能派生读取，不得单独 authored
+状态面可以展示 execution ledger 的派生结论，但不得 authored ledger 字段。
+
+可展示字段限于：
+
+- `ledger_locator`
+- `ledger_completeness`
+- `ledger_freshness`
+- `ledger_conflict`
+
+这些结论必须来自 fact-chain 对 recovery 主入口的解析。若 ledger 缺失、stale、绑定到第二 locator，或 authored recovery forbidden fields，状态面和 `loom_status` 都必须输出 blocking / stale 结论，而不是用状态面内容覆盖 recovery。
+
+## 6. gate 可消费判定
+
+状态面必须明确区分：
+
+- `gate 已存在`
+- `gate 已通过`
+- `gate 结论 stale`
+- `gate 因前序缺失不可消费`
+- `gate 结论缺少 provenance`
+- `gate 结论来自过期 retained result`
+
+例如：
+
+- formal spec 路径存在，但 `spec_review` 未批准
+  - `gates.spec_review.status = block`
+  - `taxonomy.active_failures` 必须含 `missing_prerequisite_gate`
+- implementation review 已存在，但 `reviewed_head` 过时
+  - `gates.implementation_review.status = block`
+  - `taxonomy.active_failures` 必须含 `review_stale`
+- behavior evidence / test evidence 缺失或 stale
+  - 对应消费 gate 必须 `block`
+  - `taxonomy.active_failures` 必须含 `evidence_failure`
+- host mirror 与 authored truth 不一致
+  - 对应消费 gate 必须 `block`
+  - `taxonomy.active_failures` 必须含 `drift`
+- retained result 绑定过期、来源不可读或缺少 producing command / action、target gate / surface、subject locator 等关键 provenance
+  - 对应消费 gate 必须 `block`
+  - `taxonomy.active_failures` 必须含 `stale` 或 `gate_failure`
+
+## 6. closeout / reconciliation 展示
+
+状态面必须把以下结论直接暴露出来，而不是要求调用方另查：
+
+- 当前事项是否 `absorbed`
+- 当前事项是否已经 `closed_out`
+- 是否存在 `absorbed_but_open`
+- 是否存在 `parent_drift`
+- 是否存在 `project_drift`
+- 是否存在 `merge_signal_drift`
+
+## 7. 当前统一入口
 
 当前仓库中的统一读取入口包括：
 
-- `python3 loom-init/scripts/loom-init.py fact-chain --target <repo>`
-- `python3 shared/scripts/loom_flow.py runtime-evidence --target <repo> [--item <id>]`
+- `python3 tools/loom_status.py --target <repo> [--item <id>]`
+- `python3 tools/loom_flow.py reconciliation audit --target <repo> ...`
+- `python3 tools/loom_flow.py closeout check --target <repo> ...`
+
+这些入口应输出同一控制面语义，而不是平行结果模型。
+
+输出纪律：
+
+- repo-local 与 host-backed 输出字段组保持一致
+- host-backed 额外值必须标记为 host/control-plane mirror
+- retained result 必须标记原始 result envelope 或等价 locator
+- derived summary 不得遮蔽 authored truth 与 mirror 的冲突
+- 任一关键来源不可读、过期或冲突时输出 `block`
+
+## 8. 非目标
+
+- 不把状态面写成新的长期进度账本
+- 不用状态面覆盖 `Work Item` / review record / merge checkpoint / closeout basis 的原始权威位置
+- 不允许调用方只读局部字段就跳过前序 gate
+- 不把 runtime_state、runtime_evidence 或 host mirror 改造成事项 authored truth
