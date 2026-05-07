@@ -4,6 +4,8 @@
 
 它回答的不是“状态写在哪”，而是“resume / review / merge-ready / closeout 至少要从同一个控制面读出哪些治理现场”。
 
+状态控制面是 derived surface。它必须展示 provenance 与阻断原因，但不得新增第二套 authored truth。
+
 ## 1. 目标
 
 `status control plane v2` 至少要同时服务：
@@ -18,6 +20,20 @@
 - host-backed GitHub 状态消费
 
 它不新增 authored 真相，只统一读取已有真相与 host signals。
+
+读取顺序固定为：
+
+1. repo-authored truth
+   - `Work Item`、恢复主入口、review record、merge / closeout basis
+2. host / control-plane mirror
+   - issue、project、PR、checks、ruleset、host binding
+3. retained result
+   - guardian、integration、repo-native verdict、host action result envelope
+4. derived status surface
+   - 汇总展示、taxonomy、最终 `pass | block`
+
+状态面只能把第 2、3 层作为 mirror / evidence / locator provenance 消费，不能把它们提升为第 1 层。
+第 4 层是本次状态面的输出 / 展示层，不是生成当前状态面时可反读的输入。旧状态面最多用于 stale-surface 检测，不能作为当前 `pass | block` 的来源。
 
 ## 2. 统一读取对象
 
@@ -124,6 +140,22 @@
 - `branch_protection`
 - `project`
 
+### 3.8 `provenance`
+
+每个会影响 `pass | block` 的字段组至少要能暴露：
+
+- `source_layer`
+  - `authored_truth | host_control_mirror | retained_result | derived_surface`
+- `source_locator`
+- `source_binding`
+- `freshness`
+  - `fresh | stale | missing | unreadable | not_applicable`
+- `conflict`
+  - `none | drift | stale_surface | stale_retained_result | parallel_truth`
+
+`provenance` 是读取说明，不是新的 authored 字段组。它可以在 JSON 输出中按字段内联，也可以作为并列索引输出，但必须能被机械入口追溯到具体字段。
+若一个字段组混合消费多个来源，provenance 必须能下钻到字段级，不能用组级 provenance 掩盖局部 stale / drift。
+
 ## 4. 总结果语义
 
 统一状态控制面本身只允许输出：
@@ -135,6 +167,8 @@
 
 - 只要存在活跃 `stale` / `drift` / `gate_failure`，结果就是 `block`
 - 只要缺前序 gate 或绑定链不完整，结果就是 `block`
+- 只要关键字段缺少 provenance、provenance 指向不可读来源，或同一事实出现 parallel truth，结果就是 `block`
+- retained result 与 producing command / action、target gate / surface、subject locator、当前 `HEAD`、范围、恢复摘要或 gate 前置不匹配时，结果就是 `block`
 - 只有关键读面全部可消费且前序链完整时，结果才是 `pass`
 
 ## 5. closeout / reconciliation 一体化要求
@@ -155,9 +189,11 @@ v2 必须至少能稳定读出：
 - repo-local 路径可以只依赖 `.loom/` 与本地 git
 - host-backed 路径可以额外消费 issue / PR / project / branch protection / required checks
 - 两条路径必须输出同一套字段组与 taxonomy
+- host-backed 路径输出的 GitHub 值是 host/control-plane mirror；repo-local 路径可以缓存其 locator 或 retained result，但不得把缓存值当成 authored truth
 
 ## 7. 非目标
 
 - 不把状态面升级成第二套 authored 账本
 - 不允许不同 skill 各自拼装私有状态结构
 - 不把 GitHub 私有字段直接冻结为 Loom core 唯一命名
+- 不用 `runtime_state` 代替 status control plane

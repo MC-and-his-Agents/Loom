@@ -1280,6 +1280,11 @@ def require_shadow_parity_payload(
         failures.append(Failure(category, f"{context} must include non-empty `summary`"))
     if not isinstance(payload.get("missing_inputs"), list):
         failures.append(Failure(category, f"{context} must include `missing_inputs`"))
+    blocking_failures = payload.get("blocking_failures")
+    if not isinstance(blocking_failures, list):
+        failures.append(Failure(category, f"{context} must include `blocking_failures`"))
+    elif payload.get("result") == "block" and not blocking_failures:
+        failures.append(Failure(category, f"{context} blocking mode must expose blocking_failures when it blocks"))
     top_level_details = payload.get("missing_details")
     if top_level_details is not None:
         require_missing_details(
@@ -2025,6 +2030,54 @@ def require_runtime_state_payload(
             failures.append(Failure(category, f"{context} runtime_state check `{key}` must include non-empty `summary`"))
 
 
+def require_fact_chain_provenance(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must return a JSON object"))
+        return
+    provenance = payload.get("provenance")
+    if not isinstance(provenance, list) or not provenance:
+        failures.append(Failure(category, f"{context} must include non-empty `provenance`"))
+    else:
+        allowed_kinds = {
+            "authored_truth",
+            "host_control_mirror",
+            "retained_result",
+            "derived_surface",
+            "runtime_state",
+            "runtime_evidence",
+        }
+        for entry in provenance:
+            if not isinstance(entry, dict):
+                failures.append(Failure(category, f"{context} provenance entries must be objects"))
+                continue
+            for field in ("kind", "carrier", "field", "authority", "freshness", "trusted_because"):
+                if not isinstance(entry.get(field), str) or not entry.get(field):
+                    failures.append(Failure(category, f"{context} provenance entries must include `{field}`"))
+            if entry.get("kind") not in allowed_kinds:
+                failures.append(Failure(category, f"{context} provenance kind must stay within the stable vocabulary"))
+            if not isinstance(entry.get("path"), str) and not isinstance(entry.get("locator"), str):
+                failures.append(Failure(category, f"{context} provenance entries must include `path` or `locator`"))
+    readiness = payload.get("recovery_readiness")
+    if not isinstance(readiness, dict):
+        failures.append(Failure(category, f"{context} must include `recovery_readiness`"))
+    else:
+        if readiness.get("result") not in {"pass", "block"}:
+            failures.append(Failure(category, f"{context} recovery_readiness.result must be pass or block"))
+        if not isinstance(readiness.get("summary"), str) or not readiness.get("summary"):
+            failures.append(Failure(category, f"{context} recovery_readiness must include a summary"))
+        if not isinstance(readiness.get("missing_inputs"), list):
+            failures.append(Failure(category, f"{context} recovery_readiness must include `missing_inputs`"))
+    blocking_failures = payload.get("blocking_failures")
+    if not isinstance(blocking_failures, list):
+        failures.append(Failure(category, f"{context} must include `blocking_failures`"))
+
+
 def require_route_payload(
     failures: list[Failure],
     *,
@@ -2121,8 +2174,8 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
     if not isinstance(routing, dict):
         failures.append(Failure(category, "`skills/loom-init/contract.json` must declare `routing`"))
     else:
-        if routing.get("reference") != "../route-matrix.md":
-            failures.append(Failure(category, "`skills/loom-init/contract.json` must reference `../route-matrix.md`"))
+        if routing.get("reference") not in {"../route-matrix.md", ".loom-runtime/route-matrix.md"}:
+            failures.append(Failure(category, "`skills/loom-init/contract.json` must reference the generated route matrix"))
         if routing.get("fallback_entry") != "loom-init":
             failures.append(Failure(category, "`skills/loom-init/contract.json` fallback entry must remain `loom-init`"))
         if routing.get("priority_order") != [
@@ -2568,7 +2621,7 @@ def check_skill_routing(root: Path) -> list[Failure]:
     with tempfile.TemporaryDirectory(prefix="loom-check-route-registry-") as tmp:
         broken_skills = Path(tmp) / "skills"
         shutil.copytree(root / "skills", broken_skills)
-        registry_path = broken_skills / "registry.json"
+        registry_path = broken_skills / "loom-init" / ".loom-runtime" / "registry.json"
         registry = load_json_file(registry_path)
         if isinstance(registry, dict):
             entries = registry.get("entries")
@@ -3372,6 +3425,13 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 expected_carrier="repo-local-wrapper",
                 allowed_results={"pass"},
             )
+        if label == "fact-chain":
+            require_fact_chain_provenance(
+                failures,
+                category="daily-execution-cli",
+                context="`fact-chain`.report",
+                payload=payload.get("report"),
+            )
         if label == "state-check":
             require_runtime_state_payload(
                 failures,
@@ -3426,6 +3486,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 elif reconciliation.get("result") not in {"pass", "warn", "fix-needed", "block", "not_applicable"}:
                     failures.append(Failure("daily-execution-cli", "`loom_status` closeout reconciliation result must stay within the stable set"))
             require_governance_surface(
+                failures,
+                category="daily-execution-cli",
+                context="`loom_status`",
+                payload=payload,
+            )
+            require_fact_chain_provenance(
                 failures,
                 category="daily-execution-cli",
                 context="`loom_status`",
@@ -3692,6 +3758,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     )
                 if not isinstance(state_check.get("checks"), dict):
                     failures.append(Failure("daily-execution-cli", "`flow resume` must include `state_check.checks`"))
+            require_fact_chain_provenance(
+                failures,
+                category="daily-execution-cli",
+                context="`flow resume`",
+                payload=payload,
+            )
         if label == "flow-handoff":
             if payload.get("command") != "flow":
                 failures.append(Failure("daily-execution-cli", "`flow handoff` must report `command: flow`"))
@@ -3761,6 +3833,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     )
                 if not isinstance(state_check.get("checks"), dict):
                     failures.append(Failure("daily-execution-cli", "`flow handoff` must include `state_check.checks`"))
+            require_fact_chain_provenance(
+                failures,
+                category="daily-execution-cli",
+                context="`flow handoff`",
+                payload=payload,
+            )
         if label == "flow-review":
             if payload.get("command") != "flow":
                 failures.append(Failure("daily-execution-cli", "`flow review` must report `command: flow`"))
@@ -3812,6 +3890,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 context="`flow review` repo_specific_requirements",
                 payload=payload.get("repo_specific_requirements"),
                 expected_surface="review",
+            )
+            require_fact_chain_provenance(
+                failures,
+                category="daily-execution-cli",
+                context="`flow review`",
+                payload=payload,
             )
         if label == "review-read":
             if payload.get("command") != "review":
@@ -3989,6 +4073,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 payload=payload.get("repo_specific_requirements"),
                 expected_surface="merge_ready",
             )
+            require_fact_chain_provenance(
+                failures,
+                category="daily-execution-cli",
+                context="`flow merge-ready`",
+                payload=payload,
+            )
             if payload.get("result") != "fallback":
                 failures.append(Failure("daily-execution-cli", "`flow merge-ready` must return `fallback` for the bootstrap demo"))
             if payload.get("fallback_to") != "admission":
@@ -3997,6 +4087,80 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(Failure("daily-execution-cli", "`flow merge-ready` build checkpoint must fall back to `admission` for the bootstrap demo"))
             if isinstance(payload.get("merge_checkpoint"), dict) and payload["merge_checkpoint"].get("fallback_to") != "admission":
                 failures.append(Failure("daily-execution-cli", "`flow merge-ready` merge checkpoint must fall back to `admission` for the bootstrap demo"))
+
+    with tempfile.TemporaryDirectory(prefix="loom-check-fact-chain-provenance-") as tmp:
+        stale_target = Path(tmp) / "stale-status"
+        shutil.copytree(example_target, stale_target)
+        status_path = stale_target / ".loom/status/current.md"
+        status_text = status_path.read_text(encoding="utf-8")
+        status_path.write_text(
+            status_text.replace(
+                "- Next Step: Accept the generated Loom entry and promote the first real repository work item.",
+                "- Next Step: Stale derived status should not override recovery.",
+            ).replace(
+                "- Latest Validation Summary: Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist.",
+                "- Latest Validation Summary: Stale status summary must be rejected.",
+            ),
+            encoding="utf-8",
+        )
+        for label, args in (
+            (
+                "stale status fact-chain",
+                ["python3", "tools/loom_flow.py", "fact-chain", "--target", str(stale_target), "--item", "INIT-0001"],
+            ),
+            (
+                "stale status flow resume",
+                ["python3", "tools/loom_flow.py", "flow", "resume", "--target", str(stale_target), "--item", "INIT-0001"],
+            ),
+            (
+                "stale status control",
+                ["python3", "tools/loom_status.py", "--target", str(stale_target), "--item", "INIT-0001"],
+            ),
+        ):
+            payload, error = load_command_json(root, args)
+            if error:
+                failures.append(Failure("daily-execution-cli", f"`{label}` failed: {error}"))
+                continue
+            if payload.get("result") != "block":
+                failures.append(Failure("daily-execution-cli", f"`{label}` must block stale derived status surfaces"))
+            require_fact_chain_provenance(
+                failures,
+                category="daily-execution-cli",
+                context=f"`{label}`",
+                payload=payload.get("report") if label.endswith("fact-chain") else payload,
+            )
+            failure_blob = json.dumps(payload.get("blocking_failures") or payload.get("report", {}).get("blocking_failures"), ensure_ascii=False)
+            if "stale" not in failure_blob and "parallel_truth_drift" not in failure_blob:
+                failures.append(Failure("daily-execution-cli", f"`{label}` must expose stale/drift blocking failures"))
+
+        mirror_target = Path(tmp) / "host-mirror-overwrite"
+        shutil.copytree(example_target, mirror_target)
+        init_path = mirror_target / ".loom/bootstrap/init-result.json"
+        init_payload = json.loads(init_path.read_text(encoding="utf-8"))
+        init_payload.setdefault("fact_chain", {})["host_mirror"] = {
+            "next_step": "Host mirror attempted to override recovery.",
+            "latest_validation_summary": "Retained result attempted to override recovery.",
+        }
+        init_path.write_text(json.dumps(init_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "fact-chain", "--target", str(mirror_target), "--item", "INIT-0001"],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`host mirror overwrite` failed: {error}"))
+        else:
+            if payload.get("result") != "block":
+                failures.append(Failure("daily-execution-cli", "`host mirror overwrite` must block parallel authored recovery fields"))
+            report = payload.get("report")
+            require_fact_chain_provenance(
+                failures,
+                category="daily-execution-cli",
+                context="`host mirror overwrite`.report",
+                payload=report,
+            )
+            failure_blob = json.dumps(report.get("blocking_failures") if isinstance(report, dict) else [], ensure_ascii=False)
+            if "parallel_truth_drift" not in failure_blob:
+                failures.append(Failure("daily-execution-cli", "`host mirror overwrite` must expose parallel_truth_drift"))
 
     with tempfile.TemporaryDirectory(prefix="loom-check-review-run-") as tmp:
         source_snapshot = Path(tmp) / "source-snapshot"
@@ -4626,7 +4790,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
 
         broken_install = tmp_root / "broken-install" / "skills"
         shutil.copytree(root / "skills", broken_install)
-        (broken_install / "shared" / "scripts" / "loom_flow.py").unlink()
+        (broken_install / "loom-init" / ".loom-runtime" / "shared" / "scripts" / "loom_flow.py").unlink()
         payload, error = load_command_json(
             root,
             ["python3", str(broken_install / "loom-init" / "scripts" / "loom-init.py"), "runtime-state", "--target", str(target_root)],
@@ -4638,7 +4802,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
 
         drift_install = tmp_root / "drift-install" / "skills"
         shutil.copytree(root / "skills", drift_install)
-        (drift_install / "install-layout.json").unlink()
+        (drift_install / "loom-init" / ".loom-runtime" / "install-layout.json").unlink()
         payload, error = load_command_json(
             root,
             ["python3", str(drift_install / "loom-init" / "scripts" / "loom-init.py"), "runtime-state", "--target", str(target_root)],
@@ -5475,7 +5639,8 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
 
                 broken_install = tmp_root / "broken-install" / "skills"
                 shutil.copytree(root / "skills", broken_install)
-                (broken_install / "install-layout.json").unlink()
+                (broken_install / "loom-init" / ".loom-runtime" / "install-layout.json").unlink()
+                (broken_install / "loom-pre-review" / ".loom-runtime" / "install-layout.json").unlink()
                 payload, error = load_command_json(
                     root,
                     [
@@ -5979,6 +6144,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
 
             shutil.copytree(root / "skills", broken_install)
             (broken_install / "install-layout.json").unlink()
+            (broken_install / "loom-retire" / ".loom-runtime" / "install-layout.json").unlink()
             for label, args in (
                 (
                     "installed closeout check missing install-layout",

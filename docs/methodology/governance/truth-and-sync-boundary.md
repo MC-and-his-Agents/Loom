@@ -14,6 +14,7 @@
 - 哪些对象只能承接 host control truth
 - 哪些对象只是派生读面或运行证据
 - Loom 如何同步，而不是复制第二套真相
+- mirror、retained result 与 derived surface 如何带 provenance 被消费
 
 字段级事实链仍以 [../harness/fact-chain-contract.md](../harness/fact-chain-contract.md) 为准。
 
@@ -29,6 +30,10 @@ Loom 当前固定四层：
   - 从前两层派生的读面
 - runtime / review evidence
   - 被消费的运行或审查证据
+
+读取优先级固定为：authored truth 优先，其次只读消费 host control truth / mirror 与 retained result，最后消费 derived read surfaces。后两者只能解释、证明或暴露 drift，不得反向创建第二套 authored truth。
+
+`init-result` 或 companion locator 的先读只属于 locator discovery，不改变上述事实优先级。
 
 ## 3. Repo Execution Truth
 
@@ -73,6 +78,15 @@ Loom 当前固定四层：
 
 它们不是 repo execution truth 的替代品。
 
+host control truth 被 repo-local 读取后形成的 mirror 只允许承接：
+
+- host object locator
+- 当前 host control-plane 值
+- 读取时间、head / PR / issue / project 等绑定
+- 用于 drift、merge basis、closeout basis 的 provenance
+
+mirror 不得承接 `current_stop`、`next_step`、`latest_validation_summary`、review disposition 或其他仓内 authored 字段。
+
 ## 5. Derived Read Surfaces
 
 以下对象只允许派生读取：
@@ -84,6 +98,8 @@ Loom 当前固定四层：
 
 这些对象可以汇总信息，但不得反向覆盖 authored 真相。
 
+派生读面必须能追溯到被消费的 authored truth、host mirror 或 retained result。若派生读面只给出结论而缺少 locator / binding / source layer，调用方必须把它当成不可消费状态。
+
 ## 6. Runtime / Review Evidence
 
 以下对象进入证据层：
@@ -94,6 +110,8 @@ Loom 当前固定四层：
 - PR 评论中的临时讨论
 
 这些对象可以被 Loom 消费，但默认不是长期 authored 真相。
+
+被保留的 host action result 或 repo-native verdict 属于 retained result。它是证据层里可被长期引用的结果封套，不是独立 authored truth。它可以作为 review、merge-ready 或 closeout 的证据 provenance，但只有在绑定当前对象且没有被更新的 authored truth 或 host control truth 否定时才可消费。
 
 若其中某项需要成为长期真相，必须回写到稳定主载体：
 
@@ -129,7 +147,14 @@ Loom 当前只允许以下同步：
 
 - 先保留两边原值
 - 明确报出 drift
-- 通过专门 sync 入口修复
+- 阻断依赖该事实的 resume / review / merge-ready / closeout 消费
+- 通过专门 sync 入口修复，不在派生读面中自动选择胜者
+
+当 retained result 或 derived read surface 与其来源冲突时：
+
+- retained result 过期或绑定不完整时，标记为 stale evidence
+- derived read surface 与 authored truth 或 host control truth 不一致时，标记为 stale surface
+- 上述情况在 merge-ready、controlled merge、closeout 等放行路径中必须 fail-closed
 
 当前执行面上：
 

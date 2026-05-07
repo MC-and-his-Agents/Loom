@@ -1,23 +1,17 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "INIT-0001",
-  "decision": "allow",
+  "decision": "fallback",
   "kind": "spec_review",
-  "summary": "Self-governance adoption spec is approved for binding Loom future iteration to its own workflow.",
-  "reviewer": "codex-self-governance",
-  "reviewed_head": "c9bd5dd7ebf2813069455f71bff931f25631b432",
+  "summary": "Formal spec review has not been completed yet.",
+  "reviewer": "not yet assigned",
+  "reviewed_head": "bootstrap-placeholder",
   "reviewed_validation_summary": "Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist.",
-  "fallback_to": null,
-  "findings": [],
-  "blocking_issues": [],
-  "follow_ups": [],
-  "consumed_inputs": {
-    "work_item": ".loom/work-items/INIT-0001.md",
-    "recovery_entry": ".loom/progress/INIT-0001.md",
-    "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pass",
-    "engine_adapter": null,
-    "engine_evidence": null,
-    "normalized_findings": null
-  }
+  "fallback_to": "admission",
+  "blocking_issues": [
+    "Spec gate remains open until the formal spec path receives its own review record."
+  ],
+  "follow_ups": [
+    "Record a spec_review decision before implementation review or merge-ready consumes the formal spec path."
+  ]
 }

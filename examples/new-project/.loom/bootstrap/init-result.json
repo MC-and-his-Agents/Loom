@@ -7,7 +7,7 @@
     "contract_version": "1.3.0"
   },
   "run": {
-    "target": "/Users/mc/dev/Loom-worktrees/work-item-506-skills-source-generation/examples/new-project",
+    "target": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/examples/new-project",
     "scenario": "新项目",
     "scenario_key": "new",
     "integration_mode": "root",
@@ -119,7 +119,7 @@
       "path": ".loom/bin/fact_chain_support.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/fact_chain_support.py",
-      "sha256": "78cf0d0022a4c03933a5e46cba676e80cafa5d0802fb95191a761ec9f9417e65"
+      "sha256": "5d10e10d459269dd718b3385ee13019f564f361cad696965122745b0d329078b"
     },
     {
       "path": ".loom/bin/governance_surface.py",
@@ -131,13 +131,13 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "d67ffd22cacad33d25e1a4ef5dc90b57eb7143aae7a9a65420fcbdcb38fc701d"
+      "sha256": "216adef334fa5db5596d989155e03eb2222bc54b10b64fa2b4f19b92eddba72b"
     },
     {
       "path": ".loom/bin/loom_status.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_status.py",
-      "sha256": "229ecdf3171aab0df302fd9662f5a9ce6371e7b8f194ece341909d38ce268bed"
+      "sha256": "e8814b5ef11c120a7909e48f7d3a648f5ce9baf1dde14425f02c9db072495f36"
     },
     {
       "path": ".loom/bin/runtime_paths.py",
@@ -155,7 +155,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "b0b313d362912d5b71b0c3897a64cb7073720041c8c4cdd67ba939f6312c5a50"
+      "sha256": "09297502d6a5c54a147791dae1e1fa93d0dbee3fc772e3e1230f9726688037e8"
     },
     {
       "path": "AGENTS.md",
@@ -263,12 +263,12 @@
     "scene": "repo-local-demo",
     "carrier": "repo-local-wrapper",
     "entry_family": "loom-init",
-    "install_root": "/Users/mc/dev/Loom-worktrees/work-item-506-skills-source-generation/skills",
-    "runtime_root": "/Users/mc/dev/Loom-worktrees/work-item-506-skills-source-generation/skills/shared/scripts",
-    "registry_path": "/Users/mc/dev/Loom-worktrees/work-item-506-skills-source-generation/skills/registry.json",
-    "layout_or_manifest_path": "/Users/mc/dev/Loom-worktrees/work-item-506-skills-source-generation/skills/install-layout.json",
-    "source_repo_root": "/Users/mc/dev/Loom-worktrees/work-item-506-skills-source-generation",
-    "target_root": "/Users/mc/dev/Loom-worktrees/work-item-506-skills-source-generation/examples/new-project",
+    "install_root": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills",
+    "runtime_root": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills/shared/scripts",
+    "registry_path": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills/registry.json",
+    "layout_or_manifest_path": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills/install-layout.json",
+    "source_repo_root": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance",
+    "target_root": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/examples/new-project",
     "checks": {
       "scene_marker": {
         "status": "pass",
@@ -278,21 +278,21 @@
         "status": "pass",
         "summary": "carrier layout exposes an installed skills root and shared runtime tree.",
         "evidence": {
-          "install_root": "/Users/mc/dev/Loom-worktrees/work-item-506-skills-source-generation/skills"
+          "install_root": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills"
         }
       },
       "registry_contract": {
         "status": "pass",
         "summary": "registry, upgrade contract, and skill entrypoints are consistent.",
         "evidence": {
-          "path": "/Users/mc/dev/Loom-worktrees/work-item-506-skills-source-generation/skills/registry.json"
+          "path": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills/registry.json"
         }
       },
       "shared_runtime": {
         "status": "pass",
         "summary": "shared runtime scripts are present and executable roots can be resolved.",
         "evidence": {
-          "path": "/Users/mc/dev/Loom-worktrees/work-item-506-skills-source-generation/skills/shared/scripts"
+          "path": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills/shared/scripts"
         }
       },
       "referenced_resources": {
@@ -430,53 +430,53 @@
       }
     },
     "repo_interface": {
-      "availability": "absent",
+      "availability": "present",
       "manifest": {
-        "status": "missing",
+        "status": "present",
         "locator": ".loom/companion/manifest.json",
-        "source": "companion manifest"
+        "source": "repository scan"
       },
       "companion_entry": {
-        "status": "missing",
-        "locator": "unknown",
-        "source": "repo companion manifest"
+        "status": "present",
+        "locator": ".loom/companion/README.md",
+        "source": "repo companion interface.companion_entry"
       },
       "repo_specific_requirements": {
-        "status": "missing",
-        "locator": "unknown",
-        "source": "repo companion interface"
+        "status": "present",
+        "locator": ".loom/companion/repo-interface.json",
+        "source": "repo companion manifest.repo_interface"
       },
       "specialized_gates": {
-        "status": "missing",
-        "locator": "unknown",
-        "source": "repo companion interface"
+        "status": "present",
+        "locator": ".loom/companion/repo-interface.json",
+        "source": "repo companion manifest.repo_interface"
       },
-      "summary": "no repo companion interface is declared for this repository.",
+      "summary": "repo companion manifest and machine-readable repo interface are readable.",
       "missing_inputs": []
     },
     "repo_interop": {
-      "availability": "absent",
+      "availability": "present",
       "contract": {
-        "status": "missing",
+        "status": "present",
         "locator": ".loom/companion/interop.json",
         "source": "repository scan"
       },
       "host_adapters": {
-        "status": "missing",
-        "locator": "unknown",
+        "status": "present",
+        "locator": ".loom/companion/interop.json",
         "source": "repo interop contract"
       },
       "repo_native_carriers": {
-        "status": "missing",
-        "locator": "unknown",
+        "status": "present",
+        "locator": ".loom/companion/interop.json",
         "source": "repo interop contract"
       },
       "shadow_surfaces": {
-        "status": "missing",
-        "locator": "unknown",
+        "status": "present",
+        "locator": ".loom/companion/interop.json",
         "source": "repo interop contract"
       },
-      "summary": "no repo interop contract is declared for this repository.",
+      "summary": "repo interop contract is readable for host adapters, repo-native carriers, and shadow parity.",
       "missing_inputs": []
     },
     "workspace_profile": {
@@ -506,7 +506,7 @@
       "host_worktree": {
         "ownership": "host",
         "status": "present",
-        "locator": "/Users/mc/dev/Loom-worktrees/work-item-506-skills-source-generation"
+        "locator": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance"
       },
       "result": "pass",
       "missing_inputs": [],
@@ -523,7 +523,7 @@
           "enforcement": "advisory",
           "host_enforcement": false,
           "summary": "Run the repo-local Loom bootstrap verification entry.",
-          "runtime_present": false
+          "runtime_present": true
         },
         "status": {
           "surface": "status",
@@ -533,7 +533,7 @@
           "enforcement": "advisory",
           "host_enforcement": false,
           "summary": "Read the repo-local Loom status surface.",
-          "runtime_present": false
+          "runtime_present": true
         },
         "merge-ready": {
           "surface": "merge_ready",
@@ -543,7 +543,7 @@
           "enforcement": "advisory",
           "host_enforcement": false,
           "summary": "Run Loom's local merge-ready orchestration without taking over host merge controls.",
-          "runtime_present": false
+          "runtime_present": true
         },
         "closeout-check": {
           "surface": "closeout",
@@ -553,7 +553,7 @@
           "enforcement": "advisory",
           "host_enforcement": false,
           "summary": "Check closeout readiness against local Loom carriers and readable host inputs.",
-          "runtime_present": false
+          "runtime_present": true
         },
         "reconciliation-audit": {
           "surface": "reconciliation",
@@ -563,22 +563,18 @@
           "enforcement": "advisory",
           "host_enforcement": false,
           "summary": "Audit closeout drift without mutating host state.",
-          "runtime_present": false
+          "runtime_present": true
         }
       },
-      "runtime_status": "missing",
+      "runtime_status": "present",
       "authority": "local",
       "enforcement": "advisory",
       "host_enforcement": false,
       "host_enforcement_status": "not_host_enforced",
       "result": "pass",
       "missing_inputs": [],
-      "missing_entrypoints": [
-        ".loom/bin/loom_init.py",
-        ".loom/bin/loom_status.py",
-        ".loom/bin/loom_flow.py"
-      ],
-      "recommended_action": "install or refresh repo-local Loom runtime entries before using gate starter aliases"
+      "missing_entrypoints": [],
+      "recommended_action": "run the repo-local aliases as advisory Loom checks, then configure host-required checks separately"
     },
     "governance_control_plane": {
       "schema_version": "loom-governance-control/v1",
@@ -620,7 +616,7 @@
         "host_worktree": {
           "ownership": "host",
           "status": "present",
-          "locator": "/Users/mc/dev/Loom-worktrees/work-item-506-skills-source-generation"
+          "locator": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance"
         },
         "result": "pass",
         "missing_inputs": [],
@@ -637,7 +633,7 @@
             "enforcement": "advisory",
             "host_enforcement": false,
             "summary": "Run the repo-local Loom bootstrap verification entry.",
-            "runtime_present": false
+            "runtime_present": true
           },
           "status": {
             "surface": "status",
@@ -647,7 +643,7 @@
             "enforcement": "advisory",
             "host_enforcement": false,
             "summary": "Read the repo-local Loom status surface.",
-            "runtime_present": false
+            "runtime_present": true
           },
           "merge-ready": {
             "surface": "merge_ready",
@@ -657,7 +653,7 @@
             "enforcement": "advisory",
             "host_enforcement": false,
             "summary": "Run Loom's local merge-ready orchestration without taking over host merge controls.",
-            "runtime_present": false
+            "runtime_present": true
           },
           "closeout-check": {
             "surface": "closeout",
@@ -667,7 +663,7 @@
             "enforcement": "advisory",
             "host_enforcement": false,
             "summary": "Check closeout readiness against local Loom carriers and readable host inputs.",
-            "runtime_present": false
+            "runtime_present": true
           },
           "reconciliation-audit": {
             "surface": "reconciliation",
@@ -677,22 +673,18 @@
             "enforcement": "advisory",
             "host_enforcement": false,
             "summary": "Audit closeout drift without mutating host state.",
-            "runtime_present": false
+            "runtime_present": true
           }
         },
-        "runtime_status": "missing",
+        "runtime_status": "present",
         "authority": "local",
         "enforcement": "advisory",
         "host_enforcement": false,
         "host_enforcement_status": "not_host_enforced",
         "result": "pass",
         "missing_inputs": [],
-        "missing_entrypoints": [
-          ".loom/bin/loom_init.py",
-          ".loom/bin/loom_status.py",
-          ".loom/bin/loom_flow.py"
-        ],
-        "recommended_action": "install or refresh repo-local Loom runtime entries before using gate starter aliases"
+        "missing_entrypoints": [],
+        "recommended_action": "run the repo-local aliases as advisory Loom checks, then configure host-required checks separately"
       },
       "host_binding": {
         "schema_version": "loom-host-binding/v1",
@@ -714,12 +706,12 @@
           },
           "branch": {
             "status": "present",
-            "locator": "work-item-506-skills-source-generation",
+            "locator": "work/536-fact-chain-provenance",
             "authority": "git"
           },
           "worktree": {
             "status": "present",
-            "locator": "/Users/mc/dev/Loom-worktrees/work-item-506-skills-source-generation",
+            "locator": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance",
             "authority": "git"
           },
           "implementation_pr": {
@@ -733,7 +725,7 @@
             "authority": "host"
           },
           "closeout": {
-            "status": "host-managed",
+            "status": "present",
             "locator": "reconciliation audit + closeout gate",
             "authority": "loom + host"
           }
@@ -1005,8 +997,6 @@
           ],
           "strong": [
             "standard",
-            "repo_interface",
-            "repo_interop",
             "host_enforced_control_plane",
             "pr_merge_path",
             "controlled_merge_basis",
@@ -1040,20 +1030,6 @@
             }
           ],
           "strong": [
-            {
-              "id": "repo_interface",
-              "layer": "repo-owned-residue",
-              "required": true,
-              "defaulting": "scaffold",
-              "recommended_action": "install or repair the repo companion interface"
-            },
-            {
-              "id": "repo_interop",
-              "layer": "repo-owned-residue",
-              "required": true,
-              "defaulting": "scaffold",
-              "recommended_action": "install or repair the repo interop contract"
-            },
             {
               "id": "github_controlled_merge",
               "layer": "github-profile",

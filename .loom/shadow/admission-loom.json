@@ -1,15 +1,9 @@
 {
-  "schema_version": "loom-shadow-evidence/v1",
-  "surface": "admission",
-  "side": "loom",
   "result": "pass",
-  "parity_value": "self-governance-advisory-pass",
   "source_files": [
-    ".loom/work-items/INIT-0001.md",
-    ".loom/status/current.md"
+    ".loom/work-items/INIT-0001.md"
   ],
   "source_sha256": {
-    ".loom/work-items/INIT-0001.md": "48ae465e436b635d2eeb69943f83c8e9229c51ab92a080b1e37e92b24d3599d3",
-    ".loom/status/current.md": "b26bcac92dcffbc0c61e4677d0265ca70b35bfc4ba641ac75a344501fd47f1ac"
+    ".loom/work-items/INIT-0001.md": "48ae465e436b635d2eeb69943f83c8e9229c51ab92a080b1e37e92b24d3599d3"
   }
 }

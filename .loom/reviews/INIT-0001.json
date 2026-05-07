@@ -1,23 +1,17 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "INIT-0001",
-  "decision": "allow",
-  "kind": "code_review",
-  "summary": "Behavior-first operating-layer closeout slice reviewed after root runtime, companion, status carrier synchronization, and installer version-gate repair.",
-  "reviewer": "codex-review",
-  "reviewed_head": "b3a7216e2dd868c8b08ca33b62a58fac5235818d",
-  "reviewed_validation_summary": "Root .loom/bin verify passed; carrier refresh dry-run has no runtime provenance drift; loom_check gates cover behavior-first docs, locators, and carrier evidence.",
-  "fallback_to": null,
-  "findings": [],
-  "blocking_issues": [],
-  "follow_ups": [],
-  "consumed_inputs": {
-    "work_item": ".loom/work-items/INIT-0001.md",
-    "recovery_entry": ".loom/progress/INIT-0001.md",
-    "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pass",
-    "engine_adapter": null,
-    "engine_evidence": null,
-    "normalized_findings": null
-  }
+  "decision": "fallback",
+  "kind": "general_review",
+  "summary": "Bootstrap has not entered formal review yet.",
+  "reviewer": "not yet assigned",
+  "reviewed_head": "bootstrap-placeholder",
+  "reviewed_validation_summary": "Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist.",
+  "fallback_to": "admission",
+  "blocking_issues": [
+    "Formal review starts only after downstream work replaces the bootstrap placeholder item."
+  ],
+  "follow_ups": [
+    "Record the first real semantic review before asking merge checkpoint to consume reviewer judgment."
+  ]
 }
