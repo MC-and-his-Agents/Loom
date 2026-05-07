@@ -20,6 +20,7 @@ from loom_flow import (
     report_blocking_failures,
     report_blocking_messages,
     report_provenance,
+    report_execution_ledger,
     report_recovery_readiness,
     runtime_state_payload,
     spec_review_gate_payload,
@@ -493,6 +494,7 @@ def main(argv: list[str]) -> int:
             "runtime_state": runtime_state,
             "provenance": report_provenance(context["report"]),
             "recovery_readiness": report_recovery_readiness(context["report"]),
+            "execution_ledger": report_execution_ledger(context["report"]),
             "blocking_failures": report_blocking_failures(context["report"]),
             "item": {
                 "id": context["item_id"],

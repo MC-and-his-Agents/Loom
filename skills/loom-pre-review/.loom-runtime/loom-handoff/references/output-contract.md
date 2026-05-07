@@ -32,6 +32,9 @@
   - 当前阻断项，供交接前回写
 - `latest_validation_summary`
   - 最近验证摘要，供交接前回写
+- `execution_ledger`
+  - 当前 recovery-bound ledger 的 completeness、freshness、plan / acceptance / validation / handoff locator
+  - 若 handoff notes 仍为 `not_applicable`，handoff 输出只能指出需要回写的 locator，不得创建第二份恢复状态
 - `fallback_target`
   - 若当前未准备好移交，应优先回退到的目标；无回退时为 `null`
 - `writeback_fields`

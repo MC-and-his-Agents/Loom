@@ -30,12 +30,26 @@
 - Automated checks:
 - Manual checks:
 - Runtime evidence:
+- Behavior evidence:
+- Fresh verification evidence:
+- Execution ledger plan locator:
+- Execution ledger validation evidence locator:
 
 ## Test Strategy
 
 - TDD or test-first expectation:
 - Regression coverage to add or preserve:
 - Cases that are intentionally not automated:
+- How failing tests or equivalent checks will be introduced before implementation:
+- How passing tests or equivalent checks will be captured as test evidence:
+
+## Subagent Output Integration
+
+- Owned outputs:
+- Integration owner:
+- Required evidence from each subagent:
+- Review or reconciliation needed before merge-ready:
+- Handoff notes locator, or `not_applicable`:
 
 ## Dependencies
 
@@ -48,4 +62,6 @@
 - [ ] Spec is stable enough to implement
 - [ ] Scope and non-goals are clear
 - [ ] Validation path is defined
+- [ ] BDD outer-loop scenarios map to validation or `not_applicable`
+- [ ] TDD inner-loop expectations map to test evidence
 - [ ] Risks and dependencies are explicit

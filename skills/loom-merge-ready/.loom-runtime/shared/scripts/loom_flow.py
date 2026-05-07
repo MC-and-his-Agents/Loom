@@ -2912,7 +2912,14 @@ def render_recovery_entry(item_id: str, values: dict[str, str]) -> str:
         f"- Blockers: {values['blockers']}\n"
         f"- Latest Validation Summary: {values['latest_validation_summary']}\n"
         f"- Recovery Boundary: {values['recovery_boundary']}\n"
-        f"- Current Lane: {values['current_lane']}\n"
+        f"- Current Lane: {values['current_lane']}\n\n"
+        "## Execution Ledger\n\n"
+        "- Ledger Binding: recovery_entry\n"
+        "- Plan Locator: not_applicable\n"
+        "- Acceptance Locator: not_applicable\n"
+        "- Validation Evidence Locator: not_applicable\n"
+        "- Handoff Notes Locator: not_applicable\n"
+        "- Evidence Freshness: not_applicable\n"
     )
 
 
@@ -4416,6 +4423,21 @@ def report_recovery_readiness(report: dict[str, Any]) -> dict[str, Any]:
         "missing_inputs": ["fact-chain recovery_readiness"],
         "fallback_to": "admission",
         "checks": {},
+    }
+
+
+def report_execution_ledger(report: dict[str, Any]) -> dict[str, Any]:
+    ledger = report.get("execution_ledger")
+    if isinstance(ledger, dict):
+        return ledger
+    return {
+        "authoritative_carrier": "recovery_entry",
+        "status": "missing",
+        "completeness": "missing",
+        "freshness": "missing",
+        "fields": {},
+        "missing_fields": ["execution_ledger"],
+        "forbidden_authored_fields": [],
     }
 
 
@@ -8545,6 +8567,7 @@ def handle_flow(args: argparse.Namespace) -> int:
 
     fact_chain_provenance = report_provenance(context["report"])
     recovery_readiness = report_recovery_readiness(context["report"])
+    execution_ledger = report_execution_ledger(context["report"])
     blocking_failures = report_blocking_failures(context["report"])
     if recovery_readiness.get("result") == "block" and result == "pass":
         result = "block"
@@ -8569,6 +8592,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             "runtime_state": runtime_state,
             "provenance": fact_chain_provenance,
             "recovery_readiness": recovery_readiness,
+            "execution_ledger": execution_ledger,
             "blocking_failures": blocking_failures,
             **({"governance_surface": governance_surface} if args.operation == "resume" else {}),
             **({"maturity_upgrade_path": upgrade_path} if args.operation == "resume" else {}),

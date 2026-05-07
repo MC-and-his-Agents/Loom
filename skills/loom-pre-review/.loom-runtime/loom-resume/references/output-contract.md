@@ -54,6 +54,9 @@
     - `interop_locator`
     - `post_adoption_next_step`
     - `adoption_verify_summary`
+- `execution_ledger`
+  - 来自 recovery / fact-chain contract 的 ledger completeness、freshness、authoritative carrier 与 locator / evidence 字段
+  - 不得覆盖 `recovery.next_step`、`recovery.blockers` 或 `recovery.latest_validation_summary`
 - `checkpoint`
   - 原始 checkpoint 文本与归一化后的 checkpoint
 - `state_check`

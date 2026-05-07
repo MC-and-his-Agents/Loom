@@ -46,6 +46,7 @@
 - 当前阻断项是什么
 - 最近一次稳定提交点或等价回退边界是什么
 - 当前 lane 是什么
+- execution ledger 等价载体如何绑定到本恢复入口
 
 `handoff` 还应额外指明：
 
@@ -62,6 +63,7 @@
 - 本轮新增验证事实或验证摘要
 - 仍未解除的阻断项
 - 在需要时形成明确提交点或等价可恢复边界
+- 更新或确认 execution ledger 的 locator / evidence freshness
 
 当前稳定回写入口为：
 
@@ -73,13 +75,37 @@
 - `recovery writeback` 只写恢复主入口，再同步重渲染状态面
 - 状态面不接受独立 authored 修改
 
-## 5. `checkpoint-lite` 与标准恢复形态
+## 5. Execution ledger 等价载体
+
+Loom v0.7 把 execution ledger 定义为恢复主入口内的 locator / evidence 读面，或等价绑定到恢复主入口的 carrier。它不是第二份恢复状态。
+
+最小字段为：
+
+- `ledger_binding`
+  - 必须指向 `recovery_entry` 或当前恢复主入口 locator
+- `plan_locator`
+  - 指向 plan、执行计划或 `not_applicable`
+- `acceptance_locator`
+  - 指向 spec、acceptance criteria、checkpoint 验收记录或 `not_applicable`
+- `validation_evidence_locator`
+  - 指向验证命令、验证记录、review evidence 或 `not_applicable`
+- `handoff_notes_locator`
+  - 指向 handoff notes 或 `not_applicable`
+- `evidence_freshness`
+  - `current` 或 `not_applicable`
+
+execution ledger 只允许映射 plan、acceptance、validation evidence 与 handoff notes 的 locator / evidence。它不得 authored `next_step`、`blockers`、`latest_validation_summary`，也不得覆盖 recovery 主入口中的任何动态事实。
+
+`resume`、`handoff` 与 `merge-ready` 必须消费同一个 fact-chain / recovery contract 暴露的 ledger completeness 与 freshness。缺少 ledger、ledger stale、ledger 绑定到第二 locator，或 ledger authored forbidden recovery fields 时，入口必须 fail closed 并回退到 admission 修复。
+
+## 6. `checkpoint-lite` 与标准恢复形态
 
 Loom 默认承认两种恢复形态：
 
 - `checkpoint-lite`
   - 停点、下一步、阻断项寄存在 issue / PR 等现有载体
   - 仅适用于低复杂度、低恢复成本、且已有单一稳定宿主载体的场景
+  - 若作为 ledger-equivalent carrier，仍必须声明唯一动态事实承载面，且不得同时维护第二份 ledger
 - 标准恢复形态
   - 使用明确恢复工件承接 `checkpoint`、`resume`、`handoff`
   - 必须有唯一恢复主入口
@@ -92,7 +118,7 @@ Loom 默认承认两种恢复形态：
 - merge checkpoint 已需要稳定消费风险、验证摘要与回退边界
 - 不存在单一稳定宿主载体，或当前仓库同时存在多个运行 / 状态入口
 
-## 6. 边界约束
+## 7. 边界约束
 
 - 不得只依赖聊天记录、分支名或个人记忆恢复
 - 不得在多个文档中并行维护“下一步”

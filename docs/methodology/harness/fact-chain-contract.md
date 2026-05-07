@@ -101,6 +101,7 @@ Loom 的执行真相只允许沿一条事实链流动：
 | `read_entry` | `init-result` | locator | verify、fact-chain、daily CLI |
 | `status_surface` locator | `init-result` + `work item` 派生 | derived | fact-chain、verify、checkpoint、workspace-lifecycle |
 | `runtime_evidence.*` | status-surface `Runtime Evidence` | derived | fact-chain、verify、merge-checkpoint、loom-check |
+| `execution_ledger.*` | recovery 主入口 | locator / evidence | fact-chain、resume、handoff、merge-ready、loom-check |
 
 约束：
 
@@ -109,6 +110,7 @@ Loom 的执行真相只允许沿一条事实链流动：
 - host / control-plane mirror 只能作为派生读面或 locator provenance 被消费，不得回写成 repo execution truth 的 authored 字段。
 - retained result 只证明某个宿主动作或 repo-native verdict 曾经发生，并且必须带有 producing command / action、target gate / surface、subject locator、head、scope、时间戳或 run id 中适用的绑定；它不得替代当前 authored 停点、下一步或验证摘要。
 - `--activate` 只能显式切换当前 locator，不得通过 `resume`、`handoff` 或其他只读 flow 隐式改写活跃事项。
+- `execution_ledger` 只能作为恢复主入口内的 locator / evidence 映射，或等价绑定到恢复主入口；不得 authored 第二份 `next_step`、`blockers`、`latest_validation_summary`。
 
 ## 2.5 读取层级与 provenance
 
@@ -175,6 +177,8 @@ Loom 的执行真相只允许沿一条事实链流动：
 - 让状态面手工维护与恢复主入口不同的 `next_step` 或验证摘要
 - 让 merge checkpoint 依赖另一份未声明主入口的状态摘要
 - 让 `init-result` 承载实时执行状态
+- 让 execution ledger 指向恢复主入口之外的第二 locator
+- 在 execution ledger 中 authored `next_step`、`blockers` 或 `latest_validation_summary`
 
 ## 5. 最小消费规则
 

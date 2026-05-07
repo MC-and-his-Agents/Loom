@@ -7,7 +7,7 @@
     "contract_version": "1.3.0"
   },
   "run": {
-    "target": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/examples/new-project",
+    "target": "/Users/mc/dev/Loom-worktrees/work-541-execution-ledger/examples/new-project",
     "scenario": "新项目",
     "scenario_key": "new",
     "integration_mode": "root",
@@ -113,13 +113,13 @@
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "d32d5a479ac362300e6d3ccf8a32f355be6a60468fa713f85545de663c9d4514"
+      "sha256": "f83455d96caefe56dd5ffc738fc8523b355897b8c8aae30888ffc6b17bf5981a"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/fact_chain_support.py",
-      "sha256": "5d10e10d459269dd718b3385ee13019f564f361cad696965122745b0d329078b"
+      "sha256": "fa1305b6e68173d5e37dd83569718221707588d317c79c24a189e9279580c45c"
     },
     {
       "path": ".loom/bin/governance_surface.py",
@@ -131,13 +131,13 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "216adef334fa5db5596d989155e03eb2222bc54b10b64fa2b4f19b92eddba72b"
+      "sha256": "3342fbff56731666f23b88ced24e677043223d20064601d3a08c459dcaba180c"
     },
     {
       "path": ".loom/bin/loom_status.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_status.py",
-      "sha256": "e8814b5ef11c120a7909e48f7d3a648f5ce9baf1dde14425f02c9db072495f36"
+      "sha256": "5ca65aec03b83daceefd1a57a80ed2685b56f4d7f5d1f764fce1283f039569ec"
     },
     {
       "path": ".loom/bin/runtime_paths.py",
@@ -155,7 +155,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "09297502d6a5c54a147791dae1e1fa93d0dbee3fc772e3e1230f9726688037e8"
+      "sha256": "bd5f8eadb4822461924bd6d234d796644d2840edd35c08798c86a726f6c008e9"
     },
     {
       "path": "AGENTS.md",
@@ -263,12 +263,12 @@
     "scene": "repo-local-demo",
     "carrier": "repo-local-wrapper",
     "entry_family": "loom-init",
-    "install_root": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills",
-    "runtime_root": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills/shared/scripts",
-    "registry_path": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills/registry.json",
-    "layout_or_manifest_path": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills/install-layout.json",
-    "source_repo_root": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance",
-    "target_root": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/examples/new-project",
+    "install_root": "/Users/mc/dev/Loom-worktrees/work-541-execution-ledger/skills",
+    "runtime_root": "/Users/mc/dev/Loom-worktrees/work-541-execution-ledger/skills/shared/scripts",
+    "registry_path": "/Users/mc/dev/Loom-worktrees/work-541-execution-ledger/skills/registry.json",
+    "layout_or_manifest_path": "/Users/mc/dev/Loom-worktrees/work-541-execution-ledger/skills/install-layout.json",
+    "source_repo_root": "/Users/mc/dev/Loom-worktrees/work-541-execution-ledger",
+    "target_root": "/Users/mc/dev/Loom-worktrees/work-541-execution-ledger/examples/new-project",
     "checks": {
       "scene_marker": {
         "status": "pass",
@@ -278,21 +278,21 @@
         "status": "pass",
         "summary": "carrier layout exposes an installed skills root and shared runtime tree.",
         "evidence": {
-          "install_root": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills"
+          "install_root": "/Users/mc/dev/Loom-worktrees/work-541-execution-ledger/skills"
         }
       },
       "registry_contract": {
         "status": "pass",
         "summary": "registry, upgrade contract, and skill entrypoints are consistent.",
         "evidence": {
-          "path": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills/registry.json"
+          "path": "/Users/mc/dev/Loom-worktrees/work-541-execution-ledger/skills/registry.json"
         }
       },
       "shared_runtime": {
         "status": "pass",
         "summary": "shared runtime scripts are present and executable roots can be resolved.",
         "evidence": {
-          "path": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills/shared/scripts"
+          "path": "/Users/mc/dev/Loom-worktrees/work-541-execution-ledger/skills/shared/scripts"
         }
       },
       "referenced_resources": {
@@ -506,7 +506,7 @@
       "host_worktree": {
         "ownership": "host",
         "status": "present",
-        "locator": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance"
+        "locator": "/Users/mc/dev/Loom-worktrees/work-541-execution-ledger"
       },
       "result": "pass",
       "missing_inputs": [],
@@ -616,7 +616,7 @@
         "host_worktree": {
           "ownership": "host",
           "status": "present",
-          "locator": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance"
+          "locator": "/Users/mc/dev/Loom-worktrees/work-541-execution-ledger"
         },
         "result": "pass",
         "missing_inputs": [],
@@ -706,12 +706,12 @@
           },
           "branch": {
             "status": "present",
-            "locator": "work/536-fact-chain-provenance",
+            "locator": "work/541-execution-ledger",
             "authority": "git"
           },
           "worktree": {
             "status": "present",
-            "locator": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance",
+            "locator": "/Users/mc/dev/Loom-worktrees/work-541-execution-ledger",
             "authority": "git"
           },
           "implementation_pr": {

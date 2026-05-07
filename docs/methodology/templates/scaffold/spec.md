@@ -41,6 +41,7 @@ Then
 - Scenario coverage:
 - Expected evidence locator:
 - Freshness rule:
+- Execution ledger acceptance locator:
 - `not_applicable` rationale, if this is not a behavior-bearing change:
 
 ## Exceptions And Boundaries

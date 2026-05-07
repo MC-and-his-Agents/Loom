@@ -32,6 +32,8 @@
 - Runtime evidence:
 - Behavior evidence:
 - Fresh verification evidence:
+- Execution ledger plan locator:
+- Execution ledger validation evidence locator:
 
 ## Test Strategy
 
@@ -47,6 +49,7 @@
 - Integration owner:
 - Required evidence from each subagent:
 - Review or reconciliation needed before merge-ready:
+- Handoff notes locator, or `not_applicable`:
 
 ## Dependencies
 

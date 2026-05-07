@@ -3693,6 +3693,8 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             for key in ("item", "workspace", "recovery", "checkpoint", "state_check"):
                 if not isinstance(payload.get(key), dict):
                     failures.append(Failure("daily-execution-cli", f"`flow resume` must include `{key}`"))
+            if not isinstance(payload.get("execution_ledger"), dict):
+                failures.append(Failure("daily-execution-cli", "`flow resume` must include `execution_ledger`"))
             require_runtime_state_payload(
                 failures,
                 category="daily-execution-cli",
@@ -3778,6 +3780,8 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             for key in ("item", "workspace", "checkpoint", "state_check"):
                 if not isinstance(payload.get(key), dict):
                     failures.append(Failure("daily-execution-cli", f"`flow handoff` must include `{key}`"))
+            if not isinstance(payload.get("execution_ledger"), dict):
+                failures.append(Failure("daily-execution-cli", "`flow handoff` must include `execution_ledger`"))
             require_runtime_state_payload(
                 failures,
                 category="daily-execution-cli",
@@ -3997,7 +4001,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         "`flow merge-ready` fallback must be `null` or a known checkpoint",
                     )
                 )
-            for key in ("item", "runtime_state", "state_check", "runtime_evidence", "build_checkpoint", "merge_checkpoint", "current_checkpoint", "repo_specific_requirements"):
+            for key in ("item", "runtime_state", "execution_ledger", "state_check", "runtime_evidence", "build_checkpoint", "merge_checkpoint", "current_checkpoint", "repo_specific_requirements"):
                 if not isinstance(payload.get(key), dict):
                     failures.append(Failure("daily-execution-cli", f"`flow merge-ready` must include `{key}`"))
             require_runtime_state_payload(
@@ -4089,6 +4093,81 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(Failure("daily-execution-cli", "`flow merge-ready` merge checkpoint must fall back to `admission` for the bootstrap demo"))
 
     with tempfile.TemporaryDirectory(prefix="loom-check-fact-chain-provenance-") as tmp:
+        missing_ledger_target = Path(tmp) / "missing-ledger"
+        shutil.copytree(example_target, missing_ledger_target)
+        progress_path = missing_ledger_target / ".loom/progress/INIT-0001.md"
+        progress_text = progress_path.read_text(encoding="utf-8")
+        progress_path.write_text(
+            re.sub(r"\n## Execution Ledger\n\n.*\Z", "\n", progress_text, flags=re.S),
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "flow", "resume", "--target", str(missing_ledger_target), "--item", "INIT-0001"],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`missing execution ledger` failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`missing execution ledger` must block flow resume"))
+        elif "Execution Ledger" not in json.dumps(payload.get("missing_inputs", []), ensure_ascii=False):
+            failures.append(Failure("daily-execution-cli", "`missing execution ledger` must name the missing ledger section"))
+
+        stale_ledger_target = Path(tmp) / "stale-ledger"
+        shutil.copytree(example_target, stale_ledger_target)
+        progress_path = stale_ledger_target / ".loom/progress/INIT-0001.md"
+        progress_path.write_text(
+            progress_path.read_text(encoding="utf-8").replace("- Evidence Freshness: current", "- Evidence Freshness: stale"),
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "flow", "merge-ready", "--target", str(stale_ledger_target), "--item", "INIT-0001"],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`stale execution ledger` failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`stale execution ledger` must block merge-ready"))
+        elif "evidence must" not in json.dumps(payload.get("missing_inputs", []), ensure_ascii=False):
+            failures.append(Failure("daily-execution-cli", "`stale execution ledger` must report stale evidence freshness"))
+
+        forbidden_ledger_target = Path(tmp) / "forbidden-ledger-fields"
+        shutil.copytree(example_target, forbidden_ledger_target)
+        progress_path = forbidden_ledger_target / ".loom/progress/INIT-0001.md"
+        progress_path.write_text(
+            progress_path.read_text(encoding="utf-8").replace(
+                "- Evidence Freshness: current",
+                "- Evidence Freshness: current\n- Next Step: Ledger attempted to author a second next step.",
+            ),
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "flow", "handoff", "--target", str(forbidden_ledger_target), "--item", "INIT-0001"],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`forbidden execution ledger field` failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`forbidden execution ledger field` must block handoff"))
+        elif "Next Step" not in json.dumps(payload.get("missing_inputs", []), ensure_ascii=False):
+            failures.append(Failure("daily-execution-cli", "`forbidden execution ledger field` must name the forbidden authored field"))
+
+        dual_ledger_target = Path(tmp) / "dual-ledger"
+        shutil.copytree(example_target, dual_ledger_target)
+        init_path = dual_ledger_target / ".loom/bootstrap/init-result.json"
+        init_payload = json.loads(init_path.read_text(encoding="utf-8"))
+        init_payload.setdefault("fact_chain", {}).setdefault("entry_points", {})["execution_ledger"] = ".loom/status/current.md"
+        init_path.write_text(json.dumps(init_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "fact-chain", "--target", str(dual_ledger_target), "--item", "INIT-0001"],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`dual execution ledger` failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`dual execution ledger` must block fact-chain consumption"))
+        elif "second execution ledger locator" not in json.dumps(payload.get("missing_inputs", []), ensure_ascii=False):
+            failures.append(Failure("daily-execution-cli", "`dual execution ledger` must report the second ledger locator"))
+
         stale_target = Path(tmp) / "stale-status"
         shutil.copytree(example_target, stale_target)
         status_path = stale_target / ".loom/status/current.md"
@@ -5917,7 +5996,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 payload, error = load_command_json_with_retry(
                     root,
                     args,
-                    timeout_seconds=30,
+                    timeout_seconds=60,
                     retries=3,
                 )
                 if error:
