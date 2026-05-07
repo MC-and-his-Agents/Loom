@@ -1,15 +1,9 @@
 {
-  "schema_version": "loom-shadow-evidence/v1",
-  "surface": "merge_ready",
-  "side": "loom",
   "result": "pass",
-  "parity_value": "self-governance-advisory-pass",
   "source_files": [
-    ".github/workflows/loom-check.yml",
-    "skills/shared/scripts/loom_check.py"
+    ".loom/status/current.md"
   ],
   "source_sha256": {
-    ".github/workflows/loom-check.yml": "94497e146bf2ff0d8652c56bdde95fe9743f76dcfd666f8a3d04b22a8d32d787",
-    "skills/shared/scripts/loom_check.py": "b0b313d362912d5b71b0c3897a64cb7073720041c8c4cdd67ba939f6312c5a50"
+    ".loom/status/current.md": "94986ff8feee998e4ccb4b5fb7e7122f65576536b9bd099c7cf800f437ca8cf5"
   }
 }

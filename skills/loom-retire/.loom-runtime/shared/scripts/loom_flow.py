@@ -1296,13 +1296,14 @@ def run_git(root: Path, args: list[str]) -> subprocess.CompletedProcess[str] | N
         return None
 
 
-def run_process(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+def run_process(args: list[str], cwd: Path, *, timeout_seconds: float | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         args,
         cwd=cwd,
         check=False,
         capture_output=True,
         text=True,
+        timeout=timeout_seconds,
     )
 
 
@@ -1404,7 +1405,10 @@ def cleanup_scratch_tree(target_root: Path, scratch_dir: Path) -> None:
 
 
 def gh_json(root: Path, args: list[str]) -> tuple[dict[str, Any] | None, list[str]]:
-    result = run_process(["gh", *args], root)
+    try:
+        result = run_process(["gh", *args], root, timeout_seconds=20)
+    except subprocess.TimeoutExpired:
+        return None, [f"gh {' '.join(args)} timed out after 20s"]
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip() or "gh command failed"
         return None, [detail]
@@ -2421,15 +2425,21 @@ def build_review_flow_payload(
             "fallback_to": "admission",
             "steps": steps,
             "runtime_state": runtime_state,
+            **fact_chain_error_contract(errors, output_relative=output_relative),
         }
 
     steps.append(
         {
             "name": "fact-chain",
-            "result": "pass",
-            "summary": "fact chain is readable from a single entry.",
-            "missing_inputs": [],
-            "fallback_to": None,
+            "result": "block" if report_blocking_failures(context["report"]) else "pass",
+            "summary": (
+                "fact chain is readable from a single entry."
+                if not report_blocking_failures(context["report"])
+                else "fact chain is readable, but provenance or derived-surface drift is blocking."
+            ),
+            "missing_inputs": report_blocking_messages(context["report"]),
+            "fallback_to": "admission" if report_blocking_failures(context["report"]) else None,
+            "blocking_failures": report_blocking_failures(context["report"]),
         }
     )
 
@@ -2585,6 +2595,11 @@ def build_review_flow_payload(
         for message in repo_specific_requirements.get("missing_inputs", []):
             if message not in missing_inputs:
                 missing_inputs.append(message)
+    recovery_readiness = report_recovery_readiness(context["report"])
+    if recovery_readiness.get("result") == "block" and result == "pass":
+        result = "block"
+        fallback_to = fallback_to or recovery_readiness.get("fallback_to") or "admission"
+        summary = f"{operation} flow rebuilt context but recovery readiness is blocking."
 
     return {
         "command": "flow",
@@ -2601,6 +2616,9 @@ def build_review_flow_payload(
         "fallback_to": fallback_to,
         "steps": steps,
         "runtime_state": runtime_state,
+        "provenance": report_provenance(context["report"]),
+        "recovery_readiness": recovery_readiness,
+        "blocking_failures": report_blocking_failures(context["report"]),
         "state_check": {
             "result": state_payload["result"],
             "summary": state_payload["summary"],
@@ -4314,6 +4332,7 @@ def handle_fact_chain(args: argparse.Namespace) -> int:
                 "summary": "fact-chain command could not read a valid Loom fact chain.",
                 "missing_inputs": [f"fact-chain: {message}" for message in errors],
                 "fallback_to": "admission",
+                **fact_chain_error_contract(errors, output_relative=args.output),
             }
         )
 
@@ -4329,13 +4348,23 @@ def handle_fact_chain(args: argparse.Namespace) -> int:
             }
         )
 
+    blocking_failures = report_blocking_failures(report)
+    result = "block" if blocking_failures else "pass"
     return emit(
         {
             "command": "fact-chain",
-            "result": "pass",
-            "summary": "fact chain can be read and validated from a single entry.",
-            "missing_inputs": [],
-            "fallback_to": None,
+            "result": result,
+            "summary": (
+                "fact chain can be read and validated from a single entry."
+                if result == "pass"
+                else "fact chain is readable, but provenance or derived-surface drift is blocking."
+            ),
+            "missing_inputs": report_blocking_messages(report),
+            "fallback_to": "admission" if result == "block" else None,
+            "provenance": report_provenance(report),
+            "recovery_readiness": report_recovery_readiness(report),
+            "derived_status_surface": report.get("derived_status_surface"),
+            "blocking_failures": blocking_failures,
             "report": report,
         }
     )
@@ -4370,6 +4399,99 @@ def runtime_evidence_from_report(report: dict[str, Any]) -> tuple[dict[str, Any]
             "source": entry.get("source"),
         }
     return fields, missing_inputs
+
+
+def report_provenance(report: dict[str, Any]) -> list[dict[str, Any]]:
+    provenance = report.get("provenance")
+    return provenance if isinstance(provenance, list) else []
+
+
+def report_recovery_readiness(report: dict[str, Any]) -> dict[str, Any]:
+    readiness = report.get("recovery_readiness")
+    if isinstance(readiness, dict):
+        return readiness
+    return {
+        "result": "block",
+        "summary": "recovery readiness was not reported by the fact-chain reader.",
+        "missing_inputs": ["fact-chain recovery_readiness"],
+        "fallback_to": "admission",
+        "checks": {},
+    }
+
+
+def report_blocking_failures(report: dict[str, Any]) -> list[dict[str, Any]]:
+    failures = report.get("blocking_failures")
+    return failures if isinstance(failures, list) else []
+
+
+def report_blocking_messages(report: dict[str, Any]) -> list[str]:
+    messages: list[str] = []
+    for failure in report_blocking_failures(report):
+        if not isinstance(failure, dict):
+            continue
+        message = failure.get("message") or failure.get("summary") or failure.get("kind")
+        if isinstance(message, str) and message and message not in messages:
+            messages.append(message)
+    readiness = report_recovery_readiness(report)
+    if readiness.get("result") == "block":
+        for message in readiness.get("missing_inputs", []):
+            if isinstance(message, str) and message not in messages:
+                messages.append(message)
+    return messages
+
+
+def fact_chain_error_contract(
+    errors: list[str],
+    *,
+    output_relative: str = ".loom/bootstrap/init-result.json",
+) -> dict[str, Any]:
+    missing_inputs = [f"fact-chain: {message}" for message in errors]
+    blocking_failures = [
+        {
+            "category": "gate_failure",
+            "kind": "fact_chain_unreadable",
+            "carrier": "init_result",
+            "field": "fact_chain",
+            "authority": "locator_discovery",
+            "message": message,
+            "blocking": True,
+            "fallback_to": "admission",
+            "locator": output_relative,
+        }
+        for message in missing_inputs
+    ]
+    return {
+        "provenance": [
+            {
+                "kind": "host_control_mirror",
+                "carrier": "init_result",
+                "field": "fact_chain",
+                "authority": "locator_discovery",
+                "freshness": "unreadable",
+                "trusted_because": "init-result must be readable before authored truth carriers can be selected.",
+                "locator": output_relative,
+            }
+        ],
+        "recovery_readiness": {
+            "result": "block",
+            "status": "blocked",
+            "summary": "recovery is blocked because fact-chain locator discovery failed.",
+            "missing_inputs": missing_inputs,
+            "fallback_to": "admission",
+            "checks": {
+                "locator_discovery": "block",
+                "authored_work_item": "unknown",
+                "authored_recovery_entry": "unknown",
+                "derived_status_surface": "unknown",
+                "parallel_truth": "unknown",
+            },
+            "authoritative_carrier": "recovery_entry",
+            "authoritative_path": None,
+            "parallel_truth_drift": [],
+            "blocking_failures": blocking_failures,
+        },
+        "blocking_failures": blocking_failures,
+    }
 
 
 def handle_runtime_evidence(args: argparse.Namespace) -> int:
@@ -6677,6 +6799,12 @@ def closeout_payload(
     skip_gate: bool,
 ) -> tuple[dict[str, Any], list[str]]:
     missing_inputs: list[str] = []
+    context, context_errors = load_context(target_root, ".loom/bootstrap/init-result.json", None)
+    fact_chain_context: dict[str, Any] | None = context if not context_errors else None
+    if context_errors:
+        missing_inputs.extend(f"fact-chain: {message}" for message in context_errors)
+    elif fact_chain_context is not None:
+        missing_inputs.extend(report_blocking_messages(fact_chain_context["report"]))
     governance_surface = build_governance_surface(target_root)
     repo_specific_requirements = repo_specific_requirements_payload(
         governance_surface.get("repo_interface"),
@@ -6833,6 +6961,15 @@ def closeout_payload(
             "pr": pr_payload,
             "project": project_payload,
             "repo_specific_requirements": repo_specific_requirements,
+            **(
+                {
+                    "provenance": report_provenance(fact_chain_context["report"]),
+                    "recovery_readiness": report_recovery_readiness(fact_chain_context["report"]),
+                    "blocking_failures": report_blocking_failures(fact_chain_context["report"]),
+                }
+                if fact_chain_context is not None
+                else fact_chain_error_contract(context_errors)
+            ),
             **({"reconciliation": reconciliation_payload} if reconciliation_payload is not None else {}),
         },
         [],
@@ -7280,6 +7417,7 @@ def handle_review(args: argparse.Namespace) -> int:
                 "summary": "review command could not read a valid Loom fact chain.",
                 "missing_inputs": [f"fact-chain: {message}" for message in errors],
                 "fallback_to": "admission",
+                **fact_chain_error_contract(errors, output_relative=args.output),
             }
         )
 
@@ -7589,6 +7727,7 @@ def handle_recovery(args: argparse.Namespace) -> int:
                 "summary": "recovery command could not read a valid Loom fact chain.",
                 "missing_inputs": [f"fact-chain: {message}" for message in errors],
                 "fallback_to": "admission",
+                **fact_chain_error_contract(errors, output_relative=args.output),
             }
         )
 
@@ -8128,6 +8267,7 @@ def handle_flow(args: argparse.Namespace) -> int:
                 "fallback_to": "admission",
                 "steps": steps,
                 "runtime_state": runtime_state,
+                **fact_chain_error_contract(errors, output_relative=args.output),
             }
         )
 
@@ -8150,10 +8290,15 @@ def handle_flow(args: argparse.Namespace) -> int:
     steps.append(
         {
             "name": "fact-chain",
-            "result": "pass",
-            "summary": "fact chain is readable from a single entry.",
-            "missing_inputs": [],
-            "fallback_to": None,
+            "result": "block" if report_blocking_failures(context["report"]) else "pass",
+            "summary": (
+                "fact chain is readable from a single entry."
+                if not report_blocking_failures(context["report"])
+                else "fact chain is readable, but provenance or derived-surface drift is blocking."
+            ),
+            "missing_inputs": report_blocking_messages(context["report"]),
+            "fallback_to": "admission" if report_blocking_failures(context["report"]) else None,
+            "blocking_failures": report_blocking_failures(context["report"]),
         }
     )
 
@@ -8398,6 +8543,14 @@ def handle_flow(args: argparse.Namespace) -> int:
             "guided_adoption_plan": guided,
         }
 
+    fact_chain_provenance = report_provenance(context["report"])
+    recovery_readiness = report_recovery_readiness(context["report"])
+    blocking_failures = report_blocking_failures(context["report"])
+    if recovery_readiness.get("result") == "block" and result == "pass":
+        result = "block"
+        fallback_to = fallback_to or recovery_readiness.get("fallback_to") or "admission"
+        summary = "flow rebuilt context but recovery readiness is blocking."
+
     return emit(
         {
             "command": "flow",
@@ -8414,6 +8567,9 @@ def handle_flow(args: argparse.Namespace) -> int:
             "fallback_to": fallback_to,
             "steps": steps,
             "runtime_state": runtime_state,
+            "provenance": fact_chain_provenance,
+            "recovery_readiness": recovery_readiness,
+            "blocking_failures": blocking_failures,
             **({"governance_surface": governance_surface} if args.operation == "resume" else {}),
             **({"maturity_upgrade_path": upgrade_path} if args.operation == "resume" else {}),
             **({"adoption_guidance": adoption_guidance} if args.operation == "resume" else {}),
@@ -8598,6 +8754,18 @@ def handle_shadow_parity(args: argparse.Namespace) -> int:
             for detail in details:
                 if detail not in missing_details:
                     missing_details.append(detail)
+    blocking_failures = [
+        {
+            "category": "drift" if report.get("classification") == "drift" else "gate_failure",
+            "kind": "parallel_truth_drift" if report.get("result") == "mismatch" else "shadow_parity_unreadable",
+            "surface": report.get("surface"),
+            "message": report.get("summary"),
+            "blocking": mode == "blocking",
+            "fallback_to": "manual-reconciliation",
+        }
+        for report in blocking_reports
+        if isinstance(report, dict)
+    ]
 
     payload = {
         "command": "shadow-parity",
@@ -8610,6 +8778,7 @@ def handle_shadow_parity(args: argparse.Namespace) -> int:
         "runtime_state": runtime_state,
         "governance_surface": governance_surface,
         "reports": reports,
+        "blocking_failures": blocking_failures,
     }
     if missing_details:
         payload["missing_details"] = missing_details

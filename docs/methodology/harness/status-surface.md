@@ -19,6 +19,8 @@
 - 当前 behavior evidence / test evidence 是否覆盖当前范围
 - 最近验证是否仍是 fresh verification evidence
 
+状态面不是 runtime state，也不是 runtime evidence ledger。它只消费这些来源并给出当前可读的 derived control-plane 结论。
+
 ## 2. 字段派生原则
 
 所有字段都必须从既有主真相或 host signals 派生：
@@ -37,10 +39,25 @@
   - 从 closeout / reconciliation 结果派生
 - `binding`
   - 从 host binding surface 派生
+- `github`
+  - 从 host / control-plane mirror 派生
+- retained host / repo-native result
+  - 作为 evidence provenance 或 gate 前置结果派生
 - `taxonomy`
   - 从统一失败分类派生
 
 禁止手工维护第二套 authored 状态摘要。
+
+每个影响放行的派生值必须保留来源说明：
+
+- 来源层级
+  - authored truth、host/control-plane mirror、retained result 或 derived surface
+- 来源 locator
+- 与当前 `item_id`、`HEAD`、范围、reviewed head、PR 或 merge commit 的绑定
+- fresh / stale / missing / unreadable / not_applicable 判断
+
+缺少上述来源说明时，该字段不可消费。
+混合来源的字段组必须能下钻到字段级 provenance，不能用组级 provenance 掩盖局部 stale / drift。
 
 行为证据与测试证据也只能派生读取：
 
@@ -87,7 +104,25 @@
 
 字段缺失永远是错误，不等同于不适用。
 
-## 4.1 行为 / 测试证据展示
+## 4.1 `runtime_state` / `runtime_evidence` / status control plane
+
+三者职责固定区分：
+
+- `runtime_state`
+  - 描述 Loom runtime / launcher / carrier 是否可运行、当前入口属于什么安装场景、缺少什么运行输入，以及 lane、run、logs、diagnostics 的 locator 或宿主运行对象状态
+  - 可以阻断命令启动
+  - 不承载事项进度、recovery state、validation verdict、review 结论、merge-ready 结论或 closeout 结论
+- `runtime_evidence`
+  - 描述已经被验证或审查消费的运行证据及其绑定，证明 run / logs / diagnostics / verification / lane 证据在哪里
+  - 不承载下一步、当前停点、blocking owner 或最终 gate verdict
+- status control plane
+  - 汇总 authored truth、host mirror、retained result 与 runtime evidence，输出 `pass | block`、taxonomy 与 provenance
+  - 不反向写入 runtime_state，也不把 runtime_state 当成事项状态面
+
+若 runtime_state 与 runtime_evidence 的绑定不一致，状态面必须把相关 evidence 标记为 `stale` 或 `unreadable`。若调用方试图用 runtime_state 代替恢复主入口或 status control plane，必须视为 parallel truth 风险并阻断。
+`runtime_evidence` 的 `present`、`not_applicable`、`stale`、`missing` 结论仍由状态面或 fact-chain 根据当前 `HEAD`、范围与恢复摘要派生；`Runtime Evidence` 区块本身只提供 locator 读面。
+
+## 4.2 行为 / 测试证据展示
 
 状态面展示行为证据与测试证据时，至少应区分：
 
@@ -111,6 +146,8 @@
 - `gate 已通过`
 - `gate 结论 stale`
 - `gate 因前序缺失不可消费`
+- `gate 结论缺少 provenance`
+- `gate 结论来自过期 retained result`
 
 例如：
 
@@ -123,6 +160,12 @@
 - behavior evidence / test evidence 缺失或 stale
   - 对应消费 gate 必须 `block`
   - `taxonomy.active_failures` 必须含 `evidence_failure`
+- host mirror 与 authored truth 不一致
+  - 对应消费 gate 必须 `block`
+  - `taxonomy.active_failures` 必须含 `drift`
+- retained result 绑定过期、来源不可读或缺少 producing command / action、target gate / surface、subject locator 等关键 provenance
+  - 对应消费 gate 必须 `block`
+  - `taxonomy.active_failures` 必须含 `stale` 或 `gate_failure`
 
 ## 6. closeout / reconciliation 展示
 
@@ -145,8 +188,17 @@
 
 这些入口应输出同一控制面语义，而不是平行结果模型。
 
+输出纪律：
+
+- repo-local 与 host-backed 输出字段组保持一致
+- host-backed 额外值必须标记为 host/control-plane mirror
+- retained result 必须标记原始 result envelope 或等价 locator
+- derived summary 不得遮蔽 authored truth 与 mirror 的冲突
+- 任一关键来源不可读、过期或冲突时输出 `block`
+
 ## 8. 非目标
 
 - 不把状态面写成新的长期进度账本
 - 不用状态面覆盖 `Work Item` / review record / merge checkpoint / closeout basis 的原始权威位置
 - 不允许调用方只读局部字段就跳过前序 gate
+- 不把 runtime_state、runtime_evidence 或 host mirror 改造成事项 authored truth

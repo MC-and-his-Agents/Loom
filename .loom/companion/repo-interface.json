@@ -6,40 +6,21 @@
     "merge_ready": [],
     "closeout": []
   },
-  "specialized_gates": [
-    {
-      "id": "loom-root-self-governance-ci",
-      "summary": "Root Loom carrier must be consumed by CI and local loom_check before product iteration merges.",
-      "locator": ".github/workflows/loom-check.yml",
-      "gate_type": "build"
+  "specialized_gates": [],
+  "review_instruction_locators": {
+    "spec_review": {
+      "locator": "loom_default",
+      "mode": "loom_default"
     },
-    {
-      "id": "loom-root-carrier-drift-check",
-      "summary": "Root self-adoption carrier drift is checked through loom_check root-self-adoption surface.",
-      "locator": "skills/shared/scripts/loom_check.py",
-      "gate_type": "build"
+    "implementation_review": {
+      "locator": "loom_default",
+      "mode": "loom_default"
     }
-  ],
+  },
   "metadata_contract": {
-    "fields": [
-      {
-        "id": "next_managed_iteration",
-        "summary": "Declares the next Loom productization phase that must consume the root self-governance carrier.",
-        "applicability_locator": ".loom/companion/README.md",
-        "authority_locator": "docs/evidence/validations/validation-loom-self-governance-adoption.md",
-        "enforcement": "advisory"
-      }
-    ]
+    "fields": []
   },
   "context_schema": {
-    "fields": [
-      {
-        "id": "github_phase_issue",
-        "summary": "GitHub phase issue used to bind a Loom product iteration to the self-managed workflow.",
-        "type": "integer",
-        "required": true,
-        "mapping_rule_locator": "docs/evidence/validations/validation-loom-self-governance-adoption.md"
-      }
-    ]
+    "fields": []
   }
 }

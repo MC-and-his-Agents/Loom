@@ -10,15 +10,15 @@
 - [work-item-contract.md](./work-item-contract.md)
   - 定义唯一默认执行入口与 enforcement 合同
 - [fact-chain-contract.md](./fact-chain-contract.md)
-  - 定义静态真相、动态真相与派生读面的唯一归属关系
+  - 定义静态真相、动态真相、host/control-plane mirror、retained result 与派生读面的读取优先级和 provenance 纪律
 - [execution-context.md](./execution-context.md)
   - 定义每轮正式执行必须绑定和读取的最小上下文语义
 - [item-context-contract.md](./item-context-contract.md)
   - 定义当前活跃 `Work Item` 的最小 machine-readable 上下文字段与读取边界
 - [status-surface-contract.md](./status-surface-contract.md)
-  - 定义 `status control plane v2` 的对象、字段组与消费边界
+  - 定义 `status control plane v2` 的对象、字段组、provenance 与消费边界
 - [status-surface.md](./status-surface.md)
-  - 定义统一状态控制面的字段语义、运行时证据与 closeout 展示
+  - 定义统一状态控制面的字段语义、`runtime_state` / `runtime_evidence` 边界、运行时证据与 closeout 展示
 - [governance-failure-taxonomy.md](./governance-failure-taxonomy.md)
   - 定义 `stale` / `drift` / `gate_failure` 的统一 taxonomy
 - [execution-chain.md](./execution-chain.md)
@@ -62,6 +62,15 @@
 
 这些文件共同表达的不是零散脚本集合，而是从 `Work Item` / fact-chain 到 review / merge / closeout 的统一编排链路。
 当 Loom 需要调用 GitHub、CI、review engine、`git worktree` 或其他宿主能力时，也应先通过 [host-action-contract.md](./host-action-contract.md) 收口结果与去向，再由各专题文件承接细节，而不是在外部再复制一套真相。
+
+读取纪律：
+
+- authored truth 只由 `Work Item`、恢复主入口、review record、merge / closeout basis 等主载体承接
+- host/control-plane mirror 只能提供 issue、PR、project、checks、ruleset 等宿主控制面的只读 provenance
+- retained result 只能作为已发生宿主动作或 repo-native verdict 的证据 provenance，必须绑定当前消费对象
+- repo-native carrier 通过 interop 只提供只读 locator 或 retained result 来源，不自动成为 Loom authored truth 或 host mirror
+- derived surface 只汇总、展示 taxonomy 与阻断原因；不得反向覆盖 authored truth
+- provenance 缺失、绑定过期、parallel truth 或 stale derived surface 在放行路径上必须阻断
 
 ## 行为优先执行层
 

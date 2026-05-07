@@ -1,15 +1,9 @@
 {
-  "schema_version": "loom-shadow-evidence/v1",
-  "surface": "review",
-  "side": "loom",
   "result": "pass",
-  "parity_value": "self-governance-advisory-pass",
   "source_files": [
-    ".loom/reviews/INIT-0001.json",
-    "docs/evidence/validations/validation-loom-self-governance-adoption.md"
+    ".loom/reviews/INIT-0001.json"
   ],
   "source_sha256": {
-    ".loom/reviews/INIT-0001.json": "5cc02b2da863be9b4638b8391c3dfc71adfe9d09254cd4645253caba2e1ed6c6",
-    "docs/evidence/validations/validation-loom-self-governance-adoption.md": "9733d396aae304e14699178cb612ee53f82a8394f6de164d408746a4f67b76ae"
+    ".loom/reviews/INIT-0001.json": "cac159984acac0278a6c34c8ded267f23b00286efcca632a98e78055313fcaf4"
   }
 }

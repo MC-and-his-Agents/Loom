@@ -24,6 +24,8 @@
 
 review instruction locator 属于 [repo-companion-contract.md](./repo-companion-contract.md) 的 `review_instruction_locators`，因为它定位的是 repo-owned review rule 入口，不是 retained host action result、repo-native carrier 或 shadow parity evidence。
 
+`interop.json` 中声明的入口在 fact-chain 中只能被消费为 host/control-plane mirror、retained result、repo-native carrier locator 或 locator provenance。它不得成为新的 Loom-authored truth，也不得覆盖 `Work Item`、恢复主入口、review record、merge checkpoint 或 closeout basis。
+
 ## 2. `.loom/companion/interop.json`
 
 当前稳定 schema：
@@ -79,6 +81,7 @@ review instruction locator 属于 [repo-companion-contract.md](./repo-companion-
 - `surfaces` 必须是非空数组
 - `surfaces[*]` 只允许 `admission | pre_review | review | build | merge_ready | closeout`
 - `locator` 只描述 Loom 如何读取 retained host action 的结果，不描述如何执行动作本身
+- 读取结果必须作为 retained result 消费，并保留原始 locator、绑定对象与 fresh/stale 判断
 
 典型对象包括：
 
@@ -100,6 +103,8 @@ review instruction locator 属于 [repo-companion-contract.md](./repo-companion-
 
 - `locator` 可以指向 repo-native truth / evidence 目录、文件或生成结果
 - 这些 carrier 继续保留为仓库原生真相，不要求先迁成 Loom carrier
+- 若 repo-native carrier 与 Loom authored truth 表达同一事实，Loom 不自动选择 repo-native 值；该差异只能进入 provenance / drift / parity 结果
+- repo-native carrier 不会因为被 `interop.json` 声明就自动变成 host/control-plane mirror；除非另有权威合同声明，它只是只读 locator 或 retained result 来源
 
 典型对象包括：
 
@@ -130,6 +135,7 @@ review instruction locator 属于 [repo-companion-contract.md](./repo-companion-
 - 只有显式 `blocking` 消费模式可以把 `mismatch` / `unreadable` 升级为阻断结果
 - `shadow_surfaces` 只描述比对入口，不声明“哪一方自动获胜”
 - `loom_locator` 与 `repo_locator` 必须指向 shadow evidence envelope，而不是裸状态值
+- `shadow_surfaces` 输出不得被消费为 authored truth；它只证明派生读面或 repo-native carrier 是否同源、可读、可比较
 
 ### 5.1 shadow evidence envelope
 
@@ -162,6 +168,8 @@ review instruction locator 属于 [repo-companion-contract.md](./repo-companion-
 - `.loom/shadow/*.json` 中除 `.loom/shadow/shadow-parity.json` 外，只允许被 `shadow_surfaces` 显式声明
 
 任一条件失败时，对应 surface 必须进入 `unreadable`，blocking 模式下升级为 `block`。
+
+若 envelope 可读但 `source_sha256` 对应的源文件已不再匹配当前消费对象，结果必须视为 stale retained result 或 stale carrier evidence，不得作为 fresh verification evidence。
 
 ### 5.2 blocking 消费模式
 
@@ -244,6 +252,7 @@ blocking 模式只改变消费结果，不改变 `shadow_surfaces` schema：
 
 - 不把 interop 细节塞回 `repo-interface.json`
 - 不让 `interop.json` 承载运行态或 authored state
+- 不让 `interop.json` 承载 status control plane 的结论或 runtime_state
 - 不让 `interop.json` 承载 spec review / implementation review instruction locator；这些 locator 必须通过 `repo-interface.json` 的 `review_instruction_locators` 声明
 - 不让 `interop.json` 承载 external-runtime locator、runtime version、rollback mode 或 runtime provenance
 - 不让 Loom 因为读取了 interop contract，就接管宿主底层实现

@@ -11,25 +11,31 @@
 - Review Entry: .loom/reviews/INIT-0001.json
 - Validation Entry: python3 .loom/bin/loom_init.py verify --target .
 - Closing Condition: The generated entry, work item, recovery entry, and templates are readable and verified
-- Current Checkpoint: merge checkpoint
-- Current Stop: Behavior-first operating-layer closeout slice is on PR #476 with local gates and root carriers aligned.
-- Next Step: Wait for PR #476 CI/review, merge through GitHub, then reconcile #440-#446, #474, #447-#473, and #439.
+- Current Checkpoint: build checkpoint
+- Current Stop: Bootstrap artifacts have been generated and are awaiting downstream review.
+- Next Step: Accept the generated Loom entry and promote the first real repository work item.
 - Blockers: None recorded.
-- Latest Validation Summary: Root .loom/bin verify passed; carrier refresh dry-run has no runtime provenance drift; loom_check gates cover behavior-first docs, locators, and carrier evidence.
+- Latest Validation Summary: Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist.
 - Recovery Boundary: Bootstrap result at `.loom/bootstrap/init-result.json`; bootstrap manifest at `.loom/bootstrap/manifest.json`.
-- Current Lane: behavior-first operating-layer closeout
+- Current Lane: bootstrap verification only
 
-## Self-Governance Binding
+## Governance Status
 
-- Managed Scope: Loom core and product iteration
-- Next Managed Phase: #439 Phase: Behavior-first project operating layer
-- Next Managed FRs: #440 #441 #442 #443 #444 #445 #446 #474
-- Next Managed Work Items: #447-#473
-- Companion Entry: .loom/companion/README.md
-- Repo Interface: .loom/companion/repo-interface.json
-- Repo Interop: .loom/companion/interop.json
-- Evidence Entry: docs/evidence/validations/validation-loom-self-governance-adoption.md
-- Boundary: downstream examples and adopted repositories remain fixtures, not root truth
+- Item Key: INIT-0001
+- Item Type: work_item
+- Phase: not_declared
+- FR: not_declared
+- Release: not_declared
+- Sprint: not_declared
+- Head SHA: bootstrap-placeholder
+- Status: planning
+- Spec Entry: .loom/specs/INIT-0001/spec.md
+- Plan Entry: .loom/specs/INIT-0001/plan.md
+- Implementation Contract Entry: .loom/specs/INIT-0001/implementation-contract.md
+- Spec Review Entry: .loom/reviews/INIT-0001.spec.json
+- Spec Review Status: pending
+- Review Head Status: bootstrap-placeholder
+- Merge Gate Status: pending
 
 ## Runtime Evidence
 

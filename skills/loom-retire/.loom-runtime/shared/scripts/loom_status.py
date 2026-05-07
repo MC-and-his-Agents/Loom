@@ -12,10 +12,15 @@ from loom_flow import (
     closeout_payload,
     detect_github_repo,
     emit,
+    fact_chain_error_contract,
     github_issue_payload,
     github_pr_payload,
     implementation_review_status_payload,
     load_context,
+    report_blocking_failures,
+    report_blocking_messages,
+    report_provenance,
+    report_recovery_readiness,
     runtime_state_payload,
     spec_review_gate_payload,
 )
@@ -402,6 +407,7 @@ def main(argv: list[str]) -> int:
                 "missing_inputs": [f"fact-chain: {message}" for message in errors],
                 "fallback_to": "admission",
                 "runtime_state": runtime_state,
+                **fact_chain_error_contract(errors, output_relative=args.output),
             }
         )
 
@@ -429,6 +435,19 @@ def main(argv: list[str]) -> int:
         github_status=github_status,
         github_errors=github_errors,
     )
+    fact_chain_failures = report_blocking_failures(context["report"])
+    if fact_chain_failures:
+        classifications = control_status.get("classifications")
+        if not isinstance(classifications, list):
+            classifications = []
+        for failure in fact_chain_failures:
+            if not isinstance(failure, dict):
+                continue
+            classification = failure.get("kind") or failure.get("category")
+            if isinstance(classification, str) and classification not in classifications:
+                classifications.append(classification)
+        control_status["classifications"] = classifications
+        control_status["result"] = "block"
     closeout = full_closeout_status_payload(
         target_root,
         phase_number=args.phase,
@@ -454,6 +473,9 @@ def main(argv: list[str]) -> int:
     for message in control_status.get("missing_inputs", []):
         if message not in missing_inputs:
             missing_inputs.append(str(message))
+    for message in report_blocking_messages(context["report"]):
+        if message not in missing_inputs:
+            missing_inputs.append(message)
 
     result = "pass" if not missing_inputs else "block"
     summary = (
@@ -469,6 +491,9 @@ def main(argv: list[str]) -> int:
             "missing_inputs": missing_inputs,
             "fallback_to": "admission" if missing_inputs else None,
             "runtime_state": runtime_state,
+            "provenance": report_provenance(context["report"]),
+            "recovery_readiness": report_recovery_readiness(context["report"]),
+            "blocking_failures": report_blocking_failures(context["report"]),
             "item": {
                 "id": context["item_id"],
                 "goal": context["goal"],

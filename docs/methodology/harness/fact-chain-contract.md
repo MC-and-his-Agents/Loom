@@ -26,6 +26,8 @@ Loom 的执行真相只允许沿一条事实链流动：
 
 跨 repo 与 GitHub 控制面的真相分层，见 [../governance/truth-and-sync-boundary.md](../governance/truth-and-sync-boundary.md)。
 
+读取事实链时必须同时暴露 provenance：读了哪一层、读到哪个 locator、该值为什么可消费，以及冲突时由哪个层级阻断。
+
 ## 2. 主真相载体
 
 ### 2.1 `work item`
@@ -104,7 +106,44 @@ Loom 的执行真相只允许沿一条事实链流动：
 
 - `authored` 字段只能在主来源中维护。
 - `derived` 字段只能由读取脚本从主来源计算或映射，不得手工改写为第二真相。
+- host / control-plane mirror 只能作为派生读面或 locator provenance 被消费，不得回写成 repo execution truth 的 authored 字段。
+- retained result 只证明某个宿主动作或 repo-native verdict 曾经发生，并且必须带有 producing command / action、target gate / surface、subject locator、head、scope、时间戳或 run id 中适用的绑定；它不得替代当前 authored 停点、下一步或验证摘要。
 - `--activate` 只能显式切换当前 locator，不得通过 `resume`、`handoff` 或其他只读 flow 隐式改写活跃事项。
+
+## 2.5 读取层级与 provenance
+
+事实链读取固定按以下层级解释：
+
+1. locator discovery
+   - `init-result` 中的当前 item 与 carrier locator
+   - 只决定本次要读哪份主载体，不承载事项事实
+2. authored truth
+   - `work item`、恢复主入口、review record 等主载体中的字段
+   - 决定执行事实本身
+3. derived surface
+   - status surface、merge-ready 摘要、closeout 摘要、fact-chain 输出
+   - 只展示组合结果、freshness 与阻断原因
+4. host / control-plane mirror
+   - issue、project、PR、checks、ruleset 或 repo-native control plane 的当前镜像
+   - 只用于 host 状态、绑定链、merge / closeout basis 与 drift 判断
+5. retained result
+   - guardian、integration、repo-native merge readiness、host action 等已保留结果
+   - 只作为可审查证据、locator provenance 或前序结果 provenance 被消费
+
+这里的层级是事实优先级，不是 bootstrap 顺序。`init-result` 先被读取只是为了发现 carrier locator，它本身不参与事实优先级，也不承载实时执行真相。
+
+每个机械输出至少应能说明：
+
+- `source_layer`
+  - `authored_truth | host_control_mirror | retained_result | derived_surface`
+- `source_locator`
+  - 文件、host object、run、comment、result envelope 或等价 locator
+- `source_binding`
+  - `item_id`、`head_sha`、`reviewed_head_sha`、`merge_commit_sha`、时间戳或等价绑定中适用的部分
+- `consumed_as`
+  - `truth | mirror | evidence | locator | summary`
+
+若同一字段同时出现在 authored truth 与 mirror / retained result / derived surface 中，读取方必须以 authored truth 为准，并把其他值作为 provenance 或 drift evidence。若非 authored 层展示了不同值且无法证明只是过期镜像，结果必须阻断。
 
 ## 3. 派生读面
 
@@ -125,6 +164,8 @@ Loom 的执行真相只允许沿一条事实链流动：
 
 若派生读面展示的值与主真相不一致，应视为事实链断裂。
 
+派生读面可以缓存或展示 host mirror 与 retained result，但必须保留原始 locator 与绑定信息。缺少 provenance、绑定过期、或与 authored truth 冲突时，派生读面不得输出 `pass`。
+
 ## 4. 不允许的并行记账
 
 以下情况都属于并行真相，必须报错或阻断：
@@ -143,8 +184,20 @@ Loom 的执行真相只允许沿一条事实链流动：
 2. 再读 `work item`
 3. 再读恢复主入口
 4. 需要状态汇总时，再读派生状态面
+5. 最后按需要读取 host / control-plane mirror 与 retained result 的 locator / evidence
 
 不允许跳过主真相，直接把状态面或 merge checkpoint 输入当成 authored 真相。
+
+冲突处理固定为 fail-closed：
+
+- authored truth 之间冲突
+  - 阻断，并要求回到唯一主载体修复
+- authored truth 与 host / control-plane mirror 冲突
+  - 阻断当前消费，进入 drift / reconciliation 处理；不得用 mirror 覆盖 authored truth
+- retained result 与 producing command / action、target gate / surface、subject locator、当前 `HEAD`、范围、恢复摘要或 gate 前置不匹配
+  - 视为 stale retained result，不能作为 fresh evidence
+- derived surface 与其来源不一致
+  - 视为 stale derived surface，必须重算或修复 provenance 后再消费
 
 当前仓库中的统一读取入口包括：
 

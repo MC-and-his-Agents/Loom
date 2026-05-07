@@ -7,7 +7,7 @@
     "contract_version": "1.3.0"
   },
   "run": {
-    "target": "/Users/mc/dev/Loom",
+    "target": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance",
     "scenario": "复杂既有仓库",
     "scenario_key": "complex-existing",
     "integration_mode": "companion",
@@ -16,13 +16,13 @@
   "intake": {
     "schema_version": "loom-init-intake/v1",
     "repository_type": "existing",
-    "root_boundary_docs": "clear",
+    "root_boundary_docs": "partial",
     "ci_or_basic_tests": true,
     "repository_level_validation_entry": true,
-    "primary_gap_category": "spec-path",
+    "primary_gap_category": "governance",
     "long_running_recovery_pain": true,
     "shared_contract_or_high_risk_boundary": true,
-    "purity_or_scope_signals": "clean",
+    "purity_or_scope_signals": "severe",
     "merge_review_semantic_overload": false,
     "notes": "autodetected by loom_init.py"
   },
@@ -116,7 +116,7 @@
       "path": ".loom/bin/fact_chain_support.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/fact_chain_support.py",
-      "sha256": "78cf0d0022a4c03933a5e46cba676e80cafa5d0802fb95191a761ec9f9417e65"
+      "sha256": "5d10e10d459269dd718b3385ee13019f564f361cad696965122745b0d329078b"
     },
     {
       "path": ".loom/bin/governance_surface.py",
@@ -128,13 +128,13 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "d67ffd22cacad33d25e1a4ef5dc90b57eb7143aae7a9a65420fcbdcb38fc701d"
+      "sha256": "216adef334fa5db5596d989155e03eb2222bc54b10b64fa2b4f19b92eddba72b"
     },
     {
       "path": ".loom/bin/loom_status.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_status.py",
-      "sha256": "229ecdf3171aab0df302fd9662f5a9ce6371e7b8f194ece341909d38ce268bed"
+      "sha256": "e8814b5ef11c120a7909e48f7d3a648f5ce9baf1dde14425f02c9db072495f36"
     },
     {
       "path": ".loom/bin/runtime_paths.py",
@@ -152,7 +152,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "e0d0178b76619a82a6d616db872a57efaea90e635bfe0883ef318e42e937232c"
+      "sha256": "09297502d6a5c54a147791dae1e1fa93d0dbee3fc772e3e1230f9726688037e8"
     },
     {
       "path": "AGENTS.md",
@@ -198,6 +198,11 @@
       "path": ".loom/specs/INIT-0001/implementation-contract.md",
       "kind": "implementation-contract",
       "source": "skills/shared/assets/templates/scaffold/implementation-contract.md"
+    },
+    {
+      "path": ".github/PULL_REQUEST_TEMPLATE.md",
+      "kind": "pr-template",
+      "source": "skills/shared/assets/github/PULL_REQUEST_TEMPLATE.md"
     }
   ],
   "initial_work_items": [
@@ -255,12 +260,12 @@
     "scene": "repo-local-demo",
     "carrier": "repo-local-wrapper",
     "entry_family": "loom-init",
-    "install_root": "/Users/mc/dev/Loom/skills",
-    "runtime_root": "/Users/mc/dev/Loom/skills/shared/scripts",
-    "registry_path": "/Users/mc/dev/Loom/skills/registry.json",
-    "layout_or_manifest_path": "/Users/mc/dev/Loom/skills/install-layout.json",
-    "source_repo_root": "/Users/mc/dev/Loom",
-    "target_root": "/Users/mc/dev/Loom",
+    "install_root": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills",
+    "runtime_root": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills/shared/scripts",
+    "registry_path": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills/registry.json",
+    "layout_or_manifest_path": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills/install-layout.json",
+    "source_repo_root": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance",
+    "target_root": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance",
     "checks": {
       "scene_marker": {
         "status": "pass",
@@ -270,21 +275,21 @@
         "status": "pass",
         "summary": "carrier layout exposes an installed skills root and shared runtime tree.",
         "evidence": {
-          "install_root": "/Users/mc/dev/Loom/skills"
+          "install_root": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills"
         }
       },
       "registry_contract": {
         "status": "pass",
         "summary": "registry, upgrade contract, and skill entrypoints are consistent.",
         "evidence": {
-          "path": "/Users/mc/dev/Loom/skills/registry.json"
+          "path": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills/registry.json"
         }
       },
       "shared_runtime": {
         "status": "pass",
         "summary": "shared runtime scripts are present and executable roots can be resolved.",
         "evidence": {
-          "path": "/Users/mc/dev/Loom/skills/shared/scripts"
+          "path": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills/shared/scripts"
         }
       },
       "referenced_resources": {
@@ -295,36 +300,36 @@
   },
   "governance_surface": {
     "repository_mode": "complex-existing",
-    "loom_state": "partial",
+    "loom_state": "active",
     "carrier_summary": {
       "work_item": {
-        "status": "missing",
-        "locator": "unknown",
+        "status": "present",
+        "locator": ".loom/work-items/INIT-0001.md",
         "source": "repository scan"
       },
       "recovery": {
-        "status": "missing",
-        "locator": "unknown",
+        "status": "present",
+        "locator": ".loom/progress/INIT-0001.md",
         "source": "repository scan"
       },
       "review": {
-        "status": "missing",
-        "locator": "unknown",
+        "status": "present",
+        "locator": ".loom/reviews/INIT-0001.json",
         "source": "repository scan"
       },
       "status_surface": {
-        "status": "missing",
-        "locator": "unknown",
+        "status": "present",
+        "locator": ".loom/status/current.md",
         "source": "repository scan"
       },
       "spec_path": {
-        "status": "missing",
-        "locator": "unknown",
+        "status": "present",
+        "locator": ".loom/specs/INIT-0001/spec.md",
         "source": "repository scan"
       },
       "plan_path": {
-        "status": "missing",
-        "locator": "unknown",
+        "status": "present",
+        "locator": ".loom/specs/INIT-0001/plan.md",
         "source": "repository scan"
       }
     },
@@ -345,57 +350,228 @@
         "repo-local-cli",
         "loom-check"
       ],
-      "pr_reviews": "not_required"
+      "pr_reviews": "not_required",
+      "rulesets": {
+        "status": "verified",
+        "enforced": false,
+        "count": 0
+      },
+      "ci_check_presence": {
+        "schema_version": "loom-ci-check-presence/v1",
+        "workflow_exists": true,
+        "workflow_locator": ".github/workflows/loom-check.yml",
+        "stable_check_names": [
+          "py-compile",
+          "demo-bootstrap",
+          "repo-local-cli",
+          "loom-check"
+        ],
+        "check_ran": true,
+        "required_checks_configured": true,
+        "host_enforcement_status": "verified",
+        "recommended_action": "install the workflow and configure its stable check names as host-required checks"
+      },
+      "host_enforcement": {
+        "branch_protection_or_ruleset": true,
+        "required_checks": true,
+        "workflow_exists": true,
+        "check_ran": true,
+        "verification_status": "verified"
+      },
+      "api_snapshot": {
+        "schema_version": "loom-host-api-snapshot/v1",
+        "read_mode": "cached_non_merge",
+        "verification_status": "verified",
+        "fallback_status": null,
+        "cache_scope": "process",
+        "requests": [
+          {
+            "method": "GET",
+            "path": "repos/MC-and-his-Agents/Loom",
+            "purpose": "repository default branch"
+          },
+          {
+            "method": "GET",
+            "path": "repos/MC-and-his-Agents/Loom/branches/main",
+            "purpose": "branch protection"
+          },
+          {
+            "method": "GET",
+            "path": "repos/MC-and-his-Agents/Loom/actions/workflows",
+            "purpose": "workflow presence"
+          },
+          {
+            "method": "GET",
+            "path": "repos/MC-and-his-Agents/Loom/commits/main/check-runs",
+            "purpose": "recent check runs"
+          },
+          {
+            "method": "GET",
+            "path": "repos/MC-and-his-Agents/Loom/rulesets",
+            "purpose": "branch ruleset enforcement"
+          }
+        ],
+        "errors": [],
+        "budget": {
+          "schema_version": "loom-host-api-budget/v1",
+          "default_non_merge_read_mode": "cached_non_merge",
+          "merge_gate_read_mode": "uncached_live_gate",
+          "cache_scope": "process",
+          "rest_first": true,
+          "graphql_allowed_when": "REST cannot express the required relationship",
+          "search_endpoint": "not_in_hot_path",
+          "polling": "not_in_hot_path",
+          "rate_limit_policy": "consume x-ratelimit-* headers from natural responses when available; do not call /rate_limit just to inspect budget",
+          "github_actions_budget": "design for GITHUB_TOKEN per-repository hourly request limits"
+        }
+      }
     },
     "repo_interface": {
-      "availability": "absent",
+      "availability": "present",
       "manifest": {
-        "status": "missing",
+        "status": "present",
         "locator": ".loom/companion/manifest.json",
-        "source": "companion manifest"
+        "source": "repository scan"
       },
       "companion_entry": {
-        "status": "missing",
-        "locator": "unknown",
-        "source": "repo companion manifest"
+        "status": "present",
+        "locator": ".loom/companion/README.md",
+        "source": "repo companion interface.companion_entry"
       },
       "repo_specific_requirements": {
-        "status": "missing",
-        "locator": "unknown",
-        "source": "repo companion interface"
+        "status": "present",
+        "locator": ".loom/companion/repo-interface.json",
+        "source": "repo companion manifest.repo_interface"
       },
       "specialized_gates": {
-        "status": "missing",
-        "locator": "unknown",
-        "source": "repo companion interface"
+        "status": "present",
+        "locator": ".loom/companion/repo-interface.json",
+        "source": "repo companion manifest.repo_interface"
       },
-      "summary": "no repo companion interface is declared for this repository.",
+      "summary": "repo companion manifest and machine-readable repo interface are readable.",
       "missing_inputs": []
     },
     "repo_interop": {
-      "availability": "absent",
+      "availability": "present",
       "contract": {
-        "status": "missing",
+        "status": "present",
         "locator": ".loom/companion/interop.json",
         "source": "repository scan"
       },
       "host_adapters": {
-        "status": "missing",
-        "locator": "unknown",
+        "status": "present",
+        "locator": ".loom/companion/interop.json",
         "source": "repo interop contract"
       },
       "repo_native_carriers": {
-        "status": "missing",
-        "locator": "unknown",
+        "status": "present",
+        "locator": ".loom/companion/interop.json",
         "source": "repo interop contract"
       },
       "shadow_surfaces": {
-        "status": "missing",
-        "locator": "unknown",
+        "status": "present",
+        "locator": ".loom/companion/interop.json",
         "source": "repo interop contract"
       },
-      "summary": "no repo interop contract is declared for this repository.",
+      "summary": "repo interop contract is readable for host adapters, repo-native carriers, and shadow parity.",
       "missing_inputs": []
+    },
+    "workspace_profile": {
+      "schema_version": "loom-workspace-profile/v1",
+      "selected": "single-workspace",
+      "selection_reason": "workspace_entry points at the repository root",
+      "profiles": {
+        "single-workspace": {
+          "summary": "Use the repository root as the Loom execution workspace.",
+          "host_worktree_required": false,
+          "recommended_action": "keep workspace_entry as `.` unless isolation becomes necessary"
+        },
+        "per-item-worktree": {
+          "summary": "Use one isolated workspace per Work Item, usually backed by host git worktree.",
+          "host_worktree_required": true,
+          "recommended_action": "ensure workspace, branch, Work Item, and PR bindings stay aligned"
+        },
+        "attach-existing": {
+          "summary": "Attach Loom to an existing repo-defined workspace without taking over host lifecycle actions.",
+          "host_worktree_required": false,
+          "recommended_action": "declare the repo-specific workspace locator and keep host lifecycle ownership external"
+        }
+      },
+      "workspace_entry": ".",
+      "workspace_path": ".",
+      "workspace_exists": true,
+      "host_worktree": {
+        "ownership": "host",
+        "status": "present",
+        "locator": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance"
+      },
+      "result": "pass",
+      "missing_inputs": [],
+      "recommended_action": "keep workspace_entry as `.` unless isolation becomes necessary"
+    },
+    "gate_starter": {
+      "schema_version": "loom-gate-starter/v1",
+      "aliases": {
+        "verify": {
+          "surface": "verification",
+          "entrypoint": ".loom/bin/loom_init.py",
+          "command": "python3 .loom/bin/loom_init.py verify --target .",
+          "authority": "local",
+          "enforcement": "advisory",
+          "host_enforcement": false,
+          "summary": "Run the repo-local Loom bootstrap verification entry.",
+          "runtime_present": true
+        },
+        "status": {
+          "surface": "status",
+          "entrypoint": ".loom/bin/loom_status.py",
+          "command": "python3 .loom/bin/loom_status.py --target . --item INIT-0001",
+          "authority": "local",
+          "enforcement": "advisory",
+          "host_enforcement": false,
+          "summary": "Read the repo-local Loom status surface.",
+          "runtime_present": true
+        },
+        "merge-ready": {
+          "surface": "merge_ready",
+          "entrypoint": ".loom/bin/loom_flow.py",
+          "command": "python3 .loom/bin/loom_flow.py flow merge-ready --target . --item INIT-0001",
+          "authority": "local",
+          "enforcement": "advisory",
+          "host_enforcement": false,
+          "summary": "Run Loom's local merge-ready orchestration without taking over host merge controls.",
+          "runtime_present": true
+        },
+        "closeout-check": {
+          "surface": "closeout",
+          "entrypoint": ".loom/bin/loom_flow.py",
+          "command": "python3 .loom/bin/loom_flow.py closeout check --target .",
+          "authority": "local",
+          "enforcement": "advisory",
+          "host_enforcement": false,
+          "summary": "Check closeout readiness against local Loom carriers and readable host inputs.",
+          "runtime_present": true
+        },
+        "reconciliation-audit": {
+          "surface": "reconciliation",
+          "entrypoint": ".loom/bin/loom_flow.py",
+          "command": "python3 .loom/bin/loom_flow.py reconciliation audit --target .",
+          "authority": "local",
+          "enforcement": "advisory",
+          "host_enforcement": false,
+          "summary": "Audit closeout drift without mutating host state.",
+          "runtime_present": true
+        }
+      },
+      "runtime_status": "present",
+      "authority": "local",
+      "enforcement": "advisory",
+      "host_enforcement": false,
+      "host_enforcement_status": "not_host_enforced",
+      "result": "pass",
+      "missing_inputs": [],
+      "missing_entrypoints": [],
+      "recommended_action": "run the repo-local aliases as advisory Loom checks, then configure host-required checks separately"
     },
     "governance_control_plane": {
       "schema_version": "loom-governance-control/v1",
@@ -408,7 +584,104 @@
           "implementation_pr": "work_item",
           "merge_commit": "closeout"
         },
-        "result": "block"
+        "result": "pass"
+      },
+      "workspace_profile": {
+        "schema_version": "loom-workspace-profile/v1",
+        "selected": "single-workspace",
+        "selection_reason": "workspace_entry points at the repository root",
+        "profiles": {
+          "single-workspace": {
+            "summary": "Use the repository root as the Loom execution workspace.",
+            "host_worktree_required": false,
+            "recommended_action": "keep workspace_entry as `.` unless isolation becomes necessary"
+          },
+          "per-item-worktree": {
+            "summary": "Use one isolated workspace per Work Item, usually backed by host git worktree.",
+            "host_worktree_required": true,
+            "recommended_action": "ensure workspace, branch, Work Item, and PR bindings stay aligned"
+          },
+          "attach-existing": {
+            "summary": "Attach Loom to an existing repo-defined workspace without taking over host lifecycle actions.",
+            "host_worktree_required": false,
+            "recommended_action": "declare the repo-specific workspace locator and keep host lifecycle ownership external"
+          }
+        },
+        "workspace_entry": ".",
+        "workspace_path": ".",
+        "workspace_exists": true,
+        "host_worktree": {
+          "ownership": "host",
+          "status": "present",
+          "locator": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance"
+        },
+        "result": "pass",
+        "missing_inputs": [],
+        "recommended_action": "keep workspace_entry as `.` unless isolation becomes necessary"
+      },
+      "gate_starter": {
+        "schema_version": "loom-gate-starter/v1",
+        "aliases": {
+          "verify": {
+            "surface": "verification",
+            "entrypoint": ".loom/bin/loom_init.py",
+            "command": "python3 .loom/bin/loom_init.py verify --target .",
+            "authority": "local",
+            "enforcement": "advisory",
+            "host_enforcement": false,
+            "summary": "Run the repo-local Loom bootstrap verification entry.",
+            "runtime_present": true
+          },
+          "status": {
+            "surface": "status",
+            "entrypoint": ".loom/bin/loom_status.py",
+            "command": "python3 .loom/bin/loom_status.py --target . --item INIT-0001",
+            "authority": "local",
+            "enforcement": "advisory",
+            "host_enforcement": false,
+            "summary": "Read the repo-local Loom status surface.",
+            "runtime_present": true
+          },
+          "merge-ready": {
+            "surface": "merge_ready",
+            "entrypoint": ".loom/bin/loom_flow.py",
+            "command": "python3 .loom/bin/loom_flow.py flow merge-ready --target . --item INIT-0001",
+            "authority": "local",
+            "enforcement": "advisory",
+            "host_enforcement": false,
+            "summary": "Run Loom's local merge-ready orchestration without taking over host merge controls.",
+            "runtime_present": true
+          },
+          "closeout-check": {
+            "surface": "closeout",
+            "entrypoint": ".loom/bin/loom_flow.py",
+            "command": "python3 .loom/bin/loom_flow.py closeout check --target .",
+            "authority": "local",
+            "enforcement": "advisory",
+            "host_enforcement": false,
+            "summary": "Check closeout readiness against local Loom carriers and readable host inputs.",
+            "runtime_present": true
+          },
+          "reconciliation-audit": {
+            "surface": "reconciliation",
+            "entrypoint": ".loom/bin/loom_flow.py",
+            "command": "python3 .loom/bin/loom_flow.py reconciliation audit --target .",
+            "authority": "local",
+            "enforcement": "advisory",
+            "host_enforcement": false,
+            "summary": "Audit closeout drift without mutating host state.",
+            "runtime_present": true
+          }
+        },
+        "runtime_status": "present",
+        "authority": "local",
+        "enforcement": "advisory",
+        "host_enforcement": false,
+        "host_enforcement_status": "not_host_enforced",
+        "result": "pass",
+        "missing_inputs": [],
+        "missing_entrypoints": [],
+        "recommended_action": "run the repo-local aliases as advisory Loom checks, then configure host-required checks separately"
       },
       "host_binding": {
         "schema_version": "loom-host-binding/v1",
@@ -424,18 +697,18 @@
             "authority": "github-profile"
           },
           "work_item": {
-            "status": "missing",
-            "locator": "unknown",
+            "status": "present",
+            "locator": ".loom/work-items/INIT-0001.md",
             "authority": "loom fact chain"
           },
           "branch": {
             "status": "present",
-            "locator": "feat/loom-self-adoption-carrier",
+            "locator": "work/536-fact-chain-provenance",
             "authority": "git"
           },
           "worktree": {
             "status": "present",
-            "locator": "/Users/mc/dev/Loom",
+            "locator": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance",
             "authority": "git"
           },
           "implementation_pr": {
@@ -449,17 +722,15 @@
             "authority": "host"
           },
           "closeout": {
-            "status": "host-managed",
+            "status": "present",
             "locator": "reconciliation audit + closeout gate",
             "authority": "loom + host"
           }
         },
         "default_branch": "main",
-        "missing_inputs": [
-          "work_item"
-        ],
-        "result": "block",
-        "summary": "host binding surface is readable, but required binding facts are missing or host-managed."
+        "missing_inputs": [],
+        "result": "pass",
+        "summary": "host binding surface can relate the active Work Item to branch, worktree, PR, merge commit, and closeout."
       },
       "taxonomy": {
         "spec_stale": "Approved spec no longer covers the implementation surface.",
@@ -538,9 +809,13 @@
       ],
       "maturity": {
         "schema_version": "loom-governance-maturity/v1",
-        "current": "unadopted",
-        "achieved": [],
-        "next": "light",
+        "current": "strong",
+        "achieved": [
+          "light",
+          "standard",
+          "strong"
+        ],
+        "next": null,
         "levels": {
           "light": {
             "requires": [
@@ -569,6 +844,10 @@
               "standard",
               "repo_interface",
               "repo_interop",
+              "host_enforced_control_plane",
+              "pr_merge_path",
+              "controlled_merge_basis",
+              "closeout_basis",
               "github_controlled_merge"
             ],
             "summary": "Host-backed binding, reconciliation, controlled merge, and closeout gates are available."
@@ -677,130 +956,51 @@
               "required": true,
               "defaulting": "host",
               "recommended_action": "enable controlled merge binding and required host gates"
+            },
+            {
+              "id": "host_enforced_control_plane",
+              "layer": "github-profile",
+              "required": true,
+              "defaulting": "host",
+              "recommended_action": "verify branch protection or ruleset enforcement plus required checks before claiming strong governance"
+            },
+            {
+              "id": "pr_merge_path",
+              "layer": "github-profile",
+              "required": true,
+              "defaulting": "host",
+              "recommended_action": "prove the PR merge path is host-owned and readable before strong governance"
+            },
+            {
+              "id": "controlled_merge_basis",
+              "layer": "github-profile",
+              "required": true,
+              "defaulting": "host",
+              "recommended_action": "prove controlled merge depends on verified host checks instead of local aliases"
+            },
+            {
+              "id": "closeout_basis",
+              "layer": "github-profile",
+              "required": true,
+              "defaulting": "host",
+              "recommended_action": "prove closeout consumes merge commit and reconciliation basis before strong governance"
             }
           ]
         },
         "missing_by_level": {
-          "light": [
-            "work_item",
-            "recovery",
-            "status_surface",
-            "review"
-          ],
-          "standard": [
-            "light",
-            "fr_work_item_layer",
-            "spec_path",
-            "plan_path",
-            "spec_gate",
-            "basic_host_binding",
-            "closeout_reconciliation_read"
-          ],
-          "strong": [
-            "standard",
-            "repo_interface",
-            "repo_interop",
-            "github_controlled_merge"
-          ]
+          "light": [],
+          "standard": [],
+          "strong": []
         },
         "missing_details_by_level": {
-          "light": [
-            {
-              "id": "work_item",
-              "layer": "core",
-              "required": true,
-              "defaulting": "generated",
-              "recommended_action": "run loom-init or restore the Work Item carrier"
-            },
-            {
-              "id": "recovery",
-              "layer": "core",
-              "required": true,
-              "defaulting": "generated",
-              "recommended_action": "restore the recovery carrier"
-            },
-            {
-              "id": "status_surface",
-              "layer": "core",
-              "required": true,
-              "defaulting": "generated",
-              "recommended_action": "restore the status surface carrier"
-            },
-            {
-              "id": "review",
-              "layer": "core",
-              "required": true,
-              "defaulting": "generated",
-              "recommended_action": "restore the review carrier"
-            }
-          ],
-          "standard": [
-            {
-              "id": "fr_work_item_layer",
-              "layer": "github-profile",
-              "required": true,
-              "defaulting": "profile",
-              "recommended_action": "declare the FR -> Work Item split through the GitHub profile upgrade path"
-            },
-            {
-              "id": "spec_path",
-              "layer": "core",
-              "required": true,
-              "defaulting": "generated",
-              "recommended_action": "install formal spec scaffold"
-            },
-            {
-              "id": "plan_path",
-              "layer": "core",
-              "required": true,
-              "defaulting": "generated",
-              "recommended_action": "install execution plan scaffold"
-            },
-            {
-              "id": "spec_gate",
-              "layer": "core",
-              "required": true,
-              "defaulting": "generated",
-              "recommended_action": "record or restore the spec review gate"
-            },
-            {
-              "id": "basic_host_binding",
-              "layer": "github-profile",
-              "required": true,
-              "defaulting": "profile",
-              "recommended_action": "run governance-profile binding and repair missing host bindings"
-            },
-            {
-              "id": "closeout_reconciliation_read",
-              "layer": "github-profile",
-              "required": true,
-              "defaulting": "profile",
-              "recommended_action": "install repo interop so closeout can consume reconciliation"
-            }
-          ],
-          "strong": [
-            {
-              "id": "repo_interface",
-              "layer": "repo-owned-residue",
-              "required": true,
-              "defaulting": "scaffold",
-              "recommended_action": "install or repair the repo companion interface"
-            },
-            {
-              "id": "repo_interop",
-              "layer": "repo-owned-residue",
-              "required": true,
-              "defaulting": "scaffold",
-              "recommended_action": "install or repair the repo interop contract"
-            },
-            {
-              "id": "github_controlled_merge",
-              "layer": "github-profile",
-              "required": true,
-              "defaulting": "host",
-              "recommended_action": "enable controlled merge binding and required host gates"
-            }
-          ]
+          "light": [],
+          "standard": [],
+          "strong": []
+        },
+        "fresh_adoption": {
+          "repository_mode": "complex-existing",
+          "max_default_maturity": "light",
+          "applied": false
         },
         "gate_rollout": {
           "schema_version": "loom-adoption-gate-rollout/v1",
@@ -825,7 +1025,7 @@
           "blocking_preconditions": [
             {
               "id": "strong_maturity",
-              "status": "missing",
+              "status": "pass",
               "layer": "github-profile",
               "recommended_action": "upgrade the repository to strong maturity before enabling blocking gates"
             },
@@ -833,7 +1033,7 @@
               "id": "adversarial_adoption_checks",
               "status": "missing",
               "layer": "core",
-              "recommended_action": "run the Loom-owned Syvert-style adversarial adoption fixture and record the validation evidence"
+              "recommended_action": "run the Loom-owned strong-governance adversarial adoption fixture and record the validation evidence"
             },
             {
               "id": "rollback_switch",
@@ -850,54 +1050,17 @@
         }
       }
     },
-    "summary": "resume chain is only partially supported because governance carriers or GitHub control-plane signals are incomplete.",
-    "missing_inputs": [
-      "no stable Loom carriers are readable yet",
-      "host binding: work_item"
-    ]
+    "summary": "resume chain is readable and the current governance carriers can support continued execution.",
+    "missing_inputs": []
   },
   "maturity_upgrade_path": {
-    "result": "block",
-    "current": "unadopted",
-    "next": "light",
-    "missing_inputs": [
-      "work_item",
-      "recovery",
-      "status_surface",
-      "review"
-    ],
-    "missing_details": [
-      {
-        "id": "work_item",
-        "layer": "core",
-        "required": true,
-        "defaulting": "generated",
-        "recommended_action": "run loom-init or restore the Work Item carrier"
-      },
-      {
-        "id": "recovery",
-        "layer": "core",
-        "required": true,
-        "defaulting": "generated",
-        "recommended_action": "restore the recovery carrier"
-      },
-      {
-        "id": "status_surface",
-        "layer": "core",
-        "required": true,
-        "defaulting": "generated",
-        "recommended_action": "restore the status surface carrier"
-      },
-      {
-        "id": "review",
-        "layer": "core",
-        "required": true,
-        "defaulting": "generated",
-        "recommended_action": "restore the review carrier"
-      }
-    ],
-    "fallback_to": "adoption",
-    "upgrade_entry": "python3 .loom/bin/loom_flow.py governance-profile upgrade --target . --to light --dry-run",
+    "result": "pass",
+    "current": "strong",
+    "next": null,
+    "missing_inputs": [],
+    "missing_details": [],
+    "fallback_to": null,
+    "upgrade_entry": null,
     "validation_entries": [
       "python3 .loom/bin/loom_flow.py governance-profile status --target .",
       "python3 .loom/bin/loom_flow.py governance-profile upgrade-plan --target ."
@@ -925,7 +1088,7 @@
       "blocking_preconditions": [
         {
           "id": "strong_maturity",
-          "status": "missing",
+          "status": "pass",
           "layer": "github-profile",
           "recommended_action": "upgrade the repository to strong maturity before enabling blocking gates"
         },
@@ -933,7 +1096,7 @@
           "id": "adversarial_adoption_checks",
           "status": "missing",
           "layer": "core",
-          "recommended_action": "run the Loom-owned Syvert-style adversarial adoption fixture and record the validation evidence"
+          "recommended_action": "run the Loom-owned strong-governance adversarial adoption fixture and record the validation evidence"
         },
         {
           "id": "rollback_switch",
