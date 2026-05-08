@@ -70,6 +70,8 @@
     "shared/references/adoption/lightweight-retrofit-default.md",
     "shared/references/adoption/deep-existing-repo-default.md",
     "shared/references/adoption/routing-and-checkpoints.md",
+    "shared/references/adoption/repo-companion-contract.md",
+    "shared/references/adoption/repo-interop-contract.md",
     "loom-init",
     "loom-adopt",
     "loom-resume",

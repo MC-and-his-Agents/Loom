@@ -204,7 +204,14 @@ REPO_INTERFACE_GATE_TYPES = {
 REPO_INTERFACE_CONTEXT_TYPES = {"string", "integer", "number", "boolean"}
 REPO_INTERFACE_MANIFEST_KEYS = {"schema_version", "companion_entry", "repo_interface"}
 REPO_INTERFACE_V1_KEYS = {"schema_version", "companion_entry", "repo_specific_requirements", "specialized_gates"}
-REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {"review_instruction_locators", "metadata_contract", "context_schema"}
+REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {
+    "review_instruction_locators",
+    "metadata_contract",
+    "context_schema",
+    "dynamic_tool_locators",
+}
+DECLARED_LOCATOR_REQUIREMENTS = {"required", "optional", "advisory"}
+DECLARED_LOCATOR_OWNERS = {"repo", "repo-companion", "host", "host-adapter", "platform", "external-tool"}
 REPO_INTEROP_AVAILABILITY = {"absent", "incomplete", "present"}
 REPO_INTEROP_SCHEMA = "loom-repo-interop/v1"
 REPO_INTEROP_KEYS = {"schema_version", "host_adapters", "repo_native_carriers", "shadow_surfaces"}
@@ -885,21 +892,82 @@ def validate_context_schema(
     return missing_inputs
 
 
+def locator_field_missing(value: object) -> bool:
+    return not isinstance(value, str) or not value.strip()
+
+
+def validate_dynamic_tool_locator(
+    *,
+    root: Path,
+    entry: object,
+    index: int,
+) -> tuple[list[str], list[str]]:
+    prefix = f"dynamic_tool_locators[{index}]"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"], []
+    entry_id = entry.get("id")
+    locator_label = f"{prefix} `{entry_id}` locator" if isinstance(entry_id, str) and entry_id.strip() else f"{prefix} locator"
+    blocking: list[str] = []
+    optional: list[str] = []
+    for field in ("id", "summary", "owner", "requirement", "surface", "fallback_to"):
+        value = entry.get(field)
+        if not isinstance(value, str) or not value.strip():
+            blocking.append(f"{prefix} missing `{field}`")
+    owner = entry.get("owner")
+    if owner not in DECLARED_LOCATOR_OWNERS:
+        blocking.append(f"{prefix} owner must stay repo/host/platform-owned, not Loom core")
+    requirement = entry.get("requirement")
+    if requirement not in DECLARED_LOCATOR_REQUIREMENTS:
+        blocking.append(f"{prefix} requirement must be `required`, `optional`, or `advisory`")
+    surface = entry.get("surface")
+    if surface not in REPO_INTEROP_COLLECTION_SURFACES:
+        blocking.append(
+            f"{prefix} surface must be one of `admission`, `pre_review`, `review`, `build`, `merge_ready`, `closeout`"
+        )
+    locator_value = entry.get("locator")
+    locator, target = resolve_locator(root, locator_value)
+    locator_error: str | None = None
+    locator_error_is_optional = False
+    if locator_field_missing(locator_value):
+        locator_error = f"{locator_label} missing `locator`"
+        locator_error_is_optional = requirement in {"optional", "advisory"}
+    elif locator is None or target is None:
+        locator_error = locator_boundary_error(locator_value, label=locator_label)
+    elif not target.exists():
+        locator_error = f"{prefix} locator points to missing path `{locator}`"
+        locator_error_is_optional = requirement in {"optional", "advisory"}
+    if locator_error:
+        if locator_error_is_optional:
+            optional.append(locator_error)
+        else:
+            blocking.append(locator_error)
+    return blocking, optional
+
+
 def validate_repo_interop_collection_entry(
     *,
     root: Path,
     collection: str,
     entry: object,
     index: int,
-) -> list[str]:
+) -> tuple[list[str], list[str]]:
     prefix = f"{collection}[{index}]"
     if not isinstance(entry, dict):
-        return [f"{prefix} must be an object"]
+        return [f"{prefix} must be an object"], []
+    entry_id = entry.get("id")
+    locator_label = f"{prefix} `{entry_id}` locator" if isinstance(entry_id, str) and entry_id.strip() else f"{prefix} locator"
     missing_inputs: list[str] = []
-    for field in ("id", "summary", "locator"):
+    missing_optional: list[str] = []
+    for field in ("id", "summary", "owner", "requirement", "fallback_to"):
         value = entry.get(field)
         if not isinstance(value, str) or not value.strip():
             missing_inputs.append(f"{prefix} missing `{field}`")
+    owner = entry.get("owner")
+    if owner not in DECLARED_LOCATOR_OWNERS:
+        missing_inputs.append(f"{prefix} owner must stay repo/host/platform-owned, not Loom core")
+    requirement = entry.get("requirement")
+    if requirement not in DECLARED_LOCATOR_REQUIREMENTS:
+        missing_inputs.append(f"{prefix} requirement must be `required`, `optional`, or `advisory`")
     surfaces = entry.get("surfaces")
     if not isinstance(surfaces, list) or not surfaces:
         missing_inputs.append(f"{prefix} must include `surfaces` as a non-empty list")
@@ -909,12 +977,24 @@ def validate_repo_interop_collection_entry(
                 missing_inputs.append(
                     f"{prefix}.surfaces[{surface_index}] must be one of `admission`, `pre_review`, `review`, `build`, `merge_ready`, `closeout`"
                 )
-    locator, target = resolve_locator(root, entry.get("locator"))
-    if locator is None or target is None:
-        missing_inputs.append(locator_boundary_error(entry.get("locator"), label=f"{prefix} locator"))
+    locator_value = entry.get("locator")
+    locator, target = resolve_locator(root, locator_value)
+    locator_error: str | None = None
+    locator_error_is_optional = False
+    if locator_field_missing(locator_value):
+        locator_error = f"{locator_label} missing `locator`"
+        locator_error_is_optional = requirement in {"optional", "advisory"}
+    elif locator is None or target is None:
+        locator_error = locator_boundary_error(locator_value, label=locator_label)
     elif not target.exists():
-        missing_inputs.append(f"{prefix} locator points to missing path `{locator}`")
-    return missing_inputs
+        locator_error = f"{prefix} locator points to missing path `{locator}`"
+        locator_error_is_optional = requirement in {"optional", "advisory"}
+    if locator_error:
+        if locator_error_is_optional:
+            missing_optional.append(locator_error)
+        else:
+            missing_inputs.append(locator_error)
+    return missing_inputs, missing_optional
 
 
 def validate_shadow_surface(
@@ -950,10 +1030,13 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
         "companion_entry": carrier_entry("missing", "unknown", "repo companion manifest"),
         "repo_specific_requirements": carrier_entry("missing", "unknown", "repo companion interface"),
         "specialized_gates": carrier_entry("missing", "unknown", "repo companion interface"),
+        "dynamic_tool_locators": carrier_entry("missing", "unknown", "repo companion interface"),
         "summary": "no repo companion interface is declared for this repository.",
         "missing_inputs": [],
+        "missing_optional": [],
     }
     missing_inputs: list[str] = []
+    missing_optional: list[str] = []
 
     if not manifest_path.exists():
         if has_legacy_companion_docs(root):
@@ -1003,6 +1086,7 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
     )
     repo_interface_surface["repo_specific_requirements"] = manifest_repo_interface
     repo_interface_surface["specialized_gates"] = manifest_repo_interface.copy()
+    repo_interface_surface["dynamic_tool_locators"] = manifest_repo_interface.copy()
     if manifest_repo_interface_error:
         missing_inputs.append(manifest_repo_interface_error)
 
@@ -1098,6 +1182,19 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
                             entry=context_schema,
                         )
                     )
+                dynamic_tool_locators = interface_payload.get("dynamic_tool_locators")
+                if dynamic_tool_locators is not None:
+                    if not isinstance(dynamic_tool_locators, list):
+                        missing_inputs.append("dynamic_tool_locators must be a list")
+                    else:
+                        for index, entry in enumerate(dynamic_tool_locators):
+                            blocking, optional = validate_dynamic_tool_locator(
+                                root=root,
+                                entry=entry,
+                                index=index,
+                            )
+                            missing_inputs.extend(blocking)
+                            missing_optional.extend(optional)
 
     if missing_inputs:
         repo_interface_surface["availability"] = "incomplete"
@@ -1107,9 +1204,12 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
     else:
         repo_interface_surface["availability"] = "present"
         repo_interface_surface["summary"] = (
-            "repo companion manifest and machine-readable repo interface are readable."
+            "repo companion interface is readable with optional tool locator advisories."
+            if missing_optional
+            else "repo companion manifest and machine-readable repo interface are readable."
         )
     repo_interface_surface["missing_inputs"] = list(dict.fromkeys(missing_inputs))
+    repo_interface_surface["missing_optional"] = list(dict.fromkeys(missing_optional))
     return repo_interface_surface, list(dict.fromkeys(missing_inputs))
 
 
@@ -1123,8 +1223,10 @@ def detect_repo_interop(root: Path) -> tuple[dict[str, Any], list[str]]:
         "shadow_surfaces": carrier_entry("missing", "unknown", "repo interop contract"),
         "summary": "no repo interop contract is declared for this repository.",
         "missing_inputs": [],
+        "missing_optional": [],
     }
     missing_inputs: list[str] = []
+    missing_optional: list[str] = []
 
     if not interop_path.exists():
         return repo_interop_surface, missing_inputs
@@ -1159,28 +1261,28 @@ def detect_repo_interop(root: Path) -> tuple[dict[str, Any], list[str]]:
             missing_inputs.append("repo interop contract must include `host_adapters` as a list")
         else:
             for index, entry in enumerate(host_adapters):
-                missing_inputs.extend(
-                    validate_repo_interop_collection_entry(
-                        root=root,
-                        collection="host_adapters",
-                        entry=entry,
-                        index=index,
-                    )
+                blocking, optional = validate_repo_interop_collection_entry(
+                    root=root,
+                    collection="host_adapters",
+                    entry=entry,
+                    index=index,
                 )
+                missing_inputs.extend(blocking)
+                missing_optional.extend(optional)
 
         repo_native_carriers = interop_payload.get("repo_native_carriers")
         if not isinstance(repo_native_carriers, list):
             missing_inputs.append("repo interop contract must include `repo_native_carriers` as a list")
         else:
             for index, entry in enumerate(repo_native_carriers):
-                missing_inputs.extend(
-                    validate_repo_interop_collection_entry(
-                        root=root,
-                        collection="repo_native_carriers",
-                        entry=entry,
-                        index=index,
-                    )
+                blocking, optional = validate_repo_interop_collection_entry(
+                    root=root,
+                    collection="repo_native_carriers",
+                    entry=entry,
+                    index=index,
                 )
+                missing_inputs.extend(blocking)
+                missing_optional.extend(optional)
 
         shadow_surfaces = interop_payload.get("shadow_surfaces")
         if not isinstance(shadow_surfaces, dict):
@@ -1209,8 +1311,13 @@ def detect_repo_interop(root: Path) -> tuple[dict[str, Any], list[str]]:
         repo_interop_surface["summary"] = "repo interop contract exists, but the machine-readable read surface is incomplete."
     else:
         repo_interop_surface["availability"] = "present"
-        repo_interop_surface["summary"] = "repo interop contract is readable for host adapters, repo-native carriers, and shadow parity."
+        repo_interop_surface["summary"] = (
+            "repo interop contract is readable with optional locator advisories."
+            if missing_optional
+            else "repo interop contract is readable for host adapters, repo-native carriers, and shadow parity."
+        )
     repo_interop_surface["missing_inputs"] = list(dict.fromkeys(missing_inputs))
+    repo_interop_surface["missing_optional"] = list(dict.fromkeys(missing_optional))
     return repo_interop_surface, list(dict.fromkeys(missing_inputs))
 
 

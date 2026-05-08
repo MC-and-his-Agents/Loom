@@ -1143,7 +1143,7 @@ def require_repo_interface_payload(
         payload=payload.get("manifest"),
         allowed_statuses={"present", "missing"},
     )
-    for key in ("companion_entry", "repo_specific_requirements", "specialized_gates"):
+    for key in ("companion_entry", "repo_specific_requirements", "specialized_gates", "dynamic_tool_locators"):
         require_locator_entry(
             failures,
             category=category,
@@ -1155,6 +1155,8 @@ def require_repo_interface_payload(
         failures.append(Failure(category, f"{context} must include non-empty `summary`"))
     if not isinstance(payload.get("missing_inputs"), list):
         failures.append(Failure(category, f"{context} must include `missing_inputs` as a list"))
+    if not isinstance(payload.get("missing_optional"), list):
+        failures.append(Failure(category, f"{context} must include `missing_optional` as a list"))
 
 
 def require_repo_interop_payload(
@@ -1188,6 +1190,8 @@ def require_repo_interop_payload(
         failures.append(Failure(category, f"{context} must include non-empty `summary`"))
     if not isinstance(payload.get("missing_inputs"), list):
         failures.append(Failure(category, f"{context} must include `missing_inputs` as a list"))
+    if not isinstance(payload.get("missing_optional"), list):
+        failures.append(Failure(category, f"{context} must include `missing_optional` as a list"))
 
 
 def require_repo_specific_requirements_payload(
@@ -6791,6 +6795,34 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
                 }
             ]
         },
+        "dynamic_tool_locators": [
+            {
+                "id": "repo-review-tool",
+                "summary": "Declare a repo-owned review helper locator without executing it.",
+                "locator": ".loom/companion/review.md",
+                "owner": "repo-companion",
+                "requirement": "required",
+                "surface": "review",
+                "fallback_to": "build",
+            },
+            {
+                "id": "optional-merge-tool",
+                "summary": "Declare an optional merge helper locator.",
+                "locator": ".loom/companion/missing-optional-tool.md",
+                "owner": "repo-companion",
+                "requirement": "optional",
+                "surface": "merge_ready",
+                "fallback_to": "merge",
+            },
+            {
+                "id": "advisory-build-tool",
+                "summary": "Declare an advisory helper with no installed locator.",
+                "owner": "repo-companion",
+                "requirement": "advisory",
+                "surface": "build",
+                "fallback_to": "build",
+            },
+        ],
     }
 
     with tempfile.TemporaryDirectory(prefix="loom-check-repo-companion-") as tmp:
@@ -6917,6 +6949,17 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
                         }
                     ]
                 },
+                "dynamic_tool_locators": [
+                    {
+                        "id": "bad-tool",
+                        "summary": "Broken tool locator",
+                        "locator": "../outside-tool.json",
+                        "owner": "loom-core",
+                        "requirement": "required",
+                        "surface": "attempt_time",
+                        "fallback_to": "host-action",
+                    }
+                ],
             },
         )
         invalid_v2_surface = build_governance_surface(invalid_v2_target)
@@ -6929,6 +6972,34 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
         )
         if not isinstance(invalid_v2_interface, dict) or invalid_v2_interface.get("availability") != "incomplete":
             failures.append(Failure("repo-companion", "invalid v2 repo companion interface sample must report `availability: incomplete`"))
+
+        invalid_optional_escape_target = base / "invalid-optional-dynamic-tool-escape"
+        shutil.copytree(example_target, invalid_optional_escape_target)
+        install_companion(
+            invalid_optional_escape_target,
+            manifest=valid_manifest,
+            repo_interface=valid_interface_v2,
+        )
+        interface_path = invalid_optional_escape_target / ".loom" / "companion" / "repo-interface.json"
+        interface_payload = json.loads(interface_path.read_text(encoding="utf-8"))
+        interface_payload["dynamic_tool_locators"] = [
+            {
+                "id": "optional-escaped-tool",
+                "summary": "Optional tool locator must still respect repository path boundaries.",
+                "locator": "../outside-tool.json",
+                "owner": "repo-companion",
+                "requirement": "optional",
+                "surface": "review",
+                "fallback_to": "build",
+            }
+        ]
+        write_json(interface_path, interface_payload)
+        invalid_optional_escape_surface = build_governance_surface(invalid_optional_escape_target)
+        invalid_optional_interface = invalid_optional_escape_surface.get("repo_interface")
+        if not isinstance(invalid_optional_interface, dict) or invalid_optional_interface.get("availability") != "incomplete":
+            failures.append(Failure("repo-companion", "optional dynamic tool path escape must fail closed"))
+        elif "outside-tool.json" not in json.dumps(invalid_optional_interface.get("missing_inputs", []), ensure_ascii=False):
+            failures.append(Failure("repo-companion", "optional dynamic tool path escape must stay in blocking missing_inputs"))
 
         present_v1_target = base / "present-v1"
         shutil.copytree(example_target, present_v1_target)
@@ -6965,6 +7036,14 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
         )
         if not isinstance(present_interface, dict) or present_interface.get("availability") != "present":
             failures.append(Failure("repo-companion", "present v2 repo companion sample must report `availability: present`"))
+        elif "missing-optional-tool.md" not in json.dumps(present_interface.get("missing_optional", []), ensure_ascii=False):
+            failures.append(Failure("repo-companion", "optional dynamic tool locator gaps must stay in missing_optional"))
+        elif "advisory-build-tool" not in json.dumps(present_interface.get("missing_optional", []), ensure_ascii=False):
+            failures.append(Failure("repo-companion", "advisory dynamic tool missing locator field must stay in missing_optional"))
+        if isinstance(present_interface, dict) and "missing-optional-tool.md" in json.dumps(present_interface.get("missing_inputs", []), ensure_ascii=False):
+            failures.append(Failure("repo-companion", "optional dynamic tool locator gaps must not pollute core missing_inputs"))
+        if isinstance(present_interface, dict) and "advisory-build-tool" in json.dumps(present_interface.get("missing_inputs", []), ensure_ascii=False):
+            failures.append(Failure("repo-companion", "advisory dynamic tool missing locator field must not pollute core missing_inputs"))
 
         review_requirements = repo_specific_requirements_payload(
             present_interface,
@@ -7124,6 +7203,26 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
                 "summary": "Read guardian review verdicts without reimplementing the host action.",
                 "surfaces": ["review", "merge_ready"],
                 "locator": "host/guardian-review.json",
+                "owner": "host-adapter",
+                "requirement": "required",
+                "fallback_to": "build",
+            },
+            {
+                "id": "optional-host-summary",
+                "summary": "Read an optional host summary when the repo declares one.",
+                "surfaces": ["closeout"],
+                "locator": "host/missing-optional-summary.json",
+                "owner": "host-adapter",
+                "requirement": "optional",
+                "fallback_to": "manual-reconciliation",
+            },
+            {
+                "id": "advisory-host-note",
+                "summary": "Read an advisory host note when available.",
+                "surfaces": ["review"],
+                "owner": "host-adapter",
+                "requirement": "advisory",
+                "fallback_to": "review",
             }
         ],
         "repo_native_carriers": [
@@ -7132,6 +7231,9 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
                 "summary": "Read repo-native governance status output without migrating carriers.",
                 "surfaces": ["admission", "review", "merge_ready", "closeout"],
                 "locator": "native/status",
+                "owner": "repo",
+                "requirement": "required",
+                "fallback_to": "manual-reconciliation",
             }
         ],
         "shadow_surfaces": {
@@ -7187,6 +7289,9 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
                         "summary": "Broken adapter",
                         "surfaces": ["guardian"],
                         "locator": "host/missing.json",
+                        "owner": "host-adapter",
+                        "requirement": "required",
+                        "fallback_to": "build",
                     }
                 ],
                 "repo_native_carriers": [],
@@ -7210,6 +7315,30 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
         if not isinstance(invalid_interop, dict) or invalid_interop.get("availability") != "incomplete":
             failures.append(Failure("repo-interop", "invalid repo interop sample must report `availability: incomplete`"))
 
+        invalid_optional_escape_target = base / "invalid-optional-host-escape"
+        shutil.copytree(example_target, invalid_optional_escape_target)
+        install_interop(invalid_optional_escape_target, interop=valid_interop)
+        interop_path = invalid_optional_escape_target / ".loom" / "companion" / "interop.json"
+        interop_payload = json.loads(interop_path.read_text(encoding="utf-8"))
+        interop_payload["host_adapters"] = [
+            {
+                "id": "optional-escaped-host",
+                "summary": "Optional host adapter locator must still respect repository path boundaries.",
+                "surfaces": ["review"],
+                "locator": "../outside-host.json",
+                "owner": "host-adapter",
+                "requirement": "optional",
+                "fallback_to": "build",
+            }
+        ]
+        write_json(interop_path, interop_payload)
+        invalid_optional_escape_surface = build_governance_surface(invalid_optional_escape_target)
+        invalid_optional_interop = invalid_optional_escape_surface.get("repo_interop")
+        if not isinstance(invalid_optional_interop, dict) or invalid_optional_interop.get("availability") != "incomplete":
+            failures.append(Failure("repo-interop", "optional host action path escape must fail closed"))
+        elif "outside-host.json" not in json.dumps(invalid_optional_interop.get("missing_inputs", []), ensure_ascii=False):
+            failures.append(Failure("repo-interop", "optional host action path escape must stay in blocking missing_inputs"))
+
         present_target = base / "present"
         shutil.copytree(example_target, present_target)
         install_interop(present_target, interop=valid_interop)
@@ -7223,6 +7352,14 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
         )
         if not isinstance(present_interop, dict) or present_interop.get("availability") != "present":
             failures.append(Failure("repo-interop", "present repo interop sample must report `availability: present`"))
+        elif "missing-optional-summary.json" not in json.dumps(present_interop.get("missing_optional", []), ensure_ascii=False):
+            failures.append(Failure("repo-interop", "optional host action locator gaps must stay in missing_optional"))
+        elif "advisory-host-note" not in json.dumps(present_interop.get("missing_optional", []), ensure_ascii=False):
+            failures.append(Failure("repo-interop", "advisory host action missing locator field must stay in missing_optional"))
+        if isinstance(present_interop, dict) and "missing-optional-summary.json" in json.dumps(present_interop.get("missing_inputs", []), ensure_ascii=False):
+            failures.append(Failure("repo-interop", "optional host action locator gaps must not pollute core missing_inputs"))
+        if isinstance(present_interop, dict) and "advisory-host-note" in json.dumps(present_interop.get("missing_inputs", []), ensure_ascii=False):
+            failures.append(Failure("repo-interop", "advisory host action missing locator field must not pollute core missing_inputs"))
 
         parity_payload, error = load_command_json(
             root,
@@ -7651,6 +7788,9 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                 "summary": "Read repo-native review verdicts without reimplementing the host action.",
                 "surfaces": ["review", "merge_ready"],
                 "locator": "host/guardian-review.json",
+                "owner": "host-adapter",
+                "requirement": "required",
+                "fallback_to": "review",
             }
         ],
         "repo_native_carriers": [
@@ -7659,6 +7799,9 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                 "summary": "Read repo-native governance status output without migrating carriers.",
                 "surfaces": ["admission", "review", "merge_ready", "closeout"],
                 "locator": "native/status",
+                "owner": "repo",
+                "requirement": "required",
+                "fallback_to": "manual-reconciliation",
             }
         ],
         "shadow_surfaces": {
@@ -7747,6 +7890,7 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                         }
                     ]
                 },
+                "dynamic_tool_locators": [],
             },
         )
 
