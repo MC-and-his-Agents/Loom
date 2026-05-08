@@ -57,6 +57,37 @@ Loom 把 review 分成四层：
 
 成熟既有仓库可以通过 repo companion 的 `review_instruction_locators` 声明 spec review 与 implementation review 的 repo-owned instruction 入口。正式 review 必须先消费这些 locator；缺失、不可读或越界时 fail closed，不得猜测 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 路径。
 
+### 2.1 Review engine profile contract
+
+`review run` 在调用 Codex-backed reviewer 前必须解析稳定 profile，不得继承本机 `~/.codex/config.toml` 的默认 model 或 reasoning effort。
+
+Resolved profile 的 schema 为 `loom-review-engine-profile/v1`，至少包含：
+
+- `adapter`: 当前固定为 `loom/default-codex`
+- `engine`: 当前固定为 `codex`
+- `profile_id`: `default`、`high-risk`、`spec-review` 或 `repeated-blocker`
+- `model`: 显式传给 engine 的 model
+- `reasoning_effort`: `low`、`medium`、`high` 或 `xhigh`
+- `timeout_seconds`: engine 执行超时
+- `context_policy`: 本次 review 允许消费的上下文策略
+- `selection_reason`: 选择该 profile 的原因
+- `override_reason`: 若发生人工或 repo override，必须为非空；无 override 时为 `null`
+
+默认选择规则：
+
+- `spec-review`: `kind = spec_review` 时使用，reasoning 至少为 `high`
+- `high-risk`: active item 涉及 shared contract、security、permission、approval、sandbox、host adapter、runtime 或 release 边界时使用
+- `repeated-blocker`: active item 已标记重复 blocker / root-cause review 时使用
+- `default`: 普通 implementation review 使用
+
+允许通过 `review run --engine-profile`、`--engine-model` 或 `--engine-reasoning` override，但必须同时提供 `--engine-override-reason`。override evidence 必须记录 previous profile、selected profile 和 reason。
+
+Resolved profile 必须同时出现在：
+
+- `engine.profile`
+- `.loom/runtime/review/<item>/<head>/engine-metadata.json`
+- `review_record_input.engine_profile`
+
 ## 3. review record 最小字段
 
 review record 至少应包含：
