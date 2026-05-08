@@ -12,10 +12,10 @@
 - Validation Entry: make check
 - Closing Condition: Review context pack schema is documented; review run writes context pack evidence; prompt consumes recent findings and dispositions; repeated blocker signal is advisory evidence with source locators; fixtures prove repeated blockers recommend root-cause handling; generated skill surfaces are synchronized; make check passes cleanly; and the #679 batch PR absorbs #680-#683.
 - Current Checkpoint: build checkpoint
-- Current Stop: WI-679 context pack implementation and fixtures are drafted on the batch branch; generated skill surfaces are synchronized.
+- Current Stop: WI-679 context pack implementation, fixtures, generated surfaces, installer version, and review evidence are aligned on the batch branch.
 - Next Step: Run installer/version checks, refresh review evidence, run merge-ready, open the #679 batch PR, merge to main, then close #680-#683.
 - Blockers: None recorded.
-- Latest Validation Summary: python3 -m py_compile passed for changed loom_flow and loom_check scripts; python3 tools/skills_surface.py check passed; python3 tools/loom_check.py passed with 27 surfaces.
+- Latest Validation Summary: python3 -m py_compile passed for changed loom_flow and loom_check scripts; python3 tools/skills_surface.py check passed; python3 tools/loom_check.py passed with 27 surfaces; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed; npm run check:payload --prefix packages/loom-installer passed.
 - Recovery Boundary: Branch work/679-review-context-pack-repeated-blocker; active item WI-679; context pack and repeated blocker signal are input evidence only and must not replace review, recovery, merge-ready, closeout, issue, or PR truth.
 - Current Lane: v0.8.0 / #531 / #679 review context pack and repeated blocker signal
 

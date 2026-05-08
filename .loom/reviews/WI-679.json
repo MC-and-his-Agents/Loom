@@ -1,39 +1,23 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-679",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "504099084c921d48ea0026609a10014c126f118b",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
-      }
-    },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "#679 implementation writes review context pack input evidence, feeds recent findings and repeated blocker guidance into the default prompt, records context pack locators in engine evidence, and adds fixtures for repeated/root-cause candidates.",
+  "reviewer": "codex",
+  "reviewed_head": "c82f5e84787a2a65fec105e63bfdda7091523511",
+  "reviewed_validation_summary": "python3 -m py_compile passed for changed loom_flow and loom_check scripts; python3 tools/skills_surface.py check passed; python3 tools/loom_check.py passed with 27 surfaces; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed; npm run check:payload --prefix packages/loom-installer passed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-679.md",
+    "recovery_entry": ".loom/progress/WI-679.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "engine_adapter": "loom/default-codex",
+    "engine_evidence": ".loom/runtime/review/WI-679/c82f5e84787a2a65fec105e63bfdda7091523511/engine-metadata.json",
+    "normalized_findings": "not_applicable"
+  }
 }
