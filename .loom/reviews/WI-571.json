@@ -5,7 +5,7 @@
   "kind": "code_review",
   "summary": "#571 implementation defines policy_locators, policy_readiness, status/flow exposure, and missing/conflict/unsafe fixtures while preserving the host-adapter boundary and avoiding host permission or sandbox mutation.",
   "reviewer": "codex",
-  "reviewed_head": "fe184fa1107ea5839045ea852102feb7e690e56b",
+  "reviewed_head": "60bcff7f2d6740a7322295561a0b4f1896f256e2",
   "reviewed_validation_summary": "python3 -m py_compile passed for changed shared scripts; python3 tools/skills_surface.py check passed; policy fixture smoke returned failures 0; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed; npm run check:payload --prefix packages/loom-installer passed; python3 tools/loom_check.py passed with 26 surfaces; make check passed twice, with the second demo-bootstrap run reporting write.touched: [].",
   "fallback_to": null,
   "findings": [],
