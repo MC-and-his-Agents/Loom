@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-566
-- Goal: Deliver #566 dynamic tool handshake semantics for v0.8.0 / #531.
-- Scope: Define the dynamic tool handshake vocabulary, preserve the companion / interop declaration boundary, expose tool availability and failure summary in flow/status output, and validate unsupported, unavailable, and failed tool fixtures.
-- Execution Path: phase/v0.8.0/fr/566
+- Item ID: WI-571
+- Goal: Deliver #571 approval and sandbox policy read surface for v0.8.0 / #531.
+- Scope: Define approval/sandbox policy read contracts, preserve the host-adapter boundary, expose policy and risk summary in status/flow output, and validate missing/conflict/unsafe policy fixtures.
+- Execution Path: phase/v0.8.0/fr/571
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-566.md
-- Review Entry: .loom/reviews/WI-566.json
+- Recovery Entry: .loom/progress/WI-571.md
+- Review Entry: .loom/reviews/WI-571.json
 - Validation Entry: make check
-- Closing Condition: `tool_availability` exposes `advertised | unavailable | unsupported | failed`, required tool failure blocks the owning execution surface, optional/advisory failures remain advisory, status reads the latest derived summary, fixtures cover unsupported/unavailable/failed tools, `make check` passes cleanly, and the #566 batch PR absorbs #567-#570.
+- Closing Condition: `policy_readiness` exposes approval policy, sandbox policy, `declared | missing | conflict | unsafe`, and risk summary; required policy risk blocks the owning surface; optional/advisory policy risk remains advisory; status reads the latest derived summary; fixtures cover missing/conflict/unsafe policy; `make check` passes cleanly; and the #571 batch PR absorbs #572-#575.
 - Current Checkpoint: merge checkpoint
-- Current Stop: WI-566 dynamic tool handshake implementation, generated carriers, installer version bump, reviews, and verification evidence are aligned on the batch branch.
-- Next Step: Push the updated #566 PR, wait for host checks, merge to main, then run closeout for #567-#570.
+- Current Stop: WI-571 approval/sandbox policy read surface implementation, generated carriers, demo bootstrap artifacts, reviews, and validation evidence are aligned on the batch branch.
+- Next Step: Push the #571 branch, open the batch PR, wait for host checks, merge to main, then run closeout for #572-#575.
 - Blockers: None recorded.
-- Latest Validation Summary: make check passed on work/566-dynamic-tool-handshake-semantics with 26 loom_check surfaces before installer version bump; after bumping @mc-and-his-agents/loom-installer from 0.1.73 to 0.1.74, node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed, version_surface_check passed, check:payload passed, loom_status passed, and flow merge-ready passed with tool_availability result pass.
-- Recovery Boundary: Branch work/566-dynamic-tool-handshake-semantics; active item WI-566; dynamic tool handshake evidence is derived from companion locators and must not replace recovery truth, execution_attempt evidence, or retained host action results.
-- Current Lane: v0.8.0 / #531 / #566 dynamic tool handshake semantics
+- Latest Validation Summary: python3 -m py_compile passed for changed shared scripts; python3 tools/skills_surface.py check passed; policy fixture smoke returned failures 0; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed; npm run check:payload --prefix packages/loom-installer passed; python3 tools/loom_check.py passed with 26 surfaces; make check passed twice, with the second demo-bootstrap run reporting write.touched: [].
+- Recovery Boundary: Branch work/571-approval-sandbox-read-surface; active item WI-571; policy readiness evidence is derived from companion locators and must not replace recovery truth, execution_attempt evidence, retained host action results, or host permission/sandbox systems.
+- Current Lane: v0.8.0 / #531 / #571 approval and sandbox policy read surface
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-566.md
-- Dynamic Truth: .loom/progress/WI-566.md
+- Static Truth: .loom/work-items/WI-571.md
+- Dynamic Truth: .loom/progress/WI-571.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

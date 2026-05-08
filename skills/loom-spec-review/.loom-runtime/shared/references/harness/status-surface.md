@@ -78,6 +78,14 @@ Dynamic tool availability 也只能派生读取：
   - required 工具失败可阻断对应 execution surface；optional / advisory 工具失败只作为 advisory evidence
   - 不调用工具、不写 host result、不替代 `execution_attempt`
 
+Approval / sandbox policy 也只能派生读取：
+
+- `policy_readiness`
+  - 从 repo companion 的 `policy_locators` 与只读 policy declaration 派生
+  - 展示 approval policy、sandbox policy 与 risk summary
+  - required policy 的 `missing` / `conflict` / `unsafe` 可阻断对应 execution surface；optional / advisory policy risk 只作为 review input
+  - 不申请权限、不修改 sandbox、不替代宿主权限系统
+
 ## 3. 必备展示面
 
 统一状态面至少要展示：
@@ -95,6 +103,7 @@ Dynamic tool availability 也只能派生读取：
 - TDD 内环测试或等价检查的证据覆盖状态
 - fresh verification evidence 的 `head_sha` / 范围 / 摘要绑定
 - dynamic tool availability 与 failure summary
+- approval / sandbox policy 与 risk summary
 
 ## 4. `Runtime Evidence`
 

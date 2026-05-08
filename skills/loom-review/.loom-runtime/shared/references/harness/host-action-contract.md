@@ -15,7 +15,7 @@
 它同时冻结 v0.7 的 dynamic tool availability / host action declaration 边界：
 
 - 只声明 locator、owner、requirement、surface、fallback_to 与 fail-closed 强度
-- 不定义 attempt-time advertised / unavailable / unsupported / failed 结果词表；这些属于后续工具调用尝试合同
+- attempt-time advertised / unavailable / unsupported / failed 结果词表由 [dynamic-tool-handshake.md](./dynamic-tool-handshake.md) 承接
 - 不让 Loom 接管 host、platform 或 external tool 的 ownership
 
 ## 1. 能力定位
@@ -38,6 +38,12 @@ Loom 的宿主动作面不是新的 umbrella CLI，也不是宿主平台替身�
 - 工具 locator 通过 companion-owned `.loom/companion/repo-interface.json` 的 `dynamic_tool_locators` 声明
 - Loom 只校验 locator 是否可消费，不调用工具、不探测运行时可用性、不写入尝试结果
 
+当成熟既有仓库需要声明 approval / sandbox policy 读面时：
+
+- policy locator 通过 companion-owned `.loom/companion/repo-interface.json` 的 `policy_locators` 声明
+- host adapter 持有宿主具体 policy 名称、权限请求、sandbox 实现与执行细节
+- Loom 只消费抽象 `declared | missing | conflict | unsafe` 结果与 risk summary，不申请权限、不修改 sandbox、不写 host result
+
 具体专题落点仍保持拆分：
 
 - 对象 ownership 边界见 [host-lifecycle-boundary.md](./host-lifecycle-boundary.md)
@@ -45,6 +51,7 @@ Loom 的宿主动作面不是新的 umbrella CLI，也不是宿主平台替身�
 - 自动检查与 required checks 读面见 [automation-frontload.md](./automation-frontload.md)
 - drift taxonomy 见 [reconciliation-audit.md](./reconciliation-audit.md)
 - closeout 检查与 sync 顺序见 [closeout-gate.md](./closeout-gate.md)
+- approval / sandbox policy 读面见 [policy-read-surface.md](./policy-read-surface.md)
 
 ## 2. 覆盖范围
 
@@ -137,11 +144,13 @@ v0.7 只冻结 declaration-time locator contract。
 - locator 校验不得执行宿主动作、不得调用 dynamic tool、不得写 attempt-time result
 - retained host action result locator 留在 `.loom/companion/interop.json`
 - dynamic tool availability locator 留在 `.loom/companion/repo-interface.json`
+- approval / sandbox policy read locator 留在 `.loom/companion/repo-interface.json`
 
 明确排除：
 
 - 不定义 advertised / unavailable / unsupported / failed 等尝试期结果
 - 不在 Loom core 中定义 host/platform 的调用协议
+- 不定义宿主 approval policy 名称、sandbox 配置项或权限提升动作
 - 不把 optional/advisory 缺口升级成普通 PR blocking gate
 
 ## 6. Ownership Boundary

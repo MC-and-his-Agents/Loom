@@ -141,22 +141,25 @@
   "context_schema": {
     "fields": []
   },
-  "dynamic_tool_locators": []
+  "dynamic_tool_locators": [],
+  "policy_locators": []
 }
 ```
 
-`v2` 在 `v1` 之上新增四个可选顶层 section：
+`v2` 在 `v1` 之上新增五个可选顶层 section：
 
 - `review_instruction_locators`
 - `metadata_contract`
 - `context_schema`
 - `dynamic_tool_locators`
+- `policy_locators`
 
 稳定约束：
 
 - `metadata_contract` 与 `context_schema` 只在 `v2` 合法
 - `review_instruction_locators` 只在 `v2` 合法
 - `dynamic_tool_locators` 只在 `v2` 合法
+- `policy_locators` 只在 `v2` 合法
 - `v2` 不改变 `repo_specific_requirements` 与 `specialized_gates` 的既有纪律
 - `v2` 不把 repo runtime state、review summary、validation status 或 retained host action result 写入 `repo-interface.json`
 
@@ -261,7 +264,51 @@
 - `dynamic_tool_locators` 不得承载 attempt-time result、review summary、validation status 或 retained host action result
 - retained host action result locator 必须留在 [repo-interop-contract.md](./repo-interop-contract.md) 的 `host_adapters`
 
-### 4.6 `metadata_contract`
+### 4.6 `policy_locators`
+
+`policy_locators` 用于声明 approval / sandbox policy 的只读 locator。它回答的是：
+
+- Loom 应去哪里读取 approval 或 sandbox policy 声明
+- 该 policy 读面的真实 owner 是谁
+- 缺失、冲突或 unsafe 时按 required、optional 还是 advisory 处理
+- 缺失或阻断时回到哪个 Loom surface 或人工路径
+
+它不回答：
+
+- 宿主具体 approval policy 名称是什么
+- sandbox 如何实现或如何修改
+- Loom 是否应该申请权限、提升权限或改变宿主策略
+- retained host action result 应写在哪里
+
+`policy_locators[*]` 固定字段：
+
+- `id`
+- `summary`
+- `policy`
+- `locator`
+- `owner`
+- `requirement`
+- `surface`
+- `fallback_to`
+
+其中：
+
+- `policy` 只允许 `approval | sandbox`
+- `locator` 必须是仓内相对路径；绝对路径、越界或非法路径对所有 requirement 都必须 fail closed
+- `owner` 只允许 `repo | repo-companion | host | host-adapter | platform | external-tool`
+- `requirement` 只允许 `required | optional | advisory`
+- `surface` 只允许 `admission | pre_review | review | build | merge_ready | closeout`；policy locator 额外允许 `attempt_time` 表示适用于一次执行尝试的通用 policy read
+- `fallback_to` 只描述声明不可消费时的 Loom 回退面或人工路径，不描述宿主权限动作
+
+稳定约束：
+
+- locator 指向的 policy declaration 若存在，只能输出 `declared | missing | conflict | unsafe`，并由 `policy_readiness` 派生展示
+- required policy `missing` / `conflict` / `unsafe` 在 owning surface 下阻断；optional / advisory policy risk 只作为 review input 或 advisory evidence
+- `policy_locators` 不得承载 host approval result、sandbox mutation、review summary、validation status 或 retained host action result
+- retained host action result locator 必须留在 [repo-interop-contract.md](./repo-interop-contract.md) 的 `host_adapters`
+- policy 读面细节由 [policy-read-surface.md](../methodology/harness/policy-read-surface.md) 承接
+
+### 4.7 `metadata_contract`
 
 `metadata_contract` 用于声明 repo-specific metadata block 的 locator contract，而不是把这些字段抬升为 Loom core 默认字段或通用 schema。
 
@@ -306,7 +353,7 @@
 - 它们不得被回写成 Loom core 默认字段名
 - Loom 不为它们提供跨仓统一 taxonomy 承诺
 
-### 4.6.1 明确禁止上移的字段模式
+### 4.7.1 明确禁止上移的字段模式
 
 `metadata_contract` 不得承接以下字段模式：
 
@@ -329,7 +376,7 @@
 
 它们不能因为“看起来像 metadata”就被回塞到 `repo-interface.json`。
 
-### 4.6.2 与 `context_schema` 的边界
+### 4.7.2 与 `context_schema` 的边界
 
 `metadata_contract` 与 `context_schema` 的分工固定如下：
 
@@ -344,7 +391,7 @@
 - 不得在 `context_schema` 中伪装声明 repo-native metadata block 的 authority locator
 - 不得把同一字段同时当作“必传上下文字段”和“repo-local metadata result 字段”写成单一 Loom core 默认概念
 
-### 4.6.3 与 `interop.json` 的边界
+### 4.7.3 与 `interop.json` 的边界
 
 `metadata_contract` 不得声明以下 locator：
 
@@ -363,7 +410,7 @@ external-runtime 迁移路径固定属于 [external-runtime-companion-contract.m
 - 不得把 `blocking ownership`、`override path`、`authority-of-truth` 写成 `metadata_contract` 字段
 - 不得把 external-runtime 的 runtime locator 或 rollback switch 写进 `repo-interface.json`
 
-### 4.7 `context_schema`
+### 4.8 `context_schema`
 
 `context_schema` 用于声明 repo-specific required context fields 与映射规则，不暗含单一 Loom 通用字段模型。
 
@@ -381,7 +428,7 @@ external-runtime 迁移路径固定属于 [external-runtime-companion-contract.m
 - `required` 必须是布尔值
 - `mapping_rule_locator` 指向仓库如何把宿主上下文映射到该字段的权威说明
 
-### 4.8 纪律重申
+### 4.9 纪律重申
 
 无论 `v1` 或 `v2`，以下纪律保持不变：
 
@@ -389,13 +436,14 @@ external-runtime 迁移路径固定属于 [external-runtime-companion-contract.m
 - `repo-interface.json` 仍不承载运行态、review summary、current stop、validation status 或 host action result
 - `review_instruction_locators` 只承接 repo-owned review instruction 入口，不得承接 review disposition 或 review result
 - `dynamic_tool_locators` 只承接 dynamic tool availability locator，不得承接 attempt-time result 或 host action result
+- `policy_locators` 只承接 approval / sandbox policy read locator，不得承接权限请求、sandbox mutation 或 host action result
 - `metadata_contract` 仍只是 repo-specific metadata block 的 locator contract，不定义 Loom core 默认 taxonomy
 - repo-specific 规则仍通过 companion 合同挂接，不得伪装成 Loom core 默认规则
 - host adapter / repo-native carrier / shadow parity 入口继续留在独立的 `interop.json`，不得回塞到 `repo-interface.json`
 
 ## 5. 读面语义
 
-`governance_surface.repo_interface` 当前只允许暴露以下四类状态：
+`governance_surface.repo_interface` 当前只允许暴露以下四类 availability 状态，并可派生 `tool_availability` 与 `policy_readiness` 子读面：
 
 - `absent`
   - 仓库没有 `repo companion` manifest

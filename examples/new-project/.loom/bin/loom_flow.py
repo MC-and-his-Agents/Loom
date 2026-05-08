@@ -872,6 +872,114 @@ def tool_availability_for_surface(repo_interface: object, *, surface: str) -> di
     }
 
 
+def policy_readiness_for_surface(repo_interface: object, *, surface: str) -> dict[str, Any]:
+    empty_payload = {
+        "schema_version": "loom-policy-readiness/v1",
+        "surface": surface,
+        "result": "pass",
+        "summary": "no approval or sandbox policy evidence applies to this surface.",
+        "declared_policies": [],
+        "blocking_policies": [],
+        "advisory_policies": [],
+        "approval_policy": None,
+        "sandbox_policy": None,
+        "risk_summary": {
+            "blocking": [],
+            "advisory": [],
+            "by_status": {
+                "conflict": 0,
+                "declared": 0,
+                "missing": 0,
+                "unsafe": 0,
+            },
+            "by_policy": {
+                "approval": "missing",
+                "sandbox": "missing",
+            },
+        },
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if not isinstance(repo_interface, dict):
+        return empty_payload
+    policy_readiness = repo_interface.get("policy_readiness")
+    if not isinstance(policy_readiness, dict):
+        return empty_payload
+    declared_policies = policy_readiness.get("declared_policies")
+    if not isinstance(declared_policies, list):
+        return empty_payload
+
+    applicable: list[dict[str, Any]] = []
+    for policy in declared_policies:
+        if not isinstance(policy, dict):
+            continue
+        policy_surface = policy.get("surface")
+        if policy_surface in {surface, "attempt_time"}:
+            applicable.append(policy)
+
+    by_status = {
+        "conflict": 0,
+        "declared": 0,
+        "missing": 0,
+        "unsafe": 0,
+    }
+    by_policy = {
+        "approval": "missing",
+        "sandbox": "missing",
+    }
+    blocking_policies: list[dict[str, Any]] = []
+    advisory_policies: list[dict[str, Any]] = []
+    missing_inputs: list[str] = []
+    fallback_to: str | None = None
+    latest_by_policy: dict[str, dict[str, Any]] = {}
+    for policy in applicable:
+        status = policy.get("status")
+        if isinstance(status, str) and status in by_status:
+            by_status[status] += 1
+        policy_type = policy.get("policy")
+        if isinstance(policy_type, str) and policy_type in by_policy:
+            by_policy[policy_type] = str(status or "missing")
+            latest_by_policy[policy_type] = policy
+        if policy.get("result") == "block":
+            blocking_policies.append(policy)
+            fallback = policy.get("fallback_to")
+            if fallback_to is None and isinstance(fallback, str) and fallback:
+                fallback_to = fallback
+            for message in policy.get("missing_inputs", []):
+                if message not in missing_inputs:
+                    missing_inputs.append(str(message))
+        elif policy.get("status") != "declared":
+            advisory_policies.append(policy)
+
+    result = "block" if blocking_policies else "pass"
+    if blocking_policies:
+        summary = "required approval or sandbox policy evidence blocks this surface."
+    elif advisory_policies:
+        summary = "only optional or advisory approval/sandbox policy risk applies to this surface."
+    elif applicable:
+        summary = "approval and sandbox policy evidence is declared for this surface."
+    else:
+        summary = empty_payload["summary"]
+    return {
+        **empty_payload,
+        "result": result,
+        "summary": summary,
+        "declared_policies": applicable,
+        "blocking_policies": blocking_policies,
+        "advisory_policies": advisory_policies,
+        "approval_policy": latest_by_policy.get("approval"),
+        "sandbox_policy": latest_by_policy.get("sandbox"),
+        "risk_summary": {
+            "blocking": blocking_policies,
+            "advisory": advisory_policies,
+            "by_status": by_status,
+            "by_policy": by_policy,
+        },
+        "missing_inputs": missing_inputs,
+        "fallback_to": fallback_to if result == "block" else None,
+    }
+
+
 def repo_specific_requirements_payload(
     repo_interface: object,
     *,
@@ -889,6 +997,7 @@ def repo_specific_requirements_payload(
         "missing_inputs": [],
         "fallback_to": None,
         "tool_availability": tool_availability_for_surface(repo_interface, surface=surface),
+        "policy_readiness": policy_readiness_for_surface(repo_interface, surface=surface),
     }
     if not isinstance(repo_interface, dict):
         return {
@@ -1009,6 +1118,15 @@ def repo_specific_requirements_payload(
                 missing_inputs.append(str(message))
         if not blocking:
             summary = "required dynamic tool handshake evidence blocks this surface."
+    policy_readiness = policy_readiness_for_surface(repo_interface, surface=surface)
+    if policy_readiness.get("result") == "block":
+        result = "block"
+        fallback_to = fallback_to or policy_readiness.get("fallback_to") or repo_specific_default_fallback(surface)
+        for message in policy_readiness.get("missing_inputs", []):
+            if message not in missing_inputs:
+                missing_inputs.append(str(message))
+        if not blocking and tool_availability.get("result") != "block":
+            summary = "required approval or sandbox policy evidence blocks this surface."
     return {
         "surface": surface,
         "result": result,
@@ -1020,6 +1138,7 @@ def repo_specific_requirements_payload(
         "missing_inputs": missing_inputs,
         "fallback_to": fallback_to,
         "tool_availability": tool_availability,
+        "policy_readiness": policy_readiness,
     }
 
 
