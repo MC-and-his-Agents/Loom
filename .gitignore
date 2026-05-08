@@ -99,3 +99,4 @@ plugins/loom/*
 packages/skills/
 packages/loom-installer/payload/
 .worktrees/
+.loom/runtime/attempts/
