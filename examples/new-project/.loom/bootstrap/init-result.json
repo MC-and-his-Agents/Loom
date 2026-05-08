@@ -345,7 +345,7 @@
     },
     "github_control_plane": {
       "repository": "MC-and-his-Agents/Loom",
-      "default_branch": "main",
+      "default_branch": "${CURRENT_BRANCH}",
       "branch_protection": "enabled",
       "required_checks": [
         "py-compile",
@@ -784,7 +784,7 @@
             "authority": "loom + host"
           }
         },
-        "default_branch": "main",
+        "default_branch": "${CURRENT_BRANCH}",
         "missing_inputs": [],
         "result": "pass",
         "summary": "host binding surface can relate the active Work Item to branch, worktree, PR, merge commit, and closeout."
