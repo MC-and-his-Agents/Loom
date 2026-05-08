@@ -1,7 +1,10 @@
 export type Host = 'codex' | 'claude';
 export type Mode = 'plugin' | 'skill';
-export type InstallStatus = 'installed' | 'already-installed';
+export type InstallerOperation = 'add' | 'upgrade-plan' | 'verify-upgrade';
+export type InstallStatus = 'installed' | 'already-installed' | 'planned' | 'verified' | 'blocked';
 export type DistributionLayer = 'host-adapter-plugin' | 'generated-single-skill';
+export type RuntimeState = 'ready' | 'blocked' | 'unknown';
+export type UpgradeEligibility = 'current' | 'upgrade-available' | 'drift' | 'incompatible' | 'unknown';
 
 export interface PayloadFileRecord {
   path: string;
@@ -59,6 +62,8 @@ export interface PayloadManifest {
 }
 
 export interface InstallResult {
+  schema_version?: 'loom-installer-result/v1';
+  operation?: InstallerOperation;
   mode: Mode;
   host: Host;
   distribution_layer: DistributionLayer;
@@ -67,8 +72,36 @@ export interface InstallResult {
   verification: string[];
   warnings: string[];
   version_context: VersionContext | null;
+  installed_status?: InstalledLoomSurfaceStatus;
+  available_version_context?: VersionContext;
+  changed_paths?: string[];
+  drift?: string[];
+  rollback_path?: string | null;
+  rehearsal?: UpgradeRehearsalEvidence;
   failed_layer: string | null;
   fail_closed_reason: string | null;
+}
+
+export interface InstalledLoomSurfaceStatus {
+  schema_version: 'loom-installed-surface-status/v1';
+  installed_layer: DistributionLayer;
+  host_adapter: Host;
+  mode: Mode;
+  skill_id?: string;
+  version_context: VersionContext | null;
+  runtime_state: RuntimeState;
+  upgrade_eligibility: UpgradeEligibility;
+  evidence: string[];
+  failed_layer: string | null;
+  fail_closed_reason: string | null;
+}
+
+export interface UpgradeRehearsalEvidence {
+  schema_version: 'loom-upgrade-rehearsal/v1';
+  mutates_target: false;
+  changed_paths: string[];
+  drift: string[];
+  rollback_path: string | null;
 }
 
 export interface CliOptions {

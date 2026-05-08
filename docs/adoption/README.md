@@ -27,6 +27,7 @@
 - 统一安装体验：[unified-install-experience.md](./unified-install-experience.md)
 - 宿主适配矩阵：`host-adapter-matrix.md`
 - 单 skill 安装合同：[single-skill-contract.md](./single-skill-contract.md)
+- 已安装 Loom status 与升级演练：[installed-loom-status.md](./installed-loom-status.md)
 - 版本权威图：[version-authority-map.md](./version-authority-map.md)
 
 边界约束：

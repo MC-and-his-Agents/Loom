@@ -20,6 +20,13 @@ npx @mc-and-his-agents/loom-installer add skill <skill-id> --host codex
 npx @mc-and-his-agents/loom-installer add skill <skill-id> --host claude
 ```
 
+只读升级演练与验证：
+
+```bash
+npx @mc-and-his-agents/loom-installer upgrade-plan plugin --host codex --json
+npx @mc-and-his-agents/loom-installer verify-upgrade plugin --host codex --json
+```
+
 也可以先固定 installer 版本：
 
 ```bash
@@ -46,6 +53,8 @@ Options：
 生成出来的 payload 目录不会提交到 git。Build 步骤会以确定性方式重建它们，`check:payload` 会校验重建稳定性。根 `skills/` surface 本身会提交，并通过 `check:distribution` 校验。
 
 Installer JSON output 会报告 `distribution_layer`、`version_context` 和 `failed_layer`，让调用方区分 host adapter plugin install 与 generated single-skill install。
+
+Installer 管理的 layer 也会写入 `loom-installed-surface-status/v1` metadata。`upgrade-plan` 和 `verify-upgrade` 只读取该 metadata，并与 package payload 比对，报告 `upgrade_eligibility`、`changed_paths`、`drift`、`rollback_path` 和 fail-closed reason；它们不会修改目标仓库。状态合同见 `docs/adoption/installed-loom-status.md`。
 
 ## Release Notes
 
