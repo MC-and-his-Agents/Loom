@@ -79,6 +79,7 @@ CORE_DOCS = (
     "docs/methodology/harness/workspace-profile.md",
     "docs/methodology/harness/repo-local-gate-starter.md",
     "docs/methodology/harness/workspace-lifecycle.md",
+    "docs/methodology/harness/worker-backend-contract.md",
     "docs/methodology/harness/host-action-contract.md",
     "docs/methodology/harness/host-api-budget.md",
     "docs/methodology/harness/host-lifecycle-boundary.md",
@@ -192,6 +193,7 @@ AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT = (
     "docs/methodology/harness/workspace-profile.md",
     "docs/methodology/harness/repo-local-gate-starter.md",
     "docs/methodology/harness/workspace-lifecycle.md",
+    "docs/methodology/harness/worker-backend-contract.md",
     "docs/methodology/harness/recovery-model.md",
     "docs/methodology/harness/status-surface.md",
     "docs/methodology/harness/automation-frontload.md",
@@ -1427,6 +1429,58 @@ def require_host_lifecycle_payload(
         value = worktree.get(field)
         if not isinstance(value, str) or not value:
             failures.append(Failure(category, f"{context} worktree must include non-empty `{field}`"))
+
+
+def require_lifecycle_expectations_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must include `lifecycle_expectations`"))
+        return
+    if payload.get("schema_version") != "loom-workspace-lifecycle/v1":
+        failures.append(Failure(category, f"{context} lifecycle_expectations must use schema `loom-workspace-lifecycle/v1`"))
+    if payload.get("result") not in {"pass", "block"}:
+        failures.append(Failure(category, f"{context} lifecycle_expectations.result must be `pass` or `block`"))
+    operations = payload.get("operations")
+    if not isinstance(operations, dict):
+        failures.append(Failure(category, f"{context} lifecycle_expectations must include operations"))
+        return
+    for key in ("create", "locate", "attach", "handoff", "cleanup", "retire", "execution_boundary", "remove"):
+        if not isinstance(operations.get(key), dict):
+            failures.append(Failure(category, f"{context} lifecycle_expectations.operations must include `{key}`"))
+    attach = operations.get("attach")
+    if isinstance(attach, dict):
+        if attach.get("creates_workspace") is not False or attach.get("deletes_workspace") is not False:
+            failures.append(Failure(category, f"{context} attach must stay locate/binding-only"))
+        if attach.get("takes_host_lifecycle") is not False:
+            failures.append(Failure(category, f"{context} attach must not take over host lifecycle"))
+    remove = operations.get("remove")
+    if isinstance(remove, dict) and remove.get("in_core") is not False:
+        failures.append(Failure(category, f"{context} remove must stay outside Loom core"))
+    execution_boundary = operations.get("execution_boundary")
+    if isinstance(execution_boundary, dict):
+        for verb in ("run", "stop"):
+            value = execution_boundary.get(verb)
+            if not isinstance(value, str) or "read/event surface only" not in value:
+                failures.append(Failure(category, f"{context} execution_boundary.{verb} must stay read/event-only"))
+    worker_backend = payload.get("worker_backend")
+    if not isinstance(worker_backend, dict):
+        failures.append(Failure(category, f"{context} lifecycle_expectations must include worker_backend"))
+    else:
+        if worker_backend.get("backend") != "local":
+            failures.append(Failure(category, f"{context} worker backend must default to local"))
+        if worker_backend.get("daemon") is not False:
+            failures.append(Failure(category, f"{context} worker backend must not introduce a daemon"))
+        future_rule = worker_backend.get("future_backend_rule")
+        if not isinstance(future_rule, str) or not all(
+            token in future_rule
+            for token in ("Work Item", "workspace", "recovery", "ledger")
+        ):
+            failures.append(Failure(category, f"{context} worker backend future rule must preserve Work Item/workspace/recovery/ledger truth"))
 
 
 def require_reconciliation_payload(
@@ -2693,6 +2747,12 @@ def check_demo_assets(root: Path) -> list[Failure]:
             gate_starter = governance_surface.get("gate_starter")
             if isinstance(gate_starter, dict) and gate_starter.get("host_enforcement") is not False:
                 failures.append(Failure("demo-assets", "demo gate starter must not claim host enforcement"))
+        require_lifecycle_expectations_payload(
+            failures,
+            category="demo-assets",
+            context="demo init-result",
+            payload=init_result.get("lifecycle_expectations"),
+        )
     return failures
 
 
@@ -3348,6 +3408,11 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             {"pass"},
         ),
         (
+            "attach",
+            ["python3", "tools/loom_flow.py", "workspace", "attach", "--target", "examples/new-project", "--item", "INIT-0001"],
+            {"pass"},
+        ),
+        (
             "review-read",
             ["python3", "tools/loom_flow.py", "review", "read", "--target", "examples/new-project", "--item", "INIT-0001"],
             {"pass"},
@@ -3695,6 +3760,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     failures.append(Failure("daily-execution-cli", f"`flow resume` must include `{key}`"))
             if not isinstance(payload.get("execution_ledger"), dict):
                 failures.append(Failure("daily-execution-cli", "`flow resume` must include `execution_ledger`"))
+            require_lifecycle_expectations_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`flow resume`",
+                payload=payload.get("lifecycle_expectations"),
+            )
             require_runtime_state_payload(
                 failures,
                 category="daily-execution-cli",
@@ -3782,6 +3853,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     failures.append(Failure("daily-execution-cli", f"`flow handoff` must include `{key}`"))
             if not isinstance(payload.get("execution_ledger"), dict):
                 failures.append(Failure("daily-execution-cli", "`flow handoff` must include `execution_ledger`"))
+            require_lifecycle_expectations_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`flow handoff`",
+                payload=payload.get("lifecycle_expectations"),
+            )
             require_runtime_state_payload(
                 failures,
                 category="daily-execution-cli",
@@ -3926,6 +4003,19 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 category="daily-execution-cli",
                 context="`host-lifecycle`",
                 payload=payload,
+            )
+            require_lifecycle_expectations_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`host-lifecycle`",
+                payload=payload.get("lifecycle_expectations"),
+            )
+        if label == "attach":
+            require_lifecycle_expectations_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`workspace attach`",
+                payload=payload.get("lifecycle_expectations"),
             )
         if label in {"closeout-check", "closeout-sync"}:
             if payload.get("command") != "closeout":
@@ -4465,10 +4555,40 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         lifecycle_target = Path(tmp) / "new-project"
         shutil.copytree(example_target, lifecycle_target)
         temp_root = lifecycle_target / ".loom/flow/tmp"
-        temp_root.mkdir(parents=True, exist_ok=True)
-        (temp_root / "sentinel.txt").write_text("temp\n", encoding="utf-8")
+        residue = temp_root / "loom-owned-residue"
+        residue.mkdir(parents=True, exist_ok=True)
+        (residue / ".loom-owned").write_text("owned\n", encoding="utf-8")
+        (residue / "sentinel.txt").write_text("temp\n", encoding="utf-8")
 
-        for operation in ("create", "cleanup", "retire"):
+        progress_path = lifecycle_target / ".loom/progress/INIT-0001.md"
+        progress_before_handoff = progress_path.read_text(encoding="utf-8")
+        handoff_payload, handoff_error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "flow",
+                "handoff",
+                "--target",
+                str(lifecycle_target),
+                "--item",
+                "INIT-0001",
+            ],
+        )
+        if handoff_error:
+            failures.append(Failure("daily-execution-cli", f"`flow handoff` lifecycle fixture failed: {handoff_error}"))
+        elif handoff_payload.get("result") not in {"pass", "block"}:
+            failures.append(Failure("daily-execution-cli", "`flow handoff` lifecycle fixture must return pass or block"))
+        require_lifecycle_expectations_payload(
+            failures,
+            category="daily-execution-cli",
+            context="`flow handoff` lifecycle fixture",
+            payload=handoff_payload.get("lifecycle_expectations") if isinstance(handoff_payload, dict) else None,
+        )
+        if progress_path.read_text(encoding="utf-8") != progress_before_handoff:
+            failures.append(Failure("daily-execution-cli", "`flow handoff` must not rewrite the recovery entry"))
+
+        for operation in ("create", "attach", "cleanup", "retire"):
             payload, error = load_command_json(
                 root,
                 [
@@ -4492,6 +4612,14 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         f"`workspace {operation}` must pass on a clean temp copy, got `{payload.get('result')}`",
                     )
                 )
+            require_lifecycle_expectations_payload(
+                failures,
+                category="daily-execution-cli",
+                context=f"`workspace {operation}`",
+                payload=payload.get("lifecycle_expectations") if isinstance(payload, dict) else None,
+            )
+            if operation == "cleanup" and residue.exists():
+                failures.append(Failure("daily-execution-cli", "`workspace cleanup` must remove marked Loom-owned residue"))
 
         locate_payload, error = load_command_json(
             root,
@@ -4513,6 +4641,90 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             or locate_payload["checkpoint"].get("normalized") != "retired"
         ):
             failures.append(Failure("daily-execution-cli", "`workspace retire` must leave the copied sample in `retired` state"))
+        progress_after_retire = progress_path.read_text(encoding="utf-8")
+        for stable_line in (
+            "- Current Stop:",
+            "- Next Step:",
+            "- Blockers:",
+            "- Latest Validation Summary:",
+            "## Execution Ledger",
+        ):
+            if stable_line not in progress_after_retire:
+                failures.append(Failure("daily-execution-cli", f"`workspace retire` must preserve recovery field `{stable_line}`"))
+
+    with tempfile.TemporaryDirectory(prefix="loom-check-missing-workspace-") as tmp:
+        missing_workspace_target = Path(tmp) / "new-project"
+        shutil.copytree(example_target, missing_workspace_target)
+        work_item = missing_workspace_target / ".loom/work-items/INIT-0001.md"
+        work_item.write_text(
+            work_item.read_text(encoding="utf-8").replace("- Workspace Entry: .", "- Workspace Entry: "),
+            encoding="utf-8",
+        )
+        for label, command in (
+            (
+                "workspace locate",
+                ["python3", "tools/loom_flow.py", "workspace", "locate", "--target", str(missing_workspace_target), "--item", "INIT-0001"],
+            ),
+            (
+                "workspace attach",
+                ["python3", "tools/loom_flow.py", "workspace", "attach", "--target", str(missing_workspace_target), "--item", "INIT-0001"],
+            ),
+            (
+                "workspace retire",
+                ["python3", "tools/loom_flow.py", "workspace", "retire", "--target", str(missing_workspace_target), "--item", "INIT-0001"],
+            ),
+            (
+                "purity-check",
+                ["python3", "tools/loom_flow.py", "purity-check", "--target", str(missing_workspace_target), "--item", "INIT-0001"],
+            ),
+            (
+                "flow resume",
+                ["python3", "tools/loom_flow.py", "flow", "resume", "--target", str(missing_workspace_target), "--item", "INIT-0001"],
+            ),
+            (
+                "host-lifecycle",
+                ["python3", "tools/loom_flow.py", "host-lifecycle", "--target", str(missing_workspace_target), "--item", "INIT-0001"],
+            ),
+            (
+                "flow handoff",
+                ["python3", "tools/loom_flow.py", "flow", "handoff", "--target", str(missing_workspace_target), "--item", "INIT-0001"],
+            ),
+        ):
+            payload, error = load_command_json(root, command)
+            if error:
+                failures.append(Failure("daily-execution-cli", f"`{label}` missing workspace fixture failed to emit JSON: {error}"))
+                continue
+            if payload.get("result") not in {"block", "fallback"}:
+                failures.append(Failure("daily-execution-cli", f"`{label}` must fail closed when Workspace Entry is missing"))
+            missing_text = json.dumps(payload.get("missing_inputs", []), ensure_ascii=False)
+            if "Workspace Entry" not in missing_text and "workspace entry" not in missing_text:
+                failures.append(Failure("daily-execution-cli", f"`{label}` must report the missing workspace locator"))
+
+    with tempfile.TemporaryDirectory(prefix="loom-check-unowned-temp-") as tmp:
+        unowned_target = Path(tmp) / "new-project"
+        shutil.copytree(example_target, unowned_target)
+        unowned_note = unowned_target / ".loom/flow/tmp/user-note.txt"
+        unowned_note.parent.mkdir(parents=True, exist_ok=True)
+        unowned_note.write_text("user residue\n", encoding="utf-8")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "workspace",
+                "cleanup",
+                "--target",
+                str(unowned_target),
+                "--item",
+                "INIT-0001",
+            ],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`workspace cleanup` unowned temp fixture failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`workspace cleanup` must block on unmarked temp content"))
+        if not unowned_note.exists():
+            failures.append(Failure("daily-execution-cli", "`workspace cleanup` must not delete non-Loom-owned temp content"))
 
     with tempfile.TemporaryDirectory(prefix="loom-check-authoring-") as tmp:
         authoring_target = Path(tmp) / "new-project"
@@ -6097,8 +6309,10 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 )
 
             temp_root = retire_target / ".loom" / ".tmp"
-            temp_root.mkdir(parents=True, exist_ok=True)
-            (temp_root / "sentinel.txt").write_text("temp\n", encoding="utf-8")
+            installed_residue = temp_root / "loom-owned-residue"
+            installed_residue.mkdir(parents=True, exist_ok=True)
+            (installed_residue / ".loom-owned").write_text("owned\n", encoding="utf-8")
+            (installed_residue / "sentinel.txt").write_text("temp\n", encoding="utf-8")
 
             cleanup_payload, error = load_command_json(
                 root,
@@ -6127,6 +6341,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     expected_carrier="installed-skills-root",
                     allowed_results={"pass"},
                 )
+                require_lifecycle_expectations_payload(
+                    failures,
+                    category="daily-execution-cli",
+                    context="`installed workspace cleanup`",
+                    payload=cleanup_payload.get("lifecycle_expectations"),
+                )
 
             retire_payload, error = load_command_json(
                 root,
@@ -6154,6 +6374,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     expected_scene="installed-runtime",
                     expected_carrier="installed-skills-root",
                     allowed_results={"pass"},
+                )
+                require_lifecycle_expectations_payload(
+                    failures,
+                    category="daily-execution-cli",
+                    context="`installed workspace retire`",
+                    payload=retire_payload.get("lifecycle_expectations"),
                 )
                 checkpoint = retire_payload.get("checkpoint")
                 if not isinstance(checkpoint, dict) or checkpoint.get("normalized") != "retired":

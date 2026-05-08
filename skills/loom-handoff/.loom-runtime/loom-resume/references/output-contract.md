@@ -57,6 +57,8 @@
 - `execution_ledger`
   - 来自 recovery / fact-chain contract 的 ledger completeness、freshness、authoritative carrier 与 locator / evidence 字段
   - 不得覆盖 `recovery.next_step`、`recovery.blockers` 或 `recovery.latest_validation_summary`
+- `lifecycle_expectations`
+  - 与 workspace lifecycle contract 同源，至少声明 `attach` 仅定位/绑定、`run` / `stop` 仅 execution-boundary 读面、`remove` 不属于 Loom core、默认 worker backend 为无 daemon 的 `local`
 - `checkpoint`
   - 原始 checkpoint 文本与归一化后的 checkpoint
 - `state_check`

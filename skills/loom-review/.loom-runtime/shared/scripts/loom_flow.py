@@ -30,7 +30,7 @@ from fact_chain_support import (
     path_boundary_missing_details,
     resolve_repo_relative_path,
 )
-from governance_surface import build_governance_surface
+from governance_surface import build_governance_surface, workspace_lifecycle_expectations
 from runtime_paths import shared_asset, shared_script
 from runtime_state import detect_runtime_state
 
@@ -164,7 +164,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
 
     workspace = subparsers.add_parser("workspace", help="Manage Loom workspace lifecycle semantics")
-    workspace.add_argument("operation", choices=("create", "locate", "cleanup", "retire"))
+    workspace.add_argument("operation", choices=("create", "locate", "attach", "cleanup", "retire"))
     workspace.add_argument("--target", required=True, help="Target repository root")
     workspace.add_argument("--item", help="Expected current item id")
     workspace.add_argument(
@@ -1625,6 +1625,8 @@ def relative_to_root(path: Path, root: Path) -> str:
 
 def resolve_workspace_path(target_root: Path, workspace_entry: str) -> tuple[Path | None, list[str]]:
     errors: list[str] = []
+    if not workspace_entry.strip():
+        return None, ["missing workspace entry locator"]
     raw = Path(workspace_entry)
     if raw.is_absolute():
         resolved = raw.resolve()
@@ -3260,6 +3262,22 @@ def collect_temp_paths(target_root: Path) -> list[Path]:
     return paths
 
 
+def cleanup_candidates(target_root: Path) -> tuple[list[Path], list[str]]:
+    candidates: list[Path] = []
+    unsafe: list[str] = []
+    for temp_root in collect_temp_paths(target_root):
+        if temp_root.is_file():
+            unsafe.append(relative_to_root(temp_root, target_root))
+            continue
+        for child in sorted(temp_root.iterdir(), key=lambda path: path.name):
+            marker = child / ".loom-owned" if child.is_dir() else child.with_name(f"{child.name}.loom-owned")
+            if marker.exists():
+                candidates.append(child)
+            else:
+                unsafe.append(relative_to_root(child, target_root))
+    return candidates, unsafe
+
+
 def path_matches_owned_roots(path: str, roots: tuple[str, ...]) -> bool:
     normalized = path.rstrip("/")
     for root in roots:
@@ -3858,6 +3876,7 @@ def purity_report_from_context(context: dict[str, Any], fact_chain_errors: list[
 def base_workspace_payload(context: dict[str, Any], operation: str) -> dict[str, Any]:
     purity = purity_report_from_context(context)
     workspace_profile = workspace_profile_from_context(context)
+    lifecycle_expectations = workspace_lifecycle_expectations(workspace_profile)
     return {
         "command": "workspace",
         "operation": operation,
@@ -3884,6 +3903,7 @@ def base_workspace_payload(context: dict[str, Any], operation: str) -> dict[str,
             "normalized": context["current_checkpoint"],
         },
         "purity": purity,
+        "lifecycle_expectations": lifecycle_expectations,
         "missing_inputs": [],
         "fallback_to": None,
     }
@@ -4135,7 +4155,7 @@ def handle_workspace(args: argparse.Namespace) -> int:
             {
                 "command": "workspace",
                 "operation": args.operation,
-                "result": "fallback",
+                "result": "block",
                 "summary": "workspace lifecycle command could not read a valid Loom fact chain.",
                 "missing_inputs": [f"fact-chain: {message}" for message in errors],
                 "fallback_to": "admission",
@@ -4151,11 +4171,19 @@ def handle_workspace(args: argparse.Namespace) -> int:
     workspace_path = context["workspace_path"]
     purity = payload["purity"]
 
-    if args.operation == "locate":
+    if args.operation in {"locate", "attach"}:
         payload["result"] = "pass" if not purity["hard_failures"] else "block"
-        payload["summary"] = "workspace location was resolved from the fact chain."
+        payload["summary"] = (
+            "workspace was attached by resolving an existing workspace_entry binding."
+            if args.operation == "attach"
+            else "workspace location was resolved from the fact chain."
+        )
         if purity["hard_failures"]:
-            payload["summary"] = "workspace location resolved, but the workspace is not execution-ready."
+            payload["summary"] = (
+                "workspace attachment resolved, but the workspace is not execution-ready."
+                if args.operation == "attach"
+                else "workspace location resolved, but the workspace is not execution-ready."
+            )
             payload["missing_inputs"] = list(purity["hard_failures"])
         return emit_workspace(payload)
 
@@ -4186,11 +4214,17 @@ def handle_workspace(args: argparse.Namespace) -> int:
 
     if args.operation == "cleanup":
         owned_dirty, foreign_dirty = dirty_paths_by_owner(target_root)
-        temp_paths = collect_temp_paths(target_root)
+        temp_paths, unsafe_temp_paths = cleanup_candidates(target_root)
         if foreign_dirty:
             payload["result"] = "block"
             payload["summary"] = "cleanup stopped because the workspace contains non-Loom changes."
             payload["missing_inputs"] = [f"non-loom residue: {path}" for path in foreign_dirty]
+            return emit_workspace(payload)
+        if unsafe_temp_paths:
+            payload["result"] = "block"
+            payload["summary"] = "cleanup stopped because a Loom temp root contains unmarked content."
+            payload["missing_inputs"] = [f"unmarked temp content: {path}" for path in unsafe_temp_paths]
+            payload["retained_paths"] = unsafe_temp_paths
             return emit_workspace(payload)
 
         removed: list[str] = []
@@ -4229,7 +4263,15 @@ def handle_workspace(args: argparse.Namespace) -> int:
         cleanup_payload["missing_inputs"] = [f"non-loom residue: {path}" for path in foreign_dirty]
         return emit_workspace(cleanup_payload)
 
-    for temp_path in collect_temp_paths(target_root):
+    temp_paths, unsafe_temp_paths = cleanup_candidates(target_root)
+    if unsafe_temp_paths:
+        cleanup_payload["result"] = "block"
+        cleanup_payload["summary"] = "retire cannot proceed because cleanup would touch unmarked temp content."
+        cleanup_payload["missing_inputs"] = [f"unmarked temp content: {path}" for path in unsafe_temp_paths]
+        cleanup_payload["retained_paths"] = unsafe_temp_paths
+        return emit_workspace(cleanup_payload)
+
+    for temp_path in temp_paths:
         relative = relative_to_root(temp_path, target_root)
         tracked = git_tracked_files(target_root, relative)
         if tracked:
@@ -5203,6 +5245,7 @@ def host_lifecycle_payload(context: dict[str, Any]) -> dict[str, Any]:
     branch = git_branch(context["target_root"])
     purity = purity_report_from_context(context)
     workspace_profile = workspace_profile_from_context(context)
+    lifecycle_expectations = workspace_lifecycle_expectations(workspace_profile)
     worktree_root = current_cwd_relative(context["target_root"])
     branch_status = "report_only" if branch else "host_managed_without_local_branch"
     pr_status = "report_only"
@@ -5234,7 +5277,8 @@ def host_lifecycle_payload(context: dict[str, Any]) -> dict[str, Any]:
                 "entry": context["workspace_entry"],
                 "path": relative_to_root(context["workspace_path"], context["target_root"]),
                 "profile": workspace_profile,
-                "lifecycle_entry": "python3 .loom/bin/loom_flow.py workspace create|locate|cleanup|retire",
+                "lifecycle_entry": "python3 .loom/bin/loom_flow.py workspace create|locate|attach|cleanup|retire",
+                "lifecycle_expectations": lifecycle_expectations,
             },
             "branch": {
                 "ownership": "host",
@@ -5255,6 +5299,7 @@ def host_lifecycle_payload(context: dict[str, Any]) -> dict[str, Any]:
             },
         },
         "purity": purity,
+        "lifecycle_expectations": lifecycle_expectations,
     }
 
 
@@ -8615,6 +8660,7 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "fallback_to": state_payload["fallback_to"],
                         "checks": state_payload["checks"],
                     },
+                    "lifecycle_expectations": locate_payload["lifecycle_expectations"],
                 }
                 if args.operation in {"resume", "handoff"}
                 else {}

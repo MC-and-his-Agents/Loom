@@ -125,6 +125,18 @@
 这里的 `runtime_state` 只回答 Loom 入口自身处于什么安装/运行场景，不是 `governance_surface.loom_state` 的别名。
 `governance_surface.loom_state` 回答的是仓库 Loom 装配程度；`runtime_state` 回答的是当前入口能否被视为 installed runtime 并继续运行。
 
+### 4.2 `lifecycle_expectations`
+
+初始化输出还必须给出 `lifecycle_expectations`，用于声明 workspace / worker lifecycle 的最小可执行合同：
+
+- `workspace_entry` 与解析后的 workspace path
+- `create`、`locate`、`attach`、`handoff`、`cleanup`、`retire` 的语义边界
+- `execution_boundary.run` / `execution_boundary.stop` 只作为读面或事件语义
+- `remove.in_core = false`
+- 默认 `worker_backend.backend = local` 且 `daemon = false`
+
+该区块只表达 lifecycle 期望，不回写 recovery entry，也不接管 branch、PR、git worktree 或 worker daemon。
+
 ### 5. 首批事项
 
 至少拆出：
