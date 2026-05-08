@@ -1222,6 +1222,7 @@ def repo_interface_payload() -> dict[str, object]:
         },
         "metadata_contract": {"fields": []},
         "context_schema": {"fields": []},
+        "dynamic_tool_locators": [],
     }
 
 
@@ -1235,6 +1236,9 @@ def repo_interop_payload() -> dict[str, object]:
                 "summary": "Repo-owned adoption residue generated as explicit write targets; Loom reads it without promoting the repo-specific rules into core.",
                 "surfaces": list(SHADOW_PARITY_SURFACES),
                 "locator": ".loom/companion",
+                "owner": "repo-companion",
+                "requirement": "required",
+                "fallback_to": "adoption",
             }
         ],
         "shadow_surfaces": {
