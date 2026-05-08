@@ -88,6 +88,17 @@ SKILL_SIGNAL_RULES: dict[str, tuple[str, ...]] = {
         "continue the current item",
         "next step",
     ),
+    "loom-build": (
+        "实现当前事项",
+        "执行 build",
+        "implementation round",
+        "build round",
+        "loom build",
+        "subagent-driven",
+        "subagent driven",
+        "集成 subagent",
+        "repeated blocker",
+    ),
     "loom-pre-review": (
         "review 前",
         "进入 review",
