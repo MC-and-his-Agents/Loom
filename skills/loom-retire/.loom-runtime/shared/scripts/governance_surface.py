@@ -212,6 +212,16 @@ REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {
 }
 DECLARED_LOCATOR_REQUIREMENTS = {"required", "optional", "advisory"}
 DECLARED_LOCATOR_OWNERS = {"repo", "repo-companion", "host", "host-adapter", "platform", "external-tool"}
+DYNAMIC_TOOL_HANDSHAKE_SCHEMA = "loom-dynamic-tool-handshake/v1"
+DYNAMIC_TOOL_HANDSHAKE_STATUSES = {"advertised", "unavailable", "unsupported", "failed"}
+DYNAMIC_TOOL_HANDSHAKE_FAILURE_CATEGORIES = {
+    "none",
+    "unavailable",
+    "unsupported",
+    "failed",
+    "invalid_declaration",
+}
+DYNAMIC_TOOL_SURFACES = REPO_INTERFACE_GATE_TYPES | {"attempt_time"}
 REPO_INTEROP_AVAILABILITY = {"absent", "incomplete", "present"}
 REPO_INTEROP_SCHEMA = "loom-repo-interop/v1"
 REPO_INTEROP_KEYS = {"schema_version", "host_adapters", "repo_native_carriers", "shadow_surfaces"}
@@ -920,9 +930,9 @@ def validate_dynamic_tool_locator(
     if requirement not in DECLARED_LOCATOR_REQUIREMENTS:
         blocking.append(f"{prefix} requirement must be `required`, `optional`, or `advisory`")
     surface = entry.get("surface")
-    if surface not in REPO_INTEROP_COLLECTION_SURFACES:
+    if surface not in DYNAMIC_TOOL_SURFACES:
         blocking.append(
-            f"{prefix} surface must be one of `admission`, `pre_review`, `review`, `build`, `merge_ready`, `closeout`"
+            f"{prefix} surface must be one of `admission`, `pre_review`, `review`, `build`, `merge_ready`, `closeout`, `attempt_time`"
         )
     locator_value = entry.get("locator")
     locator, target = resolve_locator(root, locator_value)
@@ -942,6 +952,196 @@ def validate_dynamic_tool_locator(
         else:
             blocking.append(locator_error)
     return blocking, optional
+
+
+def empty_tool_availability() -> dict[str, Any]:
+    return {
+        "schema_version": DYNAMIC_TOOL_HANDSHAKE_SCHEMA,
+        "result": "pass",
+        "summary": "no dynamic tools are declared for this repository.",
+        "declared_tools": [],
+        "failure_summary": {
+            "required_blocking": [],
+            "optional_advisory": [],
+            "by_status": {status: 0 for status in sorted(DYNAMIC_TOOL_HANDSHAKE_STATUSES)},
+        },
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+
+
+def read_tool_handshake_declaration(path: Path) -> tuple[dict[str, Any] | None, list[str]]:
+    if path.suffix.lower() != ".json":
+        return None, []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, [f"tool handshake declaration is unreadable: {exc}"]
+    if not isinstance(payload, dict):
+        return None, ["tool handshake declaration must be a JSON object"]
+    if payload.get("schema_version") != DYNAMIC_TOOL_HANDSHAKE_SCHEMA:
+        return None, [f"tool handshake declaration schema must be `{DYNAMIC_TOOL_HANDSHAKE_SCHEMA}`"]
+    status = payload.get("status")
+    if status not in DYNAMIC_TOOL_HANDSHAKE_STATUSES:
+        return None, [
+            "tool handshake status must be one of `advertised`, `unavailable`, `unsupported`, `failed`"
+        ]
+    failure_category = payload.get("failure_category", "none")
+    if failure_category not in DYNAMIC_TOOL_HANDSHAKE_FAILURE_CATEGORIES:
+        return None, ["tool handshake failure_category is outside the stable vocabulary"]
+    return payload, []
+
+
+def dynamic_tool_status_entry(
+    *,
+    root: Path,
+    entry: object,
+    index: int,
+) -> dict[str, Any]:
+    prefix = f"dynamic_tool_locators[{index}]"
+    if not isinstance(entry, dict):
+        return {
+            "id": f"invalid-{index}",
+            "surface": "unknown",
+            "requirement": "required",
+            "owner": "unknown",
+            "status": "failed",
+            "result": "block",
+            "failure_category": "invalid_declaration",
+            "summary": f"{prefix} must be an object",
+            "evidence": {"status": "missing", "locator": None},
+            "missing_inputs": [f"{prefix} must be an object"],
+            "fallback_to": "admission",
+        }
+
+    tool_id = str(entry.get("id") or f"tool-{index}")
+    requirement = str(entry.get("requirement") or "required")
+    surface = str(entry.get("surface") or "attempt_time")
+    fallback_to = entry.get("fallback_to") if isinstance(entry.get("fallback_to"), str) else "admission"
+    locator_value = entry.get("locator")
+    locator, target = resolve_locator(root, locator_value)
+    missing_inputs: list[str] = []
+    evidence: dict[str, Any] = {
+        "status": "missing",
+        "locator": locator if isinstance(locator, str) else locator_value,
+    }
+    status = "advertised"
+    failure_category = "none"
+    summary = "dynamic tool is declared and its availability locator is readable."
+
+    if locator_field_missing(locator_value):
+        status = "unavailable"
+        failure_category = "unavailable"
+        summary = "dynamic tool has no availability locator."
+        missing_inputs.append(f"{prefix} `{tool_id}` locator missing `locator`")
+    elif locator is None or target is None:
+        status = "failed"
+        failure_category = "invalid_declaration"
+        summary = "dynamic tool availability locator is outside the repository boundary."
+        missing_inputs.append(locator_boundary_error(locator_value, label=f"{prefix} `{tool_id}` locator"))
+    elif not target.exists():
+        status = "unavailable"
+        failure_category = "unavailable"
+        summary = "dynamic tool availability locator points to a missing path."
+        missing_inputs.append(f"{prefix} locator points to missing path `{locator}`")
+    else:
+        evidence = {"status": "present", "locator": locator}
+        declaration, declaration_errors = read_tool_handshake_declaration(target)
+        if declaration_errors:
+            status = "failed"
+            failure_category = "invalid_declaration"
+            summary = "dynamic tool availability declaration is unreadable or invalid."
+            missing_inputs.extend(f"{prefix} `{tool_id}` {message}" for message in declaration_errors)
+        elif declaration:
+            status = str(declaration["status"])
+            failure_category = str(declaration.get("failure_category", "none"))
+            summary = str(declaration.get("summary") or f"dynamic tool handshake reported `{status}`.")
+            fallback_value = declaration.get("fallback_to")
+            if isinstance(fallback_value, str) and fallback_value:
+                fallback_to = fallback_value
+            evidence_payload = declaration.get("evidence")
+            if isinstance(evidence_payload, dict):
+                evidence = {**evidence, **evidence_payload, "locator": locator}
+            if status != "advertised":
+                missing_inputs.append(f"dynamic tool `{tool_id}` is {status}")
+
+    blocking = requirement == "required" and status != "advertised"
+    return {
+        "id": tool_id,
+        "summary": summary,
+        "owner": entry.get("owner"),
+        "requirement": requirement,
+        "surface": surface,
+        "locator": locator if isinstance(locator, str) else locator_value,
+        "status": status,
+        "result": "block" if blocking else "pass",
+        "failure_category": failure_category,
+        "evidence": evidence,
+        "missing_inputs": missing_inputs if blocking else [],
+        "advisory": missing_inputs if not blocking else [],
+        "fallback_to": fallback_to if blocking else None,
+    }
+
+
+def dynamic_tool_availability_payload(root: Path, dynamic_tool_locators: object) -> dict[str, Any]:
+    payload = empty_tool_availability()
+    if dynamic_tool_locators is None:
+        return payload
+    if not isinstance(dynamic_tool_locators, list):
+        return {
+            **payload,
+            "result": "block",
+            "summary": "dynamic tool locators are declared but not readable as a list.",
+            "missing_inputs": ["dynamic_tool_locators must be a list"],
+            "fallback_to": "admission",
+        }
+
+    tools = [
+        dynamic_tool_status_entry(root=root, entry=entry, index=index)
+        for index, entry in enumerate(dynamic_tool_locators)
+    ]
+    by_status = {status: 0 for status in sorted(DYNAMIC_TOOL_HANDSHAKE_STATUSES)}
+    required_blocking: list[dict[str, Any]] = []
+    optional_advisory: list[dict[str, Any]] = []
+    missing_inputs: list[str] = []
+    fallback_to: str | None = None
+    for tool in tools:
+        status = tool.get("status")
+        if isinstance(status, str) and status in by_status:
+            by_status[status] += 1
+        if tool.get("result") == "block":
+            required_blocking.append(tool)
+            fallback = tool.get("fallback_to")
+            if fallback_to is None and isinstance(fallback, str) and fallback:
+                fallback_to = fallback
+            for message in tool.get("missing_inputs", []):
+                if message not in missing_inputs:
+                    missing_inputs.append(str(message))
+        elif tool.get("status") != "advertised":
+            optional_advisory.append(tool)
+
+    result = "block" if required_blocking else "pass"
+    if required_blocking:
+        summary = "required dynamic tool handshake evidence is unavailable, unsupported, failed, or invalid."
+    elif optional_advisory:
+        summary = "only optional or advisory dynamic tool handshake failures are present."
+    elif tools:
+        summary = "dynamic tool declarations are readable and advertised."
+    else:
+        summary = payload["summary"]
+    return {
+        **payload,
+        "result": result,
+        "summary": summary,
+        "declared_tools": tools,
+        "failure_summary": {
+            "required_blocking": required_blocking,
+            "optional_advisory": optional_advisory,
+            "by_status": by_status,
+        },
+        "missing_inputs": missing_inputs,
+        "fallback_to": fallback_to if result == "block" else None,
+    }
 
 
 def validate_repo_interop_collection_entry(
@@ -1031,6 +1231,7 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
         "repo_specific_requirements": carrier_entry("missing", "unknown", "repo companion interface"),
         "specialized_gates": carrier_entry("missing", "unknown", "repo companion interface"),
         "dynamic_tool_locators": carrier_entry("missing", "unknown", "repo companion interface"),
+        "tool_availability": empty_tool_availability(),
         "summary": "no repo companion interface is declared for this repository.",
         "missing_inputs": [],
         "missing_optional": [],
@@ -1184,6 +1385,10 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
                     )
                 dynamic_tool_locators = interface_payload.get("dynamic_tool_locators")
                 if dynamic_tool_locators is not None:
+                    repo_interface_surface["tool_availability"] = dynamic_tool_availability_payload(
+                        root,
+                        dynamic_tool_locators,
+                    )
                     if not isinstance(dynamic_tool_locators, list):
                         missing_inputs.append("dynamic_tool_locators must be a list")
                     else:

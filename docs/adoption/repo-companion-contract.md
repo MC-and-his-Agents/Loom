@@ -250,13 +250,14 @@
 - required locator 缺失或指向不可读路径必须 fail closed
 - `owner` 只允许 `repo | repo-companion | host | host-adapter | platform | external-tool`
 - `requirement` 只允许 `required | optional | advisory`
-- `surface` 只允许 `admission | pre_review | review | build | merge_ready | closeout`
+- `surface` 只允许 `admission | pre_review | review | build | merge_ready | closeout`；dynamic tool locator 额外允许 `attempt_time` 表示适用于一次执行尝试的通用 handshake availability
 - `fallback_to` 只描述声明不可消费时的 Loom 回退面或人工路径，不描述工具调用
 
 稳定约束：
 
 - `required` 缺口进入 blocking `missing_inputs`
 - `optional` / `advisory` locator 缺失或指向不可读路径只进入 `missing_optional` 或 profile-local advisory evidence，不得污染 core pass/fail
+- locator 指向的 handshake declaration 若存在，只能输出 `advertised | unavailable | unsupported | failed`，并由 `tool_availability` 派生展示
 - `dynamic_tool_locators` 不得承载 attempt-time result、review summary、validation status 或 retained host action result
 - retained host action result locator 必须留在 [repo-interop-contract.md](./repo-interop-contract.md) 的 `host_adapters`
 

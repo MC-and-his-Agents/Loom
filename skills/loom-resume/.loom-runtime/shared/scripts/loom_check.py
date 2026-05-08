@@ -73,6 +73,7 @@ CORE_DOCS = (
     "docs/methodology/harness/item-context-contract.md",
     "docs/methodology/harness/fact-chain-contract.md",
     "docs/methodology/harness/execution-attempt.md",
+    "docs/methodology/harness/dynamic-tool-handshake.md",
     "docs/methodology/harness/execution-context.md",
     "docs/methodology/harness/execution-chain.md",
     "docs/methodology/harness/checkpoint-model.md",
@@ -188,6 +189,7 @@ AUTOMATION_FRONTLOAD_SKILLS = (
 AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT = (
     "docs/methodology/harness/work-item-contract.md",
     "docs/methodology/harness/execution-attempt.md",
+    "docs/methodology/harness/dynamic-tool-handshake.md",
     "docs/methodology/harness/execution-context.md",
     "docs/methodology/harness/execution-chain.md",
     "docs/methodology/harness/checkpoint-model.md",
@@ -259,6 +261,7 @@ REVIEW_FINDING_DISPOSITION_STATUSES = {"accepted", "rejected", "deferred"}
 REPO_INTERFACE_AVAILABILITY = {"absent", "companion_docs_only", "incomplete", "present"}
 REPO_INTERFACE_ENFORCEMENT = {"blocking", "advisory"}
 REPO_INTEROP_AVAILABILITY = {"absent", "incomplete", "present"}
+DYNAMIC_TOOL_HANDSHAKE_STATUSES = {"advertised", "unavailable", "unsupported", "failed"}
 
 
 def repo_root_from_argv(argv: list[str]) -> Path:
@@ -1187,6 +1190,58 @@ def require_repo_interface_payload(
         failures.append(Failure(category, f"{context} must include `missing_inputs` as a list"))
     if not isinstance(payload.get("missing_optional"), list):
         failures.append(Failure(category, f"{context} must include `missing_optional` as a list"))
+    require_tool_availability_payload(
+        failures,
+        category=category,
+        context=f"{context}.tool_availability",
+        payload=payload.get("tool_availability"),
+    )
+
+
+def require_tool_availability_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("schema_version") != "loom-dynamic-tool-handshake/v1":
+        failures.append(Failure(category, f"{context} schema_version must be `loom-dynamic-tool-handshake/v1`"))
+    if payload.get("result") not in {"pass", "block"}:
+        failures.append(Failure(category, f"{context} result must be pass or block"))
+    if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+        failures.append(Failure(category, f"{context} must include summary"))
+    declared_tools = payload.get("declared_tools")
+    if not isinstance(declared_tools, list):
+        failures.append(Failure(category, f"{context} declared_tools must be a list"))
+    else:
+        for index, tool in enumerate(declared_tools):
+            if not isinstance(tool, dict):
+                failures.append(Failure(category, f"{context}.declared_tools[{index}] must be an object"))
+                continue
+            if tool.get("status") not in DYNAMIC_TOOL_HANDSHAKE_STATUSES:
+                failures.append(Failure(category, f"{context}.declared_tools[{index}] status must stay in the handshake vocabulary"))
+            if tool.get("result") not in {"pass", "block"}:
+                failures.append(Failure(category, f"{context}.declared_tools[{index}] result must be pass or block"))
+            if tool.get("failure_category") not in {"none", "unavailable", "unsupported", "failed", "invalid_declaration"}:
+                failures.append(Failure(category, f"{context}.declared_tools[{index}] failure_category must stay stable"))
+            if not isinstance(tool.get("evidence"), dict):
+                failures.append(Failure(category, f"{context}.declared_tools[{index}] must include evidence"))
+    failure_summary = payload.get("failure_summary")
+    if not isinstance(failure_summary, dict):
+        failures.append(Failure(category, f"{context} failure_summary must be an object"))
+    else:
+        by_status = failure_summary.get("by_status")
+        if not isinstance(by_status, dict) or set(by_status) != DYNAMIC_TOOL_HANDSHAKE_STATUSES:
+            failures.append(Failure(category, f"{context} failure_summary.by_status must include the stable status vocabulary"))
+        for key in ("required_blocking", "optional_advisory"):
+            if not isinstance(failure_summary.get(key), list):
+                failures.append(Failure(category, f"{context} failure_summary.{key} must be a list"))
+    if not isinstance(payload.get("missing_inputs"), list):
+        failures.append(Failure(category, f"{context} missing_inputs must be a list"))
 
 
 def require_repo_interop_payload(
@@ -1266,6 +1321,12 @@ def require_repo_specific_requirements_payload(
     if isinstance(declared, list) and isinstance(blocking, list) and isinstance(advisory, list):
         if len(declared) != len(blocking) + len(advisory):
             failures.append(Failure(category, f"{context} declared requirements must split cleanly into blocking and advisory"))
+    require_tool_availability_payload(
+        failures,
+        category=category,
+        context=f"{context}.tool_availability",
+        payload=payload.get("tool_availability"),
+    )
 
 
 def require_missing_details(
@@ -7156,6 +7217,20 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
             failures.append(Failure("repo-companion", "optional dynamic tool locator gaps must not pollute core missing_inputs"))
         if isinstance(present_interface, dict) and "advisory-build-tool" in json.dumps(present_interface.get("missing_inputs", []), ensure_ascii=False):
             failures.append(Failure("repo-companion", "advisory dynamic tool missing locator field must not pollute core missing_inputs"))
+        if isinstance(present_interface, dict):
+            availability = present_interface.get("tool_availability")
+            require_tool_availability_payload(
+                failures,
+                category="repo-companion",
+                context="present v2 tool availability",
+                payload=availability,
+            )
+            if isinstance(availability, dict):
+                by_status = (availability.get("failure_summary") or {}).get("by_status")
+                if isinstance(by_status, dict) and by_status.get("advertised", 0) < 1:
+                    failures.append(Failure("repo-companion", "present dynamic tool locator must surface as advertised"))
+                if isinstance(by_status, dict) and by_status.get("unavailable", 0) < 2:
+                    failures.append(Failure("repo-companion", "optional/advisory missing dynamic tools must surface as unavailable"))
 
         review_requirements = repo_specific_requirements_payload(
             present_interface,
@@ -7201,6 +7276,116 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
         )
         if closeout_requirements.get("result") != "block":
             failures.append(Failure("repo-companion", "blocking closeout requirements must fail closed"))
+
+        tool_failures_target = base / "tool-failures"
+        shutil.copytree(example_target, tool_failures_target)
+        tool_failure_interface = {
+            **valid_interface_v2,
+            "repo_specific_requirements": {
+                "review": [],
+                "merge_ready": [],
+                "closeout": [],
+            },
+            "dynamic_tool_locators": [
+                {
+                    "id": "required-unsupported-tool",
+                    "summary": "Required tool reports unsupported.",
+                    "locator": ".loom/companion/tool-unsupported.json",
+                    "owner": "host-adapter",
+                    "requirement": "required",
+                    "surface": "merge_ready",
+                    "fallback_to": "merge",
+                },
+                {
+                    "id": "optional-unavailable-tool",
+                    "summary": "Optional tool is not installed.",
+                    "locator": ".loom/companion/missing-tool.json",
+                    "owner": "host-adapter",
+                    "requirement": "optional",
+                    "surface": "review",
+                    "fallback_to": "build",
+                },
+                {
+                    "id": "advisory-failed-tool",
+                    "summary": "Advisory tool reports a failed handshake.",
+                    "locator": ".loom/companion/tool-failed.json",
+                    "owner": "external-tool",
+                    "requirement": "advisory",
+                    "surface": "attempt_time",
+                    "fallback_to": "build",
+                },
+            ],
+        }
+        install_companion(
+            tool_failures_target,
+            manifest=valid_manifest,
+            repo_interface=tool_failure_interface,
+        )
+        write_json(
+            tool_failures_target / ".loom/companion/tool-unsupported.json",
+            {
+                "schema_version": "loom-dynamic-tool-handshake/v1",
+                "status": "unsupported",
+                "summary": "Host adapter does not support this tool call.",
+                "failure_category": "unsupported",
+                "fallback_to": "merge",
+                "evidence": {"status": "present"},
+            },
+        )
+        write_json(
+            tool_failures_target / ".loom/companion/tool-failed.json",
+            {
+                "schema_version": "loom-dynamic-tool-handshake/v1",
+                "status": "failed",
+                "summary": "External tool handshake failed.",
+                "failure_category": "failed",
+                "fallback_to": "build",
+                "evidence": {"status": "present"},
+            },
+        )
+        tool_failure_surface = build_governance_surface(tool_failures_target)
+        tool_failure_repo_interface = tool_failure_surface.get("repo_interface")
+        require_repo_interface_payload(
+            failures,
+            category="repo-companion",
+            context="tool failure repo companion",
+            payload=tool_failure_repo_interface,
+        )
+        if not isinstance(tool_failure_repo_interface, dict) or tool_failure_repo_interface.get("availability") != "present":
+            failures.append(Failure("repo-companion", "tool handshake failures must not make the companion declaration unreadable"))
+        else:
+            availability = tool_failure_repo_interface.get("tool_availability")
+            if not isinstance(availability, dict):
+                failures.append(Failure("repo-companion", "tool failure sample must expose tool_availability"))
+            else:
+                by_status = (availability.get("failure_summary") or {}).get("by_status")
+                if not isinstance(by_status, dict) or by_status.get("unsupported") != 1:
+                    failures.append(Failure("repo-companion", "unsupported tool fixture must surface as unsupported"))
+                if not isinstance(by_status, dict) or by_status.get("unavailable") != 1:
+                    failures.append(Failure("repo-companion", "unavailable tool fixture must surface as unavailable"))
+                if not isinstance(by_status, dict) or by_status.get("failed") != 1:
+                    failures.append(Failure("repo-companion", "failed tool fixture must surface as failed"))
+            tool_merge_requirements = repo_specific_requirements_payload(
+                tool_failure_repo_interface,
+                target_root=tool_failures_target,
+                surface="merge_ready",
+            )
+            require_repo_specific_requirements_payload(
+                failures,
+                category="repo-companion",
+                context="tool failure merge-ready requirements",
+                payload=tool_merge_requirements,
+                expected_surface="merge_ready",
+            )
+            if tool_merge_requirements.get("result") != "block":
+                failures.append(Failure("repo-companion", "required unsupported dynamic tool must block merge-ready"))
+            tool_review_requirements = repo_specific_requirements_payload(
+                tool_failure_repo_interface,
+                target_root=tool_failures_target,
+                surface="review",
+            )
+            if tool_review_requirements.get("result") != "pass":
+                failures.append(Failure("repo-companion", "optional unavailable dynamic tool must not block review"))
 
         flow_review_payload, error = load_command_json(
             root,

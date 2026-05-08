@@ -15,6 +15,8 @@
   - 定义每轮正式执行必须绑定和读取的最小上下文语义
 - [execution-attempt.md](./execution-attempt.md)
   - 定义单次命令尝试的 runtime evidence envelope、freshness 与禁止承载 authored progress 的边界
+- [dynamic-tool-handshake.md](./dynamic-tool-handshake.md)
+  - 定义 dynamic tool availability 的 `advertised` / `unavailable` / `unsupported` / `failed` 词表、companion / interop 边界与状态展示规则
 - [item-context-contract.md](./item-context-contract.md)
   - 定义当前活跃 `Work Item` 的最小 machine-readable 上下文字段与读取边界
 - [status-surface-contract.md](./status-surface-contract.md)
