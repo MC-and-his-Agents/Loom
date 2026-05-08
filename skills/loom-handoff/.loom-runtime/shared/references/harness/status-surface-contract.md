@@ -160,7 +160,23 @@
 - `drift`
 - `gate_failures`
 
-### 3.8 `github`
+### 3.9 `event_evidence`
+
+当 flow、fixture 或 host adapter 提供 structured event evidence 时，状态面可以展示最近事件摘要：
+
+- `schema_version`
+- `item_id`
+- `session_id`
+- `attempt_id`
+- `event_type`
+- `result`
+- `source`
+- `subject`
+- `provenance`
+
+该字段组只消费 [structured-event-evidence.md](./structured-event-evidence.md) 定义的 evidence-only 事件，不得从事件中读取或生成 `next_step`、`blockers`、`latest_validation_summary`、issue closeout 或 scheduler 状态。
+
+### 3.10 `github`
 
 至少包含：
 
@@ -173,7 +189,7 @@
 - `branch_protection`
 - `project`
 
-### 3.8 `provenance`
+### 3.11 `provenance`
 
 每个会影响 `pass | block` 的字段组至少要能暴露：
 

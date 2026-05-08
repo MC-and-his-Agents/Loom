@@ -52,6 +52,7 @@ Loom 的宿主动作面不是新的 umbrella CLI，也不是宿主平台替身�
 - drift taxonomy 见 [reconciliation-audit.md](./reconciliation-audit.md)
 - closeout 检查与 sync 顺序见 [closeout-gate.md](./closeout-gate.md)
 - approval / sandbox policy 读面见 [policy-read-surface.md](./policy-read-surface.md)
+- structured event evidence 见 [structured-event-evidence.md](./structured-event-evidence.md)
 
 ## 2. 覆盖范围
 
@@ -152,6 +153,7 @@ v0.7 只冻结 declaration-time locator contract。
 - 不在 Loom core 中定义 host/platform 的调用协议
 - 不定义宿主 approval policy 名称、sandbox 配置项或权限提升动作
 - 不把 optional/advisory 缺口升级成普通 PR blocking gate
+- 不把 structured event evidence 提升为 issue、tracker、recovery 或 scheduler 的 authored truth
 
 ## 6. Ownership Boundary
 

@@ -74,6 +74,7 @@ CORE_DOCS = (
     "docs/methodology/harness/fact-chain-contract.md",
     "docs/methodology/harness/execution-attempt.md",
     "docs/methodology/harness/dynamic-tool-handshake.md",
+    "docs/methodology/harness/structured-event-evidence.md",
     "docs/methodology/harness/execution-context.md",
     "docs/methodology/harness/execution-chain.md",
     "docs/methodology/harness/checkpoint-model.md",
@@ -190,6 +191,7 @@ AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT = (
     "docs/methodology/harness/work-item-contract.md",
     "docs/methodology/harness/execution-attempt.md",
     "docs/methodology/harness/dynamic-tool-handshake.md",
+    "docs/methodology/harness/structured-event-evidence.md",
     "docs/methodology/harness/execution-context.md",
     "docs/methodology/harness/execution-chain.md",
     "docs/methodology/harness/checkpoint-model.md",
@@ -264,6 +266,17 @@ REPO_INTEROP_AVAILABILITY = {"absent", "incomplete", "present"}
 DYNAMIC_TOOL_HANDSHAKE_STATUSES = {"advertised", "unavailable", "unsupported", "failed"}
 POLICY_READ_STATUSES = {"declared", "missing", "conflict", "unsafe"}
 POLICY_TYPES = {"approval", "sandbox"}
+EVENT_EVIDENCE_SCHEMA = "loom-event-evidence/v1"
+EVENT_EVIDENCE_TYPES = {"agent.step", "agent.tool", "tracker.state", "validation.result", "failure.observed"}
+EVENT_EVIDENCE_RESULTS = {"pass", "fail", "block", "warn", "unavailable"}
+EVENT_EVIDENCE_FORBIDDEN_AUTHORED_FIELDS = {
+    "next_step",
+    "blockers",
+    "latest_validation_summary",
+    "current_checkpoint",
+    "recovery",
+    "authored_truth",
+}
 
 
 def repo_root_from_argv(argv: list[str]) -> Path:
@@ -2273,6 +2286,57 @@ def require_execution_attempt_summary(
         for field in ("locator", "latest_locator"):
             if not isinstance(evidence.get(field), str) or not evidence.get(field):
                 failures.append(Failure(category, f"{context} execution_attempt evidence must include `{field}`"))
+
+
+def structured_event_evidence_errors(payload: object, *, context: str) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(payload, dict):
+        return [f"{context} event evidence must be an object"]
+    if payload.get("schema_version") != EVENT_EVIDENCE_SCHEMA:
+        errors.append(f"{context} schema_version must be `{EVENT_EVIDENCE_SCHEMA}`")
+    for field in ("item_id", "session_id", "attempt_id", "event_id", "summary", "observed_at"):
+        if not isinstance(payload.get(field), str) or not payload.get(field):
+            errors.append(f"{context} must include non-empty `{field}`")
+    if payload.get("event_type") not in EVENT_EVIDENCE_TYPES:
+        errors.append(f"{context} event_type is outside the stable vocabulary")
+    if payload.get("result") not in EVENT_EVIDENCE_RESULTS:
+        errors.append(f"{context} result is outside the stable vocabulary")
+    for field in ("source", "subject", "provenance"):
+        if not isinstance(payload.get(field), dict):
+            errors.append(f"{context} must include `{field}` as an object")
+    source = payload.get("source")
+    if isinstance(source, dict):
+        if not isinstance(source.get("kind"), str) or not source.get("kind"):
+            errors.append(f"{context} source.kind must be non-empty")
+        if not isinstance(source.get("locator"), str) or not source.get("locator"):
+            errors.append(f"{context} source.locator must be non-empty")
+    subject = payload.get("subject")
+    if isinstance(subject, dict):
+        if subject.get("kind") not in {"item", "session", "attempt", "tool", "validation", "failure", "tracker"}:
+            errors.append(f"{context} subject.kind is outside the stable vocabulary")
+        if not isinstance(subject.get("locator"), str) or not subject.get("locator"):
+            errors.append(f"{context} subject.locator must be non-empty")
+    provenance = payload.get("provenance")
+    if isinstance(provenance, dict):
+        if provenance.get("authority") != "event_evidence":
+            errors.append(f"{context} provenance.authority must be `event_evidence`")
+        if provenance.get("truth_boundary") != "evidence_only":
+            errors.append(f"{context} provenance.truth_boundary must be `evidence_only`")
+    forbidden = sorted(EVENT_EVIDENCE_FORBIDDEN_AUTHORED_FIELDS.intersection(payload))
+    if forbidden:
+        errors.append(f"{context} event evidence must not carry authored truth fields: {', '.join(forbidden)}")
+    return errors
+
+
+def require_structured_event_evidence(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    for error in structured_event_evidence_errors(payload, context=context):
+        failures.append(Failure(category, error))
 
 
 def require_fact_chain_provenance(
@@ -9644,6 +9708,152 @@ def check_orchestration_conformance_profiles(root: Path) -> list[Failure]:
     return failures
 
 
+def fake_event_evidence(
+    *,
+    event_id: str,
+    event_type: str,
+    source_kind: str,
+    subject_kind: str,
+    result: str,
+    summary: str,
+    subject_locator: str = ".loom/runtime/attempts/WI-576/latest.json",
+) -> dict[str, object]:
+    return {
+        "schema_version": EVENT_EVIDENCE_SCHEMA,
+        "item_id": "WI-576",
+        "session_id": "fixture-session",
+        "attempt_id": "fixture-attempt",
+        "event_id": event_id,
+        "event_type": event_type,
+        "source": {
+            "kind": source_kind,
+            "locator": f"loom_check.fixture.{source_kind}",
+        },
+        "subject": {
+            "kind": subject_kind,
+            "locator": subject_locator,
+        },
+        "result": result,
+        "summary": summary,
+        "observed_at": "fixture",
+        "provenance": {
+            "authority": "event_evidence",
+            "truth_boundary": "evidence_only",
+        },
+    }
+
+
+def check_structured_event_evidence_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    docs = {
+        "docs/methodology/harness/structured-event-evidence.md": [
+            "loom-event-evidence/v1",
+            "fake agent",
+            "fake tracker",
+            "tool failure",
+            "drift",
+            "evidence_only",
+            "`next_step`",
+        ],
+        "skills/shared/references/harness/structured-event-evidence.md": [
+            "loom-event-evidence/v1",
+            "fake agent",
+            "fake tracker",
+            "evidence_only",
+        ],
+    }
+    for relative, anchors in docs.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            failures.append(Failure("structured-event-evidence", f"`{relative}` is unreadable: {exc}"))
+            continue
+        for anchor in anchors:
+            if anchor not in text:
+                failures.append(Failure("structured-event-evidence", f"`{relative}` must mention `{anchor}`"))
+
+    events = [
+        fake_event_evidence(
+            event_id="fake-agent-success",
+            event_type="agent.step",
+            source_kind="fake_agent",
+            subject_kind="attempt",
+            result="pass",
+            summary="fake agent completed the orchestration step",
+        ),
+        fake_event_evidence(
+            event_id="fake-agent-failure",
+            event_type="failure.observed",
+            source_kind="fake_agent",
+            subject_kind="failure",
+            result="fail",
+            summary="fake agent reported a controlled failure",
+            subject_locator=".loom/runtime/events/WI-576/failure.json",
+        ),
+        fake_event_evidence(
+            event_id="fake-agent-tool-failure",
+            event_type="agent.tool",
+            source_kind="fake_agent",
+            subject_kind="tool",
+            result="block",
+            summary="fake agent reported a tool failure without calling a real tool",
+            subject_locator=".loom/runtime/events/WI-576/tool.json",
+        ),
+        fake_event_evidence(
+            event_id="fake-tracker-active",
+            event_type="tracker.state",
+            source_kind="fake_tracker",
+            subject_kind="tracker",
+            result="pass",
+            summary="fake tracker observed active state",
+            subject_locator="fake-tracker://WI-576",
+        ),
+        fake_event_evidence(
+            event_id="fake-tracker-closed",
+            event_type="tracker.state",
+            source_kind="fake_tracker",
+            subject_kind="tracker",
+            result="pass",
+            summary="fake tracker observed closed state",
+            subject_locator="fake-tracker://WI-576",
+        ),
+        fake_event_evidence(
+            event_id="fake-tracker-drift",
+            event_type="tracker.state",
+            source_kind="fake_tracker",
+            subject_kind="tracker",
+            result="block",
+            summary="fake tracker observed state drift",
+            subject_locator="fake-tracker://WI-576",
+        ),
+    ]
+    for event in events:
+        require_structured_event_evidence(
+            failures,
+            category="structured-event-evidence",
+            context=str(event.get("event_id")),
+            payload=event,
+        )
+
+    missing_required = dict(events[0])
+    missing_required.pop("attempt_id", None)
+    if not any("attempt_id" in error for error in structured_event_evidence_errors(missing_required, context="missing-required")):
+        failures.append(Failure("structured-event-evidence", "event evidence must reject missing required fields"))
+
+    truth_poisoned = dict(events[0])
+    truth_poisoned["next_step"] = "close the issue"
+    if not any("authored truth fields" in error for error in structured_event_evidence_errors(truth_poisoned, context="truth-poisoned")):
+        failures.append(Failure("structured-event-evidence", "event evidence must reject copied recovery truth"))
+
+    tracker_poisoned = dict(events[-1])
+    tracker_poisoned["recovery"] = {"next_step": "invented tracker recovery"}
+    if not any("authored truth fields" in error for error in structured_event_evidence_errors(tracker_poisoned, context="tracker-poisoned")):
+        failures.append(Failure("structured-event-evidence", "fake tracker drift must not carry scheduler or recovery truth"))
+
+    return failures
+
+
 def deferred_roadmap_inventory_section(body: str) -> str:
     match = re.search(r"(?ims)^## Roadmap Inventory\s*(.*?)(?=^## |\Z)", body)
     return match.group(1).strip() if match else ""
@@ -10101,6 +10311,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_github_cli_budget(root))
     failures.extend(check_operating_layer_contract(root))
     failures.extend(check_orchestration_conformance_profiles(root))
+    failures.extend(check_structured_event_evidence_contract(root))
     failures.extend(check_deferred_roadmap_tree_contract(root))
     failures.extend(check_execution_attempt_contract(root))
     failures.extend(check_markdown_links(root))
@@ -10108,7 +10319,7 @@ def collect_failures(root: Path) -> list[Failure]:
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 26
+    categories_checked = 27
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")
