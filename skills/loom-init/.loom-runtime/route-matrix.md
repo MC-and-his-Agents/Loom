@@ -14,6 +14,7 @@
 | --- | --- | --- | --- |
 | 初始化 / retrofit | 初始化、新项目接入、既有仓库 retrofit、引入 Loom | `loom-adopt` | `loom-init/scripts/loom-init.py bootstrap\|verify\|fact-chain` |
 | 恢复执行 | 接手当前事项、恢复上下文、问下一步、继续推进 | `loom-resume` | `loom-resume/scripts/loom-resume.py flow resume` |
+| 执行 / build | 实现当前事项、执行 build、implementation round、集成 subagent 输出、检查 repeated blocker | `loom-build` | `loom-build/scripts/loom-build.py flow build` |
 | review 前统一检查 | review 前检查、进入 review、确认是否可 review、确认 gate chain 是否已到 review gate | `loom-pre-review` | `loom-pre-review/scripts/loom-pre-review.py flow pre-review` |
 | formal spec review | formal spec review、spec review、确认 spec 是否通过、审查 formal spec 路径、确认 spec gate | `loom-spec-review` | `loom-spec-review/scripts/loom-spec-review.py flow spec-review` + `shared/scripts/loom_flow.py review run --review-file .loom/reviews/<item>.spec.json` + `shared/scripts/loom_flow.py review record --review-file .loom/reviews/<item>.spec.json --kind spec_review` |
 | 正式 review | 正式 review、语义审查、输出 review 结论、code review、implementation review、确认 review gate | `loom-review` | `loom-review/scripts/loom-review.py flow review` + `shared/scripts/loom_flow.py review run` + `loom-review/scripts/loom-review.py review record` |

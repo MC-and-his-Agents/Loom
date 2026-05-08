@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-689
-- Goal: Deliver #689 installed Loom upgrade rehearsal and status for v0.8.0 / #531.
-- Scope: Define installed Loom status, add installer upgrade-plan and verify-upgrade read surfaces, expose drift and rollback evidence, and cover rehearsal failure states with installer tests.
-- Execution Path: phase/v0.8.0/fr/689
+- Item ID: WI-706
+- Goal: Deliver #706 Loom build skill and subagent-driven execution mode for v0.8.0 / #531.
+- Scope: Define the loom-build route and ownership contract, add generated skill surfaces, and validate subagent output integration and repeated blocker handling.
+- Execution Path: phase/v0.8.0/fr/706
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-689.md
-- Review Entry: .loom/reviews/WI-689.json
+- Recovery Entry: .loom/progress/WI-706.md
+- Review Entry: .loom/reviews/WI-706.json
 - Validation Entry: make check
-- Closing Condition: Adoption docs define installed Loom surface status; installer emits read-only upgrade-plan and verify-upgrade evidence including changed paths, drift, rollback path, failed layer, and fail-closed reason; fixtures cover current, upgrade-available, drift, and incompatible metadata states; make check passes cleanly; and the #689 batch PR absorbs #690-#692.
-- Current Checkpoint: merge checkpoint
-- Current Stop: WI-689 implementation, validation, spec review, and code review evidence are aligned on the batch branch.
-- Next Step: Run merge-ready checks, open the #689 batch PR, merge to main, then close #690-#692.
+- Closing Condition: Loom build route is documented and generated; subagent-driven execution ownership is bounded by explicit read/write/integration contracts; unintegrated subagent output and repeated blocker evidence fail closed before review/merge-ready; make check passes cleanly; and the #706 batch PR absorbs #707-#710.
+- Current Checkpoint: build checkpoint
+- Current Stop: WI-706 loom-build route, ownership contract, generated skill surfaces, and build execution fixtures are implemented on the batch branch.
+- Next Step: Record review evidence, refresh merge-ready evidence, open the #706 batch PR, merge to main, then close #707-#710.
 - Blockers: None recorded.
-- Latest Validation Summary: npm test passed for packages/loom-installer; npm run check:release passed for packages/loom-installer; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed; CLI smoke for upgrade-plan returned planned/current/mutates_target=false; make check passed with 27 surfaces and no tracked drift beyond this batch.
-- Recovery Boundary: Branch work/689-installed-upgrade-rehearsal-status; active item WI-689; installed Loom status and upgrade rehearsal evidence are read surfaces only and must not replace repo companion, Work Item, review, merge-ready, closeout, issue, or PR truth.
-- Current Lane: v0.8.0 / #531 / #689 installed Loom upgrade rehearsal and status
+- Latest Validation Summary: python3 -m py_compile passed for changed Loom runtime scripts; python3 tools/skills_surface.py check passed; python3 tools/loom_init.py route selected loom-build for build/subagent task signals; python3 tools/loom_flow.py flow build failed closed without required evidence and passed with integrated build evidence in a temp fixture; npm test and npm run check:release passed for packages/loom-installer; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed.
+- Recovery Boundary: Branch work/706-loom-build-subagent-execution-mode; active item WI-706; subagent-driven execution evidence must write back into Loom carriers and must not become parallel truth.
+- Current Lane: v0.8.0 / #531 / #706 Loom build skill and subagent-driven execution mode
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-689.md
-- Dynamic Truth: .loom/progress/WI-689.md
+- Static Truth: .loom/work-items/WI-706.md
+- Dynamic Truth: .loom/progress/WI-706.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

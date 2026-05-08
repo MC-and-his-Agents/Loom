@@ -2548,6 +2548,7 @@ def check_skill_manifests(root: Path) -> list[Failure]:
         "loom-init": "bootstrap/root",
         "loom-adopt": "scenario/adopt",
         "loom-resume": "scenario/resume",
+        "loom-build": "scenario/build",
         "loom-pre-review": "scenario/pre-review",
         "loom-review": "scenario/review",
         "loom-spec-review": "scenario/spec-review",
@@ -2850,6 +2851,7 @@ def check_skill_routing(root: Path) -> list[Failure]:
     implicit_cases = (
         ("请初始化这个新项目并接入 Loom", "loom-adopt"),
         ("请接手当前事项并恢复上下文后继续推进", "loom-resume"),
+        ("请执行 build round 并集成 subagent 输出", "loom-build"),
         ("请在进入 review 前做统一检查", "loom-pre-review"),
         ("请先对 formal spec 做 spec review", "loom-spec-review"),
         ("请对当前事项做正式 review 并给出审查结论", "loom-review"),
@@ -10464,6 +10466,102 @@ def check_execution_attempt_contract(root: Path) -> list[Failure]:
     return failures
 
 
+def check_build_execution_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    example_target = root / "examples/new-project"
+    if not example_target.exists():
+        return failures
+
+    with tempfile.TemporaryDirectory(prefix="loom-check-build-execution-") as tmp:
+        target = Path(tmp) / "target"
+        shutil.copytree(example_target, target)
+        context, errors = loom_flow_module.load_context(target, ".loom/bootstrap/init-result.json", "INIT-0001")
+        if errors:
+            failures.append(Failure("build-execution", f"fixture fact chain failed: {'; '.join(errors)}"))
+            return failures
+        context["closing_condition"] = f"{context['closing_condition']} Ownership constraints are declared for build fixtures."
+
+        evidence_dir = target / ".loom/runtime/build"
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+
+        def write_evidence(name: str, delegations: list[dict[str, object]]) -> str:
+            relative = f".loom/runtime/build/{name}.json"
+            payload = {
+                "schema_version": "loom-build-evidence/v1",
+                "delegations": delegations,
+                "integration_evidence": [
+                    {
+                        "carrier": "recovery",
+                        "locator": ".loom/progress/INIT-0001.md",
+                    }
+                ],
+            }
+            (target / relative).write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            return relative
+
+        base_delegation = {
+            "id": "worker-a",
+            "task_goal": "update build fixture",
+            "context_locators": [".loom/work-items/INIT-0001.md"],
+            "read_scope": [".loom/specs/INIT-0001/plan.md"],
+            "write_ownership": ["docs/example.md"],
+            "non_goals": ["do not edit review records"],
+            "validation_expectation": "make check",
+            "output_format": "summary plus changed paths",
+            "integration_target": ".loom/progress/INIT-0001.md",
+            "status": "integrated",
+        }
+
+        integrated = loom_flow_module.build_execution_payload(
+            context,
+            write_evidence("integrated", [dict(base_delegation)]),
+        )
+        if integrated.get("result") != "pass":
+            failures.append(Failure("build-execution", "integrated subagent output must pass build execution readiness"))
+
+        unintegrated_delegation = dict(base_delegation)
+        unintegrated_delegation["id"] = "worker-unintegrated"
+        unintegrated_delegation["status"] = "unintegrated"
+        unintegrated = loom_flow_module.build_execution_payload(
+            context,
+            write_evidence("unintegrated", [unintegrated_delegation]),
+        )
+        if unintegrated.get("result") != "block":
+            failures.append(Failure("build-execution", "unintegrated subagent output must block build readiness"))
+        elif not any("not integrated" in message for message in unintegrated.get("missing_inputs", [])):
+            failures.append(Failure("build-execution", "unintegrated output must be named in missing_inputs"))
+
+        overlap_a = dict(base_delegation)
+        overlap_a["id"] = "worker-overlap-a"
+        overlap_b = dict(base_delegation)
+        overlap_b["id"] = "worker-overlap-b"
+        overlap_b["read_scope"] = [".loom/specs/INIT-0001/spec.md"]
+        overlap = loom_flow_module.build_execution_payload(
+            context,
+            write_evidence("overlap", [overlap_a, overlap_b]),
+        )
+        if overlap.get("result") != "block" or not overlap.get("ownership_conflicts"):
+            failures.append(Failure("build-execution", "overlapping write ownership must fail closed"))
+
+        repeated_a = dict(base_delegation)
+        repeated_a["id"] = "worker-repeat-a"
+        repeated_a["write_ownership"] = ["docs/a.md"]
+        repeated_a["blocker_signature"] = "validation-gap"
+        repeated_b = dict(base_delegation)
+        repeated_b["id"] = "worker-repeat-b"
+        repeated_b["write_ownership"] = ["docs/b.md"]
+        repeated_b["blocker_signature"] = "validation-gap"
+        repeated = loom_flow_module.build_execution_payload(
+            context,
+            write_evidence("repeated", [repeated_a, repeated_b]),
+        )
+        signal = repeated.get("repeated_blocker_signal")
+        if repeated.get("result") != "block" or not isinstance(signal, dict) or signal.get("result") != "block":
+            failures.append(Failure("build-execution", "repeated blocker candidates must block and expose root-cause signal"))
+
+    return failures
+
+
 def is_within(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
@@ -10512,12 +10610,13 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_structured_event_evidence_contract(root))
     failures.extend(check_deferred_roadmap_tree_contract(root))
     failures.extend(check_execution_attempt_contract(root))
+    failures.extend(check_build_execution_contract(root))
     failures.extend(check_markdown_links(root))
     return failures
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 27
+    categories_checked = 28
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")

@@ -21,6 +21,8 @@
   - 定义 approval / sandbox policy 读面、missing / conflict / unsafe 词表、风险摘要与 host-adapter 边界
 - [structured-event-evidence.md](./structured-event-evidence.md)
   - 定义 agent / tool / validation / failure / tracker event evidence 的字段、fake orchestration fixtures 与禁止承载 authored truth 的边界
+- [subagent-driven-execution.md](./subagent-driven-execution.md)
+  - 定义 subagent-driven build mode 的 ownership、integration、repeated blocker 与主执行者回写边界
 - [item-context-contract.md](./item-context-contract.md)
   - 定义当前活跃 `Work Item` 的最小 machine-readable 上下文字段与读取边界
 - [status-surface-contract.md](./status-surface-contract.md)
