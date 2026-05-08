@@ -11,7 +11,7 @@
 - Review Entry: .loom/reviews/WI-679.json
 - Validation Entry: make check
 - Closing Condition: Review context pack schema is documented; review run writes context pack evidence; prompt consumes recent findings and dispositions; repeated blocker signal is advisory evidence with source locators; fixtures prove repeated blockers recommend root-cause handling; generated skill surfaces are synchronized; make check passes cleanly; and the #679 batch PR absorbs #680-#683.
-- Current Checkpoint: build checkpoint
+- Current Checkpoint: merge checkpoint
 - Current Stop: WI-679 context pack implementation, fixtures, generated surfaces, installer version, and review evidence are aligned on the batch branch.
 - Next Step: Run installer/version checks, refresh review evidence, run merge-ready, open the #679 batch PR, merge to main, then close #680-#683.
 - Blockers: None recorded.
