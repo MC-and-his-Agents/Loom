@@ -5,7 +5,7 @@
   "kind": "code_review",
   "summary": "#675 implementation resolves a deterministic review engine profile before Codex execution, passes explicit model/reasoning settings, records profile evidence in metadata and review_record_input, and adds fixtures for override and missing-profile contract enforcement.",
   "reviewer": "codex",
-  "reviewed_head": "fd37609c35f8f3b54d18dd3797b02ca17bc6b255",
+  "reviewed_head": "c86a2f1207f444da103f65b23e3ec4db0f7c1bb6",
   "reviewed_validation_summary": "python3 -m py_compile passed for changed loom_flow and loom_check scripts; python3 tools/skills_surface.py check passed; python3 tools/loom_check.py passed with 27 surfaces; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed; npm run check:payload --prefix packages/loom-installer passed.",
   "fallback_to": null,
   "findings": [],
