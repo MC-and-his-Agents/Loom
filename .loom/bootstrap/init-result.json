@@ -74,9 +74,9 @@
     "mode": "work-item + recovery-entry + derived status-surface",
     "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
     "entry_points": {
-      "current_item_id": "WI-706",
-      "work_item": ".loom/work-items/WI-706.md",
-      "recovery_entry": ".loom/progress/WI-706.md",
+      "current_item_id": "WI-531",
+      "work_item": ".loom/work-items/WI-531.md",
+      "recovery_entry": ".loom/progress/WI-531.md",
       "status_surface": ".loom/status/current.md"
     }
   },

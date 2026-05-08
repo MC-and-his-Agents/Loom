@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-706
-- Goal: Deliver #706 Loom build skill and subagent-driven execution mode for v0.8.0 / #531.
-- Scope: Define the loom-build route and ownership contract, add generated skill surfaces, and validate subagent output integration and repeated blocker handling.
-- Execution Path: phase/v0.8.0/fr/706
+- Item ID: WI-531
+- Goal: Complete v0.8.0 / #531 phase closeout with GitHub truth, docs, implementation, tests, review, merge-ready, main, release tag, and issue state aligned.
+- Scope: Verify all eight FR batches and child Work Items are closed on main, bump root release truth to v0.8.0, publish the root release after merge, and close #531 only after evidence agrees.
+- Execution Path: phase/v0.8.0/closeout/531
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-706.md
-- Review Entry: .loom/reviews/WI-706.json
+- Recovery Entry: .loom/progress/WI-531.md
+- Review Entry: .loom/reviews/WI-531.json
 - Validation Entry: make check
-- Closing Condition: Loom build route is documented and generated; subagent-driven execution ownership is bounded by explicit read/write/integration contracts; unintegrated subagent output and repeated blocker evidence fail closed before review/merge-ready; make check passes cleanly; and the #706 batch PR absorbs #707-#710.
+- Closing Condition: main contains #561, #566, #571, #576, #675, #679, #689, and #706; all child Work Items are closed; VERSION declares v0.8.0; make check passes cleanly; the closeout PR merges to main; GitHub tag/release v0.8.0 points at the final release commit; and #531 is closed with matching evidence.
 - Current Checkpoint: merge checkpoint
-- Current Stop: WI-706 loom-build route, ownership contract, generated skill surfaces, build execution fixtures, and review evidence are ready for the batch PR.
-- Next Step: Open the #706 batch PR, merge to main after host checks pass, then close #707-#710 and #706.
+- Current Stop: All eight v0.8.0 FR batches have merged to main and their FR/child issues are closed; final release truth changes are ready for closeout PR review.
+- Next Step: Merge the final #531 closeout PR, rerun make check on main, publish tag/release v0.8.0 at the final release commit, then close #531.
 - Blockers: None recorded.
-- Latest Validation Summary: python3 -m py_compile passed for changed Loom runtime scripts; python3 tools/skills_surface.py check passed; python3 tools/loom_init.py route selected loom-build for build/subagent task signals; python3 tools/loom_flow.py flow build failed closed without required evidence and passed with integrated build evidence in a temp fixture; npm test and npm run check:release passed for packages/loom-installer; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed.
-- Recovery Boundary: Branch work/706-loom-build-subagent-execution-mode; active item WI-706; subagent-driven execution evidence must write back into Loom carriers and must not become parallel truth.
-- Current Lane: v0.8.0 / #531 / #706 Loom build skill and subagent-driven execution mode
+- Latest Validation Summary: #706 merged via PR #721 at 51157fadc59a98c6721b4b2bef70bb4d8497f6be; post-merge make check passed on main with 28 surfaces; #561, #566, #571, #576, #675, #679, #689, #706 and all child Work Items are closed.
+- Recovery Boundary: Branch work/531-v0.8.0-closeout; active item WI-531; final release/tag publication occurs only after the closeout PR merges and post-merge verification passes.
+- Current Lane: v0.8.0 / #531 phase closeout
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-706.md
-- Dynamic Truth: .loom/progress/WI-706.md
+- Static Truth: .loom/work-items/WI-531.md
+- Dynamic Truth: .loom/progress/WI-531.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
