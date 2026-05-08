@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-675
-- Goal: Deliver #675 deterministic review engine execution for v0.8.0 / #531.
-- Scope: Define the review engine profile contract, resolve explicit Codex model and reasoning profile in review run, and require auditable profile evidence in review fixtures.
-- Execution Path: phase/v0.8.0/fr/675
+- Item ID: WI-679
+- Goal: Deliver #679 review context pack and repeated blocker signal for v0.8.0 / #531.
+- Scope: Define the review context pack MVP, feed recent findings/dispositions into review prompts and engine evidence, and emit advisory repeated blocker/root-cause signals with fixtures.
+- Execution Path: phase/v0.8.0/fr/679
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-675.md
-- Review Entry: .loom/reviews/WI-675.json
+- Recovery Entry: .loom/progress/WI-679.md
+- Review Entry: .loom/reviews/WI-679.json
 - Validation Entry: make check
-- Closing Condition: Review execution has a stable profile contract; review run passes explicit model and reasoning parameters instead of inheriting host defaults; engine metadata and review_record_input expose the resolved profile, selection reason, and override reason; override without reason fails closed; review fixtures require profile evidence; generated skill surfaces are synchronized; make check passes cleanly; and the #675 batch PR absorbs #676-#678.
-- Current Checkpoint: merge checkpoint
-- Current Stop: WI-675 implementation, fixtures, generated surfaces, installer version, and review evidence are aligned on the batch branch.
-- Next Step: Run installer/version checks, refresh review evidence, run merge-ready, open #675 batch PR, merge to main, then close #676-#678.
+- Closing Condition: Review context pack schema is documented; review run writes context pack evidence; prompt consumes recent findings and dispositions; repeated blocker signal is advisory evidence with source locators; fixtures prove repeated blockers recommend root-cause handling; generated skill surfaces are synchronized; make check passes cleanly; and the #679 batch PR absorbs #680-#683.
+- Current Checkpoint: build checkpoint
+- Current Stop: WI-679 context pack implementation and fixtures are drafted on the batch branch; generated skill surfaces are synchronized.
+- Next Step: Run installer/version checks, refresh review evidence, run merge-ready, open the #679 batch PR, merge to main, then close #680-#683.
 - Blockers: None recorded.
-- Latest Validation Summary: python3 -m py_compile passed for changed loom_flow and loom_check scripts; python3 tools/skills_surface.py check passed; python3 tools/loom_check.py passed with 27 surfaces; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed; npm run check:payload --prefix packages/loom-installer passed.
-- Recovery Boundary: Branch work/675-deterministic-review-engine-execution; active item WI-675; review engine profile evidence is execution evidence and must not replace authored review, Work Item, recovery, merge-ready, closeout, issue, or PR truth.
-- Current Lane: v0.8.0 / #531 / #675 deterministic review engine execution
+- Latest Validation Summary: python3 -m py_compile passed for changed loom_flow and loom_check scripts; python3 tools/skills_surface.py check passed; python3 tools/loom_check.py passed with 27 surfaces.
+- Recovery Boundary: Branch work/679-review-context-pack-repeated-blocker; active item WI-679; context pack and repeated blocker signal are input evidence only and must not replace review, recovery, merge-ready, closeout, issue, or PR truth.
+- Current Lane: v0.8.0 / #531 / #679 review context pack and repeated blocker signal
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-675.md
-- Dynamic Truth: .loom/progress/WI-675.md
+- Static Truth: .loom/work-items/WI-679.md
+- Dynamic Truth: .loom/progress/WI-679.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

@@ -86,6 +86,31 @@ Resolved profile 必须同时出现在：
 - `.loom/runtime/review/<item>/<head>/engine-metadata.json`
 - `review_record_input.engine_profile`
 
+### 2.2 Review context pack
+
+`review run` 必须在调用 engine 前写入 MVP context pack，schema 为 `loom-review-context-pack/v1`。context pack 是输入证据，不是第二份 review truth。
+
+Context pack 至少包含：
+
+- `item_id`
+- `review_path`
+- `current_head`
+- `validation_summary`
+- `history_available`
+- `recent_findings`
+- `repeated_blocker_signal`
+
+`recent_findings` 从可读的历史 review record 与 `.loom/runtime/review/<item>/*/normalized-findings.json` 投影而来，只保留 finding id、summary、severity、disposition、reviewed head、validation summary 和 source locator。
+
+`repeated_blocker_signal` 的 schema 为 `loom-repeated-blocker-signal/v1`。它在 v0.8.0 中只作为 advisory evidence：
+
+- `result = present` 表示至少两个 block finding 共享 repeat key
+- `result = absent` 表示当前可用历史中未发现重复 blocker
+- `enforcement = advisory` 表示本批不把重复 blocker 自动升级成 merge gate blocker
+- `candidates[]` 必须列出 repeat key、count、source locators、summary 和 recommended action
+
+Prompt 必须消费 context pack，并要求 reviewer 将 finding 分类为 `new`、`unresolved` 或 `repeated/root-cause candidate`。历史不可用时，context pack 仍必须存在并标明 `history_available = false`，不得猜测历史结论。
+
 ## 3. review record 最小字段
 
 review record 至少应包含：
