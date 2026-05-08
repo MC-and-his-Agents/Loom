@@ -11,7 +11,7 @@
 - Review Entry: .loom/reviews/WI-675.json
 - Validation Entry: make check
 - Closing Condition: Review execution has a stable profile contract; review run passes explicit model and reasoning parameters instead of inheriting host defaults; engine metadata and review_record_input expose the resolved profile, selection reason, and override reason; override without reason fails closed; review fixtures require profile evidence; generated skill surfaces are synchronized; make check passes cleanly; and the #675 batch PR absorbs #676-#678.
-- Current Checkpoint: build checkpoint
+- Current Checkpoint: merge checkpoint
 - Current Stop: WI-675 implementation, fixtures, generated surfaces, installer version, and review evidence are aligned on the batch branch.
 - Next Step: Run installer/version checks, refresh review evidence, run merge-ready, open #675 batch PR, merge to main, then close #676-#678.
 - Blockers: None recorded.
