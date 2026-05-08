@@ -12,11 +12,11 @@
 - Validation Entry: make check
 - Closing Condition: Root self-status reads WI-561, demo bootstrap is portable and idempotent, and #531/#561 branch/PR truth can be established without INIT-0001 as the active item.
 - Current Checkpoint: build checkpoint
-- Current Stop: Baseline repair has activated WI-561 and portable demo bootstrap is implemented.
-- Next Step: Run full validation, record review evidence, and open the #531/#561 baseline PR.
-- Blockers: Formal review and merge-ready are still pending for this baseline branch.
-- Latest Validation Summary: Portable demo bootstrap mode has been implemented and WI-561 root self-governance carriers have been authored; full make check still pending.
-- Recovery Boundary: Branch work/531-v080-baseline-repair; active item WI-561; retired bootstrap item INIT-0001.
+- Current Stop: Baseline repair implementation is committed; review evidence is the next governance action.
+- Next Step: Record WI-561 spec and implementation review evidence, then run merge-ready and full verification.
+- Blockers: None recorded.
+- Latest Validation Summary: Validated portable demo bootstrap idempotence, skills surface generation, WI-561 fact-chain readability, and installed positive-chain fixture isolation; full make check will be rerun after review evidence is recorded.
+- Recovery Boundary: Branch work/531-v080-baseline-repair at commit e21498c; active item WI-561; retired bootstrap item INIT-0001.
 - Current Lane: v0.8.0 / #531 baseline repair
 
 ## Runtime Evidence
