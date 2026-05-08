@@ -67,10 +67,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          ACTIVE_ITEM="$(python3 - <<'PY'
+import json
+from pathlib import Path
+
+payload = json.loads(Path(".loom/bootstrap/init-result.json").read_text(encoding="utf-8"))
+print(payload["fact_chain"]["entry_points"]["current_item_id"])
+PY
+)"
           python3 .loom/bin/loom_init.py verify --target .
           python3 .loom/bin/loom_flow.py governance-profile status --target .
           python3 .loom/bin/loom_flow.py runtime-parity validate --target .
-          python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-561
+          python3 .loom/bin/loom_flow.py adopt verify --target . --item "${ACTIVE_ITEM}"
           python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run
 
   loom-check:
