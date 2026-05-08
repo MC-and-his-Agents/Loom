@@ -262,6 +262,8 @@ REPO_INTERFACE_AVAILABILITY = {"absent", "companion_docs_only", "incomplete", "p
 REPO_INTERFACE_ENFORCEMENT = {"blocking", "advisory"}
 REPO_INTEROP_AVAILABILITY = {"absent", "incomplete", "present"}
 DYNAMIC_TOOL_HANDSHAKE_STATUSES = {"advertised", "unavailable", "unsupported", "failed"}
+POLICY_READ_STATUSES = {"declared", "missing", "conflict", "unsafe"}
+POLICY_TYPES = {"approval", "sandbox"}
 
 
 def repo_root_from_argv(argv: list[str]) -> Path:
@@ -1176,7 +1178,7 @@ def require_repo_interface_payload(
         payload=payload.get("manifest"),
         allowed_statuses={"present", "missing"},
     )
-    for key in ("companion_entry", "repo_specific_requirements", "specialized_gates", "dynamic_tool_locators"):
+    for key in ("companion_entry", "repo_specific_requirements", "specialized_gates", "dynamic_tool_locators", "policy_locators"):
         require_locator_entry(
             failures,
             category=category,
@@ -1195,6 +1197,18 @@ def require_repo_interface_payload(
         category=category,
         context=f"{context}.tool_availability",
         payload=payload.get("tool_availability"),
+    )
+    require_policy_readiness_payload(
+        failures,
+        category=category,
+        context=f"{context}.policy_readiness",
+        payload=payload.get("policy_readiness"),
+    )
+    require_policy_readiness_payload(
+        failures,
+        category=category,
+        context=f"{context}.policy_readiness",
+        payload=payload.get("policy_readiness"),
     )
 
 
@@ -1240,6 +1254,57 @@ def require_tool_availability_payload(
         for key in ("required_blocking", "optional_advisory"):
             if not isinstance(failure_summary.get(key), list):
                 failures.append(Failure(category, f"{context} failure_summary.{key} must be a list"))
+    if not isinstance(payload.get("missing_inputs"), list):
+        failures.append(Failure(category, f"{context} missing_inputs must be a list"))
+
+
+def require_policy_readiness_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("schema_version") != "loom-policy-readiness/v1":
+        failures.append(Failure(category, f"{context} schema_version must be `loom-policy-readiness/v1`"))
+    if payload.get("result") not in {"pass", "block"}:
+        failures.append(Failure(category, f"{context} result must be pass or block"))
+    if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+        failures.append(Failure(category, f"{context} must include summary"))
+    declared_policies = payload.get("declared_policies")
+    if not isinstance(declared_policies, list):
+        failures.append(Failure(category, f"{context} declared_policies must be a list"))
+    else:
+        for index, policy in enumerate(declared_policies):
+            if not isinstance(policy, dict):
+                failures.append(Failure(category, f"{context}.declared_policies[{index}] must be an object"))
+                continue
+            if policy.get("policy") not in POLICY_TYPES:
+                failures.append(Failure(category, f"{context}.declared_policies[{index}] policy must be approval or sandbox"))
+            if policy.get("status") not in POLICY_READ_STATUSES:
+                failures.append(Failure(category, f"{context}.declared_policies[{index}] status must stay in the policy vocabulary"))
+            if policy.get("result") not in {"pass", "block"}:
+                failures.append(Failure(category, f"{context}.declared_policies[{index}] result must be pass or block"))
+            if policy.get("risk") not in {"none", "unknown", "conflict", "unsafe"}:
+                failures.append(Failure(category, f"{context}.declared_policies[{index}] risk must stay stable"))
+            if not isinstance(policy.get("evidence"), dict):
+                failures.append(Failure(category, f"{context}.declared_policies[{index}] must include evidence"))
+    risk_summary = payload.get("risk_summary")
+    if not isinstance(risk_summary, dict):
+        failures.append(Failure(category, f"{context} risk_summary must be an object"))
+    else:
+        by_status = risk_summary.get("by_status")
+        if not isinstance(by_status, dict) or set(by_status) != POLICY_READ_STATUSES:
+            failures.append(Failure(category, f"{context} risk_summary.by_status must include the stable status vocabulary"))
+        by_policy = risk_summary.get("by_policy")
+        if not isinstance(by_policy, dict) or set(by_policy) != POLICY_TYPES:
+            failures.append(Failure(category, f"{context} risk_summary.by_policy must include approval and sandbox"))
+        for key in ("blocking", "advisory"):
+            if not isinstance(risk_summary.get(key), list):
+                failures.append(Failure(category, f"{context} risk_summary.{key} must be a list"))
     if not isinstance(payload.get("missing_inputs"), list):
         failures.append(Failure(category, f"{context} missing_inputs must be a list"))
 
@@ -6877,6 +6942,25 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
         ):
             (companion_dir / doc).parent.mkdir(parents=True, exist_ok=True)
             (companion_dir / doc).write_text(f"# {doc}\n", encoding="utf-8")
+        for relative, payload in {
+            "policy/approval.json": {
+                "schema_version": "loom-policy-read/v1",
+                "policy": "approval",
+                "status": "declared",
+                "summary": "Approval policy is host-declared and readable.",
+                "risk": "none",
+                "evidence": {"status": "present"},
+            },
+            "policy/sandbox.json": {
+                "schema_version": "loom-policy-read/v1",
+                "policy": "sandbox",
+                "status": "declared",
+                "summary": "Sandbox policy is host-declared and readable.",
+                "risk": "none",
+                "evidence": {"status": "present"},
+            },
+        }.items():
+            write_json(companion_dir / relative, payload)
         if manifest is not None:
             write_json(companion_dir / "manifest.json", manifest)
         if repo_interface is not None:
@@ -6994,6 +7078,28 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
                 "requirement": "advisory",
                 "surface": "build",
                 "fallback_to": "build",
+            },
+        ],
+        "policy_locators": [
+            {
+                "id": "approval-policy",
+                "summary": "Declare the host approval policy read surface.",
+                "policy": "approval",
+                "locator": ".loom/companion/policy/approval.json",
+                "owner": "host-adapter",
+                "requirement": "required",
+                "surface": "review",
+                "fallback_to": "build",
+            },
+            {
+                "id": "sandbox-policy",
+                "summary": "Declare the host sandbox policy read surface.",
+                "policy": "sandbox",
+                "locator": ".loom/companion/policy/sandbox.json",
+                "owner": "host-adapter",
+                "requirement": "required",
+                "surface": "merge_ready",
+                "fallback_to": "merge",
             },
         ],
     }
@@ -7231,6 +7337,19 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
                     failures.append(Failure("repo-companion", "present dynamic tool locator must surface as advertised"))
                 if isinstance(by_status, dict) and by_status.get("unavailable", 0) < 2:
                     failures.append(Failure("repo-companion", "optional/advisory missing dynamic tools must surface as unavailable"))
+            policy_readiness = present_interface.get("policy_readiness")
+            require_policy_readiness_payload(
+                failures,
+                category="repo-companion",
+                context="present v2 policy readiness",
+                payload=policy_readiness,
+            )
+            if isinstance(policy_readiness, dict):
+                by_policy = (policy_readiness.get("risk_summary") or {}).get("by_policy")
+                if not isinstance(by_policy, dict) or by_policy.get("approval") != "declared":
+                    failures.append(Failure("repo-companion", "present approval policy must surface as declared"))
+                if not isinstance(by_policy, dict) or by_policy.get("sandbox") != "declared":
+                    failures.append(Failure("repo-companion", "present sandbox policy must surface as declared"))
 
         review_requirements = repo_specific_requirements_payload(
             present_interface,
@@ -7386,6 +7505,141 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
             )
             if tool_review_requirements.get("result") != "pass":
                 failures.append(Failure("repo-companion", "optional unavailable dynamic tool must not block review"))
+
+        policy_failures_target = base / "policy-failures"
+        shutil.copytree(example_target, policy_failures_target)
+        policy_failure_interface = {
+            **valid_interface_v2,
+            "repo_specific_requirements": {
+                "review": [],
+                "merge_ready": [],
+                "closeout": [],
+            },
+            "dynamic_tool_locators": [],
+            "policy_locators": [
+                {
+                    "id": "required-approval-conflict",
+                    "summary": "Required approval policy conflicts with the current flow.",
+                    "policy": "approval",
+                    "locator": ".loom/companion/policy-conflict.json",
+                    "owner": "host-adapter",
+                    "requirement": "required",
+                    "surface": "review",
+                    "fallback_to": "build",
+                },
+                {
+                    "id": "required-sandbox-unsafe",
+                    "summary": "Required sandbox policy reports unsafe execution.",
+                    "policy": "sandbox",
+                    "locator": ".loom/companion/policy-unsafe.json",
+                    "owner": "host-adapter",
+                    "requirement": "required",
+                    "surface": "merge_ready",
+                    "fallback_to": "merge",
+                },
+                {
+                    "id": "optional-approval-missing",
+                    "summary": "Optional approval policy is unavailable.",
+                    "policy": "approval",
+                    "locator": ".loom/companion/policy-missing.json",
+                    "owner": "host-adapter",
+                    "requirement": "optional",
+                    "surface": "closeout",
+                    "fallback_to": "merge",
+                },
+            ],
+        }
+        install_companion(
+            policy_failures_target,
+            manifest=valid_manifest,
+            repo_interface=policy_failure_interface,
+        )
+        write_json(
+            policy_failures_target / ".loom/companion/policy-conflict.json",
+            {
+                "schema_version": "loom-policy-read/v1",
+                "policy": "approval",
+                "status": "conflict",
+                "summary": "Approval policy conflicts with the requested flow.",
+                "risk": "conflict",
+                "fallback_to": "build",
+                "evidence": {"status": "present"},
+            },
+        )
+        write_json(
+            policy_failures_target / ".loom/companion/policy-unsafe.json",
+            {
+                "schema_version": "loom-policy-read/v1",
+                "policy": "sandbox",
+                "status": "unsafe",
+                "summary": "Sandbox policy is unsafe for this flow.",
+                "risk": "unsafe",
+                "fallback_to": "merge",
+                "evidence": {"status": "present"},
+            },
+        )
+        write_json(
+            policy_failures_target / ".loom/companion/policy-missing.json",
+            {
+                "schema_version": "loom-policy-read/v1",
+                "policy": "approval",
+                "status": "missing",
+                "summary": "Optional approval policy is not available.",
+                "risk": "unknown",
+                "fallback_to": "merge",
+                "evidence": {"status": "missing"},
+            },
+        )
+        policy_failure_surface = build_governance_surface(policy_failures_target)
+        policy_failure_repo_interface = policy_failure_surface.get("repo_interface")
+        require_repo_interface_payload(
+            failures,
+            category="repo-companion",
+            context="policy failure repo companion",
+            payload=policy_failure_repo_interface,
+        )
+        if not isinstance(policy_failure_repo_interface, dict) or policy_failure_repo_interface.get("availability") != "present":
+            failures.append(Failure("repo-companion", "policy failures must not make the companion declaration unreadable"))
+        else:
+            readiness = policy_failure_repo_interface.get("policy_readiness")
+            if not isinstance(readiness, dict):
+                failures.append(Failure("repo-companion", "policy failure sample must expose policy_readiness"))
+            else:
+                by_status = (readiness.get("risk_summary") or {}).get("by_status")
+                if not isinstance(by_status, dict) or by_status.get("missing") != 1:
+                    failures.append(Failure("repo-companion", "missing policy fixture must surface as missing"))
+                if not isinstance(by_status, dict) or by_status.get("conflict") != 1:
+                    failures.append(Failure("repo-companion", "conflict policy fixture must surface as conflict"))
+                if not isinstance(by_status, dict) or by_status.get("unsafe") != 1:
+                    failures.append(Failure("repo-companion", "unsafe policy fixture must surface as unsafe"))
+            policy_review_requirements = repo_specific_requirements_payload(
+                policy_failure_repo_interface,
+                target_root=policy_failures_target,
+                surface="review",
+            )
+            require_repo_specific_requirements_payload(
+                failures,
+                category="repo-companion",
+                context="policy failure review requirements",
+                payload=policy_review_requirements,
+                expected_surface="review",
+            )
+            if policy_review_requirements.get("result") != "block":
+                failures.append(Failure("repo-companion", "required conflicting approval policy must block review"))
+            policy_merge_requirements = repo_specific_requirements_payload(
+                policy_failure_repo_interface,
+                target_root=policy_failures_target,
+                surface="merge_ready",
+            )
+            if policy_merge_requirements.get("result") != "block":
+                failures.append(Failure("repo-companion", "required unsafe sandbox policy must block merge-ready"))
+            policy_closeout_requirements = repo_specific_requirements_payload(
+                policy_failure_repo_interface,
+                target_root=policy_failures_target,
+                surface="closeout",
+            )
+            if policy_closeout_requirements.get("result") != "pass":
+                failures.append(Failure("repo-companion", "optional missing policy must not block closeout"))
 
         flow_review_payload, error = load_command_json(
             root,

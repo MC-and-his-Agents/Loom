@@ -426,6 +426,11 @@ def main(argv: list[str]) -> int:
         if isinstance(repo_interface, dict)
         else None
     )
+    policy_readiness = (
+        repo_interface.get("policy_readiness")
+        if isinstance(repo_interface, dict)
+        else None
+    )
     ci_check_presence = github_control_plane.get("ci_check_presence") if isinstance(github_control_plane, dict) else None
     host_enforcement = github_control_plane.get("host_enforcement") if isinstance(github_control_plane, dict) else None
     github_status, github_errors = github_status_payload(
@@ -505,6 +510,7 @@ def main(argv: list[str]) -> int:
             "execution_ledger": report_execution_ledger(context["report"]),
             "latest_execution_attempt": latest_execution_attempt,
             "tool_availability": tool_availability,
+            "policy_readiness": policy_readiness,
             "blocking_failures": report_blocking_failures(context["report"]),
             "item": {
                 "id": context["item_id"],

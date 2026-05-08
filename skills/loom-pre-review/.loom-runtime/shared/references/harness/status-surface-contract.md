@@ -138,7 +138,20 @@
 - `merge_commit_sha`
 - `target_branch`
 
-### 3.7 `taxonomy`
+### 3.7 `policy_readiness`
+
+当 repo companion 声明 approval / sandbox policy 读面时，状态面必须展示派生 `policy_readiness`：
+
+- `approval_policy`
+- `sandbox_policy`
+- `risk_summary`
+- `declared_policies`
+- `missing_inputs`
+- `fallback_to`
+
+该字段组只消费 `.loom/companion/repo-interface.json` 的 `policy_locators` 与只读 policy declaration，不申请权限、不修改 sandbox、不写 host result。
+
+### 3.8 `taxonomy`
 
 至少包含：
 

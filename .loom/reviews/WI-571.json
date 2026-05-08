@@ -1,0 +1,23 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-571",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "#571 implementation review pending final validation on the batch branch.",
+  "reviewer": "codex",
+  "reviewed_head": "c926b1d3ee174498d402304fa9fbf3730b13859b",
+  "reviewed_validation_summary": "Pending for WI-571.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-571.md",
+    "recovery_entry": ".loom/progress/WI-571.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

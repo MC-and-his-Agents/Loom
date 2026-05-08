@@ -19,6 +19,7 @@
 - spec review / implementation review instruction locator
 - host action result 的 authored 真相副本
 - dynamic tool availability locator
+- approval / sandbox policy read locator
 - 新的 blocking merge gate
 
 换句话说，`interop.json` 只告诉 Loom “去哪里读”，不告诉 Loom “如何替宿主执行”。
@@ -26,6 +27,7 @@
 review instruction locator 属于 [repo-companion-contract.md](./repo-companion-contract.md) 的 `review_instruction_locators`，因为它定位的是 repo-owned review rule 入口，不是 retained host action result、repo-native carrier 或 shadow parity evidence。
 
 dynamic tool availability locator 属于 [repo-companion-contract.md](./repo-companion-contract.md) 的 `dynamic_tool_locators`，因为它定位的是工具声明入口，不是 retained host action result。
+approval / sandbox policy read locator 属于 [repo-companion-contract.md](./repo-companion-contract.md) 的 `policy_locators`，因为它定位的是 policy 声明入口，不是权限请求结果、sandbox mutation 或 retained host action result。
 
 `interop.json` 中声明的入口在 fact-chain 中只能被消费为 host/control-plane mirror、retained result、repo-native carrier locator 或 locator provenance。它不得成为新的 Loom-authored truth，也不得覆盖 `Work Item`、恢复主入口、review record、merge checkpoint 或 closeout basis。
 
@@ -277,6 +279,7 @@ blocking 模式只改变消费结果，不改变 `shadow_surfaces` schema：
 - 不让 `interop.json` 承载 status control plane 的结论或 runtime_state
 - 不让 `interop.json` 承载 spec review / implementation review instruction locator；这些 locator 必须通过 `repo-interface.json` 的 `review_instruction_locators` 声明
 - 不让 `interop.json` 承载 dynamic tool availability locator；这些 locator 必须通过 `repo-interface.json` 的 `dynamic_tool_locators` 声明
+- 不让 `interop.json` 承载 approval / sandbox policy read locator；这些 locator 必须通过 `repo-interface.json` 的 `policy_locators` 声明
 - 不让 `interop.json` 承载 external-runtime locator、runtime version、rollback mode 或 runtime provenance
 - 不让 Loom 因为读取了 interop contract，就接管宿主底层实现
 - 不让 `interop.json` 定义 blocking owner、override path 或 final merge authority

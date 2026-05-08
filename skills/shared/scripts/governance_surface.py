@@ -209,6 +209,7 @@ REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {
     "metadata_contract",
     "context_schema",
     "dynamic_tool_locators",
+    "policy_locators",
 }
 DECLARED_LOCATOR_REQUIREMENTS = {"required", "optional", "advisory"}
 DECLARED_LOCATOR_OWNERS = {"repo", "repo-companion", "host", "host-adapter", "platform", "external-tool"}
@@ -222,6 +223,11 @@ DYNAMIC_TOOL_HANDSHAKE_FAILURE_CATEGORIES = {
     "invalid_declaration",
 }
 DYNAMIC_TOOL_SURFACES = REPO_INTERFACE_GATE_TYPES | {"attempt_time"}
+POLICY_READ_SCHEMA = "loom-policy-read/v1"
+POLICY_READINESS_SCHEMA = "loom-policy-readiness/v1"
+POLICY_TYPES = {"approval", "sandbox"}
+POLICY_READ_STATUSES = {"declared", "missing", "conflict", "unsafe"}
+POLICY_RISK_LEVELS = {"none", "unknown", "conflict", "unsafe"}
 REPO_INTEROP_AVAILABILITY = {"absent", "incomplete", "present"}
 REPO_INTEROP_SCHEMA = "loom-repo-interop/v1"
 REPO_INTEROP_KEYS = {"schema_version", "host_adapters", "repo_native_carriers", "shadow_surfaces"}
@@ -954,6 +960,58 @@ def validate_dynamic_tool_locator(
     return blocking, optional
 
 
+def validate_policy_locator(
+    *,
+    root: Path,
+    entry: object,
+    index: int,
+) -> tuple[list[str], list[str]]:
+    blocking: list[str] = []
+    optional: list[str] = []
+    prefix = f"policy_locators[{index}]"
+    locator_label = f"{prefix} locator"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"], optional
+    policy_type = entry.get("policy")
+    if policy_type not in POLICY_TYPES:
+        blocking.append(f"{prefix} policy must be `approval` or `sandbox`")
+    if not isinstance(entry.get("id"), str) or not entry.get("id"):
+        blocking.append(f"{prefix} must include non-empty `id`")
+    if not isinstance(entry.get("summary"), str) or not entry.get("summary"):
+        blocking.append(f"{prefix} must include non-empty `summary`")
+    owner = entry.get("owner")
+    if owner not in DECLARED_LOCATOR_OWNERS:
+        blocking.append(
+            f"{prefix} owner must be one of `repo`, `repo-companion`, `host`, `host-adapter`, `platform`, `external-tool`"
+        )
+    requirement = entry.get("requirement", "required")
+    if requirement not in DECLARED_LOCATOR_REQUIREMENTS:
+        blocking.append(f"{prefix} requirement must be `required`, `optional`, or `advisory`")
+    surface = entry.get("surface")
+    if surface not in DYNAMIC_TOOL_SURFACES:
+        blocking.append(
+            f"{prefix} surface must be one of `admission`, `pre_review`, `review`, `build`, `merge_ready`, `closeout`, `attempt_time`"
+        )
+    locator_value = entry.get("locator")
+    locator, target = resolve_locator(root, locator_value)
+    locator_error: str | None = None
+    locator_error_is_optional = False
+    if locator_field_missing(locator_value):
+        locator_error = f"{locator_label} missing `locator`"
+        locator_error_is_optional = requirement in {"optional", "advisory"}
+    elif locator is None or target is None:
+        locator_error = locator_boundary_error(locator_value, label=locator_label)
+    elif not target.exists():
+        locator_error = f"{prefix} locator points to missing path `{locator}`"
+        locator_error_is_optional = requirement in {"optional", "advisory"}
+    if locator_error:
+        if locator_error_is_optional:
+            optional.append(locator_error)
+        else:
+            blocking.append(locator_error)
+    return blocking, optional
+
+
 def empty_tool_availability() -> dict[str, Any]:
     return {
         "schema_version": DYNAMIC_TOOL_HANDSHAKE_SCHEMA,
@@ -964,6 +1022,25 @@ def empty_tool_availability() -> dict[str, Any]:
             "required_blocking": [],
             "optional_advisory": [],
             "by_status": {status: 0 for status in sorted(DYNAMIC_TOOL_HANDSHAKE_STATUSES)},
+        },
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+
+
+def empty_policy_readiness() -> dict[str, Any]:
+    return {
+        "schema_version": POLICY_READINESS_SCHEMA,
+        "result": "pass",
+        "summary": "no approval or sandbox policy read surfaces are declared for this repository.",
+        "declared_policies": [],
+        "approval_policy": None,
+        "sandbox_policy": None,
+        "risk_summary": {
+            "blocking": [],
+            "advisory": [],
+            "by_status": {status: 0 for status in sorted(POLICY_READ_STATUSES)},
+            "by_policy": {policy: "missing" for policy in sorted(POLICY_TYPES)},
         },
         "missing_inputs": [],
         "fallback_to": None,
@@ -989,6 +1066,29 @@ def read_tool_handshake_declaration(path: Path) -> tuple[dict[str, Any] | None, 
     failure_category = payload.get("failure_category", "none")
     if failure_category not in DYNAMIC_TOOL_HANDSHAKE_FAILURE_CATEGORIES:
         return None, ["tool handshake failure_category is outside the stable vocabulary"]
+    return payload, []
+
+
+def read_policy_declaration(path: Path) -> tuple[dict[str, Any] | None, list[str]]:
+    if path.suffix.lower() != ".json":
+        return None, []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, [f"policy declaration is unreadable: {exc}"]
+    if not isinstance(payload, dict):
+        return None, ["policy declaration must be a JSON object"]
+    if payload.get("schema_version") != POLICY_READ_SCHEMA:
+        return None, [f"policy declaration schema must be `{POLICY_READ_SCHEMA}`"]
+    policy_type = payload.get("policy")
+    if policy_type not in POLICY_TYPES:
+        return None, ["policy declaration policy must be `approval` or `sandbox`"]
+    status = payload.get("status")
+    if status not in POLICY_READ_STATUSES:
+        return None, ["policy declaration status must be one of `declared`, `missing`, `conflict`, `unsafe`"]
+    risk = payload.get("risk", "none")
+    if risk not in POLICY_RISK_LEVELS:
+        return None, ["policy declaration risk is outside the stable vocabulary"]
     return payload, []
 
 
@@ -1083,6 +1183,101 @@ def dynamic_tool_status_entry(
     }
 
 
+def policy_status_entry(
+    *,
+    root: Path,
+    entry: object,
+    index: int,
+) -> dict[str, Any]:
+    prefix = f"policy_locators[{index}]"
+    if not isinstance(entry, dict):
+        return {
+            "id": f"invalid-{index}",
+            "policy": "approval",
+            "surface": "unknown",
+            "requirement": "required",
+            "owner": "unknown",
+            "status": "unsafe",
+            "result": "block",
+            "risk": "unsafe",
+            "summary": f"{prefix} must be an object",
+            "evidence": {"status": "missing", "locator": None},
+            "missing_inputs": [f"{prefix} must be an object"],
+            "fallback_to": "admission",
+        }
+
+    policy_id = str(entry.get("id") or f"policy-{index}")
+    policy_type = str(entry.get("policy") or "approval")
+    requirement = str(entry.get("requirement") or "required")
+    surface = str(entry.get("surface") or "attempt_time")
+    fallback_to = entry.get("fallback_to") if isinstance(entry.get("fallback_to"), str) else "admission"
+    locator_value = entry.get("locator")
+    locator, target = resolve_locator(root, locator_value)
+    missing_inputs: list[str] = []
+    evidence: dict[str, Any] = {
+        "status": "missing",
+        "locator": locator if isinstance(locator, str) else locator_value,
+    }
+    status = "declared"
+    risk = "none"
+    summary = "policy read declaration is readable."
+
+    if locator_field_missing(locator_value):
+        status = "missing"
+        risk = "unknown"
+        summary = "policy read declaration has no locator."
+        missing_inputs.append(f"{prefix} `{policy_id}` locator missing `locator`")
+    elif locator is None or target is None:
+        status = "unsafe"
+        risk = "unsafe"
+        summary = "policy read locator is outside the repository boundary."
+        missing_inputs.append(locator_boundary_error(locator_value, label=f"{prefix} `{policy_id}` locator"))
+    elif not target.exists():
+        status = "missing"
+        risk = "unknown"
+        summary = "policy read locator points to a missing path."
+        missing_inputs.append(f"{prefix} locator points to missing path `{locator}`")
+    else:
+        evidence = {"status": "present", "locator": locator}
+        declaration, declaration_errors = read_policy_declaration(target)
+        if declaration_errors:
+            status = "unsafe"
+            risk = "unsafe"
+            summary = "policy declaration is unreadable or invalid."
+            missing_inputs.extend(f"{prefix} `{policy_id}` {message}" for message in declaration_errors)
+        elif declaration:
+            status = str(declaration["status"])
+            policy_type = str(declaration.get("policy") or policy_type)
+            risk = str(declaration.get("risk", "none"))
+            summary = str(declaration.get("summary") or f"{policy_type} policy read reported `{status}`.")
+            fallback_value = declaration.get("fallback_to")
+            if isinstance(fallback_value, str) and fallback_value:
+                fallback_to = fallback_value
+            evidence_payload = declaration.get("evidence")
+            if isinstance(evidence_payload, dict):
+                evidence = {**evidence, **evidence_payload, "locator": locator}
+            if status != "declared":
+                missing_inputs.append(f"{policy_type} policy `{policy_id}` is {status}")
+
+    blocking = requirement == "required" and status in {"missing", "conflict", "unsafe"}
+    return {
+        "id": policy_id,
+        "summary": summary,
+        "owner": entry.get("owner"),
+        "requirement": requirement,
+        "surface": surface,
+        "policy": policy_type,
+        "locator": locator if isinstance(locator, str) else locator_value,
+        "status": status,
+        "result": "block" if blocking else "pass",
+        "risk": risk,
+        "evidence": evidence,
+        "missing_inputs": missing_inputs if blocking else [],
+        "advisory": missing_inputs if not blocking else [],
+        "fallback_to": fallback_to if blocking else None,
+    }
+
+
 def dynamic_tool_availability_payload(root: Path, dynamic_tool_locators: object) -> dict[str, Any]:
     payload = empty_tool_availability()
     if dynamic_tool_locators is None:
@@ -1138,6 +1333,76 @@ def dynamic_tool_availability_payload(root: Path, dynamic_tool_locators: object)
             "required_blocking": required_blocking,
             "optional_advisory": optional_advisory,
             "by_status": by_status,
+        },
+        "missing_inputs": missing_inputs,
+        "fallback_to": fallback_to if result == "block" else None,
+    }
+
+
+def policy_readiness_payload(root: Path, policy_locators: object) -> dict[str, Any]:
+    payload = empty_policy_readiness()
+    if policy_locators is None:
+        return payload
+    if not isinstance(policy_locators, list):
+        return {
+            **payload,
+            "result": "block",
+            "summary": "policy locators are declared but not readable as a list.",
+            "missing_inputs": ["policy_locators must be a list"],
+            "fallback_to": "admission",
+        }
+
+    policies = [
+        policy_status_entry(root=root, entry=entry, index=index)
+        for index, entry in enumerate(policy_locators)
+    ]
+    by_status = {status: 0 for status in sorted(POLICY_READ_STATUSES)}
+    by_policy = {policy: "missing" for policy in sorted(POLICY_TYPES)}
+    blocking: list[dict[str, Any]] = []
+    advisory: list[dict[str, Any]] = []
+    missing_inputs: list[str] = []
+    fallback_to: str | None = None
+    latest_by_policy: dict[str, dict[str, Any]] = {}
+    for policy in policies:
+        status = policy.get("status")
+        if isinstance(status, str) and status in by_status:
+            by_status[status] += 1
+        policy_type = policy.get("policy")
+        if isinstance(policy_type, str) and policy_type in by_policy:
+            by_policy[policy_type] = str(status or "missing")
+            latest_by_policy[policy_type] = policy
+        if policy.get("result") == "block":
+            blocking.append(policy)
+            fallback = policy.get("fallback_to")
+            if fallback_to is None and isinstance(fallback, str) and fallback:
+                fallback_to = fallback
+            for message in policy.get("missing_inputs", []):
+                if message not in missing_inputs:
+                    missing_inputs.append(str(message))
+        elif policy.get("status") != "declared":
+            advisory.append(policy)
+
+    result = "block" if blocking else "pass"
+    if blocking:
+        summary = "required approval or sandbox policy evidence is missing, conflicting, or unsafe."
+    elif advisory:
+        summary = "only optional or advisory approval/sandbox policy risk is present."
+    elif policies:
+        summary = "approval and sandbox policy read declarations are readable."
+    else:
+        summary = payload["summary"]
+    return {
+        **payload,
+        "result": result,
+        "summary": summary,
+        "declared_policies": policies,
+        "approval_policy": latest_by_policy.get("approval"),
+        "sandbox_policy": latest_by_policy.get("sandbox"),
+        "risk_summary": {
+            "blocking": blocking,
+            "advisory": advisory,
+            "by_status": by_status,
+            "by_policy": by_policy,
         },
         "missing_inputs": missing_inputs,
         "fallback_to": fallback_to if result == "block" else None,
@@ -1231,7 +1496,9 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
         "repo_specific_requirements": carrier_entry("missing", "unknown", "repo companion interface"),
         "specialized_gates": carrier_entry("missing", "unknown", "repo companion interface"),
         "dynamic_tool_locators": carrier_entry("missing", "unknown", "repo companion interface"),
+        "policy_locators": carrier_entry("missing", "unknown", "repo companion interface"),
         "tool_availability": empty_tool_availability(),
+        "policy_readiness": empty_policy_readiness(),
         "summary": "no repo companion interface is declared for this repository.",
         "missing_inputs": [],
         "missing_optional": [],
@@ -1288,6 +1555,7 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
     repo_interface_surface["repo_specific_requirements"] = manifest_repo_interface
     repo_interface_surface["specialized_gates"] = manifest_repo_interface.copy()
     repo_interface_surface["dynamic_tool_locators"] = manifest_repo_interface.copy()
+    repo_interface_surface["policy_locators"] = manifest_repo_interface.copy()
     if manifest_repo_interface_error:
         missing_inputs.append(manifest_repo_interface_error)
 
@@ -1394,6 +1662,23 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
                     else:
                         for index, entry in enumerate(dynamic_tool_locators):
                             blocking, optional = validate_dynamic_tool_locator(
+                                root=root,
+                                entry=entry,
+                                index=index,
+                            )
+                            missing_inputs.extend(blocking)
+                            missing_optional.extend(optional)
+                policy_locators = interface_payload.get("policy_locators")
+                if policy_locators is not None:
+                    repo_interface_surface["policy_readiness"] = policy_readiness_payload(
+                        root,
+                        policy_locators,
+                    )
+                    if not isinstance(policy_locators, list):
+                        missing_inputs.append("policy_locators must be a list")
+                    else:
+                        for index, entry in enumerate(policy_locators):
+                            blocking, optional = validate_policy_locator(
                                 root=root,
                                 entry=entry,
                                 index=index,
