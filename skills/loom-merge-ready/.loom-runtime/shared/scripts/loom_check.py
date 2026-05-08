@@ -2178,6 +2178,35 @@ def require_review_run_payload(
         failures.append(Failure(category, f"{context} engine must stay `codex` for the default path"))
     if engine.get("adapter") != "loom/default-codex":
         failures.append(Failure(category, f"{context} adapter must stay `loom/default-codex`"))
+    profile = engine.get("profile")
+    if engine.get("result") == "not_run" and profile is None and engine.get("failure_reason") == "runtime_conflict":
+        pass
+    elif not isinstance(profile, dict):
+        failures.append(Failure(category, f"{context} engine profile must include the resolved review engine profile"))
+    else:
+        if profile.get("schema_version") != "loom-review-engine-profile/v1":
+            failures.append(Failure(category, f"{context} engine profile schema must stay `loom-review-engine-profile/v1`"))
+        if profile.get("adapter") != "loom/default-codex" or profile.get("engine") != "codex":
+            failures.append(Failure(category, f"{context} engine profile must bind the Codex adapter explicitly"))
+        if profile.get("profile_id") not in {"default", "high-risk", "spec-review", "repeated-blocker"}:
+            failures.append(Failure(category, f"{context} engine profile id must stay within the stable vocabulary"))
+        for key in ("model", "reasoning_effort", "context_policy", "selection_reason"):
+            if not isinstance(profile.get(key), str) or not profile.get(key):
+                failures.append(Failure(category, f"{context} engine profile must include non-empty `{key}`"))
+        if profile.get("reasoning_effort") not in {"low", "medium", "high", "xhigh"}:
+            failures.append(Failure(category, f"{context} engine profile reasoning effort must stay within the stable vocabulary"))
+        if not isinstance(profile.get("timeout_seconds"), int) or profile.get("timeout_seconds") <= 0:
+            failures.append(Failure(category, f"{context} engine profile must include a positive `timeout_seconds`"))
+        if "override" in profile:
+            override = profile.get("override")
+            if not isinstance(override, dict):
+                failures.append(Failure(category, f"{context} engine profile override must be an object"))
+            else:
+                for key in ("previous_profile", "selected_profile"):
+                    if not isinstance(override.get(key), dict):
+                        failures.append(Failure(category, f"{context} engine profile override must include `{key}`"))
+                if not isinstance(override.get("reason"), str) or not override.get("reason"):
+                    failures.append(Failure(category, f"{context} engine profile override must include a non-empty reason"))
     if engine.get("result") not in {"pass", "block", "not_run"}:
         failures.append(Failure(category, f"{context} engine result must stay within the stable contract"))
     if engine.get("failure_reason") not in {None, "engine_unavailable", "schema_drift", "runtime_conflict", "repo_diff_detected"}:
@@ -2213,6 +2242,8 @@ def require_review_run_payload(
                 value = review_record_input.get(key)
                 if not isinstance(value, str) or not value:
                     failures.append(Failure(category, f"{context} review_record_input must include non-empty `{key}`"))
+            if not isinstance(review_record_input.get("engine_profile"), dict):
+                failures.append(Failure(category, f"{context} review_record_input must include resolved `engine_profile`"))
             if review_record_input.get("decision") not in {"allow", "block", "fallback"}:
                 failures.append(Failure(category, f"{context} review_record_input decision must stay within the stable contract"))
             if review_record_input.get("reviewer") != "loom/default-codex":
@@ -4712,6 +4743,89 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 payload=payload,
                 expected_result={"pass"},
             )
+            if isinstance(payload, dict):
+                profile_probe = json.loads(json.dumps(payload))
+                if isinstance(profile_probe.get("engine"), dict):
+                    profile_probe["engine"].pop("profile", None)
+                profile_probe_failures: list[Failure] = []
+                require_review_run_payload(
+                    profile_probe_failures,
+                    category="daily-execution-cli",
+                    context="`review run` missing profile probe",
+                    payload=profile_probe,
+                    expected_result={"pass"},
+                )
+                if not any("engine profile" in failure.detail for failure in profile_probe_failures):
+                    failures.append(Failure("daily-execution-cli", "`review run` contract check must fail when resolved profile metadata is missing"))
+
+        override_target = Path(tmp) / "profile-override"
+        prepare_review_target(override_target, "review run profile override")
+        write_fake_codex(fake_bin / "codex", mode="success")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(override_target),
+                "--item",
+                "INIT-0001",
+                "--engine-model",
+                "gpt-5.2",
+                "--engine-reasoning",
+                "high",
+                "--engine-override-reason",
+                "fixture requires explicit high-reasoning review profile evidence",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` profile override failed: {error}"))
+        else:
+            require_review_run_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`review run` profile override",
+                payload=payload,
+                expected_result={"pass"},
+            )
+            engine = payload.get("engine") if isinstance(payload, dict) else None
+            profile = engine.get("profile") if isinstance(engine, dict) else None
+            if not isinstance(profile, dict) or not isinstance(profile.get("override"), dict):
+                failures.append(Failure("daily-execution-cli", "`review run` profile override must record previous and selected profile evidence"))
+            else:
+                override = profile["override"]
+                if not isinstance(override.get("previous_profile"), dict) or not isinstance(override.get("selected_profile"), dict):
+                    failures.append(Failure("daily-execution-cli", "`review run` profile override must record previous and selected profile"))
+                if override.get("reason") != "fixture requires explicit high-reasoning review profile evidence":
+                    failures.append(Failure("daily-execution-cli", "`review run` profile override must preserve the override reason"))
+
+        missing_reason_target = Path(tmp) / "profile-override-missing-reason"
+        prepare_review_target(missing_reason_target, "review run profile override missing reason")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(missing_reason_target),
+                "--item",
+                "INIT-0001",
+                "--engine-reasoning",
+                "high",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` profile override missing reason failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`review run` profile override must block without an override reason"))
+        elif "override requires" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
+            failures.append(Failure("daily-execution-cli", "`review run` profile override missing reason must expose the missing reason"))
 
         engine_missing_target = Path(tmp) / "engine-missing"
         prepare_review_target(engine_missing_target, "review run engine unavailable")

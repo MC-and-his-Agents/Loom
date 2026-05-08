@@ -106,6 +106,43 @@ REVIEW_FINDING_DISPOSITION_STATUSES = {"accepted", "rejected", "deferred"}
 DEFAULT_REVIEW_ENGINE = "codex"
 DEFAULT_REVIEW_ADAPTER = "loom/default-codex"
 DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS = 120
+REVIEW_ENGINE_PROFILE_SCHEMA = "loom-review-engine-profile/v1"
+REVIEW_ENGINE_PROFILE_IDS = {"default", "high-risk", "spec-review", "repeated-blocker"}
+REVIEW_ENGINE_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
+REVIEW_ENGINE_PROFILES: dict[str, dict[str, Any]] = {
+    "default": {
+        "profile_id": "default",
+        "model": "gpt-5.2",
+        "reasoning_effort": "medium",
+        "timeout_seconds": DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS,
+        "context_policy": "minimal-review-baseline",
+        "selection_reason": "default implementation review profile for normal-risk changes",
+    },
+    "high-risk": {
+        "profile_id": "high-risk",
+        "model": "gpt-5.2",
+        "reasoning_effort": "high",
+        "timeout_seconds": DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS,
+        "context_policy": "expanded-risk-baseline",
+        "selection_reason": "high-risk review profile for shared contracts, security, permissions, sandbox, or host-boundary changes",
+    },
+    "spec-review": {
+        "profile_id": "spec-review",
+        "model": "gpt-5.2",
+        "reasoning_effort": "high",
+        "timeout_seconds": DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS,
+        "context_policy": "formal-spec-suite-baseline",
+        "selection_reason": "formal spec review profile",
+    },
+    "repeated-blocker": {
+        "profile_id": "repeated-blocker",
+        "model": "gpt-5.2",
+        "reasoning_effort": "high",
+        "timeout_seconds": DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS,
+        "context_policy": "recent-findings-and-dispositions",
+        "selection_reason": "repeated blocker review profile",
+    },
+}
 ENGINE_FAILURE_REASONS = {
     "engine_unavailable",
     "schema_drift",
@@ -299,6 +336,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     review.add_argument("--engine-adapter", help="Optional review engine adapter identifier consumed by this record")
     review.add_argument("--engine-evidence", help="Optional review engine evidence path relative to the target root")
     review.add_argument("--normalized-findings", help="Optional normalized findings path relative to the target root")
+    review.add_argument("--engine-profile", choices=tuple(sorted(REVIEW_ENGINE_PROFILE_IDS)), help="Optional deterministic review engine profile override for review run")
+    review.add_argument("--engine-model", help="Optional review engine model override for review run")
+    review.add_argument("--engine-reasoning", choices=tuple(sorted(REVIEW_ENGINE_REASONING_EFFORTS)), help="Optional review engine reasoning effort override for review run")
+    review.add_argument("--engine-override-reason", help="Required reason when overriding review engine profile, model, or reasoning")
     review.add_argument("--blocking-issue", action="append", default=[], help="Blocking review finding")
     review.add_argument("--follow-up", action="append", default=[], help="Follow-up item recorded by the review")
 
@@ -3234,6 +3275,7 @@ def run_default_review_engine(
     context: dict[str, Any],
     build_payload: dict[str, Any],
     review_path: str,
+    engine_profile: dict[str, Any],
     *,
     review_kind: str | None = None,
 ) -> dict[str, Any]:
@@ -3254,6 +3296,7 @@ def run_default_review_engine(
     prompt_path.write_text(prompt_text, encoding="utf-8")
 
     effective_kind = review_kind or default_review_kind(context)
+    timeout_seconds = int(engine_profile["timeout_seconds"])
 
     before_fingerprint, fingerprint_errors = git_tracked_diff_fingerprint(context["target_root"])
     if fingerprint_errors:
@@ -3266,6 +3309,7 @@ def run_default_review_engine(
             "engine": {
                 "engine": DEFAULT_REVIEW_ENGINE,
                 "adapter": DEFAULT_REVIEW_ADAPTER,
+                "profile": engine_profile,
                 "result": "block",
                 "failure_reason": "runtime_conflict",
                 "reviewed_head": reviewed_head,
@@ -3294,8 +3338,13 @@ def run_default_review_engine(
             [
                 DEFAULT_REVIEW_ENGINE,
                 "exec",
+                "--ignore-user-config",
                 "-C",
                 str(context["target_root"]),
+                "-m",
+                str(engine_profile["model"]),
+                "-c",
+                f"model_reasoning_effort={json.dumps(engine_profile['reasoning_effort'])}",
                 "-s",
                 "workspace-write",
                 "--output-schema",
@@ -3310,7 +3359,7 @@ def run_default_review_engine(
             text=True,
             capture_output=True,
             check=False,
-            timeout=DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
     except FileNotFoundError:
         failure_reason = "engine_unavailable"
@@ -3318,7 +3367,7 @@ def run_default_review_engine(
     except subprocess.TimeoutExpired:
         failure_reason = "runtime_conflict"
         failure_detail = (
-            f"default review engine timed out after {DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS}s"
+            f"default review engine timed out after {timeout_seconds}s"
         )
     else:
         if completed.returncode != 0:
@@ -3363,6 +3412,7 @@ def run_default_review_engine(
             {
                 "engine": DEFAULT_REVIEW_ENGINE,
                 "adapter": DEFAULT_REVIEW_ADAPTER,
+                "profile": engine_profile,
                 "failure_reason": failure_reason,
                 "summary": failure_detail,
                 "reviewed_head": reviewed_head,
@@ -3377,6 +3427,7 @@ def run_default_review_engine(
             "engine": {
                 "engine": DEFAULT_REVIEW_ENGINE,
                 "adapter": DEFAULT_REVIEW_ADAPTER,
+                "profile": engine_profile,
                 "result": "block",
                 "failure_reason": failure_reason,
                 "reviewed_head": reviewed_head,
@@ -3397,6 +3448,7 @@ def run_default_review_engine(
             {
                 "engine": DEFAULT_REVIEW_ENGINE,
                 "adapter": DEFAULT_REVIEW_ADAPTER,
+                "profile": engine_profile,
                 "failure_reason": "schema_drift",
                 "summary": "normalized engine output did not satisfy Loom review schema",
                 "errors": normalization_errors,
@@ -3412,6 +3464,7 @@ def run_default_review_engine(
             "engine": {
                 "engine": DEFAULT_REVIEW_ENGINE,
                 "adapter": DEFAULT_REVIEW_ADAPTER,
+                "profile": engine_profile,
                 "result": "block",
                 "failure_reason": "schema_drift",
                 "reviewed_head": reviewed_head,
@@ -3425,6 +3478,7 @@ def run_default_review_engine(
             {
                 "engine": DEFAULT_REVIEW_ENGINE,
                 "adapter": DEFAULT_REVIEW_ADAPTER,
+                "profile": engine_profile,
                 "result": "pass",
                 "reviewed_head": reviewed_head,
                 "decision": normalized_payload["decision"],
@@ -3441,6 +3495,7 @@ def run_default_review_engine(
         "engine": {
             "engine": DEFAULT_REVIEW_ENGINE,
             "adapter": DEFAULT_REVIEW_ADAPTER,
+            "profile": engine_profile,
             "result": "pass",
             "failure_reason": None,
             "reviewed_head": reviewed_head,
@@ -3454,6 +3509,7 @@ def run_default_review_engine(
             "findings_file": relative_to_root(findings_path, context["target_root"]),
             "engine_adapter": DEFAULT_REVIEW_ADAPTER,
             "engine_evidence": relative_to_root(result_path, context["target_root"]),
+            "engine_profile": engine_profile,
             "normalized_findings": relative_to_root(findings_path, context["target_root"]),
         },
     }
@@ -4019,6 +4075,95 @@ def implementation_review_kind(context: dict[str, Any]) -> str:
     if scope_paths and all(path.endswith(".md") or path.startswith(".loom/") for path in scope_paths):
         return "general_review"
     return "code_review"
+
+
+def review_engine_profile_selection(context: dict[str, Any], review_kind: str) -> tuple[str, str]:
+    if review_kind == "spec_review":
+        return "spec-review", "spec review requires the formal spec profile instead of inheriting host defaults"
+    haystack = " ".join(
+        str(context.get(key, ""))
+        for key in (
+            "goal",
+            "scope",
+            "execution_path",
+            "current_stop",
+            "next_step",
+            "blockers",
+            "latest_validation_summary",
+        )
+    ).lower()
+    high_risk_terms = (
+        "security",
+        "permission",
+        "approval",
+        "sandbox",
+        "host",
+        "adapter",
+        "shared contract",
+        "contract",
+        "runtime",
+        "release",
+    )
+    if any(term in haystack for term in high_risk_terms):
+        return "high-risk", "risk terms in the active item require the high-risk formal review profile"
+    if "repeated blocker" in haystack or "repeated-blocker" in haystack:
+        return "repeated-blocker", "active item references repeated blocker review handling"
+    return "default", "default implementation review profile for normal-risk changes"
+
+
+def resolve_review_engine_profile(
+    context: dict[str, Any],
+    review_kind: str,
+    *,
+    requested_profile: str | None = None,
+    requested_model: str | None = None,
+    requested_reasoning: str | None = None,
+    override_reason: str | None = None,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    selected_profile, selection_reason = review_engine_profile_selection(context, review_kind)
+    if requested_profile:
+        selected_profile = requested_profile
+        selection_reason = f"profile override requested `{requested_profile}`"
+    base_profile = dict(REVIEW_ENGINE_PROFILES[selected_profile])
+    base_profile["selection_reason"] = selection_reason
+    previous_profile = dict(base_profile)
+    override_requested = any(value for value in (requested_profile, requested_model, requested_reasoning))
+    reason = override_reason.strip() if isinstance(override_reason, str) else ""
+    if override_requested and not reason:
+        return None, ["review engine profile override requires --engine-override-reason"]
+    if requested_model:
+        base_profile["model"] = requested_model.strip()
+    if requested_reasoning:
+        base_profile["reasoning_effort"] = requested_reasoning
+    if not isinstance(base_profile.get("model"), str) or not base_profile["model"].strip():
+        return None, ["review engine profile model must be non-empty"]
+    if base_profile.get("reasoning_effort") not in REVIEW_ENGINE_REASONING_EFFORTS:
+        return None, ["review engine profile reasoning effort is outside the stable vocabulary"]
+    resolved = {
+        "schema_version": REVIEW_ENGINE_PROFILE_SCHEMA,
+        "profile_id": base_profile["profile_id"],
+        "adapter": DEFAULT_REVIEW_ADAPTER,
+        "engine": DEFAULT_REVIEW_ENGINE,
+        "model": base_profile["model"],
+        "reasoning_effort": base_profile["reasoning_effort"],
+        "timeout_seconds": int(base_profile["timeout_seconds"]),
+        "context_policy": base_profile["context_policy"],
+        "selection_reason": base_profile["selection_reason"],
+        "override_reason": reason or None,
+    }
+    if override_requested:
+        resolved["override"] = {
+            "previous_profile": previous_profile,
+            "selected_profile": {
+                "profile_id": resolved["profile_id"],
+                "model": resolved["model"],
+                "reasoning_effort": resolved["reasoning_effort"],
+                "timeout_seconds": resolved["timeout_seconds"],
+                "context_policy": resolved["context_policy"],
+            },
+            "reason": reason,
+        }
+    return resolved, []
 
 
 def review_focus_paths(context: dict[str, Any]) -> list[str]:
@@ -8097,6 +8242,42 @@ def handle_review(args: argparse.Namespace) -> int:
     if args.operation == "run":
         flow_operation = "spec-review" if inferred_spec_review else "review"
         review_kind = "spec_review" if inferred_spec_review else implementation_review_kind(context)
+        engine_profile, engine_profile_errors = resolve_review_engine_profile(
+            context,
+            review_kind,
+            requested_profile=args.engine_profile,
+            requested_model=args.engine_model,
+            requested_reasoning=args.engine_reasoning,
+            override_reason=args.engine_override_reason,
+        )
+        if engine_profile_errors or engine_profile is None:
+            manual_review = manual_review_payload(
+                context=context,
+                findings_file=None,
+                kind=review_kind,
+                review_record_path=review_path,
+            )
+            return emit(
+                {
+                    "command": "review",
+                    "operation": "run",
+                    "item": {"id": context["item_id"]},
+                    "result": "block",
+                    "summary": "default review engine profile could not be resolved safely.",
+                    "missing_inputs": engine_profile_errors,
+                    "fallback_to": None,
+                    "engine": {
+                        "engine": DEFAULT_REVIEW_ENGINE,
+                        "adapter": DEFAULT_REVIEW_ADAPTER,
+                        "profile": None,
+                        "result": "not_run",
+                        "failure_reason": "runtime_conflict",
+                        "reviewed_head": git_head_sha(target_root) or "unknown-head",
+                        "evidence": None,
+                    },
+                    "manual_review": manual_review,
+                }
+            )
         flow_payload = build_review_flow_payload(target_root, args.output, args.item, operation=flow_operation)
         review_surface = flow_payload.get("review") or (flow_payload.get("spec_review") if inferred_spec_review else None)
         if flow_payload["result"] != "pass":
@@ -8127,6 +8308,7 @@ def handle_review(args: argparse.Namespace) -> int:
                     "engine": {
                         "engine": DEFAULT_REVIEW_ENGINE,
                         "adapter": DEFAULT_REVIEW_ADAPTER,
+                        "profile": engine_profile,
                         "result": "not_run",
                         "failure_reason": None,
                         "reviewed_head": git_head_sha(target_root) or "unknown-head",
@@ -8137,7 +8319,13 @@ def handle_review(args: argparse.Namespace) -> int:
             )
 
         build_payload = flow_payload["build_checkpoint"]
-        engine_payload = run_default_review_engine(context, build_payload, review_path, review_kind=review_kind)
+        engine_payload = run_default_review_engine(
+            context,
+            build_payload,
+            review_path,
+            engine_profile,
+            review_kind=review_kind,
+        )
         review_record_input = engine_payload.get("review_record_input")
         findings_file = (
             review_record_input.get("findings_file")
