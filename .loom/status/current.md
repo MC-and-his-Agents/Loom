@@ -12,8 +12,8 @@
 - Validation Entry: make check
 - Closing Condition: `flow resume|pre-review|spec-review|review|merge-ready` attempts expose an evidence locator, `loom_status` shows latest fresh/stale/missing attempt evidence correctly, fixtures reject authored progress duplication, `make check` passes cleanly, and the #561 batch PR absorbs #563-#565.
 - Current Checkpoint: merge checkpoint
-- Current Stop: WI-561 execution_attempt implementation is in local validation after contract, flow, status, and fixture updates.
-- Next Step: Finish full `make check`, record fresh spec/implementation review, then prepare the #561 batch PR for host checks and merge.
+- Current Stop: WI-561 execution_attempt implementation and formal reviews are complete on the batch branch.
+- Next Step: Run merge-ready and host binding checks, then open the #561 batch PR for host checks and merge.
 - Blockers: None recorded.
 - Latest Validation Summary: make check passed on work/561-execution-attempt-envelope; py_compile and skills_surface checks passed; loom_check passed with execution-attempt fixtures; flow resume emitted attempt evidence and loom_status shows latest WI-561 attempt evidence as fresh; .loom/runtime/attempts remains ignored runtime evidence.
 - Recovery Boundary: Branch work/561-execution-attempt-envelope; active item WI-561; attempt runtime evidence is ignored under .loom/runtime/attempts and does not replace recovery truth.
