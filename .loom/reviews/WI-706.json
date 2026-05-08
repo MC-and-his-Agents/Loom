@@ -1,0 +1,23 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-706",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "#706 implementation adds loom-build routing, generated skill surfaces, subagent ownership and integration evidence, repeated blocker handling, and harness fixtures without adding a parallel truth source.",
+  "reviewer": "codex",
+  "reviewed_head": "d6ded95f6f295e791501b32dce74ae587aaaadfa",
+  "reviewed_validation_summary": "python3 -m py_compile passed for changed Loom runtime scripts; python3 tools/skills_surface.py check passed; python3 tools/loom_init.py route selected loom-build for build/subagent task signals; python3 tools/loom_flow.py flow build failed closed without required evidence and passed with integrated build evidence in a temp fixture; npm test and npm run check:release passed for packages/loom-installer; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-706.md",
+    "recovery_entry": ".loom/progress/WI-706.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
