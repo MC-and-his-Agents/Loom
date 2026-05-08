@@ -1,39 +1,23 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-561",
-  "decision": "fallback",
+  "decision": "allow",
   "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "d89c44d1dcb47ec424f46a2c8ecc0c42c68028b3",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
-      }
-    },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+  "summary": "WI-561 baseline implementation is approved: active self-governance now reads WI-561, demo bootstrap output is portable, and self-check fixtures are isolated from root active work items.",
+  "reviewer": "codex-baseline-reviewer",
+  "reviewed_head": "5ef3e6d906872e08411e76ec6531c5800511f74b",
+  "reviewed_validation_summary": "Validated portable demo bootstrap idempotence, skills surface generation, WI-561 fact-chain readability, and installed positive-chain fixture isolation; full make check will be rerun after review evidence is recorded.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-561.md",
+    "recovery_entry": ".loom/progress/WI-561.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
 }
