@@ -11,11 +11,11 @@
 - Review Entry: .loom/reviews/WI-571.json
 - Validation Entry: make check
 - Closing Condition: `policy_readiness` exposes approval policy, sandbox policy, `declared | missing | conflict | unsafe`, and risk summary; required policy risk blocks the owning surface; optional/advisory policy risk remains advisory; status reads the latest derived summary; fixtures cover missing/conflict/unsafe policy; `make check` passes cleanly; and the #571 batch PR absorbs #572-#575.
-- Current Checkpoint: build checkpoint
-- Current Stop: WI-571 approval/sandbox policy read surface implementation, docs, generated skill surfaces, and policy fixtures are in progress on the batch branch.
-- Next Step: Run targeted status/flow checks and full `make check`, then record review evidence and open the #571 PR.
+- Current Checkpoint: merge checkpoint
+- Current Stop: WI-571 approval/sandbox policy read surface implementation, generated carriers, demo bootstrap artifacts, reviews, and validation evidence are aligned on the batch branch.
+- Next Step: Push the #571 branch, open the batch PR, wait for host checks, merge to main, then run closeout for #572-#575.
 - Blockers: None recorded.
-- Latest Validation Summary: Initial policy read surface implementation is under validation; targeted fixture smoke must pass before merge-ready.
+- Latest Validation Summary: python3 -m py_compile passed for changed shared scripts; python3 tools/skills_surface.py check passed; policy fixture smoke returned failures 0; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed; npm run check:payload --prefix packages/loom-installer passed; python3 tools/loom_check.py passed with 26 surfaces; make check passed twice, with the second demo-bootstrap run reporting write.touched: [].
 - Recovery Boundary: Branch work/571-approval-sandbox-read-surface; active item WI-571; policy readiness evidence is derived from companion locators and must not replace recovery truth, execution_attempt evidence, retained host action results, or host permission/sandbox systems.
 - Current Lane: v0.8.0 / #531 / #571 approval and sandbox policy read surface
 
