@@ -1081,14 +1081,22 @@ def git_branch_name(target_root: Path) -> str | None:
     return branch
 
 
-def portable_bootstrap_value(value: object, replacements: list[tuple[str, str]], current_branch: str | None) -> object:
+def portable_bootstrap_value(
+    value: object,
+    replacements: list[tuple[str, str]],
+    current_branch: str | None,
+    path: tuple[str, ...] = (),
+) -> object:
     if isinstance(value, dict):
-        return {key: portable_bootstrap_value(child, replacements, current_branch) for key, child in value.items()}
+        return {
+            key: portable_bootstrap_value(child, replacements, current_branch, path + (key,))
+            for key, child in value.items()
+        }
     if isinstance(value, list):
-        return [portable_bootstrap_value(child, replacements, current_branch) for child in value]
+        return [portable_bootstrap_value(child, replacements, current_branch, path) for child in value]
     if not isinstance(value, str):
         return value
-    if current_branch and value == current_branch:
+    if current_branch and value == current_branch and path[-1:] != ("default_branch",):
         return "${CURRENT_BRANCH}"
     portable = value
     for source, replacement in replacements:
