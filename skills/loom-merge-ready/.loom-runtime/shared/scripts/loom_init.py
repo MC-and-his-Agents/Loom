@@ -164,6 +164,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     bootstrap.add_argument("--verify", action="store_true", help="Verify written artifacts after scaffolding")
     bootstrap.add_argument("--force", action="store_true", help="Overwrite Loom-managed artifacts when needed")
     bootstrap.add_argument(
+        "--portable-output",
+        action="store_true",
+        help="Normalize machine-local paths and branch names in written bootstrap metadata",
+    )
+    bootstrap.add_argument(
         "--install-pr-template",
         action="store_true",
         help="Install the Loom PR template when the target repo does not already provide one",
@@ -1060,6 +1065,62 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
     return result
 
 
+def git_branch_name(target_root: Path) -> str | None:
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(target_root), "rev-parse", "--abbrev-ref", "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    branch = completed.stdout.strip()
+    if completed.returncode != 0 or not branch or branch == "HEAD":
+        return None
+    return branch
+
+
+def portable_bootstrap_value(value: object, replacements: list[tuple[str, str]], current_branch: str | None) -> object:
+    if isinstance(value, dict):
+        return {key: portable_bootstrap_value(child, replacements, current_branch) for key, child in value.items()}
+    if isinstance(value, list):
+        return [portable_bootstrap_value(child, replacements, current_branch) for child in value]
+    if not isinstance(value, str):
+        return value
+    if current_branch and value == current_branch:
+        return "${CURRENT_BRANCH}"
+    portable = value
+    for source, replacement in replacements:
+        portable = portable.replace(source, replacement)
+    return portable
+
+
+def portable_bootstrap_result(result: dict[str, object], target_root: Path) -> dict[str, object]:
+    replacement_inputs = [
+        (str(target_root.resolve()), "${TARGET_ROOT}"),
+        (os.environ.get("LOOM_SOURCE_REPO_ROOT", ""), "${SOURCE_REPO_ROOT}"),
+        (os.environ.get("LOOM_INSTALLED_SKILLS_ROOT", ""), "${INSTALLED_SKILLS_ROOT}"),
+    ]
+    replacements = sorted(
+        [(source, replacement) for source, replacement in replacement_inputs if source],
+        key=lambda pair: len(pair[0]),
+        reverse=True,
+    )
+    portable = portable_bootstrap_value(result, replacements, git_branch_name(target_root))
+    assert isinstance(portable, dict)
+    portable["portable_output"] = {
+        "enabled": True,
+        "path_placeholders": {
+            "target_root": "${TARGET_ROOT}",
+            "source_repo_root": "${SOURCE_REPO_ROOT}",
+            "installed_skills_root": "${INSTALLED_SKILLS_ROOT}",
+            "current_branch": "${CURRENT_BRANCH}",
+        },
+    }
+    return portable
+
+
 def init_maturity_upgrade_path(governance_surface: dict[str, object]) -> dict[str, object]:
     control_plane = governance_surface.get("governance_control_plane")
     maturity = control_plane.get("maturity") if isinstance(control_plane, dict) else None
@@ -1932,9 +1993,10 @@ def bootstrap(args: argparse.Namespace) -> int:
 
     if args.write:
         try:
+            scaffold_result = portable_bootstrap_result(result, target_root) if args.portable_output else result
             written, touched = scaffold_target(
                 target_root=target_root,
-                result=result,
+                result=scaffold_result,
                 output_path=output_path,
                 force=args.force,
                 install_pr_template=args.install_pr_template,
@@ -1961,7 +2023,8 @@ def bootstrap(args: argparse.Namespace) -> int:
     else:
         result["write"] = {"enabled": False, "written_files": 0, "touched": []}
 
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    output_result = portable_bootstrap_result(result, target_root) if args.portable_output else result
+    print(json.dumps(output_result, ensure_ascii=False, indent=2))
     return 0
 
 

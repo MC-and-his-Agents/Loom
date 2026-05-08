@@ -11,7 +11,10 @@
         "merge_ready",
         "closeout"
       ],
-      "locator": ".loom/companion"
+      "locator": ".loom/companion",
+      "owner": "repo-companion",
+      "requirement": "required",
+      "fallback_to": "adoption"
     }
   ],
   "shadow_surfaces": {

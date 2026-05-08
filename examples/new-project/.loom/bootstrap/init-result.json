@@ -7,7 +7,7 @@
     "contract_version": "1.3.0"
   },
   "run": {
-    "target": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics/examples/new-project",
+    "target": "${TARGET_ROOT}",
     "scenario": "新项目",
     "scenario_key": "new",
     "integration_mode": "root",
@@ -113,7 +113,7 @@
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "21e3da23e82efdcbc81bff7d9bd7110d5579d8d87fffc9b4cd8e2c6adbb2e78d"
+      "sha256": "842a6420a5e44e6190c952fce5dc2bab0c55e8a834cfe2d3680eafb84db0106d"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
@@ -155,7 +155,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "47fe871caf9f276cc609d2205a512731e905f9f253969e96d2ea434aec477658"
+      "sha256": "fa960c0dca7125c552c6a2d398314d0b754295b3047acf6e3dfad373f29a4f32"
     },
     {
       "path": "AGENTS.md",
@@ -263,12 +263,12 @@
     "scene": "repo-local-demo",
     "carrier": "repo-local-wrapper",
     "entry_family": "loom-init",
-    "install_root": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics/skills",
-    "runtime_root": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics/skills/shared/scripts",
-    "registry_path": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics/skills/registry.json",
-    "layout_or_manifest_path": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics/skills/install-layout.json",
-    "source_repo_root": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics",
-    "target_root": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics/examples/new-project",
+    "install_root": "${INSTALLED_SKILLS_ROOT}",
+    "runtime_root": "${INSTALLED_SKILLS_ROOT}/shared/scripts",
+    "registry_path": "${INSTALLED_SKILLS_ROOT}/registry.json",
+    "layout_or_manifest_path": "${INSTALLED_SKILLS_ROOT}/install-layout.json",
+    "source_repo_root": "${SOURCE_REPO_ROOT}",
+    "target_root": "${TARGET_ROOT}",
     "checks": {
       "scene_marker": {
         "status": "pass",
@@ -278,21 +278,21 @@
         "status": "pass",
         "summary": "carrier layout exposes an installed skills root and shared runtime tree.",
         "evidence": {
-          "install_root": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics/skills"
+          "install_root": "${INSTALLED_SKILLS_ROOT}"
         }
       },
       "registry_contract": {
         "status": "pass",
         "summary": "registry, upgrade contract, and skill entrypoints are consistent.",
         "evidence": {
-          "path": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics/skills/registry.json"
+          "path": "${INSTALLED_SKILLS_ROOT}/registry.json"
         }
       },
       "shared_runtime": {
         "status": "pass",
         "summary": "shared runtime scripts are present and executable roots can be resolved.",
         "evidence": {
-          "path": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics/skills/shared/scripts"
+          "path": "${INSTALLED_SKILLS_ROOT}/shared/scripts"
         }
       },
       "referenced_resources": {
@@ -513,7 +513,7 @@
       "host_worktree": {
         "ownership": "host",
         "status": "present",
-        "locator": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics"
+        "locator": "${SOURCE_REPO_ROOT}"
       },
       "result": "pass",
       "missing_inputs": [],
@@ -623,7 +623,7 @@
         "host_worktree": {
           "ownership": "host",
           "status": "present",
-          "locator": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics"
+          "locator": "${SOURCE_REPO_ROOT}"
         },
         "result": "pass",
         "missing_inputs": [],
@@ -713,12 +713,12 @@
           },
           "branch": {
             "status": "present",
-            "locator": "work/670-deferred-roadmap-tree-semantics",
+            "locator": "${CURRENT_BRANCH}",
             "authority": "git"
           },
           "worktree": {
             "status": "present",
-            "locator": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics",
+            "locator": "${SOURCE_REPO_ROOT}",
             "authority": "git"
           },
           "implementation_pr": {
@@ -1271,6 +1271,15 @@
         "switch_to": "advisory",
         "recommended_action": "disable blocking consumption, preserve evidence, repair drift, then rerun adversarial adoption checks before re-enabling blocking"
       }
+    }
+  },
+  "portable_output": {
+    "enabled": true,
+    "path_placeholders": {
+      "target_root": "${TARGET_ROOT}",
+      "source_repo_root": "${SOURCE_REPO_ROOT}",
+      "installed_skills_root": "${INSTALLED_SKILLS_ROOT}",
+      "current_branch": "${CURRENT_BRANCH}"
     }
   }
 }

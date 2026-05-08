@@ -1,0 +1,23 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-561",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "WI-561 baseline implementation remains approved after final shadow evidence refresh and installer gate repair.",
+  "reviewer": "codex-baseline-reviewer",
+  "reviewed_head": "bb12da41865284714dcaba41e6d9d6fab90228dd",
+  "reviewed_validation_summary": "make check passed on work/531-v080-baseline-repair; WI-561 status, merge-ready, and adopt verify passed; demo bootstrap rerun wrote no tracked changes; installer version bump check and npm test passed for 0.1.72.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-561.md",
+    "recovery_entry": ".loom/progress/WI-561.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

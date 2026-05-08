@@ -70,7 +70,7 @@ jobs:
           python3 .loom/bin/loom_init.py verify --target .
           python3 .loom/bin/loom_flow.py governance-profile status --target .
           python3 .loom/bin/loom_flow.py runtime-parity validate --target .
-          python3 .loom/bin/loom_flow.py adopt verify --target . --item INIT-0001
+          python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-561
           python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run
 
   loom-check:
