@@ -53,6 +53,24 @@ Loom 当前固定三类 issue：
 - 不得把尚未进入实施的 child issue 提前写成进行中
 - 当 parent 只承担汇总与收口时，应让真正实施落在 child issue
 
+### 3.1 deferred roadmap issue
+
+`deferred roadmap issue` 是 GitHub truth 中的路线图保留语义。
+
+当 issue 以 `closed + deferred-roadmap` 出现在 roadmap tree 中时，它表示 roadmap reservation，不是 `closed_out`，也不是 completed delivery。
+
+稳定约束：
+
+- open Phase 可以持有 closed deferred FR / Work Item children
+- deferred child 在激活前不得被 closeout 或 completed delivery 消费
+- deferred child 不要求 PR、merge commit、review 或 closeout basis
+- 激活必须显式转换：reopen / reactivate，或重新绑定为 active execution issue
+- duplicate/retry artifacts 必须指向 canonical issue，不能进入 Roadmap Inventory
+
+deferred roadmap 只允许表达未来范围已进入 host truth。它不得把未激活的 child issue 伪装成已经完成的执行结果。
+
+检查输出应区分 `deferred_roadmap` 与 `completed_delivery`，避免把路线图保留语义消费成完成交付语义。
+
 ## 4. 激活规则
 
 ### 4.1 issue 级激活

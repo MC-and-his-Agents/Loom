@@ -40,6 +40,17 @@ Loom 只冻结这条路径的语义，不冻结 GitHub 之外宿主的具体对�
 - 哪些 `FR` 属于同一阶段
 - 阶段边界何时允许收口
 
+Deferred Phase container 可以提前保留未来 roadmap tree，但必须暴露：
+
+- `Activation Policy`
+  - 说明何时从 deferred roadmap 转入 active execution
+  - 明确 deferred child 激活前不需要 PR、merge 或 closeout evidence
+- `Roadmap Inventory`
+  - 明确列出 canonical FR children
+  - 明确列出 canonical Work Item children
+  - 明确说明 closed deferred children are deferred, not completed
+  - duplicate/retry artifacts 必须单独列出，并排除出 canonical inventory
+
 ### 2.3 `FR`
 
 `FR` 默认承接 formal spec / planning 层。

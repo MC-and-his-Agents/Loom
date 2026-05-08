@@ -7,7 +7,7 @@
     "contract_version": "1.3.0"
   },
   "run": {
-    "target": "/Users/mc/dev/Loom-worktrees/work-556-conformance-live-readiness/examples/new-project",
+    "target": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics/examples/new-project",
     "scenario": "新项目",
     "scenario_key": "new",
     "integration_mode": "root",
@@ -155,7 +155,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "dce8bac53c736f890be83eb3bd4f6e4a0ace1fd5f816b0333516596ca7d64a4d"
+      "sha256": "47fe871caf9f276cc609d2205a512731e905f9f253969e96d2ea434aec477658"
     },
     {
       "path": "AGENTS.md",
@@ -263,12 +263,12 @@
     "scene": "repo-local-demo",
     "carrier": "repo-local-wrapper",
     "entry_family": "loom-init",
-    "install_root": "/Users/mc/dev/Loom-worktrees/work-556-conformance-live-readiness/skills",
-    "runtime_root": "/Users/mc/dev/Loom-worktrees/work-556-conformance-live-readiness/skills/shared/scripts",
-    "registry_path": "/Users/mc/dev/Loom-worktrees/work-556-conformance-live-readiness/skills/registry.json",
-    "layout_or_manifest_path": "/Users/mc/dev/Loom-worktrees/work-556-conformance-live-readiness/skills/install-layout.json",
-    "source_repo_root": "/Users/mc/dev/Loom-worktrees/work-556-conformance-live-readiness",
-    "target_root": "/Users/mc/dev/Loom-worktrees/work-556-conformance-live-readiness/examples/new-project",
+    "install_root": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics/skills",
+    "runtime_root": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics/skills/shared/scripts",
+    "registry_path": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics/skills/registry.json",
+    "layout_or_manifest_path": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics/skills/install-layout.json",
+    "source_repo_root": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics",
+    "target_root": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics/examples/new-project",
     "checks": {
       "scene_marker": {
         "status": "pass",
@@ -278,21 +278,21 @@
         "status": "pass",
         "summary": "carrier layout exposes an installed skills root and shared runtime tree.",
         "evidence": {
-          "install_root": "/Users/mc/dev/Loom-worktrees/work-556-conformance-live-readiness/skills"
+          "install_root": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics/skills"
         }
       },
       "registry_contract": {
         "status": "pass",
         "summary": "registry, upgrade contract, and skill entrypoints are consistent.",
         "evidence": {
-          "path": "/Users/mc/dev/Loom-worktrees/work-556-conformance-live-readiness/skills/registry.json"
+          "path": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics/skills/registry.json"
         }
       },
       "shared_runtime": {
         "status": "pass",
         "summary": "shared runtime scripts are present and executable roots can be resolved.",
         "evidence": {
-          "path": "/Users/mc/dev/Loom-worktrees/work-556-conformance-live-readiness/skills/shared/scripts"
+          "path": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics/skills/shared/scripts"
         }
       },
       "referenced_resources": {
@@ -513,7 +513,7 @@
       "host_worktree": {
         "ownership": "host",
         "status": "present",
-        "locator": "/Users/mc/dev/Loom-worktrees/work-556-conformance-live-readiness"
+        "locator": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics"
       },
       "result": "pass",
       "missing_inputs": [],
@@ -623,7 +623,7 @@
         "host_worktree": {
           "ownership": "host",
           "status": "present",
-          "locator": "/Users/mc/dev/Loom-worktrees/work-556-conformance-live-readiness"
+          "locator": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics"
         },
         "result": "pass",
         "missing_inputs": [],
@@ -713,12 +713,12 @@
           },
           "branch": {
             "status": "present",
-            "locator": "work/556-conformance-live-readiness",
+            "locator": "work/670-deferred-roadmap-tree-semantics",
             "authority": "git"
           },
           "worktree": {
             "status": "present",
-            "locator": "/Users/mc/dev/Loom-worktrees/work-556-conformance-live-readiness",
+            "locator": "/Users/mc/dev/Loom-worktrees/work-670-deferred-roadmap-tree-semantics",
             "authority": "git"
           },
           "implementation_pr": {

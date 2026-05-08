@@ -31,6 +31,10 @@ GitHub profile 至少应能表达：
   - 版本目标、阶段树或等价治理目标面
 - `Phase`
   - 阶段级 issue 或等价规划对象
+  - deferred Phase container 必须声明 `Activation Policy` 与 `Roadmap Inventory`
+  - `Roadmap Inventory` 必须列出 canonical FR children 与 canonical Work Item children
+  - closed deferred children are deferred, not completed
+  - duplicate/retry artifacts 必须单独标明，并排除出 canonical inventory
 - `FR`
   - formal spec / planning issue
 - `Work Item`

@@ -33,6 +33,17 @@ Loom 冻结的是对象语义、前置关系与绑定链，不冻结 GitHub 私�
 负责把阶段目标映射到一组稳定治理范围。
 只承载阶段边界，不承接执行现场。
 
+Deferred Phase container 可以提前保留未来 roadmap tree，但必须暴露：
+
+- `Activation Policy`
+  - 说明何时从 deferred roadmap 转入 active execution
+  - 明确 deferred child 激活前不需要 PR、merge 或 closeout evidence
+- `Roadmap Inventory`
+  - 明确列出 canonical FR children
+  - 明确列出 canonical Work Item children
+  - 明确说明 closed deferred children are deferred, not completed
+  - duplicate/retry artifacts 必须单独列出，并排除出 canonical inventory
+
 ### 2.3 `FR`
 
 `FR` 默认承接 formal spec / planning 层。
