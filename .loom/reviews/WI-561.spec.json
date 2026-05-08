@@ -1,0 +1,23 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-561",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-561 baseline spec is approved for the v0.8.0/#531 execution baseline repair; full execution_attempt feature work remains out of scope for this baseline batch.",
+  "reviewer": "codex-baseline-reviewer",
+  "reviewed_head": "433d889b7c0ceb01e6108e91df1594d4265942c0",
+  "reviewed_validation_summary": "Validated portable demo bootstrap idempotence, skills surface generation, WI-561 fact-chain readability, and installed positive-chain fixture isolation; full make check will be rerun after review evidence is recorded.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-561.md",
+    "recovery_entry": ".loom/progress/WI-561.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
