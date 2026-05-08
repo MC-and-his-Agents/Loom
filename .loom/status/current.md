@@ -12,11 +12,11 @@
 - Validation Entry: make check
 - Closing Condition: Root self-status reads WI-561, demo bootstrap is portable and idempotent, and #531/#561 branch/PR truth can be established without INIT-0001 as the active item.
 - Current Checkpoint: merge checkpoint
-- Current Stop: WI-561 baseline repair is locally merge-ready after full verification.
-- Next Step: Push the branch, open the #531/#561 baseline PR, and keep child #562-#565 open for the next FR implementation batch.
+- Current Stop: WI-561 baseline repair is locally merge-ready after full verification and installer gate repair.
+- Next Step: Push the updated branch, wait for host checks, then merge the #531/#561 baseline PR when green.
 - Blockers: None recorded.
-- Latest Validation Summary: make check passed on work/531-v080-baseline-repair; WI-561 status, merge-ready, and adopt verify passed; demo bootstrap rerun wrote no tracked changes.
-- Recovery Boundary: Branch work/531-v080-baseline-repair at commit bb6b5dc; active item WI-561; retired bootstrap item INIT-0001.
+- Latest Validation Summary: make check passed on work/531-v080-baseline-repair; WI-561 status, merge-ready, and adopt verify passed; demo bootstrap rerun wrote no tracked changes; installer version bump check and npm test passed for 0.1.72.
+- Recovery Boundary: Branch work/531-v080-baseline-repair at commit 129edaa; active item WI-561; retired bootstrap item INIT-0001.
 - Current Lane: v0.8.0 / #531 baseline repair
 
 ## Runtime Evidence
