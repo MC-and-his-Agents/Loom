@@ -1,0 +1,23 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-675",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "#675 spec freezes deterministic review engine profile evidence and scopes implementation to explicit Codex model/reasoning resolution plus fixtures.",
+  "reviewer": "codex",
+  "reviewed_head": "7ab1c30edfea90ba4dd7fd34dffafcfe751d7f3a",
+  "reviewed_validation_summary": "python3 -m py_compile passed for changed loom_flow and loom_check scripts; python3 tools/skills_surface.py check passed; python3 tools/loom_check.py passed with 27 surfaces; installer version and payload checks passed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-675.md",
+    "recovery_entry": ".loom/progress/WI-675.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
