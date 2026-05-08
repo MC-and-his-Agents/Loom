@@ -51,6 +51,17 @@ WORKSPACE_PROFILE_CONTRACTS = {
         "recommended_action": "declare the repo-specific workspace locator and keep host lifecycle ownership external",
     },
 }
+LOCAL_WORKER_BACKEND_CONTRACT = {
+    "schema_version": "loom-worker-backend/v1",
+    "backend": "local",
+    "ownership": "host-adapter",
+    "execution_boundary": {
+        "run": "read/event surface only; Loom does not start a daemon",
+        "stop": "read/event surface only; Loom does not own worker termination",
+    },
+    "daemon": False,
+    "future_backend_rule": "future backends may change invocation mechanics but must preserve Work Item, workspace, recovery, and ledger truth boundaries",
+}
 GATE_STARTER_ALIASES = {
     "verify": {
         "surface": "verification",
@@ -110,6 +121,70 @@ HOST_API_BUDGET_CONTRACT = {
     "rate_limit_policy": "consume x-ratelimit-* headers from natural responses when available; do not call /rate_limit just to inspect budget",
     "github_actions_budget": "design for GITHUB_TOKEN per-repository hourly request limits",
 }
+
+
+def local_worker_backend_contract() -> dict[str, object]:
+    return deepcopy(LOCAL_WORKER_BACKEND_CONTRACT)
+
+
+def workspace_lifecycle_expectations(workspace_profile: dict[str, object] | None) -> dict[str, object]:
+    profile = workspace_profile if isinstance(workspace_profile, dict) else {}
+    workspace_entry = profile.get("workspace_entry")
+    workspace_path = profile.get("workspace_path")
+    missing_inputs: list[str] = []
+    if not isinstance(workspace_entry, str) or not workspace_entry:
+        missing_inputs.append("workspace_entry")
+    if not isinstance(workspace_path, str) or not workspace_path:
+        missing_inputs.append("workspace_path")
+
+    return {
+        "schema_version": "loom-workspace-lifecycle/v1",
+        "result": "pass" if not missing_inputs else "block",
+        "missing_inputs": missing_inputs,
+        "workspace": {
+            "entry": workspace_entry or None,
+            "path": workspace_path or None,
+            "profile": profile.get("selected") or "unknown",
+            "exists": bool(profile.get("workspace_exists")),
+        },
+        "operations": {
+            "create": {
+                "semantics": "establish or confirm the workspace_entry execution workspace",
+                "creates_host_worktree": False,
+            },
+            "locate": {
+                "semantics": "resolve workspace_entry, recovery_entry, checkpoint, and purity without mutation",
+                "writes_truth": False,
+            },
+            "attach": {
+                "semantics": "locate and bind an existing repo-defined workspace",
+                "creates_workspace": False,
+                "deletes_workspace": False,
+                "takes_host_lifecycle": False,
+            },
+            "handoff": {
+                "semantics": "consume the same workspace/recovery contract and preserve recovery authored fields",
+                "requires_recovery_entry": True,
+            },
+            "cleanup": {
+                "semantics": "remove only explicit Loom-owned temporary residue",
+                "deletes_non_loom_owned": False,
+            },
+            "retire": {
+                "semantics": "write Current Checkpoint to retired while preserving the recovery entry",
+                "deletes_workspace_directory": False,
+            },
+            "execution_boundary": {
+                "run": "read/event surface only",
+                "stop": "read/event surface only",
+            },
+            "remove": {
+                "in_core": False,
+                "fallback_to": "workspace cleanup/retire plus host-owned directory or git worktree lifecycle",
+            },
+        },
+        "worker_backend": local_worker_backend_contract(),
+    }
 GITHUB_STABLE_CHECK_NAMES = ("py-compile", "demo-bootstrap", "repo-local-cli", "loom-check")
 _GITHUB_API_CACHE: dict[tuple[str, ...], Any] = {}
 REPO_INTERFACE_V1_SCHEMA = "loom-repo-interface/v1"

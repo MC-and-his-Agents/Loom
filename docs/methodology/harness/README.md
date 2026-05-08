@@ -34,6 +34,7 @@
 - [repo-local-gate-starter.md](./repo-local-gate-starter.md)
   - 定义新仓库可用的本地 gate starter aliases，并明确它们不是宿主强制门禁
 - `workspace-lifecycle.md`
+- `worker-backend-contract.md`
   - 定义 `create`、`locate`、`cleanup`、`retire` 与 `purity-check` 的生命周期合同
 - [host-action-contract.md](./host-action-contract.md)
   - 定义现有 host-facing actions 的统一结果、`fallback_to` 与 ownership 合同

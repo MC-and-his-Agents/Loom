@@ -14,7 +14,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from fact_chain_support import inspect_fact_chain
-from governance_surface import build_governance_surface
+from governance_surface import build_governance_surface, workspace_lifecycle_expectations
 from runtime_paths import registry_path, shared_asset
 from runtime_state import detect_runtime_state
 
@@ -1054,6 +1054,7 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
         },
         "runtime_state": runtime_state_payload(target_root),
         "governance_surface": governance_surface,
+        "lifecycle_expectations": workspace_lifecycle_expectations(governance_surface.get("workspace_profile")),
         "maturity_upgrade_path": init_maturity_upgrade_path(governance_surface),
     }
     return result
