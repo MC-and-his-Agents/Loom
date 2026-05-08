@@ -5,7 +5,7 @@
   "kind": "code_review",
   "summary": "#679 implementation writes review context pack input evidence, feeds recent findings and repeated blocker guidance into the default prompt, records context pack locators in engine evidence, and adds fixtures for repeated/root-cause candidates.",
   "reviewer": "codex",
-  "reviewed_head": "23ee00b27a3807b6edce5ebb37fb1d29938c7887",
+  "reviewed_head": "3a7cdd67dff04ea84593b4dcb2ccd56c8c4c0759",
   "reviewed_validation_summary": "python3 -m py_compile passed for changed loom_flow and loom_check scripts; python3 tools/skills_surface.py check passed; python3 tools/loom_check.py passed with 27 surfaces; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed; npm run check:payload --prefix packages/loom-installer passed.",
   "fallback_to": null,
   "findings": [],
