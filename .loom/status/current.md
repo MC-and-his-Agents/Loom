@@ -11,9 +11,9 @@
 - Review Entry: .loom/reviews/WI-689.json
 - Validation Entry: make check
 - Closing Condition: Adoption docs define installed Loom surface status; installer emits read-only upgrade-plan and verify-upgrade evidence including changed paths, drift, rollback path, failed layer, and fail-closed reason; fixtures cover current, upgrade-available, drift, and incompatible metadata states; make check passes cleanly; and the #689 batch PR absorbs #690-#692.
-- Current Checkpoint: build checkpoint
-- Current Stop: WI-689 installer upgrade rehearsal/status implementation, docs, tests, and local validation are aligned on the batch branch.
-- Next Step: Record review evidence, run merge-ready checks, open the #689 batch PR, merge to main, then close #690-#692.
+- Current Checkpoint: merge checkpoint
+- Current Stop: WI-689 implementation, validation, spec review, and code review evidence are aligned on the batch branch.
+- Next Step: Run merge-ready checks, open the #689 batch PR, merge to main, then close #690-#692.
 - Blockers: None recorded.
 - Latest Validation Summary: npm test passed for packages/loom-installer; npm run check:release passed for packages/loom-installer; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed; CLI smoke for upgrade-plan returned planned/current/mutates_target=false; make check passed with 27 surfaces and no tracked drift beyond this batch.
 - Recovery Boundary: Branch work/689-installed-upgrade-rehearsal-status; active item WI-689; installed Loom status and upgrade rehearsal evidence are read surfaces only and must not replace repo companion, Work Item, review, merge-ready, closeout, issue, or PR truth.
