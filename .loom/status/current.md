@@ -4,20 +4,20 @@
 
 - Item ID: WI-561
 - Goal: Deliver #561 execution attempt envelope as the first v0.8.0 / #531 batch
-- Scope: Repair Loom self-governance baseline for #531, bind the first active batch to #561, and remove demo bootstrap path/branch drift before FR review or merge-ready.
+- Scope: Define the `execution_attempt` envelope, emit attempt summaries from key Loom flows, expose latest attempt evidence in status, and validate attempt read/write boundaries without creating a second progress truth.
 - Execution Path: phase/v0.8.0/fr/561
 - Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-561.md
 - Review Entry: .loom/reviews/WI-561.json
 - Validation Entry: make check
-- Closing Condition: Root self-status reads WI-561, demo bootstrap is portable and idempotent, and #531/#561 branch/PR truth can be established without INIT-0001 as the active item.
+- Closing Condition: `flow resume|pre-review|spec-review|review|merge-ready` attempts expose an evidence locator, `loom_status` shows latest fresh/stale/missing attempt evidence correctly, fixtures reject authored progress duplication, `make check` passes cleanly, and the #561 batch PR absorbs #563-#565.
 - Current Checkpoint: merge checkpoint
-- Current Stop: WI-561 baseline repair is locally merge-ready after full verification and installer gate repair.
-- Next Step: Push the updated branch, wait for host checks, then merge the #531/#561 baseline PR when green.
+- Current Stop: WI-561 execution_attempt implementation and formal reviews are complete on the batch branch.
+- Next Step: Run merge-ready and host binding checks, then open the #561 batch PR for host checks and merge.
 - Blockers: None recorded.
-- Latest Validation Summary: make check passed on work/531-v080-baseline-repair; WI-561 status, merge-ready, and adopt verify passed; demo bootstrap rerun wrote no tracked changes; installer version bump check and npm test passed for 0.1.72.
-- Recovery Boundary: Branch work/531-v080-baseline-repair at commit 129edaa; active item WI-561; retired bootstrap item INIT-0001.
-- Current Lane: v0.8.0 / #531 baseline repair
+- Latest Validation Summary: make check passed on work/561-execution-attempt-envelope; py_compile and skills_surface checks passed; loom_check passed with execution-attempt fixtures; flow resume emitted attempt evidence and loom_status shows latest WI-561 attempt evidence as fresh; .loom/runtime/attempts remains ignored runtime evidence.
+- Recovery Boundary: Branch work/561-execution-attempt-envelope; active item WI-561; attempt runtime evidence is ignored under .loom/runtime/attempts and does not replace recovery truth.
+- Current Lane: v0.8.0 / #531 / #561 execution attempt envelope
 
 ## Runtime Evidence
 

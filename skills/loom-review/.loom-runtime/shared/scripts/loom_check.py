@@ -72,6 +72,7 @@ CORE_DOCS = (
     "docs/methodology/harness/work-item-contract.md",
     "docs/methodology/harness/item-context-contract.md",
     "docs/methodology/harness/fact-chain-contract.md",
+    "docs/methodology/harness/execution-attempt.md",
     "docs/methodology/harness/execution-context.md",
     "docs/methodology/harness/execution-chain.md",
     "docs/methodology/harness/checkpoint-model.md",
@@ -186,6 +187,7 @@ AUTOMATION_FRONTLOAD_SKILLS = (
 
 AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT = (
     "docs/methodology/harness/work-item-contract.md",
+    "docs/methodology/harness/execution-attempt.md",
     "docs/methodology/harness/execution-context.md",
     "docs/methodology/harness/execution-chain.md",
     "docs/methodology/harness/checkpoint-model.md",
@@ -2114,6 +2116,37 @@ def require_runtime_state_payload(
             failures.append(Failure(category, f"{context} runtime_state check `{key}` returned an unknown status"))
         if not isinstance(check.get("summary"), str) or not check.get("summary"):
             failures.append(Failure(category, f"{context} runtime_state check `{key}` must include non-empty `summary`"))
+
+
+def require_execution_attempt_summary(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+    expected_operation: str,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must include `execution_attempt`"))
+        return
+    if payload.get("schema_version") != loom_flow_module.EXECUTION_ATTEMPT_SCHEMA:
+        failures.append(Failure(category, f"{context} execution_attempt schema must stay stable"))
+    if payload.get("operation") != expected_operation:
+        failures.append(Failure(category, f"{context} execution_attempt operation must be `{expected_operation}`"))
+    if payload.get("result") not in {"pass", "block", "fallback"}:
+        failures.append(Failure(category, f"{context} execution_attempt result must stay within the stable contract"))
+    if payload.get("failure_category") not in loom_flow_module.EXECUTION_ATTEMPT_FAILURE_CATEGORIES:
+        failures.append(Failure(category, f"{context} execution_attempt failure_category is outside the stable vocabulary"))
+    evidence = payload.get("evidence")
+    if not isinstance(evidence, dict):
+        failures.append(Failure(category, f"{context} execution_attempt must include evidence"))
+        return
+    if evidence.get("status") not in {"present", "missing", "invalid"}:
+        failures.append(Failure(category, f"{context} execution_attempt evidence.status must be stable"))
+    if evidence.get("status") == "present":
+        for field in ("locator", "latest_locator"):
+            if not isinstance(evidence.get(field), str) or not evidence.get(field):
+                failures.append(Failure(category, f"{context} execution_attempt evidence must include `{field}`"))
 
 
 def require_fact_chain_provenance(
@@ -5453,6 +5486,32 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         expected_carrier="installed-skills-root",
                         allowed_results={"pass"},
                     )
+                    require_execution_attempt_summary(
+                        failures,
+                        category="daily-execution-cli",
+                        context="`installed flow resume`",
+                        payload=resume_payload.get("execution_attempt"),
+                        expected_operation="resume",
+                    )
+                    latest_attempt_status, latest_attempt_errors = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "shared" / "scripts" / "loom_status.py"),
+                            "--target",
+                            str(positive_target),
+                            "--item",
+                            "INIT-0001",
+                        ],
+                    )
+                    if latest_attempt_errors:
+                        failures.append(Failure("daily-execution-cli", f"`installed status latest attempt` failed: {latest_attempt_errors}"))
+                    else:
+                        latest_attempt = latest_attempt_status.get("latest_execution_attempt")
+                        if not isinstance(latest_attempt, dict):
+                            failures.append(Failure("daily-execution-cli", "`loom_status` must include latest_execution_attempt"))
+                        elif latest_attempt.get("freshness") != "fresh":
+                            failures.append(Failure("daily-execution-cli", "`loom_status` must expose the latest fresh execution_attempt after flow resume"))
 
                 payload, error = load_command_json(
                     root,
@@ -5497,6 +5556,14 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     failures.append(Failure("daily-execution-cli", f"`installed flow pre-review` failed: {error}"))
                 elif payload.get("result") != "pass":
                     failures.append(Failure("daily-execution-cli", "`installed flow pre-review` must pass for the positive chain"))
+                else:
+                    require_execution_attempt_summary(
+                        failures,
+                        category="daily-execution-cli",
+                        context="`installed flow pre-review`",
+                        payload=payload.get("execution_attempt"),
+                        expected_operation="pre-review",
+                    )
 
                 payload, error = load_command_json(
                     root,
@@ -5541,6 +5608,14 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     failures.append(Failure("daily-execution-cli", f"`installed flow spec-review` failed: {error}"))
                 elif spec_review_flow_payload.get("result") != "pass":
                     failures.append(Failure("daily-execution-cli", "`installed flow spec-review` must pass for the positive chain"))
+                else:
+                    require_execution_attempt_summary(
+                        failures,
+                        category="daily-execution-cli",
+                        context="`installed flow spec-review`",
+                        payload=spec_review_flow_payload.get("execution_attempt"),
+                        expected_operation="spec-review",
+                    )
 
                 spec_review_run_payload, error = load_command_json(
                     root,
@@ -9446,6 +9521,102 @@ def check_deferred_roadmap_tree_contract(root: Path) -> list[Failure]:
     return failures
 
 
+def check_execution_attempt_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    example_target = root / "examples/new-project"
+    if not example_target.exists():
+        return failures
+
+    with tempfile.TemporaryDirectory(prefix="loom-check-execution-attempt-") as tmp:
+        target = Path(tmp) / "target"
+        shutil.copytree(example_target, target)
+        for args in (
+            ["git", "init"],
+            ["git", "config", "user.email", "loom-check@example.com"],
+            ["git", "config", "user.name", "loom-check"],
+            ["git", "add", "."],
+            ["git", "commit", "-m", "baseline"],
+        ):
+            result = run_command(root, args, cwd=target, timeout_seconds=30)
+            if result.returncode != 0:
+                detail = result.stderr.strip() or result.stdout.strip() or "git setup failed"
+                failures.append(Failure("execution-attempt", f"fixture git setup failed: {detail}"))
+                return failures
+
+        context, errors = loom_flow_module.load_context(target, ".loom/bootstrap/init-result.json", "INIT-0001")
+        if errors:
+            failures.append(Failure("execution-attempt", f"fixture fact chain failed: {'; '.join(errors)}"))
+            return failures
+
+        flow_payload = {
+            "command": "flow",
+            "operation": "resume",
+            "result": "pass",
+            "summary": "synthetic resume flow passed",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "steps": [
+                {
+                    "name": "fact-chain",
+                    "result": "pass",
+                    "missing_inputs": [],
+                    "fallback_to": None,
+                }
+            ],
+        }
+        summary = loom_flow_module.persist_execution_attempt(
+            context,
+            command="flow",
+            operation="resume",
+            payload=flow_payload,
+        )
+        require_execution_attempt_summary(
+            failures,
+            category="execution-attempt",
+            context="synthetic flow resume",
+            payload=summary,
+            expected_operation="resume",
+        )
+        evidence = summary.get("evidence") if isinstance(summary, dict) else None
+        if not isinstance(evidence, dict) or evidence.get("status") != "present":
+            failures.append(Failure("execution-attempt", "persisted attempt summary must include present evidence"))
+
+        latest = loom_flow_module.latest_execution_attempt_payload(target, "INIT-0001")
+        if latest.get("freshness") != "fresh":
+            failures.append(Failure("execution-attempt", "latest attempt must be fresh immediately after write"))
+        envelope = latest.get("attempt")
+        if not isinstance(envelope, dict):
+            failures.append(Failure("execution-attempt", "latest attempt must expose the persisted envelope"))
+            return failures
+
+        poisoned = dict(envelope)
+        poisoned["next_step"] = "forbidden duplicate recovery progress"
+        _, poison_errors, _ = loom_flow_module.validate_execution_attempt_envelope(
+            poisoned,
+            target_root=target,
+            expected_item="INIT-0001",
+            expected_head=str(envelope.get("head_sha")),
+        )
+        if not any("authored progress field" in error for error in poison_errors):
+            failures.append(Failure("execution-attempt", "attempt envelope must reject copied recovery progress fields"))
+
+        latest_path = target / ".loom/runtime/attempts/INIT-0001/latest.json"
+        latest_path.unlink()
+        missing = loom_flow_module.latest_execution_attempt_payload(target, "INIT-0001")
+        if missing.get("status") != "missing" or missing.get("freshness") != "missing":
+            failures.append(Failure("execution-attempt", "missing latest attempt evidence must be marked missing"))
+
+        stale = dict(envelope)
+        stale["head_sha"] = "0" * 40
+        latest_path.parent.mkdir(parents=True, exist_ok=True)
+        latest_path.write_text(json.dumps(stale, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        stale_payload = loom_flow_module.latest_execution_attempt_payload(target, "INIT-0001")
+        if stale_payload.get("freshness") != "stale":
+            failures.append(Failure("execution-attempt", "status must not display a stale attempt as fresh"))
+
+    return failures
+
+
 def is_within(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
@@ -9492,12 +9663,13 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_operating_layer_contract(root))
     failures.extend(check_orchestration_conformance_profiles(root))
     failures.extend(check_deferred_roadmap_tree_contract(root))
+    failures.extend(check_execution_attempt_contract(root))
     failures.extend(check_markdown_links(root))
     return failures
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 25
+    categories_checked = 26
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")

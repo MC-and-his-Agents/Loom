@@ -13,6 +13,8 @@
   - 定义静态真相、动态真相、host/control-plane mirror、retained result 与派生读面的读取优先级和 provenance 纪律
 - [execution-context.md](./execution-context.md)
   - 定义每轮正式执行必须绑定和读取的最小上下文语义
+- [execution-attempt.md](./execution-attempt.md)
+  - 定义单次命令尝试的 runtime evidence envelope、freshness 与禁止承载 authored progress 的边界
 - [item-context-contract.md](./item-context-contract.md)
   - 定义当前活跃 `Work Item` 的最小 machine-readable 上下文字段与读取边界
 - [status-surface-contract.md](./status-surface-contract.md)

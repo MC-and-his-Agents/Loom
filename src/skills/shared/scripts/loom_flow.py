@@ -12,6 +12,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -58,6 +59,7 @@ OWNED_TEMP_ROOTS = (
 )
 OWNED_RUNTIME_EVIDENCE_ROOTS = (
     ".loom/runtime/review",
+    ".loom/runtime/attempts",
 )
 
 TERMINAL_CHECKPOINTS = {
@@ -114,6 +116,30 @@ SHADOW_PARITY_SURFACES = ("admission", "review", "merge_ready", "closeout")
 ADOPTION_DECISIONS_SCHEMA = "loom-adoption-decisions/v1"
 GUIDED_ADOPTION_PLAN_SCHEMA = "loom-guided-adoption-plan/v1"
 COMPANION_GENERATION_SCHEMA = "loom-companion-generation/v1"
+EXECUTION_ATTEMPT_SCHEMA = "loom-execution-attempt/v1"
+EXECUTION_ATTEMPT_RESULTS = {"pass", "block", "fallback"}
+EXECUTION_ATTEMPT_FAILURE_CATEGORIES = {
+    "none",
+    "runtime_state",
+    "fact_chain",
+    "state_check",
+    "runtime_evidence",
+    "checkpoint",
+    "review",
+    "repo_specific",
+    "recovery_readiness",
+    "unknown",
+}
+EXECUTION_ATTEMPT_FORBIDDEN_AUTHORED_FIELDS = {
+    "current_stop",
+    "next_step",
+    "blockers",
+    "latest_validation_summary",
+    "current_checkpoint",
+    "current_lane",
+    "recovery_boundary",
+    "closing_condition",
+}
 
 ADOPTION_DECISION_QUESTIONS: dict[str, str] = {
     "fr_work_item_layer": "Which host planning object owns the FR layer, and how does each FR point to its Work Item?",
@@ -1393,6 +1419,330 @@ def read_repo_relative_text_file(root: Path, path_str: str, *, label: str) -> tu
 def write_json_file(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def execution_attempt_directory(target_root: Path, item_id: str) -> Path:
+    return target_root / ".loom/runtime/attempts" / item_id
+
+
+def execution_attempt_locator(item_id: str, filename: str = "latest.json") -> str:
+    return f".loom/runtime/attempts/{item_id}/{filename}"
+
+
+def collect_forbidden_execution_attempt_paths(payload: Any, prefix: str = "") -> list[str]:
+    found: list[str] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            path = f"{prefix}.{key}" if prefix else str(key)
+            if key in EXECUTION_ATTEMPT_FORBIDDEN_AUTHORED_FIELDS:
+                found.append(path)
+            found.extend(collect_forbidden_execution_attempt_paths(value, path))
+    elif isinstance(payload, list):
+        for index, value in enumerate(payload):
+            found.extend(collect_forbidden_execution_attempt_paths(value, f"{prefix}[{index}]"))
+    return found
+
+
+def execution_attempt_failure_category(payload: dict[str, Any]) -> str:
+    if payload.get("result") == "pass":
+        return "none"
+    missing_inputs = payload.get("missing_inputs")
+    haystack = " ".join(str(item).lower() for item in missing_inputs if isinstance(missing_inputs, list))
+    steps = payload.get("steps")
+    if isinstance(steps, list):
+        for step in steps:
+            if not isinstance(step, dict) or step.get("result") not in {"block", "fallback"}:
+                continue
+            name = str(step.get("name") or "")
+            if "runtime-state" in name:
+                return "runtime_state"
+            if "fact-chain" in name:
+                return "fact_chain"
+            if "state-check" in name:
+                return "state_check"
+            if "runtime-evidence" in name:
+                return "runtime_evidence"
+            if "checkpoint" in name:
+                return "checkpoint"
+            if "review" in name:
+                return "review"
+    if "runtime state" in haystack:
+        return "runtime_state"
+    if "fact-chain" in haystack or "fact chain" in haystack:
+        return "fact_chain"
+    if "runtime_evidence" in haystack or "runtime evidence" in haystack:
+        return "runtime_evidence"
+    if "checkpoint" in haystack:
+        return "checkpoint"
+    if "review" in haystack:
+        return "review"
+    if "repo-specific" in haystack or "companion" in haystack:
+        return "repo_specific"
+    if "recovery readiness" in haystack:
+        return "recovery_readiness"
+    return "unknown"
+
+
+def execution_attempt_summary_from_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
+    evidence = envelope.get("evidence") if isinstance(envelope.get("evidence"), dict) else {}
+    failure = envelope.get("failure") if isinstance(envelope.get("failure"), dict) else {}
+    return {
+        "schema_version": EXECUTION_ATTEMPT_SCHEMA,
+        "attempt_id": envelope.get("attempt_id"),
+        "item_id": envelope.get("item_id"),
+        "command": envelope.get("command"),
+        "operation": envelope.get("operation"),
+        "result": envelope.get("result"),
+        "failure_category": failure.get("category"),
+        "fallback_to": failure.get("fallback_to"),
+        "evidence": {
+            "status": evidence.get("status"),
+            "locator": evidence.get("locator"),
+            "latest_locator": evidence.get("latest_locator"),
+        },
+    }
+
+
+def build_execution_attempt_envelope(
+    context: dict[str, Any],
+    *,
+    command: str,
+    operation: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    head_sha = git_head_sha(context["target_root"]) or "unknown-head"
+    created_at = utc_now_iso()
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            {
+                "item_id": context["item_id"],
+                "command": command,
+                "operation": operation,
+                "head_sha": head_sha,
+                "created_at": created_at,
+                "result": payload.get("result"),
+            },
+            sort_keys=True,
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()[:12]
+    attempt_id = f"{context['item_id']}-{operation}-{head_sha[:12]}-{fingerprint}".replace("/", "-")
+    attempt_locator = execution_attempt_locator(context["item_id"], f"{attempt_id}.json")
+    latest_locator = execution_attempt_locator(context["item_id"])
+    result = payload.get("result") if payload.get("result") in EXECUTION_ATTEMPT_RESULTS else "block"
+    missing_inputs = payload.get("missing_inputs")
+    if not isinstance(missing_inputs, list):
+        missing_inputs = []
+    failure_category = execution_attempt_failure_category(payload)
+    if failure_category not in EXECUTION_ATTEMPT_FAILURE_CATEGORIES:
+        failure_category = "unknown"
+    steps = payload.get("steps")
+    step_summary = []
+    if isinstance(steps, list):
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            step_summary.append(
+                {
+                    "name": step.get("name"),
+                    "result": step.get("result"),
+                    "fallback_to": step.get("fallback_to"),
+                    "missing_count": len(step.get("missing_inputs", [])) if isinstance(step.get("missing_inputs"), list) else 0,
+                }
+            )
+    return {
+        "schema_version": EXECUTION_ATTEMPT_SCHEMA,
+        "attempt_id": attempt_id,
+        "item_id": context["item_id"],
+        "command": command,
+        "operation": operation,
+        "result": result,
+        "created_at": created_at,
+        "head_sha": head_sha,
+        "branch": git_branch(context["target_root"]) or "unknown-branch",
+        "workspace": {
+            "entry": context["workspace_entry"],
+            "path": relative_to_root(context["workspace_path"], context["target_root"]),
+        },
+        "failure": {
+            "category": failure_category,
+            "missing_inputs": missing_inputs,
+            "fallback_to": payload.get("fallback_to"),
+        },
+        "steps": step_summary,
+        "evidence": {
+            "status": "present",
+            "locator": attempt_locator,
+            "latest_locator": latest_locator,
+        },
+    }
+
+
+def persist_execution_attempt(
+    context: dict[str, Any],
+    *,
+    command: str,
+    operation: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    envelope = build_execution_attempt_envelope(context, command=command, operation=operation, payload=payload)
+    forbidden = collect_forbidden_execution_attempt_paths(envelope)
+    if forbidden:
+        envelope["evidence"] = {
+            "status": "invalid",
+            "locator": None,
+            "latest_locator": execution_attempt_locator(context["item_id"]),
+            "missing_inputs": [f"execution_attempt includes authored progress field `{path}`" for path in forbidden],
+        }
+        return execution_attempt_summary_from_envelope(envelope)
+
+    evidence = envelope["evidence"]
+    try:
+        attempt_path, attempt_errors = resolve_repo_relative_path(
+            context["target_root"],
+            str(evidence["locator"]),
+            label="execution_attempt evidence locator",
+        )
+        latest_path, latest_errors = resolve_repo_relative_path(
+            context["target_root"],
+            str(evidence["latest_locator"]),
+            label="execution_attempt latest locator",
+        )
+        if attempt_errors or latest_errors:
+            raise ValueError("; ".join([*attempt_errors, *latest_errors]))
+        assert attempt_path is not None
+        assert latest_path is not None
+        write_json_file(attempt_path, envelope)
+        write_json_file(latest_path, envelope)
+    except Exception as exc:
+        envelope["evidence"] = {
+            "status": "missing",
+            "locator": evidence.get("locator"),
+            "latest_locator": evidence.get("latest_locator"),
+            "missing_inputs": [f"execution_attempt evidence could not be written: {exc}"],
+        }
+    return execution_attempt_summary_from_envelope(envelope)
+
+
+def validate_execution_attempt_envelope(
+    payload: Any,
+    *,
+    target_root: Path,
+    expected_item: str,
+    expected_head: str | None = None,
+) -> tuple[dict[str, Any] | None, list[str], str]:
+    if not isinstance(payload, dict):
+        return None, ["execution_attempt evidence must be a JSON object"], "invalid"
+    errors: list[str] = []
+    if payload.get("schema_version") != EXECUTION_ATTEMPT_SCHEMA:
+        errors.append(f"execution_attempt schema_version must be `{EXECUTION_ATTEMPT_SCHEMA}`")
+    for field in ("attempt_id", "item_id", "command", "operation", "created_at", "head_sha"):
+        if not isinstance(payload.get(field), str) or not str(payload.get(field)).strip():
+            errors.append(f"execution_attempt `{field}` must be a non-empty string")
+    if payload.get("item_id") != expected_item:
+        errors.append(f"execution_attempt item_id does not match `{expected_item}`")
+    if payload.get("result") not in EXECUTION_ATTEMPT_RESULTS:
+        errors.append("execution_attempt result must be pass, block, or fallback")
+    workspace = payload.get("workspace")
+    if not isinstance(workspace, dict):
+        errors.append("execution_attempt workspace must be an object")
+    else:
+        for field in ("entry", "path"):
+            if not isinstance(workspace.get(field), str) or not workspace.get(field):
+                errors.append(f"execution_attempt workspace.{field} must be a non-empty string")
+    failure = payload.get("failure")
+    if not isinstance(failure, dict):
+        errors.append("execution_attempt failure must be an object")
+    else:
+        if failure.get("category") not in EXECUTION_ATTEMPT_FAILURE_CATEGORIES:
+            errors.append("execution_attempt failure.category is outside the stable vocabulary")
+        if not isinstance(failure.get("missing_inputs"), list):
+            errors.append("execution_attempt failure.missing_inputs must be a list")
+    evidence = payload.get("evidence")
+    if not isinstance(evidence, dict):
+        errors.append("execution_attempt evidence must be an object")
+    else:
+        locator = evidence.get("locator")
+        if not isinstance(locator, str) or not locator.strip():
+            errors.append("execution_attempt evidence.locator must be a non-empty string")
+        elif resolve_repo_relative_path(target_root, locator, label="execution_attempt evidence locator")[1]:
+            errors.append("execution_attempt evidence.locator must stay inside the target root")
+        if evidence.get("status") not in {"present", "missing", "invalid"}:
+            errors.append("execution_attempt evidence.status must be present, missing, or invalid")
+    forbidden = collect_forbidden_execution_attempt_paths(payload)
+    for path in forbidden:
+        errors.append(f"execution_attempt must not include authored progress field `{path}`")
+    if errors:
+        return payload, errors, "invalid"
+    if expected_head and payload.get("head_sha") != expected_head:
+        return payload, [], "stale"
+    return payload, [], "fresh"
+
+
+def latest_execution_attempt_payload(target_root: Path, item_id: str) -> dict[str, Any]:
+    locator = execution_attempt_locator(item_id)
+    path, path_errors = resolve_repo_relative_path(target_root, locator, label="execution_attempt latest locator")
+    if path_errors:
+        return {
+            "schema_version": EXECUTION_ATTEMPT_SCHEMA,
+            "status": "missing",
+            "freshness": "missing",
+            "summary": "latest execution attempt evidence locator is invalid.",
+            "evidence": {"locator": locator, "status": "missing"},
+            "missing_inputs": path_errors,
+            "attempt": None,
+        }
+    assert path is not None
+    if not path.exists():
+        return {
+            "schema_version": EXECUTION_ATTEMPT_SCHEMA,
+            "status": "missing",
+            "freshness": "missing",
+            "summary": "latest execution attempt evidence is not present.",
+            "evidence": {"locator": locator, "status": "missing"},
+            "missing_inputs": [f"missing execution_attempt evidence: {locator}"],
+            "attempt": None,
+        }
+    try:
+        raw = load_json_file(path)
+    except Exception as exc:
+        return {
+            "schema_version": EXECUTION_ATTEMPT_SCHEMA,
+            "status": "invalid",
+            "freshness": "unreadable",
+            "summary": "latest execution attempt evidence is unreadable.",
+            "evidence": {"locator": locator, "status": "invalid"},
+            "missing_inputs": [str(exc)],
+            "attempt": None,
+        }
+    current_head = git_head_sha(target_root) or "unknown-head"
+    envelope, errors, freshness = validate_execution_attempt_envelope(
+        raw,
+        target_root=target_root,
+        expected_item=item_id,
+        expected_head=current_head,
+    )
+    status = "present" if freshness == "fresh" else ("stale" if freshness == "stale" else "invalid")
+    summary = (
+        "latest execution attempt evidence is fresh for the current item and HEAD."
+        if freshness == "fresh"
+        else "latest execution attempt evidence exists but is stale for the current HEAD."
+        if freshness == "stale"
+        else "latest execution attempt evidence is invalid."
+    )
+    return {
+        "schema_version": EXECUTION_ATTEMPT_SCHEMA,
+        "status": status,
+        "freshness": freshness,
+        "summary": summary,
+        "evidence": {"locator": locator, "status": "present" if freshness in {"fresh", "stale"} else "invalid"},
+        "missing_inputs": errors,
+        "attempt": envelope,
+    }
 
 
 def cleanup_scratch_tree(target_root: Path, scratch_dir: Path) -> None:
@@ -8356,7 +8706,14 @@ def handle_flow(args: argparse.Namespace) -> int:
             }
         )
     if args.operation in {"review", "spec-review"}:
-        return emit(build_review_flow_payload(target_root, args.output, args.item, operation=args.operation))
+        payload = build_review_flow_payload(target_root, args.output, args.item, operation=args.operation)
+        payload["execution_attempt"] = persist_execution_attempt(
+            context,
+            command="flow",
+            operation=args.operation,
+            payload=payload,
+        )
+        return emit(payload)
 
     steps.append(
         {
@@ -8623,8 +8980,7 @@ def handle_flow(args: argparse.Namespace) -> int:
         fallback_to = fallback_to or recovery_readiness.get("fallback_to") or "admission"
         summary = "flow rebuilt context but recovery readiness is blocking."
 
-    return emit(
-        {
+    payload = {
             "command": "flow",
             "operation": args.operation,
             "item": {
@@ -8770,7 +9126,13 @@ def handle_flow(args: argparse.Namespace) -> int:
                 else {}
             ),
         }
+    payload["execution_attempt"] = persist_execution_attempt(
+        context,
+        command="flow",
+        operation=args.operation,
+        payload=payload,
     )
+    return emit(payload)
 
 
 def handle_shadow_parity(args: argparse.Namespace) -> int:

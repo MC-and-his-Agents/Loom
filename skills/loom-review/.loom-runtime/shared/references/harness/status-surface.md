@@ -151,7 +151,16 @@
 
 这些结论必须来自 fact-chain 对 recovery 主入口的解析。若 ledger 缺失、stale、绑定到第二 locator，或 authored recovery forbidden fields，状态面和 `loom_status` 都必须输出 blocking / stale 结论，而不是用状态面内容覆盖 recovery。
 
-## 6. gate 可消费判定
+## 6. Latest Execution Attempt
+
+状态面可以展示最近一次 `execution_attempt`，但只能作为 runtime evidence 读取。
+
+- fresh attempt 必须满足 [execution-attempt.md](./execution-attempt.md) 的 envelope 合同、绑定当前 `item_id` 与当前 `HEAD`，且不包含 authored progress 字段
+- stale attempt 可以展示 `attempt_id`、`result` 与 locator，但必须标为 `freshness: stale`
+- missing 或 unreadable attempt evidence 必须标为 `missing` 或 `invalid`，不得用 flow 输出里的摘要补写第二真相
+- attempt 的 `result` 不等于当前 gate 通过；gate 仍消费 Work Item、recovery、review、merge-ready 与 closeout 主载体
+
+## 7. gate 可消费判定
 
 状态面必须明确区分：
 
