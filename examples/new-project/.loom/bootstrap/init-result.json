@@ -125,19 +125,19 @@
       "path": ".loom/bin/governance_surface.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/governance_surface.py",
-      "sha256": "b9429ee3eb91bd0431aab3692d885cb7c4987c999075d6737cfb81b7d2bb4ffd"
+      "sha256": "e7ec9b9eb43ec0c3a3f817cfc90d5305eb6e18095c8a5144c3f2540ddbb2920d"
     },
     {
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "2d93eeda879e99ef7171bddc74bda0b1ed14e68aa5bf0e7f4c62efaaf2119726"
+      "sha256": "bbed0f31db45d5e8d3b0ba8874621cdfc717e970f55aa0227e105d9a974236f0"
     },
     {
       "path": ".loom/bin/loom_status.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_status.py",
-      "sha256": "f3ed7dc7493fc623de242eb46fa0c16c82820a63e74193f980e8692064653675"
+      "sha256": "dd96d9ac1f606f5701e9ebc0847da5928444b45d233943b3546e8dc2213c1b64"
     },
     {
       "path": ".loom/bin/runtime_paths.py",
@@ -155,7 +155,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "b4ef1fb7cfc78368b468860bface76ddaa839d8ac6eda312f52b55a2a36ca597"
+      "sha256": "bf28b93cef0a27a0a0bb95dd0317511b8b6ef0057ff35bbfe5db1d19c4215459"
     },
     {
       "path": "AGENTS.md",
@@ -455,6 +455,24 @@
         "status": "present",
         "locator": ".loom/companion/repo-interface.json",
         "source": "repo companion manifest.repo_interface"
+      },
+      "tool_availability": {
+        "schema_version": "loom-dynamic-tool-handshake/v1",
+        "result": "pass",
+        "summary": "no dynamic tools are declared for this repository.",
+        "declared_tools": [],
+        "failure_summary": {
+          "required_blocking": [],
+          "optional_advisory": [],
+          "by_status": {
+            "advertised": 0,
+            "failed": 0,
+            "unavailable": 0,
+            "unsupported": 0
+          }
+        },
+        "missing_inputs": [],
+        "fallback_to": null
       },
       "summary": "repo companion manifest and machine-readable repo interface are readable.",
       "missing_inputs": [],

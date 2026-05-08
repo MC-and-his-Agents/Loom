@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-561
-- Goal: Deliver #561 execution attempt envelope as the first v0.8.0 / #531 batch
-- Scope: Define the `execution_attempt` envelope, emit attempt summaries from key Loom flows, expose latest attempt evidence in status, and validate attempt read/write boundaries without creating a second progress truth.
-- Execution Path: phase/v0.8.0/fr/561
+- Item ID: WI-566
+- Goal: Deliver #566 dynamic tool handshake semantics for v0.8.0 / #531.
+- Scope: Define the dynamic tool handshake vocabulary, preserve the companion / interop declaration boundary, expose tool availability and failure summary in flow/status output, and validate unsupported, unavailable, and failed tool fixtures.
+- Execution Path: phase/v0.8.0/fr/566
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-561.md
-- Review Entry: .loom/reviews/WI-561.json
+- Recovery Entry: .loom/progress/WI-566.md
+- Review Entry: .loom/reviews/WI-566.json
 - Validation Entry: make check
-- Closing Condition: `flow resume|pre-review|spec-review|review|merge-ready` attempts expose an evidence locator, `loom_status` shows latest fresh/stale/missing attempt evidence correctly, fixtures reject authored progress duplication, `make check` passes cleanly, and the #561 batch PR absorbs #563-#565.
+- Closing Condition: `tool_availability` exposes `advertised | unavailable | unsupported | failed`, required tool failure blocks the owning execution surface, optional/advisory failures remain advisory, status reads the latest derived summary, fixtures cover unsupported/unavailable/failed tools, `make check` passes cleanly, and the #566 batch PR absorbs #567-#570.
 - Current Checkpoint: merge checkpoint
-- Current Stop: WI-561 execution_attempt implementation and formal reviews are complete on the batch branch.
-- Next Step: Run merge-ready and host binding checks, then open the #561 batch PR for host checks and merge.
+- Current Stop: WI-566 dynamic tool handshake implementation, generated carriers, installer version bump, reviews, and verification evidence are aligned on the batch branch.
+- Next Step: Push the updated #566 PR, wait for host checks, merge to main, then run closeout for #567-#570.
 - Blockers: None recorded.
-- Latest Validation Summary: make check passed on work/561-execution-attempt-envelope; py_compile and skills_surface checks passed; loom_check passed with execution-attempt fixtures; flow resume emitted attempt evidence and loom_status shows latest WI-561 attempt evidence as fresh; .loom/runtime/attempts remains ignored runtime evidence.
-- Recovery Boundary: Branch work/561-execution-attempt-envelope; active item WI-561; attempt runtime evidence is ignored under .loom/runtime/attempts and does not replace recovery truth.
-- Current Lane: v0.8.0 / #531 / #561 execution attempt envelope
+- Latest Validation Summary: make check passed on work/566-dynamic-tool-handshake-semantics with 26 loom_check surfaces before installer version bump; after bumping @mc-and-his-agents/loom-installer from 0.1.73 to 0.1.74, node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed, version_surface_check passed, check:payload passed, loom_status passed, and flow merge-ready passed with tool_availability result pass.
+- Recovery Boundary: Branch work/566-dynamic-tool-handshake-semantics; active item WI-566; dynamic tool handshake evidence is derived from companion locators and must not replace recovery truth, execution_attempt evidence, or retained host action results.
+- Current Lane: v0.8.0 / #531 / #566 dynamic tool handshake semantics
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-561.md
-- Dynamic Truth: .loom/progress/WI-561.md
+- Static Truth: .loom/work-items/WI-566.md
+- Dynamic Truth: .loom/progress/WI-566.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

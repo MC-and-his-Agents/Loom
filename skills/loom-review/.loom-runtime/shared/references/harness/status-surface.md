@@ -70,6 +70,14 @@
 
 状态面可以展示这些字段，但不得在状态面内 authored 第二份结论。
 
+Dynamic tool availability 也只能派生读取：
+
+- `tool_availability`
+  - 从 repo companion 的 `dynamic_tool_locators` 与只读 handshake declaration 派生
+  - 展示 `advertised | unavailable | unsupported | failed`
+  - required 工具失败可阻断对应 execution surface；optional / advisory 工具失败只作为 advisory evidence
+  - 不调用工具、不写 host result、不替代 `execution_attempt`
+
 ## 3. 必备展示面
 
 统一状态面至少要展示：
@@ -86,6 +94,7 @@
 - BDD 外环场景的证据覆盖状态
 - TDD 内环测试或等价检查的证据覆盖状态
 - fresh verification evidence 的 `head_sha` / 范围 / 摘要绑定
+- dynamic tool availability 与 failure summary
 
 ## 4. `Runtime Evidence`
 

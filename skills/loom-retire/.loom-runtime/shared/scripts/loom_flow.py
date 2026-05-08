@@ -783,6 +783,95 @@ def repo_specific_default_fallback(surface: str) -> str:
     }[surface]
 
 
+def tool_availability_for_surface(repo_interface: object, *, surface: str) -> dict[str, Any]:
+    empty_payload = {
+        "schema_version": "loom-dynamic-tool-handshake/v1",
+        "surface": surface,
+        "result": "pass",
+        "summary": "no dynamic tool handshake evidence applies to this surface.",
+        "declared_tools": [],
+        "blocking_tools": [],
+        "advisory_tools": [],
+        "failure_summary": {
+            "required_blocking": [],
+            "optional_advisory": [],
+            "by_status": {
+                "advertised": 0,
+                "failed": 0,
+                "unavailable": 0,
+                "unsupported": 0,
+            },
+        },
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if not isinstance(repo_interface, dict):
+        return empty_payload
+    tool_availability = repo_interface.get("tool_availability")
+    if not isinstance(tool_availability, dict):
+        return empty_payload
+    declared_tools = tool_availability.get("declared_tools")
+    if not isinstance(declared_tools, list):
+        return empty_payload
+
+    applicable: list[dict[str, Any]] = []
+    for tool in declared_tools:
+        if not isinstance(tool, dict):
+            continue
+        tool_surface = tool.get("surface")
+        if tool_surface in {surface, "attempt_time"}:
+            applicable.append(tool)
+    by_status = {
+        "advertised": 0,
+        "failed": 0,
+        "unavailable": 0,
+        "unsupported": 0,
+    }
+    blocking_tools: list[dict[str, Any]] = []
+    advisory_tools: list[dict[str, Any]] = []
+    missing_inputs: list[str] = []
+    fallback_to: str | None = None
+    for tool in applicable:
+        status = tool.get("status")
+        if isinstance(status, str) and status in by_status:
+            by_status[status] += 1
+        if tool.get("result") == "block":
+            blocking_tools.append(tool)
+            fallback = tool.get("fallback_to")
+            if fallback_to is None and isinstance(fallback, str) and fallback:
+                fallback_to = fallback
+            for message in tool.get("missing_inputs", []):
+                if message not in missing_inputs:
+                    missing_inputs.append(str(message))
+        elif tool.get("status") != "advertised":
+            advisory_tools.append(tool)
+
+    result = "block" if blocking_tools else "pass"
+    if blocking_tools:
+        summary = "required dynamic tool handshake evidence blocks this surface."
+    elif advisory_tools:
+        summary = "only optional or advisory dynamic tool handshake failures apply to this surface."
+    elif applicable:
+        summary = "dynamic tool handshake evidence is advertised for this surface."
+    else:
+        summary = empty_payload["summary"]
+    return {
+        **empty_payload,
+        "result": result,
+        "summary": summary,
+        "declared_tools": applicable,
+        "blocking_tools": blocking_tools,
+        "advisory_tools": advisory_tools,
+        "failure_summary": {
+            "required_blocking": blocking_tools,
+            "optional_advisory": advisory_tools,
+            "by_status": by_status,
+        },
+        "missing_inputs": missing_inputs,
+        "fallback_to": fallback_to if result == "block" else None,
+    }
+
+
 def repo_specific_requirements_payload(
     repo_interface: object,
     *,
@@ -799,6 +888,7 @@ def repo_specific_requirements_payload(
         "summary": "no repo companion requirements are declared for this surface.",
         "missing_inputs": [],
         "fallback_to": None,
+        "tool_availability": tool_availability_for_surface(repo_interface, surface=surface),
     }
     if not isinstance(repo_interface, dict):
         return {
@@ -909,6 +999,16 @@ def repo_specific_requirements_payload(
         result = "pass"
         fallback_to = None
         missing_inputs = []
+
+    tool_availability = tool_availability_for_surface(repo_interface, surface=surface)
+    if tool_availability.get("result") == "block":
+        result = "block"
+        fallback_to = fallback_to or tool_availability.get("fallback_to") or repo_specific_default_fallback(surface)
+        for message in tool_availability.get("missing_inputs", []):
+            if message not in missing_inputs:
+                missing_inputs.append(str(message))
+        if not blocking:
+            summary = "required dynamic tool handshake evidence blocks this surface."
     return {
         "surface": surface,
         "result": result,
@@ -919,6 +1019,7 @@ def repo_specific_requirements_payload(
         "summary": summary,
         "missing_inputs": missing_inputs,
         "fallback_to": fallback_to,
+        "tool_availability": tool_availability,
     }
 
 

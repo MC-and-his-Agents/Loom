@@ -1,0 +1,23 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-566",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "#566 formal spec defines the dynamic tool handshake vocabulary, companion boundary, status/read surface, and unsupported/unavailable/failed fixture expectations without creating parallel execution truth.",
+  "reviewer": "codex",
+  "reviewed_head": "aeb14b8a5ed912d886ccc51766bed5867497272d",
+  "reviewed_validation_summary": "Pending for WI-566.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-566.md",
+    "recovery_entry": ".loom/progress/WI-566.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

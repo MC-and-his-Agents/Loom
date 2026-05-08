@@ -15,7 +15,7 @@
 它同时冻结 v0.7 的 dynamic tool availability / host action declaration 边界：
 
 - 只声明 locator、owner、requirement、surface、fallback_to 与 fail-closed 强度
-- 不定义 attempt-time advertised / unavailable / unsupported / failed 结果词表；这些属于后续工具调用尝试合同
+- attempt-time advertised / unavailable / unsupported / failed 结果词表由 [dynamic-tool-handshake.md](./dynamic-tool-handshake.md) 承接
 - 不让 Loom 接管 host、platform 或 external tool 的 ownership
 
 ## 1. 能力定位

@@ -420,6 +420,12 @@ def main(argv: list[str]) -> int:
     workspace_profile = governance_surface.get("workspace_profile")
     gate_starter = governance_surface.get("gate_starter")
     github_control_plane = governance_surface.get("github_control_plane")
+    repo_interface = governance_surface.get("repo_interface")
+    tool_availability = (
+        repo_interface.get("tool_availability")
+        if isinstance(repo_interface, dict)
+        else None
+    )
     ci_check_presence = github_control_plane.get("ci_check_presence") if isinstance(github_control_plane, dict) else None
     host_enforcement = github_control_plane.get("host_enforcement") if isinstance(github_control_plane, dict) else None
     github_status, github_errors = github_status_payload(
@@ -498,6 +504,7 @@ def main(argv: list[str]) -> int:
             "recovery_readiness": report_recovery_readiness(context["report"]),
             "execution_ledger": report_execution_ledger(context["report"]),
             "latest_execution_attempt": latest_execution_attempt,
+            "tool_availability": tool_availability,
             "blocking_failures": report_blocking_failures(context["report"]),
             "item": {
                 "id": context["item_id"],
