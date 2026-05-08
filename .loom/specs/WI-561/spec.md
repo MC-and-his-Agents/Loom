@@ -36,7 +36,7 @@ Then the written bootstrap metadata uses portable placeholders for machine-local
 
 ## Acceptance Criteria
 
-- [ ] Root status reads `WI-561` as the active item.
-- [ ] `INIT-0001` no longer conflicts as an active work item.
-- [ ] Demo bootstrap metadata is portable across path and branch changes.
-- [ ] Re-running demo bootstrap does not introduce additional tracked drift.
+- [x] Root status reads `WI-561` as the active item.
+- [x] `INIT-0001` no longer conflicts as an active work item.
+- [x] Demo bootstrap metadata is portable across path and branch changes.
+- [x] Re-running demo bootstrap does not introduce additional tracked drift.
