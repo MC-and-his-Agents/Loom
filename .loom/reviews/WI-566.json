@@ -1,0 +1,23 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-566",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "#566 implementation wires dynamic tool handshake declarations into governance_surface, loom_flow repo-specific requirements, loom_status output, and loom_check fixtures. Required unsupported/unavailable/failed tools block their owning surface; optional/advisory failures remain advisory; no parallel execution truth is introduced.",
+  "reviewer": "codex",
+  "reviewed_head": "13be73fcc19a0a0fafcbfd5e6819221e37abe14c",
+  "reviewed_validation_summary": "py_compile passed for shared runtime scripts; skills_surface check passed; repo companion dynamic tool fixture check passed with unsupported/unavailable/failed coverage; loom_status exposes tool_availability for WI-566 and is only blocked by missing implementation review; flow merge-ready exposes repo_specific_requirements.tool_availability and is only blocked by missing implementation review.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-566.md",
+    "recovery_entry": ".loom/progress/WI-566.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
