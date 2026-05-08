@@ -2881,6 +2881,12 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
     carrier_root = root / ".loom"
     if not carrier_root.exists():
         return failures
+    active_item = "INIT-0001"
+    init_result = load_json_file(root / ".loom/bootstrap/init-result.json")
+    if isinstance(init_result, dict):
+        entry_points = init_result.get("fact_chain", {}).get("entry_points")
+        if isinstance(entry_points, dict) and isinstance(entry_points.get("current_item_id"), str):
+            active_item = entry_points["current_item_id"]
 
     required_paths = (
         ".loom/bootstrap/manifest.json",
@@ -2920,7 +2926,7 @@ def check_root_self_adoption_carrier(root: Path) -> list[Failure]:
         ),
         (
             "root adopt verify",
-            ["python3", ".loom/bin/loom_flow.py", "adopt", "verify", "--target", ".", "--item", "INIT-0001"],
+            ["python3", ".loom/bin/loom_flow.py", "adopt", "verify", "--target", ".", "--item", active_item],
             "adopt-verify",
             {"result": "pass", "schema_version": "loom-adoption-verify/v1"},
         ),
