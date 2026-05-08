@@ -2,40 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: INIT-0001
-- Goal: Bootstrap the first executable Loom path for this repository
-- Scope: Establish rule entry, first work item, progress carrier, spec/plan, and verification entry
-- Execution Path: bootstrap/root
+- Item ID: WI-561
+- Goal: Deliver #561 execution attempt envelope as the first v0.8.0 / #531 batch
+- Scope: Repair Loom self-governance baseline for #531, bind the first active batch to #561, and remove demo bootstrap path/branch drift before FR review or merge-ready.
+- Execution Path: phase/v0.8.0/fr/561
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/INIT-0001.md
-- Review Entry: .loom/reviews/INIT-0001.json
-- Validation Entry: python3 .loom/bin/loom_init.py verify --target .
-- Closing Condition: The generated entry, work item, recovery entry, and templates are readable and verified
+- Recovery Entry: .loom/progress/WI-561.md
+- Review Entry: .loom/reviews/WI-561.json
+- Validation Entry: make check
+- Closing Condition: Root self-status reads WI-561, demo bootstrap is portable and idempotent, and #531/#561 branch/PR truth can be established without INIT-0001 as the active item.
 - Current Checkpoint: build checkpoint
-- Current Stop: Bootstrap artifacts have been generated and are awaiting downstream review.
-- Next Step: Accept the generated Loom entry and promote the first real repository work item.
-- Blockers: None recorded.
-- Latest Validation Summary: Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist.
-- Recovery Boundary: Bootstrap result at `.loom/bootstrap/init-result.json`; bootstrap manifest at `.loom/bootstrap/manifest.json`.
-- Current Lane: bootstrap verification only
-
-## Governance Status
-
-- Item Key: INIT-0001
-- Item Type: work_item
-- Phase: not_declared
-- FR: not_declared
-- Release: not_declared
-- Sprint: not_declared
-- Head SHA: bootstrap-placeholder
-- Status: planning
-- Spec Entry: .loom/specs/INIT-0001/spec.md
-- Plan Entry: .loom/specs/INIT-0001/plan.md
-- Implementation Contract Entry: .loom/specs/INIT-0001/implementation-contract.md
-- Spec Review Entry: .loom/reviews/INIT-0001.spec.json
-- Spec Review Status: pending
-- Review Head Status: bootstrap-placeholder
-- Merge Gate Status: pending
+- Current Stop: Baseline repair has activated WI-561 and portable demo bootstrap is implemented.
+- Next Step: Run full validation, record review evidence, and open the #531/#561 baseline PR.
+- Blockers: Formal review and merge-ready are still pending for this baseline branch.
+- Latest Validation Summary: Portable demo bootstrap mode has been implemented and WI-561 root self-governance carriers have been authored; full make check still pending.
+- Recovery Boundary: Branch work/531-v080-baseline-repair; active item WI-561; retired bootstrap item INIT-0001.
+- Current Lane: v0.8.0 / #531 baseline repair
 
 ## Runtime Evidence
 
@@ -47,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/INIT-0001.md
-- Dynamic Truth: .loom/progress/INIT-0001.md
+- Static Truth: .loom/work-items/WI-561.md
+- Dynamic Truth: .loom/progress/WI-561.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

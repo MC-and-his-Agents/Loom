@@ -448,6 +448,34 @@ def load_text_file(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def prune_fixture_work_items(target: Path, keep_item: str = "INIT-0001") -> None:
+    """Keep copied self-check fixtures independent from this repo's active Work Items."""
+    for directory in (
+        target / ".loom/work-items",
+        target / ".loom/progress",
+        target / ".loom/reviews",
+    ):
+        if not directory.exists():
+            continue
+        for path in directory.glob("*"):
+            if path.stem == keep_item or path.stem.startswith(f"{keep_item}."):
+                continue
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+
+    specs_dir = target / ".loom/specs"
+    if specs_dir.exists():
+        for path in specs_dir.iterdir():
+            if path.name == keep_item:
+                continue
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+
+
 def run_command(
     root: Path,
     args: list[str],
@@ -4376,6 +4404,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             if not isinstance(verification, dict) or verification.get("ok") is not True:
                 failures.append(Failure("daily-execution-cli", f"`{label}` bootstrap must verify successfully"))
                 return False
+            prune_fixture_work_items(target)
             for args in (
                 ["git", "add", "."],
                 ["git", "add", "-f", ".loom"],
@@ -5309,6 +5338,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 if not isinstance(verification, dict) or verification.get("ok") is not True:
                     errors.append("installed bootstrap must verify successfully before the pre-merge chain starts")
                     return None, errors
+                prune_fixture_work_items(target)
 
                 git_add = run_command(root, ["git", "add", "."], cwd=target)
                 if git_add.returncode != 0:
