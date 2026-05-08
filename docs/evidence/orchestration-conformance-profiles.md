@@ -23,6 +23,7 @@
 - resume / handoff / merge-ready 消费同一 recovery / ledger contract
 - generated `skills/**`、`.loom-runtime/**`、`examples/new-project/.loom/**` 与 `src/skills/**` 同步
 - installer payload、version surface、runtime-state 和 `loom_check` 自检可运行
+- structured event evidence validator 和 fake agent / fake tracker fixtures 可证明 success、failure、tool failure、active、closed、drift 行为
 
 Core 缺口必须 fail closed，因为这些能力构成 Loom v0.7.0 的可恢复 harness 执行控制面。
 
@@ -34,6 +35,7 @@ Core 缺口必须 fail closed，因为这些能力构成 Loom v0.7.0 的可恢�
 
 - repo companion / repo interop locator-only 合同
 - host action / dynamic tool declaration-time locator contract
+- host-backed tracker state 只能作为 structured event evidence 或 retained host result 被消费
 - required locator missing / unreadable / invalid boundary 的 fail-closed 行为
 - optional / advisory missing in-repo locator 只进入 profile-local `missing_optional`
 - adapter drift、shadow parity、external runtime、repo-native carrier 只作为 retained evidence 或 advisory/profile-local gate 消费
