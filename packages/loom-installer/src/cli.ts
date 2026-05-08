@@ -5,10 +5,12 @@ import type { InstallResult } from './types.js';
 
 function errorResult(message: string): InstallResult {
   return {
+    schema_version: 'loom-installer-result/v1',
+    operation: 'add',
     mode: 'plugin',
     host: 'codex',
     distribution_layer: 'host-adapter-plugin',
-    status: 'installed',
+    status: 'blocked',
     installed_paths: [],
     verification: [],
     warnings: [],

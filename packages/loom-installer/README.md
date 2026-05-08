@@ -20,6 +20,13 @@ npx @mc-and-his-agents/loom-installer add skill <skill-id> --host codex
 npx @mc-and-his-agents/loom-installer add skill <skill-id> --host claude
 ```
 
+Read-only upgrade rehearsal and verification:
+
+```bash
+npx @mc-and-his-agents/loom-installer upgrade-plan plugin --host codex --json
+npx @mc-and-his-agents/loom-installer verify-upgrade plugin --host codex --json
+```
+
 You can also pin the installer first:
 
 ```bash
@@ -46,6 +53,8 @@ The published package includes a generated payload. The payload is generated fro
 Generated payload directories are not committed to git. The build step recreates them deterministically, and `check:payload` verifies rebuild stability. The root `skills/` surface itself is committed and verified with `check:distribution`.
 
 Installer JSON output reports `distribution_layer`, `version_context`, and `failed_layer` so callers can distinguish host adapter plugin installs from generated single-skill installs.
+
+Installer-managed layers also write `loom-installed-surface-status/v1` metadata. `upgrade-plan` and `verify-upgrade` read that metadata, compare it to the package payload, and report `upgrade_eligibility`, `changed_paths`, `drift`, `rollback_path`, and fail-closed reasons without mutating the target repository. See `docs/adoption/installed-loom-status.md` for the status contract.
 
 ## Release Notes
 

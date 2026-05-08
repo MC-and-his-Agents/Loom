@@ -1,0 +1,23 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-689",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "#689 implementation and refreshed shadow evidence align installed status metadata, read-only upgrade-plan and verify-upgrade outputs, drift and rollback evidence, adoption docs, and installer fixtures for current, upgrade-available, drift, and missing metadata states.",
+  "reviewer": "codex",
+  "reviewed_head": "89c736e09a86ab317df2237e1b61300d7d572578",
+  "reviewed_validation_summary": "npm test passed for packages/loom-installer; npm run check:release passed for packages/loom-installer; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed; CLI smoke for upgrade-plan returned planned/current/mutates_target=false; make check passed with 27 surfaces and no tracked drift beyond this batch.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-689.md",
+    "recovery_entry": ".loom/progress/WI-689.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

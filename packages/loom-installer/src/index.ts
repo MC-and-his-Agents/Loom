@@ -1,7 +1,20 @@
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Host, CliOptions, InstallResult, Mode, PayloadManifest, PayloadSkillRecord, ResolvedEnv, VersionContext } from './types.js';
-import { InstallerError, assert, dirExists, ensureTargetWritable, runCommand } from './utils.js';
+import {
+  Host,
+  CliOptions,
+  DistributionLayer,
+  InstalledLoomSurfaceStatus,
+  InstallResult,
+  InstallerOperation,
+  Mode,
+  PayloadManifest,
+  PayloadSkillRecord,
+  ResolvedEnv,
+  UpgradeEligibility,
+  VersionContext,
+} from './types.js';
+import { InstallerError, assert, dirExists, ensureTargetExists, ensureTargetWritable, fileExists, readJson, runCommand, sha256, writeJson } from './utils.js';
 import { loadPayloadManifest, resolveSkillRecord, verifyPayload } from './payload.js';
 import { installCodexPlugin, installCodexSkill } from './codex.js';
 import { installClaudePlugin, installClaudeSkill } from './claude.js';
@@ -14,6 +27,7 @@ const DEFAULT_OPTIONS: CliOptions = {
 };
 
 export interface ParsedCommand {
+  operation?: InstallerOperation;
   mode: Mode;
   skillId?: string;
   options: CliOptions;
@@ -65,8 +79,10 @@ export function parseCli(argv: string[]): ParsedCommand {
   const subject = argv[1];
   const third = argv[2];
   const rest = subject === 'plugin' ? argv.slice(2) : argv.slice(3);
-  if (command !== 'add') {
-    throw new InstallerError('usage: loom-installer add plugin|skill <skill-id> [--host ...] [--target ...] [--force] [--json]');
+  if (command !== 'add' && command !== 'upgrade-plan' && command !== 'verify-upgrade') {
+    throw new InstallerError(
+      'usage: loom-installer add|upgrade-plan|verify-upgrade plugin|skill <skill-id> [--host ...] [--target ...] [--force] [--json]',
+    );
   }
   const options: CliOptions = { ...DEFAULT_OPTIONS };
   for (let index = 0; index < rest.length; index += 1) {
@@ -102,21 +118,23 @@ export function parseCli(argv: string[]): ParsedCommand {
 
   if (subject === 'plugin') {
     return {
+      operation: command,
       mode: 'plugin',
       options,
     };
   }
   if (subject === 'skill') {
     if (!third) {
-      throw new InstallerError('usage: loom-installer add skill <skill-id>');
+      throw new InstallerError(`usage: loom-installer ${command} skill <skill-id>`);
     }
     return {
+      operation: command,
       mode: 'skill',
       skillId: third,
       options,
     };
   }
-  throw new InstallerError(`unknown add target: ${String(subject)}`);
+  throw new InstallerError(`unknown ${command} target: ${String(subject)}`);
 }
 
 export function checkPython(env: ResolvedEnv): string[] {
@@ -144,8 +162,8 @@ export function checkPython(env: ResolvedEnv): string[] {
   return warnings;
 }
 
-export function ensureClaudeCliWhenNeeded(host: Host, mode: Mode, env: ResolvedEnv): void {
-  if (host !== 'claude' || mode !== 'plugin') {
+export function ensureClaudeCliWhenNeeded(host: Host, mode: Mode, operation: InstallerOperation, env: ResolvedEnv): void {
+  if (operation !== 'add' || host !== 'claude' || mode !== 'plugin') {
     return;
   }
   const result = runCommand(env.claudeBin, ['--version'], process.env);
@@ -157,8 +175,17 @@ export function ensureClaudeCliWhenNeeded(host: Host, mode: Mode, env: ResolvedE
 export function formatResult(result: InstallResult): string {
   const version = result.version_context;
   return [
-    `${result.host} ${result.mode}: ${result.status}`,
+    `${result.host} ${result.mode} ${result.operation ?? 'add'}: ${result.status}`,
     `layer: ${result.distribution_layer}`,
+    ...(result.installed_status
+      ? [
+          `runtime_state: ${result.installed_status.runtime_state}`,
+          `upgrade_eligibility: ${result.installed_status.upgrade_eligibility}`,
+        ]
+      : []),
+    ...(result.changed_paths?.length ? [`changed_paths: ${result.changed_paths.length}`] : []),
+    ...(result.drift?.length ? [`drift: ${result.drift.length}`] : []),
+    ...(result.rollback_path ? [`rollback_path: ${result.rollback_path}`] : []),
     ...(version
       ? [
           `versions: repo=${version.repo_version} installer=${version.installer_package_version} plugin=${version.plugin_surface_version} registry=${version.skills_registry_version}`,
@@ -172,14 +199,34 @@ export function formatResult(result: InstallResult): string {
 export function runInstaller(parsed: ParsedCommand, envSource: NodeJS.ProcessEnv = process.env, packageRoot?: string): InstallResult {
   const resolvedEnv = resolveEnvironment(envSource);
   const host = selectHost(parsed.options.host, resolvedEnv);
+  const operation = parsed.operation ?? 'add';
   const resolvedPackageRoot = packageRoot ?? packageRootFromUrl(import.meta.url);
   const targetRoot = resolve(parsed.options.target);
-  ensureTargetWritable(targetRoot);
+  if (operation === 'add') {
+    ensureTargetWritable(targetRoot);
+  } else {
+    ensureTargetExists(targetRoot);
+  }
 
   const manifest = loadPayloadManifest(resolvedPackageRoot);
   verifyPayload(resolvedPackageRoot, manifest);
   const warnings = checkPython(resolvedEnv);
-  ensureClaudeCliWhenNeeded(host, parsed.mode, resolvedEnv);
+  ensureClaudeCliWhenNeeded(host, parsed.mode, operation, resolvedEnv);
+  const skill = parsed.mode === 'skill' ? resolveSkillRecord(manifest, parsed.skillId ?? '') : undefined;
+
+  if (operation !== 'add') {
+    const result = inspectInstalledSurface({
+      operation,
+      host,
+      parsed,
+      packageRoot: resolvedPackageRoot,
+      targetRoot,
+      manifest,
+      skill,
+    });
+    result.warnings.unshift(...warnings);
+    return result;
+  }
 
   const result = installForHost({
     host,
@@ -190,7 +237,15 @@ export function runInstaller(parsed: ParsedCommand, envSource: NodeJS.ProcessEnv
     manifest,
   });
   result.warnings.unshift(...warnings);
-  return withVersionContext(result, manifest, parsed.mode === 'skill' ? resolveSkillRecord(manifest, parsed.skillId ?? '') : undefined);
+  const withContext = withVersionContext(result, manifest, skill);
+  writeInstalledSurfaceStatus({
+    result: withContext,
+    host,
+    mode: parsed.mode,
+    skill,
+    targetRoot,
+  });
+  return withContext;
 }
 
 function payloadVersionContext(manifest: PayloadManifest, skill?: PayloadSkillRecord): VersionContext {
@@ -212,8 +267,292 @@ function payloadVersionContext(manifest: PayloadManifest, skill?: PayloadSkillRe
 
 function withVersionContext(result: InstallResult, manifest: PayloadManifest, skill?: PayloadSkillRecord): InstallResult {
   return {
+    schema_version: 'loom-installer-result/v1',
+    operation: 'add',
     ...result,
     version_context: payloadVersionContext(manifest, skill),
+  };
+}
+
+function distributionLayer(mode: Mode): DistributionLayer {
+  return mode === 'plugin' ? 'host-adapter-plugin' : 'generated-single-skill';
+}
+
+function skillDirName(host: Host, skillId: string): string {
+  if (host === 'codex') {
+    return skillId.startsWith('loom-') ? skillId : `loom-${skillId}`;
+  }
+  return skillId;
+}
+
+function installedRoot(targetRoot: string, host: Host, mode: Mode, skill?: PayloadSkillRecord): string {
+  if (mode === 'plugin') {
+    return host === 'codex'
+      ? join(targetRoot, 'plugins', 'loom')
+      : join(targetRoot, '.claude', 'marketplaces', 'loom-local', 'plugins', 'loom');
+  }
+  assert(skill, 'skill install requires a skill record');
+  return host === 'codex'
+    ? join(targetRoot, '.agents', 'skills', skillDirName(host, skill.id))
+    : join(targetRoot, '.claude', 'skills', skillDirName(host, skill.id));
+}
+
+function installedStatusPath(root: string): string {
+  return join(root, '.loom-install-status.json');
+}
+
+function writeInstalledSurfaceStatus(input: {
+  result: InstallResult;
+  host: Host;
+  mode: Mode;
+  skill?: PayloadSkillRecord;
+  targetRoot: string;
+}): void {
+  const root = installedRoot(input.targetRoot, input.host, input.mode, input.skill);
+  const statusPath = installedStatusPath(root);
+  const status: InstalledLoomSurfaceStatus = {
+    schema_version: 'loom-installed-surface-status/v1',
+    installed_layer: input.result.distribution_layer,
+    host_adapter: input.host,
+    mode: input.mode,
+    ...(input.skill ? { skill_id: input.skill.id } : {}),
+    version_context: input.result.version_context,
+    runtime_state: 'ready',
+    upgrade_eligibility: 'current',
+    evidence: [`installed surface metadata at ${statusPath}`],
+    failed_layer: null,
+    fail_closed_reason: null,
+  };
+  writeJson(statusPath, status);
+  input.result.installed_paths.push(statusPath);
+  input.result.installed_status = status;
+}
+
+function sourcePrefix(mode: Mode, manifest: PayloadManifest, skill?: PayloadSkillRecord): string {
+  if (mode === 'plugin') {
+    return manifest.plugin.relative_path.replace(/\/$/, '');
+  }
+  assert(skill, 'skill install requires a skill record');
+  return skill.relative_path.replace(/\/$/, '');
+}
+
+function targetRelativePath(mode: Mode, host: Host, sourcePath: string, manifest: PayloadManifest, skill?: PayloadSkillRecord): string {
+  const prefix = sourcePrefix(mode, manifest, skill);
+  const suffix = sourcePath.slice(prefix.length).replace(/^\//, '');
+  if (mode === 'plugin') {
+    return host === 'codex'
+      ? join('plugins', 'loom', suffix)
+      : join('.claude', 'marketplaces', 'loom-local', 'plugins', 'loom', suffix);
+  }
+  assert(skill, 'skill install requires a skill record');
+  return host === 'codex'
+    ? join('.agents', 'skills', skillDirName(host, skill.id), suffix)
+    : join('.claude', 'skills', skillDirName(host, skill.id), suffix);
+}
+
+function compareInstalledPayload(input: {
+  host: Host;
+  mode: Mode;
+  packageRoot: string;
+  targetRoot: string;
+  manifest: PayloadManifest;
+  skill?: PayloadSkillRecord;
+}): string[] {
+  const prefix = `${sourcePrefix(input.mode, input.manifest, input.skill)}/`;
+  const changed: string[] = [];
+  for (const file of input.manifest.files) {
+    if (!file.path.startsWith(prefix)) {
+      continue;
+    }
+    const source = join(input.packageRoot, 'payload', file.path);
+    const targetRelative = targetRelativePath(input.mode, input.host, file.path, input.manifest, input.skill);
+    const target = join(input.targetRoot, targetRelative);
+    if (!fileExists(target) || sha256(source) !== sha256(target)) {
+      changed.push(targetRelative);
+    }
+  }
+  return changed.sort();
+}
+
+function statusFailureResult(input: {
+  operation: InstallerOperation;
+  host: Host;
+  mode: Mode;
+  skill?: PayloadSkillRecord;
+  manifest: PayloadManifest;
+  rollbackPath?: string;
+  reason: string;
+  evidence: string[];
+}): InstallResult {
+  const available = payloadVersionContext(input.manifest, input.skill);
+  const rollbackPath = input.rollbackPath ?? null;
+  const installedStatus = {
+    schema_version: 'loom-installed-surface-status/v1' as const,
+    installed_layer: distributionLayer(input.mode),
+    host_adapter: input.host,
+    mode: input.mode,
+    ...(input.skill ? { skill_id: input.skill.id } : {}),
+    version_context: null,
+    runtime_state: 'blocked' as const,
+    upgrade_eligibility: 'incompatible' as const,
+    evidence: input.evidence,
+    failed_layer: 'installed-surface',
+    fail_closed_reason: input.reason,
+  };
+  return {
+    schema_version: 'loom-installer-result/v1',
+    operation: input.operation,
+    mode: input.mode,
+    host: input.host,
+    distribution_layer: distributionLayer(input.mode),
+    status: 'blocked',
+    installed_paths: rollbackPath ? [rollbackPath] : [],
+    verification: input.evidence,
+    warnings: [],
+    version_context: null,
+    installed_status: installedStatus,
+    available_version_context: available,
+    changed_paths: [],
+    drift: [],
+    rollback_path: rollbackPath,
+    rehearsal: {
+      schema_version: 'loom-upgrade-rehearsal/v1',
+      mutates_target: false,
+      changed_paths: [],
+      drift: [],
+      rollback_path: rollbackPath,
+    },
+    failed_layer: 'installed-surface',
+    fail_closed_reason: input.reason,
+  };
+}
+
+function sameVersionContext(left: VersionContext | null, right: VersionContext): boolean {
+  if (!left) {
+    return false;
+  }
+  const keys: (keyof VersionContext)[] = [
+    'repo_version',
+    'installer_package_version',
+    'plugin_surface_version',
+    'host_adapter_version',
+    'skills_registry_version',
+    'runtime_core_version',
+    'skill_package_version',
+    'skill_contract_version',
+    'skill_package_id',
+  ];
+  return keys.every((key) => left[key] === right[key]);
+}
+
+function inspectInstalledSurface(input: {
+  operation: InstallerOperation;
+  host: Host;
+  parsed: ParsedCommand;
+  packageRoot: string;
+  targetRoot: string;
+  manifest: PayloadManifest;
+  skill?: PayloadSkillRecord;
+}): InstallResult {
+  const root = installedRoot(input.targetRoot, input.host, input.parsed.mode, input.skill);
+  const statusPath = installedStatusPath(root);
+  const available = payloadVersionContext(input.manifest, input.skill);
+  if (!fileExists(statusPath)) {
+    return statusFailureResult({
+      operation: input.operation,
+      host: input.host,
+      mode: input.parsed.mode,
+      skill: input.skill,
+      manifest: input.manifest,
+      rollbackPath: root,
+      reason: `installed Loom status metadata is missing: ${relative(input.targetRoot, statusPath)}`,
+      evidence: [`missing installed status metadata at ${statusPath}`],
+    });
+  }
+
+  let installedStatus = readJson<NonNullable<InstallResult['installed_status']>>(statusPath);
+  if (
+    installedStatus.schema_version !== 'loom-installed-surface-status/v1' ||
+    installedStatus.host_adapter !== input.host ||
+    installedStatus.mode !== input.parsed.mode ||
+    installedStatus.installed_layer !== distributionLayer(input.parsed.mode) ||
+    !installedStatus.version_context
+  ) {
+    return statusFailureResult({
+      operation: input.operation,
+      host: input.host,
+      mode: input.parsed.mode,
+      skill: input.skill,
+      manifest: input.manifest,
+      rollbackPath: root,
+      reason: `installed Loom status metadata is inconsistent: ${relative(input.targetRoot, statusPath)}`,
+      evidence: [`inconsistent installed status metadata at ${statusPath}`],
+    });
+  }
+  if (input.skill && installedStatus.skill_id !== input.skill.id) {
+    return statusFailureResult({
+      operation: input.operation,
+      host: input.host,
+      mode: input.parsed.mode,
+      skill: input.skill,
+      manifest: input.manifest,
+      rollbackPath: root,
+      reason: `installed Loom skill metadata does not match ${input.skill.id}`,
+      evidence: [`skill metadata mismatch at ${statusPath}`],
+    });
+  }
+
+  const changedPaths = compareInstalledPayload({
+    host: input.host,
+    mode: input.parsed.mode,
+    packageRoot: input.packageRoot,
+    targetRoot: input.targetRoot,
+    manifest: input.manifest,
+    skill: input.skill,
+  });
+  const versionMatches = sameVersionContext(installedStatus.version_context, available);
+  const eligibility: UpgradeEligibility = changedPaths.length === 0 && versionMatches ? 'current' : versionMatches ? 'drift' : 'upgrade-available';
+  const drift = eligibility === 'drift' ? changedPaths : [];
+  const runtimeState = eligibility === 'drift' ? 'blocked' : 'ready';
+  const rollbackPath = changedPaths.length > 0 ? root : null;
+  const failClosedReason = eligibility === 'drift' ? 'installed Loom payload drifted from its recorded version context' : null;
+  installedStatus = {
+    ...installedStatus,
+    runtime_state: runtimeState,
+    upgrade_eligibility: eligibility,
+    evidence: [`read installed status metadata at ${statusPath}`, `compared installed payload under ${root}`],
+    failed_layer: failClosedReason ? 'installed-surface' : null,
+    fail_closed_reason: failClosedReason,
+  };
+
+  return {
+    schema_version: 'loom-installer-result/v1',
+    operation: input.operation,
+    mode: input.parsed.mode,
+    host: input.host,
+    distribution_layer: distributionLayer(input.parsed.mode),
+    status: input.operation === 'verify-upgrade' ? (failClosedReason ? 'blocked' : 'verified') : failClosedReason ? 'blocked' : 'planned',
+    installed_paths: [root, statusPath],
+    verification: [
+      `read installed status metadata at ${statusPath}`,
+      `compared ${changedPaths.length} changed path(s) without mutating target`,
+    ],
+    warnings: [],
+    version_context: installedStatus.version_context,
+    installed_status: installedStatus,
+    available_version_context: available,
+    changed_paths: changedPaths,
+    drift,
+    rollback_path: rollbackPath,
+    rehearsal: {
+      schema_version: 'loom-upgrade-rehearsal/v1',
+      mutates_target: false,
+      changed_paths: changedPaths,
+      drift,
+      rollback_path: rollbackPath,
+    },
+    failed_layer: failClosedReason ? 'installed-surface' : null,
+    fail_closed_reason: failClosedReason,
   };
 }
 

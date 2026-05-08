@@ -44,6 +44,12 @@ export function ensureTargetWritable(path: string): void {
   }
 }
 
+export function ensureTargetExists(path: string): void {
+  if (!existsSync(path)) {
+    throw new InstallerError(`target path does not exist: ${path}`);
+  }
+}
+
 export function copyTree(source: string, target: string, force: boolean): void {
   if (existsSync(target)) {
     if (!force) {

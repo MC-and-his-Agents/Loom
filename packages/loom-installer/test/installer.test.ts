@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -69,14 +69,25 @@ test('detectHosts and selectHost fail closed on conflicts', () => {
 
 test('parseCli supports plugin and skill flows', () => {
   const plugin = parseCli(['add', 'plugin', '--host', 'codex', '--json']);
+  assert.equal(plugin.operation, 'add');
   assert.equal(plugin.mode, 'plugin');
   assert.equal(plugin.options.host, 'codex');
   assert.equal(plugin.options.json, true);
 
   const skill = parseCli(['add', 'skill', 'loom-review', '--target', '/tmp/repo']);
+  assert.equal(skill.operation, 'add');
   assert.equal(skill.mode, 'skill');
   assert.equal(skill.skillId, 'loom-review');
   assert.equal(skill.options.target, '/tmp/repo');
+
+  const plan = parseCli(['upgrade-plan', 'plugin', '--host', 'codex', '--target', '/tmp/repo', '--json']);
+  assert.equal(plan.operation, 'upgrade-plan');
+  assert.equal(plan.mode, 'plugin');
+
+  const verify = parseCli(['verify-upgrade', 'skill', 'loom-init', '--host', 'claude']);
+  assert.equal(verify.operation, 'verify-upgrade');
+  assert.equal(verify.mode, 'skill');
+  assert.equal(verify.skillId, 'loom-init');
 });
 
 test('payload manifest excludes python cache artifacts', () => {
@@ -162,8 +173,192 @@ test('codex plugin install writes marketplace entry', () => {
   assert.equal(result.host, 'codex');
   assert.equal(result.distribution_layer, 'host-adapter-plugin');
   assert.equal(result.version_context?.plugin_surface_version, '0.4.0');
+  assert.equal(result.installed_status?.schema_version, 'loom-installed-surface-status/v1');
+  assert.equal(result.installed_status?.runtime_state, 'ready');
   assert.equal(marketplace.plugins[0].name, 'loom');
   assert.equal(marketplace.plugins[0].source.path, './plugins/loom');
+});
+
+test('upgrade-plan reports current installed plugin without mutating target', () => {
+  const base = fixtureRoot();
+  const envSource = prepareEnv(base);
+  mkdirSync(envSource.CODEX_HOME!, { recursive: true });
+  const repoRoot = join(base, 'repo');
+  mkdirSync(repoRoot, { recursive: true });
+
+  runInstaller(
+    {
+      mode: 'plugin',
+      options: {
+        host: 'codex',
+        target: repoRoot,
+        force: false,
+        json: false,
+      },
+    },
+    envSource,
+    packageRoot(),
+  );
+
+  const plan = runInstaller(
+    {
+      operation: 'upgrade-plan',
+      mode: 'plugin',
+      options: {
+        host: 'codex',
+        target: repoRoot,
+        force: false,
+        json: false,
+      },
+    },
+    envSource,
+    packageRoot(),
+  );
+
+  assert.equal(plan.operation, 'upgrade-plan');
+  assert.equal(plan.status, 'planned');
+  assert.equal(plan.installed_status?.upgrade_eligibility, 'current');
+  assert.deepEqual(plan.changed_paths, []);
+  assert.deepEqual(plan.drift, []);
+  assert.equal(plan.rehearsal?.mutates_target, false);
+  assert.equal(plan.rollback_path, null);
+});
+
+test('upgrade-plan reports available payload and changed paths', () => {
+  const base = fixtureRoot();
+  const envSource = prepareEnv(base);
+  mkdirSync(envSource.CODEX_HOME!, { recursive: true });
+  const repoRoot = join(base, 'repo');
+  mkdirSync(repoRoot, { recursive: true });
+
+  runInstaller(
+    {
+      mode: 'plugin',
+      options: {
+        host: 'codex',
+        target: repoRoot,
+        force: false,
+        json: false,
+      },
+    },
+    envSource,
+    packageRoot(),
+  );
+  const statusPath = join(repoRoot, 'plugins', 'loom', '.loom-install-status.json');
+  const status = JSON.parse(readFileSync(statusPath, 'utf8'));
+  status.version_context.installer_package_version = '0.0.0';
+  writeFileSync(statusPath, `${JSON.stringify(status, null, 2)}\n`, 'utf8');
+  writeFileSync(join(repoRoot, 'plugins', 'loom', 'skills', 'registry.json'), '{"registry_version":"0.0.0"}\n', 'utf8');
+
+  const plan = runInstaller(
+    {
+      operation: 'upgrade-plan',
+      mode: 'plugin',
+      options: {
+        host: 'codex',
+        target: repoRoot,
+        force: false,
+        json: false,
+      },
+    },
+    envSource,
+    packageRoot(),
+  );
+
+  assert.equal(plan.status, 'planned');
+  assert.equal(plan.installed_status?.upgrade_eligibility, 'upgrade-available');
+  assert.equal(plan.changed_paths?.includes(join('plugins', 'loom', 'skills', 'registry.json')), true);
+  assert.equal(plan.rollback_path, join(repoRoot, 'plugins', 'loom'));
+});
+
+test('verify-upgrade fails closed when installed payload drifts from recorded metadata', () => {
+  const base = fixtureRoot();
+  const envSource = prepareEnv(base);
+  mkdirSync(envSource.CODEX_HOME!, { recursive: true });
+  const repoRoot = join(base, 'repo');
+  mkdirSync(repoRoot, { recursive: true });
+
+  runInstaller(
+    {
+      mode: 'plugin',
+      options: {
+        host: 'codex',
+        target: repoRoot,
+        force: false,
+        json: false,
+      },
+    },
+    envSource,
+    packageRoot(),
+  );
+  writeFileSync(join(repoRoot, 'plugins', 'loom', 'skills', 'registry.json'), '{"registry_version":"drift"}\n', 'utf8');
+
+  const verify = runInstaller(
+    {
+      operation: 'verify-upgrade',
+      mode: 'plugin',
+      options: {
+        host: 'codex',
+        target: repoRoot,
+        force: false,
+        json: false,
+      },
+    },
+    envSource,
+    packageRoot(),
+  );
+
+  assert.equal(verify.status, 'blocked');
+  assert.equal(verify.installed_status?.runtime_state, 'blocked');
+  assert.equal(verify.installed_status?.upgrade_eligibility, 'drift');
+  assert.equal(verify.drift?.includes(join('plugins', 'loom', 'skills', 'registry.json')), true);
+  assert.equal(verify.failed_layer, 'installed-surface');
+  assert.match(verify.fail_closed_reason ?? '', /drifted/);
+  assert.equal(verify.rollback_path, join(repoRoot, 'plugins', 'loom'));
+});
+
+test('verify-upgrade fails closed when installed version metadata is missing', () => {
+  const base = fixtureRoot();
+  const envSource = prepareEnv(base);
+  mkdirSync(envSource.CODEX_HOME!, { recursive: true });
+  const repoRoot = join(base, 'repo');
+  mkdirSync(repoRoot, { recursive: true });
+
+  runInstaller(
+    {
+      mode: 'plugin',
+      options: {
+        host: 'codex',
+        target: repoRoot,
+        force: false,
+        json: false,
+      },
+    },
+    envSource,
+    packageRoot(),
+  );
+  rmSync(join(repoRoot, 'plugins', 'loom', '.loom-install-status.json'));
+
+  const verify = runInstaller(
+    {
+      operation: 'verify-upgrade',
+      mode: 'plugin',
+      options: {
+        host: 'codex',
+        target: repoRoot,
+        force: false,
+        json: false,
+      },
+    },
+    envSource,
+    packageRoot(),
+  );
+
+  assert.equal(verify.status, 'blocked');
+  assert.equal(verify.installed_status?.upgrade_eligibility, 'incompatible');
+  assert.equal(verify.failed_layer, 'installed-surface');
+  assert.match(verify.fail_closed_reason ?? '', /metadata is missing/);
+  assert.equal(verify.rollback_path, join(repoRoot, 'plugins', 'loom'));
 });
 
 test('codex plugin install fails closed on marketplace conflicts without force', () => {
