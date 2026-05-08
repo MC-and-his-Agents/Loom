@@ -2219,7 +2219,7 @@ def require_review_run_payload(
         if not isinstance(evidence, dict):
             failures.append(Failure(category, f"{context} engine must include `evidence` when it runs"))
         else:
-            for key in ("runtime_root", "prompt", "raw_result", "normalized_findings", "metadata"):
+            for key in ("runtime_root", "prompt", "raw_result", "normalized_findings", "metadata", "context_pack"):
                 value = evidence.get(key)
                 if not isinstance(value, str) or not value:
                     failures.append(Failure(category, f"{context} engine evidence must include non-empty `{key}`"))
@@ -2238,7 +2238,7 @@ def require_review_run_payload(
         if not isinstance(review_record_input, dict):
             failures.append(Failure(category, f"{context} must include `review_record_input` when engine review passes"))
         else:
-            for key in ("decision", "summary", "reviewer", "kind", "findings_file", "engine_adapter", "engine_evidence", "normalized_findings"):
+            for key in ("decision", "summary", "reviewer", "kind", "findings_file", "engine_adapter", "engine_evidence", "normalized_findings", "context_pack"):
                 value = review_record_input.get(key)
                 if not isinstance(value, str) or not value:
                     failures.append(Failure(category, f"{context} review_record_input must include non-empty `{key}`"))
@@ -4744,6 +4744,20 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 expected_result={"pass"},
             )
             if isinstance(payload, dict):
+                evidence = payload.get("engine", {}).get("evidence") if isinstance(payload.get("engine"), dict) else None
+                context_pack_path = evidence.get("context_pack") if isinstance(evidence, dict) else None
+                prompt_path = evidence.get("prompt") if isinstance(evidence, dict) else None
+                if not isinstance(context_pack_path, str) or not (review_target / context_pack_path).exists():
+                    failures.append(Failure("daily-execution-cli", "`review run` positive chain must write context pack evidence"))
+                else:
+                    context_pack = json.loads((review_target / context_pack_path).read_text(encoding="utf-8"))
+                    if context_pack.get("schema_version") != "loom-review-context-pack/v1":
+                        failures.append(Failure("daily-execution-cli", "`review run` context pack must use the stable schema"))
+                    if not isinstance(context_pack.get("repeated_blocker_signal"), dict):
+                        failures.append(Failure("daily-execution-cli", "`review run` context pack must include repeated blocker signal"))
+                prompt_file = (review_target / prompt_path) if isinstance(prompt_path, str) else None
+                if prompt_file is None or not prompt_file.exists() or "Recent Review Context Pack" not in prompt_file.read_text(encoding="utf-8"):
+                    failures.append(Failure("daily-execution-cli", "`review run` prompt must include recent review context pack guidance"))
                 profile_probe = json.loads(json.dumps(payload))
                 if isinstance(profile_probe.get("engine"), dict):
                     profile_probe["engine"].pop("profile", None)
@@ -4757,6 +4771,76 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 )
                 if not any("engine profile" in failure.detail for failure in profile_probe_failures):
                     failures.append(Failure("daily-execution-cli", "`review run` contract check must fail when resolved profile metadata is missing"))
+
+        repeated_target = Path(tmp) / "repeated-blocker-context"
+        prepare_review_target(repeated_target, "review run repeated blocker context")
+        history_root = repeated_target / ".loom/runtime/review/INIT-0001"
+        for attempt in ("attempt-a", "attempt-b"):
+            attempt_root = history_root / attempt
+            attempt_root.mkdir(parents=True, exist_ok=True)
+            (attempt_root / "normalized-findings.json").write_text(
+                json.dumps(
+                    {
+                        "findings": [
+                            {
+                                "id": "block-context-drift",
+                                "summary": "Context drift keeps reappearing after local patch attempts.",
+                                "severity": "block",
+                                "rebuttal": None,
+                                "disposition": {
+                                    "status": "accepted",
+                                    "summary": "Fixture marks this as a real repeated blocker candidate.",
+                                },
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (attempt_root / "engine-metadata.json").write_text(
+                json.dumps({"reviewed_head": attempt, "validation_summary": f"{attempt} validation"}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        write_fake_codex(fake_bin / "codex", mode="success")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(repeated_target),
+                "--item",
+                "INIT-0001",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` repeated blocker context failed: {error}"))
+        else:
+            require_review_run_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`review run` repeated blocker context",
+                payload=payload,
+                expected_result={"pass"},
+            )
+            evidence = payload.get("engine", {}).get("evidence") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else None
+            context_pack_path = evidence.get("context_pack") if isinstance(evidence, dict) else None
+            if not isinstance(context_pack_path, str):
+                failures.append(Failure("daily-execution-cli", "`review run` repeated blocker context must expose context pack evidence"))
+            else:
+                context_pack = json.loads((repeated_target / context_pack_path).read_text(encoding="utf-8"))
+                signal = context_pack.get("repeated_blocker_signal")
+                if not isinstance(signal, dict) or signal.get("result") != "present":
+                    failures.append(Failure("daily-execution-cli", "`review run` repeated blocker context must identify repeated blocker candidates"))
+                candidates = signal.get("candidates") if isinstance(signal, dict) else None
+                if not isinstance(candidates, list) or not candidates:
+                    failures.append(Failure("daily-execution-cli", "`review run` repeated blocker context must include candidate details"))
 
         override_target = Path(tmp) / "profile-override"
         prepare_review_target(override_target, "review run profile override")

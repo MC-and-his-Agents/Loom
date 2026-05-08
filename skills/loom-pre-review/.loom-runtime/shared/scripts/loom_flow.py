@@ -177,6 +177,8 @@ EXECUTION_ATTEMPT_FORBIDDEN_AUTHORED_FIELDS = {
     "recovery_boundary",
     "closing_condition",
 }
+REVIEW_CONTEXT_PACK_SCHEMA = "loom-review-context-pack/v1"
+REPEATED_BLOCKER_SIGNAL_SCHEMA = "loom-repeated-blocker-signal/v1"
 
 ADOPTION_DECISION_QUESTIONS: dict[str, str] = {
     "fr_work_item_layer": "Which host planning object owns the FR layer, and how does each FR point to its Work Item?",
@@ -2935,6 +2937,127 @@ def load_findings_file(target_root: Path, findings_file: str) -> tuple[list[dict
     return findings, []
 
 
+def repeated_blocker_key(finding: dict[str, Any]) -> str:
+    finding_id = finding.get("id")
+    if isinstance(finding_id, str) and finding_id.strip():
+        return re.sub(r"[^a-z0-9]+", "-", finding_id.lower()).strip("-")
+    summary = str(finding.get("summary", "")).lower()
+    words = re.findall(r"[a-z0-9]+", summary)
+    return "-".join(words[:10]) or "unknown"
+
+
+def review_context_finding_entry(
+    *,
+    source: str,
+    source_kind: str,
+    reviewed_head: str | None,
+    validation_summary: str | None,
+    finding: dict[str, Any],
+) -> dict[str, Any]:
+    disposition = finding.get("disposition")
+    disposition_status = disposition.get("status") if isinstance(disposition, dict) else None
+    disposition_summary = disposition.get("summary") if isinstance(disposition, dict) else None
+    return {
+        "source": source,
+        "source_kind": source_kind,
+        "reviewed_head": reviewed_head,
+        "validation_summary": validation_summary,
+        "id": finding.get("id"),
+        "summary": finding.get("summary"),
+        "severity": finding.get("severity"),
+        "disposition": {
+            "status": disposition_status,
+            "summary": disposition_summary,
+        } if disposition_status or disposition_summary else None,
+        "repeat_key": repeated_blocker_key(finding),
+    }
+
+
+def build_review_context_pack(context: dict[str, Any], review_path: str) -> dict[str, Any]:
+    recent_findings: list[dict[str, Any]] = []
+    review_record, _, review_errors = load_review_record(context["target_root"], context["item_id"], review_path)
+    if review_record and not review_errors:
+        for finding in review_record.get("findings", []):
+            if isinstance(finding, dict):
+                recent_findings.append(
+                    review_context_finding_entry(
+                        source=review_path,
+                        source_kind="review_record",
+                        reviewed_head=review_record.get("reviewed_head"),
+                        validation_summary=review_record.get("reviewed_validation_summary"),
+                        finding=finding,
+                    )
+                )
+
+    runtime_history_root = context["target_root"] / ".loom/runtime/review" / context["item_id"]
+    if runtime_history_root.exists():
+        for findings_path in sorted(runtime_history_root.glob("*/normalized-findings.json")):
+            try:
+                payload = load_json_file(findings_path)
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+            raw_findings = payload.get("findings") if isinstance(payload, dict) else None
+            findings, errors = normalize_review_findings(raw_findings, relative=relative_to_root(findings_path, context["target_root"]))
+            if errors:
+                continue
+            metadata_path = findings_path.parent / "engine-metadata.json"
+            metadata: dict[str, Any] = {}
+            if metadata_path.exists():
+                try:
+                    loaded = load_json_file(metadata_path)
+                    if isinstance(loaded, dict):
+                        metadata = loaded
+                except (OSError, ValueError, json.JSONDecodeError):
+                    metadata = {}
+            for finding in findings:
+                recent_findings.append(
+                    review_context_finding_entry(
+                        source=relative_to_root(findings_path, context["target_root"]),
+                        source_kind="normalized_findings",
+                        reviewed_head=metadata.get("reviewed_head") if isinstance(metadata.get("reviewed_head"), str) else None,
+                        validation_summary=metadata.get("validation_summary") if isinstance(metadata.get("validation_summary"), str) else None,
+                        finding=finding,
+                    )
+                )
+
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for finding in recent_findings:
+        if finding.get("severity") == "block":
+            groups.setdefault(str(finding.get("repeat_key") or "unknown"), []).append(finding)
+    candidates = [
+        {
+            "repeat_key": key,
+            "count": len(entries),
+            "sources": [entry["source"] for entry in entries],
+            "summaries": [entry["summary"] for entry in entries if entry.get("summary")],
+            "recommended_action": "treat as a root-cause candidate before repeating another local patch",
+        }
+        for key, entries in sorted(groups.items())
+        if len(entries) >= 2
+    ]
+    return {
+        "schema_version": REVIEW_CONTEXT_PACK_SCHEMA,
+        "item_id": context["item_id"],
+        "review_path": review_path,
+        "current_head": git_head_sha(context["target_root"]) or "unknown-head",
+        "validation_summary": context["latest_validation_summary"],
+        "history_available": bool(recent_findings),
+        "history_policy": "not_applicable when no prior review record or normalized findings are available",
+        "recent_findings": recent_findings[-20:],
+        "repeated_blocker_signal": {
+            "schema_version": REPEATED_BLOCKER_SIGNAL_SCHEMA,
+            "result": "present" if candidates else "absent",
+            "enforcement": "advisory",
+            "summary": (
+                "Repeated blocker candidates are present; reviewer should classify root-cause risk."
+                if candidates
+                else "No repeated blocker candidates detected in available review history."
+            ),
+            "candidates": candidates,
+        },
+    }
+
+
 def load_review_record(
     target_root: Path,
     item_id: str,
@@ -3285,14 +3408,18 @@ def run_default_review_engine(
     result_path = runtime_root / "engine-result.json"
     findings_path = runtime_root / "normalized-findings.json"
     metadata_path = runtime_root / "engine-metadata.json"
+    context_pack_path = runtime_root / "context-pack.json"
     scratch_dir = context["target_root"] / ".loom/runtime/tmp" / "review-engine" / context["item_id"]
+    context_pack = build_review_context_pack(context, review_path)
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    write_json_file(context_pack_path, context_pack)
     prompt_text = build_default_review_prompt(
         context=context,
         build_payload=build_payload,
         runtime_fields=runtime_evidence_from_report(context["report"])[0],
         review_path=review_path,
+        context_pack=context_pack,
     )
-    runtime_root.mkdir(parents=True, exist_ok=True)
     prompt_path.write_text(prompt_text, encoding="utf-8")
 
     effective_kind = review_kind or default_review_kind(context)
@@ -3319,6 +3446,7 @@ def run_default_review_engine(
                     "raw_result": relative_to_root(result_path, context["target_root"]),
                     "normalized_findings": relative_to_root(findings_path, context["target_root"]),
                     "metadata": relative_to_root(metadata_path, context["target_root"]),
+                    "context_pack": relative_to_root(context_pack_path, context["target_root"]),
                 },
             },
         }
@@ -3404,6 +3532,7 @@ def run_default_review_engine(
         "raw_result": relative_to_root(result_path, context["target_root"]),
         "normalized_findings": relative_to_root(findings_path, context["target_root"]),
         "metadata": relative_to_root(metadata_path, context["target_root"]),
+        "context_pack": relative_to_root(context_pack_path, context["target_root"]),
     }
 
     if failure_reason is not None:
@@ -3413,6 +3542,7 @@ def run_default_review_engine(
                 "engine": DEFAULT_REVIEW_ENGINE,
                 "adapter": DEFAULT_REVIEW_ADAPTER,
                 "profile": engine_profile,
+                "context_pack": relative_to_root(context_pack_path, context["target_root"]),
                 "failure_reason": failure_reason,
                 "summary": failure_detail,
                 "reviewed_head": reviewed_head,
@@ -3449,6 +3579,7 @@ def run_default_review_engine(
                 "engine": DEFAULT_REVIEW_ENGINE,
                 "adapter": DEFAULT_REVIEW_ADAPTER,
                 "profile": engine_profile,
+                "context_pack": relative_to_root(context_pack_path, context["target_root"]),
                 "failure_reason": "schema_drift",
                 "summary": "normalized engine output did not satisfy Loom review schema",
                 "errors": normalization_errors,
@@ -3479,11 +3610,13 @@ def run_default_review_engine(
                 "engine": DEFAULT_REVIEW_ENGINE,
                 "adapter": DEFAULT_REVIEW_ADAPTER,
                 "profile": engine_profile,
+                "context_pack": relative_to_root(context_pack_path, context["target_root"]),
                 "result": "pass",
                 "reviewed_head": reviewed_head,
                 "decision": normalized_payload["decision"],
                 "summary": normalized_payload["summary"],
                 "kind": effective_kind,
+                "validation_summary": context["latest_validation_summary"],
             },
         )
     cleanup_scratch_tree(context["target_root"], scratch_dir)
@@ -3510,6 +3643,7 @@ def run_default_review_engine(
             "engine_adapter": DEFAULT_REVIEW_ADAPTER,
             "engine_evidence": relative_to_root(result_path, context["target_root"]),
             "engine_profile": engine_profile,
+            "context_pack": relative_to_root(context_pack_path, context["target_root"]),
             "normalized_findings": relative_to_root(findings_path, context["target_root"]),
         },
     }
@@ -4249,6 +4383,7 @@ def build_default_review_prompt(
     build_payload: dict[str, Any],
     runtime_fields: dict[str, dict[str, Any]],
     review_path: str,
+    context_pack: dict[str, Any],
 ) -> str:
     focus_paths = review_focus_paths(context)
     is_spec_review = review_path == default_spec_review_path(context["item_id"])
@@ -4263,6 +4398,23 @@ def build_default_review_prompt(
     path_lines = [f"- `{path}`" for path in focus_paths[:20]]
     if len(focus_paths) > 20:
         path_lines.append(f"- ... ({len(focus_paths) - 20} more paths omitted)")
+    recent_findings = context_pack.get("recent_findings") if isinstance(context_pack.get("recent_findings"), list) else []
+    recent_lines = [
+        f"- {entry.get('severity')}: {entry.get('summary')} (disposition={((entry.get('disposition') or {}).get('status') if isinstance(entry.get('disposition'), dict) else None) or 'none'}, source={entry.get('source')})"
+        for entry in recent_findings[:10]
+        if isinstance(entry, dict)
+    ]
+    if not recent_lines:
+        recent_lines = ["- not_applicable: no prior review findings were available."]
+    repeated_signal = context_pack.get("repeated_blocker_signal") if isinstance(context_pack.get("repeated_blocker_signal"), dict) else {}
+    repeated_candidates = repeated_signal.get("candidates") if isinstance(repeated_signal.get("candidates"), list) else []
+    repeated_lines = [
+        f"- {candidate.get('repeat_key')}: count={candidate.get('count')}, sources={', '.join(str(source) for source in candidate.get('sources', []))}"
+        for candidate in repeated_candidates[:10]
+        if isinstance(candidate, dict)
+    ]
+    if not repeated_lines:
+        repeated_lines = ["- absent: no repeated blocker candidate detected."]
     return "\n".join(
         [
             "你是 Loom 默认 formal reviewer。",
@@ -4302,6 +4454,16 @@ def build_default_review_prompt(
             "",
             "优先审查这些路径：",
             *path_lines,
+            "",
+            "Recent Review Context Pack：",
+            f"- Schema: {context_pack.get('schema_version')}",
+            f"- History Available: {context_pack.get('history_available')}",
+            f"- Repeated Blocker Signal: {repeated_signal.get('result', 'absent')} ({repeated_signal.get('enforcement', 'advisory')})",
+            "Recent Findings:",
+            *recent_lines,
+            "Repeated Blocker Candidates:",
+            *repeated_lines,
+            "- 请将发现分类为 new、unresolved 或 repeated/root-cause candidate；不要在没有证据时把 repeat 自动升级成 hard gate。",
             "",
             "Findings 写作要求：",
             "- 每条 finding 必须包含 `id`、`summary`、`severity`、`rebuttal`、`disposition`。",
