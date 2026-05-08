@@ -6116,8 +6116,9 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 elif "implementation-drift-only" not in json.dumps(payload, ensure_ascii=False):
                     failures.append(Failure("daily-execution-cli", "`installed checkpoint merge` drift negative must expose implementation-drift-only review head binding"))
 
+    live_github_opt_in = os.environ.get("LOOM_CHECK_LIVE_GITHUB") == "1"
     gh_auth_probe = None
-    if shutil.which("gh") is not None:
+    if live_github_opt_in and shutil.which("gh") is not None:
         try:
             gh_auth_probe = run_command(root, ["gh", "auth", "status"], timeout_seconds=5)
         except subprocess.TimeoutExpired:
@@ -9093,6 +9094,322 @@ def check_orchestration_conformance_profiles(root: Path) -> list[Failure]:
     return failures
 
 
+def deferred_roadmap_inventory_section(body: str) -> str:
+    match = re.search(r"(?ims)^## Roadmap Inventory\s*(.*?)(?=^## |\Z)", body)
+    return match.group(1).strip() if match else ""
+
+
+def markdown_issue_numbers(text: str) -> set[str]:
+    return set(re.findall(r"#(\d+)", text))
+
+
+def deferred_roadmap_fixture_failures(name: str, body: str) -> list[str]:
+    failures: list[str] = []
+    text = body.lower()
+    has_deferred_semantics = (
+        "deferred-roadmap" in text
+        or "closed deferred children are deferred, not completed" in text
+        or "deferred, not completed" in text
+    )
+    if has_deferred_semantics:
+        if "## Activation Policy" not in body:
+            failures.append(f"{name}: deferred_roadmap fixture must expose Activation Policy")
+        if "## Roadmap Inventory" not in body:
+            failures.append(f"{name}: deferred_roadmap fixture must expose Roadmap Inventory")
+
+    inventory = deferred_roadmap_inventory_section(body)
+    if "## Roadmap Inventory" in body:
+        if not re.search(r"(?im)^FR:\s*#\d+", inventory):
+            failures.append(f"{name}: deferred_roadmap Roadmap Inventory must list FR children")
+        if not re.search(r"(?im)^Work Items:\s*#\d+", inventory):
+            failures.append(f"{name}: deferred_roadmap Roadmap Inventory must list Work Item children")
+        if "closed deferred children are deferred, not completed" not in text:
+            failures.append(f"{name}: deferred_roadmap fixture must say closed deferred children are deferred, not completed")
+
+        duplicate_lines = [
+            line
+            for line in inventory.splitlines()
+            if "duplicate" in line.lower() or "retry artifact" in line.lower()
+        ]
+        duplicate_numbers = set().union(*(markdown_issue_numbers(line) for line in duplicate_lines)) if duplicate_lines else set()
+        canonical_lines = [
+            line
+            for line in inventory.splitlines()
+            if not ("duplicate" in line.lower() or "retry artifact" in line.lower())
+        ]
+        canonical_numbers = set().union(*(markdown_issue_numbers(line) for line in canonical_lines)) if canonical_lines else set()
+        overlap = sorted(duplicate_numbers & canonical_numbers)
+        if overlap:
+            failures.append(
+                f"{name}: deferred_roadmap duplicate/retry artifacts must be excluded from canonical inventory: "
+                + ", ".join(f"#{number}" for number in overlap)
+            )
+
+    if (
+        "completed delivery" in text
+        and "closeout basis" not in text
+        and "deferred-roadmap" not in text
+    ):
+        failures.append(
+            f"{name}: completed_delivery closed child must have closeout basis or explicit deferred_roadmap semantics"
+        )
+    return failures
+
+
+def normalized_issue_labels(issue: dict[str, Any]) -> set[str]:
+    labels = issue.get("labels")
+    if not isinstance(labels, list):
+        return set()
+    return {str(label).lower() for label in labels}
+
+
+def parse_roadmap_inventory(body: str) -> dict[str, set[int]]:
+    inventory = deferred_roadmap_inventory_section(body)
+    parsed = {"fr": set(), "work_item": set(), "duplicates": set()}
+    if not inventory:
+        return parsed
+    for line in inventory.splitlines():
+        lower = line.lower()
+        numbers = {int(number) for number in markdown_issue_numbers(line)}
+        if "duplicate" in lower or "retry artifact" in lower:
+            parsed["duplicates"].update(numbers)
+        elif re.match(r"(?i)^fr:\s*", line.strip()):
+            parsed["fr"].update(numbers)
+        elif re.match(r"(?i)^work items:\s*", line.strip()):
+            parsed["work_item"].update(numbers)
+    return parsed
+
+
+def is_duplicate_roadmap_artifact(issue: dict[str, Any]) -> bool:
+    labels = normalized_issue_labels(issue)
+    return "duplicate" in labels or issue.get("duplicate_of") is not None
+
+
+def validate_deferred_roadmap_graph_fixture(name: str, issues: list[dict[str, Any]]) -> list[str]:
+    failures: list[str] = []
+    by_number = {
+        int(issue["number"]): issue
+        for issue in issues
+        if isinstance(issue, dict) and isinstance(issue.get("number"), int)
+    }
+    phases = [issue for issue in by_number.values() if issue.get("type") == "phase"]
+    if not phases:
+        return [f"{name}: deferred_roadmap graph fixture must include a phase issue"]
+
+    for phase in phases:
+        phase_number = int(phase["number"])
+        body = str(phase.get("body") or "")
+        inventory = parse_roadmap_inventory(body)
+        canonical_fr: set[int] = set()
+        canonical_work_items: set[int] = set()
+        inventory_numbers = inventory["fr"] | inventory["work_item"]
+
+        for number, issue in by_number.items():
+            labels = normalized_issue_labels(issue)
+            parent = issue.get("parent")
+            parent_issue = by_number.get(parent) if isinstance(parent, int) else None
+            under_phase = parent == phase_number or (
+                isinstance(parent_issue, dict) and parent_issue.get("parent") == phase_number
+            )
+            if not under_phase or "deferred-roadmap" not in labels or is_duplicate_roadmap_artifact(issue):
+                continue
+            if issue.get("type") == "fr" and parent == phase_number:
+                canonical_fr.add(number)
+            elif issue.get("type") == "work-item":
+                canonical_work_items.add(number)
+
+        if canonical_fr or canonical_work_items:
+            if "## Activation Policy" not in body:
+                failures.append(f"{name}: deferred_roadmap phase #{phase_number} must expose Activation Policy")
+            if "## Roadmap Inventory" not in body:
+                failures.append(f"{name}: deferred_roadmap phase #{phase_number} must expose Roadmap Inventory")
+            if "closed deferred children are deferred, not completed" not in body.lower():
+                failures.append(
+                    f"{name}: deferred_roadmap phase #{phase_number} must say closed deferred children are deferred, not completed"
+                )
+
+        missing_fr = sorted(canonical_fr - inventory["fr"])
+        missing_work_items = sorted(canonical_work_items - inventory["work_item"])
+        if missing_fr:
+            failures.append(
+                f"{name}: deferred_roadmap Roadmap Inventory missing FR children: "
+                + ", ".join(f"#{number}" for number in missing_fr)
+            )
+        if missing_work_items:
+            failures.append(
+                f"{name}: deferred_roadmap Roadmap Inventory missing Work Item children: "
+                + ", ".join(f"#{number}" for number in missing_work_items)
+            )
+
+        duplicate_overlap = sorted((inventory["fr"] | inventory["work_item"]) & inventory["duplicates"])
+        if duplicate_overlap:
+            failures.append(
+                f"{name}: deferred_roadmap duplicate/retry artifacts must be excluded from canonical inventory: "
+                + ", ".join(f"#{number}" for number in duplicate_overlap)
+            )
+
+        for number in sorted(inventory_numbers):
+            issue = by_number.get(number)
+            if issue is None:
+                failures.append(f"{name}: Roadmap Inventory references unknown issue #{number}")
+                continue
+            expected_type = "fr" if number in inventory["fr"] else "work-item"
+            if issue.get("type") != expected_type:
+                failures.append(
+                    f"{name}: Roadmap Inventory issue #{number} must be a {expected_type}, got {issue.get('type')}"
+                )
+            parent = issue.get("parent")
+            parent_issue = by_number.get(parent) if isinstance(parent, int) else None
+            belongs_to_phase = parent == phase_number or (
+                expected_type == "work-item"
+                and isinstance(parent_issue, dict)
+                and parent_issue.get("parent") == phase_number
+            )
+            if not belongs_to_phase:
+                failures.append(
+                    f"{name}: Roadmap Inventory issue #{number} must belong to phase #{phase_number} through parent references"
+                )
+            if is_duplicate_roadmap_artifact(issue):
+                failures.append(f"{name}: duplicate/retry artifact #{number} must not be canonical inventory")
+            labels = normalized_issue_labels(issue)
+            if (
+                str(issue.get("state", "")).lower() == "closed"
+                and "deferred-roadmap" not in labels
+                and not issue.get("closeout_basis")
+            ):
+                failures.append(
+                    f"{name}: completed_delivery issue #{number} needs closeout basis or deferred_roadmap label"
+                )
+
+    return failures
+
+
+def check_deferred_roadmap_tree_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    required_anchors = {
+        "docs/methodology/governance/issue-model.md": [
+            "deferred roadmap issue",
+            "`closed + deferred-roadmap`",
+            "roadmap reservation",
+            "不是 `closed_out`",
+            "open Phase",
+            "duplicate/retry artifacts",
+            "Roadmap Inventory",
+            "`deferred_roadmap`",
+            "`completed_delivery`",
+        ],
+        "src/skills/shared/references/governance/issue-model.md": [
+            "deferred roadmap issue",
+            "`closed + deferred-roadmap`",
+            "roadmap reservation",
+            "不是 `closed_out`",
+            "open Phase",
+            "duplicate/retry artifacts",
+            "Roadmap Inventory",
+            "`deferred_roadmap`",
+            "`completed_delivery`",
+        ],
+        "docs/methodology/governance/github-delivery-funnel.md": [
+            "Deferred Phase container",
+            "`Activation Policy`",
+            "`Roadmap Inventory`",
+            "canonical FR children",
+            "canonical Work Item children",
+            "closed deferred children are deferred, not completed",
+            "duplicate/retry artifacts",
+            "canonical inventory",
+        ],
+        "src/skills/shared/references/governance/github-delivery-funnel.md": [
+            "Deferred Phase container",
+            "`Activation Policy`",
+            "`Roadmap Inventory`",
+            "canonical FR children",
+            "canonical Work Item children",
+            "closed deferred children are deferred, not completed",
+            "duplicate/retry artifacts",
+            "canonical inventory",
+        ],
+        "docs/adoption/github-profile.md": [
+            "deferred Phase container",
+            "`Activation Policy`",
+            "`Roadmap Inventory`",
+            "canonical FR children",
+            "canonical Work Item children",
+            "closed deferred children are deferred, not completed",
+            "duplicate/retry artifacts",
+            "canonical inventory",
+        ],
+        "src/skills/shared/references/adoption/github-profile.md": [
+            "deferred Phase container",
+            "`Activation Policy`",
+            "`Roadmap Inventory`",
+            "canonical FR children",
+            "canonical Work Item children",
+            "closed deferred children are deferred, not completed",
+            "duplicate/retry artifacts",
+            "canonical inventory",
+        ],
+        "docs/evidence/fixtures/deferred-roadmap-tree.json": [
+            "loom-deferred-roadmap-fixtures/v1",
+            "valid #649-style deferred tree",
+            "missing roadmap inventory",
+            "completed delivery confusion",
+            "duplicate included in canonical inventory",
+            "deferred-roadmap",
+            "duplicate_of",
+            "closeout_basis",
+        ],
+    }
+    for relative, anchors in required_anchors.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            failures.append(Failure("deferred-roadmap", f"`{relative}` is unreadable: {exc}"))
+            continue
+        for anchor in anchors:
+            if anchor not in text:
+                failures.append(Failure("deferred-roadmap", f"`{relative}` must mention `{anchor}`"))
+
+    fixture_path = root / "docs/evidence/fixtures/deferred-roadmap-tree.json"
+    try:
+        fixture_payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        failures.append(Failure("deferred-roadmap", f"`docs/evidence/fixtures/deferred-roadmap-tree.json` is unreadable: {exc}"))
+        return failures
+    fixtures = fixture_payload.get("fixtures")
+    if not isinstance(fixtures, list):
+        failures.append(Failure("deferred-roadmap", "`deferred-roadmap-tree.json` must expose fixtures list"))
+        return failures
+    for fixture in fixtures:
+        if not isinstance(fixture, dict):
+            failures.append(Failure("deferred-roadmap", "`deferred-roadmap-tree.json` fixture entries must be objects"))
+            continue
+        name = str(fixture.get("name") or "unnamed fixture")
+        issues = fixture.get("issues")
+        if not isinstance(issues, list):
+            failures.append(Failure("deferred-roadmap", f"`{name}` must expose issues list"))
+            continue
+        fixture_failures = validate_deferred_roadmap_graph_fixture(
+            name,
+            [issue for issue in issues if isinstance(issue, dict)],
+        )
+        expect = fixture.get("expect")
+        if expect == "pass" and fixture_failures:
+            failures.append(
+                Failure("deferred-roadmap", f"`{name}` expected pass, got failures: {fixture_failures}")
+            )
+        elif expect == "fail" and not fixture_failures:
+            failures.append(
+                Failure(
+                    "deferred-roadmap",
+                    f"`{name}` expected deferred_roadmap fixture failure but passed",
+                )
+            )
+
+    return failures
+
+
 def is_within(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
@@ -9138,12 +9455,13 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_github_cli_budget(root))
     failures.extend(check_operating_layer_contract(root))
     failures.extend(check_orchestration_conformance_profiles(root))
+    failures.extend(check_deferred_roadmap_tree_contract(root))
     failures.extend(check_markdown_links(root))
     return failures
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 24
+    categories_checked = 25
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")

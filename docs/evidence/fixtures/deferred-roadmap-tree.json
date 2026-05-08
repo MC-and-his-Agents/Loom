@@ -1,0 +1,174 @@
+{
+  "schema_version": "loom-deferred-roadmap-fixtures/v1",
+  "fixtures": [
+    {
+      "name": "valid #649-style deferred tree",
+      "expect": "pass",
+      "issues": [
+        {
+          "number": 649,
+          "type": "phase",
+          "state": "open",
+          "labels": ["phase"],
+          "body": "## Activation Policy\nFR / Work Item child issues are closed with `deferred-roadmap`; closed state means deferred, not completed.\n\n## Roadmap Inventory\nFR: #650, #654\nWork Items: #652, #653\nThese child issues are intentionally closed with `deferred-roadmap`; closed deferred children are deferred, not completed.\nDuplicate/retry artifacts: #651\n"
+        },
+        {
+          "number": 650,
+          "type": "fr",
+          "state": "closed",
+          "labels": ["fr", "deferred-roadmap"],
+          "parent": 649
+        },
+        {
+          "number": 654,
+          "type": "fr",
+          "state": "closed",
+          "labels": ["fr", "deferred-roadmap"],
+          "parent": 649
+        },
+        {
+          "number": 652,
+          "type": "work-item",
+          "state": "closed",
+          "labels": ["work-item", "deferred-roadmap"],
+          "parent": 650,
+          "closeout_basis": null
+        },
+        {
+          "number": 653,
+          "type": "work-item",
+          "state": "closed",
+          "labels": ["work-item", "deferred-roadmap"],
+          "parent": 650
+        },
+        {
+          "number": 651,
+          "type": "fr",
+          "state": "closed",
+          "labels": ["duplicate", "deferred-roadmap"],
+          "parent": 649,
+          "duplicate_of": 650
+        }
+      ]
+    },
+    {
+      "name": "missing roadmap inventory",
+      "expect": "fail",
+      "issues": [
+        {
+          "number": 700,
+          "type": "phase",
+          "state": "open",
+          "labels": ["phase"],
+          "body": "## Activation Policy\nClosed children use `deferred-roadmap`; closed deferred children are deferred, not completed.\n"
+        },
+        {
+          "number": 701,
+          "type": "fr",
+          "state": "closed",
+          "labels": ["fr", "deferred-roadmap"],
+          "parent": 700
+        }
+      ]
+    },
+    {
+      "name": "completed delivery confusion",
+      "expect": "fail",
+      "issues": [
+        {
+          "number": 710,
+          "type": "phase",
+          "state": "open",
+          "labels": ["phase"],
+          "body": "## Activation Policy\nClosed children are delivery children.\n\n## Roadmap Inventory\nFR: #711\nWork Items: #712\nClosed child #712 is completed delivery.\n"
+        },
+        {
+          "number": 711,
+          "type": "fr",
+          "state": "closed",
+          "labels": ["fr"],
+          "parent": 710
+        },
+        {
+          "number": 712,
+          "type": "work-item",
+          "state": "closed",
+          "labels": ["work-item"],
+          "parent": 711,
+          "closeout_basis": null
+        }
+      ]
+    },
+    {
+      "name": "duplicate included in canonical inventory",
+      "expect": "fail",
+      "issues": [
+        {
+          "number": 720,
+          "type": "phase",
+          "state": "open",
+          "labels": ["phase"],
+          "body": "## Activation Policy\nClosed children use `deferred-roadmap`.\n\n## Roadmap Inventory\nFR: #721, #722\nWork Items: #723\nClosed deferred children are deferred, not completed.\nDuplicate/retry artifacts: #722\n"
+        },
+        {
+          "number": 721,
+          "type": "fr",
+          "state": "closed",
+          "labels": ["fr", "deferred-roadmap"],
+          "parent": 720
+        },
+        {
+          "number": 722,
+          "type": "fr",
+          "state": "closed",
+          "labels": ["duplicate", "deferred-roadmap"],
+          "parent": 720,
+          "duplicate_of": 721
+        },
+        {
+          "number": 723,
+          "type": "work-item",
+          "state": "closed",
+          "labels": ["work-item", "deferred-roadmap"],
+          "parent": 721
+        }
+      ]
+    },
+    {
+      "name": "inventory child outside phase tree",
+      "expect": "fail",
+      "issues": [
+        {
+          "number": 730,
+          "type": "phase",
+          "state": "open",
+          "labels": ["phase"],
+          "body": "## Activation Policy\nClosed children use `deferred-roadmap`.\n\n## Roadmap Inventory\nFR: #731\nWork Items: #732\nClosed deferred children are deferred, not completed.\nDuplicate/retry artifacts: #733\n"
+        },
+        {
+          "number": 731,
+          "type": "fr",
+          "state": "closed",
+          "labels": ["fr", "deferred-roadmap"],
+          "parent": 999
+        },
+        {
+          "number": 732,
+          "type": "work-item",
+          "state": "closed",
+          "labels": ["work-item", "deferred-roadmap"],
+          "parent": 731,
+          "closeout_basis": null
+        },
+        {
+          "number": 733,
+          "type": "fr",
+          "state": "closed",
+          "labels": ["duplicate", "deferred-roadmap"],
+          "parent": 730,
+          "duplicate_of": 731
+        }
+      ]
+    }
+  ]
+}
