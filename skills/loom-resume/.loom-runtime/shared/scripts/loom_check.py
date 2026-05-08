@@ -9065,6 +9065,34 @@ def check_operating_layer_contract(root: Path) -> list[Failure]:
     return failures
 
 
+def check_orchestration_conformance_profiles(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    required_anchors = {
+        "docs/evidence/orchestration-conformance-profiles.md": [
+            "orchestration-core",
+            "orchestration-extension",
+            "orchestration-live",
+            "non-blocking by default",
+            "不得替代 governance maturity profile",
+            "Core 缺口必须 fail closed",
+            "Extension 缺口不得污染 `orchestration-core` pass/fail",
+            "explicit skip / unavailable evidence",
+        ],
+    }
+    for relative, anchors in required_anchors.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            failures.append(Failure("orchestration-conformance", f"`{relative}` is unreadable: {exc}"))
+            continue
+        for anchor in anchors:
+            if anchor not in text:
+                failures.append(Failure("orchestration-conformance", f"`{relative}` must mention `{anchor}`"))
+
+    return failures
+
+
 def is_within(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
@@ -9109,12 +9137,13 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_generated_artifacts_untracked(root))
     failures.extend(check_github_cli_budget(root))
     failures.extend(check_operating_layer_contract(root))
+    failures.extend(check_orchestration_conformance_profiles(root))
     failures.extend(check_markdown_links(root))
     return failures
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 23
+    categories_checked = 24
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")
