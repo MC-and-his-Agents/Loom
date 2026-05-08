@@ -22,13 +22,14 @@ The `skills/` layer consumes the current strong-governance control plane with th
 
 ## Skills Library
 
-Loom exposes one root entry and eight scenario skills:
+Loom exposes one root entry and nine scenario skills:
 
 | Skill | Role |
 | --- | --- |
 | `loom-init` | Root entry; initializes and routes. |
 | `loom-adopt` | Initializes a new repository or retrofits Loom into an existing one. |
 | `loom-resume` | Restores context and continues execution. |
+| `loom-build` | Runs a bounded implementation/build round and validates delegated output integration before review. |
 | `loom-pre-review` | Checks readiness before formal review. |
 | `loom-spec-review` | Reviews the formal spec path and produces the `spec gate` consumed by later gates. |
 | `loom-review` | Runs formal review and records review output. |

@@ -179,6 +179,8 @@ EXECUTION_ATTEMPT_FORBIDDEN_AUTHORED_FIELDS = {
 }
 REVIEW_CONTEXT_PACK_SCHEMA = "loom-review-context-pack/v1"
 REPEATED_BLOCKER_SIGNAL_SCHEMA = "loom-repeated-blocker-signal/v1"
+BUILD_EVIDENCE_SCHEMA = "loom-build-evidence/v1"
+SUBAGENT_OWNERSHIP_SCHEMA = "loom-subagent-ownership/v1"
 
 ADOPTION_DECISION_QUESTIONS: dict[str, str] = {
     "fr_work_item_layer": "Which host planning object owns the FR layer, and how does each FR point to its Work Item?",
@@ -480,7 +482,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     governance_profile.add_argument("--sync", action="store_true", help="Preview host binding repairs; writes are intentionally disabled in this phase")
 
     flow = subparsers.add_parser("flow", help="Run a bundled high-frequency Loom flow")
-    flow.add_argument("operation", choices=("pre-review", "review", "spec-review", "resume", "handoff", "merge-ready"))
+    flow.add_argument("operation", choices=("build", "pre-review", "review", "spec-review", "resume", "handoff", "merge-ready"))
     flow.add_argument("--target", required=True, help="Target repository root")
     flow.add_argument("--item", help="Expected current item id")
     flow.add_argument(
@@ -488,6 +490,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=".loom/bootstrap/init-result.json",
         help="Init-result path relative to the target root",
     )
+    flow.add_argument("--build-evidence", help="Optional build evidence JSON path relative to the target root")
 
     return parser.parse_args(argv)
 
@@ -9220,6 +9223,237 @@ def handle_work_item(args: argparse.Namespace) -> int:
     return emit(payload)
 
 
+def build_required_inputs(context: dict[str, Any]) -> list[dict[str, Any]]:
+    plan_path = context["target_root"] / ".loom/specs" / context["item_id"] / "plan.md"
+    spec_path = context["target_root"] / ".loom/specs" / context["item_id"] / "spec.md"
+    validation_summary = context["latest_validation_summary"].strip()
+    return [
+        {
+            "id": "work_item",
+            "status": "present" if context["work_item_path"].exists() else "missing",
+            "locator": relative_to_root(context["work_item_path"], context["target_root"]),
+        },
+        {
+            "id": "spec",
+            "status": "present" if spec_path.exists() else "missing",
+            "locator": relative_to_root(spec_path, context["target_root"]),
+        },
+        {
+            "id": "plan",
+            "status": "present" if plan_path.exists() else "missing",
+            "locator": relative_to_root(plan_path, context["target_root"]),
+        },
+        {
+            "id": "recovery_baseline",
+            "status": "present" if context["recovery_path"].exists() else "missing",
+            "locator": relative_to_root(context["recovery_path"], context["target_root"]),
+        },
+        {
+            "id": "validation_baseline",
+            "status": "present" if validation_summary and validation_summary.lower() != "not yet run for wi-706." else "missing",
+            "locator": "Latest Validation Summary",
+        },
+        {
+            "id": "workspace",
+            "status": "present" if context["workspace_path"].exists() else "missing",
+            "locator": context["workspace_entry"],
+        },
+        {
+            "id": "ownership_constraints",
+            "status": "present" if "ownership" in context["scope"].lower() or "ownership" in context["closing_condition"].lower() else "missing",
+            "locator": "Work Item Scope / Closing Condition",
+        },
+    ]
+
+
+def delegation_required_field_errors(delegation: dict[str, Any], index: int) -> list[str]:
+    required = (
+        "task_goal",
+        "context_locators",
+        "read_scope",
+        "write_ownership",
+        "non_goals",
+        "validation_expectation",
+        "output_format",
+        "integration_target",
+    )
+    errors: list[str] = []
+    for field in required:
+        value = delegation.get(field)
+        if value in (None, "", [], {}):
+            errors.append(f"delegation[{index}] missing `{field}`")
+    if not isinstance(delegation.get("context_locators"), list):
+        errors.append(f"delegation[{index}] context_locators must be a list")
+    if not isinstance(delegation.get("read_scope"), list):
+        errors.append(f"delegation[{index}] read_scope must be a list")
+    if not isinstance(delegation.get("write_ownership"), list):
+        errors.append(f"delegation[{index}] write_ownership must be a list")
+    return errors
+
+
+def overlap_write_ownership(delegations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    owners: dict[str, list[str]] = {}
+    for index, delegation in enumerate(delegations):
+        name = str(delegation.get("id") or f"delegation[{index}]")
+        write_ownership = delegation.get("write_ownership")
+        if not isinstance(write_ownership, list):
+            continue
+        for path in write_ownership:
+            if isinstance(path, str) and path:
+                owners.setdefault(path, []).append(name)
+    return [
+        {
+            "path": path,
+            "owners": names,
+            "result": "block",
+            "summary": "overlapping write ownership must be integrated locally before review or merge-ready",
+        }
+        for path, names in sorted(owners.items())
+        if len(names) > 1
+    ]
+
+
+def repeated_blocker_signal(delegations: list[dict[str, Any]]) -> dict[str, Any]:
+    by_signature: dict[str, list[str]] = {}
+    for index, delegation in enumerate(delegations):
+        signature = delegation.get("blocker_signature") or delegation.get("blocker")
+        if not isinstance(signature, str) or not signature:
+            continue
+        name = str(delegation.get("id") or f"delegation[{index}]")
+        by_signature.setdefault(signature, []).append(name)
+    repeated = [
+        {
+            "signature": signature,
+            "sources": sources,
+            "count": len(sources),
+            "recommended_action": "pause delegation retries and resolve root cause in the main execution lane",
+        }
+        for signature, sources in sorted(by_signature.items())
+        if len(sources) > 1
+    ]
+    return {
+        "schema_version": REPEATED_BLOCKER_SIGNAL_SCHEMA,
+        "result": "block" if repeated else "pass",
+        "summary": (
+            "repeated blocker candidates require root-cause escalation."
+            if repeated
+            else "no repeated blocker candidates were detected."
+        ),
+        "repeated": repeated,
+    }
+
+
+def read_build_evidence(target_root: Path, relative_path: str | None) -> tuple[dict[str, Any] | None, list[str], str | None]:
+    if not relative_path:
+        return None, ["build evidence is required before build readiness can be claimed"], None
+    evidence_path, errors = resolve_repo_relative_path(target_root, relative_path, label="build evidence")
+    if errors:
+        return None, errors, relative_path
+    assert evidence_path is not None
+    if not evidence_path.exists():
+        return None, [f"build evidence is missing: {relative_path}"], relative_path
+    try:
+        payload = load_json_file(evidence_path)
+    except json.JSONDecodeError as exc:
+        return None, [f"build evidence is invalid JSON: {exc.msg}"], relative_path
+    if not isinstance(payload, dict):
+        return None, ["build evidence must be a JSON object"], relative_path
+    return payload, [], relative_path
+
+
+def build_execution_payload(context: dict[str, Any], evidence_relative: str | None) -> dict[str, Any]:
+    required_inputs = build_required_inputs(context)
+    missing_inputs = [
+        f"required build input `{entry['id']}` is missing"
+        for entry in required_inputs
+        if entry.get("status") != "present"
+    ]
+    evidence, evidence_errors, evidence_locator = read_build_evidence(context["target_root"], evidence_relative)
+    missing_inputs.extend(evidence_errors)
+
+    delegations: list[dict[str, Any]] = []
+    integration_evidence: list[dict[str, Any]] = []
+    ownership_conflicts: list[dict[str, Any]] = []
+    repeated_signal = {
+        "schema_version": REPEATED_BLOCKER_SIGNAL_SCHEMA,
+        "result": "pass",
+        "summary": "no delegation evidence was available.",
+        "repeated": [],
+    }
+    delegation_errors: list[str] = []
+    unintegrated: list[str] = []
+
+    if evidence is not None:
+        if evidence.get("schema_version") != BUILD_EVIDENCE_SCHEMA:
+            missing_inputs.append(f"build evidence schema must be `{BUILD_EVIDENCE_SCHEMA}`")
+        raw_delegations = evidence.get("delegations")
+        if not isinstance(raw_delegations, list):
+            missing_inputs.append("build evidence must declare `delegations`")
+        else:
+            delegations = [entry for entry in raw_delegations if isinstance(entry, dict)]
+            if len(delegations) != len(raw_delegations):
+                missing_inputs.append("every delegation entry must be an object")
+            for index, delegation in enumerate(delegations):
+                delegation_errors.extend(delegation_required_field_errors(delegation, index))
+                status = delegation.get("status")
+                if status != "integrated":
+                    unintegrated.append(str(delegation.get("id") or f"delegation[{index}]"))
+        raw_integration = evidence.get("integration_evidence")
+        if isinstance(raw_integration, list):
+            integration_evidence = [entry for entry in raw_integration if isinstance(entry, dict)]
+        elif raw_integration is not None:
+            missing_inputs.append("build evidence `integration_evidence` must be a list when present")
+        ownership_conflicts = overlap_write_ownership(delegations)
+        repeated_signal = repeated_blocker_signal(delegations)
+
+    missing_inputs.extend(delegation_errors)
+    missing_inputs.extend(f"delegation `{name}` output is not integrated into Loom carriers" for name in unintegrated)
+    missing_inputs.extend(f"overlapping write ownership for `{conflict['path']}`" for conflict in ownership_conflicts)
+    if repeated_signal.get("result") == "block":
+        missing_inputs.append("repeated blocker candidates require root-cause escalation before build readiness")
+
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "schema_version": "loom-build-execution/v1",
+        "result": result,
+        "summary": (
+            "build execution evidence is integrated and ready for review."
+            if result == "pass"
+            else "build execution evidence is missing, unintegrated, overlapping, or repeatedly blocked."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": None if result == "pass" else "build",
+        "required_inputs": required_inputs,
+        "ownership_contract": {
+            "schema_version": SUBAGENT_OWNERSHIP_SCHEMA,
+            "required_fields": [
+                "task_goal",
+                "context_locators",
+                "read_scope",
+                "write_ownership",
+                "non_goals",
+                "validation_expectation",
+                "output_format",
+                "integration_target",
+            ],
+            "main_executor_responsibilities": [
+                "integrate delegated output into implementation",
+                "record validation evidence",
+                "update recovery and status carriers",
+                "feed integrated evidence into later review inputs",
+            ],
+        },
+        "delegation_evidence": {
+            "locator": evidence_locator,
+            "delegations": delegations,
+            "unintegrated": unintegrated,
+        },
+        "integration_evidence": integration_evidence,
+        "ownership_conflicts": ownership_conflicts,
+        "repeated_blocker_signal": repeated_signal,
+    }
+
+
 def handle_flow(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
     runtime_state = runtime_state_payload(target_root)
@@ -9262,7 +9496,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             }
         )
 
-    if args.operation not in {"pre-review", "review", "spec-review", "resume", "handoff", "merge-ready"}:
+    if args.operation not in {"build", "pre-review", "review", "spec-review", "resume", "handoff", "merge-ready"}:
         return emit(
             {
                 "command": "flow",
@@ -9312,6 +9546,7 @@ def handle_flow(args: argparse.Namespace) -> int:
     )
 
     review_payload: dict[str, Any] | None = None
+    build_execution: dict[str, Any] | None = None
     governance_surface = build_governance_surface(target_root)
     upgrade_path = maturity_upgrade_path(governance_surface, target_root)
     repo_interface = governance_surface.get("repo_interface")
@@ -9349,7 +9584,41 @@ def handle_flow(args: argparse.Namespace) -> int:
                 "runtime_evidence": runtime_fields,
             }
         )
-        if args.operation == "merge-ready":
+        if args.operation == "build":
+            admission_payload = checkpoint_payload("admission", context)
+            locate_payload = base_workspace_payload(context, "locate")
+            locate_result = "pass" if not locate_payload["purity"]["hard_failures"] else "block"
+            build_execution = build_execution_payload(context, args.build_evidence)
+            steps.extend(
+                [
+                    {
+                        "name": "checkpoint-admission",
+                        "result": admission_payload["result"],
+                        "summary": admission_payload["summary"],
+                        "missing_inputs": admission_payload["missing_inputs"],
+                        "fallback_to": admission_payload["fallback_to"],
+                    },
+                    {
+                        "name": "workspace-locate",
+                        "result": locate_result,
+                        "summary": (
+                            "workspace is location-resolved and execution-ready."
+                            if locate_result == "pass"
+                            else "workspace is location-resolved but not execution-ready."
+                        ),
+                        "missing_inputs": list(locate_payload["purity"]["hard_failures"]),
+                        "fallback_to": "admission" if locate_payload["purity"]["hard_failures"] else None,
+                    },
+                    {
+                        "name": "build-execution",
+                        "result": build_execution["result"],
+                        "summary": build_execution["summary"],
+                        "missing_inputs": build_execution["missing_inputs"],
+                        "fallback_to": build_execution["fallback_to"],
+                    },
+                ]
+            )
+        elif args.operation == "merge-ready":
             build_payload = checkpoint_payload("build", context)
             merge_payload = checkpoint_payload("merge", context)
             repo_specific_requirements = repo_specific_requirements_payload(
@@ -9467,6 +9736,14 @@ def handle_flow(args: argparse.Namespace) -> int:
             if result == "pass"
             else "handoff flow produced the minimum writeback checklist, but blocking signals remain before transfer."
         )
+    elif args.operation == "build":
+        summary = (
+            "build flow found integrated execution evidence and can proceed toward review."
+            if result == "pass"
+            else "build flow found missing, unintegrated, overlapping, or repeatedly blocked execution evidence."
+        )
+        if build_execution and build_execution["result"] == "block":
+            fallback_to = fallback_to or "build"
     elif args.operation == "merge-ready":
         if isinstance(repo_specific_requirements, dict) and result == "block" and repo_specific_requirements["result"] == "block":
             summary = "merge-ready flow found companion-declared blocking requirements that Loom core does not satisfy on its own."
@@ -9632,6 +9909,26 @@ def handle_flow(args: argparse.Namespace) -> int:
                     ],
                 }
                 if args.operation == "handoff"
+                else {}
+            ),
+            **(
+                {
+                    "state_check": {
+                        "result": state_payload["result"],
+                        "summary": state_payload["summary"],
+                        "missing_inputs": state_payload["missing_inputs"],
+                        "fallback_to": state_payload["fallback_to"],
+                        "checks": state_payload["checks"],
+                    },
+                    "runtime_evidence": runtime_fields,
+                    "build_execution": build_execution,
+                    "current_checkpoint": {
+                        "raw": context["current_checkpoint_raw"],
+                        "normalized": context["current_checkpoint"],
+                    },
+                    "current_lane": context["current_lane"],
+                }
+                if args.operation == "build"
                 else {}
             ),
             **(

@@ -22,13 +22,14 @@
 
 ## Skills Library
 
-Loom 暴露一个 root entry 和八个 scenario skills：
+Loom 暴露一个 root entry 和九个 scenario skills：
 
 | Skill | 作用 |
 | --- | --- |
 | `loom-init` | Root entry；负责初始化和路由。 |
 | `loom-adopt` | 初始化新仓库，或把 Loom retrofit 到既有仓库。 |
 | `loom-resume` | 恢复上下文并继续执行。 |
+| `loom-build` | 执行 bounded implementation/build 轮，并在 review 前校验委派输出已集成。 |
 | `loom-pre-review` | 在正式 review 前检查 readiness。 |
 | `loom-spec-review` | 审查 formal spec 路径，并产出后续 gate 消费的 `spec gate`。 |
 | `loom-review` | 执行正式 review 并记录输出。 |
