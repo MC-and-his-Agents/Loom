@@ -127,7 +127,7 @@ Loom 允许在 runtime evidence 中记录最近一次执行失败分类，作为
 - `timeout`
 - `retry_exhaustion`
 
-这些分类不是新的顶层 taxonomy，不替代 `stale` / `drift` / `gate_failure`，也不得声明 scheduler state。
+这些分类不是新的顶层 taxonomy，不替代 `stale` / `drift` / `gate_failure`，也不得声明 scheduler state。retry evidence 只说明 attempt chain 已发生什么，不说明下一次何时执行。
 
 典型例子：
 

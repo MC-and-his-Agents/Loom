@@ -1,0 +1,122 @@
+{
+  "schema_version": "loom-retry-evidence-fixtures/v1",
+  "fixtures": [
+    {
+      "name": "current-head-timeout-chain",
+      "freshness": "fresh",
+      "latest_index": 2,
+      "attempts": [
+        {
+          "result": "fallback",
+          "failure": {
+            "category": "review",
+            "execution_classification": "stall",
+            "execution_summary": "host adapter stalled while waiting for refreshed state",
+            "missing_inputs": [
+              "host adapter stalled while waiting for refreshed state"
+            ],
+            "fallback_to": "build"
+          }
+        },
+        {
+          "result": "block",
+          "failure": {
+            "category": "review",
+            "execution_classification": "timeout",
+            "execution_summary": "default review engine timed out after 900s",
+            "missing_inputs": [
+              "default review engine timed out after 900s"
+            ],
+            "fallback_to": "build"
+          }
+        }
+      ],
+      "expect": {
+        "status": "present",
+        "attempt_count": 2,
+        "retry_count": 1,
+        "latest_failure_classification": "timeout",
+        "exhausted": false,
+        "stale_attempt_count": 0
+      }
+    },
+    {
+      "name": "retry-exhaustion-chain",
+      "freshness": "fresh",
+      "latest_index": 3,
+      "attempts": [
+        {
+          "result": "fallback",
+          "failure": {
+            "category": "review",
+            "execution_classification": "stall",
+            "execution_summary": "host adapter stalled while waiting for refreshed state",
+            "missing_inputs": [
+              "host adapter stalled while waiting for refreshed state"
+            ],
+            "fallback_to": "build"
+          }
+        },
+        {
+          "result": "fallback",
+          "failure": {
+            "category": "review",
+            "execution_classification": "timeout",
+            "execution_summary": "default review engine timed out after 900s",
+            "missing_inputs": [
+              "default review engine timed out after 900s"
+            ],
+            "fallback_to": "build"
+          }
+        },
+        {
+          "result": "block",
+          "failure": {
+            "category": "review",
+            "execution_classification": "retry_exhaustion",
+            "execution_summary": "retry exhaustion after three read attempts",
+            "missing_inputs": [
+              "retry exhaustion after three read attempts"
+            ],
+            "fallback_to": "build"
+          }
+        }
+      ],
+      "expect": {
+        "status": "present",
+        "attempt_count": 3,
+        "retry_count": 2,
+        "latest_failure_classification": "retry_exhaustion",
+        "exhausted": true,
+        "stale_attempt_count": 0
+      }
+    },
+    {
+      "name": "stale-chain",
+      "freshness": "stale",
+      "latest_index": 1,
+      "attempts": [
+        {
+          "result": "block",
+          "failure": {
+            "category": "review",
+            "execution_classification": "timeout",
+            "execution_summary": "default review engine timed out after 900s",
+            "missing_inputs": [
+              "default review engine timed out after 900s"
+            ],
+            "fallback_to": "build"
+          }
+        }
+      ],
+      "expect": {
+        "status": "stale",
+        "attempt_count": 0,
+        "retry_count": 0,
+        "latest_failure_classification": "timeout",
+        "exhausted": false,
+        "stale_attempt_count": 1
+      }
+    }
+  ]
+}

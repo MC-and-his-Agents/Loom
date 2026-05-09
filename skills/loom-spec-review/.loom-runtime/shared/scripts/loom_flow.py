@@ -164,6 +164,8 @@ EXECUTION_FAILURE_CLASSIFICATIONS = {
     "retry_exhaustion",
     "unknown",
 }
+RETRY_EVIDENCE_SCHEMA = "loom-retry-evidence/v1"
+RETRY_EVIDENCE_STATUSES = {"present", "not_applicable", "stale", "missing", "invalid"}
 EXECUTION_ATTEMPT_FAILURE_CATEGORIES = {
     "none",
     "runtime_state",
@@ -2108,6 +2110,31 @@ def latest_execution_attempt_payload(target_root: Path, item_id: str) -> dict[st
     }
 
 
+def execution_attempt_history_payload(target_root: Path, item_id: str) -> list[dict[str, Any]]:
+    directory = execution_attempt_directory(target_root, item_id)
+    if not directory.exists():
+        return []
+    attempts: list[dict[str, Any]] = []
+    for path in sorted(directory.glob("*.json")):
+        if path.name == "latest.json":
+            continue
+        try:
+            payload = load_json_file(path)
+        except Exception:
+            continue
+        envelope, errors, _ = validate_execution_attempt_envelope(
+            payload,
+            target_root=target_root,
+            expected_item=item_id,
+            expected_head=None,
+        )
+        if errors or envelope is None:
+            continue
+        attempts.append(envelope)
+    attempts.sort(key=lambda entry: (str(entry.get("created_at") or ""), str(entry.get("attempt_id") or "")))
+    return attempts
+
+
 def latest_execution_failure_payload(latest_attempt: dict[str, Any]) -> dict[str, Any]:
     evidence = latest_attempt.get("evidence") if isinstance(latest_attempt, dict) else {}
     locator = evidence.get("locator") if isinstance(evidence, dict) else None
@@ -2175,6 +2202,85 @@ def latest_execution_failure_payload(latest_attempt: dict[str, Any]) -> dict[str
         "classification": classification,
         "summary": normalized_summary,
         "fallback_to": str(fallback_to) if isinstance(fallback_to, str) and fallback_to.strip() else None,
+        "provenance": provenance,
+    }
+
+
+def latest_retry_evidence_payload(target_root: Path, item_id: str) -> dict[str, Any]:
+    latest_attempt = latest_execution_attempt_payload(target_root, item_id)
+    history = execution_attempt_history_payload(target_root, item_id)
+    evidence = latest_attempt.get("evidence") if isinstance(latest_attempt, dict) else {}
+    locator = evidence.get("locator") if isinstance(evidence, dict) else None
+    freshness = latest_attempt.get("freshness") if isinstance(latest_attempt, dict) else None
+    provenance = {
+        "source_layer": "derived_surface",
+        "source_locator": locator,
+        "source_binding": "execution_attempt_history",
+        "freshness": freshness if isinstance(freshness, str) else "missing",
+        "conflict": "none",
+    }
+    if latest_attempt.get("status") == "missing":
+        return {
+            "schema_version": RETRY_EVIDENCE_SCHEMA,
+            "status": "missing",
+            "attempt_count": 0,
+            "retry_count": 0,
+            "latest_attempt_id": None,
+            "latest_attempt_result": None,
+            "latest_failure_classification": "unknown",
+            "latest_failure_summary": latest_attempt.get("summary"),
+            "exhausted": False,
+            "scheduler_ownership": "external",
+            "stale_attempt_count": 0,
+            "provenance": provenance,
+        }
+    if latest_attempt.get("status") == "invalid":
+        return {
+            "schema_version": RETRY_EVIDENCE_SCHEMA,
+            "status": "invalid",
+            "attempt_count": 0,
+            "retry_count": 0,
+            "latest_attempt_id": None,
+            "latest_attempt_result": None,
+            "latest_failure_classification": "unknown",
+            "latest_failure_summary": latest_attempt.get("summary"),
+            "exhausted": False,
+            "scheduler_ownership": "external",
+            "stale_attempt_count": 0,
+            "provenance": provenance,
+        }
+
+    latest_envelope = latest_attempt.get("attempt") if isinstance(latest_attempt.get("attempt"), dict) else {}
+    current_head = git_head_sha(target_root) or "unknown-head"
+    current_attempts = [entry for entry in history if entry.get("head_sha") == current_head]
+    stale_attempts = [entry for entry in history if entry.get("head_sha") != current_head]
+    failure = latest_envelope.get("failure") if isinstance(latest_envelope, dict) else {}
+    classification = failure.get("execution_classification") if isinstance(failure, dict) else None
+    if not isinstance(classification, str) or classification not in EXECUTION_FAILURE_CLASSIFICATIONS:
+        classification = "unknown"
+    summary = failure.get("execution_summary") if isinstance(failure, dict) else latest_attempt.get("summary")
+    latest_attempt_id = latest_envelope.get("attempt_id") if isinstance(latest_envelope, dict) else None
+    latest_attempt_result = latest_envelope.get("result") if isinstance(latest_envelope, dict) else None
+    attempt_count = len(current_attempts)
+    retry_count = max(0, attempt_count - 1)
+    if latest_attempt.get("freshness") == "stale":
+        status = "stale"
+    elif attempt_count <= 1 and classification == "none":
+        status = "not_applicable"
+    else:
+        status = "present"
+    return {
+        "schema_version": RETRY_EVIDENCE_SCHEMA,
+        "status": status,
+        "attempt_count": attempt_count,
+        "retry_count": retry_count,
+        "latest_attempt_id": latest_attempt_id if isinstance(latest_attempt_id, str) and latest_attempt_id else None,
+        "latest_attempt_result": latest_attempt_result if isinstance(latest_attempt_result, str) else None,
+        "latest_failure_classification": classification,
+        "latest_failure_summary": str(summary).strip() if isinstance(summary, str) and str(summary).strip() else None,
+        "exhausted": classification == "retry_exhaustion",
+        "scheduler_ownership": "external",
+        "stale_attempt_count": len(stale_attempts),
         "provenance": provenance,
     }
 

@@ -109,6 +109,7 @@ Approval / sandbox policy 也只能派生读取：
 - approval / sandbox policy 与 risk summary
 - execution budget 报告（`status` 为 `not_applicable`/`unavailable` 时不阻断）
 - 最近 execution failure 分类（`stall` / `timeout` / `retry_exhaustion` 只作为风险输入）
+- retry evidence 摘要（attempt chain、stale retry evidence、是否 exhausted）
 
 ## 4. `Runtime Evidence`
 
@@ -195,6 +196,23 @@ Approval / sandbox policy 也只能派生读取：
   - 表示尝试链已经耗尽，但 Loom 只记录证据，不接管调度
 
 若最近 attempt 已 stale，`execution_failure.status` 必须显示 `stale`；若没有可读 attempt evidence，则显示 `missing` 或 `invalid`。该字段组不创建 scheduler state，不单独决定 merge gate。
+
+## 6.2 Retry Evidence
+
+状态面可以从 `.loom/runtime/attempts/<item-id>/` 的 attempt chain 派生 `retry_evidence`：
+
+- `attempt_count`
+  - 绑定当前 `HEAD` 的 attempt 总数
+- `retry_count`
+  - `attempt_count - 1`
+- `latest_failure_classification` / `latest_failure_summary`
+  - 最近 attempt 的失败分类与摘要
+- `stale_attempt_count`
+  - 仍可读但已不再绑定当前 `HEAD` 的旧 attempts
+- `scheduler_ownership`
+  - 固定为 `external`
+
+若当前只有旧 head 的 attempt chain，`retry_evidence.status` 必须为 `stale`。若最近分类为 `retry_exhaustion`，状态面可以暴露 `exhausted: true`，但不得生成自动 retry 计划或 scheduler state。
 
 ## 7. gate 可消费判定
 

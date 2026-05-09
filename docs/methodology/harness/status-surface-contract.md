@@ -179,6 +179,25 @@
 
 `execution_failure` 只作为 status / recovery / review 的风险输入，不声明 scheduler state，不触发自动 retry，也不单独决定 `pass | block`。
 
+### 3.7.3 `retry_evidence`
+
+状态面可以从 `.loom/runtime/attempts/<item-id>/` 的 attempt chain 派生 retry evidence，但该字段组只读 runtime evidence，不得替代 scheduler。
+
+- `schema_version`: `loom-retry-evidence/v1`
+- `status`: `present` / `not_applicable` / `stale` / `missing` / `invalid`
+- `attempt_count`: 当前 `HEAD` 绑定的 attempt 数量
+- `retry_count`: `attempt_count - 1`
+- `latest_attempt_id`
+- `latest_attempt_result`
+- `latest_failure_classification`
+- `latest_failure_summary`
+- `exhausted`: 仅当最近分类为 `retry_exhaustion` 时为 `true`
+- `scheduler_ownership`: 固定 `external`
+- `stale_attempt_count`: 不再绑定当前 `HEAD` 的旧 attempt 数量
+- `provenance`
+
+该字段组只说明“已经发生过什么尝试”，不声明 `Claimed`、`Running`、`RetryQueued` 或自动 backoff 计划。
+
 ### 3.8 `taxonomy`
 
 至少包含：
