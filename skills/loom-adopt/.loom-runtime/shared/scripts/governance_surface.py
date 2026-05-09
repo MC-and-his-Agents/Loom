@@ -109,18 +109,91 @@ GATE_STARTER_ALIASES = {
         "summary": "Audit closeout drift without mutating host state.",
     },
 }
-HOST_API_BUDGET_CONTRACT = {
-    "schema_version": "loom-host-api-budget/v1",
-    "default_non_merge_read_mode": "cached_non_merge",
-    "merge_gate_read_mode": "uncached_live_gate",
-    "cache_scope": "process",
-    "rest_first": True,
-    "graphql_allowed_when": "REST cannot express the required relationship",
-    "search_endpoint": "not_in_hot_path",
-    "polling": "not_in_hot_path",
-    "rate_limit_policy": "consume x-ratelimit-* headers from natural responses when available; do not call /rate_limit just to inspect budget",
-    "github_actions_budget": "design for GITHUB_TOKEN per-repository hourly request limits",
-}
+LOOM_EXECUTION_BUDGET_SCHEMA = "loom-execution-budget/v1"
+LOOM_EXECUTION_BUDGET_ENFORCEMENT = "advisory"
+LOOM_EXECUTION_BUDGET_STATUS = {"present", "not_applicable", "unavailable"}
+LOOM_EXECUTION_BUDGET_DIMENSION_IDS = {"turns", "tokens", "requests", "retries", "time_window"}
+LOOM_EXECUTION_BUDGET_DIMENSION_FIELDS = ("id", "unit", "used", "limit", "remaining", "risk", "source")
+
+
+def normalize_execution_budget_dimensions(raw_dimensions: object) -> list[dict[str, Any]]:
+    if not isinstance(raw_dimensions, list):
+        return []
+    dimensions: list[dict[str, Any]] = []
+    for candidate in raw_dimensions:
+        if not isinstance(candidate, dict):
+            continue
+        budget_id = candidate.get("id")
+        if not isinstance(budget_id, str) or budget_id not in LOOM_EXECUTION_BUDGET_DIMENSION_IDS:
+            continue
+        dimension: dict[str, Any] = {"id": budget_id}
+        for field in LOOM_EXECUTION_BUDGET_DIMENSION_FIELDS:
+            if field == "id":
+                continue
+            if field in candidate:
+                dimension[field] = candidate[field]
+        dimensions.append(dimension)
+    return dimensions
+
+
+def execution_budget_payload(
+    *,
+    status: str,
+    summary: str,
+    dimensions: list[dict[str, Any]] | None = None,
+    provenance: dict[str, Any] | None = None,
+    adapter_evidence_locator: str | None = None,
+    enforcement: str = LOOM_EXECUTION_BUDGET_ENFORCEMENT,
+) -> dict[str, Any]:
+    normalized_status = status if status in LOOM_EXECUTION_BUDGET_STATUS else "not_applicable"
+    return {
+        "schema_version": LOOM_EXECUTION_BUDGET_SCHEMA,
+        "status": normalized_status,
+        "enforcement": enforcement,
+        "summary": str(summary).strip() or f"execution budget status is {normalized_status}",
+        "dimensions": normalize_execution_budget_dimensions(dimensions or []),
+        "provenance": provenance or {"source": "github_host"},
+        "adapter_evidence_locator": str(adapter_evidence_locator) if adapter_evidence_locator else "",
+    }
+
+
+def normalize_execution_budget_payload(
+    raw: object,
+    *,
+    fallback_status: str = "not_applicable",
+    fallback_summary: str = "execution budget is not currently available",
+    fallback_locator: str = "",
+    fallback_provenance: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        return execution_budget_payload(
+            status=fallback_status,
+            summary=fallback_summary,
+            dimensions=[],
+            provenance=fallback_provenance or {"source": "github_host"},
+            adapter_evidence_locator=fallback_locator,
+        )
+
+    status = raw.get("status")
+    if not isinstance(status, str):
+        status = fallback_status
+    summary = raw.get("summary")
+    dimensions = normalize_execution_budget_dimensions(raw.get("dimensions"))
+    provenance = raw.get("provenance")
+    adapter_evidence_locator = raw.get("adapter_evidence_locator")
+
+    return execution_budget_payload(
+        status=status,
+        summary=summary if isinstance(summary, str) else fallback_summary,
+        dimensions=dimensions,
+        provenance=provenance if isinstance(provenance, dict) else fallback_provenance or {"source": "github_host"},
+        adapter_evidence_locator=str(adapter_evidence_locator) if isinstance(adapter_evidence_locator, str) else fallback_locator,
+        enforcement=(
+            raw.get("enforcement")
+            if isinstance(raw.get("enforcement"), str) and raw.get("enforcement") == LOOM_EXECUTION_BUDGET_ENFORCEMENT
+            else LOOM_EXECUTION_BUDGET_ENFORCEMENT
+        ),
+    )
 
 
 def local_worker_backend_contract() -> dict[str, object]:
@@ -2065,8 +2138,24 @@ def host_api_snapshot(
     requests: list[dict[str, Any]],
     errors: list[str],
     required_live: bool = False,
+    budget: object | None = None,
 ) -> dict[str, Any]:
     verification_status = "verified" if not errors else "unverified"
+    if errors:
+        budget_payload = execution_budget_payload(
+            status="unavailable",
+            summary="; ".join(errors),
+            provenance={"source": "github_control_plane", "error_count": len(errors)},
+            adapter_evidence_locator="",
+            enforcement=LOOM_EXECUTION_BUDGET_ENFORCEMENT,
+        )
+    else:
+        budget_payload = normalize_execution_budget_payload(
+            budget,
+            fallback_status="not_applicable",
+            fallback_summary="execution budget is not collected for this invocation.",
+            fallback_locator="",
+        )
     return {
         "schema_version": "loom-host-api-snapshot/v1",
         "read_mode": "uncached_live_gate" if required_live else "cached_non_merge",
@@ -2075,7 +2164,7 @@ def host_api_snapshot(
         "cache_scope": "none" if required_live else "process",
         "requests": requests,
         "errors": errors,
-        "budget": HOST_API_BUDGET_CONTRACT,
+        "budget": budget_payload,
     }
 
 

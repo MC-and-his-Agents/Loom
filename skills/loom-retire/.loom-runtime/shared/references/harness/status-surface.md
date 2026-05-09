@@ -102,8 +102,25 @@ Approval / sandbox policy 也只能派生读取：
 - BDD 外环场景的证据覆盖状态
 - TDD 内环测试或等价检查的证据覆盖状态
 - fresh verification evidence 的 `head_sha` / 范围 / 摘要绑定
+- execution_budget 报告（`status` 为 `not_applicable`/`unavailable` 时不阻断）
 - dynamic tool availability 与 failure summary
 - approval / sandbox policy 与 risk summary
+
+## 4. execution_budget
+
+状态面在 `execution_budget` 字段组里展示 provider-neutral 预算快照：
+
+- `schema_version`: `loom-execution-budget/v1`
+- `status`: `present` / `not_applicable` / `unavailable`
+- `enforcement`: `advisory`
+- `summary`
+- `dimensions`
+  - 每项允许的 `id`：`turns`、`tokens`、`requests`、`retries`、`time_window`
+  - 每项固定字段：`unit`、`used`、`limit`、`remaining`、`risk`、`source`
+- `provenance`
+- `adapter_evidence_locator`
+
+`status` 为 `not_applicable` 或 `unavailable` 时仍为 advisory 证据，不得作为 merge-ready 的缺失输入 blocking 条件。
 
 ## 4. `Runtime Evidence`
 

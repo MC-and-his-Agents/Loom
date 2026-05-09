@@ -1,0 +1,105 @@
+{
+  "schema_version": "loom-execution-budget-fixtures/v1",
+  "fixtures": [
+    {
+      "name": "host-header-budget-present",
+      "description": "Budget from host header extraction remains provider-neutral. Unknown raw header fields are dropped.",
+      "input": {
+        "status": "present",
+        "enforcement": "advisory",
+        "summary": "read x-ratelimit-* headers from recent repository request",
+        "dimensions": [
+          {
+            "id": "requests",
+            "unit": "request",
+            "used": 142,
+            "limit": 5000,
+            "remaining": 4858,
+            "risk": "low",
+            "source": "github_host_headers",
+            "x-ratelimit-remaining": 4858,
+            "x-ratelimit-reset": 1736440000
+          },
+          {
+            "id": "tokens",
+            "unit": "token",
+            "used": 1200,
+            "limit": 12000,
+            "remaining": 10800,
+            "risk": "low",
+            "source": "github_host_headers",
+            "rateLimit": 12000
+          }
+        ],
+        "provenance": {
+          "source": "github_host",
+          "read_mode": "cached_non_merge"
+        },
+        "adapter_evidence_locator": "loom.checks.host.github.api.headers",
+        "x-ratelimit-limit": 12000
+      },
+      "expect": {
+        "status": "present",
+        "dimension_ids": ["requests", "tokens"],
+        "dimension_fields": ["id", "unit", "used", "limit", "remaining", "risk", "source"],
+        "forbidden_fields": [
+          "x-ratelimit-remaining",
+          "x-ratelimit-reset",
+          "rateLimit",
+          "x-ratelimit-limit"
+        ],
+        "enforcement": "advisory"
+      }
+    },
+    {
+      "name": "budget-missing-not-applicable",
+      "description": "Missing budget is allowed as advisory not_applicable.",
+      "input": null,
+      "expect": {
+        "status": "not_applicable",
+        "enforcement": "advisory",
+        "dimensions_count": 0,
+        "dimension_ids": []
+      }
+    },
+    {
+      "name": "vendor-dimensions-filtered",
+      "description": "Unknown vendor-specific dimension IDs and fields cannot enter Loom core budget output.",
+      "input": {
+        "status": "present",
+        "enforcement": "advisory",
+        "summary": "adapters should expose normalised dimensions only",
+        "dimensions": [
+          {
+            "id": "x-ratelimit-resource",
+            "limit": "core",
+            "used": 99,
+            "remaining": 1
+          },
+          {
+            "id": "time_window",
+            "unit": "minute",
+            "used": 60,
+            "limit": 60,
+            "remaining": 0,
+            "risk": "high",
+            "source": "github_host"
+          }
+        ],
+        "provenance": {
+          "source": "github_host",
+          "read_mode": "cached_non_merge"
+        },
+        "adapter_evidence_locator": "loom.adapter.github.rate-limit"
+      },
+      "expect": {
+        "status": "present",
+        "dimension_ids": ["time_window"],
+        "dimension_fields": ["id", "unit", "used", "limit", "remaining", "risk", "source"],
+        "forbidden_fields": [
+          "x-ratelimit-resource"
+        ]
+      }
+    }
+  ]
+}

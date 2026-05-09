@@ -151,6 +151,21 @@
 
 该字段组只消费 `.loom/companion/repo-interface.json` 的 `policy_locators` 与只读 policy declaration，不申请权限、不修改 sandbox、不写 host result。
 
+### 3.7.1 `execution_budget`
+
+状态面必须展示 provider-neutral 的执行预算消费路径，不得把预算字段作为阻断 gate。
+
+- `schema_version`: `loom-execution-budget/v1`
+- `status`: `present` / `not_applicable` / `unavailable`
+- `enforcement`: `advisory`
+- `summary`: 预算可读性与来源说明
+- `dimensions`: 标准化 budget dimensions
+- `provenance`: 来源说明
+- `adapter_evidence_locator`: 适配器 evidence locator
+
+`dimensions[*].id` 必须限定为 `turns`、`tokens`、`requests`、`retries`、`time_window`，每项只能保留
+`unit`、`used`、`limit`、`remaining`、`risk`、`source` 中的稳定字段。缺失预算时可输出 `not_applicable` 或 `unavailable`，其 `enforcement` 必须是 `advisory`。
+
 ### 3.8 `taxonomy`
 
 至少包含：

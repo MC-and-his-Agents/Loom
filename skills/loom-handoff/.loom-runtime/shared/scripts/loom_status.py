@@ -433,6 +433,21 @@ def main(argv: list[str]) -> int:
     )
     ci_check_presence = github_control_plane.get("ci_check_presence") if isinstance(github_control_plane, dict) else None
     host_enforcement = github_control_plane.get("host_enforcement") if isinstance(github_control_plane, dict) else None
+    execution_budget = (
+        github_control_plane.get("api_snapshot", {}).get("budget")
+        if isinstance(github_control_plane, dict)
+        else None
+    )
+    if not isinstance(execution_budget, dict):
+        execution_budget = {
+            "schema_version": "loom-execution-budget/v1",
+            "status": "not_applicable",
+            "enforcement": "advisory",
+            "summary": "execution budget is not available for this execution path",
+            "dimensions": [],
+            "provenance": {"source": "github_control_plane"},
+            "adapter_evidence_locator": "",
+        }
     github_status, github_errors = github_status_payload(
         target_root,
         issue_number=args.issue,
@@ -511,6 +526,7 @@ def main(argv: list[str]) -> int:
             "latest_execution_attempt": latest_execution_attempt,
             "tool_availability": tool_availability,
             "policy_readiness": policy_readiness,
+            "execution_budget": execution_budget,
             "blocking_failures": report_blocking_failures(context["report"]),
             "item": {
                 "id": context["item_id"],

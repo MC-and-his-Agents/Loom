@@ -277,6 +277,11 @@ EVENT_EVIDENCE_FORBIDDEN_AUTHORED_FIELDS = {
     "recovery",
     "authored_truth",
 }
+EXECUTION_BUDGET_FIXTURE_SCHEMA = "loom-execution-budget-fixtures/v1"
+EXECUTION_BUDGET_STABLE_FIELDS = {"schema_version", "status", "enforcement", "summary", "dimensions", "provenance", "adapter_evidence_locator"}
+EXECUTION_BUDGET_DIMENSION_FIELDS = {"id", "unit", "used", "limit", "remaining", "risk", "source"}
+EXECUTION_BUDGET_DIMENSION_IDS = set(governance_surface_module.LOOM_EXECUTION_BUDGET_DIMENSION_IDS)
+EXECUTION_BUDGET_STATUS = {"present", "not_applicable", "unavailable"}
 
 
 def repo_root_from_argv(argv: list[str]) -> Path:
@@ -3805,6 +3810,38 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             if payload.get("command") != "status":
                 failures.append(Failure("daily-execution-cli", "`loom_status` must report `command: status`"))
             governance_status = payload.get("governance_status")
+            execution_budget = payload.get("execution_budget")
+            if not isinstance(execution_budget, dict):
+                failures.append(Failure("daily-execution-cli", "`loom_status` must include `execution_budget`"))
+            else:
+                missing_inputs = payload.get("missing_inputs")
+                if "execution_budget" in missing_inputs if isinstance(missing_inputs, list) else False:
+                    failures.append(
+                        Failure(
+                            "daily-execution-cli",
+                            "`loom_status` must not surface `execution_budget` as missing input",
+                        )
+                    )
+                budget_missing = execution_budget.get("status") in {"not_applicable", "unavailable"}
+                if budget_missing and execution_budget.get("enforcement") != "advisory":
+                    failures.append(
+                        Failure(
+                            "daily-execution-cli",
+                            "`loom_status` missing budget must remain advisory",
+                        )
+                    )
+                governance_missing = governance_status.get("missing_inputs") if isinstance(governance_status, dict) else []
+                if (
+                    budget_missing
+                    and isinstance(governance_missing, list)
+                    and any(str(item).startswith("execution_budget") for item in governance_missing)
+                ):
+                    failures.append(
+                        Failure(
+                            "daily-execution-cli",
+                            "`loom_status` should not block merge-ready gate on advisory execution budget status",
+                        )
+                    )
             if not isinstance(governance_status, dict):
                 failures.append(Failure("daily-execution-cli", "`loom_status` must include `governance_status`"))
             else:
@@ -10370,6 +10407,177 @@ def check_deferred_roadmap_tree_contract(root: Path) -> list[Failure]:
     return failures
 
 
+def check_execution_budget_fixture_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    fixture_path = root / "docs/evidence/fixtures/execution-budget-fixtures.json"
+    category = "execution-budget"
+    try:
+        fixture_payload = load_json_file(fixture_path)
+    except (OSError, json.JSONDecodeError) as exc:
+        failures.append(Failure(category, f"`docs/evidence/fixtures/execution-budget-fixtures.json` is unreadable: {exc}"))
+        return failures
+
+    if not isinstance(fixture_payload, dict):
+        failures.append(Failure(category, "`execution-budget-fixtures.json` must be an object"))
+        return failures
+
+    schema_version = fixture_payload.get("schema_version")
+    if schema_version != EXECUTION_BUDGET_FIXTURE_SCHEMA:
+        failures.append(
+            Failure(
+                category,
+                f"`docs/evidence/fixtures/execution-budget-fixtures.json` schema_version must be `{EXECUTION_BUDGET_FIXTURE_SCHEMA}`",
+            )
+        )
+
+    fixtures = fixture_payload.get("fixtures")
+    if not isinstance(fixtures, list):
+        failures.append(Failure(category, "`execution-budget-fixtures.json` must expose fixtures list"))
+        return failures
+
+    for index, fixture in enumerate(fixtures, start=1):
+        if not isinstance(fixture, dict):
+            failures.append(Failure(category, f"`execution-budget-fixtures.json` fixture #{index} must be an object"))
+            continue
+        name = str(fixture.get("name") or f"fixture-{index}")
+        context = f"{name} (#{index})"
+        expect = fixture.get("expect")
+        if not isinstance(expect, dict):
+            failures.append(Failure(category, f"`{context}` must expose fixture `expect` as an object"))
+            continue
+
+        payload = governance_surface_module.normalize_execution_budget_payload(
+            fixture.get("input"),
+            fallback_status="not_applicable",
+            fallback_summary="execution budget is not currently available",
+            fallback_locator="",
+        )
+
+        if not isinstance(payload, dict):
+            failures.append(Failure(category, f"`{context}` budget payload must normalize to object"))
+            continue
+
+        if payload.get("schema_version") != governance_surface_module.LOOM_EXECUTION_BUDGET_SCHEMA:
+            failures.append(
+                Failure(
+                    category,
+                    f"`{context}` normalized budget schema_version must be `{governance_surface_module.LOOM_EXECUTION_BUDGET_SCHEMA}`",
+                )
+            )
+        if set(payload.keys()) - EXECUTION_BUDGET_STABLE_FIELDS:
+            failures.append(
+                Failure(
+                    category,
+                    f"`{context}` normalized budget payload must stay in stable field vocabulary",
+                )
+            )
+
+        status = payload.get("status")
+        if status not in EXECUTION_BUDGET_STATUS:
+            failures.append(Failure(category, f"`{context}` normalized budget status must be stable"))
+        expected_status = expect.get("status")
+        if expected_status is not None and status != expected_status:
+            failures.append(Failure(category, f"`{context}` normalized budget status `{status}` != expected `{expected_status}`"))
+
+        expected_enforcement = expect.get("enforcement", "advisory")
+        if payload.get("enforcement") != expected_enforcement:
+            failures.append(
+                Failure(
+                    category,
+                    f"`{context}` budget enforcement `{payload.get('enforcement')}` != expected `{expected_enforcement}`",
+                )
+            )
+
+        dimensions = payload.get("dimensions")
+        if not isinstance(dimensions, list):
+            failures.append(Failure(category, f"`{context}` budget dimensions must stay a list"))
+            dimensions = []
+
+        expected_dimension_ids = expect.get("dimension_ids")
+        if isinstance(expected_dimension_ids, list):
+            actual_ids = [dimension.get("id") for dimension in dimensions if isinstance(dimension, dict)]
+            if actual_ids != expected_dimension_ids:
+                failures.append(
+                    Failure(
+                        category,
+                        f"`{context}` budget dimension ids {actual_ids} != expected {expected_dimension_ids}",
+                    )
+                )
+
+        expected_dimension_fields = expect.get("dimension_fields")
+        if isinstance(expected_dimension_fields, list):
+            field_set = set(str(field) for field in expected_dimension_fields)
+            if not field_set.issubset(EXECUTION_BUDGET_DIMENSION_FIELDS):
+                failures.append(
+                    Failure(
+                        category,
+                        f"`{context}` expect `dimension_fields` contains non-stable budget dimension fields",
+                    )
+                )
+            for position, dimension in enumerate(dimensions):
+                if not isinstance(dimension, dict):
+                    failures.append(Failure(category, f"`{context}` budget dimension #{position} must be an object"))
+                    continue
+                budget_id = dimension.get("id")
+                if not isinstance(budget_id, str) or budget_id not in EXECUTION_BUDGET_DIMENSION_IDS:
+                    failures.append(
+                        Failure(
+                            category,
+                            f"`{context}` budget dimension #{position} id `{budget_id}` must stay in stable vocabulary",
+                        )
+                    )
+                extra_fields = set(dimension.keys()) - set(expected_dimension_fields)
+                if extra_fields:
+                    failures.append(
+                        Failure(
+                            category,
+                            f"`{context}` budget dimension {budget_id} has unsupported fields: {sorted(extra_fields)}",
+                        )
+                    )
+
+        expected_forbidden_fields = expect.get("forbidden_fields")
+        if isinstance(expected_forbidden_fields, list):
+            forbidden = {str(field) for field in expected_forbidden_fields}
+            for field in forbidden:
+                for key in payload.keys():
+                    if key == field:
+                        failures.append(Failure(category, f"`{context}` budget payload must not contain forbidden field `{field}`"))
+                for dimension in dimensions:
+                    if isinstance(dimension, dict) and field in dimension:
+                        failures.append(
+                            Failure(
+                                category,
+                                f"`{context}` budget dimension `{dimension.get('id')}` must not contain forbidden field `{field}`",
+                            )
+                        )
+
+        expected_count = expect.get("dimensions_count")
+        if isinstance(expected_count, int) and isinstance(dimensions, list) and len(dimensions) != expected_count:
+            failures.append(Failure(category, f"`{context}` budget dimensions count {len(dimensions)} != expected {expected_count}"))
+
+        if status in {"not_applicable", "unavailable"} and payload.get("enforcement") != "advisory":
+            failures.append(Failure(category, f"`{context}` missing budget should keep advisory enforcement"))
+
+        if status in {"not_applicable", "unavailable"} and isinstance(payload.get("dimensions"), list):
+            if payload["dimensions"]:
+                failures.append(
+                    Failure(
+                        category,
+                        f"`{context}` missing budget should not expose dimensions",
+                    )
+                )
+
+        provenance = payload.get("provenance")
+        if not isinstance(provenance, dict):
+            failures.append(Failure(category, f"`{context}` budget provenance must be an object"))
+
+        locator = payload.get("adapter_evidence_locator")
+        if locator is not None and not isinstance(locator, str):
+            failures.append(Failure(category, f"`{context}` budget adapter_evidence_locator must be a string when present"))
+
+    return failures
+
+
 def check_execution_attempt_contract(root: Path) -> list[Failure]:
     failures: list[Failure] = []
     example_target = root / "examples/new-project"
@@ -10609,6 +10817,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_orchestration_conformance_profiles(root))
     failures.extend(check_structured_event_evidence_contract(root))
     failures.extend(check_deferred_roadmap_tree_contract(root))
+    failures.extend(check_execution_budget_fixture_contract(root))
     failures.extend(check_execution_attempt_contract(root))
     failures.extend(check_build_execution_contract(root))
     failures.extend(check_markdown_links(root))
@@ -10616,7 +10825,7 @@ def collect_failures(root: Path) -> list[Failure]:
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 28
+    categories_checked = 29
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")
