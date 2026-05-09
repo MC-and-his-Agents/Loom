@@ -11188,6 +11188,143 @@ def check_dynamic_tool_live_availability_contract(root: Path) -> list[Failure]:
     return failures
 
 
+def check_live_validation_only_guardrail_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+
+    def write_json_local(path: Path, payload: object) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    docs = {
+        "docs/evidence/v0.10.0-release-readiness.md": [
+            "validation-only shadow parity mismatch",
+            "explicit blocking opt-in",
+            "owner、fallback、override path、authority-of-truth 与 live evidence",
+            "单个 adopted repo smoke",
+        ],
+        "docs/evidence/live-smoke-profile.md": [
+            "--include-blocking-shadow",
+            "not sufficient blocking-upgrade evidence on its own",
+            "不得把 `orchestration-live` 提升为普通 PR 的默认 blocking gate",
+        ],
+        "docs/methodology/harness/closeout-gate.md": [
+            "shadow parity` 默认不进入 closeout 阻断面",
+            "owner、fallback、override path 与 authority-of-truth",
+        ],
+        "docs/evidence/validations/validation-v0.10-live-validation-only-guardrail.md": [
+            "validation-only shadow parity mismatch returns `warn`",
+            "explicit blocking opt-in",
+            "single adopted repo live smoke run is not sufficient",
+        ],
+    }
+    for relative, anchors in docs.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            failures.append(Failure("live-validation-only-guardrail", f"`{relative}` is unreadable: {exc}"))
+            continue
+        for anchor in anchors:
+            if anchor not in text:
+                failures.append(Failure("live-validation-only-guardrail", f"`{relative}` must mention `{anchor}`"))
+
+    missing_target = Path("/tmp/loom-missing-live-target")
+    unavailable_payload, error = load_command_json(
+        root,
+        ["python3", "tools/loom_flow.py", "live-smoke", "run", "--target", str(missing_target), "--item", "INIT-0001"],
+    )
+    if error:
+        failures.append(Failure("live-validation-only-guardrail", f"`live-smoke run` unavailable sample failed: {error}"))
+    else:
+        require_live_smoke_payload(
+            failures,
+            category="live-validation-only-guardrail",
+            context="unavailable-live-smoke-guardrail",
+            payload=unavailable_payload,
+            expected_operation="run",
+        )
+        if not isinstance(unavailable_payload, dict) or unavailable_payload.get("result") != "warn":
+            failures.append(Failure("live-validation-only-guardrail", "missing target live smoke must warn"))
+
+    dry_run_payload, error = load_command_json(
+        root,
+        [
+            "python3",
+            "tools/loom_flow.py",
+            "live-smoke",
+            "run",
+            "--target",
+            str(root / "examples/new-project"),
+            "--dry-run",
+            "--include-blocking-shadow",
+        ],
+    )
+    if error:
+        failures.append(Failure("live-validation-only-guardrail", f"`live-smoke run --include-blocking-shadow --dry-run` failed: {error}"))
+    else:
+        require_live_smoke_payload(
+            failures,
+            category="live-validation-only-guardrail",
+            context="dry-run-live-smoke-guardrail",
+            payload=dry_run_payload,
+            expected_operation="run",
+        )
+        command_plan = dry_run_payload.get("command_plan")
+        if not isinstance(command_plan, list):
+            failures.append(Failure("live-validation-only-guardrail", "dry-run live smoke must include command_plan"))
+        else:
+            blocking_steps = [step for step in command_plan if isinstance(step, dict) and step.get("id") == "shadow-parity-blocking"]
+            if len(blocking_steps) != 1:
+                failures.append(Failure("live-validation-only-guardrail", "dry-run live smoke must include exactly one explicit blocking shadow step when requested"))
+            elif "not sufficient blocking-upgrade evidence on its own" not in str(blocking_steps[0].get("description") or ""):
+                failures.append(Failure("live-validation-only-guardrail", "blocking shadow step must say it is not sufficient blocking-upgrade evidence on its own"))
+
+    example_target = root / "examples/new-project"
+    with tempfile.TemporaryDirectory(prefix="loom-live-validation-guardrail-") as tmp:
+        mismatch_target = Path(tmp) / "shadow-mismatch"
+        shutil.copytree(example_target, mismatch_target)
+        shadow_payload = load_json_file(mismatch_target / ".loom/shadow/review-repo.json")
+        if isinstance(shadow_payload, dict):
+            shadow_payload["source_sha256"] = {"native/status/review.json": "0" * 64}
+            write_json_local(mismatch_target / ".loom/shadow/review-repo.json", shadow_payload)
+
+        warn_payload, warn_error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "shadow-parity", "--target", str(mismatch_target), "--surface", "review"],
+        )
+        if warn_error:
+            failures.append(Failure("live-validation-only-guardrail", f"`shadow-parity` validation-only mismatch sample failed: {warn_error}"))
+        else:
+            require_shadow_parity_payload(
+                failures,
+                category="live-validation-only-guardrail",
+                context="validation-only-shadow-mismatch",
+                payload=warn_payload,
+                expected_reports=1,
+            )
+            if not isinstance(warn_payload, dict) or warn_payload.get("result") != "warn":
+                failures.append(Failure("live-validation-only-guardrail", "validation-only shadow mismatch must warn"))
+
+        block_payload, block_error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "shadow-parity", "--target", str(mismatch_target), "--surface", "review", "--blocking"],
+        )
+        if block_error:
+            failures.append(Failure("live-validation-only-guardrail", f"`shadow-parity --blocking` mismatch sample failed: {block_error}"))
+        else:
+            require_shadow_parity_payload(
+                failures,
+                category="live-validation-only-guardrail",
+                context="blocking-shadow-mismatch",
+                payload=block_payload,
+                expected_reports=1,
+            )
+            if not isinstance(block_payload, dict) or block_payload.get("result") != "block":
+                failures.append(Failure("live-validation-only-guardrail", "blocking shadow mismatch must block"))
+
+    return failures
+
+
 def fake_event_evidence(
     *,
     event_id: str,
@@ -12301,6 +12438,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_live_smoke_foundation_contract(root))
     failures.extend(check_host_adapter_live_drift_contract(root))
     failures.extend(check_dynamic_tool_live_availability_contract(root))
+    failures.extend(check_live_validation_only_guardrail_contract(root))
     failures.extend(check_structured_event_evidence_contract(root))
     failures.extend(check_deferred_roadmap_tree_contract(root))
     failures.extend(check_execution_budget_fixture_contract(root))
@@ -12313,7 +12451,7 @@ def collect_failures(root: Path) -> list[Failure]:
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 31
+    categories_checked = 32
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")

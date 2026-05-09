@@ -41,7 +41,7 @@
 - `shadow-parity` validation-only
 - `flow resume --item <id>`
 
-`shadow-parity --blocking` 只能通过显式 `--include-blocking-shadow` 加入 command set。单个 adopted repo smoke 不得被描述为 blocking shadow parity 升级证据。
+`shadow-parity --blocking` 只能通过显式 `--include-blocking-shadow` 加入 command set。单个 adopted repo smoke 不得被描述为 blocking shadow parity 升级证据；该步骤 is not sufficient blocking-upgrade evidence on its own.
 
 ## Unavailable Evidence
 
