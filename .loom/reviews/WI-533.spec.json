@@ -1,0 +1,23 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-533",
+  "decision": "fallback",
+  "kind": "spec_review",
+  "summary": "WI-533 release closeout spec gates v0.10.0 publication on merged scope, root release truth, clean verification, and final GitHub release alignment.",
+  "reviewer": "codex",
+  "reviewed_head": "63f34b60286a89abba2098a5f04abb9a2579dfe6",
+  "reviewed_validation_summary": "PRs #728-#733 are merged on main; #533, #649, and #693 are closed as completed; post-merge make check and npm --prefix packages/loom-installer run check:release passed after #733.",
+  "fallback_to": "admission",
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-533.md",
+    "recovery_entry": ".loom/progress/WI-533.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
