@@ -34,6 +34,7 @@ from fact_chain_support import (
 from governance_surface import (
     build_governance_surface,
     derive_execution_budget_risk,
+    empty_tool_availability,
     workspace_lifecycle_expectations,
 )
 from runtime_paths import shared_asset, shared_script
@@ -115,6 +116,7 @@ REVIEW_ENGINE_PROFILE_IDS = {"default", "high-risk", "spec-review", "repeated-bl
 REVIEW_ENGINE_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
 LIVE_SMOKE_SCHEMA = "loom-live-smoke/v1"
 HOST_ADAPTER_LIVE_DRIFT_SCHEMA = "loom-host-adapter-live-drift/v1"
+DYNAMIC_TOOL_LIVE_AVAILABILITY_SCHEMA = "loom-dynamic-tool-live-availability/v1"
 LIVE_SMOKE_RETRY_FALLBACK = "live-smoke-retry-or-record-unavailable"
 LIVE_SMOKE_REPLAY_FALLBACK = "record-prior-evidence"
 LIVE_SMOKE_CONFIG_FALLBACK = "live-smoke-config-repair"
@@ -505,11 +507,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "live-smoke",
         help="Run or replay versioned adopted-repo live smoke evidence without changing core gates",
     )
-    live_smoke.add_argument("operation", choices=("run", "replay", "host-adapter-drift"))
+    live_smoke.add_argument("operation", choices=("run", "replay", "host-adapter-drift", "dynamic-tool-availability"))
     live_smoke.add_argument("--target", help="Adopted repository root for live smoke run")
     live_smoke.add_argument("--item", default="INIT-0001", help="Expected current item id for the optional resume smoke")
     live_smoke.add_argument("--prior-evidence", help="Versioned prior-pass evidence to replay without running adopted-repo commands")
     live_smoke.add_argument("--dry-run", action="store_true", help="Preview the live smoke command plan without running adopted-repo commands")
+    live_smoke.add_argument(
+        "--surface",
+        choices=("attempt_time", "review", "merge_ready", "closeout", "build", "admission", "pre_review", "all"),
+        default="attempt_time",
+        help="Dynamic tool live availability surface; defaults to attempt_time",
+    )
     live_smoke.add_argument(
         "--include-blocking-shadow",
         action="store_true",
@@ -641,6 +649,10 @@ def host_adapter_live_drift_command(target_root: Path) -> str:
     return live_smoke_command(["live-smoke", "host-adapter-drift", "--target", str(target_root)])
 
 
+def dynamic_tool_live_availability_command(target_root: Path, *, surface: str) -> str:
+    return live_smoke_command(["live-smoke", "dynamic-tool-availability", "--target", str(target_root), "--surface", surface])
+
+
 def host_adapter_live_drift_command_plan(target_root: Path, host_adapters: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     target = command_target(target_root)
     plan = [
@@ -663,6 +675,38 @@ def host_adapter_live_drift_command_plan(target_root: Path, host_adapters: list[
                 "id": str(entry_id or f"host-adapter-{index}"),
                 "command": f"read {locator if isinstance(locator, str) and locator else '<missing-locator>'}",
                 "description": "Read the retained host action result envelope declared in repo interop.",
+            }
+        )
+    return plan
+
+
+def dynamic_tool_live_availability_command_plan(
+    target_root: Path,
+    *,
+    surface: str,
+    declared_tools: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    target = command_target(target_root)
+    plan = [
+        {
+            "id": "target-check",
+            "command": f"test -d {target}",
+            "description": "Confirm the adopted-repo target path exists before reading dynamic tool handshake declarations.",
+        },
+        {
+            "id": "repo-interface-contract",
+            "command": f"read {target_root / '.loom/companion/repo-interface.json'}",
+            "description": "Read the repo companion interface and discover declared dynamic tool availability locators.",
+        },
+    ]
+    for index, entry in enumerate(declared_tools or []):
+        entry_id = entry.get("id") if isinstance(entry, dict) else None
+        locator = entry.get("locator") if isinstance(entry, dict) else None
+        plan.append(
+            {
+                "id": str(entry_id or f"dynamic-tool-{index}"),
+                "command": f"read {locator if isinstance(locator, str) and locator else '<missing-locator>'}",
+                "description": f"Read the dynamic tool handshake declaration for surface `{surface}`.",
             }
         )
     return plan
@@ -1136,6 +1180,310 @@ def host_adapter_live_drift_payload(target_root: Path) -> dict[str, Any]:
                 "availability": "present",
                 "expected_host_adapter_version": expected_version,
                 "checks": checks,
+            },
+        }
+    )
+    return payload
+
+
+def dynamic_tool_live_availability_payload(target_root: Path, *, surface: str) -> dict[str, Any]:
+    runtime_state = runtime_state_payload(target_root)
+    target = live_smoke_target_metadata(target_root)
+    payload: dict[str, Any] = {
+        "command": "live-smoke",
+        "operation": "dynamic-tool-availability",
+        "schema_version": DYNAMIC_TOOL_LIVE_AVAILABILITY_SCHEMA,
+        "runtime_state": runtime_state,
+        "target": target,
+        "command_plan": dynamic_tool_live_availability_command_plan(target_root, surface=surface),
+        "reports": [],
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if runtime_state.get("result") != "pass":
+        payload.update(
+            {
+                "result": "block",
+                "summary": "dynamic tool live availability is blocked because the Loom runtime state is inconsistent.",
+                "missing_inputs": live_smoke_missing_inputs([str(message) for message in runtime_state.get("missing_inputs", [])]),
+                "fallback_to": runtime_state.get("fallback_to"),
+                "profile_check": {"id": "dynamic-tool-live-availability", "result": "block"},
+                "dynamic_tool_availability": {
+                    "contract_locator": ".loom/companion/repo-interface.json",
+                    "availability": "runtime-blocked",
+                    "surface": surface,
+                    "tool_availability": empty_tool_availability(),
+                },
+            }
+        )
+        return payload
+
+    target_report = live_smoke_target_check_report(target_root)
+    payload["reports"] = [target_report]
+    payload["missing_inputs"] = list(target_report.get("missing_inputs", []))
+    if target_report["result"] != "pass":
+        payload.update(
+            {
+                "result": "warn",
+                "summary": "dynamic tool live availability recorded explicit unavailable evidence for the adopted-repo target.",
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+                "profile_check": {"id": "dynamic-tool-live-availability", "result": "warn"},
+                "dynamic_tool_availability": {
+                    "contract_locator": ".loom/companion/repo-interface.json",
+                    "availability": "target-unavailable",
+                    "surface": surface,
+                    "tool_availability": empty_tool_availability(),
+                },
+            }
+        )
+        return payload
+
+    governance_surface = build_governance_surface(target_root)
+    repo_interface = governance_surface.get("repo_interface")
+    contract_locator = ".loom/companion/repo-interface.json"
+    availability = "absent"
+    if isinstance(repo_interface, dict):
+        availability = str(repo_interface.get("availability") or "absent")
+    interface_report = {
+        "id": "repo-interface-contract",
+        "attempted": True,
+        "command": f"read {target_root / contract_locator}",
+        "reported_command": "repo-interface-contract",
+        "reported_result": availability,
+        "result": "pass",
+        "summary": "repo companion interface is readable.",
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    payload["reports"].append(interface_report)
+
+    if availability in {"absent", "companion_docs_only"}:
+        summary = "repo companion interface is absent, so no dynamic tool live evidence can be consumed."
+        if availability == "companion_docs_only":
+            summary = "legacy companion docs are present, but no machine-readable repo companion interface declares dynamic tools."
+        interface_report.update(
+            {
+                "result": "warn",
+                "summary": summary,
+                "missing_inputs": ["repo companion interface is absent"],
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+            }
+        )
+        payload.update(
+            {
+                "result": "warn",
+                "summary": summary,
+                "missing_inputs": ["repo companion interface is absent"],
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+                "profile_check": {"id": "dynamic-tool-live-availability", "result": "warn"},
+                "dynamic_tool_availability": {
+                    "contract_locator": contract_locator,
+                    "availability": "absent",
+                    "surface": surface,
+                    "tool_availability": empty_tool_availability(),
+                },
+            }
+        )
+        return payload
+
+    if not isinstance(repo_interface, dict) or availability == "incomplete":
+        missing_inputs = []
+        if isinstance(repo_interface, dict) and isinstance(repo_interface.get("missing_inputs"), list):
+            missing_inputs = [str(message) for message in repo_interface.get("missing_inputs", [])]
+        if not missing_inputs:
+            missing_inputs = ["repo companion interface is unreadable"]
+        interface_report.update(
+            {
+                "result": "block",
+                "summary": "repo companion interface is incomplete or unreadable for dynamic tool live availability.",
+                "missing_inputs": missing_inputs,
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+            }
+        )
+        payload.update(
+            {
+                "result": "block",
+                "summary": interface_report["summary"],
+                "missing_inputs": live_smoke_missing_inputs(missing_inputs),
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                "profile_check": {"id": "dynamic-tool-live-availability", "result": "block"},
+                "dynamic_tool_availability": {
+                    "contract_locator": contract_locator,
+                    "availability": "incomplete",
+                    "surface": surface,
+                    "tool_availability": empty_tool_availability(),
+                },
+            }
+        )
+        return payload
+
+    if availability != "present":
+        interface_report.update(
+            {
+                "result": "block",
+                "summary": "repo companion interface returned an unknown availability state for dynamic tool live availability.",
+                "missing_inputs": [f"unknown repo companion availability: {availability}"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+            }
+        )
+        payload.update(
+            {
+                "result": "block",
+                "summary": interface_report["summary"],
+                "missing_inputs": interface_report["missing_inputs"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                "profile_check": {"id": "dynamic-tool-live-availability", "result": "block"},
+                "dynamic_tool_availability": {
+                    "contract_locator": contract_locator,
+                    "availability": "incomplete",
+                    "surface": surface,
+                    "tool_availability": empty_tool_availability(),
+                },
+            }
+        )
+        return payload
+
+    tool_availability = repo_interface.get("tool_availability") if surface == "all" else tool_availability_for_surface(repo_interface, surface=surface)
+    if not isinstance(tool_availability, dict):
+        interface_report.update(
+            {
+                "result": "block",
+                "summary": "repo companion interface does not expose readable dynamic tool availability evidence.",
+                "missing_inputs": ["repo companion interface must expose `tool_availability`"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+            }
+        )
+        payload.update(
+            {
+                "result": "block",
+                "summary": interface_report["summary"],
+                "missing_inputs": interface_report["missing_inputs"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                "profile_check": {"id": "dynamic-tool-live-availability", "result": "block"},
+                "dynamic_tool_availability": {
+                    "contract_locator": contract_locator,
+                    "availability": "incomplete",
+                    "surface": surface,
+                    "tool_availability": empty_tool_availability(),
+                },
+            }
+        )
+        return payload
+
+    declared_tools = tool_availability.get("declared_tools")
+    if not isinstance(declared_tools, list):
+        interface_report.update(
+            {
+                "result": "block",
+                "summary": "dynamic tool live availability did not expose a readable declared_tools list.",
+                "missing_inputs": ["tool_availability must include `declared_tools` as a list"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+            }
+        )
+        payload.update(
+            {
+                "result": "block",
+                "summary": interface_report["summary"],
+                "missing_inputs": interface_report["missing_inputs"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                "profile_check": {"id": "dynamic-tool-live-availability", "result": "block"},
+                "dynamic_tool_availability": {
+                    "contract_locator": contract_locator,
+                    "availability": "incomplete",
+                    "surface": surface,
+                    "tool_availability": empty_tool_availability(),
+                },
+            }
+        )
+        return payload
+
+    payload["command_plan"] = dynamic_tool_live_availability_command_plan(
+        target_root,
+        surface=surface,
+        declared_tools=declared_tools,
+    )
+    if not declared_tools:
+        interface_report.update(
+            {
+                "result": "pass",
+                "summary": "repo companion interface is readable and no dynamic tools apply to this live profile.",
+                "missing_inputs": [],
+                "fallback_to": None,
+            }
+        )
+        payload.update(
+            {
+                "result": "pass",
+                "summary": interface_report["summary"],
+                "missing_inputs": [],
+                "fallback_to": None,
+                "profile_check": {"id": "dynamic-tool-live-availability", "result": "pass"},
+                "dynamic_tool_availability": {
+                    "contract_locator": contract_locator,
+                    "availability": "present",
+                    "surface": surface,
+                    "tool_availability": tool_availability,
+                },
+            }
+        )
+        return payload
+
+    advisory_messages: list[str] = []
+    for tool in declared_tools:
+        if not isinstance(tool, dict):
+            continue
+        report_result = "pass"
+        if tool.get("result") == "block":
+            report_result = "block"
+        elif tool.get("status") != "advertised":
+            report_result = "warn"
+        report_missing_inputs = [str(message) for message in tool.get("missing_inputs", [])]
+        if report_result == "warn":
+            report_missing_inputs = [str(message) for message in tool.get("advisory", [])]
+            for message in report_missing_inputs:
+                if message not in advisory_messages:
+                    advisory_messages.append(message)
+        payload["reports"].append(
+            {
+                "id": str(tool.get("id") or "dynamic-tool"),
+                "attempted": True,
+                "command": f"read {tool.get('locator') or '<missing-locator>'}",
+                "reported_command": "dynamic-tool-handshake",
+                "reported_result": str(tool.get("status") or tool.get("failure_category") or "unknown"),
+                "result": report_result,
+                "summary": str(tool.get("summary") or "dynamic tool handshake declaration was read."),
+                "missing_inputs": report_missing_inputs,
+                "fallback_to": tool.get("fallback_to") if report_result == "block" else None,
+            }
+        )
+
+    blocking_messages = [
+        message
+        for report in payload["reports"]
+        if report.get("result") == "block"
+        for message in report.get("missing_inputs", [])
+    ]
+    missing_inputs = live_smoke_missing_inputs([*blocking_messages, *advisory_messages])
+    has_block = tool_availability.get("result") == "block"
+    has_warn = any(report.get("result") == "warn" for report in payload["reports"])
+    result = "block" if has_block else "warn" if has_warn else "pass"
+    summary = "dynamic tool handshake declarations are readable and advertised for this live profile."
+    if result == "warn":
+        summary = "dynamic tool live availability produced profile-local warnings."
+    if result == "block":
+        summary = "dynamic tool live availability found blocking handshake declaration or availability gaps."
+    payload.update(
+        {
+            "result": result,
+            "summary": summary,
+            "missing_inputs": missing_inputs,
+            "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK if result == "block" else None,
+            "profile_check": {"id": "dynamic-tool-live-availability", "result": result},
+            "dynamic_tool_availability": {
+                "contract_locator": contract_locator,
+                "availability": "present",
+                "surface": surface,
+                "tool_availability": tool_availability,
             },
         }
     )
@@ -11459,6 +11807,35 @@ def handle_live_smoke(args: argparse.Namespace) -> int:
                 }
             )
         return emit(host_adapter_live_drift_payload(Path(args.target).expanduser().resolve()))
+    if args.operation == "dynamic-tool-availability":
+        if not args.target:
+            return emit(
+                {
+                    "command": "live-smoke",
+                    "operation": "dynamic-tool-availability",
+                    "schema_version": DYNAMIC_TOOL_LIVE_AVAILABILITY_SCHEMA,
+                    "result": "block",
+                    "summary": "dynamic tool live availability requires --target.",
+                    "missing_inputs": ["pass --target <adopted_repo_root>"],
+                    "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                    "runtime_state": runtime_state_payload(Path.cwd()),
+                    "command_plan": [],
+                    "reports": [],
+                    "profile_check": {"id": "dynamic-tool-live-availability", "result": "block"},
+                    "dynamic_tool_availability": {
+                        "contract_locator": ".loom/companion/repo-interface.json",
+                        "availability": "missing-target",
+                        "surface": args.surface,
+                        "tool_availability": empty_tool_availability(),
+                    },
+                }
+            )
+        return emit(
+            dynamic_tool_live_availability_payload(
+                Path(args.target).expanduser().resolve(),
+                surface=args.surface,
+            )
+        )
 
     repo_root = Path(os.environ.get("LOOM_SOURCE_REPO_ROOT", Path.cwd())).expanduser().resolve()
     runtime_state = runtime_state_payload(repo_root)

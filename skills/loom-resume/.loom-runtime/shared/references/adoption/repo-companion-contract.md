@@ -261,6 +261,7 @@
 - `required` 缺口进入 blocking `missing_inputs`
 - `optional` / `advisory` locator 缺失或指向不可读路径只进入 `missing_optional` 或 profile-local advisory evidence，不得污染 core pass/fail
 - locator 指向的 handshake declaration 若存在，只能输出 `advertised | unavailable | unsupported | failed`，并由 `tool_availability` 派生展示
+- `python3 tools/loom_flow.py live-smoke dynamic-tool-availability --target <repo>` 只把这组 declaration-time locator 包装成 live smoke / release confidence evidence；它不承载 attempt-time result，不执行业务工具，也不改写 repo companion truth
 - `dynamic_tool_locators` 不得承载 attempt-time result、review summary、validation status 或 retained host action result
 - retained host action result locator 必须留在 [repo-interop-contract.md](./repo-interop-contract.md) 的 `host_adapters`
 

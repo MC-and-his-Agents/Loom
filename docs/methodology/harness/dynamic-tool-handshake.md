@@ -18,6 +18,8 @@ Dynamic tool handshake evidence is runtime evidence. It is not authored progress
 
 The locator may point at a readable handshake declaration. Loom reads that declaration but does not call the tool, probe the host, or write host results.
 
+`python3 tools/loom_flow.py live-smoke dynamic-tool-availability --target <repo> [--surface <surface>]` is the live/profile-local evidence wrapper for this contract. It reads the same declarations and emits release-confidence evidence without executing the tool protocol itself.
+
 Retained host action results remain in `.loom/companion/interop.json`. Attempt summaries remain in `execution_attempt`.
 
 ## Vocabulary
@@ -29,7 +31,7 @@ Retained host action results remain in `.loom/companion/interop.json`. Attempt s
 - `unsupported`: the host adapter reports that the requested tool call is not supported.
 - `failed`: the tool handshake ran or was declared and failed.
 
-These values are never top-level command results. Top-level `result` remains `pass | block | fallback`.
+These values are never top-level command results. Top-level `result` remains `pass | warn | block`.
 
 ## Severity
 
@@ -55,3 +57,4 @@ These values are never top-level command results. Top-level `result` remains `pa
 `loom_status` exposes the latest derived `tool_availability` from `governance_surface.repo_interface`.
 `flow review` and `flow merge-ready` expose the applicable tool availability under `repo_specific_requirements.tool_availability`.
 
+`live-smoke dynamic-tool-availability` embeds that same `tool_availability` payload inside `loom-dynamic-tool-live-availability/v1`, keeps optional/advisory failures profile-local, and does not call the tool or define a tool-specific protocol.
