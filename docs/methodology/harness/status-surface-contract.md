@@ -166,7 +166,22 @@
 `dimensions[*].id` 必须限定为 `turns`、`tokens`、`requests`、`retries`、`time_window`，每项只能保留
 `unit`、`used`、`limit`、`remaining`、`risk`、`source` 中的稳定字段。缺失预算时可输出 `not_applicable` 或 `unavailable`，其 `enforcement` 必须是 `advisory`。
 
-### 3.7.2 `execution_failure`
+### 3.7.2 `execution_budget_risk`
+
+状态面必须展示从 `execution_budget` 派生的 provider-neutral 风险摘要：
+
+- `schema_version`: `loom-execution-budget-risk/v1`
+- `status`: `present` / `not_applicable` / `unavailable`
+- `enforcement`: `advisory`
+- `highest_risk`: `none` / `low` / `medium` / `high` / `unknown`
+- `risk_dimensions`
+- `summary`
+- `budget_summary`
+- `provenance`
+
+该字段组只说明“当前预算是否显示风险压力”，供 review / merge-ready / closeout 消费；不得把 advisory budget risk 直接提升为 gate blocker。
+
+### 3.7.3 `execution_failure`
 
 状态面可以展示最近一次 `execution_attempt` 的执行失败分类，但该字段组只读 runtime evidence，不得把执行失败直接升级成 merge gate。
 
@@ -179,7 +194,7 @@
 
 `execution_failure` 只作为 status / recovery / review 的风险输入，不声明 scheduler state，不触发自动 retry，也不单独决定 `pass | block`。
 
-### 3.7.3 `retry_evidence`
+### 3.7.4 `retry_evidence`
 
 状态面可以从 `.loom/runtime/attempts/<item-id>/` 的 attempt chain 派生 retry evidence，但该字段组只读 runtime evidence，不得替代 scheduler。
 

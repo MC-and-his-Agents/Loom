@@ -44,6 +44,9 @@
 - `execution_budget`
   - 从 `github_control_plane.api_snapshot.budget` 派生
   - 仅作 advisory evidence，不作为 gate 阻断条件
+- `execution_budget_risk`
+  - 从 `execution_budget` 派生 provider-neutral 风险摘要
+  - 仅作 advisory evidence，不作为 gate 阻断条件
 - retained host / repo-native result
   - 作为 evidence provenance 或 gate 前置结果派生
 - `taxonomy`
@@ -108,10 +111,40 @@ Approval / sandbox policy 也只能派生读取：
 - dynamic tool availability 与 failure summary
 - approval / sandbox policy 与 risk summary
 - execution budget 报告（`status` 为 `not_applicable`/`unavailable` 时不阻断）
+- execution budget risk 摘要（`highest_risk = high` 时可提示 merge / review 风险，但不阻断）
 - 最近 execution failure 分类（`stall` / `timeout` / `retry_exhaustion` 只作为风险输入）
 - retry evidence 摘要（attempt chain、stale retry evidence、是否 exhausted）
 
-## 4. `Runtime Evidence`
+## 4. execution budget / execution budget risk
+
+状态面在 `execution_budget` 字段组里展示 provider-neutral 预算快照：
+
+- `schema_version`: `loom-execution-budget/v1`
+- `status`: `present` / `not_applicable` / `unavailable`
+- `enforcement`: `advisory`
+- `summary`
+- `dimensions`
+  - 每项允许的 `id`：`turns`、`tokens`、`requests`、`retries`、`time_window`
+  - 每项固定字段：`unit`、`used`、`limit`、`remaining`、`risk`、`source`
+- `provenance`
+- `adapter_evidence_locator`
+
+`status` 为 `not_applicable` 或 `unavailable` 时仍为 advisory 证据，不得作为 merge-ready 的缺失输入 blocking 条件。
+
+状态面还应派生 `execution_budget_risk`：
+
+- `schema_version`: `loom-execution-budget-risk/v1`
+- `status`
+- `enforcement`
+- `highest_risk`
+- `risk_dimensions`
+- `summary`
+- `budget_summary`
+- `provenance`
+
+其中 `highest_risk = high` 只表示预算风险应被 review / merge-ready / closeout 消费，不表示 Loom 自动阻断当前 gate。
+
+## 4.1 `Runtime Evidence`
 
 若事项涉及运行面，状态面必须继续提供固定区块 `Runtime Evidence`：
 

@@ -31,7 +31,11 @@ from fact_chain_support import (
     path_boundary_missing_details,
     resolve_repo_relative_path,
 )
-from governance_surface import build_governance_surface, workspace_lifecycle_expectations
+from governance_surface import (
+    build_governance_surface,
+    derive_execution_budget_risk,
+    workspace_lifecycle_expectations,
+)
 from runtime_paths import shared_asset, shared_script
 from runtime_state import detect_runtime_state
 
@@ -3251,6 +3255,18 @@ def review_context_finding_entry(
 
 
 def build_review_context_pack(context: dict[str, Any], review_path: str) -> dict[str, Any]:
+    governance_surface = build_governance_surface(context["target_root"])
+    github_control_plane = (
+        governance_surface.get("github_control_plane")
+        if isinstance(governance_surface, dict)
+        else None
+    )
+    execution_budget = (
+        github_control_plane.get("api_snapshot", {}).get("budget")
+        if isinstance(github_control_plane, dict)
+        else None
+    )
+    budget_risk = derive_execution_budget_risk(execution_budget)
     recent_findings: list[dict[str, Any]] = []
     review_record, _, review_errors = load_review_record(context["target_root"], context["item_id"], review_path)
     if review_record and not review_errors:
@@ -3321,6 +3337,7 @@ def build_review_context_pack(context: dict[str, Any], review_path: str) -> dict
         "history_available": bool(recent_findings),
         "history_policy": "not_applicable when no prior review record or normalized findings are available",
         "recent_findings": recent_findings[-20:],
+        "budget_risk": budget_risk,
         "repeated_blocker_signal": {
             "schema_version": REPEATED_BLOCKER_SIGNAL_SCHEMA,
             "result": "present" if candidates else "absent",
@@ -3490,6 +3507,17 @@ def build_review_flow_payload(
 
     build_payload = checkpoint_payload("build", context)
     governance_surface = build_governance_surface(target_root)
+    github_control_plane = (
+        governance_surface.get("github_control_plane")
+        if isinstance(governance_surface, dict)
+        else None
+    )
+    execution_budget = (
+        github_control_plane.get("api_snapshot", {}).get("budget")
+        if isinstance(github_control_plane, dict)
+        else None
+    )
+    budget_risk = derive_execution_budget_risk(execution_budget)
     surface_name = "review"
     repo_specific_requirements = repo_specific_requirements_payload(
         governance_surface.get("repo_interface"),
@@ -3644,6 +3672,7 @@ def build_review_flow_payload(
             "checks": state_payload["checks"],
         },
         "runtime_evidence": runtime_fields,
+        "budget_risk": budget_risk,
         "build_checkpoint": {
             "result": build_payload["result"],
             "summary": build_payload["summary"],
@@ -3922,6 +3951,7 @@ def run_default_review_engine(
             "engine_profile": engine_profile,
             "context_pack": relative_to_root(context_pack_path, context["target_root"]),
             "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+            "budget_risk": context_pack.get("budget_risk"),
         },
     }
 
@@ -4684,6 +4714,7 @@ def build_default_review_prompt(
     if not recent_lines:
         recent_lines = ["- not_applicable: no prior review findings were available."]
     repeated_signal = context_pack.get("repeated_blocker_signal") if isinstance(context_pack.get("repeated_blocker_signal"), dict) else {}
+    budget_risk = context_pack.get("budget_risk") if isinstance(context_pack.get("budget_risk"), dict) else {}
     repeated_candidates = repeated_signal.get("candidates") if isinstance(repeated_signal.get("candidates"), list) else []
     repeated_lines = [
         f"- {candidate.get('repeat_key')}: count={candidate.get('count')}, sources={', '.join(str(source) for source in candidate.get('sources', []))}"
@@ -4735,6 +4766,13 @@ def build_default_review_prompt(
             "Recent Review Context Pack：",
             f"- Schema: {context_pack.get('schema_version')}",
             f"- History Available: {context_pack.get('history_available')}",
+            (
+                "- Budget Risk: "
+                f"{budget_risk.get('highest_risk', 'none')} "
+                f"(status={budget_risk.get('status', 'not_applicable')}, "
+                f"enforcement={budget_risk.get('enforcement', 'advisory')})"
+            ),
+            f"- Budget Risk Summary: {budget_risk.get('summary', 'not_applicable')}",
             f"- Repeated Blocker Signal: {repeated_signal.get('result', 'absent')} ({repeated_signal.get('enforcement', 'advisory')})",
             "Recent Findings:",
             *recent_lines,
@@ -5174,7 +5212,20 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
     review_record: dict[str, Any] | None = None
     review_path: str | None = None
     spec_review: dict[str, Any] | None = None
+    budget_risk: dict[str, Any] | None = None
     if stage == "merge":
+        governance_surface = build_governance_surface(context["target_root"])
+        github_control_plane = (
+            governance_surface.get("github_control_plane")
+            if isinstance(governance_surface, dict)
+            else None
+        )
+        execution_budget = (
+            github_control_plane.get("api_snapshot", {}).get("budget")
+            if isinstance(github_control_plane, dict)
+            else None
+        )
+        budget_risk = derive_execution_budget_risk(execution_budget)
         pr_template, pr_template_errors = check_pr_template(context["target_root"])
         if pr_template_errors:
             missing_inputs.extend(pr_template_errors)
@@ -5235,6 +5286,8 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
     else:
         fallback_label = fallback_to or "admission"
         summary = f"{stage} checkpoint cannot proceed from the current state; fall back to `{fallback_label}`."
+    if stage == "merge" and isinstance(budget_risk, dict) and budget_risk.get("status") == "present":
+        summary = f"{summary} Budget risk remains advisory: {budget_risk.get('summary')}"
 
     payload = {
         "command": "checkpoint",
@@ -5275,6 +5328,8 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
         }
     if spec_review is not None:
         payload["spec_review"] = spec_review
+    if budget_risk is not None:
+        payload["budget_risk"] = budget_risk
     return payload
 
 
@@ -8739,6 +8794,7 @@ def handle_review(args: argparse.Namespace) -> int:
                     "runtime_state": flow_payload.get("runtime_state"),
                     "state_check": flow_payload.get("state_check"),
                     "runtime_evidence": flow_payload.get("runtime_evidence"),
+                    "budget_risk": flow_payload.get("budget_risk"),
                     "build_checkpoint": flow_payload.get("build_checkpoint"),
                     "review": review_surface,
                     "spec_review": flow_payload.get("spec_review"),
@@ -8796,6 +8852,7 @@ def handle_review(args: argparse.Namespace) -> int:
                 "runtime_state": flow_payload.get("runtime_state"),
                 "state_check": flow_payload.get("state_check"),
                 "runtime_evidence": flow_payload.get("runtime_evidence"),
+                "budget_risk": flow_payload.get("budget_risk"),
                 "build_checkpoint": flow_payload.get("build_checkpoint"),
                 "review": review_surface,
                 "spec_review": flow_payload.get("spec_review"),
@@ -8909,6 +8966,18 @@ def handle_review(args: argparse.Namespace) -> int:
         )
 
     blocking_issues, follow_ups = compat_lists_from_findings(findings)
+    governance_surface = build_governance_surface(target_root)
+    github_control_plane = (
+        governance_surface.get("github_control_plane")
+        if isinstance(governance_surface, dict)
+        else None
+    )
+    execution_budget = (
+        github_control_plane.get("api_snapshot", {}).get("budget")
+        if isinstance(github_control_plane, dict)
+        else None
+    )
+    budget_risk = derive_execution_budget_risk(execution_budget)
     review_payload = {
         "schema_version": "loom-review/v1",
         "item_id": context["item_id"],
@@ -8927,6 +8996,7 @@ def handle_review(args: argparse.Namespace) -> int:
             "recovery_entry": str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"]),
             "status_surface": str(context["report"]["fact_chain"]["entry_points"]["status_surface"]),
             "build_checkpoint": build_payload["result"],
+            "budget_risk": budget_risk,
             "engine_adapter": args.engine_adapter,
             "engine_evidence": args.engine_evidence,
             "normalized_findings": args.normalized_findings,
@@ -8975,6 +9045,7 @@ def handle_review(args: argparse.Namespace) -> int:
             "missing_inputs": [],
             "fallback_to": None,
             "review": {"path": review_path, "record": verified_record},
+            "budget_risk": budget_risk,
             "build_checkpoint": {
                 "result": build_payload["result"],
                 "summary": build_payload["summary"],
@@ -10221,6 +10292,11 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "missing_inputs": build_payload["missing_inputs"],
                         "fallback_to": build_payload["fallback_to"],
                     },
+                    "budget_risk": derive_execution_budget_risk(
+                        governance_surface.get("github_control_plane", {}).get("api_snapshot", {}).get("budget")
+                        if isinstance(governance_surface.get("github_control_plane"), dict)
+                        else None
+                    ),
                     "review": review_payload,
                     "repo_specific_requirements": repo_specific_requirements,
                     "current_checkpoint": {
@@ -10254,6 +10330,7 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "fallback_to": merge_payload["fallback_to"],
                         "pr_template": merge_payload.get("pr_template"),
                     },
+                    "budget_risk": merge_payload.get("budget_risk"),
                     "spec_review": merge_payload.get("spec_review"),
                     "current_checkpoint": {
                         "raw": context["current_checkpoint_raw"],

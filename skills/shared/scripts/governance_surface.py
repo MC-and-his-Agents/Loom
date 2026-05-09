@@ -114,6 +114,15 @@ LOOM_EXECUTION_BUDGET_ENFORCEMENT = "advisory"
 LOOM_EXECUTION_BUDGET_STATUS = {"present", "not_applicable", "unavailable"}
 LOOM_EXECUTION_BUDGET_DIMENSION_IDS = {"turns", "tokens", "requests", "retries", "time_window"}
 LOOM_EXECUTION_BUDGET_DIMENSION_FIELDS = ("id", "unit", "used", "limit", "remaining", "risk", "source")
+LOOM_EXECUTION_BUDGET_RISK_SCHEMA = "loom-execution-budget-risk/v1"
+LOOM_EXECUTION_BUDGET_RISK_LEVELS = {"none", "low", "medium", "high", "unknown"}
+LOOM_EXECUTION_BUDGET_RISK_RANK = {
+    "unknown": -1,
+    "none": 0,
+    "low": 1,
+    "medium": 2,
+    "high": 3,
+}
 
 
 def normalize_execution_budget_dimensions(raw_dimensions: object) -> list[dict[str, Any]]:
@@ -146,12 +155,15 @@ def execution_budget_payload(
     enforcement: str = LOOM_EXECUTION_BUDGET_ENFORCEMENT,
 ) -> dict[str, Any]:
     normalized_status = status if status in LOOM_EXECUTION_BUDGET_STATUS else "not_applicable"
+    normalized_dimensions = normalize_execution_budget_dimensions(dimensions or [])
+    if normalized_status != "present":
+        normalized_dimensions = []
     return {
         "schema_version": LOOM_EXECUTION_BUDGET_SCHEMA,
         "status": normalized_status,
         "enforcement": enforcement,
         "summary": str(summary).strip() or f"execution budget status is {normalized_status}",
-        "dimensions": normalize_execution_budget_dimensions(dimensions or []),
+        "dimensions": normalized_dimensions,
         "provenance": provenance or {"source": "github_host"},
         "adapter_evidence_locator": str(adapter_evidence_locator) if adapter_evidence_locator else "",
     }
@@ -194,6 +206,61 @@ def normalize_execution_budget_payload(
             else LOOM_EXECUTION_BUDGET_ENFORCEMENT
         ),
     )
+
+
+def normalize_execution_budget_risk_level(raw_risk: object) -> str:
+    if isinstance(raw_risk, str):
+        normalized = raw_risk.strip().lower()
+        if normalized in LOOM_EXECUTION_BUDGET_RISK_LEVELS:
+            return normalized
+    return "unknown"
+
+
+def derive_execution_budget_risk(raw_budget: object) -> dict[str, Any]:
+    budget = normalize_execution_budget_payload(raw_budget)
+    status = budget.get("status")
+    enforcement = budget.get("enforcement")
+    dimensions = budget.get("dimensions") if isinstance(budget.get("dimensions"), list) else []
+
+    highest_risk = "none"
+    risk_dimensions: list[str] = []
+    for dimension in dimensions:
+        if not isinstance(dimension, dict):
+            continue
+        risk_level = normalize_execution_budget_risk_level(dimension.get("risk"))
+        if risk_level not in {"low", "medium", "high"}:
+            continue
+        dimension_id = dimension.get("id")
+        if isinstance(dimension_id, str):
+            risk_dimensions.append(dimension_id)
+        if LOOM_EXECUTION_BUDGET_RISK_RANK[risk_level] > LOOM_EXECUTION_BUDGET_RISK_RANK[highest_risk]:
+            highest_risk = risk_level
+
+    risk_dimensions = list(dict.fromkeys(risk_dimensions))
+    if status != "present":
+        highest_risk = "none"
+        risk_dimensions = []
+        summary = f"execution budget is {status}; budget risk remains advisory and non-blocking"
+    elif not risk_dimensions:
+        summary = "execution budget is present with no declared elevated risk dimensions; budget risk remains advisory"
+    else:
+        dimension_summary = ", ".join(risk_dimensions)
+        summary = (
+            f"execution budget reports {highest_risk} advisory risk across {dimension_summary}; "
+            "review and merge-ready may consume it as evidence only"
+        )
+
+    return {
+        "schema_version": LOOM_EXECUTION_BUDGET_RISK_SCHEMA,
+        "status": status,
+        "enforcement": enforcement,
+        "highest_risk": highest_risk,
+        "risk_dimensions": risk_dimensions,
+        "summary": summary,
+        "budget_summary": budget.get("summary"),
+        "adapter_evidence_locator": budget.get("adapter_evidence_locator"),
+        "provenance": budget.get("provenance") if isinstance(budget.get("provenance"), dict) else {"source": "github_host"},
+    }
 
 
 def local_worker_backend_contract() -> dict[str, object]:

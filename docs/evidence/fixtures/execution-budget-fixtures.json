@@ -42,6 +42,8 @@
         "status": "present",
         "dimension_ids": ["requests", "tokens"],
         "dimension_fields": ["id", "unit", "used", "limit", "remaining", "risk", "source"],
+        "highest_risk": "low",
+        "risk_dimensions": ["requests", "tokens"],
         "forbidden_fields": [
           "x-ratelimit-remaining",
           "x-ratelimit-reset",
@@ -59,7 +61,9 @@
         "status": "not_applicable",
         "enforcement": "advisory",
         "dimensions_count": 0,
-        "dimension_ids": []
+        "dimension_ids": [],
+        "highest_risk": "none",
+        "risk_dimensions": []
       }
     },
     {
@@ -96,9 +100,119 @@
         "status": "present",
         "dimension_ids": ["time_window"],
         "dimension_fields": ["id", "unit", "used", "limit", "remaining", "risk", "source"],
+        "highest_risk": "high",
+        "risk_dimensions": ["time_window"],
         "forbidden_fields": [
           "x-ratelimit-resource"
         ]
+      }
+    },
+    {
+      "name": "high-risk-advisory-remains-non-blocking",
+      "description": "High-risk budget dimensions are exposed as advisory risk evidence only.",
+      "input": {
+        "status": "present",
+        "enforcement": "advisory",
+        "summary": "host budget indicates retry and request pressure",
+        "dimensions": [
+          {
+            "id": "requests",
+            "unit": "request",
+            "used": 4950,
+            "limit": 5000,
+            "remaining": 50,
+            "risk": "high",
+            "source": "github_host_headers"
+          },
+          {
+            "id": "retries",
+            "unit": "attempt",
+            "used": 4,
+            "limit": 5,
+            "remaining": 1,
+            "risk": "medium",
+            "source": "loom_runtime"
+          }
+        ],
+        "provenance": {
+          "source": "github_host",
+          "read_mode": "cached_non_merge"
+        },
+        "adapter_evidence_locator": "loom.adapter.github.rate-limit"
+      },
+      "expect": {
+        "status": "present",
+        "enforcement": "advisory",
+        "dimension_ids": ["requests", "retries"],
+        "dimension_fields": ["id", "unit", "used", "limit", "remaining", "risk", "source"],
+        "highest_risk": "high",
+        "risk_dimensions": ["requests", "retries"]
+      }
+    },
+    {
+      "name": "budget-unavailable-remains-advisory",
+      "description": "Unavailable budget stays advisory and yields no risk dimensions.",
+      "input": {
+        "status": "unavailable",
+        "enforcement": "advisory",
+        "summary": "host budget mirror could not be refreshed",
+        "dimensions": [
+          {
+            "id": "requests",
+            "unit": "request",
+            "used": 1,
+            "limit": 2,
+            "remaining": 1,
+            "risk": "high",
+            "source": "stale_host"
+          }
+        ],
+        "provenance": {
+          "source": "github_host",
+          "read_mode": "cached_non_merge"
+        },
+        "adapter_evidence_locator": "loom.adapter.github.rate-limit"
+      },
+      "expect": {
+        "status": "unavailable",
+        "enforcement": "advisory",
+        "dimensions_count": 0,
+        "dimension_ids": [],
+        "highest_risk": "none",
+        "risk_dimensions": []
+      }
+    },
+    {
+      "name": "invalid-blocking-enforcement-is-normalized-away",
+      "description": "Adapters cannot promote execution budget into a budget-only blocking channel.",
+      "input": {
+        "status": "present",
+        "enforcement": "blocking",
+        "summary": "invalid adapter tried to publish blocking budget enforcement",
+        "dimensions": [
+          {
+            "id": "time_window",
+            "unit": "minute",
+            "used": 59,
+            "limit": 60,
+            "remaining": 1,
+            "risk": "high",
+            "source": "invalid_adapter"
+          }
+        ],
+        "provenance": {
+          "source": "github_host",
+          "read_mode": "uncached_live_gate"
+        },
+        "adapter_evidence_locator": "loom.adapter.invalid.blocking"
+      },
+      "expect": {
+        "status": "present",
+        "enforcement": "advisory",
+        "dimension_ids": ["time_window"],
+        "dimension_fields": ["id", "unit", "used", "limit", "remaining", "risk", "source"],
+        "highest_risk": "high",
+        "risk_dimensions": ["time_window"]
       }
     }
   ]

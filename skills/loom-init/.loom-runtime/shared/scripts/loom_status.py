@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from governance_surface import build_governance_surface
+from governance_surface import build_governance_surface, derive_execution_budget_risk, normalize_execution_budget_payload
 from loom_flow import (
     checkpoint_payload,
     closeout_payload,
@@ -440,16 +440,13 @@ def main(argv: list[str]) -> int:
         if isinstance(github_control_plane, dict)
         else None
     )
-    if not isinstance(execution_budget, dict):
-        execution_budget = {
-            "schema_version": "loom-execution-budget/v1",
-            "status": "not_applicable",
-            "enforcement": "advisory",
-            "summary": "execution budget is not available for this execution path",
-            "dimensions": [],
-            "provenance": {"source": "github_control_plane"},
-            "adapter_evidence_locator": "",
-        }
+    execution_budget = normalize_execution_budget_payload(
+        execution_budget,
+        fallback_status="not_applicable",
+        fallback_summary="execution budget is not available for this execution path",
+        fallback_provenance={"source": "github_control_plane"},
+    )
+    execution_budget_risk = derive_execution_budget_risk(execution_budget)
     github_status, github_errors = github_status_payload(
         target_root,
         issue_number=args.issue,
@@ -533,6 +530,7 @@ def main(argv: list[str]) -> int:
             "tool_availability": tool_availability,
             "policy_readiness": policy_readiness,
             "execution_budget": execution_budget,
+            "execution_budget_risk": execution_budget_risk,
             "blocking_failures": report_blocking_failures(context["report"]),
             "item": {
                 "id": context["item_id"],

@@ -281,6 +281,17 @@ EXECUTION_BUDGET_FIXTURE_SCHEMA = "loom-execution-budget-fixtures/v1"
 EXECUTION_BUDGET_STABLE_FIELDS = {"schema_version", "status", "enforcement", "summary", "dimensions", "provenance", "adapter_evidence_locator"}
 EXECUTION_BUDGET_DIMENSION_FIELDS = {"id", "unit", "used", "limit", "remaining", "risk", "source"}
 EXECUTION_BUDGET_DIMENSION_IDS = set(governance_surface_module.LOOM_EXECUTION_BUDGET_DIMENSION_IDS)
+EXECUTION_BUDGET_RISK_STABLE_FIELDS = {
+    "schema_version",
+    "status",
+    "enforcement",
+    "highest_risk",
+    "risk_dimensions",
+    "summary",
+    "budget_summary",
+    "adapter_evidence_locator",
+    "provenance",
+}
 EXECUTION_BUDGET_STATUS = {"present", "not_applicable", "unavailable"}
 EXECUTION_FAILURE_FIXTURE_SCHEMA = "loom-execution-failure-fixtures/v1"
 RETRY_EVIDENCE_FIXTURE_SCHEMA = "loom-retry-evidence-fixtures/v1"
@@ -2151,6 +2162,41 @@ def require_review_record_contract(
                 failures.append(Failure(category, f"{context} review finding disposition must include non-empty `summary`"))
 
 
+def require_execution_budget_risk_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must include `budget_risk` as an object"))
+        return
+    if payload.get("schema_version") != governance_surface_module.LOOM_EXECUTION_BUDGET_RISK_SCHEMA:
+        failures.append(
+            Failure(
+                category,
+                f"{context} budget_risk schema_version must be `{governance_surface_module.LOOM_EXECUTION_BUDGET_RISK_SCHEMA}`",
+            )
+        )
+    extra_fields = set(payload.keys()) - EXECUTION_BUDGET_RISK_STABLE_FIELDS
+    if extra_fields:
+        failures.append(Failure(category, f"{context} budget_risk must stay in stable field vocabulary"))
+    if payload.get("status") not in governance_surface_module.LOOM_EXECUTION_BUDGET_STATUS:
+        failures.append(Failure(category, f"{context} budget_risk status must stay within the stable contract"))
+    if payload.get("enforcement") != "advisory":
+        failures.append(Failure(category, f"{context} budget_risk enforcement must stay `advisory`"))
+    if payload.get("highest_risk") not in governance_surface_module.LOOM_EXECUTION_BUDGET_RISK_LEVELS:
+        failures.append(Failure(category, f"{context} budget_risk highest_risk must stay within the stable contract"))
+    risk_dimensions = payload.get("risk_dimensions")
+    if not isinstance(risk_dimensions, list):
+        failures.append(Failure(category, f"{context} budget_risk risk_dimensions must be a list"))
+    elif any(not isinstance(item, str) or item not in EXECUTION_BUDGET_DIMENSION_IDS for item in risk_dimensions):
+        failures.append(Failure(category, f"{context} budget_risk risk_dimensions must use stable dimension ids"))
+    if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+        failures.append(Failure(category, f"{context} budget_risk must include non-empty `summary`"))
+
+
 def require_review_run_payload(
     failures: list[Failure],
     *,
@@ -3817,6 +3863,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(Failure("daily-execution-cli", "`loom_status` must report `command: status`"))
             governance_status = payload.get("governance_status")
             execution_budget = payload.get("execution_budget")
+            execution_budget_risk = payload.get("execution_budget_risk")
             execution_failure = payload.get("execution_failure")
             retry_evidence = payload.get("retry_evidence")
             if not isinstance(execution_budget, dict):
@@ -3850,6 +3897,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                             "`loom_status` should not block merge-ready gate on advisory execution budget status",
                         )
                     )
+            require_execution_budget_risk_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`loom_status`",
+                payload=execution_budget_risk,
+            )
             if not isinstance(execution_failure, dict):
                 failures.append(Failure("daily-execution-cli", "`loom_status` must include `execution_failure`"))
             else:
@@ -4282,9 +4335,15 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(Failure("daily-execution-cli", "`flow review` must report `command: flow`"))
             if payload.get("operation") != "review":
                 failures.append(Failure("daily-execution-cli", "`flow review` must report `operation: review`"))
-            for key in ("item", "state_check", "runtime_evidence", "build_checkpoint", "review", "current_checkpoint", "repo_specific_requirements"):
+            for key in ("item", "state_check", "runtime_evidence", "build_checkpoint", "review", "current_checkpoint", "repo_specific_requirements", "budget_risk"):
                 if not isinstance(payload.get(key), dict):
                     failures.append(Failure("daily-execution-cli", f"`flow review` must include `{key}`"))
+            require_execution_budget_risk_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`flow review`",
+                payload=payload.get("budget_risk"),
+            )
             require_runtime_state_payload(
                 failures,
                 category="daily-execution-cli",
@@ -4448,9 +4507,15 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         "`flow merge-ready` fallback must be `null` or a known checkpoint",
                     )
                 )
-            for key in ("item", "runtime_state", "execution_ledger", "state_check", "runtime_evidence", "build_checkpoint", "merge_checkpoint", "current_checkpoint", "repo_specific_requirements"):
+            for key in ("item", "runtime_state", "execution_ledger", "state_check", "runtime_evidence", "build_checkpoint", "merge_checkpoint", "current_checkpoint", "repo_specific_requirements", "budget_risk"):
                 if not isinstance(payload.get(key), dict):
                     failures.append(Failure("daily-execution-cli", f"`flow merge-ready` must include `{key}`"))
+            require_execution_budget_risk_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`flow merge-ready`",
+                payload=payload.get("budget_risk"),
+            )
             require_runtime_state_payload(
                 failures,
                 category="daily-execution-cli",
@@ -10600,6 +10665,28 @@ def check_execution_budget_fixture_contract(root: Path) -> list[Failure]:
         locator = payload.get("adapter_evidence_locator")
         if locator is not None and not isinstance(locator, str):
             failures.append(Failure(category, f"`{context}` budget adapter_evidence_locator must be a string when present"))
+
+        derived_risk = governance_surface_module.derive_execution_budget_risk(payload)
+        if derived_risk.get("enforcement") != "advisory":
+            failures.append(Failure(category, f"`{context}` derived budget risk must remain advisory"))
+        expected_highest_risk = expect.get("highest_risk")
+        if expected_highest_risk is not None and derived_risk.get("highest_risk") != expected_highest_risk:
+            failures.append(
+                Failure(
+                    category,
+                    f"`{context}` derived highest_risk `{derived_risk.get('highest_risk')}` != expected `{expected_highest_risk}`",
+                )
+            )
+        expected_risk_dimensions = expect.get("risk_dimensions")
+        if isinstance(expected_risk_dimensions, list) and derived_risk.get("risk_dimensions") != expected_risk_dimensions:
+            failures.append(
+                Failure(
+                    category,
+                    f"`{context}` derived risk_dimensions {derived_risk.get('risk_dimensions')} != expected {expected_risk_dimensions}",
+                )
+            )
+        if status == "present" and derived_risk.get("highest_risk") == "high" and payload.get("enforcement") != "advisory":
+            failures.append(Failure(category, f"`{context}` high-risk budget must not bypass advisory enforcement"))
 
     return failures
 
