@@ -119,6 +119,16 @@ closeout 阶段发现的控制面对齐漂移。
 
 宿主 merge 控制面未达线。
 
+## 6. Execution Failure Evidence
+
+Loom 允许在 runtime evidence 中记录最近一次执行失败分类，作为 status / recovery / review 风险输入。
+
+- `stall`
+- `timeout`
+- `retry_exhaustion`
+
+这些分类不是新的顶层 taxonomy，不替代 `stale` / `drift` / `gate_failure`，也不得声明 scheduler state。
+
 典型例子：
 
 - PR 仍是 draft

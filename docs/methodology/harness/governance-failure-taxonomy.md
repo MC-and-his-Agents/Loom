@@ -190,7 +190,27 @@ closeout 阶段发现的控制面对齐漂移。
 
 状态面可以汇总，但不得把 taxonomy 压扁成单一字符串，例如“有点问题”或“需要处理”。
 
-## 8. 非目标
+## 8. Execution Failure Evidence
+
+除顶层 taxonomy 外，Loom 允许在 runtime evidence 中记录最近一次执行失败分类，用于 status、recovery 与 review 的风险输入。
+
+固定词表：
+
+- `stall`
+  - 执行面停滞、无进展或长时间等待外部宿主/工具返回
+- `timeout`
+  - 执行面在明确时间窗口内 fail closed
+- `retry_exhaustion`
+  - 尝试链已经耗尽，但 Loom 只记录证据，不接管 scheduler
+
+边界规则：
+
+- 这些分类不是新的顶层 gate taxonomy
+- 这些分类不替代 `stale` / `drift` / `gate_failure`
+- 这些分类可以携带 `fallback_to`，但 fallback target 只能指向 Loom 内部 checkpoint / flow / repair 入口
+- 这些分类不得声明 `Claimed`、`Running`、`RetryQueued` 或其他 scheduler state
+
+## 9. 非目标
 
 - 不把宿主 API 的原始错误码直接提升为 Loom taxonomy
 - 不为每个脚本单独维护失败枚举

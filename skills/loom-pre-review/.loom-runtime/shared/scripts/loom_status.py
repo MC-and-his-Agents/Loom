@@ -16,6 +16,7 @@ from loom_flow import (
     github_issue_payload,
     github_pr_payload,
     implementation_review_status_payload,
+    latest_execution_failure_payload,
     latest_execution_attempt_payload,
     load_context,
     report_blocking_failures,
@@ -490,6 +491,7 @@ def main(argv: list[str]) -> int:
         github_errors=github_errors,
     )
     latest_execution_attempt = latest_execution_attempt_payload(target_root, context["item_id"])
+    execution_failure = latest_execution_failure_payload(latest_execution_attempt)
 
     missing_inputs: list[str] = []
     for section in (spec_review, review, merge_ready):
@@ -524,6 +526,7 @@ def main(argv: list[str]) -> int:
             "recovery_readiness": report_recovery_readiness(context["report"]),
             "execution_ledger": report_execution_ledger(context["report"]),
             "latest_execution_attempt": latest_execution_attempt,
+            "execution_failure": execution_failure,
             "tool_availability": tool_availability,
             "policy_readiness": policy_readiness,
             "execution_budget": execution_budget,

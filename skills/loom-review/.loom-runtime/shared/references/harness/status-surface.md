@@ -103,6 +103,7 @@ Approval / sandbox policy 也只能派生读取：
 - TDD 内环测试或等价检查的证据覆盖状态
 - fresh verification evidence 的 `head_sha` / 范围 / 摘要绑定
 - execution_budget 报告（`status` 为 `not_applicable`/`unavailable` 时不阻断）
+- 最近 execution failure 分类（只作风险输入）
 - dynamic tool availability 与 failure summary
 - approval / sandbox policy 与 risk summary
 
@@ -121,6 +122,10 @@ Approval / sandbox policy 也只能派生读取：
 - `adapter_evidence_locator`
 
 `status` 为 `not_applicable` 或 `unavailable` 时仍为 advisory 证据，不得作为 merge-ready 的缺失输入 blocking 条件。
+
+## 4.1 execution_failure
+
+状态面可以从最近一次 `execution_attempt` 派生 `execution_failure`，用于暴露 `stall`、`timeout`、`retry_exhaustion` 等执行风险。该字段只读 runtime evidence，不创建 scheduler state，也不单独阻断 merge。
 
 ## 4. `Runtime Evidence`
 

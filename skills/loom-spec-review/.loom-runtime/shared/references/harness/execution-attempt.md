@@ -15,7 +15,9 @@ It is not authored progress. Envelopes must not carry `current_stop`, `next_step
 - `created_at`: UTC timestamp.
 - `head_sha`: current git HEAD, or `unknown-head`.
 - `workspace`: read-only `{entry, path}`.
-- `failure`: `{category, missing_inputs, fallback_to}`.
+- `failure`: `{category, execution_classification, execution_summary, missing_inputs, fallback_to}`.
 - `evidence`: `{locator, status}`.
 
 Status may display a latest attempt only as fresh when the envelope is valid, item-bound, HEAD-bound, and free of authored progress fields. Missing or stale evidence must be reported as missing or stale instead of becoming execution truth.
+
+`failure.execution_classification` is reserved for runtime evidence such as `stall`, `timeout`, or `retry_exhaustion`. It stays provider-neutral and does not create scheduler ownership.
