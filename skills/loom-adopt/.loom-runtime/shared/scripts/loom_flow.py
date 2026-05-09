@@ -525,7 +525,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
 
     flow = subparsers.add_parser("flow", help="Run a bundled high-frequency Loom flow")
-    flow.add_argument("operation", choices=("build", "pre-review", "review", "spec-review", "resume", "handoff", "merge-ready"))
+    flow.add_argument("operation", choices=("build", "story", "pre-review", "review", "spec-review", "resume", "handoff", "merge-ready"))
     flow.add_argument("--target", required=True, help="Target repository root")
     flow.add_argument("--item", help="Expected current item id")
     flow.add_argument(
@@ -546,6 +546,93 @@ def emit(payload: dict[str, Any]) -> int:
 
 def runtime_state_payload(target_root: Path) -> dict[str, Any]:
     return detect_runtime_state(__file__, "loom-flow", target_root=target_root)
+
+
+def story_flow_payload(
+    *,
+    target_root: Path,
+    runtime_state: dict[str, Any],
+    steps: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "command": "flow",
+        "operation": "story",
+        "result": "pass",
+        "summary": "story intake contract summary is available; runtime does not generate product truth without caller-provided context.",
+        "missing_inputs": [],
+        "fallback_to": None,
+        "runtime_state": runtime_state,
+        "target": str(target_root),
+        "steps": steps
+        + [
+            {
+                "name": "story-contract",
+                "result": "pass",
+                "summary": "User Story and Story Readiness contracts are separated from delivery state.",
+                "missing_inputs": [],
+                "fallback_to": None,
+            }
+        ],
+        "contract_summary": {
+            "mode": "contract-summary",
+            "authority": "docs/methodology/governance/story-intake.md",
+            "runtime_generates_story": False,
+        },
+        "story_contract": {
+            "schema_version": "loom-user-story/v1",
+            "required_fields": [
+                "actor",
+                "capability",
+                "outcome",
+                "business_value",
+                "acceptance_scenarios",
+                "provenance",
+            ],
+            "forbidden_fields": [
+                "delivery_handoff",
+                "spec_locator",
+                "plan_locator",
+                "recovery_state",
+                "review_findings",
+                "pr_summary",
+                "merge_ready_result",
+                "closeout_result",
+            ],
+            "scenario_dimensions": [
+                "happy_path",
+                "negative_path",
+                "edge_case",
+                "alternative_path",
+                "security_permission",
+                "environment_interruption",
+            ],
+        },
+        "readiness_contract": {
+            "schema_version": "loom-story-readiness/v1",
+            "decisions": ["ready", "needs-shaping", "blocked", "not-applicable"],
+            "required_fields": ["decision", "rationale", "story_locator", "checks", "missing_inputs", "fallback_to"],
+            "checks": [
+                "actor_specificity",
+                "outcome_clarity",
+                "value_signal",
+                "acceptance_scenario_quality",
+                "unresolved_blockers",
+                "story_size",
+            ],
+            "authority_boundary": "readiness judges entry into spec / plan, not product strategy correctness.",
+        },
+        "delivery_consumption_contract": {
+            "execution_entry": "Work Item",
+            "spec_consumes": "story scenario id / locator as behavior contract input",
+            "plan_consumes": "story scenario id mapped to tests, checks, manual validation, or not_applicable evidence",
+            "forbidden": "story must not author recovery, review, PR, merge-ready, or closeout state",
+        },
+        "contract": {
+            "story_intake": "docs/methodology/governance/story-intake.md",
+            "story_template": "docs/methodology/templates/scaffold/user-story.md",
+            "spec_suite": "docs/methodology/templates/spec-suite.md",
+        },
+    }
 
 
 def runtime_state_block_payload(
@@ -11138,6 +11225,9 @@ def handle_flow(args: argparse.Namespace) -> int:
                 "runtime_state": runtime_state,
             }
         )
+
+    if args.operation == "story":
+        return emit(story_flow_payload(target_root=target_root, runtime_state=runtime_state, steps=steps))
 
     context, errors = load_context(target_root, args.output, args.item)
     if errors:

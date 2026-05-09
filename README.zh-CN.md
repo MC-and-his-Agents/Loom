@@ -81,13 +81,15 @@ Installer 会报告它触达的 distribution layer 和 version context；Loom �
 
 ## Skills 库
 
-Loom 当前暴露一个 root entry 和八个 scenario skills：
+Loom 当前暴露一个 root entry 和十个 scenario skills：
 
 | Skill | 作用 |
 | --- | --- |
 | `loom-init` | Root entry；负责初始化或路由到正确场景。 |
 | `loom-adopt` | 为仓库建立最小 Loom 接入面。 |
 | `loom-resume` | 恢复上下文并继续当前 `Work Item`。 |
+| `loom-build` | 在 review 前执行 bounded implementation/build 轮。 |
+| `loom-story` | 将产品上下文收束为 User Story 与 Story Readiness。 |
 | `loom-pre-review` | 在正式 review 前检查 readiness。 |
 | `loom-spec-review` | 审查 formal spec 路径并产出 `spec-approved` gate。 |
 | `loom-review` | 执行正式 review 并记录结果。 |

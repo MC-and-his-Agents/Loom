@@ -31,6 +31,7 @@
 - Manual checks:
 - Runtime evidence:
 - Behavior evidence:
+- Story scenario to evidence mapping:
 - Fresh verification evidence:
 - Execution ledger plan locator:
 - Execution ledger validation evidence locator:
@@ -42,6 +43,7 @@
 - Cases that are intentionally not automated:
 - How failing tests or equivalent checks will be introduced before implementation:
 - How passing tests or equivalent checks will be captured as test evidence:
+- How User Story acceptance scenarios map to tests, checks, manual validation, or `not_applicable` evidence:
 
 ## Subagent Output Integration
 

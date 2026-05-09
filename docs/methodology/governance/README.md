@@ -19,6 +19,8 @@
   - `EXT-0004` `EXT-0014` `EXT-0018`
 - [github-delivery-funnel.md](./github-delivery-funnel.md)
   - `#299` `#300` `#304` `#305`
+- [story-intake.md](./story-intake.md)
+  - `#649`
 - [spec-implementation-separation.md](./spec-implementation-separation.md)
   - `#290`
 - [governance-maturity-model.md](./governance-maturity-model.md)
