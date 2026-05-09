@@ -113,6 +113,10 @@ DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS = 120
 REVIEW_ENGINE_PROFILE_SCHEMA = "loom-review-engine-profile/v1"
 REVIEW_ENGINE_PROFILE_IDS = {"default", "high-risk", "spec-review", "repeated-blocker"}
 REVIEW_ENGINE_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
+LIVE_SMOKE_SCHEMA = "loom-live-smoke/v1"
+LIVE_SMOKE_RETRY_FALLBACK = "live-smoke-retry-or-record-unavailable"
+LIVE_SMOKE_REPLAY_FALLBACK = "record-prior-evidence"
+LIVE_SMOKE_CONFIG_FALLBACK = "live-smoke-config-repair"
 REVIEW_ENGINE_PROFILES: dict[str, dict[str, Any]] = {
     "default": {
         "profile_id": "default",
@@ -496,6 +500,21 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     governance_profile.add_argument("--branch", help="GitHub branch name bound to the work item")
     governance_profile.add_argument("--sync", action="store_true", help="Preview host binding repairs; writes are intentionally disabled in this phase")
 
+    live_smoke = subparsers.add_parser(
+        "live-smoke",
+        help="Run or replay versioned adopted-repo live smoke evidence without changing core gates",
+    )
+    live_smoke.add_argument("operation", choices=("run", "replay"))
+    live_smoke.add_argument("--target", help="Adopted repository root for live smoke run")
+    live_smoke.add_argument("--item", default="INIT-0001", help="Expected current item id for the optional resume smoke")
+    live_smoke.add_argument("--prior-evidence", help="Versioned prior-pass evidence to replay without running adopted-repo commands")
+    live_smoke.add_argument("--dry-run", action="store_true", help="Preview the live smoke command plan without running adopted-repo commands")
+    live_smoke.add_argument(
+        "--include-blocking-shadow",
+        action="store_true",
+        help="Explicitly include shadow-parity --blocking in the smoke command set",
+    )
+
     flow = subparsers.add_parser("flow", help="Run a bundled high-frequency Loom flow")
     flow.add_argument("operation", choices=("build", "pre-review", "review", "spec-review", "resume", "handoff", "merge-ready"))
     flow.add_argument("--target", required=True, help="Target repository root")
@@ -542,6 +561,418 @@ def runtime_state_block_payload(
 
 def command_target(target_root: Path) -> str:
     return shlex.quote(str(target_root))
+
+
+def current_iso_timestamp() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def discover_loom_flow_entrypoint() -> Path:
+    source_repo_root = os.environ.get("LOOM_SOURCE_REPO_ROOT")
+    if source_repo_root:
+        candidate = Path(source_repo_root).expanduser().resolve() / "tools/loom_flow.py"
+        if candidate.exists():
+            return candidate
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        candidate = parent / "tools/loom_flow.py"
+        if candidate.exists():
+            return candidate
+    return current
+
+
+def live_smoke_command(args: list[str]) -> str:
+    return " ".join(shlex.quote(part) for part in [sys.executable, str(discover_loom_flow_entrypoint()), *args])
+
+
+def live_smoke_target_metadata(target_root: Path) -> dict[str, Any]:
+    return {
+        "path": str(target_root),
+        "exists": target_root.exists(),
+        "worktree": str(target_root),
+        "git_branch": git_branch(target_root),
+        "head_sha": git_head_sha(target_root),
+    }
+
+
+def live_smoke_release_interpretation(status: str) -> str:
+    if status == "passed":
+        return "fresh live smoke evidence raises release confidence and remains non-blocking by default."
+    if status == "replayed":
+        return "versioned prior-pass evidence can be consumed as release confidence input without rerunning adopted-repo commands."
+    if status == "dry_run":
+        return "dry-run only previews the live smoke command plan and does not create fresh adopted-repo evidence."
+    if status == "unavailable":
+        return "explicit unavailable evidence is a non-blocking confidence input and does not silently pass."
+    return "profile-local live smoke failure lowers release confidence but does not replace orchestration-core gate results."
+
+
+def live_smoke_command_plan(target_root: Path, *, item: str, include_blocking_shadow: bool) -> list[dict[str, Any]]:
+    target = command_target(target_root)
+    plan = [
+        {
+            "id": "target-check",
+            "command": f"test -d {target}",
+            "description": "Confirm the adopted-repo target path exists before running live smoke checks.",
+        },
+        {
+            "id": "governance-profile-status",
+            "command": live_smoke_command(["governance-profile", "status", "--target", str(target_root)]),
+            "description": "Read the adopted repo governance maturity surface.",
+        },
+        {
+            "id": "governance-profile-upgrade-plan",
+            "command": live_smoke_command(["governance-profile", "upgrade-plan", "--target", str(target_root)]),
+            "description": "Record upgrade requirements as live confidence input.",
+        },
+        {
+            "id": "runtime-parity",
+            "command": live_smoke_command(["runtime-parity", "validate", "--target", str(target_root)]),
+            "description": "Check Loom core runtime parity against the adopted repo surface.",
+        },
+        {
+            "id": "shadow-parity",
+            "command": live_smoke_command(["shadow-parity", "--target", str(target_root)]),
+            "description": "Read validation-only shadow parity without changing merge gates.",
+        },
+        {
+            "id": "flow-resume",
+            "command": live_smoke_command(["flow", "resume", "--target", str(target_root), "--item", item]),
+            "description": "Exercise resume flow on the adopted repo when the requested item exists.",
+        },
+    ]
+    if include_blocking_shadow:
+        plan.append(
+            {
+                "id": "shadow-parity-blocking",
+                "command": live_smoke_command(["shadow-parity", "--target", str(target_root), "--blocking"]),
+                "description": "Optional explicit blocking-mode shadow parity check; not sufficient blocking-upgrade evidence on its own.",
+            }
+        )
+    return plan
+
+
+def live_smoke_missing_inputs(messages: list[str]) -> list[str]:
+    return list(dict.fromkeys(message for message in messages if isinstance(message, str) and message))
+
+
+def live_smoke_target_check_report(target_root: Path) -> dict[str, Any]:
+    if target_root.exists():
+        return {
+            "id": "target-check",
+            "attempted": True,
+            "command": f"test -d {command_target(target_root)}",
+            "reported_command": "target-check",
+            "reported_result": "pass",
+            "result": "pass",
+            "summary": "adopted-repo target root exists.",
+            "missing_inputs": [],
+            "fallback_to": None,
+        }
+    return {
+        "id": "target-check",
+        "attempted": True,
+        "command": f"test -d {command_target(target_root)}",
+        "reported_command": "target-check",
+        "reported_result": "unavailable",
+        "result": "warn",
+        "summary": "adopted-repo target root is unavailable.",
+        "missing_inputs": [f"adopted repo target is unavailable: {target_root}"],
+        "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+    }
+
+
+def live_smoke_command_report(target_root: Path, *, report_id: str, args: list[str]) -> dict[str, Any]:
+    payload, errors = local_command_json(target_root, args)
+    command = live_smoke_command(args)
+    if payload is None:
+        return {
+            "id": report_id,
+            "attempted": True,
+            "command": command,
+            "reported_command": args[0],
+            "reported_result": "invalid-output",
+            "result": "block",
+            "summary": f"{args[0]} did not return readable JSON output.",
+            "missing_inputs": live_smoke_missing_inputs(errors),
+            "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+        }
+    reported_result = str(payload.get("result") or "unknown")
+    return {
+        "id": report_id,
+        "attempted": True,
+        "command": command,
+        "reported_command": payload.get("command"),
+        "reported_result": reported_result,
+        "result": "pass" if reported_result == "pass" else "warn",
+        "summary": str(payload.get("summary") or f"{args[0]} completed without a summary."),
+        "missing_inputs": live_smoke_missing_inputs([str(message) for message in payload.get("missing_inputs", [])]),
+        "fallback_to": payload.get("fallback_to"),
+    }
+
+
+def parse_live_smoke_code_block(lines: list[str]) -> list[str]:
+    commands: list[str] = []
+    in_block = False
+    for raw_line in lines:
+        stripped = raw_line.strip()
+        if stripped.startswith("```"):
+            if in_block:
+                break
+            in_block = True
+            continue
+        if in_block and stripped:
+            commands.append(stripped)
+    return commands
+
+
+def strip_inline_code(value: str | None) -> str | None:
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    if stripped.startswith("`") and stripped.endswith("`") and len(stripped) >= 2:
+        return stripped[1:-1]
+    return stripped or None
+
+
+def live_smoke_replay_payload(prior_evidence_path: Path, *, runtime_state: dict[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "command": "live-smoke",
+        "operation": "replay",
+        "schema_version": LIVE_SMOKE_SCHEMA,
+        "runtime_state": runtime_state,
+        "command_plan": [],
+        "reports": [],
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if runtime_state.get("result") != "pass":
+        payload.update(
+            {
+                "result": "block",
+                "summary": "live smoke replay is blocked because the Loom runtime state is inconsistent.",
+                "missing_inputs": live_smoke_missing_inputs([str(message) for message in runtime_state.get("missing_inputs", [])]),
+                "fallback_to": runtime_state.get("fallback_to"),
+                "live_smoke": {
+                    "status": "failed",
+                    "executed_at": current_iso_timestamp(),
+                    "release_interpretation": live_smoke_release_interpretation("failed"),
+                },
+            }
+        )
+        return payload
+    if not prior_evidence_path.exists():
+        payload.update(
+            {
+                "result": "block",
+                "summary": "live smoke replay could not read the requested prior evidence.",
+                "missing_inputs": [f"prior evidence path is unavailable: {prior_evidence_path}"],
+                "fallback_to": LIVE_SMOKE_REPLAY_FALLBACK,
+                "live_smoke": {
+                    "status": "failed",
+                    "executed_at": current_iso_timestamp(),
+                    "release_interpretation": live_smoke_release_interpretation("failed"),
+                },
+                "prior_evidence": {
+                    "path": str(prior_evidence_path),
+                    "status": "missing",
+                },
+            }
+        )
+        return payload
+
+    relative_path = str(prior_evidence_path)
+    if prior_evidence_path.is_absolute():
+        relative_path = str(prior_evidence_path.resolve())
+    sections = markdown_sections(prior_evidence_path)
+    commands = parse_live_smoke_code_block(sections.get("2. Commands", []))
+    target_lines = sections.get("1. Target", [])
+    availability_lines = sections.get("4. Current PR Availability Evidence", [])
+    text = prior_evidence_path.read_text(encoding="utf-8")
+    status_match = re.search(r"Current release evidence status:\s*`([^`]+)`", text)
+    if status_match is None or "Release interpretation:" not in text:
+        payload.update(
+            {
+                "result": "block",
+                "summary": "live smoke replay evidence is missing required status or interpretation fields.",
+                "missing_inputs": [f"{relative_path}: missing Current release evidence status or Release interpretation"],
+                "fallback_to": LIVE_SMOKE_REPLAY_FALLBACK,
+                "live_smoke": {
+                    "status": "failed",
+                    "executed_at": current_iso_timestamp(),
+                    "release_interpretation": live_smoke_release_interpretation("failed"),
+                },
+                "prior_evidence": {
+                    "path": relative_path,
+                    "status": "invalid",
+                },
+            }
+        )
+        return payload
+
+    def find_prefix(lines: list[str], prefix: str) -> str | None:
+        for raw_line in lines:
+            stripped = raw_line.strip()
+            if stripped.startswith(prefix):
+                return stripped[len(prefix) :].strip()
+        return None
+
+    prior_status = status_match.group(1).strip()
+    release_interpretation = find_prefix(availability_lines, "- Release interpretation:") or live_smoke_release_interpretation("replayed")
+    replay_report = {
+        "id": "prior-evidence",
+        "attempted": False,
+        "command": f"read {relative_path}",
+        "reported_command": "prior-evidence",
+        "reported_result": prior_status,
+        "result": "pass",
+        "summary": "versioned prior-pass live smoke evidence was replayed without rerunning adopted-repo commands.",
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    payload.update(
+        {
+            "result": "pass",
+            "summary": "versioned prior-pass live smoke evidence was replayed.",
+            "command_plan": [
+                {
+                    "id": "prior-evidence-read",
+                    "command": live_smoke_command(["live-smoke", "replay", "--prior-evidence", relative_path]),
+                    "description": "Replay versioned prior-pass evidence without rerunning adopted-repo commands.",
+                }
+            ],
+            "reports": [replay_report],
+            "live_smoke": {
+                "status": "replayed",
+                "executed_at": current_iso_timestamp(),
+                "release_interpretation": release_interpretation,
+            },
+            "prior_evidence": {
+                "path": relative_path,
+                "status": prior_status,
+                "target_family": find_prefix(target_lines, "- Adopted repo family:"),
+                "smoke_branch": strip_inline_code(find_prefix(target_lines, "- Smoke branch recorded there:")),
+                "smoke_commit": strip_inline_code(find_prefix(target_lines, "- Smoke commit recorded there:")),
+                "smoke_worktree": strip_inline_code(find_prefix(target_lines, "- Smoke worktree recorded there:")),
+                "commands": commands,
+            },
+        }
+    )
+    return payload
+
+
+def live_smoke_run_payload(
+    target_root: Path,
+    *,
+    item: str,
+    dry_run: bool,
+    include_blocking_shadow: bool,
+) -> dict[str, Any]:
+    runtime_state = runtime_state_payload(target_root)
+    command_plan = live_smoke_command_plan(target_root, item=item, include_blocking_shadow=include_blocking_shadow)
+    target = live_smoke_target_metadata(target_root)
+    payload: dict[str, Any] = {
+        "command": "live-smoke",
+        "operation": "run",
+        "schema_version": LIVE_SMOKE_SCHEMA,
+        "runtime_state": runtime_state,
+        "target": target,
+        "command_plan": command_plan,
+        "reports": [],
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if runtime_state.get("result") != "pass":
+        payload.update(
+            {
+                "result": "block",
+                "summary": "live smoke is blocked because the Loom runtime state is inconsistent.",
+                "missing_inputs": live_smoke_missing_inputs([str(message) for message in runtime_state.get("missing_inputs", [])]),
+                "fallback_to": runtime_state.get("fallback_to"),
+                "live_smoke": {
+                    "status": "failed",
+                    "executed_at": current_iso_timestamp(),
+                    "release_interpretation": live_smoke_release_interpretation("failed"),
+                },
+            }
+        )
+        return payload
+
+    target_report = live_smoke_target_check_report(target_root)
+    payload["reports"] = [target_report]
+    payload["missing_inputs"] = list(target_report.get("missing_inputs", []))
+    if target_report["result"] != "pass":
+        payload.update(
+            {
+                "result": "warn",
+                "summary": "live smoke recorded explicit unavailable evidence for the adopted-repo target.",
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+                "live_smoke": {
+                    "status": "unavailable",
+                    "executed_at": current_iso_timestamp(),
+                    "release_interpretation": live_smoke_release_interpretation("unavailable"),
+                },
+            }
+        )
+        return payload
+
+    if dry_run:
+        payload.update(
+            {
+                "result": "pass",
+                "summary": "live smoke command plan was generated without running adopted-repo commands.",
+                "live_smoke": {
+                    "status": "dry_run",
+                    "executed_at": current_iso_timestamp(),
+                    "release_interpretation": live_smoke_release_interpretation("dry_run"),
+                },
+            }
+        )
+        return payload
+
+    reports = [target_report]
+    for report_id, args in (
+        ("governance-profile-status", ["governance-profile", "status", "--target", str(target_root)]),
+        ("governance-profile-upgrade-plan", ["governance-profile", "upgrade-plan", "--target", str(target_root)]),
+        ("runtime-parity", ["runtime-parity", "validate", "--target", str(target_root)]),
+        ("shadow-parity", ["shadow-parity", "--target", str(target_root)]),
+        ("flow-resume", ["flow", "resume", "--target", str(target_root), "--item", item]),
+    ):
+        reports.append(live_smoke_command_report(target_root, report_id=report_id, args=args))
+    if include_blocking_shadow:
+        reports.append(
+            live_smoke_command_report(
+                target_root,
+                report_id="shadow-parity-blocking",
+                args=["shadow-parity", "--target", str(target_root), "--blocking"],
+            )
+        )
+
+    missing_inputs = live_smoke_missing_inputs(
+        [message for report in reports for message in report.get("missing_inputs", [])]
+    )
+    has_internal_block = any(report.get("result") == "block" for report in reports)
+    has_warning = any(report.get("result") == "warn" for report in reports)
+    result = "block" if has_internal_block else "warn" if has_warning else "pass"
+    status = "failed" if has_warning else "passed"
+    summary = "live smoke produced explicit profile-local warnings." if result == "warn" else "live smoke completed across the planned command set."
+    if result == "block":
+        summary = "live smoke failed to produce stable command output."
+    payload.update(
+        {
+            "result": result,
+            "summary": summary,
+            "reports": reports,
+            "missing_inputs": missing_inputs,
+            "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK if result == "block" else LIVE_SMOKE_RETRY_FALLBACK if result == "warn" else None,
+            "live_smoke": {
+                "status": status,
+                "executed_at": current_iso_timestamp(),
+                "release_interpretation": live_smoke_release_interpretation(status),
+            },
+        }
+    )
+    return payload
 
 
 def adoption_validation_commands(target_root: Path) -> list[str]:
@@ -10439,6 +10870,62 @@ def handle_shadow_parity(args: argparse.Namespace) -> int:
     return emit(payload)
 
 
+def handle_live_smoke(args: argparse.Namespace) -> int:
+    if args.operation == "run":
+        if not args.target:
+            return emit(
+                {
+                    "command": "live-smoke",
+                    "operation": "run",
+                    "schema_version": LIVE_SMOKE_SCHEMA,
+                    "result": "block",
+                    "summary": "live smoke run requires --target.",
+                    "missing_inputs": ["pass --target <adopted_repo_root>"],
+                    "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                    "runtime_state": runtime_state_payload(Path.cwd()),
+                    "command_plan": [],
+                    "reports": [],
+                    "live_smoke": {
+                        "status": "failed",
+                        "executed_at": current_iso_timestamp(),
+                        "release_interpretation": live_smoke_release_interpretation("failed"),
+                    },
+                }
+            )
+        return emit(
+            live_smoke_run_payload(
+                Path(args.target).expanduser().resolve(),
+                item=args.item,
+                dry_run=args.dry_run,
+                include_blocking_shadow=args.include_blocking_shadow,
+            )
+        )
+
+    repo_root = Path(os.environ.get("LOOM_SOURCE_REPO_ROOT", Path.cwd())).expanduser().resolve()
+    runtime_state = runtime_state_payload(repo_root)
+    if not args.prior_evidence:
+        return emit(
+            {
+                "command": "live-smoke",
+                "operation": "replay",
+                "schema_version": LIVE_SMOKE_SCHEMA,
+                "result": "block",
+                "summary": "live smoke replay requires --prior-evidence.",
+                "missing_inputs": ["pass --prior-evidence <versioned_evidence_path>"],
+                "fallback_to": LIVE_SMOKE_REPLAY_FALLBACK,
+                "runtime_state": runtime_state,
+                "command_plan": [],
+                "reports": [],
+                "live_smoke": {
+                    "status": "failed",
+                    "executed_at": current_iso_timestamp(),
+                    "release_interpretation": live_smoke_release_interpretation("failed"),
+                },
+            }
+        )
+    return emit(live_smoke_replay_payload(Path(args.prior_evidence).expanduser().resolve(), runtime_state=runtime_state))
+
+
 def handle_runtime_parity(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
     return emit(
@@ -10480,6 +10967,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_reconciliation(args)
     if args.command == "shadow-parity":
         return handle_shadow_parity(args)
+    if args.command == "live-smoke":
+        return handle_live_smoke(args)
     if args.command == "runtime-parity":
         return handle_runtime_parity(args)
     if args.command == "governance-profile":
