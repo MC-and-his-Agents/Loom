@@ -66,6 +66,7 @@ CORE_DOCS = (
     "docs/methodology/governance/principles.md",
     "docs/methodology/governance/review-model.md",
     "docs/methodology/governance/github-delivery-funnel.md",
+    "docs/methodology/governance/story-intake.md",
     "docs/methodology/governance/spec-implementation-separation.md",
     "docs/methodology/governance/maturity-and-closing.md",
     "docs/methodology/governance/governance-maturity-model.md",
@@ -146,6 +147,10 @@ CORE_DOCS = (
     "skills/loom-review/contract.json",
     "skills/loom-review/references/input-signals.md",
     "skills/loom-review/references/output-contract.md",
+    "skills/loom-story/SKILL.md",
+    "skills/loom-story/contract.json",
+    "skills/loom-story/references/input-signals.md",
+    "skills/loom-story/references/output-contract.md",
     "skills/loom-spec-review/SKILL.md",
     "skills/loom-spec-review/contract.json",
     "skills/loom-spec-review/references/input-signals.md",
@@ -153,6 +158,7 @@ CORE_DOCS = (
     "docs/methodology/templates/review-record.md",
     "docs/methodology/templates/scaffold/spec.md",
     "docs/methodology/templates/scaffold/plan.md",
+    "docs/methodology/templates/scaffold/user-story.md",
     "tools/loom_status.py",
     "packages/loom-installer/README.md",
     "packages/loom-installer/package.json",
@@ -171,6 +177,7 @@ CORE_DOCS = (
 
 AUTOMATION_FRONTLOAD_TEMPLATES = (
     "docs/methodology/templates/spec-suite.md",
+    "docs/methodology/templates/scaffold/user-story.md",
     "docs/methodology/templates/spec-template.md",
     "docs/methodology/templates/implementation-contract-template.md",
     "docs/methodology/templates/pull-request.md",
@@ -185,6 +192,9 @@ AUTOMATION_FRONTLOAD_SKILLS = (
     "skills/loom-init/references/input-signals.md",
     "skills/loom-init/references/intake-signals.md",
     "skills/loom-init/references/output-contract.md",
+    "skills/loom-story/SKILL.md",
+    "skills/loom-story/references/input-signals.md",
+    "skills/loom-story/references/output-contract.md",
     "skills/loom-spec-review/SKILL.md",
     "skills/loom-spec-review/references/input-signals.md",
     "skills/loom-spec-review/references/output-contract.md",
@@ -2959,6 +2969,7 @@ def check_skill_manifests(root: Path) -> list[Failure]:
         "loom-adopt": "scenario/adopt",
         "loom-resume": "scenario/resume",
         "loom-build": "scenario/build",
+        "loom-story": "scenario/story",
         "loom-pre-review": "scenario/pre-review",
         "loom-review": "scenario/review",
         "loom-spec-review": "scenario/spec-review",
@@ -3262,6 +3273,7 @@ def check_skill_routing(root: Path) -> list[Failure]:
         ("请初始化这个新项目并接入 Loom", "loom-adopt"),
         ("请接手当前事项并恢复上下文后继续推进", "loom-resume"),
         ("请执行 build round 并集成 subagent 输出", "loom-build"),
+        ("请把产品上下文整理成 user story 并检查 story readiness", "loom-story"),
         ("请在进入 review 前做统一检查", "loom-pre-review"),
         ("请先对 formal spec 做 spec review", "loom-spec-review"),
         ("请对当前事项做正式 review 并给出审查结论", "loom-review"),
@@ -12390,6 +12402,339 @@ def check_build_execution_contract(root: Path) -> list[Failure]:
     return failures
 
 
+STORY_FORBIDDEN_FIELDS = {
+    "delivery_handoff",
+    "spec_locator",
+    "plan_locator",
+    "recovery_state",
+    "review_findings",
+    "pr_summary",
+    "merge_ready_result",
+    "closeout_result",
+}
+STORY_SCENARIO_DIMENSIONS = {
+    "happy_path",
+    "negative_path",
+    "edge_case",
+    "alternative_path",
+    "security_permission",
+    "environment_interruption",
+}
+STORY_READINESS_DECISIONS = {"ready", "needs-shaping", "blocked", "not-applicable"}
+
+
+def require_user_story_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+    expect_pass: bool,
+) -> None:
+    errors: list[str] = []
+    if not isinstance(payload, dict):
+        errors.append("must be an object")
+    else:
+        if payload.get("schema_version") != "loom-user-story/v1":
+            errors.append("schema_version must be `loom-user-story/v1`")
+        for field in ("actor", "capability", "outcome", "business_value", "acceptance_scenarios", "provenance"):
+            if field not in payload:
+                errors.append(f"missing `{field}`")
+        forbidden_present = sorted(STORY_FORBIDDEN_FIELDS.intersection(payload))
+        if forbidden_present:
+            errors.append(f"forbidden delivery-state fields present: {', '.join(forbidden_present)}")
+
+        actor = payload.get("actor")
+        if not isinstance(actor, dict):
+            errors.append("actor must be an object")
+        else:
+            if actor.get("name") in {None, "", "User", "user"} and not actor.get("specificity_rationale"):
+                errors.append("actor must be specific or include specificity_rationale")
+            if actor.get("type") not in {"human-persona", "stakeholder", "system", "component"}:
+                errors.append("actor.type must be a stable actor type")
+
+        scenarios = payload.get("acceptance_scenarios")
+        if not isinstance(scenarios, list) or not scenarios:
+            errors.append("acceptance_scenarios must be a non-empty list")
+        else:
+            dimensions: set[str] = set()
+            for index, scenario in enumerate(scenarios):
+                if not isinstance(scenario, dict):
+                    errors.append(f"acceptance_scenarios[{index}] must be an object")
+                    continue
+                dimension = scenario.get("dimension")
+                if dimension not in STORY_SCENARIO_DIMENSIONS:
+                    errors.append(f"acceptance_scenarios[{index}].dimension must stay within the story coverage vocabulary")
+                else:
+                    dimensions.add(str(dimension))
+                for field in ("id", "given", "when", "then"):
+                    if not isinstance(scenario.get(field), str) or not scenario.get(field):
+                        errors.append(f"acceptance_scenarios[{index}] missing non-empty `{field}`")
+                if any(token in " ".join(str(scenario.get(field, "")) for field in ("given", "when", "then")).lower() for token in ("pytest", "npm test", "implementation step")):
+                    errors.append(f"acceptance_scenarios[{index}] must stay business-readable, not a test script")
+            if "happy_path" not in dimensions:
+                errors.append("at least one happy_path scenario is required")
+
+        provenance = payload.get("provenance")
+        if not isinstance(provenance, list) or not provenance:
+            errors.append("provenance must be a non-empty list")
+
+    if expect_pass and errors:
+        failures.append(Failure(category, f"{context} should pass story contract: {'; '.join(errors)}"))
+    if not expect_pass and not errors:
+        failures.append(Failure(category, f"{context} should fail story contract"))
+
+
+def require_story_readiness_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("schema_version") != "loom-story-readiness/v1":
+        failures.append(Failure(category, f"{context} schema_version must be `loom-story-readiness/v1`"))
+    if payload.get("decision") not in STORY_READINESS_DECISIONS:
+        failures.append(Failure(category, f"{context} decision must stay within the readiness vocabulary"))
+    for field in ("rationale", "story_locator"):
+        if not isinstance(payload.get(field), str) or not payload.get(field):
+            failures.append(Failure(category, f"{context} must include non-empty `{field}`"))
+    if not isinstance(payload.get("missing_inputs"), list):
+        failures.append(Failure(category, f"{context} must include `missing_inputs` as a list"))
+    checks = payload.get("checks")
+    if not isinstance(checks, dict):
+        failures.append(Failure(category, f"{context} must include checks"))
+        return
+    for field in (
+        "actor_specificity",
+        "outcome_clarity",
+        "value_signal",
+        "acceptance_scenario_quality",
+        "unresolved_blockers",
+        "story_size",
+    ):
+        if field not in checks:
+            failures.append(Failure(category, f"{context}.checks missing `{field}`"))
+    if payload.get("product_strategy_verdict") is not None:
+        failures.append(Failure(category, f"{context} must not claim product strategy approval"))
+
+
+def require_story_delivery_mapping(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("schema_version") != "loom-story-delivery-mapping/v1":
+        failures.append(Failure(category, f"{context} schema_version must be `loom-story-delivery-mapping/v1`"))
+    if payload.get("execution_entry") != "Work Item":
+        failures.append(Failure(category, f"{context} must keep Work Item as the execution entry"))
+    spec = payload.get("spec_behavior_contract")
+    plan = payload.get("plan_validation_strategy")
+    if not isinstance(spec, list) or not spec:
+        failures.append(Failure(category, f"{context} must include spec behavior mapping"))
+    if not isinstance(plan, list) or not plan:
+        failures.append(Failure(category, f"{context} must include plan validation mapping"))
+    spec_ids = {
+        str(entry.get("story_scenario_id"))
+        for entry in spec or []
+        if isinstance(entry, dict) and entry.get("story_scenario_id")
+    }
+    plan_ids = {
+        str(entry.get("story_scenario_id"))
+        for entry in plan or []
+        if isinstance(entry, dict) and entry.get("story_scenario_id")
+    }
+    if not spec_ids or not spec_ids.issubset(plan_ids):
+        failures.append(Failure(category, f"{context} plan must map every spec-consumed story scenario to evidence strategy"))
+    forbidden = payload.get("story_authored_delivery_state")
+    if forbidden not in (False, None):
+        failures.append(Failure(category, f"{context} must not let story author delivery state"))
+
+
+def require_story_flow_contract_summary(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("command") != "flow" or payload.get("operation") != "story":
+        failures.append(Failure(category, f"{context} must be flow story output"))
+    if payload.get("result") != "pass":
+        failures.append(Failure(category, f"{context} must pass when runtime is available"))
+    summary = payload.get("contract_summary")
+    if not isinstance(summary, dict):
+        failures.append(Failure(category, f"{context} must include contract_summary"))
+    elif summary.get("runtime_generates_story") is not False:
+        failures.append(Failure(category, f"{context} must declare that runtime does not generate story truth"))
+    story_contract = payload.get("story_contract")
+    if not isinstance(story_contract, dict) or story_contract.get("schema_version") != "loom-user-story/v1":
+        failures.append(Failure(category, f"{context} must include loom-user-story/v1 story_contract"))
+    readiness_contract = payload.get("readiness_contract")
+    if not isinstance(readiness_contract, dict) or readiness_contract.get("schema_version") != "loom-story-readiness/v1":
+        failures.append(Failure(category, f"{context} must include loom-story-readiness/v1 readiness_contract"))
+    elif "story_locator" not in readiness_contract.get("required_fields", []):
+        failures.append(Failure(category, f"{context} readiness_contract must require story_locator"))
+    delivery_contract = payload.get("delivery_consumption_contract")
+    if not isinstance(delivery_contract, dict) or delivery_contract.get("execution_entry") != "Work Item":
+        failures.append(Failure(category, f"{context} must keep Work Item as delivery consumption entry"))
+    if any(key in payload for key in ("story", "readiness", "delivery_consumption")):
+        failures.append(Failure(category, f"{context} must not expose actual story/readiness payload keys from contract-summary mode"))
+
+
+def check_story_intake_contract(root: Path) -> list[Failure]:
+    category = "story-intake"
+    failures: list[Failure] = []
+    required_anchors = {
+        "docs/methodology/governance/story-intake.md": [
+            "loom-user-story/v1",
+            "loom-story-readiness/v1",
+            "Work Item",
+            "delivery handoff",
+            "not-applicable",
+            "actor specificity",
+        ],
+        "docs/methodology/templates/spec-suite.md": [
+            "User Story",
+            "story scenario id",
+            "plan.md",
+        ],
+        "docs/methodology/templates/scaffold/user-story.md": [
+            "Actor",
+            "Capability",
+            "Story Readiness",
+            "Delivery Consumption Boundary",
+        ],
+        "skills/route-matrix.md": [
+            "loom-story",
+            "story readiness",
+            "User Story",
+        ],
+        "skills/loom-story/SKILL.md": [
+            "Story Readiness",
+            "Work Item",
+            "actor specificity",
+        ],
+        "skills/loom-story/references/output-contract.md": [
+            "loom-user-story/v1",
+            "loom-story-readiness/v1",
+            "contract_summary",
+            "delivery handoff",
+        ],
+    }
+    for relative, anchors in required_anchors.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            failures.append(Failure(category, f"`{relative}` is unreadable: {exc}"))
+            continue
+        for anchor in anchors:
+            if anchor not in text:
+                failures.append(Failure(category, f"`{relative}` must mention `{anchor}`"))
+
+    valid_story = {
+        "schema_version": "loom-user-story/v1",
+        "actor": {
+            "name": "Release shepherd",
+            "type": "human-persona",
+        },
+        "capability": "turn product discussion into a delivery-ready story",
+        "outcome": "the delivery funnel can consume accepted behavior scenarios",
+        "business_value": "reduces drift between product intent and spec / plan evidence",
+        "acceptance_scenarios": [
+            {
+                "id": "S1",
+                "dimension": "happy_path",
+                "given": "a roadmap phase has product context",
+                "when": "the actor shapes the intake",
+                "then": "a business-readable story is available",
+            },
+            {
+                "id": "S2",
+                "dimension": "negative_path",
+                "given": "the actor is vague",
+                "when": "readiness is checked",
+                "then": "the result asks for a specific actor or rationale",
+            },
+        ],
+        "provenance": [{"kind": "roadmap", "locator": "https://github.com/MC-and-his-Agents/Loom/issues/649"}],
+    }
+    require_user_story_payload(failures, category=category, context="valid story", payload=valid_story, expect_pass=True)
+
+    invalid_story = dict(valid_story)
+    invalid_story["actor"] = {"name": "User", "type": "human-persona"}
+    invalid_story["plan_locator"] = ".loom/specs/WI-649/plan.md"
+    require_user_story_payload(failures, category=category, context="invalid delivery-state story", payload=invalid_story, expect_pass=False)
+
+    readiness = {
+        "schema_version": "loom-story-readiness/v1",
+        "decision": "ready",
+        "rationale": "actor, outcome, value, and scenarios are clear enough to enter spec / plan",
+        "story_locator": "docs/methodology/templates/scaffold/user-story.md",
+        "missing_inputs": [],
+        "fallback_to": None,
+        "checks": {
+            "actor_specificity": "pass",
+            "outcome_clarity": "pass",
+            "value_signal": "pass",
+            "acceptance_scenario_quality": "pass",
+            "unresolved_blockers": "pass",
+            "story_size": "pass",
+        },
+    }
+    require_story_readiness_payload(failures, category=category, context="ready story", payload=readiness)
+    for decision in STORY_READINESS_DECISIONS:
+        candidate = dict(readiness)
+        candidate["decision"] = decision
+        if decision == "not-applicable":
+            candidate["rationale"] = "story intake bypassed because the change is a pure repository maintenance closeout"
+        require_story_readiness_payload(failures, category=category, context=f"{decision} readiness", payload=candidate)
+
+    mapping = {
+        "schema_version": "loom-story-delivery-mapping/v1",
+        "execution_entry": "Work Item",
+        "story_locator": "docs/methodology/templates/scaffold/user-story.md",
+        "spec_behavior_contract": [
+            {"story_scenario_id": "S1", "spec_section": "Key Scenarios"},
+            {"story_scenario_id": "S2", "spec_section": "Exceptions And Boundaries"},
+        ],
+        "plan_validation_strategy": [
+            {"story_scenario_id": "S1", "evidence": "automated check"},
+            {"story_scenario_id": "S2", "evidence": "manual validation or not_applicable rationale"},
+        ],
+        "story_authored_delivery_state": False,
+    }
+    require_story_delivery_mapping(failures, category=category, context="story-to-delivery mapping", payload=mapping)
+
+    payload, error = load_command_json(
+        root,
+        ["python3", "tools/loom_flow.py", "flow", "story", "--target", "examples/new-project"],
+    )
+    if error:
+        failures.append(Failure(category, f"flow story contract summary failed: {error}"))
+    else:
+        require_story_flow_contract_summary(
+            failures,
+            category=category,
+            context="flow story contract summary",
+            payload=payload,
+        )
+
+    return failures
+
+
 def is_within(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
@@ -12446,12 +12791,13 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_retry_evidence_fixture_contract(root))
     failures.extend(check_execution_attempt_contract(root))
     failures.extend(check_build_execution_contract(root))
+    failures.extend(check_story_intake_contract(root))
     failures.extend(check_markdown_links(root))
     return failures
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 32
+    categories_checked = 33
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")

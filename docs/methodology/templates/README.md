@@ -27,6 +27,8 @@
   - 对应 `spec-suite.md` 中定义的 `spec.md` 最小骨架
 - [scaffold/plan.md](./scaffold/plan.md)
   - 对应 `spec-suite.md` 中定义的 `plan.md` 最小骨架
+- [scaffold/user-story.md](./scaffold/user-story.md)
+  - 对应 `story-intake.md` 中定义的 story intake 最小骨架；其中 User Story、Story Readiness 与 Delivery Consumption Boundary 是分离产物
 
 GitHub PR 的最小实体模板位于仓库根级：
 

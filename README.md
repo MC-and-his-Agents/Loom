@@ -81,13 +81,15 @@ Agents should not treat "there are changed files" as completion. In Loom, work i
 
 ## Skills Library
 
-Loom exposes one root entry and eight scenario skills:
+Loom exposes one root entry and ten scenario skills:
 
 | Skill | Role |
 | --- | --- |
 | `loom-init` | Root entry; initializes or routes to the correct scene. |
 | `loom-adopt` | Creates the minimum Loom adoption surface for a repository. |
 | `loom-resume` | Restores context and continues the current `Work Item`. |
+| `loom-build` | Runs a bounded implementation/build round before review. |
+| `loom-story` | Turns product context into a User Story and Story Readiness result. |
 | `loom-pre-review` | Checks readiness before formal review. |
 | `loom-spec-review` | Reviews the formal spec path and produces the `spec-approved` gate. |
 | `loom-review` | Runs formal review and records the result. |

@@ -26,7 +26,7 @@
   "interface": {
     "displayName": "Loom",
     "shortDescription": "整包暴露 Loom scenario skills，并默认从 loom-init 进入。",
-    "longDescription": "Loom 以 skills/ 作为 canonical skills library；安装后由 loom-init 路由到 adopt、resume、review、merge-ready、retire 等场景入口。",
+    "longDescription": "Loom 以 skills/ 作为 canonical skills library；安装后由 loom-init 路由到 adopt、resume、story、review、merge-ready、retire 等场景入口。",
     "developerName": "MC and his Agents",
     "category": "Productivity",
     "capabilities": [
@@ -36,7 +36,7 @@
     "websiteURL": "https://github.com/MC-and-his-Agents/Loom",
     "defaultPrompt": [
       "使用 Loom skills 接管当前仓库的 agent 工作流，并默认先进入 loom-init。",
-      "让 loom-init 判断当前任务属于初始化、恢复、review、merge-ready、handoff 还是 retire。",
+      "让 loom-init 判断当前任务属于初始化、恢复、story intake、review、merge-ready、handoff 还是 retire。",
       "按 Loom 的 merge-ready-centered 流程推进，不要把代码改完等同于完成。"
     ],
     "brandColor": "#0E8A16"

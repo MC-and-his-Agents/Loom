@@ -14,6 +14,8 @@
 
 Use these scenarios as the BDD outer loop. Each scenario should describe observable behavior, not implementation steps.
 
+If a User Story exists, reference its scenario id or locator here instead of copying the full story into `spec.md` as a second truth source.
+
 ### Scenario 1
 
 Given
@@ -38,6 +40,7 @@ Then
 
 ## Behavior Evidence
 
+- Story scenario mapping:
 - Scenario coverage:
 - Expected evidence locator:
 - Freshness rule:
