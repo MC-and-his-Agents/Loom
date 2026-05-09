@@ -176,6 +176,23 @@
 
 该字段组只消费最近 `execution_attempt` evidence，不创建 scheduler state，也不单独阻断 merge。
 
+### 3.7.3 `retry_evidence`
+
+- `schema_version`: `loom-retry-evidence/v1`
+- `status`: `present` / `not_applicable` / `stale` / `missing` / `invalid`
+- `attempt_count`
+- `retry_count`
+- `latest_attempt_id`
+- `latest_attempt_result`
+- `latest_failure_classification`
+- `latest_failure_summary`
+- `exhausted`
+- `scheduler_ownership`
+- `stale_attempt_count`
+- `provenance`
+
+该字段组从 attempt chain 派生 retry evidence，不声明 scheduler state。
+
 ### 3.8 `taxonomy`
 
 至少包含：

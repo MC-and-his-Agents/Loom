@@ -155,6 +155,17 @@ GUIDED_ADOPTION_PLAN_SCHEMA = "loom-guided-adoption-plan/v1"
 COMPANION_GENERATION_SCHEMA = "loom-companion-generation/v1"
 EXECUTION_ATTEMPT_SCHEMA = "loom-execution-attempt/v1"
 EXECUTION_ATTEMPT_RESULTS = {"pass", "block", "fallback"}
+EXECUTION_FAILURE_SCHEMA = "loom-execution-failure/v1"
+EXECUTION_FAILURE_STATUSES = {"present", "not_applicable", "stale", "missing", "invalid"}
+EXECUTION_FAILURE_CLASSIFICATIONS = {
+    "none",
+    "stall",
+    "timeout",
+    "retry_exhaustion",
+    "unknown",
+}
+RETRY_EVIDENCE_SCHEMA = "loom-retry-evidence/v1"
+RETRY_EVIDENCE_STATUSES = {"present", "not_applicable", "stale", "missing", "invalid"}
 EXECUTION_ATTEMPT_FAILURE_CATEGORIES = {
     "none",
     "runtime_state",
@@ -1753,6 +1764,85 @@ def execution_attempt_failure_category(payload: dict[str, Any]) -> str:
     return "unknown"
 
 
+def classify_execution_failure_text(text: str) -> str:
+    lowered = text.strip().lower()
+    if not lowered:
+        return "unknown"
+    if "retry_exhaustion" in lowered or "retry exhaustion" in lowered or "retries exhausted" in lowered:
+        return "retry_exhaustion"
+    if "timed out" in lowered or re.search(r"\btimeout\b", lowered):
+        return "timeout"
+    if "stall" in lowered or "stalled" in lowered:
+        return "stall"
+    return "unknown"
+
+
+def execution_failure_details(payload: dict[str, Any]) -> dict[str, Any]:
+    if payload.get("result") == "pass":
+        return {
+            "classification": "none",
+            "summary": "latest execution attempt completed without an execution failure classification.",
+            "fallback_to": None,
+        }
+
+    explicit = payload.get("execution_failure")
+    if isinstance(explicit, dict):
+        classification = explicit.get("classification") or explicit.get("kind")
+        summary = explicit.get("summary")
+        fallback_to = explicit.get("fallback_to")
+        if isinstance(classification, str) and classification in EXECUTION_FAILURE_CLASSIFICATIONS:
+            normalized_summary = (
+                str(summary).strip()
+                if isinstance(summary, str) and str(summary).strip()
+                else f"execution failure classified as `{classification}`."
+            )
+            return {
+                "classification": classification,
+                "summary": normalized_summary,
+                "fallback_to": str(fallback_to) if isinstance(fallback_to, str) and fallback_to.strip() else payload.get("fallback_to"),
+            }
+
+    texts: list[str] = []
+    summary = payload.get("summary")
+    if isinstance(summary, str) and summary.strip():
+        texts.append(summary.strip())
+    missing_inputs = payload.get("missing_inputs")
+    if isinstance(missing_inputs, list):
+        texts.extend(str(item).strip() for item in missing_inputs if str(item).strip())
+    steps = payload.get("steps")
+    if isinstance(steps, list):
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            for field in ("summary", "name"):
+                value = step.get(field)
+                if isinstance(value, str) and value.strip():
+                    texts.append(value.strip())
+            step_missing = step.get("missing_inputs")
+            if isinstance(step_missing, list):
+                texts.extend(str(item).strip() for item in step_missing if str(item).strip())
+    engine = payload.get("engine")
+    if isinstance(engine, dict):
+        failure_reason = engine.get("failure_reason")
+        if isinstance(failure_reason, str) and failure_reason.strip():
+            texts.append(failure_reason.strip())
+
+    classification = "unknown"
+    matched_summary: str | None = None
+    for candidate in texts:
+        classification = classify_execution_failure_text(candidate)
+        if classification != "unknown":
+            matched_summary = candidate
+            break
+
+    summary_text = next((candidate for candidate in texts if candidate), None)
+    return {
+        "classification": classification,
+        "summary": matched_summary or summary_text or "execution attempt blocked without a classified execution failure.",
+        "fallback_to": payload.get("fallback_to"),
+    }
+
+
 def execution_attempt_summary_from_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
     evidence = envelope.get("evidence") if isinstance(envelope.get("evidence"), dict) else {}
     failure = envelope.get("failure") if isinstance(envelope.get("failure"), dict) else {}
@@ -1764,6 +1854,8 @@ def execution_attempt_summary_from_envelope(envelope: dict[str, Any]) -> dict[st
         "operation": envelope.get("operation"),
         "result": envelope.get("result"),
         "failure_category": failure.get("category"),
+        "execution_classification": failure.get("execution_classification"),
+        "execution_summary": failure.get("execution_summary"),
         "fallback_to": failure.get("fallback_to"),
         "evidence": {
             "status": evidence.get("status"),
@@ -1806,6 +1898,7 @@ def build_execution_attempt_envelope(
     failure_category = execution_attempt_failure_category(payload)
     if failure_category not in EXECUTION_ATTEMPT_FAILURE_CATEGORIES:
         failure_category = "unknown"
+    execution_failure = execution_failure_details(payload)
     steps = payload.get("steps")
     step_summary = []
     if isinstance(steps, list):
@@ -1836,8 +1929,10 @@ def build_execution_attempt_envelope(
         },
         "failure": {
             "category": failure_category,
+            "execution_classification": execution_failure["classification"],
+            "execution_summary": execution_failure["summary"],
             "missing_inputs": missing_inputs,
-            "fallback_to": payload.get("fallback_to"),
+            "fallback_to": execution_failure["fallback_to"],
         },
         "steps": step_summary,
         "evidence": {
@@ -1926,6 +2021,10 @@ def validate_execution_attempt_envelope(
     else:
         if failure.get("category") not in EXECUTION_ATTEMPT_FAILURE_CATEGORIES:
             errors.append("execution_attempt failure.category is outside the stable vocabulary")
+        if failure.get("execution_classification") not in EXECUTION_FAILURE_CLASSIFICATIONS:
+            errors.append("execution_attempt failure.execution_classification is outside the stable vocabulary")
+        if not isinstance(failure.get("execution_summary"), str) or not str(failure.get("execution_summary")).strip():
+            errors.append("execution_attempt failure.execution_summary must be a non-empty string")
         if not isinstance(failure.get("missing_inputs"), list):
             errors.append("execution_attempt failure.missing_inputs must be a list")
     evidence = payload.get("evidence")
@@ -2008,6 +2107,181 @@ def latest_execution_attempt_payload(target_root: Path, item_id: str) -> dict[st
         "evidence": {"locator": locator, "status": "present" if freshness in {"fresh", "stale"} else "invalid"},
         "missing_inputs": errors,
         "attempt": envelope,
+    }
+
+
+def execution_attempt_history_payload(target_root: Path, item_id: str) -> list[dict[str, Any]]:
+    directory = execution_attempt_directory(target_root, item_id)
+    if not directory.exists():
+        return []
+    attempts: list[dict[str, Any]] = []
+    for path in sorted(directory.glob("*.json")):
+        if path.name == "latest.json":
+            continue
+        try:
+            payload = load_json_file(path)
+        except Exception:
+            continue
+        envelope, errors, _ = validate_execution_attempt_envelope(
+            payload,
+            target_root=target_root,
+            expected_item=item_id,
+            expected_head=None,
+        )
+        if errors or envelope is None:
+            continue
+        attempts.append(envelope)
+    attempts.sort(key=lambda entry: (str(entry.get("created_at") or ""), str(entry.get("attempt_id") or "")))
+    return attempts
+
+
+def latest_execution_failure_payload(latest_attempt: dict[str, Any]) -> dict[str, Any]:
+    evidence = latest_attempt.get("evidence") if isinstance(latest_attempt, dict) else {}
+    locator = evidence.get("locator") if isinstance(evidence, dict) else None
+    freshness = latest_attempt.get("freshness") if isinstance(latest_attempt, dict) else None
+    status = latest_attempt.get("status") if isinstance(latest_attempt, dict) else None
+    provenance = {
+        "source_layer": "derived_surface",
+        "source_locator": locator,
+        "source_binding": "latest_execution_attempt",
+        "freshness": freshness if isinstance(freshness, str) else "missing",
+        "conflict": "none",
+    }
+    if status == "missing":
+        return {
+            "schema_version": EXECUTION_FAILURE_SCHEMA,
+            "status": "missing",
+            "classification": "unknown",
+            "summary": latest_attempt.get("summary") if isinstance(latest_attempt.get("summary"), str) else "latest execution attempt evidence is missing.",
+            "fallback_to": None,
+            "provenance": provenance,
+        }
+    if status == "invalid":
+        return {
+            "schema_version": EXECUTION_FAILURE_SCHEMA,
+            "status": "invalid",
+            "classification": "unknown",
+            "summary": latest_attempt.get("summary") if isinstance(latest_attempt.get("summary"), str) else "latest execution attempt evidence is invalid.",
+            "fallback_to": None,
+            "provenance": provenance,
+        }
+
+    attempt = latest_attempt.get("attempt") if isinstance(latest_attempt, dict) else None
+    failure = attempt.get("failure") if isinstance(attempt, dict) else None
+    classification = failure.get("execution_classification") if isinstance(failure, dict) else None
+    if not isinstance(classification, str) or classification not in EXECUTION_FAILURE_CLASSIFICATIONS:
+        classification = "unknown"
+    summary = failure.get("execution_summary") if isinstance(failure, dict) else None
+    fallback_to = failure.get("fallback_to") if isinstance(failure, dict) else None
+    normalized_summary = (
+        str(summary).strip()
+        if isinstance(summary, str) and str(summary).strip()
+        else "latest execution attempt did not record a readable execution failure summary."
+    )
+    if freshness == "stale":
+        return {
+            "schema_version": EXECUTION_FAILURE_SCHEMA,
+            "status": "stale",
+            "classification": classification,
+            "summary": "latest execution failure evidence exists but is stale for the current HEAD.",
+            "fallback_to": str(fallback_to) if isinstance(fallback_to, str) and fallback_to.strip() else None,
+            "provenance": provenance,
+        }
+    if classification == "none":
+        return {
+            "schema_version": EXECUTION_FAILURE_SCHEMA,
+            "status": "not_applicable",
+            "classification": "none",
+            "summary": normalized_summary,
+            "fallback_to": None,
+            "provenance": provenance,
+        }
+    return {
+        "schema_version": EXECUTION_FAILURE_SCHEMA,
+        "status": "present",
+        "classification": classification,
+        "summary": normalized_summary,
+        "fallback_to": str(fallback_to) if isinstance(fallback_to, str) and fallback_to.strip() else None,
+        "provenance": provenance,
+    }
+
+
+def latest_retry_evidence_payload(target_root: Path, item_id: str) -> dict[str, Any]:
+    latest_attempt = latest_execution_attempt_payload(target_root, item_id)
+    history = execution_attempt_history_payload(target_root, item_id)
+    evidence = latest_attempt.get("evidence") if isinstance(latest_attempt, dict) else {}
+    locator = evidence.get("locator") if isinstance(evidence, dict) else None
+    freshness = latest_attempt.get("freshness") if isinstance(latest_attempt, dict) else None
+    provenance = {
+        "source_layer": "derived_surface",
+        "source_locator": locator,
+        "source_binding": "execution_attempt_history",
+        "freshness": freshness if isinstance(freshness, str) else "missing",
+        "conflict": "none",
+    }
+    if latest_attempt.get("status") == "missing":
+        return {
+            "schema_version": RETRY_EVIDENCE_SCHEMA,
+            "status": "missing",
+            "attempt_count": 0,
+            "retry_count": 0,
+            "latest_attempt_id": None,
+            "latest_attempt_result": None,
+            "latest_failure_classification": "unknown",
+            "latest_failure_summary": latest_attempt.get("summary"),
+            "exhausted": False,
+            "scheduler_ownership": "external",
+            "stale_attempt_count": 0,
+            "provenance": provenance,
+        }
+    if latest_attempt.get("status") == "invalid":
+        return {
+            "schema_version": RETRY_EVIDENCE_SCHEMA,
+            "status": "invalid",
+            "attempt_count": 0,
+            "retry_count": 0,
+            "latest_attempt_id": None,
+            "latest_attempt_result": None,
+            "latest_failure_classification": "unknown",
+            "latest_failure_summary": latest_attempt.get("summary"),
+            "exhausted": False,
+            "scheduler_ownership": "external",
+            "stale_attempt_count": 0,
+            "provenance": provenance,
+        }
+
+    latest_envelope = latest_attempt.get("attempt") if isinstance(latest_attempt.get("attempt"), dict) else {}
+    current_head = git_head_sha(target_root) or "unknown-head"
+    current_attempts = [entry for entry in history if entry.get("head_sha") == current_head]
+    stale_attempts = [entry for entry in history if entry.get("head_sha") != current_head]
+    failure = latest_envelope.get("failure") if isinstance(latest_envelope, dict) else {}
+    classification = failure.get("execution_classification") if isinstance(failure, dict) else None
+    if not isinstance(classification, str) or classification not in EXECUTION_FAILURE_CLASSIFICATIONS:
+        classification = "unknown"
+    summary = failure.get("execution_summary") if isinstance(failure, dict) else latest_attempt.get("summary")
+    latest_attempt_id = latest_envelope.get("attempt_id") if isinstance(latest_envelope, dict) else None
+    latest_attempt_result = latest_envelope.get("result") if isinstance(latest_envelope, dict) else None
+    attempt_count = len(current_attempts)
+    retry_count = max(0, attempt_count - 1)
+    if latest_attempt.get("freshness") == "stale":
+        status = "stale"
+    elif attempt_count <= 1 and classification == "none":
+        status = "not_applicable"
+    else:
+        status = "present"
+    return {
+        "schema_version": RETRY_EVIDENCE_SCHEMA,
+        "status": status,
+        "attempt_count": attempt_count,
+        "retry_count": retry_count,
+        "latest_attempt_id": latest_attempt_id if isinstance(latest_attempt_id, str) and latest_attempt_id else None,
+        "latest_attempt_result": latest_attempt_result if isinstance(latest_attempt_result, str) else None,
+        "latest_failure_classification": classification,
+        "latest_failure_summary": str(summary).strip() if isinstance(summary, str) and str(summary).strip() else None,
+        "exhausted": classification == "retry_exhaustion",
+        "scheduler_ownership": "external",
+        "stale_attempt_count": len(stale_attempts),
+        "provenance": provenance,
     }
 
 

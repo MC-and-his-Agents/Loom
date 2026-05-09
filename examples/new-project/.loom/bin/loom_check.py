@@ -282,6 +282,8 @@ EXECUTION_BUDGET_STABLE_FIELDS = {"schema_version", "status", "enforcement", "su
 EXECUTION_BUDGET_DIMENSION_FIELDS = {"id", "unit", "used", "limit", "remaining", "risk", "source"}
 EXECUTION_BUDGET_DIMENSION_IDS = set(governance_surface_module.LOOM_EXECUTION_BUDGET_DIMENSION_IDS)
 EXECUTION_BUDGET_STATUS = {"present", "not_applicable", "unavailable"}
+EXECUTION_FAILURE_FIXTURE_SCHEMA = "loom-execution-failure-fixtures/v1"
+RETRY_EVIDENCE_FIXTURE_SCHEMA = "loom-retry-evidence-fixtures/v1"
 
 
 def repo_root_from_argv(argv: list[str]) -> Path:
@@ -2312,6 +2314,10 @@ def require_execution_attempt_summary(
         failures.append(Failure(category, f"{context} execution_attempt result must stay within the stable contract"))
     if payload.get("failure_category") not in loom_flow_module.EXECUTION_ATTEMPT_FAILURE_CATEGORIES:
         failures.append(Failure(category, f"{context} execution_attempt failure_category is outside the stable vocabulary"))
+    if payload.get("execution_classification") not in loom_flow_module.EXECUTION_FAILURE_CLASSIFICATIONS:
+        failures.append(Failure(category, f"{context} execution_attempt execution_classification is outside the stable vocabulary"))
+    if not isinstance(payload.get("execution_summary"), str) or not str(payload.get("execution_summary")).strip():
+        failures.append(Failure(category, f"{context} execution_attempt must include a non-empty execution_summary"))
     evidence = payload.get("evidence")
     if not isinstance(evidence, dict):
         failures.append(Failure(category, f"{context} execution_attempt must include evidence"))
@@ -3811,6 +3817,8 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(Failure("daily-execution-cli", "`loom_status` must report `command: status`"))
             governance_status = payload.get("governance_status")
             execution_budget = payload.get("execution_budget")
+            execution_failure = payload.get("execution_failure")
+            retry_evidence = payload.get("retry_evidence")
             if not isinstance(execution_budget, dict):
                 failures.append(Failure("daily-execution-cli", "`loom_status` must include `execution_budget`"))
             else:
@@ -3842,6 +3850,24 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                             "`loom_status` should not block merge-ready gate on advisory execution budget status",
                         )
                     )
+            if not isinstance(execution_failure, dict):
+                failures.append(Failure("daily-execution-cli", "`loom_status` must include `execution_failure`"))
+            else:
+                if execution_failure.get("schema_version") != loom_flow_module.EXECUTION_FAILURE_SCHEMA:
+                    failures.append(Failure("daily-execution-cli", "`loom_status` execution_failure must report schema v1"))
+                if execution_failure.get("status") not in loom_flow_module.EXECUTION_FAILURE_STATUSES:
+                    failures.append(Failure("daily-execution-cli", "`loom_status` execution_failure status must stay within the stable set"))
+                if execution_failure.get("classification") not in loom_flow_module.EXECUTION_FAILURE_CLASSIFICATIONS:
+                    failures.append(Failure("daily-execution-cli", "`loom_status` execution_failure classification must stay within the stable vocabulary"))
+            if not isinstance(retry_evidence, dict):
+                failures.append(Failure("daily-execution-cli", "`loom_status` must include `retry_evidence`"))
+            else:
+                if retry_evidence.get("schema_version") != loom_flow_module.RETRY_EVIDENCE_SCHEMA:
+                    failures.append(Failure("daily-execution-cli", "`loom_status` retry_evidence must report schema v1"))
+                if retry_evidence.get("status") not in loom_flow_module.RETRY_EVIDENCE_STATUSES:
+                    failures.append(Failure("daily-execution-cli", "`loom_status` retry_evidence status must stay within the stable set"))
+                if retry_evidence.get("scheduler_ownership") != "external":
+                    failures.append(Failure("daily-execution-cli", "`loom_status` retry_evidence must keep scheduler_ownership external"))
             if not isinstance(governance_status, dict):
                 failures.append(Failure("daily-execution-cli", "`loom_status` must include `governance_status`"))
             else:
@@ -10578,6 +10604,180 @@ def check_execution_budget_fixture_contract(root: Path) -> list[Failure]:
     return failures
 
 
+def check_execution_failure_fixture_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    fixture_path = root / "docs/evidence/fixtures/execution-failure-fixtures.json"
+    category = "execution-failure"
+    try:
+        fixture_payload = load_json_file(fixture_path)
+    except (OSError, json.JSONDecodeError) as exc:
+        failures.append(Failure(category, f"`docs/evidence/fixtures/execution-failure-fixtures.json` is unreadable: {exc}"))
+        return failures
+
+    if not isinstance(fixture_payload, dict):
+        failures.append(Failure(category, "`execution-failure-fixtures.json` must be an object"))
+        return failures
+    if fixture_payload.get("schema_version") != EXECUTION_FAILURE_FIXTURE_SCHEMA:
+        failures.append(
+            Failure(
+                category,
+                f"`docs/evidence/fixtures/execution-failure-fixtures.json` schema_version must be `{EXECUTION_FAILURE_FIXTURE_SCHEMA}`",
+            )
+        )
+
+    fixtures = fixture_payload.get("fixtures")
+    if not isinstance(fixtures, list):
+        failures.append(Failure(category, "`execution-failure-fixtures.json` must expose fixtures list"))
+        return failures
+
+    for index, fixture in enumerate(fixtures, start=1):
+        if not isinstance(fixture, dict):
+            failures.append(Failure(category, f"`execution-failure-fixtures.json` fixture #{index} must be an object"))
+            continue
+        name = str(fixture.get("name") or f"fixture-{index}")
+        context = f"{name} (#{index})"
+        input_payload = fixture.get("input")
+        if not isinstance(input_payload, dict):
+            failures.append(Failure(category, f"`{context}` input must be an object"))
+            continue
+        expect = fixture.get("expect")
+        if not isinstance(expect, dict):
+            failures.append(Failure(category, f"`{context}` expect must be an object"))
+            continue
+
+        details = loom_flow_module.execution_failure_details(input_payload)
+        expected_classification = expect.get("classification")
+        if expected_classification is not None and details.get("classification") != expected_classification:
+            failures.append(
+                Failure(
+                    category,
+                    f"`{context}` execution failure classification `{details.get('classification')}` != expected `{expected_classification}`",
+                )
+            )
+        expected_fallback = expect.get("fallback_to")
+        if expected_fallback is not None and details.get("fallback_to") != expected_fallback:
+            failures.append(
+                Failure(
+                    category,
+                    f"`{context}` execution failure fallback_to `{details.get('fallback_to')}` != expected `{expected_fallback}`",
+                )
+            )
+        summary_contains = expect.get("summary_contains")
+        if isinstance(summary_contains, str) and summary_contains not in str(details.get("summary")):
+            failures.append(Failure(category, f"`{context}` execution failure summary must contain `{summary_contains}`"))
+
+    return failures
+
+
+def check_retry_evidence_fixture_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    fixture_path = root / "docs/evidence/fixtures/retry-evidence-fixtures.json"
+    category = "retry-evidence"
+    try:
+        fixture_payload = load_json_file(fixture_path)
+    except (OSError, json.JSONDecodeError) as exc:
+        failures.append(Failure(category, f"`docs/evidence/fixtures/retry-evidence-fixtures.json` is unreadable: {exc}"))
+        return failures
+
+    if not isinstance(fixture_payload, dict):
+        failures.append(Failure(category, "`retry-evidence-fixtures.json` must be an object"))
+        return failures
+    if fixture_payload.get("schema_version") != RETRY_EVIDENCE_FIXTURE_SCHEMA:
+        failures.append(
+            Failure(
+                category,
+                f"`docs/evidence/fixtures/retry-evidence-fixtures.json` schema_version must be `{RETRY_EVIDENCE_FIXTURE_SCHEMA}`",
+            )
+        )
+
+    fixtures = fixture_payload.get("fixtures")
+    if not isinstance(fixtures, list):
+        failures.append(Failure(category, "`retry-evidence-fixtures.json` must expose fixtures list"))
+        return failures
+
+    with tempfile.TemporaryDirectory(prefix="loom-check-retry-evidence-") as tmp:
+        root_dir = Path(tmp)
+        current_head = "1" * 40
+        stale_head = "0" * 40
+        for index, fixture in enumerate(fixtures, start=1):
+            if not isinstance(fixture, dict):
+                failures.append(Failure(category, f"`retry-evidence-fixtures.json` fixture #{index} must be an object"))
+                continue
+            name = str(fixture.get("name") or f"fixture-{index}")
+            context = f"{name} (#{index})"
+            fixture_target = root_dir / name
+            attempts_dir = fixture_target / ".loom/runtime/attempts/INIT-0001"
+            attempts_dir.mkdir(parents=True, exist_ok=True)
+            envelopes = fixture.get("attempts")
+            if not isinstance(envelopes, list):
+                failures.append(Failure(category, f"`{context}` attempts must be a list"))
+                continue
+            latest_index = fixture.get("latest_index", len(envelopes))
+            for attempt_index, envelope in enumerate(envelopes, start=1):
+                if not isinstance(envelope, dict):
+                    continue
+                payload = dict(envelope)
+                payload.setdefault("schema_version", loom_flow_module.EXECUTION_ATTEMPT_SCHEMA)
+                payload.setdefault("item_id", "INIT-0001")
+                payload.setdefault("command", "flow")
+                payload.setdefault("operation", "review")
+                payload.setdefault("result", "block")
+                payload.setdefault("created_at", f"2026-05-09T06:00:{attempt_index:02d}Z")
+                payload.setdefault("head_sha", current_head if fixture.get("freshness") != "stale" else stale_head)
+                payload.setdefault("attempt_id", f"INIT-0001-review-{attempt_index}")
+                payload.setdefault("branch", "work/594-retry-evidence-boundary")
+                payload.setdefault("workspace", {"entry": ".", "path": "."})
+                payload.setdefault(
+                    "failure",
+                    {
+                        "category": "review",
+                        "execution_classification": "timeout",
+                        "execution_summary": "default review engine timed out after 900s",
+                        "missing_inputs": ["default review engine timed out after 900s"],
+                        "fallback_to": "build",
+                    },
+                )
+                payload.setdefault(
+                    "evidence",
+                    {
+                        "status": "present",
+                        "locator": f".loom/runtime/attempts/INIT-0001/{payload['attempt_id']}.json",
+                        "latest_locator": ".loom/runtime/attempts/INIT-0001/latest.json",
+                    },
+                )
+                attempt_path = attempts_dir / f"{payload['attempt_id']}.json"
+                attempt_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                if attempt_index == latest_index:
+                    (attempts_dir / "latest.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            head_result = run_command(root, ["git", "init"], cwd=fixture_target, timeout_seconds=30)
+            if head_result.returncode != 0:
+                failures.append(Failure(category, f"`{context}` git init failed"))
+                continue
+            run_command(root, ["git", "config", "user.email", "loom-check@example.com"], cwd=fixture_target, timeout_seconds=30)
+            run_command(root, ["git", "config", "user.name", "loom-check"], cwd=fixture_target, timeout_seconds=30)
+            (fixture_target / "README.md").write_text("retry fixture\n", encoding="utf-8")
+            run_command(root, ["git", "add", "."], cwd=fixture_target, timeout_seconds=30)
+            run_command(root, ["git", "commit", "-m", "baseline"], cwd=fixture_target, timeout_seconds=30)
+            if fixture.get("freshness") != "stale":
+                actual_head = run_command(root, ["git", "rev-parse", "HEAD"], cwd=fixture_target, timeout_seconds=30).stdout.strip()
+                for attempt_file in attempts_dir.glob("*.json"):
+                    payload = json.loads(attempt_file.read_text(encoding="utf-8"))
+                    payload["head_sha"] = actual_head
+                    attempt_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            payload = loom_flow_module.latest_retry_evidence_payload(fixture_target, "INIT-0001")
+            expect = fixture.get("expect")
+            if not isinstance(expect, dict):
+                failures.append(Failure(category, f"`{context}` expect must be an object"))
+                continue
+            for field in ("status", "attempt_count", "retry_count", "latest_failure_classification", "exhausted", "stale_attempt_count"):
+                if field in expect and payload.get(field) != expect.get(field):
+                    failures.append(Failure(category, f"`{context}` retry evidence `{field}` {payload.get(field)!r} != expected {expect.get(field)!r}"))
+
+    return failures
+
+
 def check_execution_attempt_contract(root: Path) -> list[Failure]:
     failures: list[Failure] = []
     example_target = root / "examples/new-project"
@@ -10645,6 +10845,47 @@ def check_execution_attempt_contract(root: Path) -> list[Failure]:
         if not isinstance(envelope, dict):
             failures.append(Failure("execution-attempt", "latest attempt must expose the persisted envelope"))
             return failures
+        failure = envelope.get("failure")
+        if not isinstance(failure, dict) or failure.get("execution_classification") != "none":
+            failures.append(Failure("execution-attempt", "pass attempt must classify execution failure as `none`"))
+
+        timeout_summary = loom_flow_module.persist_execution_attempt(
+            context,
+            command="flow",
+            operation="review",
+            payload={
+                "command": "flow",
+                "operation": "review",
+                "result": "block",
+                "summary": "default review engine failed closed before a formal review record could be authored.",
+                "missing_inputs": ["default review engine timed out after 900s"],
+                "fallback_to": "build",
+                "steps": [
+                    {
+                        "name": "review-engine",
+                        "result": "block",
+                        "summary": "default review engine timed out after 900s",
+                        "missing_inputs": ["default review engine timed out after 900s"],
+                        "fallback_to": "build",
+                    }
+                ],
+            },
+        )
+        if timeout_summary.get("execution_classification") != "timeout":
+            failures.append(Failure("execution-attempt", "timed-out attempt must classify execution failure as `timeout`"))
+        latest_timeout = loom_flow_module.latest_execution_attempt_payload(target, "INIT-0001")
+        execution_failure = loom_flow_module.latest_execution_failure_payload(latest_timeout)
+        if execution_failure.get("status") != "present":
+            failures.append(Failure("execution-attempt", "fresh classified execution failure must surface as present"))
+        if execution_failure.get("classification") != "timeout":
+            failures.append(Failure("execution-attempt", "latest execution failure surface must preserve timeout classification"))
+        retry_evidence = loom_flow_module.latest_retry_evidence_payload(target, "INIT-0001")
+        if retry_evidence.get("status") != "present":
+            failures.append(Failure("execution-attempt", "multiple current-head attempts must surface retry evidence as present"))
+        if retry_evidence.get("attempt_count") != 2 or retry_evidence.get("retry_count") != 1:
+            failures.append(Failure("execution-attempt", "retry evidence must count current-head attempt history"))
+        if retry_evidence.get("latest_failure_classification") != "timeout":
+            failures.append(Failure("execution-attempt", "retry evidence must preserve latest failure classification"))
 
         poisoned = dict(envelope)
         poisoned["next_step"] = "forbidden duplicate recovery progress"
@@ -10670,6 +10911,9 @@ def check_execution_attempt_contract(root: Path) -> list[Failure]:
         stale_payload = loom_flow_module.latest_execution_attempt_payload(target, "INIT-0001")
         if stale_payload.get("freshness") != "stale":
             failures.append(Failure("execution-attempt", "status must not display a stale attempt as fresh"))
+        stale_retry = loom_flow_module.latest_retry_evidence_payload(target, "INIT-0001")
+        if stale_retry.get("status") != "stale":
+            failures.append(Failure("execution-attempt", "retry evidence must not display a stale attempt chain as fresh"))
 
     return failures
 
@@ -10818,6 +11062,8 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_structured_event_evidence_contract(root))
     failures.extend(check_deferred_roadmap_tree_contract(root))
     failures.extend(check_execution_budget_fixture_contract(root))
+    failures.extend(check_execution_failure_fixture_contract(root))
+    failures.extend(check_retry_evidence_fixture_contract(root))
     failures.extend(check_execution_attempt_contract(root))
     failures.extend(check_build_execution_contract(root))
     failures.extend(check_markdown_links(root))

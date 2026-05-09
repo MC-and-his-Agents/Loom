@@ -209,6 +209,7 @@ closeout 阶段发现的控制面对齐漂移。
 - 这些分类不替代 `stale` / `drift` / `gate_failure`
 - 这些分类可以携带 `fallback_to`，但 fallback target 只能指向 Loom 内部 checkpoint / flow / repair 入口
 - 这些分类不得声明 `Claimed`、`Running`、`RetryQueued` 或其他 scheduler state
+- retry evidence 只说明 attempt chain 已发生什么，不说明下一次何时执行、由谁调度或是否会自动 backoff
 
 ## 9. 非目标
 

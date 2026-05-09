@@ -36,5 +36,6 @@ Stale attempts may be shown as stale evidence, but status must not present them 
 
 - Attempts can summarize command results, steps, failures, fallback targets, and evidence locators.
 - Attempts may classify execution failures such as `stall`, `timeout`, or `retry_exhaustion`, but they do not create a scheduler state machine and do not authorize automatic retry.
+- Attempts persist as append-only runtime evidence under `.loom/runtime/attempts/<item-id>/`, so retry evidence is derived from the attempt chain rather than from a separate scheduler-owned state record.
 - Attempts can reference authored carriers by locator but must not duplicate their authored progress values.
 - Attempts are append-only runtime evidence for observability. They do not advance checkpoints, close Work Items, change review decisions, or satisfy merge-ready by themselves.

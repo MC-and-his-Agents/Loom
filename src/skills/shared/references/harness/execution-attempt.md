@@ -21,3 +21,4 @@ It is not authored progress. Envelopes must not carry `current_stop`, `next_step
 Status may display a latest attempt only as fresh when the envelope is valid, item-bound, HEAD-bound, and free of authored progress fields. Missing or stale evidence must be reported as missing or stale instead of becoming execution truth.
 
 `failure.execution_classification` is reserved for runtime evidence such as `stall`, `timeout`, or `retry_exhaustion`. It stays provider-neutral and does not create scheduler ownership.
+Retry evidence comes from the persisted attempt chain under `.loom/runtime/attempts/<item-id>/`, not from a separate scheduler state record.
