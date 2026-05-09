@@ -12,9 +12,13 @@
 
 `python3 tools/loom_flow.py live-smoke host-adapter-drift --target <repo>`
 
+`python3 tools/loom_flow.py live-smoke dynamic-tool-availability --target <repo> [--surface attempt_time|review|merge_ready|closeout|build|admission|pre_review|all]`
+
 输出 schema 固定为 `loom-live-smoke/v1`。
 
 `host-adapter-drift` 输出 schema 固定为 `loom-host-adapter-live-drift/v1`。
+
+`dynamic-tool-availability` 输出 schema 固定为 `loom-dynamic-tool-live-availability/v1`。
 
 ## Run Contract
 
@@ -112,3 +116,23 @@
 - optional / advisory host adapter drift 只返回 profile-local `warn`
 - interop absent 或未声明任何 host adapter 时返回 `warn`
 - 命令不得执行 host action、不得写宿主控制面、不得改写 `interop.json`
+
+## Dynamic Tool Live Availability Contract
+
+`dynamic-tool-availability` 读取 adopted repo `.loom/companion/repo-interface.json` 中声明的 `dynamic_tool_locators[*]`，并把已有 `tool_availability` 词表包装成 live/profile-local evidence。
+
+最小检查面：
+
+- repo companion interface 是否存在且可读
+- `dynamic_tool_locators[*]` 是否声明合法的 `id`、`owner`、`requirement`、`surface`、`locator`、`fallback_to`
+- locator 是否缺失、越界、不可读或指向无效 handshake declaration
+- handshake declaration 是否只使用 `advertised | unavailable | unsupported | failed`
+- optional/advisory failure 是否保持 profile-local，不污染 `orchestration-core`
+
+结果纪律：
+
+- required dynamic tool unavailable / unsupported / failed / invalid declaration 可以在该命令内返回 `block`
+- optional / advisory failure 只返回 profile-local `warn`
+- repo interface absent 时返回 explicit unavailable evidence 与 `warn`
+- repo interface present 但当前 surface 无 dynamic tools 时返回 `pass`
+- 命令 does not execute the tool, 不得探测宿主协议、不得写 repo companion / host state，也不得固化 tool-specific protocol

@@ -2063,6 +2063,117 @@ def require_host_adapter_live_drift_payload(
             failures.append(Failure(category, f"{context} host_adapter_drift.checks[{index}] must include `evidence`"))
 
 
+def require_dynamic_tool_live_availability_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("command") != "live-smoke":
+        failures.append(Failure(category, f"{context} must report `command: live-smoke`"))
+    if payload.get("operation") != "dynamic-tool-availability":
+        failures.append(Failure(category, f"{context} must report `operation: dynamic-tool-availability`"))
+    if payload.get("schema_version") != "loom-dynamic-tool-live-availability/v1":
+        failures.append(Failure(category, f"{context} schema_version must be `loom-dynamic-tool-live-availability/v1`"))
+    if payload.get("result") not in {"pass", "warn", "block"}:
+        failures.append(Failure(category, f"{context} result must stay within `pass | warn | block`"))
+    if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+        failures.append(Failure(category, f"{context} must include non-empty `summary`"))
+    if not isinstance(payload.get("missing_inputs"), list):
+        failures.append(Failure(category, f"{context} must include `missing_inputs`"))
+    if payload.get("fallback_to") not in {
+        None,
+        "live-smoke-retry-or-record-unavailable",
+        "live-smoke-config-repair",
+        "admission",
+        "rebootstrap-runtime",
+        "refresh-install",
+        "loom-init",
+    }:
+        failures.append(Failure(category, f"{context} fallback_to must stay within the stable dynamic tool live contract"))
+    require_runtime_state_payload(
+        failures,
+        category=category,
+        context=context,
+        payload=payload.get("runtime_state"),
+        expected_scene="repo-local-demo",
+        expected_carrier="repo-local-wrapper",
+        allowed_results={"pass", "block"} if payload.get("result") == "block" else {"pass"},
+    )
+    target = payload.get("target")
+    if not isinstance(target, dict):
+        failures.append(Failure(category, f"{context} must include `target`"))
+    else:
+        if not isinstance(target.get("path"), str) or not target.get("path"):
+            failures.append(Failure(category, f"{context} target.path must be non-empty"))
+        if not isinstance(target.get("exists"), bool):
+            failures.append(Failure(category, f"{context} target.exists must be boolean"))
+    if not isinstance(payload.get("command_plan"), list):
+        failures.append(Failure(category, f"{context} must include `command_plan`"))
+    reports = payload.get("reports")
+    if not isinstance(reports, list):
+        failures.append(Failure(category, f"{context} must include `reports`"))
+    else:
+        for index, report in enumerate(reports):
+            if not isinstance(report, dict):
+                failures.append(Failure(category, f"{context} reports[{index}] must be an object"))
+                continue
+            if report.get("result") not in {"pass", "warn", "block"}:
+                failures.append(Failure(category, f"{context} reports[{index}] result must stay within the stable contract"))
+            if not isinstance(report.get("attempted"), bool):
+                failures.append(Failure(category, f"{context} reports[{index}] must include boolean `attempted`"))
+            for field in ("id", "command", "summary", "reported_result"):
+                value = report.get(field)
+                if not isinstance(value, str) or not value:
+                    failures.append(Failure(category, f"{context} reports[{index}] missing `{field}`"))
+            if not isinstance(report.get("missing_inputs"), list):
+                failures.append(Failure(category, f"{context} reports[{index}] must include `missing_inputs`"))
+    profile_check = payload.get("profile_check")
+    if not isinstance(profile_check, dict):
+        failures.append(Failure(category, f"{context} must include `profile_check`"))
+    else:
+        if profile_check.get("id") != "dynamic-tool-live-availability":
+            failures.append(Failure(category, f"{context} profile_check.id must be `dynamic-tool-live-availability`"))
+        if profile_check.get("result") not in {"pass", "warn", "block"}:
+            failures.append(Failure(category, f"{context} profile_check.result must stay within `pass | warn | block`"))
+    dynamic_tool_availability = payload.get("dynamic_tool_availability")
+    if not isinstance(dynamic_tool_availability, dict):
+        failures.append(Failure(category, f"{context} must include `dynamic_tool_availability`"))
+        return
+    if dynamic_tool_availability.get("availability") not in {
+        "absent",
+        "present",
+        "incomplete",
+        "runtime-blocked",
+        "target-unavailable",
+        "missing-target",
+    }:
+        failures.append(Failure(category, f"{context} dynamic_tool_availability.availability is outside the stable vocabulary"))
+    if dynamic_tool_availability.get("surface") not in {
+        "attempt_time",
+        "review",
+        "merge_ready",
+        "closeout",
+        "build",
+        "admission",
+        "pre_review",
+        "all",
+    }:
+        failures.append(Failure(category, f"{context} dynamic_tool_availability.surface is outside the stable vocabulary"))
+    if not isinstance(dynamic_tool_availability.get("contract_locator"), str) or not dynamic_tool_availability.get("contract_locator"):
+        failures.append(Failure(category, f"{context} dynamic_tool_availability.contract_locator must be non-empty"))
+    require_tool_availability_payload(
+        failures,
+        category=category,
+        context=f"{context}.dynamic_tool_availability.tool_availability",
+        payload=dynamic_tool_availability.get("tool_availability"),
+    )
+
+
 def require_github_binding_payload(
     failures: list[Failure],
     *,
@@ -10755,6 +10866,328 @@ def check_host_adapter_live_drift_contract(root: Path) -> list[Failure]:
     return failures
 
 
+def check_dynamic_tool_live_availability_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+
+    def write_json_local(path: Path, payload: object) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    def install_companion_local(target: Path, *, repo_interface: dict[str, object]) -> None:
+        companion_dir = target / ".loom" / "companion"
+        companion_dir.mkdir(parents=True, exist_ok=True)
+        (companion_dir / "README.md").write_text("# Repo Companion\n", encoding="utf-8")
+        write_json_local(
+            companion_dir / "manifest.json",
+            {
+                "schema_version": "loom-repo-companion-manifest/v1",
+                "companion_entry": ".loom/companion/README.md",
+                "repo_interface": ".loom/companion/repo-interface.json",
+            },
+        )
+        write_json_local(companion_dir / "repo-interface.json", repo_interface)
+
+    docs = {
+        "docs/methodology/harness/dynamic-tool-handshake.md": [
+            "dynamic-tool-availability",
+            "live/profile-local evidence",
+            "does not call the tool",
+            "Top-level `result` remains `pass | warn | block`",
+        ],
+        "docs/adoption/repo-companion-contract.md": [
+            "dynamic-tool-availability",
+            "live smoke",
+            "declaration-time locator",
+            "attempt-time result",
+        ],
+        "docs/evidence/live-smoke-profile.md": [
+            "loom-dynamic-tool-live-availability/v1",
+            "dynamic-tool-availability",
+            "optional/advisory",
+            "does not execute the tool",
+        ],
+        "docs/evidence/validations/validation-v0.10-dynamic-tool-live-availability.md": [
+            "loom-dynamic-tool-live-availability/v1",
+            "dynamic-tool-availability",
+            "profile-local `warn`",
+            "tool-specific protocol",
+        ],
+    }
+    for relative, anchors in docs.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            failures.append(Failure("dynamic-tool-live-availability", f"`{relative}` is unreadable: {exc}"))
+            continue
+        for anchor in anchors:
+            if anchor not in text:
+                failures.append(Failure("dynamic-tool-live-availability", f"`{relative}` must mention `{anchor}`"))
+
+    example_target = root / "examples/new-project"
+
+    missing_target = Path("/tmp/loom-missing-live-target")
+    payload, error = load_command_json(
+        root,
+        ["python3", "tools/loom_flow.py", "live-smoke", "dynamic-tool-availability", "--target", str(missing_target)],
+    )
+    if error:
+        failures.append(Failure("dynamic-tool-live-availability", f"`dynamic-tool-availability` missing target sample failed: {error}"))
+    else:
+        require_dynamic_tool_live_availability_payload(
+            failures,
+            category="dynamic-tool-live-availability",
+            context="missing-target-dynamic-tool-live-availability",
+            payload=payload,
+        )
+        if not isinstance(payload, dict) or payload.get("result") != "warn":
+            failures.append(Failure("dynamic-tool-live-availability", "missing target sample must warn"))
+
+    absent_target = Path(tempfile.mkdtemp(prefix="loom-dynamic-tool-live-availability-absent-"))
+    shutil.rmtree(absent_target)
+    shutil.copytree(example_target, absent_target)
+    shutil.rmtree(absent_target / ".loom" / "companion", ignore_errors=True)
+    absent_payload, error = load_command_json(
+        root,
+        ["python3", "tools/loom_flow.py", "live-smoke", "dynamic-tool-availability", "--target", str(absent_target)],
+    )
+    if error:
+        failures.append(Failure("dynamic-tool-live-availability", f"`dynamic-tool-availability` absent interface sample failed: {error}"))
+    else:
+        require_dynamic_tool_live_availability_payload(
+            failures,
+            category="dynamic-tool-live-availability",
+            context="absent-interface-dynamic-tool-live-availability",
+            payload=absent_payload,
+        )
+        if not isinstance(absent_payload, dict) or absent_payload.get("result") != "warn":
+            failures.append(Failure("dynamic-tool-live-availability", "absent repo interface sample must warn"))
+
+    valid_interface = {
+        "schema_version": "loom-repo-interface/v2",
+        "companion_entry": ".loom/companion/README.md",
+        "repo_specific_requirements": {"review": [], "merge_ready": [], "closeout": []},
+        "specialized_gates": [],
+        "review_instruction_locators": {
+            "spec_review": {"locator": "loom_default", "mode": "loom_default"},
+            "implementation_review": {"locator": "loom_default", "mode": "loom_default"},
+        },
+        "metadata_contract": {"fields": []},
+        "context_schema": {"fields": []},
+        "dynamic_tool_locators": [],
+    }
+
+    with tempfile.TemporaryDirectory(prefix="loom-dynamic-tool-live-availability-") as tmp:
+        base = Path(tmp)
+
+        present_target = base / "present"
+        shutil.copytree(example_target, present_target)
+        install_companion_local(present_target, repo_interface=valid_interface)
+        present_payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "live-smoke", "dynamic-tool-availability", "--target", str(present_target)],
+        )
+        if error:
+            failures.append(Failure("dynamic-tool-live-availability", f"`dynamic-tool-availability` present sample failed: {error}"))
+        else:
+            require_dynamic_tool_live_availability_payload(
+                failures,
+                category="dynamic-tool-live-availability",
+                context="present-dynamic-tool-live-availability",
+                payload=present_payload,
+            )
+            if not isinstance(present_payload, dict) or present_payload.get("result") != "pass":
+                failures.append(Failure("dynamic-tool-live-availability", "no-tools present sample must pass"))
+
+        required_target = base / "required-block"
+        shutil.copytree(example_target, required_target)
+        required_interface = json.loads(json.dumps(valid_interface))
+        required_interface["dynamic_tool_locators"] = [
+            {
+                "id": "required-unsupported-tool",
+                "summary": "Required tool reports unsupported.",
+                "locator": ".loom/companion/tool-unsupported.json",
+                "owner": "host-adapter",
+                "requirement": "required",
+                "surface": "merge_ready",
+                "fallback_to": "merge",
+            }
+        ]
+        install_companion_local(required_target, repo_interface=required_interface)
+        write_json_local(
+            required_target / ".loom" / "companion" / "tool-unsupported.json",
+            {
+                "schema_version": "loom-dynamic-tool-handshake/v1",
+                "status": "unsupported",
+                "summary": "Host adapter does not support this tool call.",
+                "failure_category": "unsupported",
+                "fallback_to": "merge",
+                "evidence": {"status": "present"},
+            },
+        )
+        required_payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "live-smoke",
+                "dynamic-tool-availability",
+                "--target",
+                str(required_target),
+                "--surface",
+                "merge_ready",
+            ],
+        )
+        if error:
+            failures.append(Failure("dynamic-tool-live-availability", f"`dynamic-tool-availability` required sample failed: {error}"))
+        elif not isinstance(required_payload, dict) or required_payload.get("result") != "block":
+            failures.append(Failure("dynamic-tool-live-availability", "required unsupported dynamic tool must block"))
+
+        optional_target = base / "optional-warn"
+        shutil.copytree(example_target, optional_target)
+        optional_interface = json.loads(json.dumps(valid_interface))
+        optional_interface["dynamic_tool_locators"] = [
+            {
+                "id": "optional-unavailable-tool",
+                "summary": "Optional tool is unavailable in this runtime.",
+                "locator": ".loom/companion/missing-tool.json",
+                "owner": "host-adapter",
+                "requirement": "optional",
+                "surface": "review",
+                "fallback_to": "build",
+            }
+        ]
+        install_companion_local(optional_target, repo_interface=optional_interface)
+        optional_payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "live-smoke",
+                "dynamic-tool-availability",
+                "--target",
+                str(optional_target),
+                "--surface",
+                "review",
+            ],
+        )
+        if error:
+            failures.append(Failure("dynamic-tool-live-availability", f"`dynamic-tool-availability` optional sample failed: {error}"))
+        elif not isinstance(optional_payload, dict) or optional_payload.get("result") != "warn":
+            failures.append(Failure("dynamic-tool-live-availability", "optional unavailable dynamic tool must warn"))
+
+        advisory_target = base / "advisory-warn"
+        shutil.copytree(example_target, advisory_target)
+        advisory_interface = json.loads(json.dumps(valid_interface))
+        advisory_interface["dynamic_tool_locators"] = [
+            {
+                "id": "advisory-failed-tool",
+                "summary": "Advisory tool reports a failed handshake.",
+                "locator": ".loom/companion/tool-failed.json",
+                "owner": "external-tool",
+                "requirement": "advisory",
+                "surface": "attempt_time",
+                "fallback_to": "build",
+            }
+        ]
+        install_companion_local(advisory_target, repo_interface=advisory_interface)
+        write_json_local(
+            advisory_target / ".loom" / "companion" / "tool-failed.json",
+            {
+                "schema_version": "loom-dynamic-tool-handshake/v1",
+                "status": "failed",
+                "summary": "External tool handshake failed.",
+                "failure_category": "failed",
+                "fallback_to": "build",
+                "evidence": {"status": "present"},
+            },
+        )
+        advisory_payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "live-smoke", "dynamic-tool-availability", "--target", str(advisory_target)],
+        )
+        if error:
+            failures.append(Failure("dynamic-tool-live-availability", f"`dynamic-tool-availability` advisory sample failed: {error}"))
+        elif not isinstance(advisory_payload, dict) or advisory_payload.get("result") != "warn":
+            failures.append(Failure("dynamic-tool-live-availability", "advisory failed dynamic tool must warn"))
+
+        unsafe_target = base / "unsafe"
+        shutil.copytree(example_target, unsafe_target)
+        unsafe_interface = json.loads(json.dumps(valid_interface))
+        unsafe_interface["dynamic_tool_locators"] = [
+            {
+                "id": "unsafe-tool",
+                "summary": "Unsafe locator must fail closed.",
+                "locator": "../outside-tool.json",
+                "owner": "repo-companion",
+                "requirement": "required",
+                "surface": "attempt_time",
+                "fallback_to": "admission",
+            }
+        ]
+        install_companion_local(unsafe_target, repo_interface=unsafe_interface)
+        unsafe_payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "live-smoke", "dynamic-tool-availability", "--target", str(unsafe_target)],
+        )
+        if error:
+            failures.append(Failure("dynamic-tool-live-availability", f"`dynamic-tool-availability` unsafe sample failed: {error}"))
+        elif not isinstance(unsafe_payload, dict) or unsafe_payload.get("result") != "block":
+            failures.append(Failure("dynamic-tool-live-availability", "unsafe dynamic tool locator must block"))
+
+        invalid_required_target = base / "invalid-required"
+        shutil.copytree(example_target, invalid_required_target)
+        invalid_required_interface = json.loads(json.dumps(valid_interface))
+        invalid_required_interface["dynamic_tool_locators"] = [
+            {
+                "id": "invalid-required-tool",
+                "summary": "Required tool has invalid handshake JSON.",
+                "locator": ".loom/companion/tool-invalid.json",
+                "owner": "host-adapter",
+                "requirement": "required",
+                "surface": "attempt_time",
+                "fallback_to": "build",
+            }
+        ]
+        install_companion_local(invalid_required_target, repo_interface=invalid_required_interface)
+        (invalid_required_target / ".loom" / "companion" / "tool-invalid.json").write_text("{not-json}\n", encoding="utf-8")
+        invalid_required_payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "live-smoke", "dynamic-tool-availability", "--target", str(invalid_required_target)],
+        )
+        if error:
+            failures.append(Failure("dynamic-tool-live-availability", f"`dynamic-tool-availability` invalid required sample failed: {error}"))
+        elif not isinstance(invalid_required_payload, dict) or invalid_required_payload.get("result") != "block":
+            failures.append(Failure("dynamic-tool-live-availability", "required invalid handshake sample must block"))
+
+        invalid_optional_target = base / "invalid-optional"
+        shutil.copytree(example_target, invalid_optional_target)
+        invalid_optional_interface = json.loads(json.dumps(valid_interface))
+        invalid_optional_interface["dynamic_tool_locators"] = [
+            {
+                "id": "invalid-optional-tool",
+                "summary": "Optional tool has invalid handshake JSON.",
+                "locator": ".loom/companion/tool-invalid.json",
+                "owner": "host-adapter",
+                "requirement": "optional",
+                "surface": "attempt_time",
+                "fallback_to": "build",
+            }
+        ]
+        install_companion_local(invalid_optional_target, repo_interface=invalid_optional_interface)
+        (invalid_optional_target / ".loom" / "companion" / "tool-invalid.json").write_text("{not-json}\n", encoding="utf-8")
+        invalid_optional_payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "live-smoke", "dynamic-tool-availability", "--target", str(invalid_optional_target)],
+        )
+        if error:
+            failures.append(Failure("dynamic-tool-live-availability", f"`dynamic-tool-availability` invalid optional sample failed: {error}"))
+        elif not isinstance(invalid_optional_payload, dict) or invalid_optional_payload.get("result") != "warn":
+            failures.append(Failure("dynamic-tool-live-availability", "optional invalid handshake sample must warn"))
+
+    return failures
+
+
 def fake_event_evidence(
     *,
     event_id: str,
@@ -11867,6 +12300,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_orchestration_conformance_profiles(root))
     failures.extend(check_live_smoke_foundation_contract(root))
     failures.extend(check_host_adapter_live_drift_contract(root))
+    failures.extend(check_dynamic_tool_live_availability_contract(root))
     failures.extend(check_structured_event_evidence_contract(root))
     failures.extend(check_deferred_roadmap_tree_contract(root))
     failures.extend(check_execution_budget_fixture_contract(root))
@@ -11879,7 +12313,7 @@ def collect_failures(root: Path) -> list[Failure]:
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 30
+    categories_checked = 31
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")
