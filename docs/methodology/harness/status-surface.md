@@ -108,6 +108,7 @@ Approval / sandbox policy 也只能派生读取：
 - dynamic tool availability 与 failure summary
 - approval / sandbox policy 与 risk summary
 - execution budget 报告（`status` 为 `not_applicable`/`unavailable` 时不阻断）
+- 最近 execution failure 分类（`stall` / `timeout` / `retry_exhaustion` 只作为风险输入）
 
 ## 4. `Runtime Evidence`
 
@@ -181,6 +182,19 @@ Approval / sandbox policy 也只能派生读取：
 - stale attempt 可以展示 `attempt_id`、`result` 与 locator，但必须标为 `freshness: stale`
 - missing 或 unreadable attempt evidence 必须标为 `missing` 或 `invalid`，不得用 flow 输出里的摘要补写第二真相
 - attempt 的 `result` 不等于当前 gate 通过；gate 仍消费 Work Item、recovery、review、merge-ready 与 closeout 主载体
+
+## 6.1 Execution Failure
+
+状态面可以从最近一次 fresh `execution_attempt` 派生 `execution_failure`：
+
+- `stall`
+  - 表示执行面停滞、无进展或等待外部宿主响应超出预期
+- `timeout`
+  - 表示执行面在明确时间窗口内失败关闭
+- `retry_exhaustion`
+  - 表示尝试链已经耗尽，但 Loom 只记录证据，不接管调度
+
+若最近 attempt 已 stale，`execution_failure.status` 必须显示 `stale`；若没有可读 attempt evidence，则显示 `missing` 或 `invalid`。该字段组不创建 scheduler state，不单独决定 merge gate。
 
 ## 7. gate 可消费判定
 

@@ -166,6 +166,19 @@
 `dimensions[*].id` 必须限定为 `turns`、`tokens`、`requests`、`retries`、`time_window`，每项只能保留
 `unit`、`used`、`limit`、`remaining`、`risk`、`source` 中的稳定字段。缺失预算时可输出 `not_applicable` 或 `unavailable`，其 `enforcement` 必须是 `advisory`。
 
+### 3.7.2 `execution_failure`
+
+状态面可以展示最近一次 `execution_attempt` 的执行失败分类，但该字段组只读 runtime evidence，不得把执行失败直接升级成 merge gate。
+
+- `schema_version`: `loom-execution-failure/v1`
+- `status`: `present` / `not_applicable` / `stale` / `missing` / `invalid`
+- `classification`: `none` / `stall` / `timeout` / `retry_exhaustion` / `unknown`
+- `summary`: 最近失败分类或 freshness 说明
+- `fallback_to`: 若最近 attempt 已给出 fallback target，则原样暴露
+- `provenance`: 指向 `latest_execution_attempt` locator 与 freshness
+
+`execution_failure` 只作为 status / recovery / review 的风险输入，不声明 scheduler state，不触发自动 retry，也不单独决定 `pass | block`。
+
 ### 3.8 `taxonomy`
 
 至少包含：

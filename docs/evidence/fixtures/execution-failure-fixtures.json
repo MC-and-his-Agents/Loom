@@ -1,0 +1,63 @@
+{
+  "schema_version": "loom-execution-failure-fixtures/v1",
+  "fixtures": [
+    {
+      "name": "timeout-inferred-from-engine-message",
+      "input": {
+        "result": "block",
+        "summary": "default review engine failed closed before a formal review record could be authored.",
+        "missing_inputs": [
+          "default review engine timed out after 900s"
+        ],
+        "fallback_to": "build"
+      },
+      "expect": {
+        "classification": "timeout",
+        "fallback_to": "build",
+        "summary_contains": "timed out"
+      }
+    },
+    {
+      "name": "stall-explicit",
+      "input": {
+        "result": "fallback",
+        "summary": "execution paused until host evidence can be refreshed.",
+        "missing_inputs": [
+          "host adapter stalled while waiting for refreshed state"
+        ],
+        "fallback_to": "admission",
+        "execution_failure": {
+          "classification": "stall",
+          "summary": "host adapter stalled while waiting for refreshed state",
+          "fallback_to": "admission"
+        }
+      },
+      "expect": {
+        "classification": "stall",
+        "fallback_to": "admission",
+        "summary_contains": "stalled"
+      }
+    },
+    {
+      "name": "retry-exhaustion-explicit",
+      "input": {
+        "result": "block",
+        "summary": "execution exhausted the declared retry budget.",
+        "missing_inputs": [
+          "retry exhaustion after three read attempts"
+        ],
+        "fallback_to": "build",
+        "execution_failure": {
+          "classification": "retry_exhaustion",
+          "summary": "retry exhaustion after three read attempts",
+          "fallback_to": "build"
+        }
+      },
+      "expect": {
+        "classification": "retry_exhaustion",
+        "fallback_to": "build",
+        "summary_contains": "retry exhaustion"
+      }
+    }
+  ]
+}
