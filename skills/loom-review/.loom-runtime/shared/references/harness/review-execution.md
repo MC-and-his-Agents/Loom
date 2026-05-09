@@ -98,11 +98,26 @@ Context pack 至少包含：
 - `review_path`
 - `current_head`
 - `validation_summary`
+- `budget_risk`
 - `history_available`
 - `recent_findings`
 - `repeated_blocker_signal`
 
 `recent_findings` 从可读的历史 review record 与 `.loom/runtime/review/<item>/*/normalized-findings.json` 投影而来，只保留 finding id、summary、severity、disposition、reviewed head、validation summary 和 source locator。
+
+`budget_risk` 是从 `github_control_plane.api_snapshot.budget` 派生的 provider-neutral 风险摘要，schema 为 `loom-execution-budget-risk/v1`。它至少暴露：
+
+- `status`
+- `enforcement`
+- `highest_risk`
+- `risk_dimensions`
+- `summary`
+
+该字段在 v0.9.0 中只作为 advisory review input：
+
+- 高风险 budget 可以提示 reviewer 关注 retry / request / token 压力
+- 缺失或 unavailable budget 只说明预算读面不可用
+- 不得因为 budget risk 单独改变 review `decision`
 
 `repeated_blocker_signal` 的 schema 为 `loom-repeated-blocker-signal/v1`。它在 v0.8.0 中只作为 advisory evidence：
 
@@ -144,6 +159,8 @@ review record 至少应包含：
 - `blocking_issues` / `follow_ups` 只是从 `findings` 投影出的兼容字段，不构成第二真相源
 - `consumed_inputs.engine_adapter`、`consumed_inputs.engine_evidence`、`consumed_inputs.normalized_findings`
   - 只记录 evidence 来源，不构成第二 authored truth
+- `consumed_inputs.budget_risk`
+  - 只记录 review 消费的 budget risk 摘要，不构成第二 authored truth，也不覆盖 review decision
 - `consumed_inputs.behavior_evidence` 与 `consumed_inputs.test_evidence`
   - 只记录 review 消费的证据 locator / 摘要 / fresh 绑定，不构成第二 authored truth
 

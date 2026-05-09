@@ -165,7 +165,22 @@
 
 `dimensions[*].id` 必须限定为 `turns`、`tokens`、`requests`、`retries`、`time_window`，每项只能保留 `unit`、`used`、`limit`、`remaining`、`risk`、`source` 中的稳定字段。缺失预算时可输出 `not_applicable` 或 `unavailable`，其 `enforcement` 必须是 `advisory`。
 
-### 3.7.2 `execution_failure`
+### 3.7.2 `execution_budget_risk`
+
+状态面必须展示从 `execution_budget` 派生的 provider-neutral 风险摘要：
+
+- `schema_version`: `loom-execution-budget-risk/v1`
+- `status`: `present` / `not_applicable` / `unavailable`
+- `enforcement`: `advisory`
+- `highest_risk`: `none` / `low` / `medium` / `high` / `unknown`
+- `risk_dimensions`
+- `summary`
+- `budget_summary`
+- `provenance`
+
+该字段组只说明“当前预算是否显示风险压力”，供 review / merge-ready / closeout 消费；不得把 advisory budget risk 直接提升为 gate blocker。
+
+### 3.7.3 `execution_failure`
 
 - `schema_version`: `loom-execution-failure/v1`
 - `status`: `present` / `not_applicable` / `stale` / `missing` / `invalid`
@@ -176,7 +191,7 @@
 
 该字段组只消费最近 `execution_attempt` evidence，不创建 scheduler state，也不单独阻断 merge。
 
-### 3.7.3 `retry_evidence`
+### 3.7.4 `retry_evidence`
 
 - `schema_version`: `loom-retry-evidence/v1`
 - `status`: `present` / `not_applicable` / `stale` / `missing` / `invalid`

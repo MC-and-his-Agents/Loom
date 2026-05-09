@@ -32,6 +32,7 @@
 - test evidence
 - fresh verification evidence 的 `head_sha` / 范围 / 恢复摘要绑定
 - 运行时证据或 `not_applicable`
+- `budget_risk` 摘要
 - 风险与回滚边界
 - 未决阻断项
 
@@ -96,6 +97,12 @@
 - 缺少 fresh verification evidence
 - 证据只存在于未整合的 subagent 输出中
 - review disposition 指向的补救、拒绝理由或延期事项缺少可消费证据
+
+`budget_risk` 在 `merge-ready` 中只作为 advisory evidence：
+
+- `high` 风险必须进入 merge-ready 输出摘要，提醒 reviewer / recovery / host merge 消费方
+- 不得把 advisory budget 加入 `missing_inputs`
+- 不得因为 budget-only 风险把 `result` 从 `pass` 改成 `block` 或 `fallback`
 
 ## 6. 与 `controlled merge` 的边界
 

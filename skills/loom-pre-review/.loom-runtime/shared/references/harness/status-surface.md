@@ -41,6 +41,12 @@
   - 从 host binding surface 派生
 - `github`
   - 从 host / control-plane mirror 派生
+- `execution_budget`
+  - 从 `github_control_plane.api_snapshot.budget` 派生
+  - 仅作 advisory evidence，不作为 gate 阻断条件
+- `execution_budget_risk`
+  - 从 `execution_budget` 派生 provider-neutral 风险摘要
+  - 仅作 advisory evidence，不作为 gate 阻断条件
 - retained host / repo-native result
   - 作为 evidence provenance 或 gate 前置结果派生
 - `taxonomy`
@@ -103,6 +109,7 @@ Approval / sandbox policy 也只能派生读取：
 - TDD 内环测试或等价检查的证据覆盖状态
 - fresh verification evidence 的 `head_sha` / 范围 / 摘要绑定
 - execution_budget 报告（`status` 为 `not_applicable`/`unavailable` 时不阻断）
+- execution_budget risk 摘要（`highest_risk = high` 时可提示 merge / review 风险，但不阻断）
 - 最近 execution failure 分类（只作风险输入）
 - retry evidence 摘要
 - dynamic tool availability 与 failure summary
@@ -123,6 +130,19 @@ Approval / sandbox policy 也只能派生读取：
 - `adapter_evidence_locator`
 
 `status` 为 `not_applicable` 或 `unavailable` 时仍为 advisory 证据，不得作为 merge-ready 的缺失输入 blocking 条件。
+
+状态面还应派生 `execution_budget_risk`：
+
+- `schema_version`: `loom-execution-budget-risk/v1`
+- `status`
+- `enforcement`
+- `highest_risk`
+- `risk_dimensions`
+- `summary`
+- `budget_summary`
+- `provenance`
+
+其中 `highest_risk = high` 只表示预算风险应被 review / merge-ready / closeout 消费，不表示 Loom 自动阻断当前 gate。
 
 ## 4.1 execution_failure
 

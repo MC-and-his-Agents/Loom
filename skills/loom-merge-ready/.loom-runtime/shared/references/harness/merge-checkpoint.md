@@ -34,6 +34,7 @@
 - test evidence
 - fresh verification evidence 的 `head_sha` / 范围 / 恢复摘要绑定
 - 运行时证据或 `not_applicable` 声明
+- `budget_risk` 摘要
 - 风险与回滚边界
 - 未决阻断项
 - 当前 head 是否仍在批准范围内
@@ -99,6 +100,12 @@
   - 退回前序 gate，重新做范围与方向收口
 - GitHub controlled merge 的 required checks / protection / ruleset 不满足
   - 回到宿主控制面补齐强制条件；Loom 只阻断，不越权代做 merge
+
+`budget_risk` 只作为 advisory evidence：
+
+- 高风险 budget 可以进入 merge gate 摘要，提醒后续 controlled merge / closeout 消费
+- 缺失或 unavailable budget 不得进入 `missing_inputs`
+- advisory budget 不得单独把 merge gate 改成 block 或 fallback
 
 ## 5. 边界约束
 
