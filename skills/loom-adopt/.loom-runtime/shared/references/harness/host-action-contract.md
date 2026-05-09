@@ -32,6 +32,7 @@ Loom 的宿主动作面不是新的 umbrella CLI，也不是宿主平台替身�
 
 - 结果 locator 通过 companion-owned `.loom/companion/interop.json` 声明
 - Loom 只消费这些结果，不接管动作执行本身
+- `python3 tools/loom_flow.py live-smoke host-adapter-drift --target <repo>` 只读取这组 locator 与 retained result envelope，产出 profile-local drift evidence；它不是新的 host-facing action，也不扩展本文件的顶层结果词表
 
 当成熟既有仓库需要声明 dynamic tool availability 时：
 

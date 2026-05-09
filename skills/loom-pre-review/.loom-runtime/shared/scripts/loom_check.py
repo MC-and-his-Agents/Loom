@@ -1941,6 +1941,128 @@ def require_live_smoke_payload(
                     failures.append(Failure(category, f"{context} prior_evidence missing `{field}`"))
 
 
+def require_host_adapter_live_drift_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("command") != "live-smoke":
+        failures.append(Failure(category, f"{context} must report `command: live-smoke`"))
+    if payload.get("operation") != "host-adapter-drift":
+        failures.append(Failure(category, f"{context} must report `operation: host-adapter-drift`"))
+    if payload.get("schema_version") != "loom-host-adapter-live-drift/v1":
+        failures.append(Failure(category, f"{context} schema_version must be `loom-host-adapter-live-drift/v1`"))
+    if payload.get("result") not in {"pass", "warn", "block"}:
+        failures.append(Failure(category, f"{context} result must stay within `pass | warn | block`"))
+    if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+        failures.append(Failure(category, f"{context} must include non-empty `summary`"))
+    if not isinstance(payload.get("missing_inputs"), list):
+        failures.append(Failure(category, f"{context} must include `missing_inputs`"))
+    if payload.get("fallback_to") not in {
+        None,
+        "live-smoke-retry-or-record-unavailable",
+        "live-smoke-config-repair",
+        "admission",
+        "rebootstrap-runtime",
+        "refresh-install",
+        "loom-init",
+    }:
+        failures.append(Failure(category, f"{context} fallback_to must stay within the stable host adapter live drift contract"))
+    require_runtime_state_payload(
+        failures,
+        category=category,
+        context=context,
+        payload=payload.get("runtime_state"),
+        expected_scene="repo-local-demo",
+        expected_carrier="repo-local-wrapper",
+        allowed_results={"pass", "block"} if payload.get("result") == "block" else {"pass"},
+    )
+    target = payload.get("target")
+    if not isinstance(target, dict):
+        failures.append(Failure(category, f"{context} must include `target`"))
+    else:
+        if not isinstance(target.get("path"), str) or not target.get("path"):
+            failures.append(Failure(category, f"{context} target.path must be non-empty"))
+        if not isinstance(target.get("exists"), bool):
+            failures.append(Failure(category, f"{context} target.exists must be boolean"))
+    if not isinstance(payload.get("command_plan"), list):
+        failures.append(Failure(category, f"{context} must include `command_plan`"))
+    reports = payload.get("reports")
+    if not isinstance(reports, list):
+        failures.append(Failure(category, f"{context} must include `reports`"))
+    else:
+        for index, report in enumerate(reports):
+            if not isinstance(report, dict):
+                failures.append(Failure(category, f"{context} reports[{index}] must be an object"))
+                continue
+            if report.get("result") not in {"pass", "warn", "block"}:
+                failures.append(Failure(category, f"{context} reports[{index}] result must stay within the stable contract"))
+            if not isinstance(report.get("attempted"), bool):
+                failures.append(Failure(category, f"{context} reports[{index}] must include boolean `attempted`"))
+            for field in ("id", "command", "summary", "reported_result"):
+                value = report.get(field)
+                if not isinstance(value, str) or not value:
+                    failures.append(Failure(category, f"{context} reports[{index}] missing `{field}`"))
+            if not isinstance(report.get("missing_inputs"), list):
+                failures.append(Failure(category, f"{context} reports[{index}] must include `missing_inputs`"))
+    profile_check = payload.get("profile_check")
+    if not isinstance(profile_check, dict):
+        failures.append(Failure(category, f"{context} must include `profile_check`"))
+    else:
+        if profile_check.get("id") != "host-adapter-live-drift":
+            failures.append(Failure(category, f"{context} profile_check.id must be `host-adapter-live-drift`"))
+        if profile_check.get("result") not in {"pass", "warn", "block"}:
+            failures.append(Failure(category, f"{context} profile_check.result must stay within `pass | warn | block`"))
+    host_adapter_drift = payload.get("host_adapter_drift")
+    if not isinstance(host_adapter_drift, dict):
+        failures.append(Failure(category, f"{context} must include `host_adapter_drift`"))
+        return
+    if host_adapter_drift.get("availability") not in {
+        "absent",
+        "present",
+        "incomplete",
+        "runtime-blocked",
+        "target-unavailable",
+        "missing-target",
+    }:
+        failures.append(Failure(category, f"{context} host_adapter_drift.availability is outside the stable vocabulary"))
+    if not isinstance(host_adapter_drift.get("contract_locator"), str) or not host_adapter_drift.get("contract_locator"):
+        failures.append(Failure(category, f"{context} host_adapter_drift.contract_locator must be non-empty"))
+    checks = host_adapter_drift.get("checks")
+    if not isinstance(checks, list):
+        failures.append(Failure(category, f"{context} host_adapter_drift.checks must be a list"))
+        return
+    for index, check in enumerate(checks):
+        if not isinstance(check, dict):
+            failures.append(Failure(category, f"{context} host_adapter_drift.checks[{index}] must be an object"))
+            continue
+        for field in ("id", "owner", "requirement", "summary", "result", "classification"):
+            value = check.get(field)
+            if not isinstance(value, str) or not value:
+                failures.append(Failure(category, f"{context} host_adapter_drift.checks[{index}] missing `{field}`"))
+        if check.get("result") not in {"pass", "warn", "block"}:
+            failures.append(Failure(category, f"{context} host_adapter_drift.checks[{index}] result must stay within `pass | warn | block`"))
+        if check.get("classification") not in {
+            "none",
+            "version_drift",
+            "locator_missing",
+            "locator_unreadable",
+            "permission_unavailable",
+            "unsafe_locator",
+            "invalid_declaration",
+        }:
+            failures.append(Failure(category, f"{context} host_adapter_drift.checks[{index}] classification is outside the stable vocabulary"))
+        if not isinstance(check.get("missing_inputs"), list):
+            failures.append(Failure(category, f"{context} host_adapter_drift.checks[{index}] must include `missing_inputs`"))
+        if not isinstance(check.get("evidence"), dict):
+            failures.append(Failure(category, f"{context} host_adapter_drift.checks[{index}] must include `evidence`"))
+
+
 def require_github_binding_payload(
     failures: list[Failure],
     *,
@@ -10313,6 +10435,326 @@ def check_live_smoke_foundation_contract(root: Path) -> list[Failure]:
     return failures
 
 
+def check_host_adapter_live_drift_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+
+    def write_json_local(path: Path, payload: object) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    def install_interop_local(target: Path, *, interop: dict[str, object]) -> None:
+        companion_dir = target / ".loom" / "companion"
+        companion_dir.mkdir(parents=True, exist_ok=True)
+        write_json_local(companion_dir / "interop.json", interop)
+
+    docs = {
+        "docs/adoption/repo-interop-contract.md": [
+            "live-smoke host-adapter-drift",
+            "host_adapter_version",
+            "permission_unavailable",
+            "profile-local evidence",
+        ],
+        "docs/methodology/harness/host-action-contract.md": [
+            "live-smoke host-adapter-drift",
+            "profile-local drift evidence",
+            "不是新的 host-facing action",
+        ],
+        "docs/evidence/live-smoke-profile.md": [
+            "loom-host-adapter-live-drift/v1",
+            "host-adapter-drift",
+            "version_drift",
+            "permission_unavailable",
+        ],
+        "docs/evidence/validations/validation-v0.10-host-adapter-live-drift.md": [
+            "loom-host-adapter-live-drift/v1",
+            "examples/new-project",
+            "profile-local `warn`",
+            "python3 tools/host_adapter_check.py",
+        ],
+    }
+    for relative, anchors in docs.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            failures.append(Failure("host-adapter-live-drift", f"`{relative}` is unreadable: {exc}"))
+            continue
+        for anchor in anchors:
+            if anchor not in text:
+                failures.append(Failure("host-adapter-live-drift", f"`{relative}` must mention `{anchor}`"))
+
+    expected_version = "1.0.0"
+
+    absent_payload = {
+        "command": "live-smoke",
+        "operation": "host-adapter-drift",
+        "schema_version": "loom-host-adapter-live-drift/v1",
+        "result": "warn",
+        "summary": "repo interop contract is absent, so no host adapter retained result can be consumed.",
+        "missing_inputs": ["repo interop contract is absent"],
+        "fallback_to": "live-smoke-retry-or-record-unavailable",
+        "runtime_state": {
+            "result": "pass",
+            "summary": "runtime carrier `repo-local-wrapper` is executing as `repo-local-demo` with a consistent bundled runtime.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "scene": "repo-local-demo",
+            "carrier": "repo-local-wrapper",
+            "entry_family": "loom-flow",
+            "install_root": "/tmp/install-root",
+            "runtime_root": "/tmp/runtime-root",
+            "registry_path": "/tmp/registry.json",
+            "layout_or_manifest_path": "/tmp/install-layout.json",
+            "source_repo_root": "/tmp/source-repo",
+            "target_root": "/tmp/absent-live-target",
+            "checks": {
+                "scene_marker": {"status": "pass", "summary": "scene marker is consistent."},
+                "carrier_layout": {"status": "pass", "summary": "carrier layout is readable.", "evidence": {"install_root": "/tmp/install-root"}},
+                "registry_contract": {"status": "pass", "summary": "registry contract is readable.", "evidence": {"path": "/tmp/registry.json"}},
+                "shared_runtime": {"status": "pass", "summary": "shared runtime is readable.", "evidence": {"path": "/tmp/runtime-root"}},
+                "referenced_resources": {"status": "pass", "summary": "referenced resources are present."},
+            },
+        },
+        "target": {
+            "path": "/tmp/absent-live-target",
+            "exists": True,
+            "worktree": "/tmp/absent-live-target",
+            "git_branch": "main",
+            "head_sha": "deadbeef",
+        },
+        "command_plan": [
+            {"id": "target-check", "command": "test -d /tmp/absent-live-target", "description": "Confirm the adopted-repo target path exists before reading host adapter retained result locators."},
+            {"id": "repo-interop-contract", "command": "read /tmp/absent-live-target/.loom/companion/interop.json", "description": "Read the repo interop contract and discover declared host adapter retained result locators."},
+        ],
+        "reports": [
+            {
+                "id": "target-check",
+                "attempted": True,
+                "command": "test -d /tmp/absent-live-target",
+                "reported_command": "target-check",
+                "reported_result": "pass",
+                "result": "pass",
+                "summary": "adopted-repo target root exists.",
+                "missing_inputs": [],
+                "fallback_to": None,
+            },
+            {
+                "id": "repo-interop-contract",
+                "attempted": True,
+                "command": "read /tmp/absent-live-target/.loom/companion/interop.json",
+                "reported_command": "repo-interop-contract",
+                "reported_result": "absent",
+                "result": "warn",
+                "summary": "repo interop contract is absent, so no host adapter retained result can be consumed.",
+                "missing_inputs": ["repo interop contract is absent"],
+                "fallback_to": "live-smoke-retry-or-record-unavailable",
+            },
+        ],
+        "profile_check": {"id": "host-adapter-live-drift", "result": "warn"},
+        "host_adapter_drift": {
+            "contract_locator": ".loom/companion/interop.json",
+            "availability": "absent",
+            "expected_host_adapter_version": expected_version,
+            "checks": [],
+        },
+    }
+    require_host_adapter_live_drift_payload(
+        failures,
+        category="host-adapter-live-drift",
+        context="absent-host-adapter-live-drift",
+        payload=absent_payload,
+    )
+
+    permission_payload = json.loads(json.dumps(absent_payload))
+    permission_payload.update(
+        {
+            "result": "block",
+            "summary": "host adapter live drift found blocking retained result declaration or readability gaps.",
+            "missing_inputs": ["host adapter `guardian-review` reported permission_unavailable"],
+            "fallback_to": "live-smoke-config-repair",
+            "reports": [
+                absent_payload["reports"][0],
+                {
+                    "id": "guardian-review",
+                    "attempted": True,
+                    "command": "read host/guardian-review.json",
+                    "reported_command": "host-adapter-retained-result",
+                    "reported_result": "permission_unavailable",
+                    "result": "block",
+                    "summary": "host adapter requires additional permission before its retained result can be read.",
+                    "missing_inputs": ["host adapter `guardian-review` reported permission_unavailable"],
+                    "fallback_to": "build",
+                },
+            ],
+            "profile_check": {"id": "host-adapter-live-drift", "result": "block"},
+            "host_adapter_drift": {
+                "contract_locator": ".loom/companion/interop.json",
+                "availability": "present",
+                "expected_host_adapter_version": expected_version,
+                "checks": [
+                    {
+                        "id": "guardian-review",
+                        "owner": "host-adapter",
+                        "requirement": "required",
+                        "surfaces": ["review", "merge_ready"],
+                        "locator": "host/guardian-review.json",
+                        "result": "block",
+                        "classification": "permission_unavailable",
+                        "summary": "host adapter requires additional permission before its retained result can be read.",
+                        "missing_inputs": ["host adapter `guardian-review` reported permission_unavailable"],
+                        "fallback_to": "build",
+                        "evidence": {
+                            "locator_status": "readable",
+                            "envelope_status": "permission_unavailable",
+                            "declared_host_adapter_version": expected_version,
+                            "expected_host_adapter_version": expected_version,
+                        },
+                    }
+                ],
+            },
+        }
+    )
+    require_host_adapter_live_drift_payload(
+        failures,
+        category="host-adapter-live-drift",
+        context="permission-unavailable-host-adapter-live-drift",
+        payload=permission_payload,
+    )
+
+    example_target = root / "examples/new-project"
+    absent_target = Path(tempfile.mkdtemp(prefix="loom-host-adapter-live-drift-absent-"))
+    shutil.rmtree(absent_target)
+    shutil.copytree(example_target, absent_target)
+    (absent_target / ".loom" / "companion" / "interop.json").unlink(missing_ok=True)
+    payload, error = load_command_json(root, ["python3", "tools/loom_flow.py", "live-smoke", "host-adapter-drift", "--target", str(absent_target)])
+    if error:
+        failures.append(Failure("host-adapter-live-drift", f"`host-adapter-drift` absent sample failed: {error}"))
+    else:
+        require_host_adapter_live_drift_payload(
+            failures,
+            category="host-adapter-live-drift",
+            context="absent-host-adapter-live-drift-command",
+            payload=payload,
+        )
+        if not isinstance(payload, dict) or payload.get("result") != "warn":
+            failures.append(Failure("host-adapter-live-drift", "absent host adapter live drift sample must warn"))
+
+    with tempfile.TemporaryDirectory(prefix="loom-host-adapter-live-drift-") as tmp:
+        base = Path(tmp)
+        valid_interop = {
+            "schema_version": "loom-repo-interop/v1",
+            "host_adapters": [
+                {
+                    "id": "guardian-review",
+                    "summary": "Read guardian review verdicts without reimplementing the host action.",
+                    "surfaces": ["review", "merge_ready"],
+                    "locator": "host/guardian-review.json",
+                    "owner": "host-adapter",
+                    "requirement": "required",
+                    "fallback_to": "build",
+                }
+            ],
+            "repo_native_carriers": [],
+            "shadow_surfaces": {
+                "admission": {"summary": "Compare admission parity.", "loom_locator": ".loom/shadow/admission-loom.json", "repo_locator": ".loom/shadow/admission-repo.json"},
+                "review": {"summary": "Compare review parity.", "loom_locator": ".loom/shadow/review-loom.json", "repo_locator": ".loom/shadow/review-repo.json"},
+                "merge_ready": {"summary": "Compare merge-ready parity.", "loom_locator": ".loom/shadow/merge-ready-loom.json", "repo_locator": ".loom/shadow/merge-ready-repo.json"},
+                "closeout": {"summary": "Compare closeout parity.", "loom_locator": ".loom/shadow/closeout-loom.json", "repo_locator": ".loom/shadow/closeout-repo.json"},
+            },
+        }
+
+        present_target = base / "present"
+        shutil.copytree(example_target, present_target)
+        install_interop_local(present_target, interop=valid_interop)
+        write_json_local(
+            present_target / "host" / "guardian-review.json",
+            {
+                "summary": "guardian review verdict is readable.",
+                "status": "pass",
+                "host_adapter_version": expected_version,
+            },
+        )
+        present_payload, error = load_command_json(root, ["python3", "tools/loom_flow.py", "live-smoke", "host-adapter-drift", "--target", str(present_target)])
+        if error:
+            failures.append(Failure("host-adapter-live-drift", f"`host-adapter-drift` present sample failed: {error}"))
+        else:
+            require_host_adapter_live_drift_payload(
+                failures,
+                category="host-adapter-live-drift",
+                context="present-host-adapter-live-drift-command",
+                payload=present_payload,
+            )
+            if not isinstance(present_payload, dict) or present_payload.get("result") != "pass":
+                failures.append(Failure("host-adapter-live-drift", "present host adapter live drift sample must pass"))
+
+        missing_target = base / "missing"
+        shutil.copytree(example_target, missing_target)
+        install_interop_local(missing_target, interop=valid_interop)
+        missing_payload, error = load_command_json(root, ["python3", "tools/loom_flow.py", "live-smoke", "host-adapter-drift", "--target", str(missing_target)])
+        if error:
+            failures.append(Failure("host-adapter-live-drift", f"`host-adapter-drift` missing sample failed: {error}"))
+        elif not isinstance(missing_payload, dict) or missing_payload.get("result") != "block":
+            failures.append(Failure("host-adapter-live-drift", "required missing host adapter locator must block"))
+
+        optional_target = base / "optional"
+        shutil.copytree(example_target, optional_target)
+        optional_interop = json.loads(json.dumps(valid_interop))
+        optional_interop["host_adapters"][0]["requirement"] = "optional"
+        install_interop_local(optional_target, interop=optional_interop)
+        optional_payload, error = load_command_json(root, ["python3", "tools/loom_flow.py", "live-smoke", "host-adapter-drift", "--target", str(optional_target)])
+        if error:
+            failures.append(Failure("host-adapter-live-drift", f"`host-adapter-drift` optional sample failed: {error}"))
+        elif not isinstance(optional_payload, dict) or optional_payload.get("result") != "warn":
+            failures.append(Failure("host-adapter-live-drift", "optional missing host adapter locator must warn"))
+
+        unsafe_target = base / "unsafe"
+        shutil.copytree(example_target, unsafe_target)
+        unsafe_interop = json.loads(json.dumps(valid_interop))
+        unsafe_interop["host_adapters"][0]["locator"] = "../outside-host.json"
+        install_interop_local(unsafe_target, interop=unsafe_interop)
+        unsafe_payload, error = load_command_json(root, ["python3", "tools/loom_flow.py", "live-smoke", "host-adapter-drift", "--target", str(unsafe_target)])
+        if error:
+            failures.append(Failure("host-adapter-live-drift", f"`host-adapter-drift` unsafe sample failed: {error}"))
+        elif not isinstance(unsafe_payload, dict) or unsafe_payload.get("result") != "block":
+            failures.append(Failure("host-adapter-live-drift", "unsafe host adapter locator must block"))
+
+        version_target = base / "version-drift"
+        shutil.copytree(example_target, version_target)
+        install_interop_local(version_target, interop=valid_interop)
+        write_json_local(
+            version_target / "host" / "guardian-review.json",
+            {
+                "summary": "guardian review verdict came from an older host adapter version.",
+                "status": "pass",
+                "host_adapter_version": "9.9.9",
+            },
+        )
+        version_payload, error = load_command_json(root, ["python3", "tools/loom_flow.py", "live-smoke", "host-adapter-drift", "--target", str(version_target)])
+        if error:
+            failures.append(Failure("host-adapter-live-drift", f"`host-adapter-drift` version drift sample failed: {error}"))
+        elif not isinstance(version_payload, dict) or version_payload.get("result") != "warn":
+            failures.append(Failure("host-adapter-live-drift", "host adapter version drift sample must warn"))
+
+        permission_target = base / "permission"
+        shutil.copytree(example_target, permission_target)
+        install_interop_local(permission_target, interop=valid_interop)
+        write_json_local(
+            permission_target / "host" / "guardian-review.json",
+            {
+                "summary": "host adapter requires additional permission before its retained result can be read.",
+                "status": "permission_unavailable",
+                "host_adapter_version": expected_version,
+            },
+        )
+        permission_command_payload, error = load_command_json(root, ["python3", "tools/loom_flow.py", "live-smoke", "host-adapter-drift", "--target", str(permission_target)])
+        if error:
+            failures.append(Failure("host-adapter-live-drift", f"`host-adapter-drift` permission sample failed: {error}"))
+        elif not isinstance(permission_command_payload, dict) or permission_command_payload.get("result") != "block":
+            failures.append(Failure("host-adapter-live-drift", "required permission unavailable sample must block"))
+
+    return failures
+
+
 def fake_event_evidence(
     *,
     event_id: str,
@@ -11424,6 +11866,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_operating_layer_contract(root))
     failures.extend(check_orchestration_conformance_profiles(root))
     failures.extend(check_live_smoke_foundation_contract(root))
+    failures.extend(check_host_adapter_live_drift_contract(root))
     failures.extend(check_structured_event_evidence_contract(root))
     failures.extend(check_deferred_roadmap_tree_contract(root))
     failures.extend(check_execution_budget_fixture_contract(root))
