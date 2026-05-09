@@ -50,6 +50,7 @@
 - 活跃 failures taxonomy
 - host binding
 - GitHub control plane signals
+- 目标仓库 `release / version` 目标面，若仓库已声明
 
 ## 3. 字段组 v2
 
@@ -137,6 +138,24 @@
 - `reviewed_head_sha`
 - `merge_commit_sha`
 - `target_branch`
+
+### 3.6.1 `target_release`
+
+当仓库通过 `repo companion` 声明目标仓库 `release / version` 目标面时，状态面必须展示派生 `target_release`：
+
+- `release_id`
+- `display_name`
+- `target_branch`
+- `release_goal`
+- `authored_status`
+- `included_scope`
+- `delivery_chain`
+- `release_evidence`
+- `closeout_gaps`
+- `rollback_readiness`
+- `provenance`
+
+该字段组只消费 repo-owned target release object、host binding、review / merge / closeout basis 与可读的 repo-owned release status locator。它不得把 target release object 升格为执行入口，也不得反写 authored release truth。
 
 ### 3.7 `policy_readiness`
 

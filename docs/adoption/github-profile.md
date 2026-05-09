@@ -13,6 +13,7 @@ GitHub 是默认 host-backed 实现，不是 Loom 唯一可支持宿主。
 GitHub profile 至少应能表达：
 
 - `Roadmap / 阶段目标`
+- 目标仓库 `release / version` 目标面
 - `Phase`
 - `FR`
 - `Work Item`
@@ -29,6 +30,10 @@ GitHub profile 至少应能表达：
 
 - `Roadmap / 阶段目标`
   - 版本目标、阶段树或等价治理目标面
+- 目标仓库 `release / version` 目标面
+  - repo-owned 或 host-owned release target object
+  - 用于声明当前目标版本、目标分支、release goal、纳入范围与 closeout evidence locator
+  - 只作为规划与收口容器，不替代 `Work Item`
 - `Phase`
   - 阶段级 issue 或等价规划对象
   - deferred Phase container 必须声明 `Activation Policy` 与 `Roadmap Inventory`
@@ -43,17 +48,21 @@ GitHub profile 至少应能表达：
   - 与当前 `Work Item` 绑定的实现 PR
 - `controlled merge`
   - branch protection、required checks、merge method、merge commit 的统一消费面
+- `closeout / reconciliation`
+  - 可继续消费目标仓库 release/version 目标面的 closeout evidence 与 release status gap
 
 ## 4. strong governance 默认要求
 
 GitHub host 下的 strong governance 默认要求：
 
 - `Work Item` 是唯一默认执行入口
+- 目标仓库 `release / version` 目标面只能映射 delivery chain，不得直接进入 execution
 - `FR -> Work Item -> PR -> merge commit` 绑定链可稳定读取
 - formal spec 路径必须先过 `spec review`
 - implementation review、`merge-ready`、`controlled merge`、`closeout` 强制消费前序 gate
 - 统一状态面能直接暴露 stale / drift / gate failure
 - closeout 必须消费 `reconciliation audit`
+- 若仓库声明了目标 `release / version`，closeout 必须能区分 `merged but unreleased`、`released but unreconciled` 与 release evidence gap
 - merge 默认走受控 PR 合入，默认方法为 `squash`
 
 ## 5. 三档 profile

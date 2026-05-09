@@ -27,6 +27,7 @@ closeout gate 用来回答两件事：
 
 - 本地 gate 结果
 - 同范围 `reconciliation audit` 结果
+- 若仓库声明了目标仓库 `release / version`，则读取当前 target release object 与 release closeout evidence
 - issue 状态
 - PR 是否已 merged
 - 事项对应实现是否已达到 `absorbed`
@@ -36,6 +37,15 @@ closeout gate 用来回答两件事：
 - 主干包含合并结果后仍可回链的 fresh verification evidence
 
 若这些事实不一致，结果必须返回 `block`。
+
+若仓库声明了目标仓库 `release / version`，`closeout check` 还必须至少能区分：
+
+- `merged but unreleased`
+- `released but unreconciled`
+- 缺 changelog / release notes / migration notes / tag-artifact evidence
+- 缺 rollback basis
+
+这些缺口必须作为显式 closeout finding 暴露，不能被折叠成笼统的 host drift。
 
 `closeout check` 只允许返回 `pass` 或 `block`：
 

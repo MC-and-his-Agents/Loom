@@ -18,6 +18,8 @@
   - `#290`
 - [pull-request.md](./pull-request.md)
   - `EXT-0008` `EXT-0028`
+- [release-closeout-template.md](./release-closeout-template.md)
+  - `#693`
 
 当前目录中的核心文件，应优先表达最小模板约束，而不是只描述候选想法。
 
@@ -29,6 +31,8 @@
   - 对应 `spec-suite.md` 中定义的 `plan.md` 最小骨架
 - [scaffold/user-story.md](./scaffold/user-story.md)
   - 对应 `story-intake.md` 中定义的 story intake 最小骨架；其中 User Story、Story Readiness 与 Delivery Consumption Boundary 是分离产物
+- [scaffold/release-closeout.md](./scaffold/release-closeout.md)
+  - 对应 `release-closeout-template.md` 中定义的 target release closeout 最小骨架
 
 GitHub PR 的最小实体模板位于仓库根级：
 

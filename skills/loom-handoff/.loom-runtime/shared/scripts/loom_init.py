@@ -1316,6 +1316,13 @@ def repo_interface_payload() -> dict[str, object]:
         "metadata_contract": {"fields": []},
         "context_schema": {"fields": []},
         "dynamic_tool_locators": [],
+        "policy_locators": [],
+        "release_targets": {
+            "catalog_locator": ".loom/companion/releases/catalog.json",
+            "current_target_locator": ".loom/companion/releases/current.json",
+            "enforcement": "blocking",
+            "status_locator": ".loom/companion/releases/status.json",
+        },
     }
 
 
@@ -1605,6 +1612,59 @@ def scaffold_target(
         (target_root / ".loom/companion/review.md", render_companion_review(), "text"),
         (target_root / ".loom/companion/merge-ready.md", render_companion_merge_ready(), "text"),
         (target_root / ".loom/companion/closeout.md", render_companion_closeout(), "text"),
+        (target_root / ".loom/companion/releases/changelog.md", "# Changelog\n\n- Bootstrap release intake example.\n", "text"),
+        (target_root / ".loom/companion/releases/release-notes.md", "# Release Notes\n\n- Bootstrap release target is ready for Loom-derived status consumption.\n", "text"),
+        (target_root / ".loom/companion/releases/migration-notes.md", "# Migration Notes\n\n- not_applicable\n", "text"),
+        (target_root / ".loom/companion/releases/rollback.md", "# Rollback Basis\n\n- Revert the companion-owned release target declaration and rerun Loom checks.\n", "text"),
+        (
+            target_root / ".loom/companion/releases/catalog.json",
+            {
+                "schema_version": "loom-target-release-catalog/v1",
+                "current_release_id": "bootstrap-v0.1.0",
+                "releases": [{"release_id": "bootstrap-v0.1.0", "locator": ".loom/companion/releases/current.json"}],
+            },
+            "json",
+        ),
+        (
+            target_root / ".loom/companion/releases/current.json",
+            {
+                "schema_version": "loom-target-release/v1",
+                "release_id": "bootstrap-v0.1.0",
+                "display_name": "Bootstrap v0.1.0",
+                "target_branch": "main",
+                "release_goal": "Bootstrap the first executable Loom path for this repository.",
+                "status": "unreleased",
+                "included_scope": {
+                    "phase": [{"id": "bootstrap-phase", "locator": ".loom/companion/checkpoints.md", "delivery_status": "planned"}],
+                    "fr": [],
+                    "work_item": [{"id": "INIT-0001", "locator": ".loom/work-items/INIT-0001.md", "delivery_status": "unmerged"}],
+                    "implementation_pr": [],
+                    "merge_commit": [],
+                },
+                "evidence": {
+                    "changelog_locator": ".loom/companion/releases/changelog.md",
+                    "release_notes_locator": ".loom/companion/releases/release-notes.md",
+                    "migration_notes_locator": ".loom/companion/releases/migration-notes.md",
+                    "tag_or_artifact_locator": ".loom/companion/README.md",
+                    "rollback_basis_locator": ".loom/companion/releases/rollback.md",
+                },
+                "authority": {
+                    "owner": "repo-companion",
+                    "source_kind": "repo_owned_locator",
+                    "source_locator": ".loom/companion/releases/current.json",
+                },
+            },
+            "json",
+        ),
+        (
+            target_root / ".loom/companion/releases/status.json",
+            {
+                "schema_version": "loom-target-release-status/v1",
+                "result": "pass",
+                "summary": "repo-owned release status example is readable.",
+            },
+            "json",
+        ),
     ]
     if attach_only:
         pass

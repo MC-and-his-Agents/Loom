@@ -113,7 +113,7 @@
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "10e3b6e49f6355d971885de8b271e67885bcd789c20cbedee36b2dc3689c424c"
+      "sha256": "b90ef7fd44d5a85293adb1b8612be1661b8ad7c1fc0839fb7e84b8033ba14ab2"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
@@ -125,19 +125,19 @@
       "path": ".loom/bin/governance_surface.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/governance_surface.py",
-      "sha256": "9555b98122705fab5d79c3d7af381ced0d0135ebe9a2c7720eb45d08786f0e7e"
+      "sha256": "74e79241be3580b532b6f94e8b2ec92c4bbc2ed544da56ba1e2b10b2c4c761c9"
     },
     {
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "73b39e7f082cdf168e735f96c3f1558100305c78e22efb69a8510a031e5b7f2a"
+      "sha256": "396de1848b81471ec3f4c13b608b97cfb267e7e972bb38b64b14302f8707eeac"
     },
     {
       "path": ".loom/bin/loom_status.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_status.py",
-      "sha256": "f2f48d4489a0f6c0567030a5b732aeeca72a9c3c2098a182bcdb44dbd549b5f8"
+      "sha256": "ba8689ff47e4cb22fd44ea5d0042166af380d671673b9215ce6cfc4d558254bf"
     },
     {
       "path": ".loom/bin/runtime_paths.py",
@@ -155,7 +155,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "66e0d58e7697c83c51b563d1ccd9952171711f253ececd97f174911a146bdd08"
+      "sha256": "ecd391d04d0c2d5ac2c3ea66148ec5263a6fcca0d79387709a377ae4deb92c38"
     },
     {
       "path": "AGENTS.md",
@@ -459,6 +459,110 @@
         "status": "present",
         "locator": ".loom/companion/repo-interface.json",
         "source": "repo companion manifest.repo_interface"
+      },
+      "release_targets": {
+        "availability": "present",
+        "catalog": {
+          "status": "present",
+          "locator": ".loom/companion/releases/catalog.json",
+          "source": "repo companion interface.release_targets.catalog_locator"
+        },
+        "current_target": {
+          "status": "present",
+          "locator": ".loom/companion/releases/current.json",
+          "source": "repo companion interface.release_targets.current_target_locator"
+        },
+        "status": {
+          "status": "present",
+          "locator": ".loom/companion/releases/status.json",
+          "source": "repo companion interface.release_targets.status_locator"
+        },
+        "enforcement": "blocking",
+        "summary": "target repository release/version surface is readable.",
+        "missing_inputs": [],
+        "target_release": {
+          "schema_version": "loom-target-release-status/v1",
+          "result": "pass",
+          "summary": "target repository release/version surface is readable.",
+          "release_id": "bootstrap-v0.1.0",
+          "display_name": "Bootstrap v0.1.0",
+          "target_branch": "main",
+          "release_goal": "Bootstrap the first executable Loom path for this repository.",
+          "authored_status": "unreleased",
+          "included_scope": {
+            "phase": [
+              {
+                "id": "bootstrap-phase",
+                "locator": ".loom/companion/checkpoints.md",
+                "delivery_status": "planned"
+              }
+            ],
+            "fr": [],
+            "work_item": [
+              {
+                "id": "INIT-0001",
+                "locator": ".loom/work-items/INIT-0001.md",
+                "delivery_status": "unmerged"
+              }
+            ],
+            "implementation_pr": [],
+            "merge_commit": []
+          },
+          "delivery_chain": {
+            "merged": [],
+            "unmerged": [
+              {
+                "scope": "phase",
+                "id": "bootstrap-phase",
+                "locator": ".loom/companion/checkpoints.md",
+                "delivery_status": "planned"
+              },
+              {
+                "scope": "work_item",
+                "id": "INIT-0001",
+                "locator": ".loom/work-items/INIT-0001.md",
+                "delivery_status": "unmerged"
+              }
+            ],
+            "unreleased": [],
+            "unreconciled": []
+          },
+          "release_evidence": {
+            "changelog": {
+              "status": "present",
+              "locator": ".loom/companion/releases/changelog.md"
+            },
+            "release_notes": {
+              "status": "present",
+              "locator": ".loom/companion/releases/release-notes.md"
+            },
+            "migration_notes": {
+              "status": "present",
+              "locator": ".loom/companion/releases/migration-notes.md"
+            },
+            "tag_or_artifact": {
+              "status": "present",
+              "locator": ".loom/companion/README.md"
+            },
+            "rollback_basis": {
+              "status": "present",
+              "locator": ".loom/companion/releases/rollback.md"
+            }
+          },
+          "closeout_gaps": [],
+          "rollback_readiness": {
+            "status": "ready",
+            "locator": ".loom/companion/releases/rollback.md"
+          },
+          "provenance": {
+            "source_layer": "repo_companion",
+            "source_locator": ".loom/companion/releases/current.json",
+            "status_locator": ".loom/companion/releases/status.json",
+            "enforcement": "blocking"
+          },
+          "missing_inputs": [],
+          "fallback_to": null
+        }
       },
       "tool_availability": {
         "schema_version": "loom-dynamic-tool-handshake/v1",

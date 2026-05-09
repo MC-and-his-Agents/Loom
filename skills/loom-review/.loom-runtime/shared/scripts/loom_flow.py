@@ -34,6 +34,7 @@ from fact_chain_support import (
 from governance_surface import (
     build_governance_surface,
     derive_execution_budget_risk,
+    empty_target_release_status,
     empty_tool_availability,
     workspace_lifecycle_expectations,
 )
@@ -2077,6 +2078,13 @@ def default_repo_interface() -> dict[str, Any]:
         "metadata_contract": {"fields": []},
         "context_schema": {"fields": []},
         "dynamic_tool_locators": [],
+        "policy_locators": [],
+        "release_targets": {
+            "catalog_locator": ".loom/companion/releases/catalog.json",
+            "current_target_locator": ".loom/companion/releases/current.json",
+            "enforcement": "blocking",
+            "status_locator": ".loom/companion/releases/status.json",
+        },
     }
 
 
@@ -2136,6 +2144,10 @@ def companion_text_payloads() -> dict[str, str]:
         ".loom/companion/merge-ready.md": "# Companion Merge-Ready Surface\n",
         ".loom/companion/closeout.md": "# Companion Closeout Surface\n",
         ".loom/companion/checkpoints.md": "# Companion Checkpoints\n",
+        ".loom/companion/releases/changelog.md": "# Changelog\n\n- Bootstrap release intake example.\n",
+        ".loom/companion/releases/release-notes.md": "# Release Notes\n\n- Bootstrap release target is ready for Loom-derived status consumption.\n",
+        ".loom/companion/releases/migration-notes.md": "# Migration Notes\n\n- not_applicable\n",
+        ".loom/companion/releases/rollback.md": "# Rollback Basis\n\n- Revert the companion-owned release target declaration and rerun Loom checks.\n",
     }
 
 
@@ -2144,6 +2156,48 @@ def companion_json_payloads() -> dict[str, dict[str, Any]]:
         ".loom/companion/manifest.json": default_companion_manifest(),
         ".loom/companion/repo-interface.json": default_repo_interface(),
         ".loom/companion/interop.json": default_repo_interop(),
+        ".loom/companion/releases/catalog.json": {
+            "schema_version": "loom-target-release-catalog/v1",
+            "current_release_id": "bootstrap-v0.1.0",
+            "releases": [
+                {
+                    "release_id": "bootstrap-v0.1.0",
+                    "locator": ".loom/companion/releases/current.json",
+                }
+            ],
+        },
+        ".loom/companion/releases/current.json": {
+            "schema_version": "loom-target-release/v1",
+            "release_id": "bootstrap-v0.1.0",
+            "display_name": "Bootstrap v0.1.0",
+            "target_branch": "main",
+            "release_goal": "Bootstrap the first executable Loom path for this repository.",
+            "status": "unreleased",
+            "included_scope": {
+                "phase": [{"id": "bootstrap-phase", "locator": ".loom/companion/checkpoints.md", "delivery_status": "planned"}],
+                "fr": [],
+                "work_item": [{"id": "INIT-0001", "locator": ".loom/work-items/INIT-0001.md", "delivery_status": "unmerged"}],
+                "implementation_pr": [],
+                "merge_commit": [],
+            },
+            "evidence": {
+                "changelog_locator": ".loom/companion/releases/changelog.md",
+                "release_notes_locator": ".loom/companion/releases/release-notes.md",
+                "migration_notes_locator": ".loom/companion/releases/migration-notes.md",
+                "tag_or_artifact_locator": ".loom/companion/README.md",
+                "rollback_basis_locator": ".loom/companion/releases/rollback.md",
+            },
+            "authority": {
+                "owner": "repo-companion",
+                "source_kind": "repo_owned_locator",
+                "source_locator": ".loom/companion/releases/current.json",
+            },
+        },
+        ".loom/companion/releases/status.json": {
+            "schema_version": "loom-target-release-status/v1",
+            "result": "pass",
+            "summary": "repo-owned release status example is readable.",
+        },
     }
 
 
@@ -9487,11 +9541,24 @@ def closeout_payload(
     elif fact_chain_context is not None:
         missing_inputs.extend(report_blocking_messages(fact_chain_context["report"]))
     governance_surface = build_governance_surface(target_root)
+    repo_interface = governance_surface.get("repo_interface")
     repo_specific_requirements = repo_specific_requirements_payload(
-        governance_surface.get("repo_interface"),
+        repo_interface,
         target_root=target_root,
         surface="closeout",
     )
+    release_targets = repo_interface.get("release_targets") if isinstance(repo_interface, dict) else None
+    target_release = (
+        release_targets.get("target_release")
+        if isinstance(release_targets, dict)
+        else empty_target_release_status()
+    )
+    release_enforcement = (
+        release_targets.get("enforcement")
+        if isinstance(release_targets, dict) and isinstance(release_targets.get("enforcement"), str)
+        else "unknown"
+    )
+    closeout_findings: list[dict[str, Any]] = []
     gate: dict[str, Any] = {"skipped": skip_gate}
     if not skip_gate:
         repo_gate = target_root / ".loom/bin/loom_check.py"
@@ -9611,6 +9678,72 @@ def closeout_payload(
     if issue_payload is not None and issue_payload.get("state") != "CLOSED":
         missing_inputs.append("issue is not closed")
 
+    target_release_gaps = target_release.get("closeout_gaps") if isinstance(target_release, dict) else []
+    if not isinstance(target_release_gaps, list):
+        target_release_gaps = []
+    delivery_chain = target_release.get("delivery_chain") if isinstance(target_release, dict) else {}
+    unreleased = delivery_chain.get("unreleased") if isinstance(delivery_chain, dict) else []
+    unreconciled = delivery_chain.get("unreconciled") if isinstance(delivery_chain, dict) else []
+    if not isinstance(unreleased, list):
+        unreleased = []
+    if not isinstance(unreconciled, list):
+        unreconciled = []
+    if isinstance(target_release, dict) and target_release.get("result") == "block" and release_enforcement == "blocking":
+        missing_inputs.extend(
+            f"target_release: {message}"
+            for message in target_release.get("missing_inputs", [])
+        )
+        closeout_findings.append(
+            {
+                "category": "gate_failure",
+                "kind": "target_release_unreadable",
+                "severity": "block",
+                "subject": target_release.get("release_id") or "target release",
+                "why_blocking": "target repository release/version truth is declared as blocking but unreadable.",
+                "fallback_to": "closeout",
+                "evidence": {"missing_inputs": target_release.get("missing_inputs", [])},
+            }
+        )
+    if target_release_gaps and release_enforcement == "blocking":
+        missing_inputs.extend(f"target_release gap: {gap}" for gap in target_release_gaps)
+        closeout_findings.append(
+            {
+                "category": "gate_failure",
+                "kind": "release_evidence_gap",
+                "severity": "block",
+                "subject": target_release.get("release_id") or "target release",
+                "why_blocking": "target release closeout evidence is incomplete.",
+                "fallback_to": "merge",
+                "evidence": {"gaps": target_release_gaps},
+            }
+        )
+    if unreleased:
+        missing_inputs.append("target release contains merged but unreleased work")
+        closeout_findings.append(
+            {
+                "category": "gate_failure",
+                "kind": "merged_but_unreleased",
+                "severity": "block",
+                "subject": target_release.get("release_id") or "target release",
+                "why_blocking": "merged work is still marked unreleased in the target release surface.",
+                "fallback_to": "merge",
+                "evidence": {"unreleased": unreleased},
+            }
+        )
+    if unreconciled:
+        missing_inputs.append("target release contains released but unreconciled work")
+        closeout_findings.append(
+            {
+                "category": "drift",
+                "kind": "released_but_unreconciled",
+                "severity": "block",
+                "subject": target_release.get("release_id") or "target release",
+                "why_blocking": "released work is still marked unreconciled in the target release surface.",
+                "fallback_to": "reconciliation-sync",
+                "evidence": {"unreconciled": unreconciled},
+            }
+        )
+
     result = "pass" if not missing_inputs else "block"
     summary = (
         "closeout state is consistent across gate, GitHub issue/PR, project, and main."
@@ -9621,6 +9754,12 @@ def closeout_payload(
     if result == "block" and closeout_summary_override is not None:
         summary = closeout_summary_override
         fallback_to = closeout_fallback
+    elif result == "block" and closeout_findings:
+        primary_finding = closeout_findings[0]
+        summary = str(primary_finding.get("why_blocking") or summary)
+        fallback_value = primary_finding.get("fallback_to")
+        if isinstance(fallback_value, str) and fallback_value:
+            fallback_to = fallback_value
     elif result == "pass" and isinstance(reconciliation_payload, dict) and reconciliation_payload.get("result") == "warn":
         summary = "closeout state is consistent, but reconciliation audit reported non-blocking warnings that still need review."
     if result == "pass" and repo_specific_requirements["result"] == "block":
@@ -9642,6 +9781,8 @@ def closeout_payload(
             "pr": pr_payload,
             "project": project_payload,
             "repo_specific_requirements": repo_specific_requirements,
+            "target_release": target_release,
+            "findings": closeout_findings,
             **(
                 {
                     "provenance": report_provenance(fact_chain_context["report"]),
