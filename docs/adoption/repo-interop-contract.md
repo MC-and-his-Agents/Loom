@@ -98,6 +98,20 @@ approval / sandbox policy read locator 属于 [repo-companion-contract.md](./rep
 - `optional` / `advisory` locator 缺失或指向不可读路径只能进入 `missing_optional` 或 profile-local advisory evidence，不得污染 core pass/fail
 - `host_adapters` 不定义 attempt-time advertised / unavailable / unsupported / failed 结果，也不调用宿主动作
 
+`python3 tools/loom_flow.py live-smoke host-adapter-drift --target <repo>` 只在 adopted repo 上读取这组 `host_adapters[*]` 声明及其 locator 指向的 retained result envelope，用来回答：
+
+- 该仓库是否声明了可消费的 retained host action 读面
+- locator 是否缺失、不可读、越界或 unsafe
+- envelope 是否暴露 `permission_unavailable` 或 `host_adapter_version` 漂移
+
+它仍然属于 `orchestration-live` / profile-local evidence：
+
+- 不执行 host action
+- 不写宿主控制面
+- 不改写 `interop.json`
+- 不把 optional / advisory host adapter drift 升级成 `orchestration-core` blocker
+- `required` drift 只在该 live/profile-local 命令内返回 `block`
+
 典型对象包括：
 
 - guardian verdict

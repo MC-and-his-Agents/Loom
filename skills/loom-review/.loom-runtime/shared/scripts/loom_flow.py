@@ -114,6 +114,7 @@ REVIEW_ENGINE_PROFILE_SCHEMA = "loom-review-engine-profile/v1"
 REVIEW_ENGINE_PROFILE_IDS = {"default", "high-risk", "spec-review", "repeated-blocker"}
 REVIEW_ENGINE_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
 LIVE_SMOKE_SCHEMA = "loom-live-smoke/v1"
+HOST_ADAPTER_LIVE_DRIFT_SCHEMA = "loom-host-adapter-live-drift/v1"
 LIVE_SMOKE_RETRY_FALLBACK = "live-smoke-retry-or-record-unavailable"
 LIVE_SMOKE_REPLAY_FALLBACK = "record-prior-evidence"
 LIVE_SMOKE_CONFIG_FALLBACK = "live-smoke-config-repair"
@@ -504,7 +505,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "live-smoke",
         help="Run or replay versioned adopted-repo live smoke evidence without changing core gates",
     )
-    live_smoke.add_argument("operation", choices=("run", "replay"))
+    live_smoke.add_argument("operation", choices=("run", "replay", "host-adapter-drift"))
     live_smoke.add_argument("--target", help="Adopted repository root for live smoke run")
     live_smoke.add_argument("--item", default="INIT-0001", help="Expected current item id for the optional resume smoke")
     live_smoke.add_argument("--prior-evidence", help="Versioned prior-pass evidence to replay without running adopted-repo commands")
@@ -605,6 +606,540 @@ def live_smoke_release_interpretation(status: str) -> str:
     if status == "unavailable":
         return "explicit unavailable evidence is a non-blocking confidence input and does not silently pass."
     return "profile-local live smoke failure lowers release confidence but does not replace orchestration-core gate results."
+
+
+def current_host_adapter_version() -> str | None:
+    source_repo_root = os.environ.get("LOOM_SOURCE_REPO_ROOT")
+    candidates: list[tuple[Path, str]] = []
+    if source_repo_root:
+        candidates.append((Path(source_repo_root).expanduser().resolve() / "plugins/loom/.codex-plugin/plugin.json", "plugin"))
+    installed_skills_root = os.environ.get("LOOM_INSTALLED_SKILLS_ROOT")
+    if installed_skills_root:
+        installed_root = Path(installed_skills_root).expanduser().resolve()
+        candidates.append((installed_root / "loom-init" / "loom-package.json", "package"))
+        candidates.append((installed_root / "loom-adopt" / "loom-package.json", "package"))
+    for path, source in candidates:
+        if not path.exists():
+            continue
+        try:
+            payload = load_json_file(path)
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        if source == "plugin":
+            x_loom = payload.get("x-loom")
+            version = x_loom.get("host_adapter_version") if isinstance(x_loom, dict) else None
+        else:
+            version = payload.get("host_adapter_version")
+        if isinstance(version, str) and version.strip():
+            return version.strip()
+    return None
+
+
+def host_adapter_live_drift_command(target_root: Path) -> str:
+    return live_smoke_command(["live-smoke", "host-adapter-drift", "--target", str(target_root)])
+
+
+def host_adapter_live_drift_command_plan(target_root: Path, host_adapters: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    target = command_target(target_root)
+    plan = [
+        {
+            "id": "target-check",
+            "command": f"test -d {target}",
+            "description": "Confirm the adopted-repo target path exists before reading host adapter retained result locators.",
+        },
+        {
+            "id": "repo-interop-contract",
+            "command": f"read {target_root / '.loom/companion/interop.json'}",
+            "description": "Read the repo interop contract and discover declared host adapter retained result locators.",
+        },
+    ]
+    for index, entry in enumerate(host_adapters or []):
+        entry_id = entry.get("id") if isinstance(entry, dict) else None
+        locator = entry.get("locator") if isinstance(entry, dict) else None
+        plan.append(
+            {
+                "id": str(entry_id or f"host-adapter-{index}"),
+                "command": f"read {locator if isinstance(locator, str) and locator else '<missing-locator>'}",
+                "description": "Read the retained host action result envelope declared in repo interop.",
+            }
+        )
+    return plan
+
+
+def host_adapter_permission_unavailable(payload: dict[str, Any]) -> bool:
+    candidates: list[str] = []
+    for key in ("status", "result", "classification", "failure_category"):
+        value = payload.get(key)
+        if isinstance(value, str):
+            candidates.append(value)
+    read_status = payload.get("read_status")
+    if isinstance(read_status, dict):
+        for key in ("status", "result", "classification", "failure_category"):
+            value = read_status.get(key)
+            if isinstance(value, str):
+                candidates.append(value)
+    normalized = {value.strip().lower().replace("-", "_") for value in candidates if value.strip()}
+    return "permission_unavailable" in normalized
+
+
+def host_adapter_envelope_version(payload: dict[str, Any]) -> str | None:
+    direct = payload.get("host_adapter_version")
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+    version_context = payload.get("version_context")
+    if isinstance(version_context, dict):
+        nested = version_context.get("host_adapter_version")
+        if isinstance(nested, str) and nested.strip():
+            return nested.strip()
+    return None
+
+
+def host_adapter_drift_check(
+    target_root: Path,
+    *,
+    entry: object,
+    index: int,
+    expected_host_adapter_version: str | None,
+) -> dict[str, Any]:
+    prefix = f"host_adapters[{index}]"
+    if not isinstance(entry, dict):
+        return {
+            "id": f"invalid-{index}",
+            "owner": "unknown",
+            "requirement": "required",
+            "surfaces": [],
+            "locator": None,
+            "result": "block",
+            "classification": "invalid_declaration",
+            "summary": f"{prefix} must be an object.",
+            "missing_inputs": [f"{prefix} must be an object"],
+            "fallback_to": "admission",
+            "evidence": {"locator_status": "invalid"},
+        }
+
+    entry_id = str(entry.get("id") or f"host-adapter-{index}")
+    requirement = str(entry.get("requirement") or "required")
+    fallback_to = entry.get("fallback_to") if isinstance(entry.get("fallback_to"), str) and entry.get("fallback_to") else "admission"
+    owner = str(entry.get("owner") or "unknown")
+    surfaces = entry.get("surfaces")
+    locator_value = entry.get("locator")
+    missing_inputs: list[str] = []
+    if not isinstance(entry.get("summary"), str) or not entry.get("summary"):
+        missing_inputs.append(f"{prefix} missing `summary`")
+    if owner not in {"repo", "repo-companion", "host", "host-adapter", "platform", "external-tool"}:
+        missing_inputs.append(f"{prefix} owner must stay repo/host/platform-owned, not Loom core")
+    if requirement not in {"required", "optional", "advisory"}:
+        missing_inputs.append(f"{prefix} requirement must be `required`, `optional`, or `advisory`")
+    if not isinstance(surfaces, list) or not surfaces:
+        missing_inputs.append(f"{prefix} must include `surfaces` as a non-empty list")
+    else:
+        for surface_index, surface in enumerate(surfaces):
+            if surface not in {"admission", "pre_review", "review", "build", "merge_ready", "closeout"}:
+                missing_inputs.append(
+                    f"{prefix}.surfaces[{surface_index}] must be one of `admission`, `pre_review`, `review`, `build`, `merge_ready`, `closeout`"
+                )
+    if not isinstance(locator_value, str) or not locator_value.strip():
+        classification = "locator_missing"
+        result = "block" if requirement == "required" else "warn"
+        return {
+            "id": entry_id,
+            "owner": owner,
+            "requirement": requirement,
+            "surfaces": surfaces if isinstance(surfaces, list) else [],
+            "locator": locator_value,
+            "result": result,
+            "classification": classification,
+            "summary": "host adapter locator is missing.",
+            "missing_inputs": [*missing_inputs, f"{prefix} `{entry_id}` locator missing `locator`"],
+            "fallback_to": fallback_to if result == "block" else None,
+            "evidence": {"locator_status": "missing"},
+        }
+    if missing_inputs:
+        return {
+            "id": entry_id,
+            "owner": owner,
+            "requirement": requirement,
+            "surfaces": surfaces if isinstance(surfaces, list) else [],
+            "locator": locator_value,
+            "result": "block",
+            "classification": "invalid_declaration",
+            "summary": "host adapter declaration is incomplete or invalid.",
+            "missing_inputs": missing_inputs,
+            "fallback_to": fallback_to,
+            "evidence": {"locator_status": "invalid"},
+        }
+
+    locator_path, locator_errors = resolve_repo_relative_path(
+        target_root,
+        locator_value,
+        label=f"{prefix} `{entry_id}` locator",
+    )
+    if locator_errors:
+        return {
+            "id": entry_id,
+            "owner": owner,
+            "requirement": requirement,
+            "surfaces": list(surfaces),
+            "locator": locator_value,
+            "result": "block",
+            "classification": "unsafe_locator",
+            "summary": "host adapter locator is outside the repository boundary or otherwise unsafe.",
+            "missing_inputs": locator_errors,
+            "fallback_to": fallback_to,
+            "evidence": {"locator_status": "unsafe"},
+        }
+    assert locator_path is not None
+    if not locator_path.exists():
+        result = "block" if requirement == "required" else "warn"
+        return {
+            "id": entry_id,
+            "owner": owner,
+            "requirement": requirement,
+            "surfaces": list(surfaces),
+            "locator": locator_value,
+            "result": result,
+            "classification": "locator_missing",
+            "summary": "host adapter locator points to a missing retained result path.",
+            "missing_inputs": [f"{prefix} locator points to missing path `{locator_value}`"],
+            "fallback_to": fallback_to if result == "block" else None,
+            "evidence": {"locator_status": "missing"},
+        }
+    if locator_path.is_dir():
+        result = "block" if requirement == "required" else "warn"
+        return {
+            "id": entry_id,
+            "owner": owner,
+            "requirement": requirement,
+            "surfaces": list(surfaces),
+            "locator": locator_value,
+            "result": result,
+            "classification": "locator_unreadable",
+            "summary": "host adapter locator points to a directory, not a retained result envelope.",
+            "missing_inputs": [f"{prefix} locator points to a directory `{locator_value}`"],
+            "fallback_to": fallback_to if result == "block" else None,
+            "evidence": {"locator_status": "directory"},
+        }
+    try:
+        envelope = load_json_file(locator_path)
+    except (FileNotFoundError, json.JSONDecodeError, OSError) as exc:
+        result = "block" if requirement == "required" else "warn"
+        return {
+            "id": entry_id,
+            "owner": owner,
+            "requirement": requirement,
+            "surfaces": list(surfaces),
+            "locator": locator_value,
+            "result": result,
+            "classification": "locator_unreadable",
+            "summary": "host adapter retained result envelope is unreadable.",
+            "missing_inputs": [f"{prefix} locator is unreadable: {exc}"],
+            "fallback_to": fallback_to if result == "block" else None,
+            "evidence": {"locator_status": "unreadable"},
+        }
+    if not isinstance(envelope, dict):
+        result = "block" if requirement == "required" else "warn"
+        return {
+            "id": entry_id,
+            "owner": owner,
+            "requirement": requirement,
+            "surfaces": list(surfaces),
+            "locator": locator_value,
+            "result": result,
+            "classification": "locator_unreadable",
+            "summary": "host adapter retained result envelope must be a JSON object.",
+            "missing_inputs": [f"{prefix} locator must expose a JSON object envelope"],
+            "fallback_to": fallback_to if result == "block" else None,
+            "evidence": {"locator_status": "invalid-envelope"},
+        }
+
+    declared_version = host_adapter_envelope_version(envelope)
+    evidence = {
+        "locator_status": "readable",
+        "envelope_status": str(envelope.get("status") or envelope.get("result") or "present"),
+        "declared_host_adapter_version": declared_version,
+        "expected_host_adapter_version": expected_host_adapter_version,
+    }
+    summary = str(envelope.get("summary") or "host adapter retained result envelope is readable.")
+    if host_adapter_permission_unavailable(envelope):
+        result = "block" if requirement == "required" else "warn"
+        return {
+            "id": entry_id,
+            "owner": owner,
+            "requirement": requirement,
+            "surfaces": list(surfaces),
+            "locator": locator_value,
+            "result": result,
+            "classification": "permission_unavailable",
+            "summary": summary,
+            "missing_inputs": [f"host adapter `{entry_id}` reported permission_unavailable"],
+            "fallback_to": fallback_to if result == "block" else None,
+            "evidence": evidence,
+        }
+    if declared_version and expected_host_adapter_version and declared_version != expected_host_adapter_version:
+        return {
+            "id": entry_id,
+            "owner": owner,
+            "requirement": requirement,
+            "surfaces": list(surfaces),
+            "locator": locator_value,
+            "result": "warn",
+            "classification": "version_drift",
+            "summary": summary,
+            "missing_inputs": [
+                f"host adapter `{entry_id}` version drift: expected `{expected_host_adapter_version}`, found `{declared_version}`"
+            ],
+            "fallback_to": None,
+            "evidence": evidence,
+        }
+    return {
+        "id": entry_id,
+        "owner": owner,
+        "requirement": requirement,
+        "surfaces": list(surfaces),
+        "locator": locator_value,
+        "result": "pass",
+        "classification": "none",
+        "summary": summary,
+        "missing_inputs": [],
+        "fallback_to": None,
+        "evidence": evidence,
+    }
+
+
+def host_adapter_live_drift_payload(target_root: Path) -> dict[str, Any]:
+    runtime_state = runtime_state_payload(target_root)
+    target = live_smoke_target_metadata(target_root)
+    payload: dict[str, Any] = {
+        "command": "live-smoke",
+        "operation": "host-adapter-drift",
+        "schema_version": HOST_ADAPTER_LIVE_DRIFT_SCHEMA,
+        "runtime_state": runtime_state,
+        "target": target,
+        "command_plan": host_adapter_live_drift_command_plan(target_root),
+        "reports": [],
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if runtime_state.get("result") != "pass":
+        payload.update(
+            {
+                "result": "block",
+                "summary": "host adapter live drift is blocked because the Loom runtime state is inconsistent.",
+                "missing_inputs": live_smoke_missing_inputs([str(message) for message in runtime_state.get("missing_inputs", [])]),
+                "fallback_to": runtime_state.get("fallback_to"),
+                "profile_check": {"id": "host-adapter-live-drift", "result": "block"},
+                "host_adapter_drift": {
+                    "contract_locator": ".loom/companion/interop.json",
+                    "availability": "runtime-blocked",
+                    "expected_host_adapter_version": current_host_adapter_version(),
+                    "checks": [],
+                },
+            }
+        )
+        return payload
+
+    target_report = live_smoke_target_check_report(target_root)
+    payload["reports"] = [target_report]
+    payload["missing_inputs"] = list(target_report.get("missing_inputs", []))
+    if target_report["result"] != "pass":
+        payload.update(
+            {
+                "result": "warn",
+                "summary": "host adapter live drift recorded explicit unavailable evidence for the adopted-repo target.",
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+                "profile_check": {"id": "host-adapter-live-drift", "result": "warn"},
+                "host_adapter_drift": {
+                    "contract_locator": ".loom/companion/interop.json",
+                    "availability": "target-unavailable",
+                    "expected_host_adapter_version": current_host_adapter_version(),
+                    "checks": [],
+                },
+            }
+        )
+        return payload
+
+    governance_surface = build_governance_surface(target_root)
+    repo_interop = governance_surface.get("repo_interop")
+    expected_version = current_host_adapter_version()
+    contract_locator = ".loom/companion/interop.json"
+    availability = "absent"
+    if isinstance(repo_interop, dict):
+        availability = str(repo_interop.get("availability") or "absent")
+        contract = repo_interop.get("contract")
+        if isinstance(contract, dict) and isinstance(contract.get("locator"), str) and contract.get("locator"):
+            contract_locator = str(contract["locator"])
+    interop_report = {
+        "id": "repo-interop-contract",
+        "attempted": True,
+        "command": f"read {target_root / contract_locator}",
+        "reported_command": "repo-interop-contract",
+        "reported_result": availability,
+        "result": "pass",
+        "summary": "repo interop contract is readable.",
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    payload["reports"].append(interop_report)
+
+    if availability == "absent":
+        interop_report.update(
+            {
+                "result": "warn",
+                "summary": "repo interop contract is absent, so no host adapter retained result can be consumed.",
+                "missing_inputs": ["repo interop contract is absent"],
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+            }
+        )
+        payload.update(
+            {
+                "result": "warn",
+                "summary": interop_report["summary"],
+                "missing_inputs": interop_report["missing_inputs"],
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+                "profile_check": {"id": "host-adapter-live-drift", "result": "warn"},
+                "host_adapter_drift": {
+                    "contract_locator": contract_locator,
+                    "availability": "absent",
+                    "expected_host_adapter_version": expected_version,
+                    "checks": [],
+                },
+            }
+        )
+        return payload
+
+    interop_payload, interop_errors = load_repo_interop_contract(repo_interop, target_root=target_root)
+    if interop_errors or not isinstance(interop_payload, dict):
+        interop_report.update(
+            {
+                "result": "block",
+                "summary": "repo interop contract is incomplete or unreadable for host adapter live drift.",
+                "missing_inputs": interop_errors or ["repo interop contract is unreadable"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+            }
+        )
+        payload.update(
+            {
+                "result": "block",
+                "summary": interop_report["summary"],
+                "missing_inputs": list(interop_report["missing_inputs"]),
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                "profile_check": {"id": "host-adapter-live-drift", "result": "block"},
+                "host_adapter_drift": {
+                    "contract_locator": contract_locator,
+                    "availability": "incomplete",
+                    "expected_host_adapter_version": expected_version,
+                    "checks": [],
+                },
+            }
+        )
+        return payload
+
+    host_adapters = interop_payload.get("host_adapters")
+    if not isinstance(host_adapters, list):
+        interop_report.update(
+            {
+                "result": "block",
+                "summary": "repo interop contract does not expose a readable host_adapters list.",
+                "missing_inputs": ["repo interop contract must include `host_adapters` as a list"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+            }
+        )
+        payload.update(
+            {
+                "result": "block",
+                "summary": interop_report["summary"],
+                "missing_inputs": list(interop_report["missing_inputs"]),
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                "profile_check": {"id": "host-adapter-live-drift", "result": "block"},
+                "host_adapter_drift": {
+                    "contract_locator": contract_locator,
+                    "availability": "incomplete",
+                    "expected_host_adapter_version": expected_version,
+                    "checks": [],
+                },
+            }
+        )
+        return payload
+
+    payload["command_plan"] = host_adapter_live_drift_command_plan(target_root, host_adapters=host_adapters)
+    if not host_adapters:
+        interop_report.update(
+            {
+                "result": "warn",
+                "summary": "repo interop contract is readable but declares no host adapters.",
+                "missing_inputs": ["repo interop contract declares no host adapters"],
+                "fallback_to": None,
+            }
+        )
+        payload.update(
+            {
+                "result": "warn",
+                "summary": interop_report["summary"],
+                "missing_inputs": list(interop_report["missing_inputs"]),
+                "fallback_to": None,
+                "profile_check": {"id": "host-adapter-live-drift", "result": "warn"},
+                "host_adapter_drift": {
+                    "contract_locator": contract_locator,
+                    "availability": "present",
+                    "expected_host_adapter_version": expected_version,
+                    "checks": [],
+                },
+            }
+        )
+        return payload
+
+    checks = [
+        host_adapter_drift_check(
+            target_root,
+            entry=entry,
+            index=index,
+            expected_host_adapter_version=expected_version,
+        )
+        for index, entry in enumerate(host_adapters)
+    ]
+    for check in checks:
+        payload["reports"].append(
+            {
+                "id": str(check["id"]),
+                "attempted": True,
+                "command": f"read {check.get('locator') or '<missing-locator>'}",
+                "reported_command": "host-adapter-retained-result",
+                "reported_result": str(check["classification"]),
+                "result": str(check["result"]),
+                "summary": str(check["summary"]),
+                "missing_inputs": list(check.get("missing_inputs", [])),
+                "fallback_to": check.get("fallback_to"),
+            }
+        )
+    missing_inputs = live_smoke_missing_inputs(
+        [message for report in payload["reports"] for message in report.get("missing_inputs", [])]
+    )
+    has_block = any(check["result"] == "block" for check in checks)
+    has_warn = any(check["result"] == "warn" for check in checks)
+    result = "block" if has_block else "warn" if has_warn else "pass"
+    summary = "host adapter retained result locators are readable and show no drift."
+    if result == "warn":
+        summary = "host adapter live drift produced profile-local warnings."
+    if result == "block":
+        summary = "host adapter live drift found blocking retained result declaration or readability gaps."
+    payload.update(
+        {
+            "result": result,
+            "summary": summary,
+            "missing_inputs": missing_inputs,
+            "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK if result == "block" else None,
+            "profile_check": {"id": "host-adapter-live-drift", "result": result},
+            "host_adapter_drift": {
+                "contract_locator": contract_locator,
+                "availability": "present",
+                "expected_host_adapter_version": expected_version,
+                "checks": checks,
+            },
+        }
+    )
+    return payload
 
 
 def live_smoke_command_plan(target_root: Path, *, item: str, include_blocking_shadow: bool) -> list[dict[str, Any]]:
@@ -10900,6 +11435,30 @@ def handle_live_smoke(args: argparse.Namespace) -> int:
                 include_blocking_shadow=args.include_blocking_shadow,
             )
         )
+    if args.operation == "host-adapter-drift":
+        if not args.target:
+            return emit(
+                {
+                    "command": "live-smoke",
+                    "operation": "host-adapter-drift",
+                    "schema_version": HOST_ADAPTER_LIVE_DRIFT_SCHEMA,
+                    "result": "block",
+                    "summary": "host adapter live drift requires --target.",
+                    "missing_inputs": ["pass --target <adopted_repo_root>"],
+                    "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                    "runtime_state": runtime_state_payload(Path.cwd()),
+                    "command_plan": [],
+                    "reports": [],
+                    "profile_check": {"id": "host-adapter-live-drift", "result": "block"},
+                    "host_adapter_drift": {
+                        "contract_locator": ".loom/companion/interop.json",
+                        "availability": "missing-target",
+                        "expected_host_adapter_version": current_host_adapter_version(),
+                        "checks": [],
+                    },
+                }
+            )
+        return emit(host_adapter_live_drift_payload(Path(args.target).expanduser().resolve()))
 
     repo_root = Path(os.environ.get("LOOM_SOURCE_REPO_ROOT", Path.cwd())).expanduser().resolve()
     runtime_state = runtime_state_payload(repo_root)
