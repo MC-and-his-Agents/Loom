@@ -125,7 +125,7 @@
       "path": ".loom/bin/governance_surface.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/governance_surface.py",
-      "sha256": "15eebdff23b1e670b131252f7271b5bd23f57a729a0c8e155c2018e76fe19ceb"
+      "sha256": "c407fa9574560bfa01e8c14bab57f16f025d9f6d5a53b2b136bb52b229481ed3"
     },
     {
       "path": ".loom/bin/loom_flow.py",
@@ -137,7 +137,7 @@
       "path": ".loom/bin/loom_status.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_status.py",
-      "sha256": "fea8f59d4d0934ce60b7c5bf8592528c457093df98f30ceab278790188fbae02"
+      "sha256": "4dabb17354fd66b4eef13093dae231fb461b3bc51e30ba4bbf44397b07337331"
     },
     {
       "path": ".loom/bin/runtime_paths.py",
@@ -155,7 +155,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "a4fd2deb84f08c5698e1608bb03c2b64a435a4a098cc4442bd0b4a281e5c0f55"
+      "sha256": "360aa049c3549928ba96f50ac37bc29de190eca157fa214c68bdafd71474e957"
     },
     {
       "path": "AGENTS.md",
@@ -416,16 +416,15 @@
         ],
         "errors": [],
         "budget": {
-          "schema_version": "loom-host-api-budget/v1",
-          "default_non_merge_read_mode": "cached_non_merge",
-          "merge_gate_read_mode": "uncached_live_gate",
-          "cache_scope": "process",
-          "rest_first": true,
-          "graphql_allowed_when": "REST cannot express the required relationship",
-          "search_endpoint": "not_in_hot_path",
-          "polling": "not_in_hot_path",
-          "rate_limit_policy": "consume x-ratelimit-* headers from natural responses when available; do not call /rate_limit just to inspect budget",
-          "github_actions_budget": "design for GITHUB_TOKEN per-repository hourly request limits"
+          "schema_version": "loom-execution-budget/v1",
+          "status": "not_applicable",
+          "enforcement": "advisory",
+          "summary": "execution budget is not collected for this invocation.",
+          "dimensions": [],
+          "provenance": {
+            "source": "github_host"
+          },
+          "adapter_evidence_locator": ""
         }
       }
     },

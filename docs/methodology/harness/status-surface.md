@@ -41,6 +41,9 @@
   - 从 host binding surface 派生
 - `github`
   - 从 host / control-plane mirror 派生
+- `execution_budget`
+  - 从 `github_control_plane.api_snapshot.budget` 派生
+  - 仅作 advisory evidence，不作为 gate 阻断条件
 - retained host / repo-native result
   - 作为 evidence provenance 或 gate 前置结果派生
 - `taxonomy`
@@ -104,6 +107,7 @@ Approval / sandbox policy 也只能派生读取：
 - fresh verification evidence 的 `head_sha` / 范围 / 摘要绑定
 - dynamic tool availability 与 failure summary
 - approval / sandbox policy 与 risk summary
+- execution budget 报告（`status` 为 `not_applicable`/`unavailable` 时不阻断）
 
 ## 4. `Runtime Evidence`
 
