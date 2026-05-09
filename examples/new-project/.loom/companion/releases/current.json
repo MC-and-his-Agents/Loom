@@ -1,0 +1,39 @@
+{
+  "schema_version": "loom-target-release/v1",
+  "release_id": "bootstrap-v0.1.0",
+  "display_name": "Bootstrap v0.1.0",
+  "target_branch": "main",
+  "release_goal": "Bootstrap the first executable Loom path for this repository.",
+  "status": "unreleased",
+  "included_scope": {
+    "phase": [
+      {
+        "id": "bootstrap-phase",
+        "locator": ".loom/companion/checkpoints.md",
+        "delivery_status": "planned"
+      }
+    ],
+    "fr": [],
+    "work_item": [
+      {
+        "id": "INIT-0001",
+        "locator": ".loom/work-items/INIT-0001.md",
+        "delivery_status": "unmerged"
+      }
+    ],
+    "implementation_pr": [],
+    "merge_commit": []
+  },
+  "evidence": {
+    "changelog_locator": ".loom/companion/releases/changelog.md",
+    "release_notes_locator": ".loom/companion/releases/release-notes.md",
+    "migration_notes_locator": ".loom/companion/releases/migration-notes.md",
+    "tag_or_artifact_locator": ".loom/companion/README.md",
+    "rollback_basis_locator": ".loom/companion/releases/rollback.md"
+  },
+  "authority": {
+    "owner": "repo-companion",
+    "source_kind": "repo_owned_locator",
+    "source_locator": ".loom/companion/releases/current.json"
+  }
+}

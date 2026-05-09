@@ -142,17 +142,24 @@
     "fields": []
   },
   "dynamic_tool_locators": [],
-  "policy_locators": []
+  "policy_locators": [],
+  "release_targets": {
+    "catalog_locator": ".loom/companion/releases/catalog.json",
+    "current_target_locator": ".loom/companion/releases/current.json",
+    "enforcement": "blocking",
+    "status_locator": ".loom/companion/releases/status.json"
+  }
 }
 ```
 
-`v2` 在 `v1` 之上新增五个可选顶层 section：
+`v2` 在 `v1` 之上新增六个可选顶层 section：
 
 - `review_instruction_locators`
 - `metadata_contract`
 - `context_schema`
 - `dynamic_tool_locators`
 - `policy_locators`
+- `release_targets`
 
 稳定约束：
 
@@ -160,6 +167,7 @@
 - `review_instruction_locators` 只在 `v2` 合法
 - `dynamic_tool_locators` 只在 `v2` 合法
 - `policy_locators` 只在 `v2` 合法
+- `release_targets` 只在 `v2` 合法
 - `v2` 不改变 `repo_specific_requirements` 与 `specialized_gates` 的既有纪律
 - `v2` 不把 repo runtime state、review summary、validation status 或 retained host action result 写入 `repo-interface.json`
 
@@ -309,7 +317,47 @@
 - retained host action result locator 必须留在 [repo-interop-contract.md](./repo-interop-contract.md) 的 `host_adapters`
 - policy 读面细节由 [policy-read-surface.md](../harness/policy-read-surface.md) 承接
 
-### 4.7 `metadata_contract`
+### 4.7 `release_targets`
+
+`release_targets` 用于声明目标仓库自己的 release / version 真相入口。
+
+它回答的是：
+
+- 目标仓库 release target catalog 去哪里读
+- 当前正在准备或收口的 target release 去哪里读
+- 这组 release truth 缺失时按 blocking 还是 advisory 处理
+- 若仓库已产出 repo-owned derived status，可从哪里读取
+
+它不回答：
+
+- Loom 自己的 installer / plugin / runtime version 是什么
+- release closeout 已经得出了什么最终结论
+- GitHub Release、tag、package manager 或 deployment system 应如何被 Loom 接管
+- `Work Item`、review record、merge checkpoint 或 closeout basis 写在哪里
+
+`release_targets` 固定字段：
+
+- `catalog_locator`
+- `current_target_locator`
+- `enforcement`
+- `status_locator` 可选
+
+其中：
+
+- `catalog_locator` 必须指向仓内可读路径，承接 repo-owned target release catalog
+- `current_target_locator` 必须指向仓内可读路径，承接当前 active target release object
+- `enforcement` 只允许 `blocking | advisory`
+- `status_locator` 若存在，必须指向仓内可读路径，只能承接 repo-owned derived release status，不替代 Loom 的派生 status surface
+
+稳定约束：
+
+- `catalog_locator` 与 `current_target_locator` 只允许使用仓内相对路径；绝对路径、越界或不可读路径必须 fail closed
+- target release object 必须与 Loom distribution version authority 分离；不得把 installer version、plugin version、runtime version、schema version 或 `VERSION` 回写成 target release truth
+- target release object 可以消费 `Phase` / `FR` / `Work Item` / `PR` / `merge commit` locator，但不得让 target release 直接成为执行入口
+- `status_locator` 若缺失，Loom 仍应从 authored target release object 与 delivery chain 派生自己的 target release status summary
+- `release_targets` 不得承载 release verdict、review summary、validation status、host action result 或 scheduler state
+
+### 4.8 `metadata_contract`
 
 `metadata_contract` 用于声明 repo-specific metadata block 的 locator contract，而不是把这些字段抬升为 Loom core 默认字段或通用 schema。
 
@@ -354,7 +402,7 @@
 - 它们不得被回写成 Loom core 默认字段名
 - Loom 不为它们提供跨仓统一 taxonomy 承诺
 
-### 4.7.1 明确禁止上移的字段模式
+### 4.8.1 明确禁止上移的字段模式
 
 `metadata_contract` 不得承接以下字段模式：
 
@@ -377,7 +425,7 @@
 
 它们不能因为“看起来像 metadata”就被回塞到 `repo-interface.json`。
 
-### 4.7.2 与 `context_schema` 的边界
+### 4.8.2 与 `context_schema` 的边界
 
 `metadata_contract` 与 `context_schema` 的分工固定如下：
 
@@ -392,7 +440,7 @@
 - 不得在 `context_schema` 中伪装声明 repo-native metadata block 的 authority locator
 - 不得把同一字段同时当作“必传上下文字段”和“repo-local metadata result 字段”写成单一 Loom core 默认概念
 
-### 4.7.3 与 `interop.json` 的边界
+### 4.8.3 与 `interop.json` 的边界
 
 `metadata_contract` 不得声明以下 locator：
 
@@ -401,7 +449,7 @@
 - `shadow parity` compare surface 的 locator
 - external-runtime locator、runtime version、fallback runtime 或 de-vendor rollback mode
 
-这些入口固定属于 [repo-interop-contract.md](../adoption/repo-interop-contract.md)。
+这些入口固定属于 [repo-interop-contract.md](./repo-interop-contract.md)。
 external-runtime 迁移路径固定属于 [external-runtime-companion-contract.md](./external-runtime-companion-contract.md)。
 
 明确禁止事项：
@@ -411,7 +459,7 @@ external-runtime 迁移路径固定属于 [external-runtime-companion-contract.m
 - 不得把 `blocking ownership`、`override path`、`authority-of-truth` 写成 `metadata_contract` 字段
 - 不得把 external-runtime 的 runtime locator 或 rollback switch 写进 `repo-interface.json`
 
-### 4.8 `context_schema`
+### 4.9 `context_schema`
 
 `context_schema` 用于声明 repo-specific required context fields 与映射规则，不暗含单一 Loom 通用字段模型。
 
@@ -429,7 +477,7 @@ external-runtime 迁移路径固定属于 [external-runtime-companion-contract.m
 - `required` 必须是布尔值
 - `mapping_rule_locator` 指向仓库如何把宿主上下文映射到该字段的权威说明
 
-### 4.9 纪律重申
+### 4.10 纪律重申
 
 无论 `v1` 或 `v2`，以下纪律保持不变：
 
@@ -438,6 +486,7 @@ external-runtime 迁移路径固定属于 [external-runtime-companion-contract.m
 - `review_instruction_locators` 只承接 repo-owned review instruction 入口，不得承接 review disposition 或 review result
 - `dynamic_tool_locators` 只承接 dynamic tool availability locator，不得承接 attempt-time result 或 host action result
 - `policy_locators` 只承接 approval / sandbox policy read locator，不得承接权限请求、sandbox mutation 或 host action result
+- `release_targets` 只承接目标仓库 release/version authored truth locator，不得承接 release verdict、closeout result 或 host action result
 - `metadata_contract` 仍只是 repo-specific metadata block 的 locator contract，不定义 Loom core 默认 taxonomy
 - repo-specific 规则仍通过 companion 合同挂接，不得伪装成 Loom core 默认规则
 - host adapter / repo-native carrier / shadow parity 入口继续留在独立的 `interop.json`，不得回塞到 `repo-interface.json`

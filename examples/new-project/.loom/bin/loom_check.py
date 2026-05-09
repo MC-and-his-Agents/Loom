@@ -1240,6 +1240,12 @@ def require_repo_interface_payload(
             payload=payload.get(key),
             allowed_statuses={"present", "missing"},
         )
+    require_release_targets_surface_payload(
+        failures,
+        category=category,
+        context=f"{context}.release_targets",
+        payload=payload.get("release_targets"),
+    )
     if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
         failures.append(Failure(category, f"{context} must include non-empty `summary`"))
     if not isinstance(payload.get("missing_inputs"), list):
@@ -1258,12 +1264,66 @@ def require_repo_interface_payload(
         context=f"{context}.policy_readiness",
         payload=payload.get("policy_readiness"),
     )
-    require_policy_readiness_payload(
+
+
+def require_release_targets_surface_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("availability") not in {"absent", "present", "incomplete"}:
+        failures.append(Failure(category, f"{context} availability must stay within the stable contract"))
+    for key in ("catalog", "current_target", "status"):
+        require_locator_entry(
+            failures,
+            category=category,
+            context=f"{context}.{key}",
+            payload=payload.get(key),
+            allowed_statuses={"present", "missing"},
+        )
+    enforcement = payload.get("enforcement")
+    if enforcement not in {"blocking", "advisory", "unknown"}:
+        failures.append(Failure(category, f"{context}.enforcement must stay within the stable contract"))
+    if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+        failures.append(Failure(category, f"{context} must include summary"))
+    if not isinstance(payload.get("missing_inputs"), list):
+        failures.append(Failure(category, f"{context} missing_inputs must be a list"))
+    require_target_release_status_payload(
         failures,
         category=category,
-        context=f"{context}.policy_readiness",
-        payload=payload.get("policy_readiness"),
+        context=f"{context}.target_release",
+        payload=payload.get("target_release"),
     )
+
+
+def require_target_release_status_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("schema_version") != governance_surface_module.RELEASE_TARGET_STATUS_SCHEMA:
+        failures.append(Failure(category, f"{context} schema_version must be `{governance_surface_module.RELEASE_TARGET_STATUS_SCHEMA}`"))
+    if payload.get("result") not in {"pass", "block", "not_applicable"}:
+        failures.append(Failure(category, f"{context} result must be pass, block, or not_applicable"))
+    if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+        failures.append(Failure(category, f"{context} must include summary"))
+    for key in ("included_scope", "delivery_chain", "release_evidence", "rollback_readiness", "provenance"):
+        if not isinstance(payload.get(key), dict):
+            failures.append(Failure(category, f"{context}.{key} must be an object"))
+    if not isinstance(payload.get("closeout_gaps"), list):
+        failures.append(Failure(category, f"{context}.closeout_gaps must be a list"))
+    if not isinstance(payload.get("missing_inputs"), list):
+        failures.append(Failure(category, f"{context}.missing_inputs must be a list"))
 
 
 def require_tool_availability_payload(
@@ -4325,6 +4385,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     failures.append(Failure("daily-execution-cli", "`loom_status` closeout must include reconciliation"))
                 elif reconciliation.get("result") not in {"pass", "warn", "fix-needed", "block", "not_applicable"}:
                     failures.append(Failure("daily-execution-cli", "`loom_status` closeout reconciliation result must stay within the stable set"))
+            require_target_release_status_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`loom_status`.target_release",
+                payload=payload.get("target_release"),
+            )
             require_governance_surface(
                 failures,
                 category="daily-execution-cli",
@@ -7716,8 +7782,54 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
                 "risk": "none",
                 "evidence": {"status": "present"},
             },
+            "releases/catalog.json": {
+                "schema_version": "loom-target-release-catalog/v1",
+                "current_release_id": "release-v1",
+                "releases": [{"release_id": "release-v1", "locator": ".loom/companion/releases/current.json"}],
+            },
+            "releases/current.json": {
+                "schema_version": "loom-target-release/v1",
+                "release_id": "release-v1",
+                "display_name": "Release v1",
+                "target_branch": "main",
+                "release_goal": "Validate target repository release/version management.",
+                "status": "unreleased",
+                "included_scope": {
+                    "phase": [{"id": "phase-1", "locator": ".loom/companion/checkpoints.md", "delivery_status": "planned"}],
+                    "fr": [{"id": "fr-1", "locator": ".loom/companion/review.md", "delivery_status": "active"}],
+                    "work_item": [{"id": "INIT-0001", "locator": ".loom/work-items/INIT-0001.md", "delivery_status": "unmerged"}],
+                    "implementation_pr": [],
+                    "merge_commit": [],
+                },
+                "evidence": {
+                    "changelog_locator": ".loom/companion/releases/changelog.md",
+                    "release_notes_locator": ".loom/companion/releases/release-notes.md",
+                    "migration_notes_locator": ".loom/companion/releases/migration-notes.md",
+                    "tag_or_artifact_locator": ".loom/companion/README.md",
+                    "rollback_basis_locator": ".loom/companion/releases/rollback.md",
+                },
+                "authority": {
+                    "owner": "repo-companion",
+                    "source_kind": "repo_owned_locator",
+                    "source_locator": ".loom/companion/releases/current.json",
+                },
+            },
+            "releases/status.json": {
+                "schema_version": "loom-target-release-status/v1",
+                "result": "pass",
+                "summary": "repo-owned target release status is readable.",
+            },
         }.items():
             write_json(companion_dir / relative, payload)
+        for relative, text in {
+            "releases/changelog.md": "# Changelog\n",
+            "releases/release-notes.md": "# Release Notes\n",
+            "releases/migration-notes.md": "# Migration Notes\n",
+            "releases/rollback.md": "# Rollback Basis\n",
+        }.items():
+            path = companion_dir / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
         if manifest is not None:
             write_json(companion_dir / "manifest.json", manifest)
         if repo_interface is not None:
@@ -7859,6 +7971,12 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
                 "fallback_to": "merge",
             },
         ],
+        "release_targets": {
+            "catalog_locator": ".loom/companion/releases/catalog.json",
+            "current_target_locator": ".loom/companion/releases/current.json",
+            "enforcement": "blocking",
+            "status_locator": ".loom/companion/releases/status.json",
+        },
     }
 
     with tempfile.TemporaryDirectory(prefix="loom-check-repo-companion-") as tmp:
@@ -7996,6 +8114,11 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
                         "fallback_to": "host-action",
                     }
                 ],
+                "release_targets": {
+                    "catalog_locator": ".loom/companion/releases/catalog.json",
+                    "current_target_locator": "../outside-release.json",
+                    "enforcement": "required",
+                },
             },
         )
         invalid_v2_surface = build_governance_surface(invalid_v2_target)
@@ -8107,6 +8230,19 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
                     failures.append(Failure("repo-companion", "present approval policy must surface as declared"))
                 if not isinstance(by_policy, dict) or by_policy.get("sandbox") != "declared":
                     failures.append(Failure("repo-companion", "present sandbox policy must surface as declared"))
+            release_targets = present_interface.get("release_targets")
+            require_release_targets_surface_payload(
+                failures,
+                category="repo-companion",
+                context="present v2 release targets",
+                payload=release_targets,
+            )
+            if not isinstance(release_targets, dict) or release_targets.get("availability") != "present":
+                failures.append(Failure("repo-companion", "present release target declaration must report `availability: present`"))
+            else:
+                target_release = release_targets.get("target_release")
+                if not isinstance(target_release, dict) or target_release.get("schema_version") != governance_surface_module.RELEASE_TARGET_STATUS_SCHEMA:
+                    failures.append(Failure("repo-companion", "present release target declaration must expose `loom-target-release-status/v1`"))
 
         review_requirements = repo_specific_requirements_payload(
             present_interface,
@@ -8152,6 +8288,32 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
         )
         if closeout_requirements.get("result") != "block":
             failures.append(Failure("repo-companion", "blocking closeout requirements must fail closed"))
+
+        release_gap_target = base / "release-gap"
+        shutil.copytree(example_target, release_gap_target)
+        install_companion(
+            release_gap_target,
+            manifest=valid_manifest,
+            repo_interface=valid_interface_v2,
+        )
+        (release_gap_target / ".loom/companion/releases/changelog.md").unlink(missing_ok=True)
+        release_gap_surface = build_governance_surface(release_gap_target)
+        release_gap_interface = release_gap_surface.get("repo_interface")
+        if not isinstance(release_gap_interface, dict):
+            failures.append(Failure("repo-companion", "release gap sample must expose repo_interface"))
+        else:
+            release_targets = release_gap_interface.get("release_targets")
+            require_release_targets_surface_payload(
+                failures,
+                category="repo-companion",
+                context="release gap targets",
+                payload=release_targets,
+            )
+            target_release = release_targets.get("target_release") if isinstance(release_targets, dict) else None
+            if not isinstance(target_release, dict) or target_release.get("result") != "block":
+                failures.append(Failure("repo-companion", "missing release evidence must fail closed through target_release"))
+            elif "changelog evidence is missing" not in json.dumps(target_release.get("closeout_gaps", []), ensure_ascii=False):
+                failures.append(Failure("repo-companion", "missing changelog evidence must surface as a release closeout gap"))
 
         tool_failures_target = base / "tool-failures"
         shutil.copytree(example_target, tool_failures_target)

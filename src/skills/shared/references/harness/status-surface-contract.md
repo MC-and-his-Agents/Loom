@@ -50,6 +50,7 @@
 - 活跃 failures taxonomy
 - host binding
 - GitHub control plane signals
+- 目标仓库 `release / version` 目标面，若仓库已声明
 
 ## 3. 字段组 v2
 
@@ -138,6 +139,24 @@
 - `merge_commit_sha`
 - `target_branch`
 
+### 3.6.1 `target_release`
+
+当仓库通过 `repo companion` 声明目标仓库 `release / version` 目标面时，状态面必须展示派生 `target_release`：
+
+- `release_id`
+- `display_name`
+- `target_branch`
+- `release_goal`
+- `authored_status`
+- `included_scope`
+- `delivery_chain`
+- `release_evidence`
+- `closeout_gaps`
+- `rollback_readiness`
+- `provenance`
+
+该字段组只消费 repo-owned target release object、host binding、review / merge / closeout basis 与可读的 repo-owned release status locator。它不得把 target release object 升格为执行入口，也不得反写 authored release truth。
+
 ### 3.7 `policy_readiness`
 
 当 repo companion 声明 approval / sandbox policy 读面时，状态面必须展示派生 `policy_readiness`：
@@ -163,7 +182,8 @@
 - `provenance`: 来源说明
 - `adapter_evidence_locator`: 适配器 evidence locator
 
-`dimensions[*].id` 必须限定为 `turns`、`tokens`、`requests`、`retries`、`time_window`，每项只能保留 `unit`、`used`、`limit`、`remaining`、`risk`、`source` 中的稳定字段。缺失预算时可输出 `not_applicable` 或 `unavailable`，其 `enforcement` 必须是 `advisory`。
+`dimensions[*].id` 必须限定为 `turns`、`tokens`、`requests`、`retries`、`time_window`，每项只能保留
+`unit`、`used`、`limit`、`remaining`、`risk`、`source` 中的稳定字段。缺失预算时可输出 `not_applicable` 或 `unavailable`，其 `enforcement` 必须是 `advisory`。
 
 ### 3.7.2 `execution_budget_risk`
 
@@ -182,31 +202,35 @@
 
 ### 3.7.3 `execution_failure`
 
+状态面可以展示最近一次 `execution_attempt` 的执行失败分类，但该字段组只读 runtime evidence，不得把执行失败直接升级成 merge gate。
+
 - `schema_version`: `loom-execution-failure/v1`
 - `status`: `present` / `not_applicable` / `stale` / `missing` / `invalid`
 - `classification`: `none` / `stall` / `timeout` / `retry_exhaustion` / `unknown`
-- `summary`
-- `fallback_to`
-- `provenance`
+- `summary`: 最近失败分类或 freshness 说明
+- `fallback_to`: 若最近 attempt 已给出 fallback target，则原样暴露
+- `provenance`: 指向 `latest_execution_attempt` locator 与 freshness
 
-该字段组只消费最近 `execution_attempt` evidence，不创建 scheduler state，也不单独阻断 merge。
+`execution_failure` 只作为 status / recovery / review 的风险输入，不声明 scheduler state，不触发自动 retry，也不单独决定 `pass | block`。
 
 ### 3.7.4 `retry_evidence`
 
+状态面可以从 `.loom/runtime/attempts/<item-id>/` 的 attempt chain 派生 retry evidence，但该字段组只读 runtime evidence，不得替代 scheduler。
+
 - `schema_version`: `loom-retry-evidence/v1`
 - `status`: `present` / `not_applicable` / `stale` / `missing` / `invalid`
-- `attempt_count`
-- `retry_count`
+- `attempt_count`: 当前 `HEAD` 绑定的 attempt 数量
+- `retry_count`: `attempt_count - 1`
 - `latest_attempt_id`
 - `latest_attempt_result`
 - `latest_failure_classification`
 - `latest_failure_summary`
-- `exhausted`
-- `scheduler_ownership`
-- `stale_attempt_count`
+- `exhausted`: 仅当最近分类为 `retry_exhaustion` 时为 `true`
+- `scheduler_ownership`: 固定 `external`
+- `stale_attempt_count`: 不再绑定当前 `HEAD` 的旧 attempt 数量
 - `provenance`
 
-该字段组从 attempt chain 派生 retry evidence，不声明 scheduler state。
+该字段组只说明“已经发生过什么尝试”，不声明 `Claimed`、`Running`、`RetryQueued` 或自动 backoff 计划。
 
 ### 3.8 `taxonomy`
 

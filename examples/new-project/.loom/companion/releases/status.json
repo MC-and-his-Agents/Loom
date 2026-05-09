@@ -1,0 +1,5 @@
+{
+  "schema_version": "loom-target-release-status/v1",
+  "result": "pass",
+  "summary": "repo-owned release status example is readable."
+}

@@ -6,7 +6,12 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from governance_surface import build_governance_surface, derive_execution_budget_risk, normalize_execution_budget_payload
+from governance_surface import (
+    build_governance_surface,
+    derive_execution_budget_risk,
+    empty_target_release_status,
+    normalize_execution_budget_payload,
+)
 from loom_flow import (
     checkpoint_payload,
     closeout_payload,
@@ -382,6 +387,8 @@ def full_closeout_status_payload(
         "pr": payload.get("pr"),
         "project": payload.get("project"),
         "repo_specific_requirements": payload.get("repo_specific_requirements"),
+        "target_release": payload.get("target_release"),
+        "findings": payload.get("findings"),
     }
 
 
@@ -433,6 +440,18 @@ def main(argv: list[str]) -> int:
         if isinstance(repo_interface, dict)
         else None
     )
+    release_targets = (
+        repo_interface.get("release_targets")
+        if isinstance(repo_interface, dict)
+        else None
+    )
+    target_release = (
+        release_targets.get("target_release")
+        if isinstance(release_targets, dict)
+        else None
+    )
+    if not isinstance(target_release, dict):
+        target_release = empty_target_release_status()
     ci_check_presence = github_control_plane.get("ci_check_presence") if isinstance(github_control_plane, dict) else None
     host_enforcement = github_control_plane.get("host_enforcement") if isinstance(github_control_plane, dict) else None
     execution_budget = (
@@ -503,6 +522,9 @@ def main(argv: list[str]) -> int:
     for message in control_status.get("missing_inputs", []):
         if message not in missing_inputs:
             missing_inputs.append(str(message))
+    for message in governance_surface.get("missing_inputs", []) if isinstance(governance_surface, dict) else []:
+        if message not in missing_inputs:
+            missing_inputs.append(str(message))
     for message in report_blocking_messages(context["report"]):
         if message not in missing_inputs:
             missing_inputs.append(message)
@@ -558,6 +580,7 @@ def main(argv: list[str]) -> int:
             "review": review,
             "merge_ready": merge_ready,
             "closeout": closeout,
+            "target_release": target_release,
             "workspace_profile": workspace_profile,
             "gate_starter": gate_starter,
             "ci_check_presence": ci_check_presence,

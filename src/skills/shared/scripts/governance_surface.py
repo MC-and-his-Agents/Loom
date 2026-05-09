@@ -350,6 +350,7 @@ REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {
     "context_schema",
     "dynamic_tool_locators",
     "policy_locators",
+    "release_targets",
 }
 DECLARED_LOCATOR_REQUIREMENTS = {"required", "optional", "advisory"}
 DECLARED_LOCATOR_OWNERS = {"repo", "repo-companion", "host", "host-adapter", "platform", "external-tool"}
@@ -368,6 +369,30 @@ POLICY_READINESS_SCHEMA = "loom-policy-readiness/v1"
 POLICY_TYPES = {"approval", "sandbox"}
 POLICY_READ_STATUSES = {"declared", "missing", "conflict", "unsafe"}
 POLICY_RISK_LEVELS = {"none", "unknown", "conflict", "unsafe"}
+RELEASE_TARGET_SCHEMA = "loom-target-release/v1"
+RELEASE_TARGET_STATUS_SCHEMA = "loom-target-release-status/v1"
+RELEASE_TARGET_ENFORCEMENT = {"blocking", "advisory"}
+RELEASE_TARGET_STATUSES = {
+    "planning",
+    "active",
+    "merge_ready",
+    "unreleased",
+    "released",
+    "reconciled",
+    "closed_out",
+}
+RELEASE_TARGET_SCOPE_KEYS = ("phase", "fr", "work_item", "implementation_pr", "merge_commit")
+RELEASE_TARGET_DELIVERY_STATUSES = {
+    "planned",
+    "active",
+    "unmerged",
+    "merged",
+    "unreleased",
+    "released",
+    "unreconciled",
+    "closed_out",
+    "not_applicable",
+}
 REPO_INTEROP_AVAILABILITY = {"absent", "incomplete", "present"}
 REPO_INTEROP_SCHEMA = "loom-repo-interop/v1"
 REPO_INTEROP_KEYS = {"schema_version", "host_adapters", "repo_native_carriers", "shadow_surfaces"}
@@ -1187,6 +1212,252 @@ def empty_policy_readiness() -> dict[str, Any]:
     }
 
 
+def empty_target_release_status(summary: str = "no target repository release/version surface is declared for this repository.") -> dict[str, Any]:
+    return {
+        "schema_version": RELEASE_TARGET_STATUS_SCHEMA,
+        "result": "not_applicable",
+        "summary": summary,
+        "release_id": None,
+        "display_name": None,
+        "target_branch": None,
+        "release_goal": None,
+        "authored_status": None,
+        "included_scope": {key: [] for key in RELEASE_TARGET_SCOPE_KEYS},
+        "delivery_chain": {
+            "merged": [],
+            "unmerged": [],
+            "unreleased": [],
+            "unreconciled": [],
+        },
+        "release_evidence": {
+            "changelog": {"status": "not_applicable", "locator": None},
+            "release_notes": {"status": "not_applicable", "locator": None},
+            "migration_notes": {"status": "not_applicable", "locator": None},
+            "tag_or_artifact": {"status": "not_applicable", "locator": None},
+            "rollback_basis": {"status": "not_applicable", "locator": None},
+        },
+        "closeout_gaps": [],
+        "rollback_readiness": {"status": "not_applicable", "locator": None},
+        "provenance": {
+            "source_layer": "repo_companion",
+            "source_locator": None,
+            "status_locator": None,
+            "enforcement": None,
+        },
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+
+
+def validate_release_targets(
+    *,
+    root: Path,
+    entry: object,
+) -> list[str]:
+    prefix = "release_targets"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"]
+    missing_inputs: list[str] = []
+    for field in ("catalog_locator", "current_target_locator"):
+        locator, target = resolve_locator(root, entry.get(field))
+        if locator is None or target is None:
+            missing_inputs.append(locator_boundary_error(entry.get(field), label=f"{prefix}.{field}"))
+        elif not target.exists():
+            missing_inputs.append(f"{prefix}.{field} points to missing path `{locator}`")
+    enforcement = entry.get("enforcement")
+    if enforcement not in REPO_INTERFACE_ENFORCEMENT:
+        missing_inputs.append(f"{prefix}.enforcement must be `blocking` or `advisory`")
+    status_locator = entry.get("status_locator")
+    if status_locator not in (None, "", "not_applicable"):
+        locator, target = resolve_locator(root, status_locator)
+        if locator is None or target is None:
+            missing_inputs.append(locator_boundary_error(status_locator, label=f"{prefix}.status_locator"))
+        elif not target.exists():
+            missing_inputs.append(f"{prefix}.status_locator points to missing path `{locator}`")
+    return missing_inputs
+
+
+def normalize_release_scope_entries(entries: object) -> list[dict[str, Any]]:
+    if not isinstance(entries, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        scope_id = entry.get("id")
+        locator = entry.get("locator")
+        delivery_status = entry.get("delivery_status")
+        normalized.append(
+            {
+                "id": scope_id if isinstance(scope_id, str) and scope_id else None,
+                "locator": locator if isinstance(locator, str) and locator else None,
+                "delivery_status": (
+                    delivery_status
+                    if isinstance(delivery_status, str) and delivery_status in RELEASE_TARGET_DELIVERY_STATUSES
+                    else "planned"
+                ),
+            }
+        )
+    return normalized
+
+
+def release_evidence_entry(root: Path, locator_value: object) -> dict[str, Any]:
+    if locator_value in (None, "", "not_applicable"):
+        return {"status": "not_applicable", "locator": None if locator_value in (None, "") else "not_applicable"}
+    locator, target = resolve_locator(root, locator_value)
+    if locator is None or target is None:
+        return {"status": "invalid", "locator": locator_value}
+    if not target.exists():
+        return {"status": "missing", "locator": locator}
+    return {"status": "present", "locator": locator}
+
+
+def target_release_status_from_entry(root: Path, release_targets: object) -> dict[str, Any]:
+    payload = empty_target_release_status()
+    if not isinstance(release_targets, dict):
+        payload.update(
+            {
+                "result": "block",
+                "summary": "target repository release/version declaration is unreadable.",
+                "missing_inputs": ["release_targets must be an object"],
+                "fallback_to": "closeout",
+            }
+        )
+        return payload
+
+    enforcement = release_targets.get("enforcement") if release_targets.get("enforcement") in RELEASE_TARGET_ENFORCEMENT else None
+    payload["provenance"]["enforcement"] = enforcement
+
+    current_locator, current_target = resolve_locator(root, release_targets.get("current_target_locator"))
+    status_locator, status_target = resolve_locator(root, release_targets.get("status_locator"))
+    payload["provenance"]["source_locator"] = current_locator
+    payload["provenance"]["status_locator"] = status_locator
+
+    missing_inputs: list[str] = []
+    closeout_gaps: list[str] = []
+
+    if current_locator is None or current_target is None or not current_target.exists():
+        missing_inputs.append("release_targets.current_target_locator")
+        payload.update(
+            {
+                "result": "block" if enforcement == "blocking" else "not_applicable",
+                "summary": "current target release locator is missing or unreadable.",
+                "missing_inputs": missing_inputs,
+                "fallback_to": "closeout" if enforcement == "blocking" else None,
+            }
+        )
+        return payload
+
+    release_payload = safe_read_json(current_target)
+    if release_payload is None:
+        missing_inputs.append(f"{current_locator} is unreadable")
+    elif release_payload.get("schema_version") != RELEASE_TARGET_SCHEMA:
+        missing_inputs.append(f"{current_locator} schema_version must be `{RELEASE_TARGET_SCHEMA}`")
+    else:
+        payload["release_id"] = release_payload.get("release_id")
+        payload["display_name"] = release_payload.get("display_name")
+        payload["target_branch"] = release_payload.get("target_branch")
+        payload["release_goal"] = release_payload.get("release_goal")
+        payload["authored_status"] = release_payload.get("status")
+
+        for field in ("release_id", "display_name", "target_branch", "release_goal"):
+            if not isinstance(release_payload.get(field), str) or not str(release_payload.get(field)).strip():
+                missing_inputs.append(f"{current_locator} missing `{field}`")
+        status_value = release_payload.get("status")
+        if not isinstance(status_value, str) or status_value not in RELEASE_TARGET_STATUSES:
+            missing_inputs.append(f"{current_locator} status must stay within the stable contract")
+
+        included_scope = release_payload.get("included_scope")
+        if not isinstance(included_scope, dict):
+            missing_inputs.append(f"{current_locator} missing `included_scope`")
+        else:
+            normalized_scope = {key: normalize_release_scope_entries(included_scope.get(key)) for key in RELEASE_TARGET_SCOPE_KEYS}
+            payload["included_scope"] = normalized_scope
+            merged: list[dict[str, Any]] = []
+            unmerged: list[dict[str, Any]] = []
+            unreleased: list[dict[str, Any]] = []
+            unreconciled: list[dict[str, Any]] = []
+            for scope_key, entries in normalized_scope.items():
+                for entry in entries:
+                    item = {"scope": scope_key, **entry}
+                    delivery_status = entry.get("delivery_status")
+                    if delivery_status in {"merged", "unreleased", "released", "unreconciled", "closed_out"}:
+                        merged.append(item)
+                    if delivery_status in {"planned", "active", "unmerged"}:
+                        unmerged.append(item)
+                    if delivery_status == "unreleased":
+                        unreleased.append(item)
+                    if delivery_status == "unreconciled":
+                        unreconciled.append(item)
+            payload["delivery_chain"] = {
+                "merged": merged,
+                "unmerged": unmerged,
+                "unreleased": unreleased,
+                "unreconciled": unreconciled,
+            }
+
+        evidence = release_payload.get("evidence")
+        if not isinstance(evidence, dict):
+            missing_inputs.append(f"{current_locator} missing `evidence`")
+        else:
+            release_evidence = {
+                "changelog": release_evidence_entry(root, evidence.get("changelog_locator")),
+                "release_notes": release_evidence_entry(root, evidence.get("release_notes_locator")),
+                "migration_notes": release_evidence_entry(root, evidence.get("migration_notes_locator")),
+                "tag_or_artifact": release_evidence_entry(root, evidence.get("tag_or_artifact_locator")),
+                "rollback_basis": release_evidence_entry(root, evidence.get("rollback_basis_locator")),
+            }
+            payload["release_evidence"] = release_evidence
+            for evidence_key, evidence_entry in release_evidence.items():
+                if evidence_entry.get("status") in {"missing", "invalid"}:
+                    closeout_gaps.append(f"{evidence_key} evidence is {evidence_entry.get('status')}")
+            rollback_entry = release_evidence["rollback_basis"]
+            payload["rollback_readiness"] = {
+                "status": "ready" if rollback_entry.get("status") == "present" else rollback_entry.get("status"),
+                "locator": rollback_entry.get("locator"),
+            }
+
+        authority = release_payload.get("authority")
+        if not isinstance(authority, dict):
+            missing_inputs.append(f"{current_locator} missing `authority`")
+        else:
+            for field in ("owner", "source_kind", "source_locator"):
+                if not isinstance(authority.get(field), str) or not str(authority.get(field)).strip():
+                    missing_inputs.append(f"{current_locator} authority missing `{field}`")
+
+    if status_locator is not None and status_target is not None and status_target.exists():
+        status_payload = safe_read_json(status_target)
+        if status_payload is None:
+            closeout_gaps.append("repo-owned release status locator is unreadable")
+        elif status_payload.get("schema_version") != RELEASE_TARGET_STATUS_SCHEMA:
+            closeout_gaps.append(f"{status_locator} schema_version must be `{RELEASE_TARGET_STATUS_SCHEMA}`")
+
+    payload["closeout_gaps"] = closeout_gaps
+    blocking = bool(missing_inputs) or (enforcement == "blocking" and bool(closeout_gaps))
+    payload["missing_inputs"] = missing_inputs
+    payload["result"] = "block" if blocking else "pass"
+    payload["summary"] = (
+        "target repository release/version surface is readable."
+        if payload["result"] == "pass"
+        else "target repository release/version surface is present but incomplete or missing required closeout evidence."
+    )
+    payload["fallback_to"] = "closeout" if payload["result"] == "block" else None
+    return payload
+
+
+def empty_release_targets_surface() -> dict[str, Any]:
+    return {
+        "availability": "absent",
+        "catalog": carrier_entry("missing", "unknown", "repo companion interface.release_targets"),
+        "current_target": carrier_entry("missing", "unknown", "repo companion interface.release_targets"),
+        "status": carrier_entry("missing", "unknown", "repo companion interface.release_targets"),
+        "enforcement": "unknown",
+        "summary": "no target repository release/version surface is declared for this repository.",
+        "missing_inputs": [],
+        "target_release": empty_target_release_status(),
+    }
+
+
 def read_tool_handshake_declaration(path: Path) -> tuple[dict[str, Any] | None, list[str]]:
     if path.suffix.lower() != ".json":
         return None, []
@@ -1637,6 +1908,7 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
         "specialized_gates": carrier_entry("missing", "unknown", "repo companion interface"),
         "dynamic_tool_locators": carrier_entry("missing", "unknown", "repo companion interface"),
         "policy_locators": carrier_entry("missing", "unknown", "repo companion interface"),
+        "release_targets": empty_release_targets_surface(),
         "tool_availability": empty_tool_availability(),
         "policy_readiness": empty_policy_readiness(),
         "summary": "no repo companion interface is declared for this repository.",
@@ -1696,6 +1968,9 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
     repo_interface_surface["specialized_gates"] = manifest_repo_interface.copy()
     repo_interface_surface["dynamic_tool_locators"] = manifest_repo_interface.copy()
     repo_interface_surface["policy_locators"] = manifest_repo_interface.copy()
+    repo_interface_surface["release_targets"]["catalog"] = manifest_repo_interface.copy()
+    repo_interface_surface["release_targets"]["current_target"] = manifest_repo_interface.copy()
+    repo_interface_surface["release_targets"]["status"] = manifest_repo_interface.copy()
     if manifest_repo_interface_error:
         missing_inputs.append(manifest_repo_interface_error)
 
@@ -1825,6 +2100,56 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
                             )
                             missing_inputs.extend(blocking)
                             missing_optional.extend(optional)
+                release_targets = interface_payload.get("release_targets")
+                if release_targets is not None:
+                    blocking_inputs = validate_release_targets(root=root, entry=release_targets)
+                    missing_inputs.extend(blocking_inputs)
+                    repo_interface_surface["release_targets"]["availability"] = "present"
+                    if isinstance(release_targets, dict):
+                        repo_interface_surface["release_targets"]["enforcement"] = (
+                            release_targets.get("enforcement")
+                            if release_targets.get("enforcement") in RELEASE_TARGET_ENFORCEMENT
+                            else "unknown"
+                        )
+                        for source_key, target_key in (
+                            ("catalog_locator", "catalog"),
+                            ("current_target_locator", "current_target"),
+                            ("status_locator", "status"),
+                        ):
+                            locator_value = release_targets.get(source_key)
+                            if locator_value in (None, "", "not_applicable") and source_key == "status_locator":
+                                repo_interface_surface["release_targets"]["status"] = carrier_entry(
+                                    "missing",
+                                    "not_applicable",
+                                    f"repo companion interface.release_targets.{source_key}",
+                                )
+                                continue
+                            repo_interface_surface["release_targets"][target_key], _ = locator_status_entry(
+                                root=root,
+                                raw_locator=locator_value,
+                                source=f"repo companion interface.release_targets.{source_key}",
+                            )
+                    target_release_payload = target_release_status_from_entry(
+                        root,
+                        release_targets,
+                    )
+                    repo_interface_surface["release_targets"]["target_release"] = target_release_payload
+                    if blocking_inputs or target_release_payload.get("result") == "block":
+                        repo_interface_surface["release_targets"]["availability"] = "incomplete"
+                    if target_release_payload.get("result") == "block":
+                        missing_inputs.extend(
+                            str(message)
+                            for message in target_release_payload.get("missing_inputs", [])
+                        )
+                    repo_interface_surface["release_targets"]["summary"] = target_release_payload["summary"]
+                    repo_interface_surface["release_targets"]["missing_inputs"] = list(
+                        dict.fromkeys(
+                            [
+                                *blocking_inputs,
+                                *target_release_payload.get("missing_inputs", []),
+                            ]
+                        )
+                    )
 
     if missing_inputs:
         repo_interface_surface["availability"] = "incomplete"

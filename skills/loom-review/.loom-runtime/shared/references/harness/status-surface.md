@@ -16,6 +16,7 @@
 - 前序 gate 是否可继续消费
 - 当前有哪些 `stale` / `drift` / `gate_failure`
 - merge 与 closeout 是否已有足够 basis
+- 若仓库声明了目标 `release / version`，当前 target release 是否仍存在 `unreleased` / `unreconciled` / evidence gap
 - 当前 behavior evidence / test evidence 是否覆盖当前范围
 - 最近验证是否仍是 fresh verification evidence
 
@@ -104,18 +105,19 @@ Approval / sandbox policy 也只能派生读取：
 - `merge-ready` 是否受前序 gate 阻断
 - `controlled merge` 是否满足宿主条件
 - `closeout` / `reconciliation` 是否存在 drift
+- target release closeout gap 是否存在 changelog、release notes、migration notes、tag-artifact evidence 或 rollback basis 缺口
 - 当前活跃 failures 列表
 - BDD 外环场景的证据覆盖状态
 - TDD 内环测试或等价检查的证据覆盖状态
 - fresh verification evidence 的 `head_sha` / 范围 / 摘要绑定
-- execution_budget 报告（`status` 为 `not_applicable`/`unavailable` 时不阻断）
-- execution_budget risk 摘要（`highest_risk = high` 时可提示 merge / review 风险，但不阻断）
-- 最近 execution failure 分类（只作风险输入）
-- retry evidence 摘要
 - dynamic tool availability 与 failure summary
 - approval / sandbox policy 与 risk summary
+- execution budget 报告（`status` 为 `not_applicable`/`unavailable` 时不阻断）
+- execution budget risk 摘要（`highest_risk = high` 时可提示 merge / review 风险，但不阻断）
+- 最近 execution failure 分类（`stall` / `timeout` / `retry_exhaustion` 只作为风险输入）
+- retry evidence 摘要（attempt chain、stale retry evidence、是否 exhausted）
 
-## 4. execution_budget
+## 4. execution budget / execution budget risk
 
 状态面在 `execution_budget` 字段组里展示 provider-neutral 预算快照：
 
@@ -144,15 +146,7 @@ Approval / sandbox policy 也只能派生读取：
 
 其中 `highest_risk = high` 只表示预算风险应被 review / merge-ready / closeout 消费，不表示 Loom 自动阻断当前 gate。
 
-## 4.1 execution_failure
-
-状态面可以从最近一次 `execution_attempt` 派生 `execution_failure`，用于暴露 `stall`、`timeout`、`retry_exhaustion` 等执行风险。该字段只读 runtime evidence，不创建 scheduler state，也不单独阻断 merge。
-
-## 4.2 retry_evidence
-
-状态面可以从 `.loom/runtime/attempts/<item-id>/` 的 attempt chain 派生 `retry_evidence`，用于暴露 attempt_count、retry_count、stale_attempt_count 与 exhausted 信号。该字段只读 runtime evidence，不声明 scheduler state。
-
-## 4. `Runtime Evidence`
+## 4.1 `Runtime Evidence`
 
 若事项涉及运行面，状态面必须继续提供固定区块 `Runtime Evidence`：
 
@@ -224,6 +218,36 @@ Approval / sandbox policy 也只能派生读取：
 - stale attempt 可以展示 `attempt_id`、`result` 与 locator，但必须标为 `freshness: stale`
 - missing 或 unreadable attempt evidence 必须标为 `missing` 或 `invalid`，不得用 flow 输出里的摘要补写第二真相
 - attempt 的 `result` 不等于当前 gate 通过；gate 仍消费 Work Item、recovery、review、merge-ready 与 closeout 主载体
+
+## 6.1 Execution Failure
+
+状态面可以从最近一次 fresh `execution_attempt` 派生 `execution_failure`：
+
+- `stall`
+  - 表示执行面停滞、无进展或等待外部宿主响应超出预期
+- `timeout`
+  - 表示执行面在明确时间窗口内失败关闭
+- `retry_exhaustion`
+  - 表示尝试链已经耗尽，但 Loom 只记录证据，不接管调度
+
+若最近 attempt 已 stale，`execution_failure.status` 必须显示 `stale`；若没有可读 attempt evidence，则显示 `missing` 或 `invalid`。该字段组不创建 scheduler state，不单独决定 merge gate。
+
+## 6.2 Retry Evidence
+
+状态面可以从 `.loom/runtime/attempts/<item-id>/` 的 attempt chain 派生 `retry_evidence`：
+
+- `attempt_count`
+  - 绑定当前 `HEAD` 的 attempt 总数
+- `retry_count`
+  - `attempt_count - 1`
+- `latest_failure_classification` / `latest_failure_summary`
+  - 最近 attempt 的失败分类与摘要
+- `stale_attempt_count`
+  - 仍可读但已不再绑定当前 `HEAD` 的旧 attempts
+- `scheduler_ownership`
+  - 固定为 `external`
+
+若当前只有旧 head 的 attempt chain，`retry_evidence.status` 必须为 `stale`。若最近分类为 `retry_exhaustion`，状态面可以暴露 `exhausted: true`，但不得生成自动 retry 计划或 scheduler state。
 
 ## 7. gate 可消费判定
 

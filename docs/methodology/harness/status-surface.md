@@ -16,6 +16,7 @@
 - 前序 gate 是否可继续消费
 - 当前有哪些 `stale` / `drift` / `gate_failure`
 - merge 与 closeout 是否已有足够 basis
+- 若仓库声明了目标 `release / version`，当前 target release 是否仍存在 `unreleased` / `unreconciled` / evidence gap
 - 当前 behavior evidence / test evidence 是否覆盖当前范围
 - 最近验证是否仍是 fresh verification evidence
 
@@ -104,6 +105,7 @@ Approval / sandbox policy 也只能派生读取：
 - `merge-ready` 是否受前序 gate 阻断
 - `controlled merge` 是否满足宿主条件
 - `closeout` / `reconciliation` 是否存在 drift
+- target release closeout gap 是否存在 changelog、release notes、migration notes、tag-artifact evidence 或 rollback basis 缺口
 - 当前活跃 failures 列表
 - BDD 外环场景的证据覆盖状态
 - TDD 内环测试或等价检查的证据覆盖状态

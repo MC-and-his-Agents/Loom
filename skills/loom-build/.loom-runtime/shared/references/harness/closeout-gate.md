@@ -27,6 +27,7 @@ closeout gate 用来回答两件事：
 
 - 本地 gate 结果
 - 同范围 `reconciliation audit` 结果
+- 若仓库声明了目标仓库 `release / version`，则读取当前 target release object 与 release closeout evidence
 - issue 状态
 - PR 是否已 merged
 - 事项对应实现是否已达到 `absorbed`
@@ -36,6 +37,15 @@ closeout gate 用来回答两件事：
 - 主干包含合并结果后仍可回链的 fresh verification evidence
 
 若这些事实不一致，结果必须返回 `block`。
+
+若仓库声明了目标仓库 `release / version`，`closeout check` 还必须至少能区分：
+
+- `merged but unreleased`
+- `released but unreconciled`
+- 缺 changelog / release notes / migration notes / tag-artifact evidence
+- 缺 rollback basis
+
+这些缺口必须作为显式 closeout finding 暴露，不能被折叠成笼统的 host drift。
 
 `closeout check` 只允许返回 `pass` 或 `block`：
 
@@ -55,6 +65,8 @@ closeout gate 用来回答两件事：
 - `fix-needed`：必须返回 `block`；先经 `reconciliation sync` 完成机械对齐，再重新执行 closeout check
 - `block`：必须返回 `block`；先消除硬冲突或缺失事实，且在 audit 重新达标前禁止任何 closeout sync 写入
 
+`shadow parity` 默认不进入 closeout 阻断面。只有 strong governance profile 或显式 opt-in 启用 blocking 消费时，closeout/review/merge-ready 才能把 shadow parity 的 `mismatch` / `unreadable` 当作阻断输入；启用点必须同时声明 owner、fallback、override path 与 authority-of-truth。
+
 closeout 消费 behavior/test evidence 的语义如下：
 
 - 它不重新执行 BDD/TDD 判断，只校验 merge-ready 放行所消费的证据仍可回链当前 merged result
@@ -66,8 +78,10 @@ closeout 消费 behavior/test evidence 的语义如下：
 因此，`closeout check` 至少要能区分：
 
 - 该 issue 已由其对应实现进入 `closed_out`
+- 该 issue 的对应实现已 merged，但 issue 仍 open，需要 `reconciliation sync`
 - 该 issue 的实现已被其他 merged work `absorbed`，但控制面尚未完成 closeout sync
 - 该 issue 仍保留独立剩余缺口，不能被视为 `absorbed`
+- GitHub host signal 不可读或互相冲突，必须进入 `manual-reconciliation`
 
 ## 4. `sync` 最小动作
 
