@@ -1,6 +1,8 @@
 # Orchestration Conformance Profiles
 
-本文件定义 Loom v0.7.0 的 orchestration conformance profiles。
+本文件定义 Loom 的 orchestration conformance profiles。
+
+这些 profiles 最初冻结于 v0.7.0，并由后续版本继续扩展。
 
 这些 profiles 回答的是“当前 release 的编排能力是否可证明”，不得替代 governance maturity profile。
 
@@ -52,6 +54,8 @@ Extension 缺口不得污染 `orchestration-core` pass/fail。若某 adopted rep
 - 明确记录 target、branch/commit/worktree、命令、结果与日期
 - smoke 不可运行时，必须输出 explicit skip / unavailable evidence，说明缺少的宿主、路径、凭据或环境前置
 - live smoke 失败可以降低 release confidence，但不得自动替代 `orchestration-core` 的 blocking 判定
+
+当前 live smoke 的稳定命令与 evidence 形态见 [live-smoke-profile.md](./live-smoke-profile.md)。
 
 Live profile 的目标是防止 release 只在模型内自洽；它提供真实反馈证据，但不把外部仓库可用性变成每个普通 PR 的默认阻断条件。
 

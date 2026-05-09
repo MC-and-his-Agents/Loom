@@ -25,6 +25,9 @@ from governance_surface import build_governance_surface
 from loom_flow import allowed_post_review_carrier_paths, repo_specific_requirements_payload, review_head_binding
 from runtime_paths import repo_local_root
 
+DEFAULT_COMMAND_TIMEOUT_SECONDS = 15.0
+ADOPT_VERIFY_TIMEOUT_SECONDS = 60.0
+
 TOP_LEVEL_DIRS = (
     "docs",
     "examples",
@@ -537,6 +540,15 @@ def run_command(
     )
 
 
+def command_timeout_seconds(args: list[str], requested_timeout_seconds: float | None) -> float:
+    if requested_timeout_seconds is not None:
+        return requested_timeout_seconds
+    normalized = [str(part) for part in args]
+    if "adopt" in normalized and "verify" in normalized:
+        return ADOPT_VERIFY_TIMEOUT_SECONDS
+    return DEFAULT_COMMAND_TIMEOUT_SECONDS
+
+
 def load_command_json(
     root: Path,
     args: list[str],
@@ -545,10 +557,11 @@ def load_command_json(
     env: dict[str, str] | None = None,
     timeout_seconds: float | None = None,
 ) -> tuple[dict[str, object] | None, str | None]:
+    timeout_seconds = command_timeout_seconds(args, timeout_seconds)
     try:
         result = run_command(root, args, cwd=cwd, env=env, timeout_seconds=timeout_seconds)
     except subprocess.TimeoutExpired:
-        return None, f"command timed out after {int(timeout_seconds or 0)}s"
+        return None, f"command timed out after {int(timeout_seconds)}s"
     if not result.stdout.strip():
         detail = "command produced no JSON output"
         if result.stderr.strip():
@@ -1819,6 +1832,113 @@ def require_runtime_parity_payload(
             failures.append(Failure(category, f"{context} check `{check.get('name')}` must include `missing_inputs`"))
         if not isinstance(check.get("evidence"), dict):
             failures.append(Failure(category, f"{context} check `{check.get('name')}` must include `evidence`"))
+
+
+def require_live_smoke_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+    expected_operation: str,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("command") != "live-smoke":
+        failures.append(Failure(category, f"{context} must report `command: live-smoke`"))
+    if payload.get("operation") != expected_operation:
+        failures.append(Failure(category, f"{context} must report `operation: {expected_operation}`"))
+    if payload.get("schema_version") != "loom-live-smoke/v1":
+        failures.append(Failure(category, f"{context} schema_version must be `loom-live-smoke/v1`"))
+    if payload.get("result") not in {"pass", "warn", "block"}:
+        failures.append(Failure(category, f"{context} result must stay within `pass | warn | block`"))
+    if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+        failures.append(Failure(category, f"{context} must include non-empty `summary`"))
+    if not isinstance(payload.get("missing_inputs"), list):
+        failures.append(Failure(category, f"{context} must include `missing_inputs`"))
+    if payload.get("fallback_to") not in {
+        None,
+        "live-smoke-retry-or-record-unavailable",
+        "record-prior-evidence",
+        "live-smoke-config-repair",
+        "admission",
+        "rebootstrap-runtime",
+        "refresh-install",
+        "loom-init",
+    }:
+        failures.append(Failure(category, f"{context} fallback_to must stay within the stable live smoke contract"))
+    runtime_state = payload.get("runtime_state")
+    allowed_runtime_results = {"pass", "block"} if payload.get("result") == "block" else {"pass"}
+    require_runtime_state_payload(
+        failures,
+        category=category,
+        context=context,
+        payload=runtime_state,
+        expected_scene="repo-local-demo",
+        expected_carrier="repo-local-wrapper",
+        allowed_results=allowed_runtime_results,
+    )
+    command_plan = payload.get("command_plan")
+    if not isinstance(command_plan, list) or not command_plan:
+        failures.append(Failure(category, f"{context} must include non-empty `command_plan`"))
+    else:
+        for index, step in enumerate(command_plan):
+            if not isinstance(step, dict):
+                failures.append(Failure(category, f"{context} command_plan[{index}] must be an object"))
+                continue
+            for field in ("id", "command", "description"):
+                value = step.get(field)
+                if not isinstance(value, str) or not value:
+                    failures.append(Failure(category, f"{context} command_plan[{index}] missing `{field}`"))
+    reports = payload.get("reports")
+    if not isinstance(reports, list) or not reports:
+        failures.append(Failure(category, f"{context} must include non-empty `reports`"))
+    else:
+        for index, report in enumerate(reports):
+            if not isinstance(report, dict):
+                failures.append(Failure(category, f"{context} reports[{index}] must be an object"))
+                continue
+            if report.get("result") not in {"pass", "warn", "block"}:
+                failures.append(Failure(category, f"{context} reports[{index}] result must stay within the stable contract"))
+            if not isinstance(report.get("attempted"), bool):
+                failures.append(Failure(category, f"{context} reports[{index}] must include boolean `attempted`"))
+            for field in ("id", "command", "summary", "reported_result"):
+                value = report.get(field)
+                if not isinstance(value, str) or not value:
+                    failures.append(Failure(category, f"{context} reports[{index}] missing `{field}`"))
+            if not isinstance(report.get("missing_inputs"), list):
+                failures.append(Failure(category, f"{context} reports[{index}] must include `missing_inputs`"))
+    live_smoke = payload.get("live_smoke")
+    if not isinstance(live_smoke, dict):
+        failures.append(Failure(category, f"{context} must include `live_smoke`"))
+    else:
+        if live_smoke.get("status") not in {"passed", "failed", "unavailable", "replayed", "dry_run"}:
+            failures.append(Failure(category, f"{context} live_smoke.status must stay within the stable contract"))
+        for field in ("executed_at", "release_interpretation"):
+            value = live_smoke.get(field)
+            if not isinstance(value, str) or not value:
+                failures.append(Failure(category, f"{context} live_smoke must include non-empty `{field}`"))
+    if expected_operation == "run":
+        target = payload.get("target")
+        if not isinstance(target, dict):
+            failures.append(Failure(category, f"{context} run payload must include `target`"))
+        else:
+            if not isinstance(target.get("path"), str) or not target.get("path"):
+                failures.append(Failure(category, f"{context} target.path must be non-empty"))
+            if not isinstance(target.get("exists"), bool):
+                failures.append(Failure(category, f"{context} target.exists must be boolean"))
+        if payload.get("prior_evidence") is not None:
+            failures.append(Failure(category, f"{context} run payload must not include `prior_evidence`"))
+    else:
+        prior_evidence = payload.get("prior_evidence")
+        if not isinstance(prior_evidence, dict):
+            failures.append(Failure(category, f"{context} replay payload must include `prior_evidence`"))
+        else:
+            for field in ("path", "status"):
+                value = prior_evidence.get(field)
+                if not isinstance(value, str) or not value:
+                    failures.append(Failure(category, f"{context} prior_evidence missing `{field}`"))
 
 
 def require_github_binding_payload(
@@ -10036,6 +10156,163 @@ def check_orchestration_conformance_profiles(root: Path) -> list[Failure]:
     return failures
 
 
+def check_live_smoke_foundation_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    docs = {
+        "docs/evidence/live-smoke-profile.md": [
+            "loom-live-smoke/v1",
+            "versioned prior-pass evidence",
+            "explicit unavailable evidence",
+            "validation-only",
+            "shadow-parity --blocking",
+        ],
+        "docs/evidence/v0.10.0-release-readiness.md": [
+            "orchestration-core",
+            "orchestration-live",
+            "confidence input",
+            "profile-local failure",
+            "blocking opt-in",
+        ],
+        "docs/evidence/validations/validation-v0.10-live-smoke-foundation.md": [
+            "live-smoke run",
+            "live-smoke replay",
+            "unavailable evidence",
+            "versioned prior-pass evidence",
+            "validation-only / confidence-input",
+        ],
+    }
+    for relative, anchors in docs.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            failures.append(Failure("live-smoke-foundation", f"`{relative}` is unreadable: {exc}"))
+            continue
+        for anchor in anchors:
+            if anchor not in text:
+                failures.append(Failure("live-smoke-foundation", f"`{relative}` must mention `{anchor}`"))
+
+    unavailable_payload = {
+        "command": "live-smoke",
+        "operation": "run",
+        "schema_version": "loom-live-smoke/v1",
+        "result": "warn",
+        "summary": "live smoke recorded explicit unavailable evidence for the adopted-repo target.",
+        "missing_inputs": ["adopted repo target is unavailable: /tmp/missing-live-target"],
+        "fallback_to": "live-smoke-retry-or-record-unavailable",
+        "runtime_state": {
+            "result": "pass",
+            "summary": "runtime carrier `repo-local-wrapper` is executing as `repo-local-demo` with a consistent bundled runtime.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "scene": "repo-local-demo",
+            "carrier": "repo-local-wrapper",
+            "entry_family": "loom-flow",
+            "install_root": "/tmp/install-root",
+            "runtime_root": "/tmp/runtime-root",
+            "registry_path": "/tmp/registry.json",
+            "layout_or_manifest_path": "/tmp/install-layout.json",
+            "source_repo_root": "/tmp/source-repo",
+            "target_root": "/tmp/missing-live-target",
+            "checks": {
+                "scene_marker": {"status": "pass", "summary": "scene marker is consistent."},
+                "carrier_layout": {"status": "pass", "summary": "carrier layout is readable.", "evidence": {"install_root": "/tmp/install-root"}},
+                "registry_contract": {"status": "pass", "summary": "registry contract is readable.", "evidence": {"path": "/tmp/registry.json"}},
+                "shared_runtime": {"status": "pass", "summary": "shared runtime is readable.", "evidence": {"path": "/tmp/runtime-root"}},
+                "referenced_resources": {"status": "pass", "summary": "referenced resources are present."},
+            },
+        },
+        "target": {
+            "path": "/tmp/missing-live-target",
+            "exists": False,
+            "worktree": "/tmp/missing-live-target",
+            "git_branch": None,
+            "head_sha": None,
+        },
+        "command_plan": [
+            {"id": "target-check", "command": "test -d /tmp/missing-live-target", "description": "Confirm the adopted-repo target path exists before running live smoke checks."},
+            {"id": "governance-profile-status", "command": "python3 tools/loom_flow.py governance-profile status --target /tmp/missing-live-target", "description": "Read the adopted repo governance maturity surface."},
+        ],
+        "reports": [
+            {
+                "id": "target-check",
+                "attempted": True,
+                "command": "test -d /tmp/missing-live-target",
+                "reported_command": "target-check",
+                "reported_result": "unavailable",
+                "result": "warn",
+                "summary": "adopted-repo target root is unavailable.",
+                "missing_inputs": ["adopted repo target is unavailable: /tmp/missing-live-target"],
+                "fallback_to": "live-smoke-retry-or-record-unavailable",
+            }
+        ],
+        "live_smoke": {
+            "status": "unavailable",
+            "executed_at": "2026-05-09T00:00:00Z",
+            "release_interpretation": "explicit unavailable evidence is a non-blocking confidence input and does not silently pass.",
+        },
+    }
+    require_live_smoke_payload(
+        failures,
+        category="live-smoke-foundation",
+        context="unavailable-live-smoke",
+        payload=unavailable_payload,
+        expected_operation="run",
+    )
+
+    replay_payload = {
+        "command": "live-smoke",
+        "operation": "replay",
+        "schema_version": "loom-live-smoke/v1",
+        "result": "pass",
+        "summary": "versioned prior-pass live smoke evidence was replayed.",
+        "missing_inputs": [],
+        "fallback_to": None,
+        "runtime_state": unavailable_payload["runtime_state"],
+        "command_plan": [
+            {"id": "prior-evidence-read", "command": "python3 tools/loom_flow.py live-smoke replay --prior-evidence docs/evidence/validations/validation-v0.7-live-orchestration-smoke.md", "description": "Replay versioned prior-pass evidence without rerunning adopted-repo commands."}
+        ],
+        "reports": [
+            {
+                "id": "prior-evidence",
+                "attempted": False,
+                "command": "read docs/evidence/validations/validation-v0.7-live-orchestration-smoke.md",
+                "reported_command": "prior-evidence",
+                "reported_result": "versioned-prior-pass",
+                "result": "pass",
+                "summary": "versioned prior-pass live smoke evidence was replayed without rerunning adopted-repo commands.",
+                "missing_inputs": [],
+                "fallback_to": None,
+            }
+        ],
+        "live_smoke": {
+            "status": "replayed",
+            "executed_at": "2026-05-09T00:00:00Z",
+            "release_interpretation": "versioned prior-pass evidence can be consumed as release confidence input without rerunning adopted-repo commands.",
+        },
+        "prior_evidence": {
+            "path": "docs/evidence/validations/validation-v0.7-live-orchestration-smoke.md",
+            "status": "versioned-prior-pass",
+            "target_family": "Syvert-style strong governance adopted repo",
+            "smoke_branch": "chore/loom-phase-d-smoke-companion",
+            "smoke_commit": "9a7b2923b6ab39631d8a3eafc1be8e5090709b9d",
+            "smoke_worktree": "/Users/mc/dev/syvert-loom-phase-d-smoke",
+            "commands": [
+                "test -d /Users/mc/dev/syvert-loom-phase-d-smoke",
+                "python3 <loom_repo_root>/tools/loom_flow.py governance-profile status --target /Users/mc/dev/syvert-loom-phase-d-smoke",
+            ],
+        },
+    }
+    require_live_smoke_payload(
+        failures,
+        category="live-smoke-foundation",
+        context="replayed-live-smoke",
+        payload=replay_payload,
+        expected_operation="replay",
+    )
+    return failures
+
+
 def fake_event_evidence(
     *,
     event_id: str,
@@ -11146,6 +11423,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_github_cli_budget(root))
     failures.extend(check_operating_layer_contract(root))
     failures.extend(check_orchestration_conformance_profiles(root))
+    failures.extend(check_live_smoke_foundation_contract(root))
     failures.extend(check_structured_event_evidence_contract(root))
     failures.extend(check_deferred_roadmap_tree_contract(root))
     failures.extend(check_execution_budget_fixture_contract(root))
@@ -11158,7 +11436,7 @@ def collect_failures(root: Path) -> list[Failure]:
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 29
+    categories_checked = 30
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")
