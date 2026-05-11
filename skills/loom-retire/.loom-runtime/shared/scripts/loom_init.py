@@ -1317,6 +1317,7 @@ def repo_interface_payload() -> dict[str, object]:
         "context_schema": {"fields": []},
         "dynamic_tool_locators": [],
         "policy_locators": [],
+        "hook_locators": [],
         "release_targets": {
             "catalog_locator": ".loom/companion/releases/catalog.json",
             "current_target_locator": ".loom/companion/releases/current.json",

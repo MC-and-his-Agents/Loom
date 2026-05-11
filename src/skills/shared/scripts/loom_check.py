@@ -1232,7 +1232,14 @@ def require_repo_interface_payload(
         payload=payload.get("manifest"),
         allowed_statuses={"present", "missing"},
     )
-    for key in ("companion_entry", "repo_specific_requirements", "specialized_gates", "dynamic_tool_locators", "policy_locators"):
+    for key in (
+        "companion_entry",
+        "repo_specific_requirements",
+        "specialized_gates",
+        "dynamic_tool_locators",
+        "policy_locators",
+        "hook_locators",
+    ):
         require_locator_entry(
             failures,
             category=category,
@@ -7760,6 +7767,9 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
             "checkpoints.md",
             "metadata-contract.md",
             "context-schema.md",
+            "hooks/before-run.md",
+            "hooks/after-run.md",
+            "hooks/cleanup.md",
             "review-instructions/spec.md",
             "review-instructions/implementation.md",
         ):
@@ -7971,6 +7981,34 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
                 "fallback_to": "merge",
             },
         ],
+        "hook_locators": [
+            {
+                "id": "before-run-hook",
+                "summary": "Declare a lifecycle hook locator without executing it.",
+                "lifecycle": "before-run",
+                "locator": ".loom/companion/hooks/before-run.md",
+                "owner": "repo-companion",
+                "requirement": "required",
+                "fallback_to": "admission",
+            },
+            {
+                "id": "optional-after-run-hook",
+                "summary": "Declare an optional after-run hook locator.",
+                "lifecycle": "after-run",
+                "locator": ".loom/companion/hooks/missing-after-run.md",
+                "owner": "repo-companion",
+                "requirement": "optional",
+                "fallback_to": "handoff",
+            },
+            {
+                "id": "advisory-cleanup-hook",
+                "summary": "Declare an advisory cleanup hook without requiring host-native support.",
+                "lifecycle": "cleanup",
+                "owner": "host-adapter",
+                "requirement": "advisory",
+                "fallback_to": "workspace cleanup|retire",
+            },
+        ],
         "release_targets": {
             "catalog_locator": ".loom/companion/releases/catalog.json",
             "current_target_locator": ".loom/companion/releases/current.json",
@@ -8160,6 +8198,89 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
         elif "outside-tool.json" not in json.dumps(invalid_optional_interface.get("missing_inputs", []), ensure_ascii=False):
             failures.append(Failure("repo-companion", "optional dynamic tool path escape must stay in blocking missing_inputs"))
 
+        invalid_hook_escape_target = base / "invalid-hook-escape"
+        shutil.copytree(example_target, invalid_hook_escape_target)
+        install_companion(
+            invalid_hook_escape_target,
+            manifest=valid_manifest,
+            repo_interface=valid_interface_v2,
+        )
+        hook_escape_interface_path = invalid_hook_escape_target / ".loom" / "companion" / "repo-interface.json"
+        hook_escape_payload = json.loads(hook_escape_interface_path.read_text(encoding="utf-8"))
+        hook_escape_payload["hook_locators"] = [
+            {
+                "id": "escaped-hook",
+                "summary": "Optional hook locator must still respect repository path boundaries.",
+                "lifecycle": "before-run",
+                "locator": "../outside-hook.md",
+                "owner": "repo-companion",
+                "requirement": "optional",
+                "fallback_to": "admission",
+            }
+        ]
+        write_json(hook_escape_interface_path, hook_escape_payload)
+        invalid_hook_escape_surface = build_governance_surface(invalid_hook_escape_target)
+        invalid_hook_escape_interface = invalid_hook_escape_surface.get("repo_interface")
+        if not isinstance(invalid_hook_escape_interface, dict) or invalid_hook_escape_interface.get("availability") != "incomplete":
+            failures.append(Failure("repo-companion", "optional hook path escape must fail closed"))
+        elif "outside-hook.md" not in json.dumps(invalid_hook_escape_interface.get("missing_inputs", []), ensure_ascii=False):
+            failures.append(Failure("repo-companion", "optional hook path escape must stay in blocking missing_inputs"))
+
+        invalid_hook_truth_target = base / "invalid-hook-truth"
+        shutil.copytree(example_target, invalid_hook_truth_target)
+        install_companion(
+            invalid_hook_truth_target,
+            manifest=valid_manifest,
+            repo_interface={
+                **valid_interface_v2,
+                "hook_locators": [
+                    {
+                        "id": "truth-polluting-hook",
+                        "summary": "Hook declarations must not carry authored or runtime truth.",
+                        "lifecycle": "after-run",
+                        "locator": ".loom/companion/hooks/after-run.md",
+                        "owner": "repo-companion",
+                        "requirement": "required",
+                        "fallback_to": "handoff",
+                        "validation_status": "pass",
+                    }
+                ],
+            },
+        )
+        invalid_hook_truth_surface = build_governance_surface(invalid_hook_truth_target)
+        invalid_hook_truth_interface = invalid_hook_truth_surface.get("repo_interface")
+        if not isinstance(invalid_hook_truth_interface, dict) or invalid_hook_truth_interface.get("availability") != "incomplete":
+            failures.append(Failure("repo-companion", "hook locator truth pollution must fail closed"))
+        elif "validation_status" not in json.dumps(invalid_hook_truth_interface.get("missing_inputs", []), ensure_ascii=False):
+            failures.append(Failure("repo-companion", "hook locator truth pollution must identify forbidden fields"))
+
+        required_hook_missing_target = base / "required-hook-missing"
+        shutil.copytree(example_target, required_hook_missing_target)
+        install_companion(
+            required_hook_missing_target,
+            manifest=valid_manifest,
+            repo_interface={
+                **valid_interface_v2,
+                "hook_locators": [
+                    {
+                        "id": "required-missing-hook",
+                        "summary": "Required hook locator must block when missing.",
+                        "lifecycle": "before-run",
+                        "locator": ".loom/companion/hooks/missing-required.md",
+                        "owner": "repo-companion",
+                        "requirement": "required",
+                        "fallback_to": "admission",
+                    }
+                ],
+            },
+        )
+        required_hook_missing_surface = build_governance_surface(required_hook_missing_target)
+        required_hook_missing_interface = required_hook_missing_surface.get("repo_interface")
+        if not isinstance(required_hook_missing_interface, dict) or required_hook_missing_interface.get("availability") != "incomplete":
+            failures.append(Failure("repo-companion", "required missing hook locator must fail closed"))
+        elif "missing-required.md" not in json.dumps(required_hook_missing_interface.get("missing_inputs", []), ensure_ascii=False):
+            failures.append(Failure("repo-companion", "required missing hook locator must stay in blocking missing_inputs"))
+
         present_v1_target = base / "present-v1"
         shutil.copytree(example_target, present_v1_target)
         install_companion(
@@ -8203,6 +8324,14 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
             failures.append(Failure("repo-companion", "optional dynamic tool locator gaps must not pollute core missing_inputs"))
         if isinstance(present_interface, dict) and "advisory-build-tool" in json.dumps(present_interface.get("missing_inputs", []), ensure_ascii=False):
             failures.append(Failure("repo-companion", "advisory dynamic tool missing locator field must not pollute core missing_inputs"))
+        if isinstance(present_interface, dict) and "missing-after-run.md" not in json.dumps(present_interface.get("missing_optional", []), ensure_ascii=False):
+            failures.append(Failure("repo-companion", "optional hook locator gaps must stay in missing_optional"))
+        if isinstance(present_interface, dict) and "advisory-cleanup-hook" not in json.dumps(present_interface.get("missing_optional", []), ensure_ascii=False):
+            failures.append(Failure("repo-companion", "advisory hook missing locator field must stay in missing_optional"))
+        if isinstance(present_interface, dict) and "missing-after-run.md" in json.dumps(present_interface.get("missing_inputs", []), ensure_ascii=False):
+            failures.append(Failure("repo-companion", "optional hook locator gaps must not pollute core missing_inputs"))
+        if isinstance(present_interface, dict) and "advisory-cleanup-hook" in json.dumps(present_interface.get("missing_inputs", []), ensure_ascii=False):
+            failures.append(Failure("repo-companion", "advisory hook missing locator field must not pollute core missing_inputs"))
         if isinstance(present_interface, dict):
             availability = present_interface.get("tool_availability")
             require_tool_availability_payload(

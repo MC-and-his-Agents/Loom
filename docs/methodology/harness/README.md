@@ -19,6 +19,8 @@
   - 定义 dynamic tool availability 的 `advertised` / `unavailable` / `unsupported` / `failed` 词表、companion / interop 边界与状态展示规则
 - [policy-read-surface.md](./policy-read-surface.md)
   - 定义 approval / sandbox policy 读面、missing / conflict / unsafe 词表、风险摘要与 host-adapter 边界
+- [hook-locator-contract.md](./hook-locator-contract.md)
+  - 定义 lifecycle hook locator、host-native adapter mapping、extension 结果词表与 runtime-evidence-only 边界
 - [structured-event-evidence.md](./structured-event-evidence.md)
   - 定义 agent / tool / validation / failure / tracker event evidence 的字段、fake orchestration fixtures 与禁止承载 authored truth 的边界
 - [subagent-driven-execution.md](./subagent-driven-execution.md)

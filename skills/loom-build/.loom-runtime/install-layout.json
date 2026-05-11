@@ -46,6 +46,7 @@
     "shared/references/harness/workspace-profile.md",
     "shared/references/harness/repo-local-gate-starter.md",
     "shared/references/harness/automation-frontload.md",
+    "shared/references/harness/hook-locator-contract.md",
     "shared/references/harness/workspace-lifecycle.md",
     "shared/references/harness/workspace-and-purity.md",
     "shared/references/harness/worker-backend-contract.md",
