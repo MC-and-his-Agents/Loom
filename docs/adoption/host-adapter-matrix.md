@@ -61,3 +61,32 @@ Adapters must fail closed and report failure instead of partial success when:
 - host discovery cannot observe the installed skill
 - version metadata cannot be read
 - a conflicting user override shadows Loom without explicit operator intent
+
+## Lifecycle Hook Mapping
+
+Host adapters may install or generate host-native hook configuration from Loom
+`hook_locators`, but generated host config remains downstream of the Loom locator
+contract. Loom core does not store Codex or Claude Code native hook file shapes.
+
+Adapters report hook mapping with:
+
+- `supported`
+- `not_applicable`
+- `advisory`
+- `unsafe`
+
+Codex mapping:
+
+- `before-run`: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PermissionRequest`
+- `after-run`: `PostToolUse`, `Stop`, `PostCompact`
+- `cleanup`: `not_applicable` or Loom explicit `workspace cleanup|retire` extension; never required native hook
+
+Claude Code mapping:
+
+- `before-run`: `SessionStart`, `UserPromptSubmit`, `PreToolUse`
+- `after-run`: `PostToolUse`, `Stop`, `SubagentStop`, `PostCompact`
+- `cleanup`: optional `SessionEnd`, constrained by Loom cleanup safety
+
+Host-native hook output must be mapped into Loom runtime evidence and must not
+write authored progress, recovery/status truth, review verdict, validation
+summary, host action result, or closeout basis.

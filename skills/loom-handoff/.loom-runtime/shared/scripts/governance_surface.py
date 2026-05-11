@@ -350,6 +350,7 @@ REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {
     "context_schema",
     "dynamic_tool_locators",
     "policy_locators",
+    "hook_locators",
     "release_targets",
 }
 DECLARED_LOCATOR_REQUIREMENTS = {"required", "optional", "advisory"}
@@ -364,6 +365,7 @@ DYNAMIC_TOOL_HANDSHAKE_FAILURE_CATEGORIES = {
     "invalid_declaration",
 }
 DYNAMIC_TOOL_SURFACES = REPO_INTERFACE_GATE_TYPES | {"attempt_time"}
+HOOK_LOCATOR_LIFECYCLES = {"before-run", "after-run", "cleanup"}
 POLICY_READ_SCHEMA = "loom-policy-read/v1"
 POLICY_READINESS_SCHEMA = "loom-policy-readiness/v1"
 POLICY_TYPES = {"approval", "sandbox"}
@@ -1105,6 +1107,71 @@ def validate_dynamic_tool_locator(
         blocking.append(
             f"{prefix} surface must be one of `admission`, `pre_review`, `review`, `build`, `merge_ready`, `closeout`, `attempt_time`"
         )
+    locator_value = entry.get("locator")
+    locator, target = resolve_locator(root, locator_value)
+    locator_error: str | None = None
+    locator_error_is_optional = False
+    if locator_field_missing(locator_value):
+        locator_error = f"{locator_label} missing `locator`"
+        locator_error_is_optional = requirement in {"optional", "advisory"}
+    elif locator is None or target is None:
+        locator_error = locator_boundary_error(locator_value, label=locator_label)
+    elif not target.exists():
+        locator_error = f"{prefix} locator points to missing path `{locator}`"
+        locator_error_is_optional = requirement in {"optional", "advisory"}
+    if locator_error:
+        if locator_error_is_optional:
+            optional.append(locator_error)
+        else:
+            blocking.append(locator_error)
+    return blocking, optional
+
+
+def validate_hook_locator(
+    *,
+    root: Path,
+    entry: object,
+    index: int,
+) -> tuple[list[str], list[str]]:
+    prefix = f"hook_locators[{index}]"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"], []
+    entry_id = entry.get("id")
+    locator_label = f"{prefix} `{entry_id}` locator" if isinstance(entry_id, str) and entry_id.strip() else f"{prefix} locator"
+    blocking: list[str] = []
+    optional: list[str] = []
+    for field in ("id", "summary", "lifecycle", "owner", "requirement", "fallback_to"):
+        value = entry.get(field)
+        if not isinstance(value, str) or not value.strip():
+            blocking.append(f"{prefix} missing `{field}`")
+    lifecycle = entry.get("lifecycle")
+    if lifecycle not in HOOK_LOCATOR_LIFECYCLES:
+        blocking.append(f"{prefix} lifecycle must be `before-run`, `after-run`, or `cleanup`")
+    owner = entry.get("owner")
+    if owner not in DECLARED_LOCATOR_OWNERS:
+        blocking.append(
+            f"{prefix} owner must be one of `repo`, `repo-companion`, `host`, `host-adapter`, `platform`, `external-tool`"
+        )
+    requirement = entry.get("requirement")
+    if requirement not in DECLARED_LOCATOR_REQUIREMENTS:
+        blocking.append(f"{prefix} requirement must be `required`, `optional`, or `advisory`")
+
+    forbidden_fields = sorted(
+        set(entry)
+        & {
+            "runtime_state",
+            "execution_result",
+            "authored_progress",
+            "review_verdict",
+            "review_summary",
+            "validation_status",
+            "host_action_result",
+            "closeout_basis",
+        }
+    )
+    if forbidden_fields:
+        blocking.append(f"{prefix} must not carry runtime or authored truth fields: {', '.join(forbidden_fields)}")
+
     locator_value = entry.get("locator")
     locator, target = resolve_locator(root, locator_value)
     locator_error: str | None = None
@@ -1908,6 +1975,7 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
         "specialized_gates": carrier_entry("missing", "unknown", "repo companion interface"),
         "dynamic_tool_locators": carrier_entry("missing", "unknown", "repo companion interface"),
         "policy_locators": carrier_entry("missing", "unknown", "repo companion interface"),
+        "hook_locators": carrier_entry("missing", "unknown", "repo companion interface"),
         "release_targets": empty_release_targets_surface(),
         "tool_availability": empty_tool_availability(),
         "policy_readiness": empty_policy_readiness(),
@@ -2094,6 +2162,24 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
                     else:
                         for index, entry in enumerate(policy_locators):
                             blocking, optional = validate_policy_locator(
+                                root=root,
+                                entry=entry,
+                                index=index,
+                            )
+                            missing_inputs.extend(blocking)
+                            missing_optional.extend(optional)
+                hook_locators = interface_payload.get("hook_locators")
+                if hook_locators is not None:
+                    repo_interface_surface["hook_locators"] = carrier_entry(
+                        "present",
+                        ".loom/companion/repo-interface.json",
+                        "repo companion interface",
+                    )
+                    if not isinstance(hook_locators, list):
+                        missing_inputs.append("hook_locators must be a list")
+                    else:
+                        for index, entry in enumerate(hook_locators):
+                            blocking, optional = validate_hook_locator(
                                 root=root,
                                 entry=entry,
                                 index=index,
