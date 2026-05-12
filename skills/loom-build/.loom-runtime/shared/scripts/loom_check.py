@@ -25,8 +25,8 @@ from governance_surface import build_governance_surface
 from loom_flow import allowed_post_review_carrier_paths, repo_specific_requirements_payload, review_head_binding
 from runtime_paths import repo_local_root
 
-DEFAULT_COMMAND_TIMEOUT_SECONDS = 15.0
-ADOPT_VERIFY_TIMEOUT_SECONDS = 60.0
+DEFAULT_COMMAND_TIMEOUT_SECONDS = 30.0
+ADOPT_VERIFY_TIMEOUT_SECONDS = 120.0
 
 TOP_LEVEL_DIRS = (
     "docs",
@@ -2249,6 +2249,122 @@ def require_dynamic_tool_live_availability_payload(
         context=f"{context}.dynamic_tool_availability.tool_availability",
         payload=dynamic_tool_availability.get("tool_availability"),
     )
+
+
+def require_hook_envelope_live_check_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("command") != "live-smoke":
+        failures.append(Failure(category, f"{context} must report `command: live-smoke`"))
+    if payload.get("operation") != "hook-envelope":
+        failures.append(Failure(category, f"{context} must report `operation: hook-envelope`"))
+    if payload.get("schema_version") != "loom-hook-envelope-check/v1":
+        failures.append(Failure(category, f"{context} schema_version must be `loom-hook-envelope-check/v1`"))
+    if payload.get("result") not in {"pass", "warn", "block"}:
+        failures.append(Failure(category, f"{context} result must stay within `pass | warn | block`"))
+    if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+        failures.append(Failure(category, f"{context} must include non-empty `summary`"))
+    if not isinstance(payload.get("missing_inputs"), list):
+        failures.append(Failure(category, f"{context} must include `missing_inputs`"))
+    if payload.get("fallback_to") not in {None, "live-smoke-retry-or-record-unavailable", "live-smoke-config-repair"}:
+        failures.append(Failure(category, f"{context} fallback_to must stay within the stable hook envelope check contract"))
+    require_runtime_state_payload(
+        failures,
+        category=category,
+        context=context,
+        payload=payload.get("runtime_state"),
+        expected_scene="repo-local-demo",
+        expected_carrier="repo-local-wrapper",
+        allowed_results={"pass", "block"} if payload.get("result") == "block" else {"pass"},
+    )
+    target = payload.get("target")
+    if not isinstance(target, dict):
+        failures.append(Failure(category, f"{context} must include `target`"))
+    else:
+        if not isinstance(target.get("path"), str) or not target.get("path"):
+            failures.append(Failure(category, f"{context} target.path must be non-empty"))
+        if not isinstance(target.get("exists"), bool):
+            failures.append(Failure(category, f"{context} target.exists must be boolean"))
+    if not isinstance(payload.get("command_plan"), list):
+        failures.append(Failure(category, f"{context} must include `command_plan`"))
+    reports = payload.get("reports")
+    if not isinstance(reports, list):
+        failures.append(Failure(category, f"{context} must include `reports`"))
+    else:
+        for index, report in enumerate(reports):
+            if not isinstance(report, dict):
+                failures.append(Failure(category, f"{context} reports[{index}] must be an object"))
+                continue
+            if report.get("result") not in {"pass", "warn", "block"}:
+                failures.append(Failure(category, f"{context} reports[{index}] result must stay within the stable contract"))
+            if not isinstance(report.get("attempted"), bool):
+                failures.append(Failure(category, f"{context} reports[{index}] must include boolean `attempted`"))
+            for field in ("id", "command", "summary", "reported_result"):
+                value = report.get(field)
+                if not isinstance(value, str) or not value:
+                    failures.append(Failure(category, f"{context} reports[{index}] missing `{field}`"))
+            if not isinstance(report.get("missing_inputs"), list):
+                failures.append(Failure(category, f"{context} reports[{index}] must include `missing_inputs`"))
+    profile_check = payload.get("profile_check")
+    if not isinstance(profile_check, dict):
+        failures.append(Failure(category, f"{context} must include `profile_check`"))
+    else:
+        if profile_check.get("id") != "hook-envelope":
+            failures.append(Failure(category, f"{context} profile_check.id must be `hook-envelope`"))
+        if profile_check.get("result") not in {"pass", "warn", "block"}:
+            failures.append(Failure(category, f"{context} profile_check.result must stay within `pass | warn | block`"))
+    hook_envelope = payload.get("hook_envelope")
+    if not isinstance(hook_envelope, dict):
+        failures.append(Failure(category, f"{context} must include `hook_envelope`"))
+        return
+    if hook_envelope.get("availability") not in {
+        "present",
+        "incomplete",
+        "runtime-blocked",
+        "target-unavailable",
+        "missing-target",
+        "missing-envelope",
+        "invalid-declaration",
+    }:
+        failures.append(Failure(category, f"{context} hook_envelope.availability is outside the stable vocabulary"))
+    if hook_envelope.get("requirement") not in {"required", "optional", "advisory"}:
+        failures.append(Failure(category, f"{context} hook_envelope.requirement must be `required`, `optional`, or `advisory`"))
+    checks = hook_envelope.get("checks")
+    if not isinstance(checks, list):
+        failures.append(Failure(category, f"{context} hook_envelope.checks must be a list"))
+        return
+    for index, check in enumerate(checks):
+        if not isinstance(check, dict):
+            failures.append(Failure(category, f"{context} hook_envelope.checks[{index}] must be an object"))
+            continue
+        for field in ("id", "requirement", "locator", "result", "classification", "summary"):
+            value = check.get(field)
+            if not isinstance(value, str) or not value:
+                failures.append(Failure(category, f"{context} hook_envelope.checks[{index}] missing `{field}`"))
+        if check.get("result") not in {"pass", "warn", "block"}:
+            failures.append(Failure(category, f"{context} hook_envelope.checks[{index}] result must stay within `pass | warn | block`"))
+        if check.get("classification") not in {
+            "none",
+            "invalid_envelope",
+            "missing_required_input",
+            "unsupported",
+            "not_applicable",
+            "permission_unavailable",
+            "unsafe",
+            "host_mapping_failed",
+        }:
+            failures.append(Failure(category, f"{context} hook_envelope.checks[{index}] classification is outside the stable vocabulary"))
+        if not isinstance(check.get("missing_inputs"), list):
+            failures.append(Failure(category, f"{context} hook_envelope.checks[{index}] must include `missing_inputs`"))
+        if not isinstance(check.get("evidence"), dict):
+            failures.append(Failure(category, f"{context} hook_envelope.checks[{index}] must include `evidence`"))
 
 
 def require_github_binding_payload(
@@ -11491,6 +11607,272 @@ def check_dynamic_tool_live_availability_contract(root: Path) -> list[Failure]:
     return failures
 
 
+def check_hook_envelope_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+
+    def write_json_local(path: Path, payload: object) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    docs = {
+        "docs/methodology/harness/hook-envelope-contract.md": [
+            "loom-hook-envelope/v1",
+            "context_injection",
+            "blocking_decision",
+            "runtime_evidence",
+            "permission_unavailable",
+            "host_mapping_failed",
+            "must not carry",
+        ],
+        "docs/methodology/harness/README.md": [
+            "hook-envelope-contract.md",
+            "context injection / blocking decision / runtime evidence",
+        ],
+    }
+    for relative, anchors in docs.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            failures.append(Failure("hook-envelope", f"`{relative}` is unreadable: {exc}"))
+            continue
+        for anchor in anchors:
+            if anchor not in text:
+                failures.append(Failure("hook-envelope", f"`{relative}` must mention `{anchor}`"))
+
+    example_target = root / "examples/new-project"
+
+    def valid_envelope(category: str) -> dict[str, object]:
+        return {
+            "schema_version": "loom-hook-envelope/v1",
+            "hook": {
+                "id": f"{category}-hook",
+                "lifecycle": "before-run",
+                "locator": ".loom/companion/hooks/before-run.md",
+            },
+            "input": {
+                "item_locator": ".loom/items/WI-617.md",
+                "workspace_locator": ".loom/workspaces/current.json",
+                "attempt_locator": ".loom/runtime/attempts/attempt-1.json",
+                "host_adapter_mapping": {
+                    "host": "codex",
+                    "event": "PreToolUse",
+                    "adapter_result": "supported",
+                },
+            },
+            "output": {
+                "category": category,
+                "summary": f"{category} output mapped into Loom envelope.",
+                "evidence": {"mapped": True},
+            },
+        }
+
+    with tempfile.TemporaryDirectory(prefix="loom-hook-envelope-") as tmp:
+        base = Path(tmp)
+        valid_target = base / "valid"
+        shutil.copytree(example_target, valid_target)
+        for category in ("context_injection", "blocking_decision", "runtime_evidence"):
+            locator = f".loom/companion/hooks/{category}.json"
+            write_json_local(valid_target / locator, valid_envelope(category))
+            payload, error = load_command_json(
+                root,
+                [
+                    "python3",
+                    "tools/loom_flow.py",
+                    "live-smoke",
+                    "hook-envelope",
+                    "--target",
+                    str(valid_target),
+                    "--envelope",
+                    locator,
+                ],
+            )
+            if error:
+                failures.append(Failure("hook-envelope", f"`hook-envelope` valid {category} sample failed: {error}"))
+            else:
+                require_hook_envelope_live_check_payload(
+                    failures,
+                    category="hook-envelope",
+                    context=f"valid-{category}-hook-envelope",
+                    payload=payload,
+                )
+                if not isinstance(payload, dict) or payload.get("result") != "pass":
+                    failures.append(Failure("hook-envelope", f"valid {category} hook envelope must pass"))
+
+        missing_payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "live-smoke",
+                "hook-envelope",
+                "--target",
+                str(valid_target),
+                "--envelope",
+                ".loom/companion/hooks/missing-required.json",
+            ],
+        )
+        if error:
+            failures.append(Failure("hook-envelope", f"`hook-envelope` missing required sample failed: {error}"))
+        elif not isinstance(missing_payload, dict) or missing_payload.get("result") != "block":
+            failures.append(Failure("hook-envelope", "required missing hook envelope must block"))
+
+        optional_missing_payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "live-smoke",
+                "hook-envelope",
+                "--target",
+                str(valid_target),
+                "--envelope",
+                ".loom/companion/hooks/missing-optional.json",
+                "--requirement",
+                "optional",
+            ],
+        )
+        if error:
+            failures.append(Failure("hook-envelope", f"`hook-envelope` missing optional sample failed: {error}"))
+        elif not isinstance(optional_missing_payload, dict) or optional_missing_payload.get("result") != "warn":
+            failures.append(Failure("hook-envelope", "optional missing hook envelope must warn"))
+
+        invalid_category_target = base / "invalid-category"
+        shutil.copytree(example_target, invalid_category_target)
+        invalid_category = valid_envelope("runtime_evidence")
+        invalid_category["output"] = {"category": "host_raw_output", "summary": "invalid category"}
+        write_json_local(invalid_category_target / ".loom/companion/hooks/invalid-category.json", invalid_category)
+        invalid_category_payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "live-smoke",
+                "hook-envelope",
+                "--target",
+                str(invalid_category_target),
+                "--envelope",
+                ".loom/companion/hooks/invalid-category.json",
+            ],
+        )
+        if error:
+            failures.append(Failure("hook-envelope", f"`hook-envelope` invalid category sample failed: {error}"))
+        elif not isinstance(invalid_category_payload, dict) or invalid_category_payload.get("result") != "block":
+            failures.append(Failure("hook-envelope", "invalid hook envelope category must block"))
+
+        truth_target = base / "truth-pollution"
+        shutil.copytree(example_target, truth_target)
+        truth_polluting = valid_envelope("runtime_evidence")
+        truth_polluting["output"] = {
+            "category": "runtime_evidence",
+            "summary": "truth pollution must fail",
+            "authored_progress": "done",
+        }
+        write_json_local(truth_target / ".loom/companion/hooks/truth.json", truth_polluting)
+        truth_payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "live-smoke",
+                "hook-envelope",
+                "--target",
+                str(truth_target),
+                "--envelope",
+                ".loom/companion/hooks/truth.json",
+            ],
+        )
+        if error:
+            failures.append(Failure("hook-envelope", f"`hook-envelope` truth pollution sample failed: {error}"))
+        elif not isinstance(truth_payload, dict) or truth_payload.get("result") != "block":
+            failures.append(Failure("hook-envelope", "hook envelope authored truth pollution must block"))
+
+        permission_target = base / "permission"
+        shutil.copytree(example_target, permission_target)
+        permission_envelope = valid_envelope("blocking_decision")
+        permission_envelope["failure"] = {
+            "classification": "permission_unavailable",
+            "summary": "host permission is unavailable after adapter mapping.",
+            "fallback_to": "build",
+        }
+        write_json_local(permission_target / ".loom/companion/hooks/permission.json", permission_envelope)
+        permission_payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "live-smoke",
+                "hook-envelope",
+                "--target",
+                str(permission_target),
+                "--envelope",
+                ".loom/companion/hooks/permission.json",
+            ],
+        )
+        if error:
+            failures.append(Failure("hook-envelope", f"`hook-envelope` permission sample failed: {error}"))
+        elif not isinstance(permission_payload, dict) or permission_payload.get("result") != "block":
+            failures.append(Failure("hook-envelope", "permission_unavailable hook envelope must block when required"))
+
+        advisory_unsafe_target = base / "advisory-unsafe"
+        shutil.copytree(example_target, advisory_unsafe_target)
+        unsafe_envelope = valid_envelope("blocking_decision")
+        unsafe_envelope["failure"] = {
+            "classification": "unsafe",
+            "summary": "host mapping reported unsafe.",
+            "fallback_to": "manual_repair",
+        }
+        write_json_local(advisory_unsafe_target / ".loom/companion/hooks/unsafe.json", unsafe_envelope)
+        advisory_unsafe_payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "live-smoke",
+                "hook-envelope",
+                "--target",
+                str(advisory_unsafe_target),
+                "--envelope",
+                ".loom/companion/hooks/unsafe.json",
+                "--requirement",
+                "advisory",
+            ],
+        )
+        if error:
+            failures.append(Failure("hook-envelope", f"`hook-envelope` advisory unsafe sample failed: {error}"))
+        elif not isinstance(advisory_unsafe_payload, dict) or advisory_unsafe_payload.get("result") != "warn":
+            failures.append(Failure("hook-envelope", "advisory unsafe hook envelope must warn"))
+
+        host_private_target = base / "host-private-fallback"
+        shutil.copytree(example_target, host_private_target)
+        host_private = valid_envelope("blocking_decision")
+        host_private["failure"] = {
+            "classification": "unsupported",
+            "summary": "fallback must not point to host-private action.",
+            "fallback_to": "Codex SessionEnd",
+        }
+        write_json_local(host_private_target / ".loom/companion/hooks/host-private.json", host_private)
+        host_private_payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "live-smoke",
+                "hook-envelope",
+                "--target",
+                str(host_private_target),
+                "--envelope",
+                ".loom/companion/hooks/host-private.json",
+            ],
+        )
+        if error:
+            failures.append(Failure("hook-envelope", f"`hook-envelope` host-private fallback sample failed: {error}"))
+        elif not isinstance(host_private_payload, dict) or host_private_payload.get("result") != "block":
+            failures.append(Failure("hook-envelope", "host-private fallback must block"))
+
+    return failures
+
+
 def check_live_validation_only_guardrail_contract(root: Path) -> list[Failure]:
     failures: list[Failure] = []
 
@@ -13074,6 +13456,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_live_smoke_foundation_contract(root))
     failures.extend(check_host_adapter_live_drift_contract(root))
     failures.extend(check_dynamic_tool_live_availability_contract(root))
+    failures.extend(check_hook_envelope_contract(root))
     failures.extend(check_live_validation_only_guardrail_contract(root))
     failures.extend(check_structured_event_evidence_contract(root))
     failures.extend(check_deferred_roadmap_tree_contract(root))
@@ -13088,7 +13471,7 @@ def collect_failures(root: Path) -> list[Failure]:
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 33
+    categories_checked = 34
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")

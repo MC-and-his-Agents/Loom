@@ -118,9 +118,43 @@ REVIEW_ENGINE_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
 LIVE_SMOKE_SCHEMA = "loom-live-smoke/v1"
 HOST_ADAPTER_LIVE_DRIFT_SCHEMA = "loom-host-adapter-live-drift/v1"
 DYNAMIC_TOOL_LIVE_AVAILABILITY_SCHEMA = "loom-dynamic-tool-live-availability/v1"
+HOOK_ENVELOPE_SCHEMA = "loom-hook-envelope/v1"
+HOOK_ENVELOPE_LIVE_CHECK_SCHEMA = "loom-hook-envelope-check/v1"
 LIVE_SMOKE_RETRY_FALLBACK = "live-smoke-retry-or-record-unavailable"
 LIVE_SMOKE_REPLAY_FALLBACK = "record-prior-evidence"
 LIVE_SMOKE_CONFIG_FALLBACK = "live-smoke-config-repair"
+HOOK_ENVELOPE_CATEGORIES = {"context_injection", "blocking_decision", "runtime_evidence"}
+HOOK_ENVELOPE_FAILURE_CLASSIFICATIONS = {
+    "invalid_envelope",
+    "missing_required_input",
+    "unsupported",
+    "not_applicable",
+    "permission_unavailable",
+    "unsafe",
+    "host_mapping_failed",
+}
+HOOK_ENVELOPE_FALLBACKS = {
+    None,
+    "admission",
+    "pre_review",
+    "review",
+    "build",
+    "merge_ready",
+    "closeout",
+    "manual_repair",
+    "workspace cleanup|retire",
+}
+HOOK_ENVELOPE_FORBIDDEN_FIELDS = {
+    "authored_progress",
+    "recovery_truth",
+    "status_truth",
+    "review_verdict",
+    "validation_summary",
+    "host_action_result",
+    "closeout_basis",
+}
+HOOK_LIFECYCLES = {"before-run", "after-run", "cleanup"}
+HOOK_ADAPTER_RESULTS = {"supported", "not_applicable", "advisory", "unsafe"}
 REVIEW_ENGINE_PROFILES: dict[str, dict[str, Any]] = {
     "default": {
         "profile_id": "default",
@@ -508,7 +542,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "live-smoke",
         help="Run or replay versioned adopted-repo live smoke evidence without changing core gates",
     )
-    live_smoke.add_argument("operation", choices=("run", "replay", "host-adapter-drift", "dynamic-tool-availability"))
+    live_smoke.add_argument("operation", choices=("run", "replay", "host-adapter-drift", "dynamic-tool-availability", "hook-envelope"))
     live_smoke.add_argument("--target", help="Adopted repository root for live smoke run")
     live_smoke.add_argument("--item", default="INIT-0001", help="Expected current item id for the optional resume smoke")
     live_smoke.add_argument("--prior-evidence", help="Versioned prior-pass evidence to replay without running adopted-repo commands")
@@ -518,6 +552,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         choices=("attempt_time", "review", "merge_ready", "closeout", "build", "admission", "pre_review", "all"),
         default="attempt_time",
         help="Dynamic tool live availability surface; defaults to attempt_time",
+    )
+    live_smoke.add_argument("--envelope", help="Repo-relative Loom hook envelope path for live-smoke hook-envelope")
+    live_smoke.add_argument(
+        "--requirement",
+        choices=("required", "optional", "advisory"),
+        default="required",
+        help="Hook envelope requirement level; defaults to required",
     )
     live_smoke.add_argument(
         "--include-blocking-shadow",
@@ -741,6 +782,21 @@ def dynamic_tool_live_availability_command(target_root: Path, *, surface: str) -
     return live_smoke_command(["live-smoke", "dynamic-tool-availability", "--target", str(target_root), "--surface", surface])
 
 
+def hook_envelope_command(target_root: Path, *, envelope: str, requirement: str) -> str:
+    return live_smoke_command(
+        [
+            "live-smoke",
+            "hook-envelope",
+            "--target",
+            str(target_root),
+            "--envelope",
+            envelope,
+            "--requirement",
+            requirement,
+        ]
+    )
+
+
 def host_adapter_live_drift_command_plan(target_root: Path, host_adapters: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     target = command_target(target_root)
     plan = [
@@ -798,6 +854,166 @@ def dynamic_tool_live_availability_command_plan(
             }
         )
     return plan
+
+
+def hook_envelope_command_plan(target_root: Path, *, envelope: str | None) -> list[dict[str, Any]]:
+    target = command_target(target_root)
+    return [
+        {
+            "id": "target-check",
+            "command": f"test -d {target}",
+            "description": "Confirm the adopted-repo target path exists before reading the mapped hook envelope.",
+        },
+        {
+            "id": "hook-envelope",
+            "command": f"read {envelope if isinstance(envelope, str) and envelope else '<missing-envelope>'}",
+            "description": "Read the repo-relative Loom-mapped hook envelope without executing any hook.",
+        },
+    ]
+
+
+def find_forbidden_hook_envelope_fields(value: object, *, prefix: str = "$") -> list[str]:
+    found: list[str] = []
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            key_label = str(key)
+            nested_prefix = f"{prefix}.{key_label}"
+            if key_label in HOOK_ENVELOPE_FORBIDDEN_FIELDS:
+                found.append(nested_prefix)
+            found.extend(find_forbidden_hook_envelope_fields(nested, prefix=nested_prefix))
+    elif isinstance(value, list):
+        for index, nested in enumerate(value):
+            found.extend(find_forbidden_hook_envelope_fields(nested, prefix=f"{prefix}[{index}]"))
+    return found
+
+
+def validate_hook_envelope_payload(envelope: object) -> dict[str, Any]:
+    missing_inputs: list[str] = []
+    evidence: dict[str, Any] = {
+        "schema_status": "unknown",
+        "output_category": None,
+        "failure_classification": None,
+    }
+    if not isinstance(envelope, dict):
+        return {
+            "result": "block",
+            "classification": "invalid_envelope",
+            "summary": "hook envelope must be a JSON object.",
+            "missing_inputs": ["hook envelope must be a JSON object"],
+            "fallback_to": "manual_repair",
+            "evidence": evidence,
+        }
+
+    if envelope.get("schema_version") != HOOK_ENVELOPE_SCHEMA:
+        missing_inputs.append("schema_version must be `loom-hook-envelope/v1`")
+    else:
+        evidence["schema_status"] = "valid"
+
+    hook = envelope.get("hook")
+    if not isinstance(hook, dict):
+        missing_inputs.append("hook envelope missing `hook` object")
+    else:
+        for field in ("id", "locator"):
+            value = hook.get(field)
+            if not isinstance(value, str) or not value.strip():
+                missing_inputs.append(f"hook missing `{field}`")
+        lifecycle = hook.get("lifecycle")
+        if lifecycle not in HOOK_LIFECYCLES:
+            missing_inputs.append("hook.lifecycle must be `before-run`, `after-run`, or `cleanup`")
+
+    input_payload = envelope.get("input")
+    if not isinstance(input_payload, dict):
+        missing_inputs.append("hook envelope missing `input` object")
+    else:
+        for field in ("item_locator", "workspace_locator", "attempt_locator"):
+            value = input_payload.get(field)
+            if not isinstance(value, str) or not value.strip():
+                missing_inputs.append(f"input missing `{field}`")
+        mapping = input_payload.get("host_adapter_mapping")
+        if not isinstance(mapping, dict):
+            missing_inputs.append("input missing `host_adapter_mapping` object")
+        else:
+            for field in ("host", "event"):
+                value = mapping.get(field)
+                if not isinstance(value, str) or not value.strip():
+                    missing_inputs.append(f"host_adapter_mapping missing `{field}`")
+            if mapping.get("adapter_result") not in HOOK_ADAPTER_RESULTS:
+                missing_inputs.append(
+                    "host_adapter_mapping.adapter_result must be `supported`, `not_applicable`, `advisory`, or `unsafe`"
+                )
+
+    output = envelope.get("output")
+    output_category = None
+    if not isinstance(output, dict):
+        missing_inputs.append("hook envelope missing `output` object")
+    else:
+        output_category = output.get("category")
+        evidence["output_category"] = output_category
+        if output_category not in HOOK_ENVELOPE_CATEGORIES:
+            missing_inputs.append("output.category must be `context_injection`, `blocking_decision`, or `runtime_evidence`")
+        summary = output.get("summary")
+        if not isinstance(summary, str) or not summary.strip():
+            missing_inputs.append("output missing `summary`")
+
+    forbidden_fields = find_forbidden_hook_envelope_fields(envelope)
+    if forbidden_fields:
+        missing_inputs.append(f"hook envelope must not carry authored or host truth fields: {', '.join(forbidden_fields)}")
+
+    failure = envelope.get("failure")
+    failure_classification = None
+    fallback_to = None
+    if failure is not None:
+        if not isinstance(failure, dict):
+            missing_inputs.append("failure must be an object when present")
+        else:
+            failure_classification = failure.get("classification")
+            evidence["failure_classification"] = failure_classification
+            if failure_classification not in HOOK_ENVELOPE_FAILURE_CLASSIFICATIONS:
+                missing_inputs.append("failure.classification is outside the stable hook envelope vocabulary")
+            fallback_to = failure.get("fallback_to")
+            if fallback_to not in HOOK_ENVELOPE_FALLBACKS:
+                missing_inputs.append("failure.fallback_to must point to a Loom surface or manual repair path")
+            summary = failure.get("summary")
+            if failure_classification and (not isinstance(summary, str) or not summary.strip()):
+                missing_inputs.append("failure with classification must include `summary`")
+
+    if missing_inputs:
+        return {
+            "result": "block",
+            "classification": "invalid_envelope",
+            "summary": "hook envelope is invalid or truth-polluting.",
+            "missing_inputs": missing_inputs,
+            "fallback_to": "manual_repair",
+            "evidence": evidence,
+        }
+
+    if failure_classification == "not_applicable":
+        return {
+            "result": "warn",
+            "classification": "not_applicable",
+            "summary": "hook envelope reports not_applicable.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "evidence": evidence,
+        }
+    if failure_classification:
+        result = "block" if failure_classification in {"permission_unavailable", "unsafe", "host_mapping_failed"} else "warn"
+        return {
+            "result": result,
+            "classification": failure_classification,
+            "summary": str(failure.get("summary") if isinstance(failure, dict) else "hook envelope reports failure."),
+            "missing_inputs": [f"hook envelope reported {failure_classification}"] if result == "block" else [],
+            "fallback_to": fallback_to if result == "block" else None,
+            "evidence": evidence,
+        }
+    return {
+        "result": "pass",
+        "classification": "none",
+        "summary": f"hook envelope maps output as `{output_category}`.",
+        "missing_inputs": [],
+        "fallback_to": None,
+        "evidence": evidence,
+    }
 
 
 def host_adapter_permission_unavailable(payload: dict[str, Any]) -> bool:
@@ -1268,6 +1484,224 @@ def host_adapter_live_drift_payload(target_root: Path) -> dict[str, Any]:
                 "availability": "present",
                 "expected_host_adapter_version": expected_version,
                 "checks": checks,
+            },
+        }
+    )
+    return payload
+
+
+def hook_envelope_payload(target_root: Path, *, envelope: str, requirement: str) -> dict[str, Any]:
+    runtime_state = runtime_state_payload(target_root)
+    target = live_smoke_target_metadata(target_root)
+    payload: dict[str, Any] = {
+        "command": "live-smoke",
+        "operation": "hook-envelope",
+        "schema_version": HOOK_ENVELOPE_LIVE_CHECK_SCHEMA,
+        "runtime_state": runtime_state,
+        "target": target,
+        "command_plan": hook_envelope_command_plan(target_root, envelope=envelope),
+        "reports": [],
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if requirement not in {"required", "optional", "advisory"}:
+        payload.update(
+            {
+                "result": "block",
+                "summary": "hook envelope check requires requirement to be required, optional, or advisory.",
+                "missing_inputs": ["--requirement must be `required`, `optional`, or `advisory`"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                "profile_check": {"id": "hook-envelope", "result": "block"},
+                "hook_envelope": {
+                    "contract_locator": envelope,
+                    "availability": "invalid-declaration",
+                    "requirement": requirement,
+                    "checks": [],
+                },
+            }
+        )
+        return payload
+    if runtime_state.get("result") != "pass":
+        payload.update(
+            {
+                "result": "block",
+                "summary": "hook envelope check is blocked because the Loom runtime state is inconsistent.",
+                "missing_inputs": live_smoke_missing_inputs([str(message) for message in runtime_state.get("missing_inputs", [])]),
+                "fallback_to": runtime_state.get("fallback_to"),
+                "profile_check": {"id": "hook-envelope", "result": "block"},
+                "hook_envelope": {
+                    "contract_locator": envelope,
+                    "availability": "runtime-blocked",
+                    "requirement": requirement,
+                    "checks": [],
+                },
+            }
+        )
+        return payload
+
+    target_report = live_smoke_target_check_report(target_root)
+    payload["reports"] = [target_report]
+    payload["missing_inputs"] = list(target_report.get("missing_inputs", []))
+    if target_report["result"] != "pass":
+        payload.update(
+            {
+                "result": "warn",
+                "summary": "hook envelope check recorded explicit unavailable evidence for the adopted-repo target.",
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+                "profile_check": {"id": "hook-envelope", "result": "warn"},
+                "hook_envelope": {
+                    "contract_locator": envelope,
+                    "availability": "target-unavailable",
+                    "requirement": requirement,
+                    "checks": [],
+                },
+            }
+        )
+        return payload
+
+    envelope_path, envelope_errors = resolve_repo_relative_path(target_root, envelope, label="hook envelope locator")
+    if envelope_errors:
+        check = {
+            "id": "hook-envelope",
+            "requirement": requirement,
+            "locator": envelope,
+            "result": "block",
+            "classification": "unsafe",
+            "summary": "hook envelope locator is outside the repository boundary or otherwise unsafe.",
+            "missing_inputs": envelope_errors,
+            "fallback_to": "manual_repair",
+            "evidence": {"locator_status": "unsafe"},
+        }
+        payload["reports"].append(
+            {
+                "id": "hook-envelope",
+                "attempted": True,
+                "command": f"read {envelope}",
+                "reported_command": "hook-envelope",
+                "reported_result": "unsafe",
+                "result": "block",
+                "summary": check["summary"],
+                "missing_inputs": envelope_errors,
+                "fallback_to": "manual_repair",
+            }
+        )
+        payload.update(
+            {
+                "result": "block",
+                "summary": "hook envelope check found an unsafe locator.",
+                "missing_inputs": live_smoke_missing_inputs(envelope_errors),
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                "profile_check": {"id": "hook-envelope", "result": "block"},
+                "hook_envelope": {
+                    "contract_locator": envelope,
+                    "availability": "incomplete",
+                    "requirement": requirement,
+                    "checks": [check],
+                },
+            }
+        )
+        return payload
+    assert envelope_path is not None
+
+    if not envelope_path.exists():
+        result = "block" if requirement == "required" else "warn"
+        missing_inputs = [f"hook envelope locator points to missing path `{envelope}`"]
+        check = {
+            "id": "hook-envelope",
+            "requirement": requirement,
+            "locator": envelope,
+            "result": result,
+            "classification": "missing_required_input" if result == "block" else "not_applicable",
+            "summary": "hook envelope locator is missing.",
+            "missing_inputs": missing_inputs,
+            "fallback_to": "manual_repair" if result == "block" else None,
+            "evidence": {"locator_status": "missing"},
+        }
+        payload["reports"].append(
+            {
+                "id": "hook-envelope",
+                "attempted": True,
+                "command": f"read {envelope}",
+                "reported_command": "hook-envelope",
+                "reported_result": "missing",
+                "result": result,
+                "summary": check["summary"],
+                "missing_inputs": missing_inputs,
+                "fallback_to": check["fallback_to"],
+            }
+        )
+        payload.update(
+            {
+                "result": result,
+                "summary": "hook envelope locator is missing.",
+                "missing_inputs": live_smoke_missing_inputs(missing_inputs) if result == "block" else [],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK if result == "block" else None,
+                "profile_check": {"id": "hook-envelope", "result": result},
+                "hook_envelope": {
+                    "contract_locator": envelope,
+                    "availability": "incomplete",
+                    "requirement": requirement,
+                    "checks": [check],
+                },
+            }
+        )
+        return payload
+
+    try:
+        envelope_payload = load_json_file(envelope_path)
+    except (FileNotFoundError, json.JSONDecodeError, OSError) as exc:
+        result = "block" if requirement == "required" else "warn"
+        missing_inputs = [f"hook envelope locator is unreadable: {exc}"]
+        check = {
+            "id": "hook-envelope",
+            "requirement": requirement,
+            "locator": envelope,
+            "result": result,
+            "classification": "invalid_envelope",
+            "summary": "hook envelope locator is unreadable.",
+            "missing_inputs": missing_inputs,
+            "fallback_to": "manual_repair" if result == "block" else None,
+            "evidence": {"locator_status": "unreadable"},
+        }
+    else:
+        check = {
+            "id": "hook-envelope",
+            "requirement": requirement,
+            "locator": envelope,
+            **validate_hook_envelope_payload(envelope_payload),
+        }
+        check["evidence"] = {"locator_status": "readable", **dict(check.get("evidence", {}))}
+        if requirement in {"optional", "advisory"} and check["result"] == "block":
+            check["result"] = "warn"
+            check["fallback_to"] = None
+            check["missing_inputs"] = []
+
+    payload["reports"].append(
+        {
+            "id": "hook-envelope",
+            "attempted": True,
+            "command": f"read {envelope}",
+            "reported_command": "hook-envelope",
+            "reported_result": str(check["classification"]),
+            "result": str(check["result"]),
+            "summary": str(check["summary"]),
+            "missing_inputs": list(check.get("missing_inputs", [])),
+            "fallback_to": check.get("fallback_to"),
+        }
+    )
+    result = str(check["result"])
+    payload.update(
+        {
+            "result": result,
+            "summary": "hook envelope is valid." if result == "pass" else "hook envelope check produced warnings." if result == "warn" else "hook envelope check found blocking errors.",
+            "missing_inputs": live_smoke_missing_inputs(list(check.get("missing_inputs", []))) if result == "block" else [],
+            "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK if result == "block" else None,
+            "profile_check": {"id": "hook-envelope", "result": result},
+            "hook_envelope": {
+                "contract_locator": envelope,
+                "availability": "present",
+                "requirement": requirement,
+                "checks": [check],
             },
         }
     )
@@ -12066,6 +12500,61 @@ def handle_live_smoke(args: argparse.Namespace) -> int:
             dynamic_tool_live_availability_payload(
                 Path(args.target).expanduser().resolve(),
                 surface=args.surface,
+            )
+        )
+    if args.operation == "hook-envelope":
+        if not args.target:
+            return emit(
+                {
+                    "command": "live-smoke",
+                    "operation": "hook-envelope",
+                    "schema_version": HOOK_ENVELOPE_LIVE_CHECK_SCHEMA,
+                    "result": "block",
+                    "summary": "hook envelope check requires --target.",
+                    "missing_inputs": ["pass --target <adopted_repo_root>"],
+                    "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                    "runtime_state": runtime_state_payload(Path.cwd()),
+                    "target": live_smoke_target_metadata(Path.cwd()),
+                    "command_plan": [],
+                    "reports": [],
+                    "profile_check": {"id": "hook-envelope", "result": "block"},
+                    "hook_envelope": {
+                        "contract_locator": args.envelope,
+                        "availability": "missing-target",
+                        "requirement": args.requirement,
+                        "checks": [],
+                    },
+                }
+            )
+        if not args.envelope:
+            target_root = Path(args.target).expanduser().resolve()
+            return emit(
+                {
+                    "command": "live-smoke",
+                    "operation": "hook-envelope",
+                    "schema_version": HOOK_ENVELOPE_LIVE_CHECK_SCHEMA,
+                    "result": "block",
+                    "summary": "hook envelope check requires --envelope.",
+                    "missing_inputs": ["pass --envelope <repo_relative_envelope_path>"],
+                    "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                    "runtime_state": runtime_state_payload(target_root),
+                    "target": live_smoke_target_metadata(target_root),
+                    "command_plan": hook_envelope_command_plan(target_root, envelope=args.envelope),
+                    "reports": [],
+                    "profile_check": {"id": "hook-envelope", "result": "block"},
+                    "hook_envelope": {
+                        "contract_locator": args.envelope,
+                        "availability": "missing-envelope",
+                        "requirement": args.requirement,
+                        "checks": [],
+                    },
+                }
+            )
+        return emit(
+            hook_envelope_payload(
+                Path(args.target).expanduser().resolve(),
+                envelope=args.envelope,
+                requirement=args.requirement,
             )
         )
 
