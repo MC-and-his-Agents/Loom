@@ -8106,6 +8106,13 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
                 "owner": "repo-companion",
                 "requirement": "required",
                 "fallback_to": "admission",
+                "safety": {
+                    "path_containment": "repo_relative",
+                    "truth_boundary": "runtime_evidence_only",
+                    "cleanup_scope": "not_applicable",
+                    "host_trust": "trusted",
+                    "permission_risk": "approval_required",
+                },
             },
             {
                 "id": "optional-after-run-hook",
@@ -8115,6 +8122,13 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
                 "owner": "repo-companion",
                 "requirement": "optional",
                 "fallback_to": "handoff",
+                "safety": {
+                    "path_containment": "repo_relative",
+                    "truth_boundary": "runtime_evidence_only",
+                    "cleanup_scope": "not_applicable",
+                    "host_trust": "requires_review",
+                    "permission_risk": "sandbox_required",
+                },
             },
             {
                 "id": "advisory-cleanup-hook",
@@ -8123,6 +8137,13 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
                 "owner": "host-adapter",
                 "requirement": "advisory",
                 "fallback_to": "workspace cleanup|retire",
+                "safety": {
+                    "path_containment": "repo_relative",
+                    "truth_boundary": "runtime_evidence_only",
+                    "cleanup_scope": "loom_owned_only",
+                    "host_trust": "requires_review",
+                    "permission_risk": "approval_required",
+                },
             },
         ],
         "release_targets": {
@@ -8332,6 +8353,13 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
                 "owner": "repo-companion",
                 "requirement": "optional",
                 "fallback_to": "admission",
+                "safety": {
+                    "path_containment": "repo_relative",
+                    "truth_boundary": "runtime_evidence_only",
+                    "cleanup_scope": "not_applicable",
+                    "host_trust": "requires_review",
+                    "permission_risk": "approval_required",
+                },
             }
         ]
         write_json(hook_escape_interface_path, hook_escape_payload)
@@ -8358,6 +8386,13 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
                         "owner": "repo-companion",
                         "requirement": "required",
                         "fallback_to": "handoff",
+                        "safety": {
+                            "path_containment": "repo_relative",
+                            "truth_boundary": "runtime_evidence_only",
+                            "cleanup_scope": "not_applicable",
+                            "host_trust": "trusted",
+                            "permission_risk": "none",
+                        },
                         "validation_status": "pass",
                     }
                 ],
@@ -8386,6 +8421,13 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
                         "owner": "repo-companion",
                         "requirement": "required",
                         "fallback_to": "admission",
+                        "safety": {
+                            "path_containment": "repo_relative",
+                            "truth_boundary": "runtime_evidence_only",
+                            "cleanup_scope": "not_applicable",
+                            "host_trust": "trusted",
+                            "permission_risk": "approval_required",
+                        },
                     }
                 ],
             },
@@ -8396,6 +8438,114 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
             failures.append(Failure("repo-companion", "required missing hook locator must fail closed"))
         elif "missing-required.md" not in json.dumps(required_hook_missing_interface.get("missing_inputs", []), ensure_ascii=False):
             failures.append(Failure("repo-companion", "required missing hook locator must stay in blocking missing_inputs"))
+
+        required_hook_missing_safety_target = base / "required-hook-missing-safety"
+        shutil.copytree(example_target, required_hook_missing_safety_target)
+        install_companion(
+            required_hook_missing_safety_target,
+            manifest=valid_manifest,
+            repo_interface={
+                **valid_interface_v2,
+                "hook_locators": [
+                    {
+                        "id": "required-no-safety-hook",
+                        "summary": "Required hook safety declaration must fail closed when absent.",
+                        "lifecycle": "before-run",
+                        "locator": ".loom/companion/hooks/before-run.md",
+                        "owner": "repo-companion",
+                        "requirement": "required",
+                        "fallback_to": "admission",
+                    }
+                ],
+            },
+        )
+        required_hook_missing_safety_surface = build_governance_surface(required_hook_missing_safety_target)
+        required_hook_missing_safety_interface = required_hook_missing_safety_surface.get("repo_interface")
+        if (
+            not isinstance(required_hook_missing_safety_interface, dict)
+            or required_hook_missing_safety_interface.get("availability") != "incomplete"
+        ):
+            failures.append(Failure("repo-companion", "required missing hook safety declaration must fail closed"))
+        elif "missing `safety` declaration" not in json.dumps(
+            required_hook_missing_safety_interface.get("missing_inputs", []),
+            ensure_ascii=False,
+        ):
+            failures.append(Failure("repo-companion", "missing hook safety declaration must identify safety"))
+
+        unsafe_hook_target = base / "unsafe-hook-safety"
+        shutil.copytree(example_target, unsafe_hook_target)
+        install_companion(
+            unsafe_hook_target,
+            manifest=valid_manifest,
+            repo_interface={
+                **valid_interface_v2,
+                "hook_locators": [
+                    {
+                        "id": "untrusted-hook",
+                        "summary": "Untrusted hook declarations must fail closed.",
+                        "lifecycle": "before-run",
+                        "locator": ".loom/companion/hooks/before-run.md",
+                        "owner": "repo-companion",
+                        "requirement": "required",
+                        "fallback_to": "admission",
+                        "safety": {
+                            "path_containment": "repo_relative",
+                            "truth_boundary": "runtime_evidence_only",
+                            "cleanup_scope": "not_applicable",
+                            "host_trust": "untrusted",
+                            "permission_risk": "unknown",
+                        },
+                    }
+                ],
+            },
+        )
+        unsafe_hook_surface = build_governance_surface(unsafe_hook_target)
+        unsafe_hook_interface = unsafe_hook_surface.get("repo_interface")
+        unsafe_hook_missing = json.dumps(
+            unsafe_hook_interface.get("missing_inputs", []) if isinstance(unsafe_hook_interface, dict) else [],
+            ensure_ascii=False,
+        )
+        if not isinstance(unsafe_hook_interface, dict) or unsafe_hook_interface.get("availability") != "incomplete":
+            failures.append(Failure("repo-companion", "untrusted or unknown-permission hook declaration must fail closed"))
+        elif "untrusted" not in unsafe_hook_missing or "unknown hook permission risk" not in unsafe_hook_missing:
+            failures.append(Failure("repo-companion", "unsafe hook declaration must identify trust and permission risk"))
+
+        unsafe_cleanup_target = base / "unsafe-cleanup-scope"
+        shutil.copytree(example_target, unsafe_cleanup_target)
+        install_companion(
+            unsafe_cleanup_target,
+            manifest=valid_manifest,
+            repo_interface={
+                **valid_interface_v2,
+                "hook_locators": [
+                    {
+                        "id": "unsafe-cleanup-hook",
+                        "summary": "Cleanup hooks must be constrained to Loom-owned residue.",
+                        "lifecycle": "cleanup",
+                        "locator": ".loom/companion/hooks/cleanup.md",
+                        "owner": "repo-companion",
+                        "requirement": "required",
+                        "fallback_to": "workspace cleanup|retire",
+                        "safety": {
+                            "path_containment": "repo_relative",
+                            "truth_boundary": "runtime_evidence_only",
+                            "cleanup_scope": "not_applicable",
+                            "host_trust": "requires_review",
+                            "permission_risk": "approval_required",
+                        },
+                    }
+                ],
+            },
+        )
+        unsafe_cleanup_surface = build_governance_surface(unsafe_cleanup_target)
+        unsafe_cleanup_interface = unsafe_cleanup_surface.get("repo_interface")
+        if not isinstance(unsafe_cleanup_interface, dict) or unsafe_cleanup_interface.get("availability") != "incomplete":
+            failures.append(Failure("repo-companion", "unsafe cleanup hook declaration must fail closed"))
+        elif "cleanup hooks must declare safety.cleanup_scope" not in json.dumps(
+            unsafe_cleanup_interface.get("missing_inputs", []),
+            ensure_ascii=False,
+        ):
+            failures.append(Failure("repo-companion", "unsafe cleanup hook declaration must identify cleanup scope"))
 
         present_v1_target = base / "present-v1"
         shutil.copytree(example_target, present_v1_target)
@@ -11787,6 +11937,70 @@ def check_hook_envelope_contract(root: Path) -> list[Failure]:
         elif not isinstance(truth_payload, dict) or truth_payload.get("result") != "block":
             failures.append(Failure("hook-envelope", "hook envelope authored truth pollution must block"))
 
+        status_truth_target = base / "status-truth-write"
+        shutil.copytree(example_target, status_truth_target)
+        status_truth_polluting = valid_envelope("runtime_evidence")
+        status_truth_polluting["output"] = {
+            "category": "runtime_evidence",
+            "summary": "status authored field write must fail",
+            "evidence": {
+                "latest_validation_summary": "hook tried to author status truth",
+            },
+        }
+        write_json_local(status_truth_target / ".loom/companion/hooks/status-truth.json", status_truth_polluting)
+        status_truth_payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "live-smoke",
+                "hook-envelope",
+                "--target",
+                str(status_truth_target),
+                "--envelope",
+                ".loom/companion/hooks/status-truth.json",
+            ],
+        )
+        if error:
+            failures.append(Failure("hook-envelope", f"`hook-envelope` status authored field sample failed: {error}"))
+        elif not isinstance(status_truth_payload, dict) or status_truth_payload.get("result") != "block":
+            failures.append(Failure("hook-envelope", "hook envelope status authored field write must block"))
+
+        cleanup_target = base / "cleanup-non-loom-owned"
+        shutil.copytree(example_target, cleanup_target)
+        cleanup_intent = valid_envelope("runtime_evidence")
+        cleanup_intent["hook"]["lifecycle"] = "cleanup"
+        cleanup_intent["output"] = {
+            "category": "runtime_evidence",
+            "summary": "cleanup intent must be constrained to Loom-owned residue.",
+            "evidence": {
+                "cleanup_targets": [
+                    {
+                        "locator": "README.md",
+                        "ownership": "repo_owned",
+                    }
+                ],
+            },
+        }
+        write_json_local(cleanup_target / ".loom/companion/hooks/cleanup-non-loom-owned.json", cleanup_intent)
+        cleanup_payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "live-smoke",
+                "hook-envelope",
+                "--target",
+                str(cleanup_target),
+                "--envelope",
+                ".loom/companion/hooks/cleanup-non-loom-owned.json",
+            ],
+        )
+        if error:
+            failures.append(Failure("hook-envelope", f"`hook-envelope` cleanup non-Loom-owned sample failed: {error}"))
+        elif not isinstance(cleanup_payload, dict) or cleanup_payload.get("result") != "block":
+            failures.append(Failure("hook-envelope", "hook envelope non-Loom-owned cleanup intent must block"))
+
         permission_target = base / "permission"
         shutil.copytree(example_target, permission_target)
         permission_envelope = valid_envelope("blocking_decision")
@@ -11869,6 +12083,29 @@ def check_hook_envelope_contract(root: Path) -> list[Failure]:
             failures.append(Failure("hook-envelope", f"`hook-envelope` host-private fallback sample failed: {error}"))
         elif not isinstance(host_private_payload, dict) or host_private_payload.get("result") != "block":
             failures.append(Failure("hook-envelope", "host-private fallback must block"))
+
+        unsafe_mapping_target = base / "unsafe-adapter-mapping"
+        shutil.copytree(example_target, unsafe_mapping_target)
+        unsafe_mapping = valid_envelope("blocking_decision")
+        unsafe_mapping["input"]["host_adapter_mapping"]["adapter_result"] = "unsafe"
+        write_json_local(unsafe_mapping_target / ".loom/companion/hooks/unsafe-adapter.json", unsafe_mapping)
+        unsafe_mapping_payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "live-smoke",
+                "hook-envelope",
+                "--target",
+                str(unsafe_mapping_target),
+                "--envelope",
+                ".loom/companion/hooks/unsafe-adapter.json",
+            ],
+        )
+        if error:
+            failures.append(Failure("hook-envelope", f"`hook-envelope` unsafe adapter mapping sample failed: {error}"))
+        elif not isinstance(unsafe_mapping_payload, dict) or unsafe_mapping_payload.get("result") != "block":
+            failures.append(Failure("hook-envelope", "unsafe hook adapter mapping must block when required"))
 
     return failures
 

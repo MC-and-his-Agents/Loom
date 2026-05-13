@@ -41,6 +41,11 @@ produced the Loom envelope. It must include:
 
 `adapter_result` must be `supported`, `not_applicable`, `advisory`, or `unsafe`.
 
+`adapter_result: unsafe` is a hook safety invariant violation. A required hook
+path must fail closed, and optional/advisory hook paths may only report
+profile-local warnings. `not_applicable` and `advisory` are explicit mapped
+states; they do not become authored progress or validation truth.
+
 ## Failure Semantics
 
 Failure classification is limited to:
@@ -73,6 +78,8 @@ Hook envelopes are mapped runtime evidence or mapped blocking decisions. They
 must not carry:
 
 - authored progress
+- recovery authored fields such as `next_step`, `blockers`, `current_checkpoint`,
+  or `latest_validation_summary`
 - recovery or status truth
 - review verdict
 - validation summary
@@ -87,6 +94,12 @@ review verdicts, merge-ready decisions, or closeout basis.
 
 `runtime_evidence` can be consumed as runtime evidence only after adapter
 mapping.
+
+Cleanup intent may appear only as mapped runtime evidence and must be constrained
+to explicit Loom-owned residue. A cleanup envelope that declares repo-owned,
+host-owned, workspace-root, or unknown-ownership targets is unsafe and fails
+closed. This fixture models the attempted deletion; Loom still does not execute
+hooks.
 
 ## Live Check
 
@@ -106,5 +119,4 @@ modify host-native hook configuration.
 
 - executing hooks
 - generating Codex or Claude Code native hook files
-- defining hook safety invariants for #621
 - defining hooks extension profile gating for #625

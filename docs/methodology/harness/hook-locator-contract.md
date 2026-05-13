@@ -44,13 +44,51 @@ Each entry uses:
 - `owner`
 - `requirement`
 - `fallback_to`
+- `safety`
 
 Allowed `lifecycle` values are `before-run`, `after-run`, and `cleanup`.
 Allowed `requirement` values are `required`, `optional`, and `advisory`.
 
+`fallback_to` must point to a Loom surface or manual repair path. It must not
+point to a host-private action such as a Codex or Claude Code native hook event.
+
 `hook_locators` are declaration-time locators. They must not carry runtime
 state, execution result, authored progress, review verdict, validation status,
 host action result, or closeout basis.
+
+## Safety Invariants
+
+Each enabled or required hook declaration must include a `safety` object. Missing
+safety on an optional or advisory hook remains profile-local advisory evidence;
+missing safety on a required hook fails closed.
+
+The stable safety fields are:
+
+- `path_containment`: must be `repo_relative`
+- `truth_boundary`: `runtime_evidence_only`, `context_only`, or `blocking_decision_only`
+- `cleanup_scope`: `not_applicable` or `loom_owned_only`
+- `host_trust`: `trusted`, `requires_review`, or `untrusted`
+- `permission_risk`: `none`, `approval_required`, `sandbox_required`, or `unknown`
+
+Safety evaluation is declaration-time only. It does not execute hooks, inspect
+host-private hook files, or write status/recovery truth.
+
+Stable fail-closed conditions:
+
+- locator is absolute, contains `..`, or resolves outside the repository root
+- a required hook locator is missing or unreadable
+- a required hook lacks a safety declaration
+- the declaration carries authored progress, recovery/status truth, validation,
+  review, host action, or closeout fields
+- `host_trust` is `untrusted`
+- `permission_risk` is `unknown`
+- `cleanup` does not declare `cleanup_scope: loom_owned_only`
+- non-cleanup lifecycle declares cleanup deletion scope
+
+Cleanup safety is constrained to explicit Loom-owned residue. Cleanup hooks must
+not delete the workspace root, host git worktree state, repo-owned artifacts, or
+unmarked files. Unsafe cleanup declarations fail closed before any host-native
+hook mapping can be consumed.
 
 ## Host Adapter Mapping
 
@@ -78,6 +116,10 @@ The adapter result vocabulary is:
 - `not_applicable`
 - `advisory`
 - `unsafe`
+
+`unsafe` adapter results fail closed when the hook path is required. Advisory or
+not-applicable mappings remain profile-local evidence unless an adopted
+repository explicitly opts into a stronger extension gate.
 
 ## Evidence Boundary
 
