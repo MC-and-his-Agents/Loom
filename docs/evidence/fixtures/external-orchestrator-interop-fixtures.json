@@ -1,0 +1,109 @@
+{
+  "schema_version": "loom-external-orchestrator-interop-fixtures/v1",
+  "fixtures": [
+    {
+      "name": "work-item-read-present",
+      "entry": {
+        "id": "fake-external-orchestrator",
+        "summary": "Read the active Work Item through the Loom fact chain.",
+        "surfaces": ["admission"],
+        "operations": ["work_item_read"],
+        "locator": ".loom/external-orchestrator/read-present.json",
+        "owner": "external-tool",
+        "requirement": "required",
+        "fallback_to": "admission"
+      },
+      "payload": {
+        "schema_version": "loom-external-orchestrator-read/v1",
+        "operation": "work_item_read",
+        "entry_kind": "work_item",
+        "source_layer": "authored_truth",
+        "source_locator": ".loom/work-items/INIT-0001.md",
+        "source_binding": {
+          "item_id": "INIT-0001"
+        },
+        "consumed_as": "locator"
+      },
+      "expect": {
+        "result": "pass"
+      }
+    },
+    {
+      "name": "pr-only-entry-block",
+      "entry": {
+        "id": "fake-external-orchestrator",
+        "summary": "Attempt to start from a PR instead of a Work Item.",
+        "surfaces": ["admission"],
+        "operations": ["work_item_read"],
+        "locator": ".loom/external-orchestrator/pr-only.json",
+        "owner": "external-tool",
+        "requirement": "required",
+        "fallback_to": "admission"
+      },
+      "payload": {
+        "schema_version": "loom-external-orchestrator-read/v1",
+        "operation": "work_item_read",
+        "entry_kind": "implementation_pr",
+        "source_layer": "host_control_mirror",
+        "source_locator": "https://github.com/example/repo/pull/1",
+        "source_binding": {
+          "pr": 1
+        },
+        "consumed_as": "mirror"
+      },
+      "expect": {
+        "result": "block",
+        "failure": "gate_failure.missing_prerequisite_gate",
+        "fallback_to": "work_item"
+      }
+    },
+    {
+      "name": "truth-poisoning-block",
+      "entry": {
+        "id": "fake-external-orchestrator",
+        "summary": "Attempt to carry scheduler state and authored progress.",
+        "surfaces": ["admission"],
+        "operations": ["work_item_read"],
+        "locator": ".loom/external-orchestrator/truth-poisoning.json",
+        "owner": "external-tool",
+        "requirement": "required",
+        "fallback_to": "admission"
+      },
+      "payload": {
+        "schema_version": "loom-external-orchestrator-read/v1",
+        "operation": "work_item_read",
+        "entry_kind": "work_item",
+        "source_layer": "authored_truth",
+        "source_locator": ".loom/work-items/INIT-0001.md",
+        "source_binding": {
+          "item_id": "INIT-0001"
+        },
+        "consumed_as": "truth",
+        "scheduler_state": "Running",
+        "next_step": "Continue from the orchestrator queue."
+      },
+      "expect": {
+        "result": "block",
+        "failure": "truth_pollution",
+        "fallback_to": "admission"
+      }
+    },
+    {
+      "name": "optional-missing-warn",
+      "entry": {
+        "id": "optional-external-orchestrator",
+        "summary": "Optional external orchestrator read evidence may be absent.",
+        "surfaces": ["admission"],
+        "operations": ["work_item_read"],
+        "locator": ".loom/external-orchestrator/missing-optional.json",
+        "owner": "external-tool",
+        "requirement": "optional",
+        "fallback_to": "admission"
+      },
+      "payload": null,
+      "expect": {
+        "result": "warn"
+      }
+    }
+  ]
+}
