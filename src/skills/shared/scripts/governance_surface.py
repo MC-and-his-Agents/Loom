@@ -415,7 +415,7 @@ RELEASE_TARGET_DELIVERY_STATUSES = {
 }
 REPO_INTEROP_AVAILABILITY = {"absent", "incomplete", "present"}
 REPO_INTEROP_SCHEMA = "loom-repo-interop/v1"
-REPO_INTEROP_KEYS = {"schema_version", "host_adapters", "repo_native_carriers", "shadow_surfaces"}
+REPO_INTEROP_KEYS = {"schema_version", "host_adapters", "repo_native_carriers", "shadow_surfaces", "external_orchestrators"}
 REPO_INTEROP_COLLECTION_SURFACES = {
     "admission",
     "pre_review",
@@ -423,6 +423,9 @@ REPO_INTEROP_COLLECTION_SURFACES = {
     "build",
     "merge_ready",
     "closeout",
+}
+EXTERNAL_ORCHESTRATOR_OPERATIONS = {
+    "work_item_read",
 }
 REPO_INTEROP_SHADOW_SURFACES = ("admission", "review", "merge_ready", "closeout")
 GOVERNANCE_CONTROL_VERSION = "loom-governance-control/v1"
@@ -2096,6 +2099,33 @@ def validate_repo_interop_collection_entry(
     return missing_inputs, missing_optional
 
 
+def validate_external_orchestrator_entry(
+    *,
+    root: Path,
+    entry: object,
+    index: int,
+) -> tuple[list[str], list[str]]:
+    missing_inputs, missing_optional = validate_repo_interop_collection_entry(
+        root=root,
+        collection="external_orchestrators",
+        entry=entry,
+        index=index,
+    )
+    if not isinstance(entry, dict):
+        return missing_inputs, missing_optional
+    prefix = f"external_orchestrators[{index}]"
+    operations = entry.get("operations")
+    if not isinstance(operations, list) or not operations:
+        missing_inputs.append(f"{prefix} must include `operations` as a non-empty list")
+    else:
+        for operation_index, operation in enumerate(operations):
+            if operation not in EXTERNAL_ORCHESTRATOR_OPERATIONS:
+                missing_inputs.append(
+                    f"{prefix}.operations[{operation_index}] must be one of `work_item_read`"
+                )
+    return missing_inputs, missing_optional
+
+
 def validate_shadow_surface(
     *,
     root: Path,
@@ -2412,6 +2442,7 @@ def detect_repo_interop(root: Path) -> tuple[dict[str, Any], list[str]]:
         "host_adapters": carrier_entry("missing", "unknown", "repo interop contract"),
         "repo_native_carriers": carrier_entry("missing", "unknown", "repo interop contract"),
         "shadow_surfaces": carrier_entry("missing", "unknown", "repo interop contract"),
+        "external_orchestrators": carrier_entry("missing", "unknown", "repo interop contract"),
         "summary": "no repo interop contract is declared for this repository.",
         "missing_inputs": [],
         "missing_optional": [],
@@ -2440,7 +2471,7 @@ def detect_repo_interop(root: Path) -> tuple[dict[str, Any], list[str]]:
                 + ", ".join(extra_keys)
             )
 
-        for key in ("host_adapters", "repo_native_carriers", "shadow_surfaces"):
+        for key in ("host_adapters", "repo_native_carriers", "shadow_surfaces", "external_orchestrators"):
             repo_interop_surface[key] = carrier_entry(
                 "present",
                 ".loom/companion/interop.json",
@@ -2469,6 +2500,19 @@ def detect_repo_interop(root: Path) -> tuple[dict[str, Any], list[str]]:
                 blocking, optional = validate_repo_interop_collection_entry(
                     root=root,
                     collection="repo_native_carriers",
+                    entry=entry,
+                    index=index,
+                )
+                missing_inputs.extend(blocking)
+                missing_optional.extend(optional)
+
+        external_orchestrators = interop_payload.get("external_orchestrators", [])
+        if not isinstance(external_orchestrators, list):
+            missing_inputs.append("repo interop contract must include `external_orchestrators` as a list")
+        else:
+            for index, entry in enumerate(external_orchestrators):
+                blocking, optional = validate_external_orchestrator_entry(
+                    root=root,
                     entry=entry,
                     index=index,
                 )
@@ -2505,7 +2549,7 @@ def detect_repo_interop(root: Path) -> tuple[dict[str, Any], list[str]]:
         repo_interop_surface["summary"] = (
             "repo interop contract is readable with optional locator advisories."
             if missing_optional
-            else "repo interop contract is readable for host adapters, repo-native carriers, and shadow parity."
+            else "repo interop contract is readable for host adapters, repo-native carriers, shadow parity, and external orchestrator locators."
         )
     repo_interop_surface["missing_inputs"] = list(dict.fromkeys(missing_inputs))
     repo_interop_surface["missing_optional"] = list(dict.fromkeys(missing_optional))

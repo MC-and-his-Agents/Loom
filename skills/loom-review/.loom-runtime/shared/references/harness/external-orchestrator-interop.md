@@ -1,0 +1,113 @@
+# External Orchestrator Interop
+
+本文件定义外部 orchestrator 如何消费 Loom，而不把 Loom 变成 scheduler 产品。
+
+它承接 `#535` 的外部 interop 边界。完整事实链仍以
+[fact-chain-contract.md](./fact-chain-contract.md) 为准。
+
+## 1. 目标
+
+外部 orchestrator 可以做四件事：
+
+- 读取当前 `Work Item`
+- attach 已存在的 workspace 语义
+- 通过 recovery writeback 写回执行进展
+- 只读消费 status 与 gates
+
+它不得做三件事：
+
+- 创建第二状态面
+- author gate / review / status truth
+- 接管 branch、PR、git worktree 或 worker lifecycle
+
+## 2. Work Item 读取顺序
+
+外部 orchestrator 必须按同一条事实链读取：
+
+1. `init-result`
+   - 只用于 locator discovery，不承载执行真相
+2. `Work Item`
+   - 读取 `item_id`、目标、范围、执行路径、workspace / recovery / review / validation locator
+3. recovery entry
+   - 读取当前 checkpoint、停点、下一步、阻断项和最近验证摘要
+4. status control plane
+   - 只作为派生汇总和 provenance 读面
+5. host mirror / retained result
+   - 只作为绑定、镜像或 evidence 消费
+
+外部 orchestrator 不得跳过 `Work Item`，也不得从 PR、tracker、release index 或
+merge commit 反推执行入口。
+
+## 3. 非法入口
+
+以下入口必须 fail closed：
+
+- PR-only
+- tracker-only
+- release-only
+- merge-commit-only
+- 缺少 `Work Item` 最小字段
+- `Work Item` 与 host binding 无法回链到同一事项
+
+结果必须使用现有 taxonomy：
+
+- `gate_failure.missing_prerequisite_gate`
+- `gate_failure.binding_failure`
+
+回退方向只允许指向：
+
+- `work_item`
+- `admission`
+- `binding_repair`
+
+不得指向 orchestrator 私有队列、retry state、tracker state 或 scheduler action。
+
+## 4. Locator Declaration
+
+成熟既有仓库可以通过 `.loom/companion/interop.json` 的
+`external_orchestrators` 声明外部 orchestrator 读面。
+
+这些声明只定位可读 evidence / adapter surface：
+
+- `id`
+- `summary`
+- `surfaces`
+- `operations`
+- `locator`
+- `owner`
+- `requirement`
+- `fallback_to`
+
+`operations` 第一版至少允许：
+
+- `work_item_read`
+
+后续可扩展到 `workspace_attach`、`recovery_writeback`、`status_read` 与
+`gate_read`，但这些扩展仍必须消费同一 fact-chain，不得新增第二状态面。
+
+## 5. Truth Boundary
+
+`external_orchestrators` 不得承载：
+
+- scheduler state
+- attempt ownership
+- authored progress
+- `next_step`
+- `blockers`
+- `latest_validation_summary`
+- status truth
+- gate verdict
+- review verdict
+- validation summary
+- host action result
+- closeout basis
+
+这些字段若出现在 external orchestrator locator payload 中，必须被视为 truth
+pollution，并阻断 required 声明。
+
+## 6. 非目标
+
+- 不提供默认 daemon
+- 不定义 tracker polling 产品
+- 不定义自动 retry / backoff 状态机
+- 不复制任何外部 orchestrator 的私有状态模型

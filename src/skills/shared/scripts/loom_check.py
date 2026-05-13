@@ -78,6 +78,7 @@ CORE_DOCS = (
     "docs/methodology/harness/fact-chain-contract.md",
     "docs/methodology/harness/execution-attempt.md",
     "docs/methodology/harness/dynamic-tool-handshake.md",
+    "docs/methodology/harness/external-orchestrator-interop.md",
     "docs/methodology/harness/structured-event-evidence.md",
     "docs/methodology/harness/execution-context.md",
     "docs/methodology/harness/execution-chain.md",
@@ -308,6 +309,22 @@ EXECUTION_BUDGET_RISK_STABLE_FIELDS = {
 EXECUTION_BUDGET_STATUS = {"present", "not_applicable", "unavailable"}
 EXECUTION_FAILURE_FIXTURE_SCHEMA = "loom-execution-failure-fixtures/v1"
 RETRY_EVIDENCE_FIXTURE_SCHEMA = "loom-retry-evidence-fixtures/v1"
+EXTERNAL_ORCHESTRATOR_FIXTURE_SCHEMA = "loom-external-orchestrator-interop-fixtures/v1"
+EXTERNAL_ORCHESTRATOR_FORBIDDEN_FIELDS = {
+    "scheduler_state",
+    "attempt_ownership",
+    "authored_progress",
+    "current_checkpoint",
+    "next_step",
+    "blockers",
+    "latest_validation_summary",
+    "status_truth",
+    "gate_verdict",
+    "review_verdict",
+    "validation_summary",
+    "host_action_result",
+    "closeout_basis",
+}
 
 
 def repo_root_from_argv(argv: list[str]) -> Path:
@@ -1514,7 +1531,7 @@ def require_repo_interop_payload(
         payload=payload.get("contract"),
         allowed_statuses={"present", "missing"},
     )
-    for key in ("host_adapters", "repo_native_carriers", "shadow_surfaces"):
+    for key in ("host_adapters", "repo_native_carriers", "shadow_surfaces", "external_orchestrators"):
         require_locator_entry(
             failures,
             category=category,
@@ -9228,6 +9245,15 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
         (target / "native" / "status").mkdir(parents=True, exist_ok=True)
         for relative, payload in {
             "host/guardian-review.json": {"verdict": "allow"},
+            "host/external-orchestrator-read.json": {
+                "schema_version": "loom-external-orchestrator-read/v1",
+                "operation": "work_item_read",
+                "entry_kind": "work_item",
+                "source_layer": "authored_truth",
+                "source_locator": ".loom/work-items/INIT-0001.md",
+                "source_binding": {"item_id": "INIT-0001"},
+                "consumed_as": "locator",
+            },
             "native/status/admission.json": {"result": "pass"},
             "native/status/review.json": {"decision": "allow"},
             "native/status/merge-ready.json": {"status": "pass"},
@@ -9285,6 +9311,28 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
                 "requirement": "required",
                 "fallback_to": "manual-reconciliation",
             }
+        ],
+        "external_orchestrators": [
+            {
+                "id": "fake-external-orchestrator",
+                "summary": "Read external orchestrator retained read evidence without making it a scheduler state.",
+                "surfaces": ["admission"],
+                "operations": ["work_item_read"],
+                "locator": "host/external-orchestrator-read.json",
+                "owner": "external-tool",
+                "requirement": "required",
+                "fallback_to": "admission",
+            },
+            {
+                "id": "optional-external-orchestrator",
+                "summary": "Optional external orchestrator evidence may be unavailable.",
+                "surfaces": ["admission"],
+                "operations": ["work_item_read"],
+                "locator": "host/missing-external-orchestrator.json",
+                "owner": "external-tool",
+                "requirement": "optional",
+                "fallback_to": "admission",
+            },
         ],
         "shadow_surfaces": {
             "admission": {
@@ -9345,6 +9393,7 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
                     }
                 ],
                 "repo_native_carriers": [],
+                "external_orchestrators": [],
                 "shadow_surfaces": {
                     "admission": {
                         "summary": "Compare admission parity.",
@@ -9406,10 +9455,14 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
             failures.append(Failure("repo-interop", "optional host action locator gaps must stay in missing_optional"))
         elif "advisory-host-note" not in json.dumps(present_interop.get("missing_optional", []), ensure_ascii=False):
             failures.append(Failure("repo-interop", "advisory host action missing locator field must stay in missing_optional"))
+        elif "missing-external-orchestrator.json" not in json.dumps(present_interop.get("missing_optional", []), ensure_ascii=False):
+            failures.append(Failure("repo-interop", "optional external orchestrator locator gaps must stay in missing_optional"))
         if isinstance(present_interop, dict) and "missing-optional-summary.json" in json.dumps(present_interop.get("missing_inputs", []), ensure_ascii=False):
             failures.append(Failure("repo-interop", "optional host action locator gaps must not pollute core missing_inputs"))
         if isinstance(present_interop, dict) and "advisory-host-note" in json.dumps(present_interop.get("missing_inputs", []), ensure_ascii=False):
             failures.append(Failure("repo-interop", "advisory host action missing locator field must not pollute core missing_inputs"))
+        if isinstance(present_interop, dict) and "missing-external-orchestrator.json" in json.dumps(present_interop.get("missing_inputs", []), ensure_ascii=False):
+            failures.append(Failure("repo-interop", "optional external orchestrator locator gaps must not pollute core missing_inputs"))
 
         parity_payload, error = load_command_json(
             root,
@@ -9609,6 +9662,89 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
             reports = rogue_payload.get("reports")
             if not isinstance(reports, list) or not reports or reports[0].get("result") != "unreadable":
                 failures.append(Failure("repo-interop", "`shadow-parity` rogue evidence sample must report `unreadable`"))
+
+    return failures
+
+
+def check_external_orchestrator_interop_fixture_contract(root: Path) -> list[Failure]:
+    fixture_path = root / "docs/evidence/fixtures/external-orchestrator-interop-fixtures.json"
+    category = "external-orchestrator-interop"
+    failures: list[Failure] = []
+    if not fixture_path.exists():
+        return [Failure(category, "`docs/evidence/fixtures/external-orchestrator-interop-fixtures.json` is missing")]
+    try:
+        fixture_payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return [Failure(category, f"external orchestrator fixture JSON is invalid: {exc}")]
+
+    if fixture_payload.get("schema_version") != EXTERNAL_ORCHESTRATOR_FIXTURE_SCHEMA:
+        failures.append(
+            Failure(
+                category,
+                f"`docs/evidence/fixtures/external-orchestrator-interop-fixtures.json` schema_version must be `{EXTERNAL_ORCHESTRATOR_FIXTURE_SCHEMA}`",
+            )
+        )
+    fixtures = fixture_payload.get("fixtures")
+    if not isinstance(fixtures, list) or not fixtures:
+        failures.append(Failure(category, "external orchestrator fixtures must include a non-empty `fixtures` list"))
+        return failures
+
+    seen_names: set[str] = set()
+    required_names = {
+        "work-item-read-present",
+        "pr-only-entry-block",
+        "truth-poisoning-block",
+        "optional-missing-warn",
+    }
+    for index, fixture in enumerate(fixtures):
+        if not isinstance(fixture, dict):
+            failures.append(Failure(category, f"fixtures[{index}] must be an object"))
+            continue
+        name = fixture.get("name")
+        if not isinstance(name, str) or not name:
+            failures.append(Failure(category, f"fixtures[{index}] must include non-empty `name`"))
+        else:
+            seen_names.add(name)
+        entry = fixture.get("entry")
+        if not isinstance(entry, dict):
+            failures.append(Failure(category, f"{name or index} entry must be an object"))
+        else:
+            for field in ("id", "summary", "locator", "owner", "requirement", "fallback_to"):
+                if not isinstance(entry.get(field), str) or not entry.get(field):
+                    failures.append(Failure(category, f"{name or index} entry missing `{field}`"))
+            if entry.get("owner") not in governance_surface_module.DECLARED_LOCATOR_OWNERS:
+                failures.append(Failure(category, f"{name or index} owner must stay within declared locator owners"))
+            if entry.get("requirement") not in governance_surface_module.DECLARED_LOCATOR_REQUIREMENTS:
+                failures.append(Failure(category, f"{name or index} requirement must be required/optional/advisory"))
+            surfaces = entry.get("surfaces")
+            if not isinstance(surfaces, list) or not surfaces:
+                failures.append(Failure(category, f"{name or index} entry must include non-empty `surfaces`"))
+            operations = entry.get("operations")
+            if not isinstance(operations, list) or "work_item_read" not in operations:
+                failures.append(Failure(category, f"{name or index} entry must declare `work_item_read`"))
+        payload = fixture.get("payload")
+        expect = fixture.get("expect")
+        if not isinstance(expect, dict) or expect.get("result") not in {"pass", "warn", "block"}:
+            failures.append(Failure(category, f"{name or index} expect.result must be pass/warn/block"))
+        if payload is not None:
+            if not isinstance(payload, dict):
+                failures.append(Failure(category, f"{name or index} payload must be an object or null"))
+            else:
+                if payload.get("operation") != "work_item_read":
+                    failures.append(Failure(category, f"{name or index} payload operation must be `work_item_read`"))
+                if payload.get("source_layer") not in {"authored_truth", "host_control_mirror", "retained_result", "derived_surface"}:
+                    failures.append(Failure(category, f"{name or index} payload source_layer must use fact-chain vocabulary"))
+                forbidden = sorted(EXTERNAL_ORCHESTRATOR_FORBIDDEN_FIELDS.intersection(payload.keys()))
+                if forbidden and expect.get("result") != "block":
+                    failures.append(Failure(category, f"{name or index} forbidden fields must only appear in blocking fixtures"))
+                if payload.get("entry_kind") != "work_item" and expect.get("result") != "block":
+                    failures.append(Failure(category, f"{name or index} non-Work Item entry must block"))
+                if payload.get("entry_kind") == "implementation_pr" and expect.get("fallback_to") != "work_item":
+                    failures.append(Failure(category, f"{name or index} PR-only fixture must fallback to `work_item`"))
+
+    missing = sorted(required_names - seen_names)
+    if missing:
+        failures.append(Failure(category, "external orchestrator fixtures missing required cases: " + ", ".join(missing)))
 
     return failures
 
@@ -14073,6 +14209,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_daily_execution_cli(root))
     failures.extend(check_repo_companion_interface_contracts(root))
     failures.extend(check_repo_interop_contracts(root))
+    failures.extend(check_external_orchestrator_interop_fixture_contract(root))
     failures.extend(check_external_runtime_devendor_contract(root))
     failures.extend(check_status_closeout_binding_contract(root))
     failures.extend(check_behavior_first_locator_contracts(root))
@@ -14101,7 +14238,7 @@ def collect_failures(root: Path) -> list[Failure]:
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 34
+    categories_checked = 35
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")
