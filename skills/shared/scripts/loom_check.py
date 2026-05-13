@@ -1271,6 +1271,12 @@ def require_repo_interface_payload(
         context=f"{context}.policy_readiness",
         payload=payload.get("policy_readiness"),
     )
+    require_hook_profile_payload(
+        failures,
+        category=category,
+        context=f"{context}.hook_profile",
+        payload=payload.get("hook_profile"),
+    )
 
 
 def require_release_targets_surface_payload(
@@ -1428,6 +1434,65 @@ def require_policy_readiness_payload(
                 failures.append(Failure(category, f"{context} risk_summary.{key} must be a list"))
     if not isinstance(payload.get("missing_inputs"), list):
         failures.append(Failure(category, f"{context} missing_inputs must be a list"))
+
+
+def require_hook_profile_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("schema_version") != governance_surface_module.HOOK_EXTENSION_PROFILE_SCHEMA:
+        failures.append(Failure(category, f"{context} schema_version must be `{governance_surface_module.HOOK_EXTENSION_PROFILE_SCHEMA}`"))
+    if payload.get("profile_id") != "orchestration-extension/hooks":
+        failures.append(Failure(category, f"{context} profile_id must be `orchestration-extension/hooks`"))
+    if not isinstance(payload.get("enabled"), bool):
+        failures.append(Failure(category, f"{context} enabled must be a boolean"))
+    if payload.get("result") not in {"pass", "warn", "block"}:
+        failures.append(Failure(category, f"{context} result must stay within `pass | warn | block`"))
+    if payload.get("status") not in {
+        "not_applicable",
+        "present",
+        "invalid_declaration",
+        "runtime-blocked",
+        "target-unavailable",
+        "missing-target",
+    }:
+        failures.append(Failure(category, f"{context} status is outside the stable hooks extension vocabulary"))
+    if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+        failures.append(Failure(category, f"{context} must include non-empty `summary`"))
+    for field in ("missing_inputs", "missing_optional", "checks"):
+        if not isinstance(payload.get(field), list):
+            failures.append(Failure(category, f"{context}.{field} must be a list"))
+    checks = payload.get("checks")
+    if not isinstance(checks, list):
+        return
+    for index, check in enumerate(checks):
+        if not isinstance(check, dict):
+            failures.append(Failure(category, f"{context}.checks[{index}] must be an object"))
+            continue
+        for field in ("id", "lifecycle", "requirement", "result", "summary"):
+            value = check.get(field)
+            if not isinstance(value, str) or not value:
+                failures.append(Failure(category, f"{context}.checks[{index}] missing `{field}`"))
+        if not isinstance(check.get("locator"), str):
+            failures.append(Failure(category, f"{context}.checks[{index}] locator must be a string"))
+        if check.get("lifecycle") not in {"before-run", "after-run", "cleanup", "unknown"}:
+            failures.append(Failure(category, f"{context}.checks[{index}] lifecycle is outside the stable vocabulary"))
+        if check.get("requirement") not in {"required", "optional", "advisory"}:
+            failures.append(Failure(category, f"{context}.checks[{index}] requirement must be `required`, `optional`, or `advisory`"))
+        if check.get("result") not in {"pass", "warn", "block"}:
+            failures.append(Failure(category, f"{context}.checks[{index}] result must stay within `pass | warn | block`"))
+        if not isinstance(check.get("missing_inputs"), list):
+            failures.append(Failure(category, f"{context}.checks[{index}] missing_inputs must be a list"))
+        if not isinstance(check.get("missing_optional"), list):
+            failures.append(Failure(category, f"{context}.checks[{index}] missing_optional must be a list"))
+        if check.get("fallback_to") is not None and not isinstance(check.get("fallback_to"), str):
+            failures.append(Failure(category, f"{context}.checks[{index}] fallback_to must be a string or null"))
 
 
 def require_repo_interop_payload(
@@ -2365,6 +2430,93 @@ def require_hook_envelope_live_check_payload(
             failures.append(Failure(category, f"{context} hook_envelope.checks[{index}] must include `missing_inputs`"))
         if not isinstance(check.get("evidence"), dict):
             failures.append(Failure(category, f"{context} hook_envelope.checks[{index}] must include `evidence`"))
+
+
+def require_hooks_extension_live_check_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("command") != "live-smoke":
+        failures.append(Failure(category, f"{context} must report `command: live-smoke`"))
+    if payload.get("operation") != "hooks-extension":
+        failures.append(Failure(category, f"{context} must report `operation: hooks-extension`"))
+    if payload.get("schema_version") != governance_surface_module.HOOK_EXTENSION_PROFILE_SCHEMA:
+        failures.append(Failure(category, f"{context} schema_version must be `{governance_surface_module.HOOK_EXTENSION_PROFILE_SCHEMA}`"))
+    if payload.get("result") not in {"pass", "warn", "block"}:
+        failures.append(Failure(category, f"{context} result must stay within `pass | warn | block`"))
+    if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+        failures.append(Failure(category, f"{context} must include non-empty `summary`"))
+    if not isinstance(payload.get("missing_inputs"), list):
+        failures.append(Failure(category, f"{context} must include `missing_inputs`"))
+    if payload.get("fallback_to") not in {None, "live-smoke-retry-or-record-unavailable", "live-smoke-config-repair"}:
+        failures.append(Failure(category, f"{context} fallback_to must stay within the stable hooks extension contract"))
+    require_runtime_state_payload(
+        failures,
+        category=category,
+        context=context,
+        payload=payload.get("runtime_state"),
+        expected_scene="repo-local-demo",
+        expected_carrier="repo-local-wrapper",
+        allowed_results={"pass", "block"} if payload.get("result") == "block" else {"pass"},
+    )
+    target = payload.get("target")
+    if not isinstance(target, dict):
+        failures.append(Failure(category, f"{context} must include `target`"))
+    else:
+        if not isinstance(target.get("path"), str) or not target.get("path"):
+            failures.append(Failure(category, f"{context} target.path must be non-empty"))
+        if not isinstance(target.get("exists"), bool):
+            failures.append(Failure(category, f"{context} target.exists must be boolean"))
+    if not isinstance(payload.get("command_plan"), list):
+        failures.append(Failure(category, f"{context} must include `command_plan`"))
+    reports = payload.get("reports")
+    if not isinstance(reports, list):
+        failures.append(Failure(category, f"{context} must include `reports`"))
+    else:
+        for index, report in enumerate(reports):
+            if not isinstance(report, dict):
+                failures.append(Failure(category, f"{context} reports[{index}] must be an object"))
+                continue
+            if report.get("result") not in {"pass", "warn", "block"}:
+                failures.append(Failure(category, f"{context} reports[{index}] result must stay within the stable contract"))
+            if not isinstance(report.get("attempted"), bool):
+                failures.append(Failure(category, f"{context} reports[{index}] must include boolean `attempted`"))
+            for field in ("id", "command", "summary", "reported_result"):
+                value = report.get(field)
+                if not isinstance(value, str) or not value:
+                    failures.append(Failure(category, f"{context} reports[{index}] missing `{field}`"))
+            if not isinstance(report.get("missing_inputs"), list):
+                failures.append(Failure(category, f"{context} reports[{index}] must include `missing_inputs`"))
+    profile_check = payload.get("profile_check")
+    if not isinstance(profile_check, dict):
+        failures.append(Failure(category, f"{context} must include `profile_check`"))
+    else:
+        if profile_check.get("id") != "hooks-extension":
+            failures.append(Failure(category, f"{context} profile_check.id must be `hooks-extension`"))
+        if profile_check.get("result") not in {"pass", "warn", "block"}:
+            failures.append(Failure(category, f"{context} profile_check.result must stay within `pass | warn | block`"))
+    core_profile = payload.get("core_profile")
+    if not isinstance(core_profile, dict):
+        failures.append(Failure(category, f"{context} must include `core_profile`"))
+    else:
+        if core_profile.get("id") != "orchestration-core":
+            failures.append(Failure(category, f"{context} core_profile.id must be `orchestration-core`"))
+        if core_profile.get("hook_enforcement") != "not_applicable":
+            failures.append(Failure(category, f"{context} core_profile.hook_enforcement must be `not_applicable`"))
+        if core_profile.get("result") != "pass":
+            failures.append(Failure(category, f"{context} core_profile.result must remain `pass`"))
+    require_hook_profile_payload(
+        failures,
+        category=category,
+        context=f"{context}.hooks_extension",
+        payload=payload.get("hooks_extension"),
+    )
 
 
 def require_github_binding_payload(
@@ -8365,10 +8517,17 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
         write_json(hook_escape_interface_path, hook_escape_payload)
         invalid_hook_escape_surface = build_governance_surface(invalid_hook_escape_target)
         invalid_hook_escape_interface = invalid_hook_escape_surface.get("repo_interface")
-        if not isinstance(invalid_hook_escape_interface, dict) or invalid_hook_escape_interface.get("availability") != "incomplete":
+        invalid_hook_escape_profile = (
+            invalid_hook_escape_interface.get("hook_profile") if isinstance(invalid_hook_escape_interface, dict) else None
+        )
+        invalid_hook_escape_missing = json.dumps(
+            invalid_hook_escape_profile.get("missing_inputs", []) if isinstance(invalid_hook_escape_profile, dict) else [],
+            ensure_ascii=False,
+        )
+        if not isinstance(invalid_hook_escape_profile, dict) or invalid_hook_escape_profile.get("result") != "block":
             failures.append(Failure("repo-companion", "optional hook path escape must fail closed"))
-        elif "outside-hook.md" not in json.dumps(invalid_hook_escape_interface.get("missing_inputs", []), ensure_ascii=False):
-            failures.append(Failure("repo-companion", "optional hook path escape must stay in blocking missing_inputs"))
+        elif "outside-hook.md" not in invalid_hook_escape_missing:
+            failures.append(Failure("repo-companion", "optional hook path escape must stay in hook_profile missing_inputs"))
 
         invalid_hook_truth_target = base / "invalid-hook-truth"
         shutil.copytree(example_target, invalid_hook_truth_target)
@@ -8400,9 +8559,16 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
         )
         invalid_hook_truth_surface = build_governance_surface(invalid_hook_truth_target)
         invalid_hook_truth_interface = invalid_hook_truth_surface.get("repo_interface")
-        if not isinstance(invalid_hook_truth_interface, dict) or invalid_hook_truth_interface.get("availability") != "incomplete":
+        invalid_hook_truth_profile = (
+            invalid_hook_truth_interface.get("hook_profile") if isinstance(invalid_hook_truth_interface, dict) else None
+        )
+        invalid_hook_truth_missing = json.dumps(
+            invalid_hook_truth_profile.get("missing_inputs", []) if isinstance(invalid_hook_truth_profile, dict) else [],
+            ensure_ascii=False,
+        )
+        if not isinstance(invalid_hook_truth_profile, dict) or invalid_hook_truth_profile.get("result") != "block":
             failures.append(Failure("repo-companion", "hook locator truth pollution must fail closed"))
-        elif "validation_status" not in json.dumps(invalid_hook_truth_interface.get("missing_inputs", []), ensure_ascii=False):
+        elif "validation_status" not in invalid_hook_truth_missing:
             failures.append(Failure("repo-companion", "hook locator truth pollution must identify forbidden fields"))
 
         required_hook_missing_target = base / "required-hook-missing"
@@ -8434,10 +8600,17 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
         )
         required_hook_missing_surface = build_governance_surface(required_hook_missing_target)
         required_hook_missing_interface = required_hook_missing_surface.get("repo_interface")
-        if not isinstance(required_hook_missing_interface, dict) or required_hook_missing_interface.get("availability") != "incomplete":
+        required_hook_missing_profile = (
+            required_hook_missing_interface.get("hook_profile") if isinstance(required_hook_missing_interface, dict) else None
+        )
+        required_hook_missing_inputs = json.dumps(
+            required_hook_missing_profile.get("missing_inputs", []) if isinstance(required_hook_missing_profile, dict) else [],
+            ensure_ascii=False,
+        )
+        if not isinstance(required_hook_missing_profile, dict) or required_hook_missing_profile.get("result") != "block":
             failures.append(Failure("repo-companion", "required missing hook locator must fail closed"))
-        elif "missing-required.md" not in json.dumps(required_hook_missing_interface.get("missing_inputs", []), ensure_ascii=False):
-            failures.append(Failure("repo-companion", "required missing hook locator must stay in blocking missing_inputs"))
+        elif "missing-required.md" not in required_hook_missing_inputs:
+            failures.append(Failure("repo-companion", "required missing hook locator must stay in hook_profile missing_inputs"))
 
         required_hook_missing_safety_target = base / "required-hook-missing-safety"
         shutil.copytree(example_target, required_hook_missing_safety_target)
@@ -8461,13 +8634,18 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
         )
         required_hook_missing_safety_surface = build_governance_surface(required_hook_missing_safety_target)
         required_hook_missing_safety_interface = required_hook_missing_safety_surface.get("repo_interface")
+        required_hook_missing_safety_profile = (
+            required_hook_missing_safety_interface.get("hook_profile")
+            if isinstance(required_hook_missing_safety_interface, dict)
+            else None
+        )
         if (
-            not isinstance(required_hook_missing_safety_interface, dict)
-            or required_hook_missing_safety_interface.get("availability") != "incomplete"
+            not isinstance(required_hook_missing_safety_profile, dict)
+            or required_hook_missing_safety_profile.get("result") != "block"
         ):
             failures.append(Failure("repo-companion", "required missing hook safety declaration must fail closed"))
         elif "missing `safety` declaration" not in json.dumps(
-            required_hook_missing_safety_interface.get("missing_inputs", []),
+            required_hook_missing_safety_profile.get("missing_inputs", []),
             ensure_ascii=False,
         ):
             failures.append(Failure("repo-companion", "missing hook safety declaration must identify safety"))
@@ -8501,11 +8679,12 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
         )
         unsafe_hook_surface = build_governance_surface(unsafe_hook_target)
         unsafe_hook_interface = unsafe_hook_surface.get("repo_interface")
+        unsafe_hook_profile = unsafe_hook_interface.get("hook_profile") if isinstance(unsafe_hook_interface, dict) else None
         unsafe_hook_missing = json.dumps(
-            unsafe_hook_interface.get("missing_inputs", []) if isinstance(unsafe_hook_interface, dict) else [],
+            unsafe_hook_profile.get("missing_inputs", []) if isinstance(unsafe_hook_profile, dict) else [],
             ensure_ascii=False,
         )
-        if not isinstance(unsafe_hook_interface, dict) or unsafe_hook_interface.get("availability") != "incomplete":
+        if not isinstance(unsafe_hook_profile, dict) or unsafe_hook_profile.get("result") != "block":
             failures.append(Failure("repo-companion", "untrusted or unknown-permission hook declaration must fail closed"))
         elif "untrusted" not in unsafe_hook_missing or "unknown hook permission risk" not in unsafe_hook_missing:
             failures.append(Failure("repo-companion", "unsafe hook declaration must identify trust and permission risk"))
@@ -8539,10 +8718,11 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
         )
         unsafe_cleanup_surface = build_governance_surface(unsafe_cleanup_target)
         unsafe_cleanup_interface = unsafe_cleanup_surface.get("repo_interface")
-        if not isinstance(unsafe_cleanup_interface, dict) or unsafe_cleanup_interface.get("availability") != "incomplete":
+        unsafe_cleanup_profile = unsafe_cleanup_interface.get("hook_profile") if isinstance(unsafe_cleanup_interface, dict) else None
+        if not isinstance(unsafe_cleanup_profile, dict) or unsafe_cleanup_profile.get("result") != "block":
             failures.append(Failure("repo-companion", "unsafe cleanup hook declaration must fail closed"))
         elif "cleanup hooks must declare safety.cleanup_scope" not in json.dumps(
-            unsafe_cleanup_interface.get("missing_inputs", []),
+            unsafe_cleanup_profile.get("missing_inputs", []),
             ensure_ascii=False,
         ):
             failures.append(Failure("repo-companion", "unsafe cleanup hook declaration must identify cleanup scope"))
@@ -8590,10 +8770,15 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
             failures.append(Failure("repo-companion", "optional dynamic tool locator gaps must not pollute core missing_inputs"))
         if isinstance(present_interface, dict) and "advisory-build-tool" in json.dumps(present_interface.get("missing_inputs", []), ensure_ascii=False):
             failures.append(Failure("repo-companion", "advisory dynamic tool missing locator field must not pollute core missing_inputs"))
-        if isinstance(present_interface, dict) and "missing-after-run.md" not in json.dumps(present_interface.get("missing_optional", []), ensure_ascii=False):
-            failures.append(Failure("repo-companion", "optional hook locator gaps must stay in missing_optional"))
-        if isinstance(present_interface, dict) and "advisory-cleanup-hook" not in json.dumps(present_interface.get("missing_optional", []), ensure_ascii=False):
-            failures.append(Failure("repo-companion", "advisory hook missing locator field must stay in missing_optional"))
+        present_hook_profile = present_interface.get("hook_profile") if isinstance(present_interface, dict) else None
+        present_hook_optional = json.dumps(
+            present_hook_profile.get("missing_optional", []) if isinstance(present_hook_profile, dict) else [],
+            ensure_ascii=False,
+        )
+        if "missing-after-run.md" not in present_hook_optional:
+            failures.append(Failure("repo-companion", "optional hook locator gaps must stay in hook_profile missing_optional"))
+        if "advisory-cleanup-hook" not in present_hook_optional:
+            failures.append(Failure("repo-companion", "advisory hook missing locator field must stay in hook_profile missing_optional"))
         if isinstance(present_interface, dict) and "missing-after-run.md" in json.dumps(present_interface.get("missing_inputs", []), ensure_ascii=False):
             failures.append(Failure("repo-companion", "optional hook locator gaps must not pollute core missing_inputs"))
         if isinstance(present_interface, dict) and "advisory-cleanup-hook" in json.dumps(present_interface.get("missing_inputs", []), ensure_ascii=False):
@@ -12110,6 +12295,213 @@ def check_hook_envelope_contract(root: Path) -> list[Failure]:
     return failures
 
 
+def check_hooks_extension_profile_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+
+    def write_json_local(path: Path, payload: object) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    def install_companion_local(target: Path, *, repo_interface: dict[str, object]) -> None:
+        companion_dir = target / ".loom" / "companion"
+        companion_dir.mkdir(parents=True, exist_ok=True)
+        (companion_dir / "README.md").write_text("# Repo Companion\n", encoding="utf-8")
+        write_json_local(
+            companion_dir / "manifest.json",
+            {
+                "schema_version": "loom-repo-companion-manifest/v1",
+                "companion_entry": ".loom/companion/README.md",
+                "repo_interface": ".loom/companion/repo-interface.json",
+            },
+        )
+        write_json_local(companion_dir / "repo-interface.json", repo_interface)
+
+    docs = {
+        "docs/evidence/orchestration-conformance-profiles.md": [
+            "orchestration-extension/hooks",
+            "not_applicable",
+            "profile-local `warn`",
+            "core profile remains pass",
+        ],
+        "docs/evidence/live-smoke-profile.md": [
+            "loom-hooks-extension-profile/v1",
+            "hooks-extension",
+            "optional/advisory",
+            "does not execute hooks",
+        ],
+        "docs/methodology/harness/hook-envelope-contract.md": [
+            "hooks-extension",
+            "profile-local evidence",
+        ],
+        "docs/methodology/harness/hook-locator-contract.md": [
+            "orchestration-extension/hooks",
+            "profile-local advisory evidence",
+        ],
+    }
+    for relative, anchors in docs.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            failures.append(Failure("hooks-extension-profile", f"`{relative}` is unreadable: {exc}"))
+            continue
+        for anchor in anchors:
+            if anchor not in text:
+                failures.append(Failure("hooks-extension-profile", f"`{relative}` must mention `{anchor}`"))
+
+    example_target = root / "examples/new-project"
+    absent_target = Path(tempfile.mkdtemp(prefix="loom-hooks-extension-absent-"))
+    shutil.rmtree(absent_target)
+    shutil.copytree(example_target, absent_target)
+    shutil.rmtree(absent_target / ".loom" / "companion", ignore_errors=True)
+    absent_payload, error = load_command_json(
+        root,
+        ["python3", "tools/loom_flow.py", "live-smoke", "hooks-extension", "--target", str(absent_target)],
+    )
+    if error:
+        failures.append(Failure("hooks-extension-profile", f"`hooks-extension` absent interface sample failed: {error}"))
+    else:
+        require_hooks_extension_live_check_payload(
+            failures,
+            category="hooks-extension-profile",
+            context="absent-hooks-extension",
+            payload=absent_payload,
+        )
+        hooks_extension = absent_payload.get("hooks_extension") if isinstance(absent_payload, dict) else None
+        if not isinstance(absent_payload, dict) or absent_payload.get("result") != "pass":
+            failures.append(Failure("hooks-extension-profile", "absent hooks extension sample must pass"))
+        elif not isinstance(hooks_extension, dict) or hooks_extension.get("status") != "not_applicable":
+            failures.append(Failure("hooks-extension-profile", "absent hooks extension sample must be not_applicable"))
+
+    valid_interface = {
+        "schema_version": "loom-repo-interface/v2",
+        "companion_entry": ".loom/companion/README.md",
+        "repo_specific_requirements": {"review": [], "merge_ready": [], "closeout": []},
+        "specialized_gates": [],
+        "review_instruction_locators": {
+            "spec_review": {"locator": "loom_default", "mode": "loom_default"},
+            "implementation_review": {"locator": "loom_default", "mode": "loom_default"},
+        },
+        "metadata_contract": {"fields": []},
+        "context_schema": {"fields": []},
+        "hook_locators": [],
+    }
+    safe_hook = {
+        "id": "before-run-context",
+        "summary": "Read Loom context before a host run.",
+        "lifecycle": "before-run",
+        "locator": ".loom/companion/hooks/before-run.md",
+        "owner": "host-adapter",
+        "requirement": "required",
+        "fallback_to": "build",
+        "safety": {
+            "path_containment": "repo_relative",
+            "truth_boundary": "context_only",
+            "cleanup_scope": "not_applicable",
+            "host_trust": "trusted",
+            "permission_risk": "none",
+        },
+    }
+
+    with tempfile.TemporaryDirectory(prefix="loom-hooks-extension-") as tmp:
+        base = Path(tmp)
+
+        present_target = base / "present"
+        shutil.copytree(example_target, present_target)
+        present_interface = json.loads(json.dumps(valid_interface))
+        present_interface["hook_locators"] = [safe_hook]
+        install_companion_local(present_target, repo_interface=present_interface)
+        (present_target / ".loom" / "companion" / "hooks").mkdir(parents=True, exist_ok=True)
+        (present_target / ".loom" / "companion" / "hooks" / "before-run.md").write_text(
+            "# Before Run\n",
+            encoding="utf-8",
+        )
+        present_payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "live-smoke", "hooks-extension", "--target", str(present_target)],
+        )
+        if error:
+            failures.append(Failure("hooks-extension-profile", f"`hooks-extension` present sample failed: {error}"))
+        else:
+            require_hooks_extension_live_check_payload(
+                failures,
+                category="hooks-extension-profile",
+                context="present-hooks-extension",
+                payload=present_payload,
+            )
+            if not isinstance(present_payload, dict) or present_payload.get("result") != "pass":
+                failures.append(Failure("hooks-extension-profile", "safe hooks extension sample must pass"))
+
+        optional_target = base / "optional-warn"
+        shutil.copytree(example_target, optional_target)
+        optional_hook = json.loads(json.dumps(safe_hook))
+        optional_hook["id"] = "optional-after-run"
+        optional_hook["lifecycle"] = "after-run"
+        optional_hook["requirement"] = "optional"
+        optional_hook["locator"] = ".loom/companion/hooks/missing-optional.md"
+        optional_hook.pop("safety")
+        optional_interface = json.loads(json.dumps(valid_interface))
+        optional_interface["hook_locators"] = [optional_hook]
+        install_companion_local(optional_target, repo_interface=optional_interface)
+        optional_payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "live-smoke", "hooks-extension", "--target", str(optional_target)],
+        )
+        if error:
+            failures.append(Failure("hooks-extension-profile", f"`hooks-extension` optional sample failed: {error}"))
+        else:
+            require_hooks_extension_live_check_payload(
+                failures,
+                category="hooks-extension-profile",
+                context="optional-hooks-extension",
+                payload=optional_payload,
+            )
+            core_profile = optional_payload.get("core_profile") if isinstance(optional_payload, dict) else None
+            if not isinstance(optional_payload, dict) or optional_payload.get("result") != "warn":
+                failures.append(Failure("hooks-extension-profile", "optional hooks extension gaps must warn"))
+            elif not isinstance(core_profile, dict) or core_profile.get("result") != "pass":
+                failures.append(Failure("hooks-extension-profile", "optional hooks extension gaps must not block core profile"))
+
+        required_target = base / "required-block"
+        shutil.copytree(example_target, required_target)
+        required_hook = json.loads(json.dumps(safe_hook))
+        required_hook["id"] = "required-unsafe"
+        required_hook["safety"]["host_trust"] = "untrusted"
+        required_interface = json.loads(json.dumps(valid_interface))
+        required_interface["hook_locators"] = [required_hook]
+        install_companion_local(required_target, repo_interface=required_interface)
+        (required_target / ".loom" / "companion" / "hooks").mkdir(parents=True, exist_ok=True)
+        (required_target / ".loom" / "companion" / "hooks" / "before-run.md").write_text(
+            "# Before Run\n",
+            encoding="utf-8",
+        )
+        required_payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "live-smoke", "hooks-extension", "--target", str(required_target)],
+        )
+        if error:
+            failures.append(Failure("hooks-extension-profile", f"`hooks-extension` required sample failed: {error}"))
+        else:
+            require_hooks_extension_live_check_payload(
+                failures,
+                category="hooks-extension-profile",
+                context="required-hooks-extension",
+                payload=required_payload,
+            )
+            core_profile = required_payload.get("core_profile") if isinstance(required_payload, dict) else None
+            if not isinstance(required_payload, dict) or required_payload.get("result") != "block":
+                failures.append(Failure("hooks-extension-profile", "required unsafe hook must block the hooks extension profile"))
+            elif not isinstance(core_profile, dict) or core_profile.get("result") != "pass":
+                failures.append(Failure("hooks-extension-profile", "required unsafe hook must not rewrite core profile result"))
+        governance_surface = build_governance_surface(required_target)
+        repo_interface = governance_surface.get("repo_interface")
+        core_missing = repo_interface.get("missing_inputs", []) if isinstance(repo_interface, dict) else []
+        if any("hook_locators" in str(message) for message in core_missing):
+            failures.append(Failure("hooks-extension-profile", "hooks extension gaps must not pollute repo_interface core missing_inputs"))
+
+    return failures
+
+
 def check_live_validation_only_guardrail_contract(root: Path) -> list[Failure]:
     failures: list[Failure] = []
 
@@ -13694,6 +14086,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_host_adapter_live_drift_contract(root))
     failures.extend(check_dynamic_tool_live_availability_contract(root))
     failures.extend(check_hook_envelope_contract(root))
+    failures.extend(check_hooks_extension_profile_contract(root))
     failures.extend(check_live_validation_only_guardrail_contract(root))
     failures.extend(check_structured_event_evidence_contract(root))
     failures.extend(check_deferred_roadmap_tree_contract(root))

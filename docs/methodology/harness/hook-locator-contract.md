@@ -30,6 +30,10 @@ Invalid locators fail closed for every requirement level:
 Missing optional or advisory locators are reported as optional gaps. They must
 not pollute core `missing_inputs`.
 
+Hook locators are evaluated by the optional `orchestration-extension/hooks`
+profile when a repository declares `hook_locators`. Repositories with no
+`hook_locators` stay `not_applicable`.
+
 ## Repo Companion Declaration
 
 Adopted repositories declare hook locators through the repo companion
@@ -72,6 +76,10 @@ The stable safety fields are:
 
 Safety evaluation is declaration-time only. It does not execute hooks, inspect
 host-private hook files, or write status/recovery truth.
+
+Missing or incomplete optional/advisory safety remains profile-local advisory
+evidence. It can produce a hooks extension warning, but it must not become an
+`orchestration-core` missing input.
 
 Stable fail-closed conditions:
 

@@ -34,6 +34,7 @@ from fact_chain_support import (
 from governance_surface import (
     build_governance_surface,
     derive_execution_budget_risk,
+    empty_hook_extension_profile,
     empty_target_release_status,
     empty_tool_availability,
     workspace_lifecycle_expectations,
@@ -120,6 +121,7 @@ HOST_ADAPTER_LIVE_DRIFT_SCHEMA = "loom-host-adapter-live-drift/v1"
 DYNAMIC_TOOL_LIVE_AVAILABILITY_SCHEMA = "loom-dynamic-tool-live-availability/v1"
 HOOK_ENVELOPE_SCHEMA = "loom-hook-envelope/v1"
 HOOK_ENVELOPE_LIVE_CHECK_SCHEMA = "loom-hook-envelope-check/v1"
+HOOKS_EXTENSION_PROFILE_SCHEMA = "loom-hooks-extension-profile/v1"
 LIVE_SMOKE_RETRY_FALLBACK = "live-smoke-retry-or-record-unavailable"
 LIVE_SMOKE_REPLAY_FALLBACK = "record-prior-evidence"
 LIVE_SMOKE_CONFIG_FALLBACK = "live-smoke-config-repair"
@@ -551,7 +553,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "live-smoke",
         help="Run or replay versioned adopted-repo live smoke evidence without changing core gates",
     )
-    live_smoke.add_argument("operation", choices=("run", "replay", "host-adapter-drift", "dynamic-tool-availability", "hook-envelope"))
+    live_smoke.add_argument("operation", choices=("run", "replay", "host-adapter-drift", "dynamic-tool-availability", "hook-envelope", "hooks-extension"))
     live_smoke.add_argument("--target", help="Adopted repository root for live smoke run")
     live_smoke.add_argument("--item", default="INIT-0001", help="Expected current item id for the optional resume smoke")
     live_smoke.add_argument("--prior-evidence", help="Versioned prior-pass evidence to replay without running adopted-repo commands")
@@ -877,6 +879,22 @@ def hook_envelope_command_plan(target_root: Path, *, envelope: str | None) -> li
             "id": "hook-envelope",
             "command": f"read {envelope if isinstance(envelope, str) and envelope else '<missing-envelope>'}",
             "description": "Read the repo-relative Loom-mapped hook envelope without executing any hook.",
+        },
+    ]
+
+
+def hooks_extension_command_plan(target_root: Path) -> list[dict[str, Any]]:
+    target = command_target(target_root)
+    return [
+        {
+            "id": "target-check",
+            "command": f"test -d {target}",
+            "description": "Confirm the adopted-repo target path exists before reading hooks extension declarations.",
+        },
+        {
+            "id": "repo-interface-contract",
+            "command": f"read {target_root / '.loom/companion/repo-interface.json'}",
+            "description": "Read hook_locators from repo companion without executing hooks or writing host state.",
         },
     ]
 
@@ -1770,6 +1788,93 @@ def hook_envelope_payload(target_root: Path, *, envelope: str, requirement: str)
                 "requirement": requirement,
                 "checks": [check],
             },
+        }
+    )
+    return payload
+
+
+def hooks_extension_payload(target_root: Path) -> dict[str, Any]:
+    runtime_state = runtime_state_payload(target_root)
+    target = live_smoke_target_metadata(target_root)
+    payload: dict[str, Any] = {
+        "command": "live-smoke",
+        "operation": "hooks-extension",
+        "schema_version": HOOKS_EXTENSION_PROFILE_SCHEMA,
+        "runtime_state": runtime_state,
+        "target": target,
+        "command_plan": hooks_extension_command_plan(target_root),
+        "reports": [],
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if runtime_state.get("result") != "pass":
+        hook_profile = empty_hook_extension_profile()
+        hook_profile.update({"status": "runtime-blocked", "result": "block"})
+        payload.update(
+            {
+                "result": "block",
+                "summary": "hooks extension profile is blocked because the Loom runtime state is inconsistent.",
+                "missing_inputs": live_smoke_missing_inputs([str(message) for message in runtime_state.get("missing_inputs", [])]),
+                "fallback_to": runtime_state.get("fallback_to"),
+                "profile_check": {"id": "hooks-extension", "result": "block"},
+                "core_profile": {"id": "orchestration-core", "hook_enforcement": "not_applicable", "result": "pass"},
+                "hooks_extension": hook_profile,
+            }
+        )
+        return payload
+
+    target_report = live_smoke_target_check_report(target_root)
+    payload["reports"] = [target_report]
+    if target_report["result"] != "pass":
+        hook_profile = empty_hook_extension_profile()
+        hook_profile.update({"status": "target-unavailable", "result": "warn"})
+        payload.update(
+            {
+                "result": "warn",
+                "summary": "hooks extension profile recorded explicit unavailable evidence for the adopted-repo target.",
+                "missing_inputs": list(target_report.get("missing_inputs", [])),
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+                "profile_check": {"id": "hooks-extension", "result": "warn"},
+                "core_profile": {"id": "orchestration-core", "hook_enforcement": "not_applicable", "result": "pass"},
+                "hooks_extension": hook_profile,
+            }
+        )
+        return payload
+
+    governance_surface = build_governance_surface(target_root)
+    repo_interface = governance_surface.get("repo_interface")
+    if not isinstance(repo_interface, dict):
+        hook_profile = empty_hook_extension_profile()
+    else:
+        hook_profile = repo_interface.get("hook_profile")
+        if not isinstance(hook_profile, dict):
+            hook_profile = empty_hook_extension_profile()
+
+    result = str(hook_profile.get("result") or "pass")
+    if result not in {"pass", "warn", "block"}:
+        result = "block"
+    payload["reports"].append(
+        {
+            "id": "hooks-extension",
+            "attempted": True,
+            "command": f"read {target_root / '.loom/companion/repo-interface.json'}",
+            "reported_command": "repo-interface.hook_locators",
+            "reported_result": str(hook_profile.get("status") or "not_applicable"),
+            "result": result,
+            "summary": str(hook_profile.get("summary") or "hooks extension profile is not enabled."),
+            "missing_inputs": list(hook_profile.get("missing_inputs", [])) if result == "block" else [],
+            "fallback_to": "manual_repair" if result == "block" else None,
+        }
+    )
+    payload.update(
+        {
+            "result": result,
+            "summary": str(hook_profile.get("summary") or "hooks extension profile is not enabled."),
+            "missing_inputs": live_smoke_missing_inputs(list(hook_profile.get("missing_inputs", []))) if result == "block" else [],
+            "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK if result == "block" else None,
+            "profile_check": {"id": "hooks-extension", "result": result},
+            "core_profile": {"id": "orchestration-core", "hook_enforcement": "not_applicable", "result": "pass"},
+            "hooks_extension": hook_profile,
         }
     )
     return payload
@@ -12624,6 +12729,31 @@ def handle_live_smoke(args: argparse.Namespace) -> int:
                 requirement=args.requirement,
             )
         )
+    if args.operation == "hooks-extension":
+        if not args.target:
+            return emit(
+                {
+                    "command": "live-smoke",
+                    "operation": "hooks-extension",
+                    "schema_version": HOOKS_EXTENSION_PROFILE_SCHEMA,
+                    "result": "block",
+                    "summary": "hooks extension profile requires --target.",
+                    "missing_inputs": ["pass --target <adopted_repo_root>"],
+                    "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                    "runtime_state": runtime_state_payload(Path.cwd()),
+                    "target": live_smoke_target_metadata(Path.cwd()),
+                    "command_plan": [],
+                    "reports": [],
+                    "profile_check": {"id": "hooks-extension", "result": "block"},
+                    "core_profile": {"id": "orchestration-core", "hook_enforcement": "not_applicable", "result": "pass"},
+                    "hooks_extension": {
+                        **empty_hook_extension_profile(),
+                        "status": "missing-target",
+                        "result": "block",
+                    },
+                }
+            )
+        return emit(hooks_extension_payload(Path(args.target).expanduser().resolve()))
 
     repo_root = Path(os.environ.get("LOOM_SOURCE_REPO_ROOT", Path.cwd())).expanduser().resolve()
     runtime_state = runtime_state_payload(repo_root)
