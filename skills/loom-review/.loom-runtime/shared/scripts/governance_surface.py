@@ -426,6 +426,8 @@ REPO_INTEROP_COLLECTION_SURFACES = {
 }
 EXTERNAL_ORCHESTRATOR_OPERATIONS = {
     "work_item_read",
+    "workspace_attach",
+    "recovery_writeback",
 }
 REPO_INTEROP_SHADOW_SURFACES = ("admission", "review", "merge_ready", "closeout")
 GOVERNANCE_CONTROL_VERSION = "loom-governance-control/v1"
@@ -2121,7 +2123,7 @@ def validate_external_orchestrator_entry(
         for operation_index, operation in enumerate(operations):
             if operation not in EXTERNAL_ORCHESTRATOR_OPERATIONS:
                 missing_inputs.append(
-                    f"{prefix}.operations[{operation_index}] must be one of `work_item_read`"
+                    f"{prefix}.operations[{operation_index}] must be one of `work_item_read`, `workspace_attach`, `recovery_writeback`"
                 )
     return missing_inputs, missing_optional
 

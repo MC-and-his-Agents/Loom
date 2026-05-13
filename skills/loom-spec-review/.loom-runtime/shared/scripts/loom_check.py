@@ -9254,6 +9254,24 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
                 "source_binding": {"item_id": "INIT-0001"},
                 "consumed_as": "locator",
             },
+            "host/external-orchestrator-attach.json": {
+                "schema_version": "loom-external-orchestrator-read/v1",
+                "operation": "workspace_attach",
+                "entry_kind": "work_item",
+                "source_layer": "derived_surface",
+                "source_locator": ".loom/status/current.md",
+                "source_binding": {"item_id": "INIT-0001"},
+                "consumed_as": "summary",
+            },
+            "host/external-orchestrator-writeback.json": {
+                "schema_version": "loom-external-orchestrator-read/v1",
+                "operation": "recovery_writeback",
+                "entry_kind": "work_item",
+                "source_layer": "authored_truth",
+                "source_locator": ".loom/progress/INIT-0001.md",
+                "source_binding": {"item_id": "INIT-0001"},
+                "consumed_as": "locator",
+            },
             "native/status/admission.json": {"result": "pass"},
             "native/status/review.json": {"decision": "allow"},
             "native/status/merge-ready.json": {"status": "pass"},
@@ -9332,6 +9350,26 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
                 "owner": "external-tool",
                 "requirement": "optional",
                 "fallback_to": "admission",
+            },
+            {
+                "id": "fake-external-orchestrator-attach",
+                "summary": "Read workspace attach evidence without owning host lifecycle.",
+                "surfaces": ["admission"],
+                "operations": ["workspace_attach"],
+                "locator": "host/external-orchestrator-attach.json",
+                "owner": "external-tool",
+                "requirement": "required",
+                "fallback_to": "admission",
+            },
+            {
+                "id": "fake-external-orchestrator-writeback",
+                "summary": "Read recovery writeback evidence without authoring status truth.",
+                "surfaces": ["build"],
+                "operations": ["recovery_writeback"],
+                "locator": "host/external-orchestrator-writeback.json",
+                "owner": "external-tool",
+                "requirement": "required",
+                "fallback_to": "build",
             },
         ],
         "shadow_surfaces": {
@@ -9695,6 +9733,9 @@ def check_external_orchestrator_interop_fixture_contract(root: Path) -> list[Fai
         "pr-only-entry-block",
         "truth-poisoning-block",
         "optional-missing-warn",
+        "workspace-attach-present",
+        "recovery-writeback-present",
+        "direct-status-write-block",
     }
     for index, fixture in enumerate(fixtures):
         if not isinstance(fixture, dict):
@@ -9720,8 +9761,11 @@ def check_external_orchestrator_interop_fixture_contract(root: Path) -> list[Fai
             if not isinstance(surfaces, list) or not surfaces:
                 failures.append(Failure(category, f"{name or index} entry must include non-empty `surfaces`"))
             operations = entry.get("operations")
-            if not isinstance(operations, list) or "work_item_read" not in operations:
-                failures.append(Failure(category, f"{name or index} entry must declare `work_item_read`"))
+            allowed_operations = {"work_item_read", "workspace_attach", "recovery_writeback"}
+            if not isinstance(operations, list) or not operations:
+                failures.append(Failure(category, f"{name or index} entry must declare at least one external orchestrator operation"))
+            elif any(operation not in allowed_operations for operation in operations):
+                failures.append(Failure(category, f"{name or index} entry declares an unsupported external orchestrator operation"))
         payload = fixture.get("payload")
         expect = fixture.get("expect")
         if not isinstance(expect, dict) or expect.get("result") not in {"pass", "warn", "block"}:
@@ -9730,8 +9774,8 @@ def check_external_orchestrator_interop_fixture_contract(root: Path) -> list[Fai
             if not isinstance(payload, dict):
                 failures.append(Failure(category, f"{name or index} payload must be an object or null"))
             else:
-                if payload.get("operation") != "work_item_read":
-                    failures.append(Failure(category, f"{name or index} payload operation must be `work_item_read`"))
+                if payload.get("operation") not in {"work_item_read", "workspace_attach", "recovery_writeback"}:
+                    failures.append(Failure(category, f"{name or index} payload operation must be a supported external orchestrator operation"))
                 if payload.get("source_layer") not in {"authored_truth", "host_control_mirror", "retained_result", "derived_surface"}:
                     failures.append(Failure(category, f"{name or index} payload source_layer must use fact-chain vocabulary"))
                 forbidden = sorted(EXTERNAL_ORCHESTRATOR_FORBIDDEN_FIELDS.intersection(payload.keys()))

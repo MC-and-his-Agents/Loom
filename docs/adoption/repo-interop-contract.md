@@ -293,7 +293,7 @@ blocking 模式只改变消费结果，不改变 `shadow_surfaces` schema：
 - `surfaces` 必须是非空数组
 - `surfaces[*]` 只允许 `admission | pre_review | review | build | merge_ready | closeout`
 - `operations` 必须是非空数组
-- `operations[*]` 第一版只允许 `work_item_read`
+- `operations[*]` 只允许 `work_item_read | workspace_attach | recovery_writeback`
 - `locator` 只描述 Loom 如何读取外部 orchestrator 的 retained read evidence，不描述如何调度任务
 - `owner` 只允许 `repo | repo-companion | host | host-adapter | platform | external-tool`
 - `requirement` 只允许 `required | optional | advisory`
@@ -321,6 +321,13 @@ merge checkpoint 或 closeout basis。
 若 required external orchestrator locator 缺失、越界、不可读，或 payload 包含这些
 forbidden authored fields，消费方必须 fail closed。optional / advisory 缺口只能进入
 profile-local advisory evidence，不得污染 `orchestration-core`。
+
+`workspace_attach` 声明只表示外部 orchestrator 可消费 Loom `workspace attach`
+语义；它不授权创建、删除或接管 branch、PR、git worktree、目录或 worker lifecycle。
+
+`recovery_writeback` 声明只表示外部 orchestrator 可通过 Loom recovery writeback
+入口写恢复主入口。它不授权直接写 status、gate、review、validation、host action 或
+closeout authored fields。
 
 ## 7. 与其他合同的关系
 

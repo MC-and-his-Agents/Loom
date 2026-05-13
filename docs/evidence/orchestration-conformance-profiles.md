@@ -78,6 +78,8 @@ daemon 或 scheduler 产品。
 第一版覆盖：
 
 - `Work Item` read locator
+- `workspace attach` 只读绑定语义
+- recovery writeback 是唯一 authored progress 写回路径
 - PR-only / tracker-only / release-only / merge-commit-only 入口 fail closed
 - external orchestrator locator payload 不承载 authored progress、status truth、gate truth 或 scheduler state
 - required locator missing / unreadable / unsafe 时在 extension path 内 block

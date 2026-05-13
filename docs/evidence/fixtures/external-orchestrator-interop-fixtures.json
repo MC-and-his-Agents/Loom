@@ -104,6 +104,108 @@
       "expect": {
         "result": "warn"
       }
+    },
+    {
+      "name": "workspace-attach-present",
+      "entry": {
+        "id": "fake-external-orchestrator-attach",
+        "summary": "Consume Loom workspace attach semantics without owning host lifecycle.",
+        "surfaces": ["admission"],
+        "operations": ["workspace_attach"],
+        "locator": ".loom/external-orchestrator/workspace-attach.json",
+        "owner": "external-tool",
+        "requirement": "required",
+        "fallback_to": "admission"
+      },
+      "payload": {
+        "schema_version": "loom-external-orchestrator-read/v1",
+        "operation": "workspace_attach",
+        "entry_kind": "work_item",
+        "source_layer": "derived_surface",
+        "source_locator": ".loom/status/current.md",
+        "source_binding": {
+          "item_id": "INIT-0001"
+        },
+        "consumed_as": "summary",
+        "workspace_entry": ".",
+        "recovery_entry": ".loom/progress/INIT-0001.md",
+        "host_lifecycle_ownership": "external"
+      },
+      "expect": {
+        "result": "pass"
+      }
+    },
+    {
+      "name": "recovery-writeback-present",
+      "entry": {
+        "id": "fake-external-orchestrator-writeback",
+        "summary": "Use Loom recovery writeback as the only authored progress write path.",
+        "surfaces": ["build"],
+        "operations": ["recovery_writeback"],
+        "locator": ".loom/external-orchestrator/recovery-writeback.json",
+        "owner": "external-tool",
+        "requirement": "required",
+        "fallback_to": "build"
+      },
+      "payload": {
+        "schema_version": "loom-external-orchestrator-read/v1",
+        "operation": "recovery_writeback",
+        "entry_kind": "work_item",
+        "source_layer": "authored_truth",
+        "source_locator": ".loom/progress/INIT-0001.md",
+        "source_binding": {
+          "item_id": "INIT-0001"
+        },
+        "consumed_as": "locator",
+        "writeback_entry": "python3 tools/loom_flow.py recovery writeback",
+        "allowed_recovery_fields": [
+          "current_checkpoint",
+          "current_stop",
+          "next_step",
+          "blockers",
+          "latest_validation_summary",
+          "recovery_boundary",
+          "current_lane"
+        ]
+      },
+      "expect": {
+        "result": "pass"
+      }
+    },
+    {
+      "name": "direct-status-write-block",
+      "entry": {
+        "id": "fake-external-orchestrator-status-write",
+        "summary": "Attempt to author status truth directly.",
+        "surfaces": ["build"],
+        "operations": ["recovery_writeback"],
+        "locator": ".loom/external-orchestrator/direct-status-write.json",
+        "owner": "external-tool",
+        "requirement": "required",
+        "fallback_to": "build"
+      },
+      "payload": {
+        "schema_version": "loom-external-orchestrator-read/v1",
+        "operation": "recovery_writeback",
+        "entry_kind": "work_item",
+        "source_layer": "derived_surface",
+        "source_locator": ".loom/status/current.md",
+        "source_binding": {
+          "item_id": "INIT-0001"
+        },
+        "consumed_as": "truth",
+        "status_truth": {
+          "result": "pass"
+        },
+        "gate_verdict": {
+          "merge_ready": "pass"
+        }
+      },
+      "expect": {
+        "result": "block",
+        "failure": "truth_pollution",
+        "fallback_to": "build"
+      }
     }
   ]
 }
