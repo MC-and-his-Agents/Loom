@@ -286,6 +286,30 @@
 `provenance` 是读取说明，不是新的 authored 字段组。它可以在 JSON 输出中按字段内联，也可以作为并列索引输出，但必须能被机械入口追溯到具体字段。
 若一个字段组混合消费多个来源，provenance 必须能下钻到字段级，不能用组级 provenance 掩盖局部 stale / drift。
 
+### 3.12 `external_orchestrator`
+
+当外部 orchestrator 只读消费 status / gate 时，状态面可以暴露派生 consumer view：
+
+- `schema_version`: 继续使用 `loom-governance-status/v2`
+- `view`: 固定为 `external_orchestrator_consumer`
+- `result`
+- `current_gate`
+- `classifications`
+- `missing_inputs`
+- `head_binding`
+- `gate_chain`
+- `allowed_operations`
+- `source_policy`
+- `provenance`
+- `recovery_readiness`
+
+该字段组只能投影本状态面的 `governance_status` 与 provenance。它不得定义第二套 status
+schema，不得 authored gate verdict，不得成为 scheduler state 或 tracker state。
+
+`allowed_operations` 只能声明 `status_read` 与 `gate_read`。`source_policy` 必须说明 status
+来自 `status control plane v2`、gate 来自现有 governance gate chain、writeback 只能回到
+recovery entry，失败回退只能指向 Loom checkpoint 或 gate 前置修复。
+
 ## 4. 总结果语义
 
 统一状态控制面本身只允许输出：
