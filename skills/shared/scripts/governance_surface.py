@@ -366,6 +366,23 @@ DYNAMIC_TOOL_HANDSHAKE_FAILURE_CATEGORIES = {
 }
 DYNAMIC_TOOL_SURFACES = REPO_INTERFACE_GATE_TYPES | {"attempt_time"}
 HOOK_LOCATOR_LIFECYCLES = {"before-run", "after-run", "cleanup"}
+HOOK_LOCATOR_FALLBACKS = {
+    "admission",
+    "pre_review",
+    "review",
+    "build",
+    "merge_ready",
+    "closeout",
+    "manual_repair",
+    "workspace cleanup|retire",
+    "handoff",
+    "merge",
+}
+HOOK_SAFETY_PATH_CONTAINMENT = {"repo_relative"}
+HOOK_SAFETY_TRUTH_BOUNDARIES = {"runtime_evidence_only", "context_only", "blocking_decision_only"}
+HOOK_SAFETY_CLEANUP_SCOPES = {"not_applicable", "loom_owned_only"}
+HOOK_SAFETY_HOST_TRUST = {"trusted", "requires_review", "untrusted"}
+HOOK_SAFETY_PERMISSION_RISKS = {"none", "approval_required", "sandbox_required", "unknown"}
 POLICY_READ_SCHEMA = "loom-policy-read/v1"
 POLICY_READINESS_SCHEMA = "loom-policy-readiness/v1"
 POLICY_TYPES = {"approval", "sandbox"}
@@ -1155,6 +1172,9 @@ def validate_hook_locator(
     requirement = entry.get("requirement")
     if requirement not in DECLARED_LOCATOR_REQUIREMENTS:
         blocking.append(f"{prefix} requirement must be `required`, `optional`, or `advisory`")
+    fallback_to = entry.get("fallback_to")
+    if fallback_to not in HOOK_LOCATOR_FALLBACKS:
+        blocking.append(f"{prefix} fallback_to must point to a Loom surface or manual repair path")
 
     forbidden_fields = sorted(
         set(entry)
@@ -1162,6 +1182,14 @@ def validate_hook_locator(
             "runtime_state",
             "execution_result",
             "authored_progress",
+            "current_stop",
+            "next_step",
+            "blockers",
+            "latest_validation_summary",
+            "current_checkpoint",
+            "current_lane",
+            "recovery_boundary",
+            "closing_condition",
             "review_verdict",
             "review_summary",
             "validation_status",
@@ -1171,6 +1199,44 @@ def validate_hook_locator(
     )
     if forbidden_fields:
         blocking.append(f"{prefix} must not carry runtime or authored truth fields: {', '.join(forbidden_fields)}")
+
+    safety = entry.get("safety")
+    safety_errors: list[str] = []
+    if not isinstance(safety, dict):
+        safety_errors.append(f"{prefix} missing `safety` declaration")
+    else:
+        path_containment = safety.get("path_containment")
+        truth_boundary = safety.get("truth_boundary")
+        cleanup_scope = safety.get("cleanup_scope")
+        host_trust = safety.get("host_trust")
+        permission_risk = safety.get("permission_risk")
+        if path_containment not in HOOK_SAFETY_PATH_CONTAINMENT:
+            safety_errors.append(f"{prefix} safety.path_containment must be `repo_relative`")
+        if truth_boundary not in HOOK_SAFETY_TRUTH_BOUNDARIES:
+            safety_errors.append(
+                f"{prefix} safety.truth_boundary must be `runtime_evidence_only`, `context_only`, or `blocking_decision_only`"
+            )
+        if cleanup_scope not in HOOK_SAFETY_CLEANUP_SCOPES:
+            safety_errors.append(f"{prefix} safety.cleanup_scope must be `not_applicable` or `loom_owned_only`")
+        if lifecycle == "cleanup" and cleanup_scope != "loom_owned_only":
+            safety_errors.append(f"{prefix} cleanup hooks must declare safety.cleanup_scope `loom_owned_only`")
+        if lifecycle != "cleanup" and cleanup_scope == "loom_owned_only":
+            safety_errors.append(f"{prefix} non-cleanup hooks must declare safety.cleanup_scope `not_applicable`")
+        if host_trust not in HOOK_SAFETY_HOST_TRUST:
+            safety_errors.append(f"{prefix} safety.host_trust must be `trusted`, `requires_review`, or `untrusted`")
+        elif host_trust == "untrusted":
+            safety_errors.append(f"{prefix} untrusted hook declarations are unsafe and must fail closed")
+        if permission_risk not in HOOK_SAFETY_PERMISSION_RISKS:
+            safety_errors.append(
+                f"{prefix} safety.permission_risk must be `none`, `approval_required`, `sandbox_required`, or `unknown`"
+            )
+        elif permission_risk == "unknown":
+            safety_errors.append(f"{prefix} unknown hook permission risk is unsafe and must fail closed")
+    if safety_errors:
+        if requirement in {"optional", "advisory"}:
+            optional.extend(safety_errors)
+        else:
+            blocking.extend(safety_errors)
 
     locator_value = entry.get("locator")
     locator, target = resolve_locator(root, locator_value)

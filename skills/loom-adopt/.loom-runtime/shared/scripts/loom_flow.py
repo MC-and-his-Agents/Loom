@@ -152,7 +152,16 @@ HOOK_ENVELOPE_FORBIDDEN_FIELDS = {
     "validation_summary",
     "host_action_result",
     "closeout_basis",
+    "current_stop",
+    "next_step",
+    "blockers",
+    "latest_validation_summary",
+    "current_checkpoint",
+    "current_lane",
+    "recovery_boundary",
+    "closing_condition",
 }
+HOOK_CLEANUP_ALLOWED_OWNERSHIPS = {"loom_owned"}
 HOOK_LIFECYCLES = {"before-run", "after-run", "cleanup"}
 HOOK_ADAPTER_RESULTS = {"supported", "not_applicable", "advisory", "unsafe"}
 REVIEW_ENGINE_PROFILES: dict[str, dict[str, Any]] = {
@@ -887,6 +896,27 @@ def find_forbidden_hook_envelope_fields(value: object, *, prefix: str = "$") -> 
     return found
 
 
+def find_unsafe_hook_cleanup_targets(value: object, *, prefix: str = "$") -> list[str]:
+    found: list[str] = []
+    if isinstance(value, dict):
+        targets = value.get("cleanup_targets")
+        if isinstance(targets, list):
+            for index, target in enumerate(targets):
+                target_prefix = f"{prefix}.cleanup_targets[{index}]"
+                if not isinstance(target, dict):
+                    found.append(f"{target_prefix} must be an object")
+                    continue
+                ownership = target.get("ownership")
+                if ownership not in HOOK_CLEANUP_ALLOWED_OWNERSHIPS:
+                    found.append(f"{target_prefix}.ownership must be `loom_owned`")
+        for key_label, nested in value.items():
+            found.extend(find_unsafe_hook_cleanup_targets(nested, prefix=f"{prefix}.{key_label}"))
+    elif isinstance(value, list):
+        for index, nested in enumerate(value):
+            found.extend(find_unsafe_hook_cleanup_targets(nested, prefix=f"{prefix}[{index}]"))
+    return found
+
+
 def validate_hook_envelope_payload(envelope: object) -> dict[str, Any]:
     missing_inputs: list[str] = []
     evidence: dict[str, Any] = {
@@ -922,6 +952,7 @@ def validate_hook_envelope_payload(envelope: object) -> dict[str, Any]:
             missing_inputs.append("hook.lifecycle must be `before-run`, `after-run`, or `cleanup`")
 
     input_payload = envelope.get("input")
+    adapter_result = None
     if not isinstance(input_payload, dict):
         missing_inputs.append("hook envelope missing `input` object")
     else:
@@ -941,6 +972,8 @@ def validate_hook_envelope_payload(envelope: object) -> dict[str, Any]:
                 missing_inputs.append(
                     "host_adapter_mapping.adapter_result must be `supported`, `not_applicable`, `advisory`, or `unsafe`"
                 )
+            else:
+                adapter_result = mapping.get("adapter_result")
 
     output = envelope.get("output")
     output_category = None
@@ -958,6 +991,12 @@ def validate_hook_envelope_payload(envelope: object) -> dict[str, Any]:
     forbidden_fields = find_forbidden_hook_envelope_fields(envelope)
     if forbidden_fields:
         missing_inputs.append(f"hook envelope must not carry authored or host truth fields: {', '.join(forbidden_fields)}")
+    unsafe_cleanup_targets = find_unsafe_hook_cleanup_targets(envelope)
+    if unsafe_cleanup_targets:
+        missing_inputs.append(
+            "hook envelope cleanup intent must target Loom-owned residue only: "
+            + ", ".join(unsafe_cleanup_targets)
+        )
 
     failure = envelope.get("failure")
     failure_classification = None
@@ -984,6 +1023,34 @@ def validate_hook_envelope_payload(envelope: object) -> dict[str, Any]:
             "summary": "hook envelope is invalid or truth-polluting.",
             "missing_inputs": missing_inputs,
             "fallback_to": "manual_repair",
+            "evidence": evidence,
+        }
+
+    if adapter_result == "unsafe":
+        return {
+            "result": "block",
+            "classification": "unsafe",
+            "summary": "hook adapter mapping reports unsafe.",
+            "missing_inputs": ["host_adapter_mapping.adapter_result is unsafe"],
+            "fallback_to": "manual_repair",
+            "evidence": evidence,
+        }
+    if adapter_result == "not_applicable":
+        return {
+            "result": "warn",
+            "classification": "not_applicable",
+            "summary": "hook adapter mapping reports not_applicable.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "evidence": evidence,
+        }
+    if adapter_result == "advisory":
+        return {
+            "result": "warn",
+            "classification": "unsupported",
+            "summary": "hook adapter mapping is advisory and remains profile-local evidence.",
+            "missing_inputs": [],
+            "fallback_to": None,
             "evidence": evidence,
         }
 

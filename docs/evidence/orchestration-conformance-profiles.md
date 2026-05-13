@@ -37,6 +37,8 @@ Core 缺口必须 fail closed，因为这些能力构成 Loom v0.7.0 的可恢�
 
 - repo companion / repo interop locator-only 合同
 - host action / dynamic tool declaration-time locator contract
+- hook locator safety declarations, mapped hook envelopes, and unsafe
+  host-adapter results
 - host-backed tracker state 只能作为 structured event evidence 或 retained host result 被消费
 - required locator missing / unreadable / invalid boundary 的 fail-closed 行为
 - optional / advisory missing in-repo locator 只进入 profile-local `missing_optional`

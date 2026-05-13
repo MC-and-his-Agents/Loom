@@ -347,6 +347,7 @@
 - `owner`
 - `requirement`
 - `fallback_to`
+- `safety`
 
 其中：
 
@@ -357,10 +358,12 @@
 - `owner` 只允许 `repo | repo-companion | host | host-adapter | platform | external-tool`
 - `requirement` 只允许 `required | optional | advisory`
 - `fallback_to` 只描述声明不可消费时的 Loom 回退面或人工路径，不描述宿主执行动作
+- `safety` 固定声明 `path_containment`、`truth_boundary`、`cleanup_scope`、`host_trust` 与 `permission_risk`
 
 稳定约束：
 
 - `hook_locators` 只承接 declaration-time locator，不承接 runtime state、execution result、authored progress、review verdict、validation status、host action result 或 closeout basis
+- required hook 缺少 `safety`、`host_trust: untrusted`、`permission_risk: unknown` 或 cleanup scope 越界时必须 fail closed
 - host adapter 可以从 `hook_locators` 生成 Codex / Claude Code native hook config，但 generated config 不替代 Loom locator contract
 - host-native hook output 只有经过 adapter 映射后才能成为 runtime evidence
 - cleanup hook 始终受 [workspace-lifecycle.md](../methodology/harness/workspace-lifecycle.md) 约束；Codex cleanup 不能作为 required native hook
