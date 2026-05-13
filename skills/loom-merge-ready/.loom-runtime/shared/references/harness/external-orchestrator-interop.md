@@ -78,14 +78,55 @@ merge commit 反推执行入口。
 - `requirement`
 - `fallback_to`
 
-`operations` 第一版至少允许：
+`operations` 至少允许：
 
 - `work_item_read`
+- `workspace_attach`
+- `recovery_writeback`
 
-后续可扩展到 `workspace_attach`、`recovery_writeback`、`status_read` 与
-`gate_read`，但这些扩展仍必须消费同一 fact-chain，不得新增第二状态面。
+后续可扩展到 `status_read` 与 `gate_read`，但这些扩展仍必须消费同一
+fact-chain，不得新增第二状态面。
 
-## 5. Truth Boundary
+## 5. Workspace Attach
+
+外部 orchestrator 可以消费或调用 Loom `workspace attach` 语义来确认既有现场可用。
+
+它可以读取：
+
+- 当前 `Work Item`
+- `workspace_entry`
+- `recovery_entry`
+- attach / locate 输出中的 purity 与 checkpoint 摘要
+
+它不得：
+
+- 创建目录
+- 删除目录
+- 创建或删除 git worktree
+- 创建、更新或关闭 branch / PR
+- 接管 worker backend lifecycle
+
+attach 失败只能回退到 `workspace_entry`、`admission` 或宿主现场声明修复，不得回退到
+orchestrator 私有 action。
+
+## 6. Recovery Writeback
+
+外部 orchestrator 写回执行进展时，只能通过既有 `recovery writeback` 入口写恢复主入口。
+
+允许写回的 authored 字段固定为：
+
+- `current_checkpoint`
+- `current_stop`
+- `next_step`
+- `blockers`
+- `latest_validation_summary`
+- `recovery_boundary`
+- `current_lane`
+
+写回后，status control plane 只能重新派生或刷新；外部 orchestrator 不得直接写 status、
+gate、review、validation、host action 或 closeout authored fields。
+
+## 7. Truth Boundary
 
 `external_orchestrators` 不得承载：
 
@@ -105,7 +146,7 @@ merge commit 反推执行入口。
 这些字段若出现在 external orchestrator locator payload 中，必须被视为 truth
 pollution，并阻断 required 声明。
 
-## 6. 非目标
+## 8. 非目标
 
 - 不提供默认 daemon
 - 不定义 tracker polling 产品
