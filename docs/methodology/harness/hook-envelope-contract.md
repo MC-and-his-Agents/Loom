@@ -115,8 +115,12 @@ The live check reports:
 The command is profile-local evidence. It must not write authored progress or
 modify host-native hook configuration.
 
+The related `hooks-extension` live smoke command validates declaration-time hook
+locator safety for the optional `orchestration-extension/hooks` profile. This
+envelope command remains scoped to one mapped envelope artifact.
+
 ## Non-goals
 
 - executing hooks
 - generating Codex or Claude Code native hook files
-- defining hooks extension profile gating for #625
+- replacing the `hooks-extension` declaration-time profile check

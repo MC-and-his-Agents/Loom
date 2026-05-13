@@ -383,6 +383,7 @@ HOOK_SAFETY_TRUTH_BOUNDARIES = {"runtime_evidence_only", "context_only", "blocki
 HOOK_SAFETY_CLEANUP_SCOPES = {"not_applicable", "loom_owned_only"}
 HOOK_SAFETY_HOST_TRUST = {"trusted", "requires_review", "untrusted"}
 HOOK_SAFETY_PERMISSION_RISKS = {"none", "approval_required", "sandbox_required", "unknown"}
+HOOK_EXTENSION_PROFILE_SCHEMA = "loom-hooks-extension-profile/v1"
 POLICY_READ_SCHEMA = "loom-policy-read/v1"
 POLICY_READINESS_SCHEMA = "loom-policy-readiness/v1"
 POLICY_TYPES = {"approval", "sandbox"}
@@ -1258,6 +1259,95 @@ def validate_hook_locator(
     return blocking, optional
 
 
+def empty_hook_extension_profile() -> dict[str, Any]:
+    return {
+        "schema_version": HOOK_EXTENSION_PROFILE_SCHEMA,
+        "profile_id": "orchestration-extension/hooks",
+        "enabled": False,
+        "result": "pass",
+        "status": "not_applicable",
+        "summary": "hooks extension profile is not enabled for this repository.",
+        "missing_inputs": [],
+        "missing_optional": [],
+        "checks": [],
+    }
+
+
+def hook_extension_profile_payload(root: Path, hook_locators: object) -> dict[str, Any]:
+    payload = empty_hook_extension_profile()
+    if hook_locators is None:
+        return payload
+    payload.update(
+        {
+            "enabled": True,
+            "status": "present",
+            "summary": "hooks extension profile is enabled and hook declarations are readable.",
+        }
+    )
+    if not isinstance(hook_locators, list):
+        return {
+            **payload,
+            "result": "block",
+            "status": "invalid_declaration",
+            "summary": "hooks extension profile is enabled but hook_locators is not a list.",
+            "missing_inputs": ["hook_locators must be a list"],
+            "checks": [],
+        }
+
+    checks: list[dict[str, Any]] = []
+    missing_inputs: list[str] = []
+    missing_optional: list[str] = []
+    for index, entry in enumerate(hook_locators):
+        blocking, optional = validate_hook_locator(root=root, entry=entry, index=index)
+        if isinstance(entry, dict):
+            hook_id = entry.get("id") if isinstance(entry.get("id"), str) and entry.get("id") else f"hook-{index}"
+            lifecycle = entry.get("lifecycle") if isinstance(entry.get("lifecycle"), str) else "unknown"
+            requirement = entry.get("requirement") if isinstance(entry.get("requirement"), str) else "required"
+            locator = entry.get("locator") if isinstance(entry.get("locator"), str) else ""
+            fallback_to = entry.get("fallback_to") if isinstance(entry.get("fallback_to"), str) else "manual_repair"
+        else:
+            hook_id = f"invalid-{index}"
+            lifecycle = "unknown"
+            requirement = "required"
+            locator = ""
+            fallback_to = "manual_repair"
+        result = "block" if blocking else "warn" if optional else "pass"
+        checks.append(
+            {
+                "id": hook_id,
+                "lifecycle": lifecycle,
+                "requirement": requirement,
+                "locator": locator,
+                "result": result,
+                "summary": "hook declaration is safe for extension consumption."
+                if result == "pass"
+                else "hook declaration has profile-local warnings."
+                if result == "warn"
+                else "hook declaration is unsafe for the configured hooks extension path.",
+                "missing_inputs": blocking,
+                "missing_optional": optional,
+                "fallback_to": fallback_to if result == "block" else None,
+            }
+        )
+        missing_inputs.extend(message for message in blocking if message not in missing_inputs)
+        missing_optional.extend(message for message in optional if message not in missing_optional)
+
+    result = "block" if missing_inputs else "warn" if missing_optional else "pass"
+    summary = "hooks extension profile is enabled and hook declarations are safe."
+    if result == "warn":
+        summary = "hooks extension profile is enabled with profile-local advisory gaps."
+    if result == "block":
+        summary = "hooks extension profile is enabled and unsafe hook declarations block the configured path."
+    return {
+        **payload,
+        "result": result,
+        "summary": summary,
+        "missing_inputs": missing_inputs,
+        "missing_optional": missing_optional,
+        "checks": checks,
+    }
+
+
 def validate_policy_locator(
     *,
     root: Path,
@@ -2045,6 +2135,7 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
         "release_targets": empty_release_targets_surface(),
         "tool_availability": empty_tool_availability(),
         "policy_readiness": empty_policy_readiness(),
+        "hook_profile": empty_hook_extension_profile(),
         "summary": "no repo companion interface is declared for this repository.",
         "missing_inputs": [],
         "missing_optional": [],
@@ -2236,22 +2327,15 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
                             missing_optional.extend(optional)
                 hook_locators = interface_payload.get("hook_locators")
                 if hook_locators is not None:
+                    repo_interface_surface["hook_profile"] = hook_extension_profile_payload(
+                        root,
+                        hook_locators,
+                    )
                     repo_interface_surface["hook_locators"] = carrier_entry(
                         "present",
                         ".loom/companion/repo-interface.json",
                         "repo companion interface",
                     )
-                    if not isinstance(hook_locators, list):
-                        missing_inputs.append("hook_locators must be a list")
-                    else:
-                        for index, entry in enumerate(hook_locators):
-                            blocking, optional = validate_hook_locator(
-                                root=root,
-                                entry=entry,
-                                index=index,
-                            )
-                            missing_inputs.extend(blocking)
-                            missing_optional.extend(optional)
                 release_targets = interface_payload.get("release_targets")
                 if release_targets is not None:
                     blocking_inputs = validate_release_targets(root=root, entry=release_targets)

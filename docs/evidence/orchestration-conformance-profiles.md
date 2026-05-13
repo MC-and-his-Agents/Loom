@@ -46,6 +46,28 @@ Core 缺口必须 fail closed，因为这些能力构成 Loom v0.7.0 的可恢�
 
 Extension 缺口不得污染 `orchestration-core` pass/fail。若某 adopted repo 显式启用 stronger extension gate，该启用点必须记录 owner、fallback、override path 与 authority-of-truth。
 
+### `orchestration-extension/hooks`
+
+`orchestration-extension/hooks` 是 hooks 的 optional extension profile。未声明
+`hook_locators` 时，该 profile 固定输出 `not_applicable`，core profile remains pass。
+
+启用条件仅来自 repo companion `.loom/companion/repo-interface.json` 的
+`hook_locators`。启用后：
+
+- required hook safety、locator、host trust 或 permission risk 缺口可以在
+  hooks extension path 内返回 `block`
+- optional/advisory hook 缺口只进入 profile-local `warn` 和
+  `missing_optional`
+- mapped hook envelope 的 `adapter_result: unsafe` 只影响对应 configured
+  hook path，不改写 authored progress、status truth、review verdict 或
+  closeout basis
+- `orchestration-core` 不因为 hooks 未启用、optional/advisory hooks 缺失或
+  profile-local warnings 改变 pass/fail
+
+该 profile 的 live evidence 命令是
+`python3 tools/loom_flow.py live-smoke hooks-extension --target <repo>`，输出
+schema 为 `loom-hooks-extension-profile/v1`。
+
 ## 4. `orchestration-live`
 
 `orchestration-live` 是 release confidence profile，不是普通 PR 的默认 blocking gate。

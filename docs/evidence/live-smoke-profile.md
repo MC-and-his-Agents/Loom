@@ -1,6 +1,6 @@
 # Live Smoke Profile
 
-本文件定义 v0.10.0 的 adopted-repo live smoke foundation。
+本文件定义 v0.10.0 以来的 adopted-repo live smoke foundation。
 
 它回答的不是“某个 adopted repo 是否已经通过所有治理面”，而是“Loom 是否能用真实 adopted repo 或 versioned prior-pass evidence 产出可消费的 `orchestration-live` confidence input”。
 
@@ -14,11 +14,15 @@
 
 `python3 tools/loom_flow.py live-smoke dynamic-tool-availability --target <repo> [--surface attempt_time|review|merge_ready|closeout|build|admission|pre_review|all]`
 
+`python3 tools/loom_flow.py live-smoke hooks-extension --target <repo>`
+
 输出 schema 固定为 `loom-live-smoke/v1`。
 
 `host-adapter-drift` 输出 schema 固定为 `loom-host-adapter-live-drift/v1`。
 
 `dynamic-tool-availability` 输出 schema 固定为 `loom-dynamic-tool-live-availability/v1`。
+
+`hooks-extension` 输出 schema 固定为 `loom-hooks-extension-profile/v1`。
 
 ## Run Contract
 
@@ -136,3 +140,32 @@
 - repo interface absent 时返回 explicit unavailable evidence 与 `warn`
 - repo interface present 但当前 surface 无 dynamic tools 时返回 `pass`
 - 命令 does not execute the tool, 不得探测宿主协议、不得写 repo companion / host state，也不得固化 tool-specific protocol
+
+## Hooks Extension Profile Contract
+
+`hooks-extension` 读取 adopted repo `.loom/companion/repo-interface.json` 中声明的
+`hook_locators[*]`，并把 declaration-time hook safety 结果包装成
+`orchestration-extension/hooks` profile-local evidence。
+
+最小检查面：
+
+- repo companion interface 是否存在且可读
+- `hook_locators[*]` 是否声明合法的 `id`、`summary`、`lifecycle`、
+  `locator`、`owner`、`requirement`、`fallback_to` 与 `safety`
+- locator 是否缺失、越界、不可读或指向目录
+- safety 是否保持 repo-relative path containment、runtime-evidence-only truth
+  boundary、Loom-owned cleanup scope、trusted/reviewed host trust 与明确
+  permission risk
+- optional/advisory gap 是否保持 profile-local，不污染
+  `orchestration-core`
+
+结果纪律：
+
+- 未声明 `hook_locators` 时返回 `pass`，`hooks_extension.status` 为
+  `not_applicable`
+- required unsafe hook declaration 可以在该命令内返回 `block`
+- optional/advisory hook gap 只返回 profile-local `warn`
+- `core_profile.result` 必须保持 `pass`，`core_profile.hook_enforcement` 固定为
+  `not_applicable`
+- 命令 does not execute hooks，不生成 host-native hook files，不写 repo
+  companion、host state、authored progress 或 status truth
