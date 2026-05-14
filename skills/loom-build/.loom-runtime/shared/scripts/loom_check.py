@@ -10088,6 +10088,26 @@ def check_external_orchestrator_conformance_contract(root: Path) -> list[Failure
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
+    def sha256_file_local(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def write_shadow_evidence_local(target: Path, evidence: str, value_key: str, value: str, source: str) -> None:
+        source_path = target / source
+        if not source_path.exists():
+            write_json_local(source_path, {value_key: value})
+        write_json_local(
+            target / evidence,
+            {
+                value_key: value,
+                "source_files": [source],
+                "source_sha256": {source: sha256_file_local(source_path)},
+            },
+        )
+
     def load_or_new_interop_local(target: Path) -> dict:
         interop_path = target / ".loom/companion/interop.json"
         if interop_path.exists():
@@ -13141,6 +13161,7 @@ def check_live_validation_only_guardrail_contract(root: Path) -> list[Failure]:
     with tempfile.TemporaryDirectory(prefix="loom-live-validation-guardrail-") as tmp:
         mismatch_target = Path(tmp) / "shadow-mismatch"
         shutil.copytree(example_target, mismatch_target)
+        write_shadow_evidence_local(mismatch_target, ".loom/shadow/review-repo.json", "decision", "allow", "native/status/review.json")
         shadow_payload = load_json_file(mismatch_target / ".loom/shadow/review-repo.json")
         if isinstance(shadow_payload, dict):
             shadow_payload["source_sha256"] = {"native/status/review.json": "0" * 64}
