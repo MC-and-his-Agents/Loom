@@ -310,6 +310,8 @@ EXECUTION_BUDGET_STATUS = {"present", "not_applicable", "unavailable"}
 EXECUTION_FAILURE_FIXTURE_SCHEMA = "loom-execution-failure-fixtures/v1"
 RETRY_EVIDENCE_FIXTURE_SCHEMA = "loom-retry-evidence-fixtures/v1"
 EXTERNAL_ORCHESTRATOR_FIXTURE_SCHEMA = "loom-external-orchestrator-interop-fixtures/v1"
+EXTERNAL_ORCHESTRATOR_CONFORMANCE_FIXTURE_SCHEMA = "loom-external-orchestrator-conformance-fixtures/v1"
+EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA = "loom-external-orchestrator-conformance/v1"
 EXTERNAL_ORCHESTRATOR_FORBIDDEN_FIELDS = {
     "scheduler_state",
     "attempt_ownership",
@@ -1510,6 +1512,67 @@ def require_hook_profile_payload(
             failures.append(Failure(category, f"{context}.checks[{index}] missing_optional must be a list"))
         if check.get("fallback_to") is not None and not isinstance(check.get("fallback_to"), str):
             failures.append(Failure(category, f"{context}.checks[{index}] fallback_to must be a string or null"))
+
+
+def require_external_orchestrator_conformance_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("command") != "live-smoke":
+        failures.append(Failure(category, f"{context} must report `command: live-smoke`"))
+    if payload.get("operation") != "external-orchestrator-interop":
+        failures.append(Failure(category, f"{context} must report `operation: external-orchestrator-interop`"))
+    if payload.get("schema_version") != EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA:
+        failures.append(Failure(category, f"{context} schema_version must be `{EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA}`"))
+    if payload.get("result") not in {"pass", "warn", "block"}:
+        failures.append(Failure(category, f"{context} result must stay within pass/warn/block"))
+    if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+        failures.append(Failure(category, f"{context} must include summary"))
+    if payload.get("fallback_to") not in {None, "live-smoke-config-repair", "live-smoke-retry-or-record-unavailable"}:
+        failures.append(Failure(category, f"{context} fallback_to must stay profile-local"))
+    for field in ("runtime_state", "target", "profile_check", "core_profile", "external_orchestrator"):
+        if not isinstance(payload.get(field), dict):
+            failures.append(Failure(category, f"{context} must include `{field}` object"))
+    if not isinstance(payload.get("command_plan"), list) or not payload.get("command_plan"):
+        failures.append(Failure(category, f"{context} must include command_plan"))
+    if not isinstance(payload.get("reports"), list):
+        failures.append(Failure(category, f"{context} must include reports"))
+    conformance = payload.get("external_orchestrator")
+    if isinstance(conformance, dict):
+        if conformance.get("schema_version") != EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA:
+            failures.append(Failure(category, f"{context}.external_orchestrator must use conformance schema"))
+        if conformance.get("profile_id") != "orchestration-extension/external-orchestrator":
+            failures.append(Failure(category, f"{context}.external_orchestrator profile_id must be external-orchestrator"))
+        if conformance.get("result") not in {"pass", "warn", "block"}:
+            failures.append(Failure(category, f"{context}.external_orchestrator result must stay stable"))
+        if conformance.get("status") not in {
+            "not_applicable",
+            "present",
+            "runtime-blocked",
+            "target-unavailable",
+            "missing-target",
+            "invalid_declaration",
+        }:
+            failures.append(Failure(category, f"{context}.external_orchestrator status is outside the stable vocabulary"))
+        for field in ("missing_inputs", "missing_optional", "checks"):
+            if not isinstance(conformance.get(field), list):
+                failures.append(Failure(category, f"{context}.external_orchestrator.{field} must be a list"))
+        non_goals = conformance.get("non_goals")
+        if not isinstance(non_goals, dict):
+            failures.append(Failure(category, f"{context}.external_orchestrator must include non_goals"))
+        else:
+            for key in ("daemon", "scheduler_state_machine", "tracker_polling_product", "second_status_surface", "host_lifecycle_ownership"):
+                if non_goals.get(key) is not False:
+                    failures.append(Failure(category, f"{context}.external_orchestrator non_goal `{key}` must remain false"))
+    core_profile = payload.get("core_profile")
+    if isinstance(core_profile, dict) and core_profile.get("result") != "pass":
+        failures.append(Failure(category, f"{context}.core_profile.result must remain pass"))
 
 
 def require_repo_interop_payload(
@@ -9912,6 +9975,177 @@ def check_external_orchestrator_interop_fixture_contract(root: Path) -> list[Fai
     return failures
 
 
+def check_external_orchestrator_conformance_contract(root: Path) -> list[Failure]:
+    category = "external-orchestrator-conformance"
+    failures: list[Failure] = []
+    required_docs = {
+        "docs/evidence/orchestration-conformance-profiles.md": [
+            "orchestration-extension/external-orchestrator",
+            "loom-external-orchestrator-conformance/v1",
+            "fake external orchestrator happy/drift fixtures",
+        ],
+        "docs/evidence/live-smoke-profile.md": [
+            "external-orchestrator-interop",
+            "loom-external-orchestrator-conformance/v1",
+            "does not execute",
+        ],
+        "docs/evidence/external-orchestrator-release-threshold.md": [
+            "v0.12.0",
+            "loom-external-orchestrator-conformance/v1",
+            "no daemon",
+            "fake external orchestrator fixtures are sufficient",
+        ],
+    }
+    for relative, anchors in required_docs.items():
+        path = root / relative
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            failures.append(Failure(category, f"`{relative}` is unreadable: {exc}"))
+            continue
+        for anchor in anchors:
+            if anchor not in text:
+                failures.append(Failure(category, f"`{relative}` must mention `{anchor}`"))
+
+    fixture_path = root / "docs/evidence/fixtures/external-orchestrator-conformance-fixtures.json"
+    try:
+        fixture_payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        failures.append(Failure(category, f"external orchestrator conformance fixtures are unreadable: {exc}"))
+        return failures
+    if fixture_payload.get("schema_version") != EXTERNAL_ORCHESTRATOR_CONFORMANCE_FIXTURE_SCHEMA:
+        failures.append(Failure(category, f"conformance fixture schema_version must be `{EXTERNAL_ORCHESTRATOR_CONFORMANCE_FIXTURE_SCHEMA}`"))
+    fixtures = fixture_payload.get("fixtures")
+    required_names = {
+        "fake-external-orchestrator-happy",
+        "fake-external-orchestrator-truth-drift",
+        "fake-external-orchestrator-private-fallback",
+        "fake-external-orchestrator-lifecycle-drift",
+    }
+    if not isinstance(fixtures, list) or not fixtures:
+        failures.append(Failure(category, "external orchestrator conformance fixtures must include fixtures"))
+        return failures
+    seen_names: set[str] = set()
+    for index, fixture in enumerate(fixtures):
+        if not isinstance(fixture, dict):
+            failures.append(Failure(category, f"fixtures[{index}] must be an object"))
+            continue
+        name = fixture.get("name")
+        if isinstance(name, str):
+            seen_names.add(name)
+        entry = fixture.get("entry")
+        payload = fixture.get("payload")
+        expect = fixture.get("expect")
+        if not isinstance(entry, dict):
+            failures.append(Failure(category, f"{name or index} entry must be an object"))
+            continue
+        if not isinstance(payload, dict):
+            failures.append(Failure(category, f"{name or index} payload must be an object"))
+        if not isinstance(expect, dict) or expect.get("result") not in {"pass", "block"}:
+            failures.append(Failure(category, f"{name or index} expect.result must be pass/block"))
+        operations = entry.get("operations")
+        if not isinstance(operations, list) or not operations:
+            failures.append(Failure(category, f"{name or index} entry.operations must be non-empty"))
+        elif any(operation not in {"work_item_read", "workspace_attach", "recovery_writeback", "status_read", "gate_read"} for operation in operations):
+            failures.append(Failure(category, f"{name or index} declares unsupported operation"))
+        if name == "fake-external-orchestrator-happy" and expect.get("schema_version") != EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA:
+            failures.append(Failure(category, "happy fixture must expect conformance schema v1"))
+        if name == "fake-external-orchestrator-truth-drift" and payload is not None:
+            forbidden = sorted(EXTERNAL_ORCHESTRATOR_FORBIDDEN_FIELDS.intersection(payload.keys()))
+            if not forbidden or expect.get("failure") != "truth_pollution":
+                failures.append(Failure(category, "truth drift fixture must prove forbidden authored/scheduler fields block"))
+        if name == "fake-external-orchestrator-private-fallback":
+            if entry.get("fallback_to") != "scheduler_retry_queue" or expect.get("fallback_to") != "current_checkpoint":
+                failures.append(Failure(category, "private fallback fixture must block back to current_checkpoint"))
+        if name == "fake-external-orchestrator-lifecycle-drift" and payload is not None:
+            if payload.get("host_lifecycle_ownership") != "loom" or payload.get("daemon") is not True:
+                failures.append(Failure(category, "lifecycle drift fixture must prove no-daemon/no-host-lifecycle boundary"))
+    missing = sorted(required_names - seen_names)
+    if missing:
+        failures.append(Failure(category, "external orchestrator conformance fixtures missing required cases: " + ", ".join(missing)))
+
+    example_target = root / "examples/new-project"
+    absent_payload, error = load_command_json(
+        root,
+        ["python3", "tools/loom_flow.py", "live-smoke", "external-orchestrator-interop", "--target", str(example_target)],
+    )
+    if error:
+        failures.append(Failure(category, f"`external-orchestrator-interop` not_applicable sample failed: {error}"))
+    else:
+        require_external_orchestrator_conformance_payload(
+            failures,
+            category=category,
+            context="not-applicable external orchestrator conformance",
+            payload=absent_payload,
+        )
+        external_profile = absent_payload.get("external_orchestrator") if isinstance(absent_payload, dict) else None
+        if not isinstance(absent_payload, dict) or absent_payload.get("result") != "pass":
+            failures.append(Failure(category, "not-applicable external orchestrator conformance must pass"))
+        elif not isinstance(external_profile, dict) or external_profile.get("status") != "not_applicable":
+            failures.append(Failure(category, "not-applicable external orchestrator conformance must expose not_applicable status"))
+
+    def write_json_local(path: Path, payload: object) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    with tempfile.TemporaryDirectory(prefix="loom-external-orchestrator-conformance-") as tmp:
+        base = Path(tmp)
+        present_target = base / "present"
+        shutil.copytree(example_target, present_target)
+        happy_fixture = next((fixture for fixture in fixtures if isinstance(fixture, dict) and fixture.get("name") == "fake-external-orchestrator-happy"), None)
+        if isinstance(happy_fixture, dict):
+            interop = load_json_file(present_target / ".loom/companion/interop.json")
+            if isinstance(interop, dict):
+                interop["external_orchestrators"] = [happy_fixture["entry"]]
+                write_json_local(present_target / ".loom/companion/interop.json", interop)
+                write_json_local(present_target / happy_fixture["entry"]["locator"], happy_fixture["payload"])
+            present_payload, present_error = load_command_json(
+                root,
+                ["python3", "tools/loom_flow.py", "live-smoke", "external-orchestrator-interop", "--target", str(present_target)],
+            )
+            if present_error:
+                failures.append(Failure(category, f"`external-orchestrator-interop` happy sample failed: {present_error}"))
+            else:
+                require_external_orchestrator_conformance_payload(
+                    failures,
+                    category=category,
+                    context="happy external orchestrator conformance",
+                    payload=present_payload,
+                )
+                if not isinstance(present_payload, dict) or present_payload.get("result") != "pass":
+                    failures.append(Failure(category, "happy external orchestrator conformance must pass"))
+
+        drift_target = base / "drift"
+        shutil.copytree(example_target, drift_target)
+        drift_fixture = next((fixture for fixture in fixtures if isinstance(fixture, dict) and fixture.get("name") == "fake-external-orchestrator-truth-drift"), None)
+        if isinstance(drift_fixture, dict):
+            interop = load_json_file(drift_target / ".loom/companion/interop.json")
+            if isinstance(interop, dict):
+                interop["external_orchestrators"] = [drift_fixture["entry"]]
+                write_json_local(drift_target / ".loom/companion/interop.json", interop)
+                write_json_local(drift_target / drift_fixture["entry"]["locator"], drift_fixture["payload"])
+            drift_payload, drift_error = load_command_json(
+                root,
+                ["python3", "tools/loom_flow.py", "live-smoke", "external-orchestrator-interop", "--target", str(drift_target)],
+            )
+            if drift_error:
+                failures.append(Failure(category, f"`external-orchestrator-interop` drift sample failed: {drift_error}"))
+            else:
+                require_external_orchestrator_conformance_payload(
+                    failures,
+                    category=category,
+                    context="drift external orchestrator conformance",
+                    payload=drift_payload,
+                )
+                core_profile = drift_payload.get("core_profile") if isinstance(drift_payload, dict) else None
+                if not isinstance(drift_payload, dict) or drift_payload.get("result") != "block":
+                    failures.append(Failure(category, "truth drift external orchestrator conformance must block"))
+                elif not isinstance(core_profile, dict) or core_profile.get("result") != "pass":
+                    failures.append(Failure(category, "external orchestrator conformance drift must not rewrite core profile"))
+
+    return failures
+
+
 def check_external_runtime_devendor_contract(root: Path) -> list[Failure]:
     failures: list[Failure] = []
     required_anchors = {
@@ -14373,6 +14607,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_repo_companion_interface_contracts(root))
     failures.extend(check_repo_interop_contracts(root))
     failures.extend(check_external_orchestrator_interop_fixture_contract(root))
+    failures.extend(check_external_orchestrator_conformance_contract(root))
     failures.extend(check_external_runtime_devendor_contract(root))
     failures.extend(check_status_closeout_binding_contract(root))
     failures.extend(check_behavior_first_locator_contracts(root))
@@ -14401,7 +14636,7 @@ def collect_failures(root: Path) -> list[Failure]:
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 35
+    categories_checked = 36
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")

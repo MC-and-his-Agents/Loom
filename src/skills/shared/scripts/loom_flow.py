@@ -34,6 +34,7 @@ from fact_chain_support import (
 from governance_surface import (
     build_governance_surface,
     derive_execution_budget_risk,
+    EXTERNAL_ORCHESTRATOR_OPERATIONS,
     empty_hook_extension_profile,
     empty_target_release_status,
     empty_tool_availability,
@@ -122,6 +123,7 @@ DYNAMIC_TOOL_LIVE_AVAILABILITY_SCHEMA = "loom-dynamic-tool-live-availability/v1"
 HOOK_ENVELOPE_SCHEMA = "loom-hook-envelope/v1"
 HOOK_ENVELOPE_LIVE_CHECK_SCHEMA = "loom-hook-envelope-check/v1"
 HOOKS_EXTENSION_PROFILE_SCHEMA = "loom-hooks-extension-profile/v1"
+EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA = "loom-external-orchestrator-conformance/v1"
 LIVE_SMOKE_RETRY_FALLBACK = "live-smoke-retry-or-record-unavailable"
 LIVE_SMOKE_REPLAY_FALLBACK = "record-prior-evidence"
 LIVE_SMOKE_CONFIG_FALLBACK = "live-smoke-config-repair"
@@ -162,6 +164,41 @@ HOOK_ENVELOPE_FORBIDDEN_FIELDS = {
     "current_lane",
     "recovery_boundary",
     "closing_condition",
+}
+EXTERNAL_ORCHESTRATOR_FORBIDDEN_FIELDS = {
+    "scheduler_state",
+    "attempt_ownership",
+    "authored_progress",
+    "current_checkpoint",
+    "next_step",
+    "blockers",
+    "latest_validation_summary",
+    "status_truth",
+    "gate_verdict",
+    "review_verdict",
+    "validation_summary",
+    "host_action_result",
+    "closeout_basis",
+    "daemon",
+    "scheduler_queue",
+    "branch_ownership",
+    "pr_ownership",
+    "worktree_ownership",
+    "worker_lifecycle",
+}
+EXTERNAL_ORCHESTRATOR_ALLOWED_FALLBACKS = {
+    "work_item",
+    "admission",
+    "binding_repair",
+    "current_checkpoint",
+    "spec_gate",
+    "build_gate",
+    "review_gate",
+    "merge_gate",
+    "build",
+    "review",
+    "merge_ready",
+    "closeout",
 }
 HOOK_CLEANUP_ALLOWED_OWNERSHIPS = {"loom_owned"}
 HOOK_LIFECYCLES = {"before-run", "after-run", "cleanup"}
@@ -553,7 +590,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "live-smoke",
         help="Run or replay versioned adopted-repo live smoke evidence without changing core gates",
     )
-    live_smoke.add_argument("operation", choices=("run", "replay", "host-adapter-drift", "dynamic-tool-availability", "hook-envelope", "hooks-extension"))
+    live_smoke.add_argument(
+        "operation",
+        choices=(
+            "run",
+            "replay",
+            "host-adapter-drift",
+            "dynamic-tool-availability",
+            "hook-envelope",
+            "hooks-extension",
+            "external-orchestrator-interop",
+        ),
+    )
     live_smoke.add_argument("--target", help="Adopted repository root for live smoke run")
     live_smoke.add_argument("--item", default="INIT-0001", help="Expected current item id for the optional resume smoke")
     live_smoke.add_argument("--prior-evidence", help="Versioned prior-pass evidence to replay without running adopted-repo commands")
@@ -899,6 +947,41 @@ def hooks_extension_command_plan(target_root: Path) -> list[dict[str, Any]]:
     ]
 
 
+def external_orchestrator_conformance_command_plan(
+    target_root: Path,
+    external_orchestrators: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    target = command_target(target_root)
+    plan = [
+        {
+            "id": "target-check",
+            "command": f"test -d {target}",
+            "description": "Confirm the adopted-repo target path exists before reading external orchestrator declarations.",
+        },
+        {
+            "id": "repo-interop-contract",
+            "command": f"read {target_root / '.loom/companion/interop.json'} external_orchestrators",
+            "description": "Read external orchestrator locator declarations without starting a scheduler or daemon.",
+        },
+        {
+            "id": "status-consumer-view",
+            "command": f"{shlex.quote(sys.executable)} tools/loom_status.py --target {shlex.quote(str(target_root))} --item INIT-0001",
+            "description": "Confirm status/gate consumption reuses Loom status control plane v2 and the existing gate chain.",
+        },
+    ]
+    for index, entry in enumerate(external_orchestrators or []):
+        entry_id = entry.get("id") if isinstance(entry, dict) else None
+        locator = entry.get("locator") if isinstance(entry, dict) else None
+        plan.append(
+            {
+                "id": str(entry_id or f"external-orchestrator-{index}"),
+                "command": f"read {locator if isinstance(locator, str) and locator else '<missing-locator>'}",
+                "description": "Read external orchestrator retained evidence without accepting scheduler-owned status or gate truth.",
+            }
+        )
+    return plan
+
+
 def find_forbidden_hook_envelope_fields(value: object, *, prefix: str = "$") -> list[str]:
     found: list[str] = []
     if isinstance(value, dict):
@@ -911,6 +994,21 @@ def find_forbidden_hook_envelope_fields(value: object, *, prefix: str = "$") -> 
     elif isinstance(value, list):
         for index, nested in enumerate(value):
             found.extend(find_forbidden_hook_envelope_fields(nested, prefix=f"{prefix}[{index}]"))
+    return found
+
+
+def find_forbidden_external_orchestrator_fields(value: object, *, prefix: str = "$") -> list[str]:
+    found: list[str] = []
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            key_label = str(key)
+            nested_prefix = f"{prefix}.{key_label}"
+            if key_label in EXTERNAL_ORCHESTRATOR_FORBIDDEN_FIELDS:
+                found.append(nested_prefix)
+            found.extend(find_forbidden_external_orchestrator_fields(nested, prefix=nested_prefix))
+    elif isinstance(value, list):
+        for index, nested in enumerate(value):
+            found.extend(find_forbidden_external_orchestrator_fields(nested, prefix=f"{prefix}[{index}]"))
     return found
 
 
@@ -1875,6 +1973,313 @@ def hooks_extension_payload(target_root: Path) -> dict[str, Any]:
             "profile_check": {"id": "hooks-extension", "result": result},
             "core_profile": {"id": "orchestration-core", "hook_enforcement": "not_applicable", "result": "pass"},
             "hooks_extension": hook_profile,
+        }
+    )
+    return payload
+
+
+def empty_external_orchestrator_conformance() -> dict[str, Any]:
+    return {
+        "schema_version": EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA,
+        "profile_id": "orchestration-extension/external-orchestrator",
+        "enabled": False,
+        "result": "pass",
+        "status": "not_applicable",
+        "summary": "external orchestrator interop profile is not enabled for this repository.",
+        "missing_inputs": [],
+        "missing_optional": [],
+        "checks": [],
+        "non_goals": {
+            "daemon": False,
+            "scheduler_state_machine": False,
+            "tracker_polling_product": False,
+            "second_status_surface": False,
+            "host_lifecycle_ownership": False,
+        },
+    }
+
+
+def external_orchestrator_conformance_check(
+    target_root: Path,
+    *,
+    entry: object,
+    index: int,
+) -> dict[str, Any]:
+    prefix = f"external_orchestrators[{index}]"
+    if not isinstance(entry, dict):
+        return {
+            "id": f"invalid-{index}",
+            "requirement": "required",
+            "operations": [],
+            "locator": "",
+            "result": "block",
+            "classification": "invalid_declaration",
+            "summary": f"{prefix} must be an object.",
+            "missing_inputs": [f"{prefix} must be an object"],
+            "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+            "evidence": {"locator_status": "invalid-declaration"},
+        }
+
+    entry_id = entry.get("id") if isinstance(entry.get("id"), str) and entry.get("id") else f"external-orchestrator-{index}"
+    requirement = entry.get("requirement") if isinstance(entry.get("requirement"), str) else "required"
+    locator = entry.get("locator") if isinstance(entry.get("locator"), str) else ""
+    fallback_to = entry.get("fallback_to") if isinstance(entry.get("fallback_to"), str) else "admission"
+    operations = entry.get("operations") if isinstance(entry.get("operations"), list) else []
+    blocking: list[str] = []
+    optional: list[str] = []
+
+    if requirement not in {"required", "optional", "advisory"}:
+        blocking.append(f"{prefix}.requirement must be required, optional, or advisory")
+        requirement = "required"
+    if not operations:
+        blocking.append(f"{prefix}.operations must be a non-empty list")
+    unsupported = [str(operation) for operation in operations if operation not in EXTERNAL_ORCHESTRATOR_OPERATIONS]
+    if unsupported:
+        blocking.append(f"{prefix}.operations contains unsupported operations: {', '.join(unsupported)}")
+    if isinstance(fallback_to, str) and fallback_to not in EXTERNAL_ORCHESTRATOR_ALLOWED_FALLBACKS:
+        blocking.append(f"{prefix}.fallback_to must point back to a Loom checkpoint or gate repair surface")
+
+    locator_path, locator_errors = resolve_repo_relative_path(target_root, locator, label=f"{prefix} locator")
+    if locator_errors:
+        blocking.extend(locator_errors)
+    elif locator_path is None or not locator_path.exists() or locator_path.is_dir():
+        message = f"{prefix} locator points to missing or unreadable retained evidence `{locator}`"
+        if requirement in {"optional", "advisory"}:
+            optional.append(message)
+        else:
+            blocking.append(message)
+
+    payload: object = None
+    if locator_path is not None and locator_path.exists() and locator_path.is_file():
+        try:
+            payload = load_json_file(locator_path)
+        except (json.JSONDecodeError, OSError) as exc:
+            blocking.append(f"{prefix} retained evidence is not readable JSON: {exc}")
+    if payload is not None and not isinstance(payload, dict):
+        blocking.append(f"{prefix} retained evidence must be a JSON object")
+    if isinstance(payload, dict):
+        forbidden = find_forbidden_external_orchestrator_fields(payload)
+        if forbidden:
+            blocking.append(f"{prefix} retained evidence contains forbidden authored/scheduler fields: {', '.join(forbidden)}")
+        payload_operation = payload.get("operation")
+        if isinstance(payload_operation, str) and operations and payload_operation not in operations:
+            blocking.append(f"{prefix} retained evidence operation is not declared by the locator")
+        if payload.get("operation") in {"status_read", "gate_read"}:
+            if payload.get("source_layer") != "derived_surface":
+                blocking.append(f"{prefix} status/gate reads must consume the derived status surface")
+            if payload.get("consumed_as") != "summary":
+                blocking.append(f"{prefix} status/gate reads must be consumed as summary")
+        if payload.get("host_lifecycle_ownership") not in {None, "host", "external"}:
+            blocking.append(f"{prefix} retained evidence must not claim Loom owns host lifecycle")
+        payload_fallback = payload.get("fallback_to")
+        if isinstance(payload_fallback, str) and payload_fallback not in EXTERNAL_ORCHESTRATOR_ALLOWED_FALLBACKS:
+            blocking.append(f"{prefix} retained evidence fallback_to must point back to Loom")
+
+    result = "block" if blocking else "warn" if optional else "pass"
+    if result == "warn" and requirement in {"required"}:
+        result = "block"
+    return {
+        "id": entry_id,
+        "requirement": requirement,
+        "operations": operations,
+        "locator": locator,
+        "result": result,
+        "classification": "truth_pollution" if blocking and isinstance(payload, dict) and find_forbidden_external_orchestrator_fields(payload) else "locator_or_contract",
+        "summary": (
+            "external orchestrator retained evidence is readable and respects Loom truth boundaries."
+            if result == "pass"
+            else "external orchestrator retained evidence has profile-local warnings."
+            if result == "warn"
+            else "external orchestrator retained evidence violates interop conformance boundaries."
+        ),
+        "missing_inputs": blocking if result == "block" else [],
+        "missing_optional": optional,
+        "fallback_to": fallback_to if result == "block" else None,
+        "evidence": {
+            "locator_status": "readable" if isinstance(payload, dict) else "missing_or_invalid",
+            "payload_schema_version": payload.get("schema_version") if isinstance(payload, dict) else None,
+            "payload_operation": payload.get("operation") if isinstance(payload, dict) else None,
+        },
+    }
+
+
+def external_orchestrator_conformance_payload(target_root: Path) -> dict[str, Any]:
+    runtime_state = runtime_state_payload(target_root)
+    target = live_smoke_target_metadata(target_root)
+    payload: dict[str, Any] = {
+        "command": "live-smoke",
+        "operation": "external-orchestrator-interop",
+        "schema_version": EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA,
+        "runtime_state": runtime_state,
+        "target": target,
+        "command_plan": external_orchestrator_conformance_command_plan(target_root),
+        "reports": [],
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if runtime_state.get("result") != "pass":
+        conformance = empty_external_orchestrator_conformance()
+        conformance.update({"status": "runtime-blocked", "result": "block"})
+        payload.update(
+            {
+                "result": "block",
+                "summary": "external orchestrator conformance is blocked because the Loom runtime state is inconsistent.",
+                "missing_inputs": live_smoke_missing_inputs([str(message) for message in runtime_state.get("missing_inputs", [])]),
+                "fallback_to": runtime_state.get("fallback_to"),
+                "profile_check": {"id": "external-orchestrator-interop", "result": "block"},
+                "core_profile": {"id": "orchestration-core", "external_orchestrator_enforcement": "not_applicable", "result": "pass"},
+                "external_orchestrator": conformance,
+            }
+        )
+        return payload
+
+    target_report = live_smoke_target_check_report(target_root)
+    payload["reports"] = [target_report]
+    if target_report["result"] != "pass":
+        conformance = empty_external_orchestrator_conformance()
+        conformance.update({"status": "target-unavailable", "result": "warn"})
+        payload.update(
+            {
+                "result": "warn",
+                "summary": "external orchestrator conformance recorded explicit unavailable evidence for the adopted-repo target.",
+                "missing_inputs": list(target_report.get("missing_inputs", [])),
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+                "profile_check": {"id": "external-orchestrator-interop", "result": "warn"},
+                "core_profile": {"id": "orchestration-core", "external_orchestrator_enforcement": "not_applicable", "result": "pass"},
+                "external_orchestrator": conformance,
+            }
+        )
+        return payload
+
+    interop_path = target_root / ".loom" / "companion" / "interop.json"
+    if not interop_path.exists():
+        conformance = empty_external_orchestrator_conformance()
+        payload["reports"].append(
+            {
+                "id": "external-orchestrator-interop",
+                "attempted": True,
+                "command": f"read {interop_path}",
+                "reported_command": "repo-interop.external_orchestrators",
+                "reported_result": "not_applicable",
+                "result": "pass",
+                "summary": "repo interop does not declare external orchestrators.",
+                "missing_inputs": [],
+                "fallback_to": None,
+            }
+        )
+        payload.update(
+            {
+                "result": "pass",
+                "summary": conformance["summary"],
+                "profile_check": {"id": "external-orchestrator-interop", "result": "pass"},
+                "core_profile": {"id": "orchestration-core", "external_orchestrator_enforcement": "not_applicable", "result": "pass"},
+                "external_orchestrator": conformance,
+            }
+        )
+        return payload
+
+    try:
+        interop_payload = load_json_file(interop_path)
+    except (json.JSONDecodeError, OSError) as exc:
+        conformance = empty_external_orchestrator_conformance()
+        conformance.update(
+            {
+                "enabled": True,
+                "result": "block",
+                "status": "invalid_declaration",
+                "summary": "repo interop contract is unreadable for external orchestrator conformance.",
+                "missing_inputs": [f"repo interop contract is unreadable: {exc}"],
+            }
+        )
+        payload.update(
+            {
+                "result": "block",
+                "summary": conformance["summary"],
+                "missing_inputs": conformance["missing_inputs"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                "profile_check": {"id": "external-orchestrator-interop", "result": "block"},
+                "core_profile": {"id": "orchestration-core", "external_orchestrator_enforcement": "not_applicable", "result": "pass"},
+                "external_orchestrator": conformance,
+            }
+        )
+        return payload
+    external_orchestrators = interop_payload.get("external_orchestrators", []) if isinstance(interop_payload, dict) else []
+    if not isinstance(external_orchestrators, list) or not external_orchestrators:
+        conformance = empty_external_orchestrator_conformance()
+        payload["reports"].append(
+            {
+                "id": "external-orchestrator-interop",
+                "attempted": True,
+                "command": f"read {interop_path}",
+                "reported_command": "repo-interop.external_orchestrators",
+                "reported_result": "not_applicable",
+                "result": "pass",
+                "summary": "repo interop is readable but declares no external orchestrators.",
+                "missing_inputs": [],
+                "fallback_to": None,
+            }
+        )
+        payload.update(
+            {
+                "result": "pass",
+                "summary": conformance["summary"],
+                "profile_check": {"id": "external-orchestrator-interop", "result": "pass"},
+                "core_profile": {"id": "orchestration-core", "external_orchestrator_enforcement": "not_applicable", "result": "pass"},
+                "external_orchestrator": conformance,
+            }
+        )
+        return payload
+
+    checks = [
+        external_orchestrator_conformance_check(target_root, entry=entry, index=index)
+        for index, entry in enumerate(external_orchestrators)
+    ]
+    for check in checks:
+        payload["reports"].append(
+            {
+                "id": str(check["id"]),
+                "attempted": True,
+                "command": f"read {check.get('locator') or '<missing-locator>'}",
+                "reported_command": "repo-interop.external_orchestrator",
+                "reported_result": str(check["classification"]),
+                "result": str(check["result"]),
+                "summary": str(check["summary"]),
+                "missing_inputs": list(check.get("missing_inputs", [])),
+                "fallback_to": check.get("fallback_to"),
+            }
+        )
+
+    has_block = any(check["result"] == "block" for check in checks)
+    has_warn = any(check["result"] == "warn" for check in checks)
+    result = "block" if has_block else "warn" if has_warn else "pass"
+    conformance = empty_external_orchestrator_conformance()
+    conformance.update(
+        {
+            "enabled": True,
+            "result": result,
+            "status": "present",
+            "summary": (
+                "external orchestrator conformance passed without introducing a daemon, scheduler state, or second status surface."
+                if result == "pass"
+                else "external orchestrator conformance produced profile-local warnings."
+                if result == "warn"
+                else "external orchestrator conformance found blocking interop drift."
+            ),
+            "missing_inputs": live_smoke_missing_inputs([message for check in checks for message in check.get("missing_inputs", [])]),
+            "missing_optional": [message for check in checks for message in check.get("missing_optional", [])],
+            "checks": checks,
+        }
+    )
+    payload.update(
+        {
+            "result": result,
+            "summary": conformance["summary"],
+            "missing_inputs": conformance["missing_inputs"],
+            "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK if result == "block" else None,
+            "profile_check": {"id": "external-orchestrator-interop", "result": result},
+            "core_profile": {"id": "orchestration-core", "external_orchestrator_enforcement": "not_applicable", "result": "pass"},
+            "external_orchestrator": conformance,
+            "command_plan": external_orchestrator_conformance_command_plan(target_root, external_orchestrators=external_orchestrators),
         }
     )
     return payload
@@ -12754,6 +13159,31 @@ def handle_live_smoke(args: argparse.Namespace) -> int:
                 }
             )
         return emit(hooks_extension_payload(Path(args.target).expanduser().resolve()))
+    if args.operation == "external-orchestrator-interop":
+        if not args.target:
+            return emit(
+                {
+                    "command": "live-smoke",
+                    "operation": "external-orchestrator-interop",
+                    "schema_version": EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA,
+                    "result": "block",
+                    "summary": "external orchestrator conformance requires --target.",
+                    "missing_inputs": ["pass --target <adopted_repo_root>"],
+                    "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                    "runtime_state": runtime_state_payload(Path.cwd()),
+                    "target": live_smoke_target_metadata(Path.cwd()),
+                    "command_plan": [],
+                    "reports": [],
+                    "profile_check": {"id": "external-orchestrator-interop", "result": "block"},
+                    "core_profile": {"id": "orchestration-core", "external_orchestrator_enforcement": "not_applicable", "result": "pass"},
+                    "external_orchestrator": {
+                        **empty_external_orchestrator_conformance(),
+                        "status": "missing-target",
+                        "result": "block",
+                    },
+                }
+            )
+        return emit(external_orchestrator_conformance_payload(Path(args.target).expanduser().resolve()))
 
     repo_root = Path(os.environ.get("LOOM_SOURCE_REPO_ROOT", Path.cwd())).expanduser().resolve()
     runtime_state = runtime_state_payload(repo_root)

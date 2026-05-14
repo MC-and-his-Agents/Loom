@@ -39,7 +39,8 @@ Core 缺口必须 fail closed，因为这些能力构成 Loom v0.7.0 的可恢�
 - host action / dynamic tool declaration-time locator contract
 - hook locator safety declarations, mapped hook envelopes, and unsafe
   host-adapter results
-- external orchestrator Work Item read locators and retained read evidence
+- external orchestrator Work Item/status/gate read locators, workspace attach,
+  recovery writeback, retained read evidence, and conformance evidence
 - host-backed tracker state 只能作为 structured event evidence 或 retained host result 被消费
 - required locator missing / unreadable / invalid boundary 的 fail-closed 行为
 - optional / advisory missing in-repo locator 只进入 profile-local `missing_optional`
@@ -80,14 +81,23 @@ daemon 或 scheduler 产品。
 - `Work Item` read locator
 - `workspace attach` 只读绑定语义
 - recovery writeback 是唯一 authored progress 写回路径
+- `status_read` / `gate_read` 只读消费 `status control plane v2` 与既有 gate chain
 - PR-only / tracker-only / release-only / merge-commit-only 入口 fail closed
 - external orchestrator locator payload 不承载 authored progress、status truth、gate truth 或 scheduler state
+- external orchestrator conformance evidence 使用
+  `loom-external-orchestrator-conformance/v1`
+- fake external orchestrator happy/drift fixtures 证明 retained read evidence 可读、
+  truth pollution 会阻断、scheduler-private fallback 回到 Loom checkpoint
 - required locator missing / unreadable / unsafe 时在 extension path 内 block
 - optional / advisory locator gaps 只进入 profile-local warning
 
 该 profile 只消费 [external-orchestrator-interop.md](../methodology/harness/external-orchestrator-interop.md)
 与 `repo interop` 的 locator-only 声明。它不得新增第二状态面，不得改变
 `orchestration-core` pass/fail。
+
+该 profile 的 live evidence 命令是
+`python3 tools/loom_flow.py live-smoke external-orchestrator-interop --target <repo>`，
+输出 schema 为 `loom-external-orchestrator-conformance/v1`。
 
 ## 4. `orchestration-live`
 
