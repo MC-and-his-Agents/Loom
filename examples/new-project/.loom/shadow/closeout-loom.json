@@ -1,0 +1,9 @@
+{
+  "result": "done",
+  "source_files": [
+    ".loom/status/current.md"
+  ],
+  "source_sha256": {
+    ".loom/status/current.md": "ed658de6dce64b0e67ba3fbd322e2008f03446554e50524a59563cceca84f6b6"
+  }
+}

@@ -3,7 +3,7 @@
   "package_type": "single-skill",
   "package_id": "loom-story",
   "display_name": "Loom Story",
-  "repo_version": "v0.11.0",
+  "repo_version": "v0.12.0",
   "source_repository": "https://github.com/MC-and-his-Agents/Loom",
   "source_revision": "repository-working-tree",
   "skill_package_version": "1.0.0",

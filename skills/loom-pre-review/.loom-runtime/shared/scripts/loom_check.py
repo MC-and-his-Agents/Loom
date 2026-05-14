@@ -10088,17 +10088,49 @@ def check_external_orchestrator_conformance_contract(root: Path) -> list[Failure
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
+    def sha256_file_local(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def write_shadow_evidence_local(target: Path, evidence: str, value_key: str, value: str, source: str) -> None:
+        source_path = target / source
+        if not source_path.exists():
+            write_json_local(source_path, {value_key: value})
+        write_json_local(
+            target / evidence,
+            {
+                value_key: value,
+                "source_files": [source],
+                "source_sha256": {source: sha256_file_local(source_path)},
+            },
+        )
+
+    def load_or_new_interop_local(target: Path) -> dict:
+        interop_path = target / ".loom/companion/interop.json"
+        if interop_path.exists():
+            interop = load_json_file(interop_path)
+            if isinstance(interop, dict):
+                return interop
+        return {
+            "schema_version": "loom-repo-interop/v1",
+            "host_adapters": [],
+            "repo_native_carriers": [],
+            "external_orchestrators": [],
+        }
+
     with tempfile.TemporaryDirectory(prefix="loom-external-orchestrator-conformance-") as tmp:
         base = Path(tmp)
         present_target = base / "present"
         shutil.copytree(example_target, present_target)
         happy_fixture = next((fixture for fixture in fixtures if isinstance(fixture, dict) and fixture.get("name") == "fake-external-orchestrator-happy"), None)
         if isinstance(happy_fixture, dict):
-            interop = load_json_file(present_target / ".loom/companion/interop.json")
-            if isinstance(interop, dict):
-                interop["external_orchestrators"] = [happy_fixture["entry"]]
-                write_json_local(present_target / ".loom/companion/interop.json", interop)
-                write_json_local(present_target / happy_fixture["entry"]["locator"], happy_fixture["payload"])
+            interop = load_or_new_interop_local(present_target)
+            interop["external_orchestrators"] = [happy_fixture["entry"]]
+            write_json_local(present_target / ".loom/companion/interop.json", interop)
+            write_json_local(present_target / happy_fixture["entry"]["locator"], happy_fixture["payload"])
             present_payload, present_error = load_command_json(
                 root,
                 ["python3", "tools/loom_flow.py", "live-smoke", "external-orchestrator-interop", "--target", str(present_target)],
@@ -10119,11 +10151,10 @@ def check_external_orchestrator_conformance_contract(root: Path) -> list[Failure
         shutil.copytree(example_target, drift_target)
         drift_fixture = next((fixture for fixture in fixtures if isinstance(fixture, dict) and fixture.get("name") == "fake-external-orchestrator-truth-drift"), None)
         if isinstance(drift_fixture, dict):
-            interop = load_json_file(drift_target / ".loom/companion/interop.json")
-            if isinstance(interop, dict):
-                interop["external_orchestrators"] = [drift_fixture["entry"]]
-                write_json_local(drift_target / ".loom/companion/interop.json", interop)
-                write_json_local(drift_target / drift_fixture["entry"]["locator"], drift_fixture["payload"])
+            interop = load_or_new_interop_local(drift_target)
+            interop["external_orchestrators"] = [drift_fixture["entry"]]
+            write_json_local(drift_target / ".loom/companion/interop.json", interop)
+            write_json_local(drift_target / drift_fixture["entry"]["locator"], drift_fixture["payload"])
             drift_payload, drift_error = load_command_json(
                 root,
                 ["python3", "tools/loom_flow.py", "live-smoke", "external-orchestrator-interop", "--target", str(drift_target)],
@@ -13042,6 +13073,26 @@ def check_live_validation_only_guardrail_contract(root: Path) -> list[Failure]:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
+    def sha256_file_local(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def write_shadow_evidence_local(target: Path, evidence: str, value_key: str, value: str, source: str) -> None:
+        source_path = target / source
+        if not source_path.exists():
+            write_json_local(source_path, {value_key: value})
+        write_json_local(
+            target / evidence,
+            {
+                value_key: value,
+                "source_files": [source],
+                "source_sha256": {source: sha256_file_local(source_path)},
+            },
+        )
+
     docs = {
         "docs/evidence/v0.10.0-release-readiness.md": [
             "validation-only shadow parity mismatch",
@@ -13130,6 +13181,7 @@ def check_live_validation_only_guardrail_contract(root: Path) -> list[Failure]:
     with tempfile.TemporaryDirectory(prefix="loom-live-validation-guardrail-") as tmp:
         mismatch_target = Path(tmp) / "shadow-mismatch"
         shutil.copytree(example_target, mismatch_target)
+        write_shadow_evidence_local(mismatch_target, ".loom/shadow/review-repo.json", "decision", "allow", "native/status/review.json")
         shadow_payload = load_json_file(mismatch_target / ".loom/shadow/review-repo.json")
         if isinstance(shadow_payload, dict):
             shadow_payload["source_sha256"] = {"native/status/review.json": "0" * 64}
