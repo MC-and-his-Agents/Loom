@@ -10088,17 +10088,29 @@ def check_external_orchestrator_conformance_contract(root: Path) -> list[Failure
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
+    def load_or_new_interop_local(target: Path) -> dict:
+        interop_path = target / ".loom/companion/interop.json"
+        if interop_path.exists():
+            interop = load_json_file(interop_path)
+            if isinstance(interop, dict):
+                return interop
+        return {
+            "schema_version": "loom-repo-interop/v1",
+            "host_adapters": [],
+            "repo_native_carriers": [],
+            "external_orchestrators": [],
+        }
+
     with tempfile.TemporaryDirectory(prefix="loom-external-orchestrator-conformance-") as tmp:
         base = Path(tmp)
         present_target = base / "present"
         shutil.copytree(example_target, present_target)
         happy_fixture = next((fixture for fixture in fixtures if isinstance(fixture, dict) and fixture.get("name") == "fake-external-orchestrator-happy"), None)
         if isinstance(happy_fixture, dict):
-            interop = load_json_file(present_target / ".loom/companion/interop.json")
-            if isinstance(interop, dict):
-                interop["external_orchestrators"] = [happy_fixture["entry"]]
-                write_json_local(present_target / ".loom/companion/interop.json", interop)
-                write_json_local(present_target / happy_fixture["entry"]["locator"], happy_fixture["payload"])
+            interop = load_or_new_interop_local(present_target)
+            interop["external_orchestrators"] = [happy_fixture["entry"]]
+            write_json_local(present_target / ".loom/companion/interop.json", interop)
+            write_json_local(present_target / happy_fixture["entry"]["locator"], happy_fixture["payload"])
             present_payload, present_error = load_command_json(
                 root,
                 ["python3", "tools/loom_flow.py", "live-smoke", "external-orchestrator-interop", "--target", str(present_target)],
@@ -10119,11 +10131,10 @@ def check_external_orchestrator_conformance_contract(root: Path) -> list[Failure
         shutil.copytree(example_target, drift_target)
         drift_fixture = next((fixture for fixture in fixtures if isinstance(fixture, dict) and fixture.get("name") == "fake-external-orchestrator-truth-drift"), None)
         if isinstance(drift_fixture, dict):
-            interop = load_json_file(drift_target / ".loom/companion/interop.json")
-            if isinstance(interop, dict):
-                interop["external_orchestrators"] = [drift_fixture["entry"]]
-                write_json_local(drift_target / ".loom/companion/interop.json", interop)
-                write_json_local(drift_target / drift_fixture["entry"]["locator"], drift_fixture["payload"])
+            interop = load_or_new_interop_local(drift_target)
+            interop["external_orchestrators"] = [drift_fixture["entry"]]
+            write_json_local(drift_target / ".loom/companion/interop.json", interop)
+            write_json_local(drift_target / drift_fixture["entry"]["locator"], drift_fixture["payload"])
             drift_payload, drift_error = load_command_json(
                 root,
                 ["python3", "tools/loom_flow.py", "live-smoke", "external-orchestrator-interop", "--target", str(drift_target)],
