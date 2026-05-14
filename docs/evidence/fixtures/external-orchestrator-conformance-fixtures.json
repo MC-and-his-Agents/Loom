@@ -1,0 +1,134 @@
+{
+  "schema_version": "loom-external-orchestrator-conformance-fixtures/v1",
+  "fixtures": [
+    {
+      "name": "fake-external-orchestrator-happy",
+      "entry": {
+        "id": "fake-external-orchestrator",
+        "summary": "Read Work Item, status, gates, workspace attach, and recovery writeback evidence without owning scheduling.",
+        "surfaces": ["admission", "build", "merge_ready"],
+        "operations": ["work_item_read", "workspace_attach", "recovery_writeback", "status_read", "gate_read"],
+        "locator": ".loom/external-orchestrator/happy.json",
+        "owner": "external-tool",
+        "requirement": "required",
+        "fallback_to": "current_checkpoint"
+      },
+      "payload": {
+        "schema_version": "loom-external-orchestrator-read/v1",
+        "operation": "status_read",
+        "entry_kind": "work_item",
+        "source_layer": "derived_surface",
+        "source_locator": ".loom/status/current.md",
+        "source_binding": {
+          "item_id": "INIT-0001",
+          "status_schema_version": "loom-governance-status/v2"
+        },
+        "consumed_as": "summary",
+        "host_lifecycle_ownership": "external",
+        "fallback_to": "current_checkpoint"
+      },
+      "expect": {
+        "result": "pass",
+        "schema_version": "loom-external-orchestrator-conformance/v1"
+      }
+    },
+    {
+      "name": "fake-external-orchestrator-truth-drift",
+      "entry": {
+        "id": "fake-external-orchestrator-truth-drift",
+        "summary": "Attempt to carry scheduler state and authored status truth.",
+        "surfaces": ["merge_ready"],
+        "operations": ["status_read", "gate_read"],
+        "locator": ".loom/external-orchestrator/truth-drift.json",
+        "owner": "external-tool",
+        "requirement": "required",
+        "fallback_to": "current_checkpoint"
+      },
+      "payload": {
+        "schema_version": "loom-external-orchestrator-read/v1",
+        "operation": "gate_read",
+        "entry_kind": "work_item",
+        "source_layer": "derived_surface",
+        "source_locator": ".loom/status/current.md",
+        "source_binding": {
+          "item_id": "INIT-0001"
+        },
+        "consumed_as": "truth",
+        "scheduler_state": "Running",
+        "status_truth": {
+          "result": "pass"
+        },
+        "gate_verdict": {
+          "merge_gate": "pass"
+        }
+      },
+      "expect": {
+        "result": "block",
+        "failure": "truth_pollution",
+        "fallback_to": "current_checkpoint"
+      }
+    },
+    {
+      "name": "fake-external-orchestrator-private-fallback",
+      "entry": {
+        "id": "fake-external-orchestrator-private-fallback",
+        "summary": "Attempt to fall back to an orchestrator-private retry queue.",
+        "surfaces": ["merge_ready"],
+        "operations": ["gate_read"],
+        "locator": ".loom/external-orchestrator/private-fallback.json",
+        "owner": "external-tool",
+        "requirement": "required",
+        "fallback_to": "scheduler_retry_queue"
+      },
+      "payload": {
+        "schema_version": "loom-external-orchestrator-read/v1",
+        "operation": "gate_read",
+        "entry_kind": "work_item",
+        "source_layer": "derived_surface",
+        "source_locator": ".loom/status/current.md",
+        "source_binding": {
+          "item_id": "INIT-0001"
+        },
+        "consumed_as": "summary",
+        "fallback_to": "scheduler_retry_queue"
+      },
+      "expect": {
+        "result": "block",
+        "failure": "gate_failure.binding_failure",
+        "fallback_to": "current_checkpoint"
+      }
+    },
+    {
+      "name": "fake-external-orchestrator-lifecycle-drift",
+      "entry": {
+        "id": "fake-external-orchestrator-lifecycle-drift",
+        "summary": "Attempt to claim host lifecycle ownership.",
+        "surfaces": ["build"],
+        "operations": ["workspace_attach"],
+        "locator": ".loom/external-orchestrator/lifecycle-drift.json",
+        "owner": "external-tool",
+        "requirement": "required",
+        "fallback_to": "build"
+      },
+      "payload": {
+        "schema_version": "loom-external-orchestrator-read/v1",
+        "operation": "workspace_attach",
+        "entry_kind": "work_item",
+        "source_layer": "derived_surface",
+        "source_locator": ".loom/status/current.md",
+        "source_binding": {
+          "item_id": "INIT-0001"
+        },
+        "consumed_as": "summary",
+        "host_lifecycle_ownership": "loom",
+        "daemon": true,
+        "worker_lifecycle": "owned"
+      },
+      "expect": {
+        "result": "block",
+        "failure": "truth_pollution",
+        "fallback_to": "build"
+      }
+    }
+  ]
+}

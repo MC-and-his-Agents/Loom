@@ -16,6 +16,8 @@
 
 `python3 tools/loom_flow.py live-smoke hooks-extension --target <repo>`
 
+`python3 tools/loom_flow.py live-smoke external-orchestrator-interop --target <repo>`
+
 输出 schema 固定为 `loom-live-smoke/v1`。
 
 `host-adapter-drift` 输出 schema 固定为 `loom-host-adapter-live-drift/v1`。
@@ -23,6 +25,9 @@
 `dynamic-tool-availability` 输出 schema 固定为 `loom-dynamic-tool-live-availability/v1`。
 
 `hooks-extension` 输出 schema 固定为 `loom-hooks-extension-profile/v1`。
+
+`external-orchestrator-interop` 输出 schema 固定为
+`loom-external-orchestrator-conformance/v1`。
 
 ## Run Contract
 
@@ -169,3 +174,34 @@
   `not_applicable`
 - 命令 does not execute hooks，不生成 host-native hook files，不写 repo
   companion、host state、authored progress 或 status truth
+
+## External Orchestrator Interop Profile Contract
+
+`external-orchestrator-interop` 读取 adopted repo
+`.loom/companion/interop.json` 中声明的 `external_orchestrators[*]`，并把
+retained read evidence 包装成 `orchestration-extension/external-orchestrator`
+profile-local evidence。
+
+最小检查面：
+
+- repo interop contract 是否存在且可读
+- `external_orchestrators[*]` 是否声明合法的 `operations`、`locator`、
+  `requirement` 与 `fallback_to`
+- retained evidence 是否只表达 `work_item_read`、`workspace_attach`、
+  `recovery_writeback`、`status_read` 或 `gate_read`
+- status/gate consumption 是否只读消费 `status control plane v2` 与现有 gate chain
+- retained evidence 是否避免 scheduler state、daemon、tracker polling、host
+  lifecycle ownership、status truth、gate truth、review verdict、validation summary、
+  host action result 或 closeout basis
+
+结果纪律：
+
+- 未声明 external orchestrator 时返回 `pass`，`external_orchestrator.status`
+  为 `not_applicable`
+- optional / advisory locator gaps 只返回 profile-local `warn`
+- required locator 缺失、truth pollution、scheduler-private fallback 或 lifecycle
+  ownership 漂移返回 `block`
+- `core_profile.result` 必须保持 `pass`，`core_profile.external_orchestrator_enforcement`
+  固定为 `not_applicable`
+- 命令不启动 daemon，不调度 worker，不创建/删除 branch、PR、git worktree 或目录，
+  不写 recovery/status/gate/review/host state
