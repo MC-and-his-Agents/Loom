@@ -83,9 +83,10 @@ merge commit 反推执行入口。
 - `work_item_read`
 - `workspace_attach`
 - `recovery_writeback`
+- `status_read`
+- `gate_read`
 
-后续可扩展到 `status_read` 与 `gate_read`，但这些扩展仍必须消费同一
-fact-chain，不得新增第二状态面。
+`status_read` 与 `gate_read` 必须消费同一 fact-chain，不得新增第二状态面。
 
 ## 5. Workspace Attach
 
@@ -126,7 +127,35 @@ orchestrator 私有 action。
 写回后，status control plane 只能重新派生或刷新；外部 orchestrator 不得直接写 status、
 gate、review、validation、host action 或 closeout authored fields。
 
-## 7. Truth Boundary
+## 7. Status / Gate Consumption
+
+外部 orchestrator 可以只读消费 `status control plane v2` 与现有 gate chain。
+
+它读取的状态必须与 Loom 本地入口同源：
+
+- `schema_version` 继续使用 `loom-governance-status/v2`
+- `result`、`current_gate`、`classifications`、`missing_inputs`、`head_binding`
+  与 `gate_chain` 来自同一个 status control plane
+- `provenance` 继续指向 Work Item、recovery entry、review / checkpoint / host mirror
+  等既有来源
+
+外部 orchestrator 视图只能是 consumer view。它可以裁剪字段以便消费，但不得定义
+新的 status schema、不得 authored `pass | block`、不得替换 gate chain。
+
+当 status/gate 读取无法消费时，回退只能指向 Loom checkpoint 或 gate 前置修复，例如：
+
+- `current_checkpoint`
+- `spec_gate`
+- `build_gate`
+- `review_gate`
+- `merge_gate`
+- `admission`
+- `binding_repair`
+
+不得回退到 scheduler 私有 action、retry queue、tracker state 或 orchestrator-owned
+decision。
+
+## 8. Truth Boundary
 
 `external_orchestrators` 不得承载：
 
@@ -146,7 +175,7 @@ gate、review、validation、host action 或 closeout authored fields。
 这些字段若出现在 external orchestrator locator payload 中，必须被视为 truth
 pollution，并阻断 required 声明。
 
-## 8. 非目标
+## 9. 非目标
 
 - 不提供默认 daemon
 - 不定义 tracker polling 产品

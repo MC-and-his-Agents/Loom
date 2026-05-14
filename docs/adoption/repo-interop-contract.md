@@ -293,7 +293,7 @@ blocking 模式只改变消费结果，不改变 `shadow_surfaces` schema：
 - `surfaces` 必须是非空数组
 - `surfaces[*]` 只允许 `admission | pre_review | review | build | merge_ready | closeout`
 - `operations` 必须是非空数组
-- `operations[*]` 只允许 `work_item_read | workspace_attach | recovery_writeback`
+- `operations[*]` 只允许 `work_item_read | workspace_attach | recovery_writeback | status_read | gate_read`
 - `locator` 只描述 Loom 如何读取外部 orchestrator 的 retained read evidence，不描述如何调度任务
 - `owner` 只允许 `repo | repo-companion | host | host-adapter | platform | external-tool`
 - `requirement` 只允许 `required | optional | advisory`
@@ -328,6 +328,15 @@ profile-local advisory evidence，不得污染 `orchestration-core`。
 `recovery_writeback` 声明只表示外部 orchestrator 可通过 Loom recovery writeback
 入口写恢复主入口。它不授权直接写 status、gate、review、validation、host action 或
 closeout authored fields。
+
+`status_read` 与 `gate_read` 声明只表示外部 orchestrator 可消费 Loom
+`status control plane v2` 与既有 gate chain 的派生读面。它们必须复用
+`loom-governance-status/v2` 字段、provenance 与 gate vocabulary，不得声明新的
+status schema、scheduler-owned verdict 或第二 gate truth。
+
+status / gate 读取失败时，`fallback_to` 只能指向 Loom checkpoint、gate 前置修复、
+`admission` 或 `binding_repair`。它不得指向 scheduler 私有 action、retry queue、
+tracker state 或 orchestrator-owned decision。
 
 ## 7. 与其他合同的关系
 

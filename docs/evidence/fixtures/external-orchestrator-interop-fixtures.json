@@ -206,6 +206,110 @@
         "failure": "truth_pollution",
         "fallback_to": "build"
       }
+    },
+    {
+      "name": "status-read-present",
+      "entry": {
+        "id": "fake-external-orchestrator-status-read",
+        "summary": "Consume status control plane v2 as a read-only external consumer view.",
+        "surfaces": ["merge_ready"],
+        "operations": ["status_read"],
+        "locator": ".loom/external-orchestrator/status-read.json",
+        "owner": "external-tool",
+        "requirement": "required",
+        "fallback_to": "current_checkpoint"
+      },
+      "payload": {
+        "schema_version": "loom-external-orchestrator-read/v1",
+        "operation": "status_read",
+        "entry_kind": "work_item",
+        "source_layer": "derived_surface",
+        "source_locator": ".loom/status/current.md",
+        "source_binding": {
+          "item_id": "INIT-0001",
+          "status_schema_version": "loom-governance-status/v2"
+        },
+        "consumed_as": "summary",
+        "status_fields": [
+          "result",
+          "current_gate",
+          "classifications",
+          "missing_inputs",
+          "head_binding",
+          "gate_chain",
+          "provenance"
+        ],
+        "fallback_to": "current_checkpoint"
+      },
+      "expect": {
+        "result": "pass"
+      }
+    },
+    {
+      "name": "gate-read-present",
+      "entry": {
+        "id": "fake-external-orchestrator-gate-read",
+        "summary": "Consume the existing Loom gate chain without authoring a gate verdict.",
+        "surfaces": ["merge_ready"],
+        "operations": ["gate_read"],
+        "locator": ".loom/external-orchestrator/gate-read.json",
+        "owner": "external-tool",
+        "requirement": "required",
+        "fallback_to": "review_gate"
+      },
+      "payload": {
+        "schema_version": "loom-external-orchestrator-read/v1",
+        "operation": "gate_read",
+        "entry_kind": "work_item",
+        "source_layer": "derived_surface",
+        "source_locator": ".loom/status/current.md",
+        "source_binding": {
+          "item_id": "INIT-0001",
+          "gate_chain": "status_control_plane_v2"
+        },
+        "consumed_as": "summary",
+        "gate_fields": [
+          "name",
+          "result",
+          "classification",
+          "missing_inputs",
+          "fallback_to"
+        ],
+        "fallback_to": "review_gate"
+      },
+      "expect": {
+        "result": "pass"
+      }
+    },
+    {
+      "name": "scheduler-private-fallback-block",
+      "entry": {
+        "id": "fake-external-orchestrator-private-fallback",
+        "summary": "Attempt to fallback to a scheduler-private action instead of a Loom checkpoint.",
+        "surfaces": ["merge_ready"],
+        "operations": ["gate_read"],
+        "locator": ".loom/external-orchestrator/private-fallback.json",
+        "owner": "external-tool",
+        "requirement": "required",
+        "fallback_to": "scheduler_retry_queue"
+      },
+      "payload": {
+        "schema_version": "loom-external-orchestrator-read/v1",
+        "operation": "gate_read",
+        "entry_kind": "work_item",
+        "source_layer": "derived_surface",
+        "source_locator": ".loom/status/current.md",
+        "source_binding": {
+          "item_id": "INIT-0001"
+        },
+        "consumed_as": "summary",
+        "fallback_to": "scheduler_retry_queue"
+      },
+      "expect": {
+        "result": "block",
+        "failure": "gate_failure.binding_failure",
+        "fallback_to": "current_checkpoint"
+      }
     }
   ]
 }

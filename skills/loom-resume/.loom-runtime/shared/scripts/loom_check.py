@@ -4666,6 +4666,35 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 classifications = governance_status.get("classifications")
                 if not isinstance(classifications, list):
                     failures.append(Failure("daily-execution-cli", "`loom_status` governance_status must include classifications"))
+            external_orchestrator = payload.get("external_orchestrator")
+            if not isinstance(external_orchestrator, dict):
+                failures.append(Failure("daily-execution-cli", "`loom_status` must include `external_orchestrator` consumer view"))
+            else:
+                if external_orchestrator.get("schema_version") != "loom-governance-status/v2":
+                    failures.append(Failure("daily-execution-cli", "`loom_status` external_orchestrator must reuse governance status schema v2"))
+                if external_orchestrator.get("view") != "external_orchestrator_consumer":
+                    failures.append(Failure("daily-execution-cli", "`loom_status` external_orchestrator view must be consumer-only"))
+                if external_orchestrator.get("result") not in {"pass", "block"}:
+                    failures.append(Failure("daily-execution-cli", "`loom_status` external_orchestrator result must be `pass` or `block`"))
+                if external_orchestrator.get("allowed_operations") != ["status_read", "gate_read"]:
+                    failures.append(Failure("daily-execution-cli", "`loom_status` external_orchestrator must expose only read operations"))
+                if not isinstance(external_orchestrator.get("gate_chain"), list):
+                    failures.append(Failure("daily-execution-cli", "`loom_status` external_orchestrator must reuse gate_chain"))
+                source_policy = external_orchestrator.get("source_policy")
+                if not isinstance(source_policy, dict):
+                    failures.append(Failure("daily-execution-cli", "`loom_status` external_orchestrator must include source_policy"))
+                elif source_policy.get("fallback_to") != "current_checkpoint":
+                    failures.append(Failure("daily-execution-cli", "`loom_status` external_orchestrator fallback must point to Loom checkpoint"))
+                elif source_policy.get("status_source") != "derived_from_status_control_plane_v2":
+                    failures.append(Failure("daily-execution-cli", "`loom_status` external_orchestrator must read status from status control plane v2"))
+                elif source_policy.get("gate_source") != "derived_from_governance_gate_chain":
+                    failures.append(Failure("daily-execution-cli", "`loom_status` external_orchestrator must read gates from the governance gate chain"))
+                external_provenance = external_orchestrator.get("provenance")
+                if not (
+                    isinstance(external_provenance, dict)
+                    or (isinstance(external_provenance, list) and external_provenance)
+                ):
+                    failures.append(Failure("daily-execution-cli", "`loom_status` external_orchestrator must carry provenance"))
             closeout = payload.get("closeout")
             if not isinstance(closeout, dict):
                 failures.append(Failure("daily-execution-cli", "`loom_status` must include `closeout`"))
@@ -9272,6 +9301,24 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
                 "source_binding": {"item_id": "INIT-0001"},
                 "consumed_as": "locator",
             },
+            "host/external-orchestrator-status.json": {
+                "schema_version": "loom-external-orchestrator-read/v1",
+                "operation": "status_read",
+                "entry_kind": "work_item",
+                "source_layer": "derived_surface",
+                "source_locator": ".loom/status/current.md",
+                "source_binding": {"item_id": "INIT-0001", "status_schema_version": "loom-governance-status/v2"},
+                "consumed_as": "summary",
+            },
+            "host/external-orchestrator-gate.json": {
+                "schema_version": "loom-external-orchestrator-read/v1",
+                "operation": "gate_read",
+                "entry_kind": "work_item",
+                "source_layer": "derived_surface",
+                "source_locator": ".loom/status/current.md",
+                "source_binding": {"item_id": "INIT-0001", "gate_chain": "status_control_plane_v2"},
+                "consumed_as": "summary",
+            },
             "native/status/admission.json": {"result": "pass"},
             "native/status/review.json": {"decision": "allow"},
             "native/status/merge-ready.json": {"status": "pass"},
@@ -9370,6 +9417,26 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
                 "owner": "external-tool",
                 "requirement": "required",
                 "fallback_to": "build",
+            },
+            {
+                "id": "fake-external-orchestrator-status",
+                "summary": "Read status control plane v2 without defining a second status surface.",
+                "surfaces": ["merge_ready"],
+                "operations": ["status_read"],
+                "locator": "host/external-orchestrator-status.json",
+                "owner": "external-tool",
+                "requirement": "required",
+                "fallback_to": "current_checkpoint",
+            },
+            {
+                "id": "fake-external-orchestrator-gate",
+                "summary": "Read the Loom gate chain without authoring a gate verdict.",
+                "surfaces": ["merge_ready"],
+                "operations": ["gate_read"],
+                "locator": "host/external-orchestrator-gate.json",
+                "owner": "external-tool",
+                "requirement": "required",
+                "fallback_to": "review_gate",
             },
         ],
         "shadow_surfaces": {
@@ -9736,6 +9803,24 @@ def check_external_orchestrator_interop_fixture_contract(root: Path) -> list[Fai
         "workspace-attach-present",
         "recovery-writeback-present",
         "direct-status-write-block",
+        "status-read-present",
+        "gate-read-present",
+        "scheduler-private-fallback-block",
+    }
+    allowed_operations = {"work_item_read", "workspace_attach", "recovery_writeback", "status_read", "gate_read"}
+    loom_fallbacks = {
+        "work_item",
+        "admission",
+        "binding_repair",
+        "current_checkpoint",
+        "spec_gate",
+        "build_gate",
+        "review_gate",
+        "merge_gate",
+        "merge_ready",
+        "build",
+        "review",
+        "closeout",
     }
     for index, fixture in enumerate(fixtures):
         if not isinstance(fixture, dict):
@@ -9746,6 +9831,7 @@ def check_external_orchestrator_interop_fixture_contract(root: Path) -> list[Fai
             failures.append(Failure(category, f"fixtures[{index}] must include non-empty `name`"))
         else:
             seen_names.add(name)
+        expect = fixture.get("expect")
         entry = fixture.get("entry")
         if not isinstance(entry, dict):
             failures.append(Failure(category, f"{name or index} entry must be an object"))
@@ -9761,23 +9847,35 @@ def check_external_orchestrator_interop_fixture_contract(root: Path) -> list[Fai
             if not isinstance(surfaces, list) or not surfaces:
                 failures.append(Failure(category, f"{name or index} entry must include non-empty `surfaces`"))
             operations = entry.get("operations")
-            allowed_operations = {"work_item_read", "workspace_attach", "recovery_writeback"}
             if not isinstance(operations, list) or not operations:
                 failures.append(Failure(category, f"{name or index} entry must declare at least one external orchestrator operation"))
             elif any(operation not in allowed_operations for operation in operations):
                 failures.append(Failure(category, f"{name or index} entry declares an unsupported external orchestrator operation"))
+            fallback_to = entry.get("fallback_to")
+            if (
+                isinstance(fallback_to, str)
+                and fallback_to not in loom_fallbacks
+                and (not isinstance(expect, dict) or expect.get("result") != "block")
+            ):
+                failures.append(Failure(category, f"{name or index} fallback_to must point to a Loom checkpoint or gate repair surface"))
         payload = fixture.get("payload")
-        expect = fixture.get("expect")
         if not isinstance(expect, dict) or expect.get("result") not in {"pass", "warn", "block"}:
             failures.append(Failure(category, f"{name or index} expect.result must be pass/warn/block"))
         if payload is not None:
             if not isinstance(payload, dict):
                 failures.append(Failure(category, f"{name or index} payload must be an object or null"))
             else:
-                if payload.get("operation") not in {"work_item_read", "workspace_attach", "recovery_writeback"}:
+                if payload.get("operation") not in allowed_operations:
                     failures.append(Failure(category, f"{name or index} payload operation must be a supported external orchestrator operation"))
                 if payload.get("source_layer") not in {"authored_truth", "host_control_mirror", "retained_result", "derived_surface"}:
                     failures.append(Failure(category, f"{name or index} payload source_layer must use fact-chain vocabulary"))
+                payload_fallback = payload.get("fallback_to")
+                if (
+                    isinstance(payload_fallback, str)
+                    and payload_fallback not in loom_fallbacks
+                    and (not isinstance(expect, dict) or expect.get("result") != "block")
+                ):
+                    failures.append(Failure(category, f"{name or index} payload fallback_to must point to a Loom checkpoint or gate repair surface"))
                 forbidden = sorted(EXTERNAL_ORCHESTRATOR_FORBIDDEN_FIELDS.intersection(payload.keys()))
                 if forbidden and expect.get("result") != "block":
                     failures.append(Failure(category, f"{name or index} forbidden fields must only appear in blocking fixtures"))
@@ -9785,6 +9883,27 @@ def check_external_orchestrator_interop_fixture_contract(root: Path) -> list[Fai
                     failures.append(Failure(category, f"{name or index} non-Work Item entry must block"))
                 if payload.get("entry_kind") == "implementation_pr" and expect.get("fallback_to") != "work_item":
                     failures.append(Failure(category, f"{name or index} PR-only fixture must fallback to `work_item`"))
+                if payload.get("operation") in {"status_read", "gate_read"}:
+                    if payload.get("source_layer") != "derived_surface":
+                        failures.append(Failure(category, f"{name or index} status/gate reads must consume the derived status surface"))
+                    if payload.get("consumed_as") != "summary":
+                        failures.append(Failure(category, f"{name or index} status/gate reads must be consumed as summary, not authored truth"))
+                    if payload.get("operation") == "status_read":
+                        status_fields = payload.get("status_fields")
+                        required_status_fields = {"result", "current_gate", "classifications", "missing_inputs", "head_binding", "gate_chain", "provenance"}
+                        if not isinstance(status_fields, list) or not required_status_fields.issubset(set(status_fields)):
+                            failures.append(Failure(category, f"{name or index} status_read fixture must reuse status control plane v2 fields"))
+                    if payload.get("operation") == "gate_read":
+                        gate_fields = payload.get("gate_fields")
+                        required_gate_fields = {"name", "result", "classification", "missing_inputs", "fallback_to"}
+                        if expect.get("result") != "block" and (not isinstance(gate_fields, list) or not required_gate_fields.issubset(set(gate_fields))):
+                            failures.append(Failure(category, f"{name or index} gate_read fixture must reuse the existing gate chain fields"))
+                if name == "scheduler-private-fallback-block" and expect.get("fallback_to") != "current_checkpoint":
+                    failures.append(Failure(category, "scheduler-private fallback fixture must fallback to `current_checkpoint`"))
+                if name == "scheduler-private-fallback-block":
+                    entry_fallback = entry.get("fallback_to") if isinstance(entry, dict) else None
+                    if entry_fallback in loom_fallbacks or payload.get("fallback_to") in loom_fallbacks:
+                        failures.append(Failure(category, "scheduler-private fallback fixture must prove a private fallback is blocked"))
 
     missing = sorted(required_names - seen_names)
     if missing:
