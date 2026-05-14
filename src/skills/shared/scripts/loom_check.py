@@ -12513,6 +12513,26 @@ def check_hook_envelope_contract(root: Path) -> list[Failure]:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
+    def sha256_file_local(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def write_shadow_evidence_local(target: Path, evidence: str, value_key: str, value: str, source: str) -> None:
+        source_path = target / source
+        if not source_path.exists():
+            write_json_local(source_path, {value_key: value})
+        write_json_local(
+            target / evidence,
+            {
+                value_key: value,
+                "source_files": [source],
+                "source_sha256": {source: sha256_file_local(source_path)},
+            },
+        )
+
     docs = {
         "docs/methodology/harness/hook-envelope-contract.md": [
             "loom-hook-envelope/v1",
