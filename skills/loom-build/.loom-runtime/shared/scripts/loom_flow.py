@@ -113,7 +113,10 @@ REVIEW_FINDING_SEVERITIES = {"warn", "block"}
 REVIEW_FINDING_DISPOSITION_STATUSES = {"accepted", "rejected", "deferred"}
 DEFAULT_REVIEW_ENGINE = "codex"
 DEFAULT_REVIEW_ADAPTER = "loom/default-codex"
-CODEX_APP_REVIEW_SHADOW_ADAPTER = "loom/codex-app-review"
+CODEX_APP_REVIEW_ADAPTER = "loom/codex-app-review"
+CODEX_APP_REVIEW_ENGINE = "codex-app-review"
+CODEX_APP_REVIEW_SHADOW_ADAPTER = CODEX_APP_REVIEW_ADAPTER
+AUTHORITATIVE_REVIEW_ADAPTERS = {DEFAULT_REVIEW_ADAPTER, CODEX_APP_REVIEW_ADAPTER}
 SHADOW_REVIEW_ADAPTERS = {CODEX_APP_REVIEW_SHADOW_ADAPTER}
 DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS = 120
 REVIEW_ENGINE_PROFILE_SCHEMA = "loom-review-engine-profile/v1"
@@ -444,9 +447,32 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     review.add_argument("--reviewer", help="Reviewer identity")
     review.add_argument("--fallback-to", choices=("admission", "build", "merge"))
     review.add_argument("--findings-file", help="Optional findings JSON path relative to the target root")
-    review.add_argument("--engine-adapter", help="Optional review engine adapter identifier consumed by this record")
+    review.add_argument(
+        "--engine-adapter",
+        choices=tuple(sorted(AUTHORITATIVE_REVIEW_ADAPTERS)),
+        help=(
+            "Optional authoritative review engine adapter for review run/record. "
+            "Default review run remains loom/default-codex."
+        ),
+    )
     review.add_argument("--engine-evidence", help="Optional review engine evidence path relative to the target root")
     review.add_argument("--normalized-findings", help="Optional normalized findings path relative to the target root")
+    review.add_argument(
+        "--codex-app-review-app-server",
+        help="Required explicit app-server/session locator when --engine-adapter loom/codex-app-review is authoritative.",
+    )
+    review.add_argument(
+        "--codex-app-review-thread-id",
+        help="Required Codex App thread id when --engine-adapter loom/codex-app-review is authoritative.",
+    )
+    review.add_argument(
+        "--codex-app-review-cwd",
+        help="Required Codex App thread cwd proof when --engine-adapter loom/codex-app-review is authoritative.",
+    )
+    review.add_argument(
+        "--codex-app-review-raw-file",
+        help="Required repo-relative Codex App normalized review output captured from review/start or same-thread normalization.",
+    )
     review.add_argument("--engine-profile", choices=tuple(sorted(REVIEW_ENGINE_PROFILE_IDS)), help="Optional deterministic review engine profile override for review run")
     review.add_argument("--engine-model", help="Optional review engine model override for review run")
     review.add_argument("--engine-reasoning", choices=tuple(sorted(REVIEW_ENGINE_REASONING_EFFORTS)), help="Optional review engine reasoning effort override for review run")
@@ -7034,11 +7060,14 @@ def resolve_review_engine_profile(
     context: dict[str, Any],
     review_kind: str,
     *,
+    adapter: str = DEFAULT_REVIEW_ADAPTER,
     requested_profile: str | None = None,
     requested_model: str | None = None,
     requested_reasoning: str | None = None,
     override_reason: str | None = None,
 ) -> tuple[dict[str, Any] | None, list[str]]:
+    if adapter not in AUTHORITATIVE_REVIEW_ADAPTERS:
+        return None, [f"unsupported authoritative review adapter: {adapter}"]
     selected_profile, selection_reason = review_engine_profile_selection(context, review_kind)
     if requested_profile:
         selected_profile = requested_profile
@@ -7061,8 +7090,8 @@ def resolve_review_engine_profile(
     resolved = {
         "schema_version": REVIEW_ENGINE_PROFILE_SCHEMA,
         "profile_id": base_profile["profile_id"],
-        "adapter": DEFAULT_REVIEW_ADAPTER,
-        "engine": DEFAULT_REVIEW_ENGINE,
+        "adapter": adapter,
+        "engine": CODEX_APP_REVIEW_ENGINE if adapter == CODEX_APP_REVIEW_ADAPTER else DEFAULT_REVIEW_ENGINE,
         "model": base_profile["model"],
         "reasoning_effort": base_profile["reasoning_effort"],
         "timeout_seconds": int(base_profile["timeout_seconds"]),
@@ -7158,6 +7187,20 @@ def normalize_codex_app_review_text(raw_text: str, *, relative: str) -> tuple[di
             }
         ],
     }, []
+
+
+def normalize_authoritative_codex_app_review_text(raw_text: str, *, relative: str) -> tuple[dict[str, Any] | None, list[str]]:
+    text = raw_text.strip()
+    if not text:
+        return None, [f"Codex App authoritative review output `{relative}` is empty"]
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        return None, [f"Codex App authoritative review output `{relative}` must be normalized JSON: {exc}"]
+    normalized, errors = normalize_engine_review_result(parsed, relative=relative)
+    if errors or normalized is None:
+        return None, errors
+    return normalized, []
 
 
 def shadow_adapter_slug(adapter: str) -> str:
@@ -7345,6 +7388,232 @@ def run_codex_app_review_shadow_adapter(
         "evidence": evidence,
         "decision": normalized["decision"],
         "parity_diff": parity_diff,
+    }
+
+
+def run_codex_app_review_authoritative_adapter(
+    context: dict[str, Any],
+    build_payload: dict[str, Any],
+    review_path: str,
+    engine_profile: dict[str, Any],
+    *,
+    review_kind: str,
+    app_server: str | None,
+    thread_id: str | None,
+    thread_cwd: str | None,
+    raw_file: str | None,
+) -> dict[str, Any]:
+    reviewed_head = git_head_sha(context["target_root"]) or "unknown-head"
+    runtime_root = review_runtime_root(context, reviewed_head)
+    raw_path = runtime_root / "engine-result.json"
+    findings_path = runtime_root / "normalized-findings.json"
+    metadata_path = runtime_root / "engine-metadata.json"
+    context_pack_path = runtime_root / "context-pack.json"
+    instructions_path = runtime_root / "prompt.txt"
+    context_pack = build_review_context_pack(context, review_path)
+    evidence = {
+        "runtime_root": relative_to_root(runtime_root, context["target_root"]),
+        "prompt": relative_to_root(instructions_path, context["target_root"]),
+        "raw_result": relative_to_root(raw_path, context["target_root"]),
+        "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+        "metadata": relative_to_root(metadata_path, context["target_root"]),
+        "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+    }
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    write_json_file(context_pack_path, context_pack)
+    instructions_path.write_text(
+        build_default_review_prompt(
+            context=context,
+            build_payload=build_payload,
+            runtime_fields=runtime_evidence_from_report(context["report"])[0],
+            review_path=review_path,
+            context_pack=context_pack,
+        ),
+        encoding="utf-8",
+    )
+
+    missing_inputs: list[str] = []
+    for label, value in (
+        ("--codex-app-review-app-server", app_server),
+        ("--codex-app-review-thread-id", thread_id),
+        ("--codex-app-review-cwd", thread_cwd),
+        ("--codex-app-review-raw-file", raw_file),
+    ):
+        if not isinstance(value, str) or not value.strip():
+            missing_inputs.append(label)
+
+    cwd_relative: str | None = None
+    if isinstance(thread_cwd, str) and thread_cwd.strip():
+        try:
+            cwd_path = Path(thread_cwd).expanduser().resolve()
+        except OSError as exc:
+            missing_inputs.append(f"Codex App review cwd could not be resolved: {exc}")
+        else:
+            if cwd_path != context["target_root"]:
+                missing_inputs.append(
+                    f"Codex App review cwd `{cwd_path}` does not match target root `{context['target_root']}`"
+                )
+            else:
+                cwd_relative = relative_to_root(cwd_path, context["target_root"])
+
+    source_path: Path | None = None
+    source_relative: str | None = None
+    if isinstance(raw_file, str) and raw_file.strip():
+        source_path, source_errors = resolve_repo_relative_path(
+            context["target_root"],
+            raw_file,
+            label="Codex App authoritative review raw file",
+        )
+        missing_inputs.extend(source_errors)
+        if source_path is not None:
+            source_relative = relative_to_root(source_path, context["target_root"])
+
+    if missing_inputs:
+        write_json_file(
+            metadata_path,
+            {
+                "schema_version": "loom-review-engine-metadata/v1",
+                "engine": CODEX_APP_REVIEW_ENGINE,
+                "adapter": CODEX_APP_REVIEW_ADAPTER,
+                "profile": engine_profile,
+                "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+                "result": "block",
+                "failure_reason": "runtime_conflict",
+                "summary": "Codex App authoritative review adapter is missing required live binding proof.",
+                "missing_inputs": missing_inputs,
+                "reviewed_head": reviewed_head,
+                "app_server": app_server,
+                "thread_id": thread_id,
+                "thread_cwd": cwd_relative or thread_cwd,
+            },
+        )
+        return {
+            "result": "block",
+            "summary": "Codex App authoritative review adapter failed closed before a formal review record could be authored.",
+            "missing_inputs": missing_inputs,
+            "fallback_to": None,
+            "engine": {
+                "engine": CODEX_APP_REVIEW_ENGINE,
+                "adapter": CODEX_APP_REVIEW_ADAPTER,
+                "profile": engine_profile,
+                "result": "block",
+                "failure_reason": "runtime_conflict",
+                "reviewed_head": reviewed_head,
+                "evidence": evidence,
+            },
+            "engine_metadata": {
+                "app_server": app_server,
+                "thread_id": thread_id,
+                "thread_cwd": cwd_relative or thread_cwd,
+                "raw_source": source_relative,
+            },
+        }
+
+    try:
+        raw_text = source_path.read_text(encoding="utf-8") if source_path is not None else ""
+    except OSError as exc:
+        raw_text = ""
+        normalization_errors = [f"Codex App authoritative review raw file: {exc.strerror or exc}"]
+        normalized = None
+    else:
+        normalized, normalization_errors = normalize_authoritative_codex_app_review_text(
+            raw_text,
+            relative=source_relative or str(raw_file),
+        )
+
+    if normalization_errors or normalized is None:
+        if raw_text:
+            raw_path.write_text(raw_text, encoding="utf-8")
+        write_json_file(
+            metadata_path,
+            {
+                "schema_version": "loom-review-engine-metadata/v1",
+                "engine": CODEX_APP_REVIEW_ENGINE,
+                "adapter": CODEX_APP_REVIEW_ADAPTER,
+                "profile": engine_profile,
+                "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+                "result": "block",
+                "failure_reason": "schema_drift",
+                "summary": "Codex App authoritative review output did not satisfy the Loom review result schema.",
+                "errors": normalization_errors,
+                "reviewed_head": reviewed_head,
+                "app_server": app_server,
+                "thread_id": thread_id,
+                "thread_cwd": cwd_relative,
+                "raw_source": source_relative,
+            },
+        )
+        return {
+            "result": "block",
+            "summary": "Codex App authoritative review output could not be normalized safely.",
+            "missing_inputs": normalization_errors,
+            "fallback_to": None,
+            "engine": {
+                "engine": CODEX_APP_REVIEW_ENGINE,
+                "adapter": CODEX_APP_REVIEW_ADAPTER,
+                "profile": engine_profile,
+                "result": "block",
+                "failure_reason": "schema_drift",
+                "reviewed_head": reviewed_head,
+                "evidence": evidence,
+            },
+            "engine_metadata": {
+                "app_server": app_server,
+                "thread_id": thread_id,
+                "thread_cwd": cwd_relative,
+                "raw_source": source_relative,
+            },
+        }
+
+    raw_path.write_text(raw_text, encoding="utf-8")
+    write_json_file(findings_path, {"findings": normalized["findings"]})
+    metadata = {
+        "schema_version": "loom-review-engine-metadata/v1",
+        "engine": CODEX_APP_REVIEW_ENGINE,
+        "adapter": CODEX_APP_REVIEW_ADAPTER,
+        "profile": engine_profile,
+        "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+        "result": "pass",
+        "reviewed_head": reviewed_head,
+        "decision": normalized["decision"],
+        "summary": normalized["summary"],
+        "kind": review_kind,
+        "validation_summary": context["latest_validation_summary"],
+        "app_server": app_server,
+        "thread_id": thread_id,
+        "thread_cwd": cwd_relative,
+        "raw_source": source_relative,
+        "authority_boundary": "normalized review_record_input only; raw Codex App output remains runtime evidence",
+    }
+    write_json_file(metadata_path, metadata)
+    return {
+        "result": "pass",
+        "summary": "Codex App authoritative review adapter produced a Loom-normalized formal review draft.",
+        "missing_inputs": [],
+        "fallback_to": None,
+        "engine": {
+            "engine": CODEX_APP_REVIEW_ENGINE,
+            "adapter": CODEX_APP_REVIEW_ADAPTER,
+            "profile": engine_profile,
+            "result": "pass",
+            "failure_reason": None,
+            "reviewed_head": reviewed_head,
+            "evidence": evidence,
+        },
+        "engine_metadata": metadata,
+        "review_record_input": {
+            "decision": normalized["decision"],
+            "summary": normalized["summary"],
+            "reviewer": CODEX_APP_REVIEW_ADAPTER,
+            "kind": review_kind,
+            "findings_file": relative_to_root(findings_path, context["target_root"]),
+            "engine_adapter": CODEX_APP_REVIEW_ADAPTER,
+            "engine_evidence": relative_to_root(raw_path, context["target_root"]),
+            "engine_profile": engine_profile,
+            "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+            "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+            "budget_risk": context_pack.get("budget_risk"),
+        },
     }
 
 
@@ -11523,9 +11792,11 @@ def handle_review(args: argparse.Namespace) -> int:
     if args.operation == "run":
         flow_operation = "spec-review" if inferred_spec_review else "review"
         review_kind = "spec_review" if inferred_spec_review else implementation_review_kind(context)
+        requested_engine_adapter = args.engine_adapter or DEFAULT_REVIEW_ADAPTER
         engine_profile, engine_profile_errors = resolve_review_engine_profile(
             context,
             review_kind,
+            adapter=requested_engine_adapter,
             requested_profile=args.engine_profile,
             requested_model=args.engine_model,
             requested_reasoning=args.engine_reasoning,
@@ -11548,8 +11819,8 @@ def handle_review(args: argparse.Namespace) -> int:
                     "missing_inputs": engine_profile_errors,
                     "fallback_to": None,
                     "engine": {
-                        "engine": DEFAULT_REVIEW_ENGINE,
-                        "adapter": DEFAULT_REVIEW_ADAPTER,
+                        "engine": CODEX_APP_REVIEW_ENGINE if requested_engine_adapter == CODEX_APP_REVIEW_ADAPTER else DEFAULT_REVIEW_ENGINE,
+                        "adapter": requested_engine_adapter,
                         "profile": None,
                         "result": "not_run",
                         "failure_reason": "runtime_conflict",
@@ -11588,8 +11859,8 @@ def handle_review(args: argparse.Namespace) -> int:
                     "repo_specific_requirements": flow_payload.get("repo_specific_requirements"),
                     "current_checkpoint": flow_payload.get("current_checkpoint"),
                     "engine": {
-                        "engine": DEFAULT_REVIEW_ENGINE,
-                        "adapter": DEFAULT_REVIEW_ADAPTER,
+                        "engine": CODEX_APP_REVIEW_ENGINE if requested_engine_adapter == CODEX_APP_REVIEW_ADAPTER else DEFAULT_REVIEW_ENGINE,
+                        "adapter": requested_engine_adapter,
                         "profile": engine_profile,
                         "result": "not_run",
                         "failure_reason": None,
@@ -11601,13 +11872,26 @@ def handle_review(args: argparse.Namespace) -> int:
             )
 
         build_payload = flow_payload["build_checkpoint"]
-        engine_payload = run_default_review_engine(
-            context,
-            build_payload,
-            review_path,
-            engine_profile,
-            review_kind=review_kind,
-        )
+        if requested_engine_adapter == CODEX_APP_REVIEW_ADAPTER:
+            engine_payload = run_codex_app_review_authoritative_adapter(
+                context,
+                build_payload,
+                review_path,
+                engine_profile,
+                review_kind=review_kind,
+                app_server=args.codex_app_review_app_server,
+                thread_id=args.codex_app_review_thread_id,
+                thread_cwd=args.codex_app_review_cwd,
+                raw_file=args.codex_app_review_raw_file,
+            )
+        else:
+            engine_payload = run_default_review_engine(
+                context,
+                build_payload,
+                review_path,
+                engine_profile,
+                review_kind=review_kind,
+            )
         shadow_engine_payload = run_codex_app_review_shadow_adapter(
             context,
             adapter=args.shadow_engine_adapter,
@@ -11630,7 +11914,7 @@ def handle_review(args: argparse.Namespace) -> int:
         summary = (
             engine_payload["summary"]
             if result == "pass"
-            else "default review engine failed closed; record any formal review conclusion through the single review record."
+            else f"{requested_engine_adapter} review engine failed closed; record any formal review conclusion through the single review record."
         )
         return emit(
             {
@@ -11652,6 +11936,7 @@ def handle_review(args: argparse.Namespace) -> int:
                 "repo_specific_requirements": flow_payload.get("repo_specific_requirements"),
                 "current_checkpoint": flow_payload.get("current_checkpoint"),
                 "engine": engine_payload["engine"],
+                **({"engine_metadata": engine_payload["engine_metadata"]} if isinstance(engine_payload.get("engine_metadata"), dict) else {}),
                 **({"shadow_engine": shadow_engine_payload} if isinstance(shadow_engine_payload, dict) else {}),
                 "manual_review": manual_review,
                 **({"review_record_input": review_record_input} if isinstance(review_record_input, dict) else {}),

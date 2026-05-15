@@ -42,7 +42,9 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
 - `--blocking-issue` / `--follow-up` 仅保留兼容 authored 入口，不得与 `--findings-file` 混用
 - 无论通过哪种入口，最终都只允许写回单一 `review_entry` 指向的 review record
 
-这个 skill 先用 `flow review` 读取正式 review 的机械基线，再用 `review run` 触发默认 Codex reviewer 并生成 Loom-normalized findings，最后用 `review record` 把审查结论写成可消费载体。
+这个 skill 先用 `flow review` 读取正式 review 的机械基线，再用 `review run` 触发默认 Codex reviewer 或显式 opt-in authoritative adapter 并生成 Loom-normalized findings，最后用 `review record` 把审查结论写成可消费载体。
+
+默认 `review run` 必须保持 `loom/default-codex` + `codex exec --output-schema`。只有明确传入 `--engine-adapter loom/codex-app-review`，并同时提供 app-server/session locator、thread id、cwd proof 和 normalized raw review output 时，Codex App review 才能作为 authoritative adapter 进入；缺任一 proof 或 schema normalization 失败时必须 fail closed 并回到 manual review 写同一 review record。
 
 安装态或 repo-local 开发态可以把这些 `loom ...` 动作映射到底层 `scripts/...` 或共享 runtime carrier；但 `loom-review` 自身的场景合同、进入时机和输出责任保持不变。
 
@@ -52,7 +54,7 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
 
 1. 运行 `flow review`，确认当前事项是否具备进入正式审查的最小条件
 2. 若 `flow review` 非 `pass`，直接返回 `block` 或 `fallback`，不伪造审查结论
-3. 运行 `review run`，用默认 Codex adapter 执行 formal review，并把 raw output 收敛为 Loom evidence 与 normalized findings
+3. 运行 `review run`，用默认 Codex adapter 或显式 opt-in Codex App authoritative adapter 执行 formal review，并把 raw output 收敛为 Loom evidence 与 normalized findings
 4. 若 `review run` fail-closed，显式回到 manual review 写回同一 `review record`
 5. 用 `review record` 写入正式 review 结论，让 `merge gate` 可机械消费
 

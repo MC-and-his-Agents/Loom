@@ -47,15 +47,15 @@ Loom 把 review 分成四层：
 其中：
 
 - `flow review` 固定保持只读，不触发 engine，也不产生副作用
-- `review run` 只负责运行默认 reviewer、落盘 evidence、生成 normalized findings，并显式 fail-closed
+- `review run` 只负责运行默认 reviewer 或显式 opt-in authoritative adapter、落盘 evidence、生成 normalized findings，并显式 fail-closed
 - `review record` 仍只写入单一 `review_entry` 指向的 JSON
 - 结构化审查结论可通过 `--findings-file <path>` 写入同一 review record
 - `--blocking-issue` / `--follow-up` 只保留兼容 authored 入口，不得与 `--findings-file` 混用
 
-默认 engine 当前固定为 Codex。
+默认 engine 当前固定为 `loom/default-codex`，能力来源是 `codex exec --output-schema`。
 若 engine 不可用、schema 漂移、runtime 冲突或运行后改动了 tracked repo 内容，`review run` 必须返回 `block`，并指向 manual review 继续写回同一 `review record`；不得把这类失败伪装成 gate fallback。
 
-阶段 1 的 Codex App review adapter 只能作为 shadow evidence producer 进入：
+Codex App review adapter 有两种显式入口，默认均不启用：
 
 - 触发必须显式，例如 `review run --shadow-engine-adapter loom/codex-app-review`
 - 默认 `loom/default-codex` / `codex exec --output-schema` 路径不得改变
@@ -63,17 +63,22 @@ Loom 把 review 分成四层：
 - shadow 输出可以包含 raw review、normalized findings、metadata 与 parity diff
 - shadow 输出不得 author `review_entry`，不得替代 `review_record_input.engine_adapter`
 - shadow unavailable / failure 不得阻断 default review run，也不得被 merge-ready 直接消费
+- Stage 2 authoritative opt-in 必须显式选择 `review run --engine-adapter loom/codex-app-review`
+- authoritative Codex App path 必须提供 app-server/session locator、thread id、thread cwd proof 和 repo-relative normalized raw review output
+- thread cwd proof 必须等于 target root；缺 app-server、thread、cwd、raw output 或 schema proof 时必须 fail closed
+- authoritative Codex App raw output 只作为 runtime evidence 保留；只有归一化后的 `review_record_input` 可被 `review record` 写入单一 authored truth
+- authoritative Codex App runtime files 使用与默认 engine 相同的 `.loom/runtime/review/<item>/<head>/engine-result.json`、`normalized-findings.json`、`engine-metadata.json` 和 `context-pack.json` 边界，保证历史 review context pack 可以继续读取 prior findings
 
 成熟既有仓库可以通过 repo companion 的 `review_instruction_locators` 声明 spec review 与 implementation review 的 repo-owned instruction 入口。正式 review 必须先消费这些 locator；缺失、不可读或越界时 fail closed，不得猜测 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 路径。
 
 ### 2.1 Review engine profile contract
 
-`review run` 在调用 Codex-backed reviewer 前必须解析稳定 profile，不得继承本机 `~/.codex/config.toml` 的默认 model 或 reasoning effort。
+`review run` 在调用 Codex-backed reviewer 或 Codex App authoritative adapter 前必须解析稳定 profile，不得继承本机 `~/.codex/config.toml` 的默认 model 或 reasoning effort。
 
 Resolved profile 的 schema 为 `loom-review-engine-profile/v1`，至少包含：
 
-- `adapter`: 当前固定为 `loom/default-codex`
-- `engine`: 当前固定为 `codex`
+- `adapter`: `loom/default-codex` 或显式 opt-in 的 `loom/codex-app-review`
+- `engine`: `codex` 或显式 opt-in 的 `codex-app-review`
 - `profile_id`: `default`、`high-risk`、`spec-review` 或 `repeated-blocker`
 - `model`: 显式传给 engine 的 model
 - `reasoning_effort`: `low`、`medium`、`high` 或 `xhigh`
