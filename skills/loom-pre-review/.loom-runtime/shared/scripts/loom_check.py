@@ -5593,7 +5593,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         review_target = Path(tmp) / "new-project"
         fake_bin = Path(tmp) / "bin"
         fake_bin.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(root, source_snapshot, ignore=shutil.ignore_patterns(".git", ".DS_Store", "__pycache__"))
+        shutil.copytree(root, source_snapshot, ignore=shutil.ignore_patterns(".git", ".DS_Store", "__pycache__", ".agents"))
 
         def prepare_review_target(target: Path, label: str) -> bool:
             shutil.copytree(source_snapshot, target)
@@ -6801,7 +6801,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             write_fake_codex(fake_bin / "codex", mode="success")
             installed_review_env = prepend_path_env(fake_bin)
             shutil.copytree(root / "skills", install_root)
-            shutil.copytree(root, source_snapshot, ignore=shutil.ignore_patterns(".git", ".DS_Store", "__pycache__"))
+            shutil.copytree(root, source_snapshot, ignore=shutil.ignore_patterns(".git", ".DS_Store", "__pycache__", ".agents"))
 
             def prepare_target(target: Path) -> tuple[str | None, list[str]]:
                 errors: list[str] = []
