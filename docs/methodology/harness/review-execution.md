@@ -53,6 +53,15 @@ Loom 把 review 分成三层：
 默认 engine 当前固定为 Codex。
 若 engine 不可用、schema 漂移、runtime 冲突或运行后改动了 tracked repo 内容，`review run` 必须返回 `block`，并指向 manual review 继续写回同一 `review record`；不得把这类失败伪装成 checkpoint fallback。
 
+阶段 1 的 Codex App review adapter 只能作为 shadow evidence producer 进入：
+
+- 触发必须显式，例如 `review run --shadow-engine-adapter loom/codex-app-review`
+- 默认 `loom/default-codex` / `codex exec --output-schema` 路径不得改变
+- shadow evidence 只能写入 `.loom/runtime/review/<item>/<head>/shadow/<adapter>/`
+- shadow 输出可以包含 raw review、normalized findings、metadata 与 parity diff
+- shadow 输出不得 author `review_entry`，不得替代 `review_record_input.engine_adapter`
+- shadow unavailable / failure 不得阻断 default review run，也不得被 merge-ready 直接消费
+
 成熟既有仓库可以通过 repo companion 的 `review_instruction_locators` 声明 spec review 与 implementation review 的 repo-owned instruction 入口。正式 review 必须先消费这些 locator；缺失、不可读或越界时 fail closed，不得猜测 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 路径。
 
 ### 2.1 Review engine profile contract

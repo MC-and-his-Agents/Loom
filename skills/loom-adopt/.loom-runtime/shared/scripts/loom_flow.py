@@ -113,6 +113,8 @@ REVIEW_FINDING_SEVERITIES = {"warn", "block"}
 REVIEW_FINDING_DISPOSITION_STATUSES = {"accepted", "rejected", "deferred"}
 DEFAULT_REVIEW_ENGINE = "codex"
 DEFAULT_REVIEW_ADAPTER = "loom/default-codex"
+CODEX_APP_REVIEW_SHADOW_ADAPTER = "loom/codex-app-review"
+SHADOW_REVIEW_ADAPTERS = {CODEX_APP_REVIEW_SHADOW_ADAPTER}
 DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS = 120
 REVIEW_ENGINE_PROFILE_SCHEMA = "loom-review-engine-profile/v1"
 REVIEW_ENGINE_PROFILE_IDS = {"default", "high-risk", "spec-review", "repeated-blocker"}
@@ -449,6 +451,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     review.add_argument("--engine-model", help="Optional review engine model override for review run")
     review.add_argument("--engine-reasoning", choices=tuple(sorted(REVIEW_ENGINE_REASONING_EFFORTS)), help="Optional review engine reasoning effort override for review run")
     review.add_argument("--engine-override-reason", help="Required reason when overriding review engine profile, model, or reasoning")
+    review.add_argument(
+        "--shadow-engine-adapter",
+        choices=tuple(sorted(SHADOW_REVIEW_ADAPTERS)),
+        help="Optional shadow-only review adapter. Does not replace the default authoritative review engine.",
+    )
+    review.add_argument(
+        "--shadow-review-raw-file",
+        help="Optional repo-relative captured Codex App review text to normalize as shadow evidence.",
+    )
     review.add_argument("--blocking-issue", action="append", default=[], help="Blocking review finding")
     review.add_argument("--follow-up", action="append", default=[], help="Follow-up item recorded by the review")
 
@@ -7115,6 +7126,228 @@ def normalize_engine_review_result(payload: Any, *, relative: str) -> tuple[dict
     }, []
 
 
+def normalize_codex_app_review_text(raw_text: str, *, relative: str) -> tuple[dict[str, Any] | None, list[str]]:
+    text = raw_text.strip()
+    if not text:
+        return None, [f"Codex App review raw output `{relative}` is empty"]
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, dict):
+        normalized, errors = normalize_engine_review_result(parsed, relative=relative)
+        if normalized is not None and not errors:
+            return normalized, []
+
+    first_line = next((line.strip() for line in text.splitlines() if line.strip()), "")
+    summary = first_line[:240] if first_line else "Codex App review returned raw text."
+    return {
+        "decision": "fallback",
+        "summary": "Codex App review raw output was captured as shadow evidence and normalized for comparison only.",
+        "findings": [
+            {
+                "id": "codex-app-review-raw-output",
+                "summary": summary,
+                "severity": "warn",
+                "rebuttal": None,
+                "disposition": {
+                    "status": "deferred",
+                    "summary": "Shadow-only finding; formal disposition must still be authored through the single review record.",
+                },
+                "details": text[:4000],
+            }
+        ],
+    }, []
+
+
+def shadow_adapter_slug(adapter: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]", "-", adapter).strip("-") or "unknown-adapter"
+
+
+def compare_review_findings(default_findings: list[dict[str, Any]], shadow_findings: list[dict[str, Any]]) -> dict[str, Any]:
+    default_ids = {str(finding.get("id")) for finding in default_findings if isinstance(finding, dict) and finding.get("id")}
+    shadow_ids = {str(finding.get("id")) for finding in shadow_findings if isinstance(finding, dict) and finding.get("id")}
+    shared = sorted(default_ids & shadow_ids)
+    default_only = sorted(default_ids - shadow_ids)
+    shadow_only = sorted(shadow_ids - default_ids)
+    result = "match" if not default_only and not shadow_only else "difference"
+    return {
+        "schema_version": "loom-review-shadow-diff/v1",
+        "result": result,
+        "summary": (
+            "Shadow review findings match the default review finding ids."
+            if result == "match"
+            else "Shadow review findings differ from the default review finding ids."
+        ),
+        "default_finding_ids": sorted(default_ids),
+        "shadow_finding_ids": sorted(shadow_ids),
+        "shared_finding_ids": shared,
+        "default_only_finding_ids": default_only,
+        "shadow_only_finding_ids": shadow_only,
+    }
+
+
+def run_codex_app_review_shadow_adapter(
+    context: dict[str, Any],
+    *,
+    adapter: str | None,
+    raw_file: str | None,
+    default_engine_payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not adapter:
+        return None
+    reviewed_head = git_head_sha(context["target_root"]) or "unknown-head"
+    runtime_root = review_runtime_root(context, reviewed_head)
+    shadow_root = runtime_root / "shadow" / shadow_adapter_slug(adapter)
+    raw_path = shadow_root / "raw-review.txt"
+    findings_path = shadow_root / "normalized-findings.json"
+    metadata_path = shadow_root / "metadata.json"
+    diff_path = shadow_root / "parity-diff.json"
+    evidence = {
+        "runtime_root": relative_to_root(shadow_root, context["target_root"]),
+        "raw_review": relative_to_root(raw_path, context["target_root"]),
+        "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+        "metadata": relative_to_root(metadata_path, context["target_root"]),
+        "parity_diff": relative_to_root(diff_path, context["target_root"]),
+    }
+
+    if adapter != CODEX_APP_REVIEW_SHADOW_ADAPTER:
+        return {
+            "adapter": adapter,
+            "result": "unavailable",
+            "summary": "Unsupported shadow review adapter.",
+            "missing_inputs": [f"unsupported shadow review adapter: {adapter}"],
+            "blocking": False,
+            "authoritative": False,
+            "evidence": evidence,
+        }
+
+    if not raw_file:
+        metadata = {
+            "schema_version": "loom-review-shadow-metadata/v1",
+            "adapter": adapter,
+            "result": "unavailable",
+            "reviewed_head": reviewed_head,
+            "summary": "Codex App review shadow adapter requires captured raw review text or a future live app-server runner.",
+            "missing_inputs": ["--shadow-review-raw-file"],
+            "authoritative": False,
+        }
+        shadow_root.mkdir(parents=True, exist_ok=True)
+        write_json_file(metadata_path, metadata)
+        return {
+            "adapter": adapter,
+            "result": "unavailable",
+            "summary": "Codex App review shadow adapter was requested but no raw review evidence was provided.",
+            "missing_inputs": ["--shadow-review-raw-file"],
+            "blocking": False,
+            "authoritative": False,
+            "evidence": evidence,
+        }
+
+    source_path, source_errors = resolve_repo_relative_path(context["target_root"], raw_file, label="shadow review raw file")
+    if source_errors or source_path is None:
+        shadow_root.mkdir(parents=True, exist_ok=True)
+        write_json_file(
+            metadata_path,
+            {
+                "schema_version": "loom-review-shadow-metadata/v1",
+                "adapter": adapter,
+                "result": "block",
+                "reviewed_head": reviewed_head,
+                "missing_inputs": source_errors,
+                "authoritative": False,
+            },
+        )
+        return {
+            "adapter": adapter,
+            "result": "block",
+            "summary": "Codex App review shadow adapter refused an unsafe raw review locator.",
+            "missing_inputs": source_errors,
+            "blocking": False,
+            "authoritative": False,
+            "evidence": evidence,
+        }
+
+    try:
+        raw_text = source_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return {
+            "adapter": adapter,
+            "result": "block",
+            "summary": "Codex App review shadow adapter could not read raw review evidence.",
+            "missing_inputs": [f"shadow review raw file: {exc.strerror or exc}"],
+            "blocking": False,
+            "authoritative": False,
+            "evidence": evidence,
+        }
+
+    shadow_root.mkdir(parents=True, exist_ok=True)
+    raw_path.write_text(raw_text, encoding="utf-8")
+    normalized, normalization_errors = normalize_codex_app_review_text(
+        raw_text,
+        relative=relative_to_root(source_path, context["target_root"]),
+    )
+    if normalization_errors or normalized is None:
+        write_json_file(
+            metadata_path,
+            {
+                "schema_version": "loom-review-shadow-metadata/v1",
+                "adapter": adapter,
+                "result": "block",
+                "reviewed_head": reviewed_head,
+                "missing_inputs": normalization_errors,
+                "raw_source": relative_to_root(source_path, context["target_root"]),
+                "authoritative": False,
+            },
+        )
+        return {
+            "adapter": adapter,
+            "result": "block",
+            "summary": "Codex App review shadow output could not be normalized safely.",
+            "missing_inputs": normalization_errors,
+            "blocking": False,
+            "authoritative": False,
+            "evidence": evidence,
+        }
+
+    write_json_file(findings_path, {"findings": normalized["findings"]})
+    default_findings: list[dict[str, Any]] = []
+    review_record_input = default_engine_payload.get("review_record_input")
+    if isinstance(review_record_input, dict):
+        default_findings_file = review_record_input.get("findings_file")
+        if isinstance(default_findings_file, str):
+            loaded_findings, _ = load_findings_file(context["target_root"], default_findings_file)
+            if isinstance(loaded_findings, list):
+                default_findings = loaded_findings
+    parity_diff = compare_review_findings(default_findings, normalized["findings"])
+    write_json_file(diff_path, parity_diff)
+    write_json_file(
+        metadata_path,
+        {
+            "schema_version": "loom-review-shadow-metadata/v1",
+            "adapter": adapter,
+            "result": "pass",
+            "reviewed_head": reviewed_head,
+            "raw_source": relative_to_root(source_path, context["target_root"]),
+            "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+            "parity_diff": relative_to_root(diff_path, context["target_root"]),
+            "authoritative": False,
+            "summary": normalized["summary"],
+        },
+    )
+    return {
+        "adapter": adapter,
+        "result": "pass",
+        "summary": "Codex App review shadow evidence was captured and normalized for comparison only.",
+        "missing_inputs": [],
+        "blocking": False,
+        "authoritative": False,
+        "evidence": evidence,
+        "decision": normalized["decision"],
+        "parity_diff": parity_diff,
+    }
+
+
 def manual_review_payload(
     *,
     context: dict[str, Any],
@@ -11375,6 +11608,12 @@ def handle_review(args: argparse.Namespace) -> int:
             engine_profile,
             review_kind=review_kind,
         )
+        shadow_engine_payload = run_codex_app_review_shadow_adapter(
+            context,
+            adapter=args.shadow_engine_adapter,
+            raw_file=args.shadow_review_raw_file,
+            default_engine_payload=engine_payload,
+        )
         review_record_input = engine_payload.get("review_record_input")
         findings_file = (
             review_record_input.get("findings_file")
@@ -11413,6 +11652,7 @@ def handle_review(args: argparse.Namespace) -> int:
                 "repo_specific_requirements": flow_payload.get("repo_specific_requirements"),
                 "current_checkpoint": flow_payload.get("current_checkpoint"),
                 "engine": engine_payload["engine"],
+                **({"shadow_engine": shadow_engine_payload} if isinstance(shadow_engine_payload, dict) else {}),
                 "manual_review": manual_review,
                 **({"review_record_input": review_record_input} if isinstance(review_record_input, dict) else {}),
             }
