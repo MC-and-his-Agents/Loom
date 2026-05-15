@@ -3079,6 +3079,26 @@ def require_review_run_payload(
                 failures.append(Failure(category, f"{context} review_record_input decision must stay within the stable contract"))
             if review_record_input.get("reviewer") != "loom/default-codex":
                 failures.append(Failure(category, f"{context} review_record_input reviewer must stay `loom/default-codex`"))
+    shadow_engine = payload.get("shadow_engine")
+    if shadow_engine is not None:
+        if not isinstance(shadow_engine, dict):
+            failures.append(Failure(category, f"{context} shadow_engine must be an object when present"))
+        else:
+            if shadow_engine.get("adapter") != "loom/codex-app-review":
+                failures.append(Failure(category, f"{context} shadow_engine adapter must stay shadow-only `loom/codex-app-review`"))
+            if shadow_engine.get("result") not in {"pass", "block", "unavailable"}:
+                failures.append(Failure(category, f"{context} shadow_engine result must stay within the stable shadow contract"))
+            if shadow_engine.get("authoritative") is not False:
+                failures.append(Failure(category, f"{context} shadow_engine must declare authoritative=false"))
+            if shadow_engine.get("blocking") is not False:
+                failures.append(Failure(category, f"{context} shadow_engine must not block review or merge-ready"))
+            evidence = shadow_engine.get("evidence")
+            if not isinstance(evidence, dict):
+                failures.append(Failure(category, f"{context} shadow_engine must include runtime evidence locators"))
+            else:
+                for key in ("runtime_root", "raw_review", "normalized_findings", "metadata", "parity_diff"):
+                    if not isinstance(evidence.get(key), str) or not evidence.get(key):
+                        failures.append(Failure(category, f"{context} shadow_engine evidence must include non-empty `{key}`"))
 
 
 def require_runtime_state_payload(
@@ -5716,6 +5736,114 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 )
                 if not any("engine profile" in failure.detail for failure in profile_probe_failures):
                     failures.append(Failure("daily-execution-cli", "`review run` contract check must fail when resolved profile metadata is missing"))
+
+        shadow_target = Path(tmp) / "review-run-shadow"
+        prepare_review_target(shadow_target, "review run shadow adapter")
+        shadow_raw = shadow_target / ".loom/runtime/tmp/codex-app-review-raw.json"
+        shadow_raw.parent.mkdir(parents=True, exist_ok=True)
+        shadow_raw.write_text(
+            json.dumps(
+                {
+                    "decision": "fallback",
+                    "summary": "Codex App reviewer produced shadow-only findings.",
+                    "findings": [
+                        {
+                            "id": "shadow-warn-1",
+                            "summary": "Codex App shadow review noted a comparison-only issue.",
+                            "severity": "warn",
+                            "rebuttal": None,
+                            "disposition": {
+                                "status": "deferred",
+                                "summary": "Shadow evidence must not author the formal review record.",
+                            },
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        write_fake_codex(fake_bin / "codex", mode="success")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(shadow_target),
+                "--item",
+                "INIT-0001",
+                "--shadow-engine-adapter",
+                "loom/codex-app-review",
+                "--shadow-review-raw-file",
+                ".loom/runtime/tmp/codex-app-review-raw.json",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` shadow adapter failed: {error}"))
+        else:
+            require_review_run_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`review run` shadow adapter",
+                payload=payload,
+                expected_result={"pass"},
+            )
+            if isinstance(payload, dict):
+                review_record_input = payload.get("review_record_input") if isinstance(payload.get("review_record_input"), dict) else {}
+                if review_record_input.get("engine_adapter") != "loom/default-codex":
+                    failures.append(Failure("daily-execution-cli", "`review run` shadow adapter must not replace default review_record_input engine adapter"))
+                shadow_engine = payload.get("shadow_engine") if isinstance(payload.get("shadow_engine"), dict) else {}
+                if shadow_engine.get("result") != "pass":
+                    failures.append(Failure("daily-execution-cli", "`review run` shadow adapter must pass when raw review evidence is provided"))
+                evidence = shadow_engine.get("evidence") if isinstance(shadow_engine.get("evidence"), dict) else {}
+                for key in ("raw_review", "normalized_findings", "metadata", "parity_diff"):
+                    value = evidence.get(key)
+                    if not isinstance(value, str) or not (shadow_target / value).exists():
+                        failures.append(Failure("daily-execution-cli", f"`review run` shadow adapter must write {key} evidence"))
+                if shadow_engine.get("authoritative") is not False or shadow_engine.get("blocking") is not False:
+                    failures.append(Failure("daily-execution-cli", "`review run` shadow adapter must stay non-authoritative and non-blocking"))
+
+        shadow_unavailable_target = Path(tmp) / "review-run-shadow-unavailable"
+        prepare_review_target(shadow_unavailable_target, "review run shadow unavailable")
+        write_fake_codex(fake_bin / "codex", mode="success")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(shadow_unavailable_target),
+                "--item",
+                "INIT-0001",
+                "--shadow-engine-adapter",
+                "loom/codex-app-review",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` shadow unavailable failed: {error}"))
+        else:
+            require_review_run_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`review run` shadow unavailable",
+                payload=payload,
+                expected_result={"pass"},
+            )
+            shadow_engine = payload.get("shadow_engine") if isinstance(payload, dict) and isinstance(payload.get("shadow_engine"), dict) else {}
+            if shadow_engine.get("result") != "unavailable":
+                failures.append(Failure("daily-execution-cli", "`review run` shadow unavailable must not block the default review path"))
+            review_record_input = payload.get("review_record_input") if isinstance(payload, dict) and isinstance(payload.get("review_record_input"), dict) else {}
+            if review_record_input.get("engine_adapter") != "loom/default-codex":
+                failures.append(Failure("daily-execution-cli", "`review run` shadow unavailable must preserve the default review record input"))
 
         repeated_target = Path(tmp) / "repeated-blocker-context"
         prepare_review_target(repeated_target, "review run repeated blocker context")
