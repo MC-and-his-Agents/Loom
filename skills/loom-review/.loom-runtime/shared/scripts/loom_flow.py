@@ -9484,8 +9484,8 @@ def load_optional_json_fixture(target_root: Path, fixture: str | None, *, label:
     if not path.exists() or not path.is_file():
         return None, [f"{label} points to a missing file: {fixture}"]
     try:
-        return load_json_file(path), []
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return json.loads(path.read_text(encoding="utf-8")), []
+    except (OSError, json.JSONDecodeError) as exc:
         return None, [f"invalid {label} `{fixture}`: {exc}"]
 
 
@@ -9971,7 +9971,7 @@ def controlled_merge_payload(
         ruleset_payload, ruleset_errors = github_public_rest_list(
             f"repos/{owner}/{repo_name}/rules/branches/{quote(base_ref, safe='')}",
         )
-    if ruleset_errors and protection_payload is None:
+    if ruleset_errors:
         missing_inputs.extend(f"branch rules/ruleset: {message}" for message in ruleset_errors)
 
     status_payload, status_errors = load_optional_json_fixture(

@@ -7762,7 +7762,15 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 if error:
                     failures.append(Failure("daily-execution-cli", f"`installed controlled-merge` ruleset required gate failed: {error}"))
                 elif controlled_ruleset_payload.get("result") != "pass":
-                    failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must pass when an active ruleset requires loom-pr-merge-gate"))
+                    failures.append(
+                        Failure(
+                            "daily-execution-cli",
+                            "`installed controlled-merge` must pass when an active ruleset requires "
+                            f"loom-pr-merge-gate; got result={controlled_ruleset_payload.get('result')} "
+                            f"missing={controlled_ruleset_payload.get('missing_inputs')} "
+                            f"host_enforcement={controlled_ruleset_payload.get('host_enforcement')}",
+                        )
+                    )
                 else:
                     host_enforcement = controlled_ruleset_payload.get("host_enforcement")
                     if not isinstance(host_enforcement, dict) or "loom-pr-merge-gate" not in host_enforcement.get("ruleset_required_contexts", []):
