@@ -3,22 +3,22 @@
   "item_id": "WI-763",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Reviewed WI-763 after the installer package version bump and recovery carrier refresh. The authored review covers the current implementation head with only carrier drift from the engine-reviewed commit; PR gate and controlled-merge remain fail-closed, consume only the Loom review_entry record as approval truth, preserve raw/shadow evidence as non-authoritative evidence, and keep default review on loom/default-codex with codex exec structured output.",
+  "summary": "Reviewed WI-763 after the vendored .loom/bin runtime refresh and validation refresh. The authored review now covers the current implementation head; root self-governance verify passes locally, shadow parity is current, PR gate and controlled-merge remain fail-closed, and only the Loom review_entry record can satisfy semantic approval.",
   "reviewer": "loom/default-codex",
-  "reviewed_head": "9fa121dfdd70d97119138b3618c4f1d5196ffdb4",
-  "reviewed_validation_summary": "2026-05-16 validation refresh for WI-763 at 6b46f96: PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_check.py tools/loom_flow.py tools/loom_check.py -> OK; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK (0.1.106 -> 0.1.107); git diff --check -> OK; python3 tools/loom_flow.py adopt verify --target . --item WI-763 -> pass; make skills-check -> OK; python3 tools/loom_flow.py shadow-parity --target . -> pass; checkpoint merge intentionally blocked before refreshed record because the version bump was non-carrier drift; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces); python3 tools/loom_flow.py review run --target . --item WI-763 -> default loom/default-codex engine pass with expected stale-record block before this record write.",
+  "reviewed_head": "2fd4bf5fd09d867cebc6ffadab7e8d8fa917a3bd",
+  "reviewed_validation_summary": "2026-05-16 validation refresh for WI-763 at 8aef9fa: PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile .loom/bin/*.py src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_check.py tools/loom_flow.py tools/loom_check.py -> OK; python3 .loom/bin/loom_init.py verify --target . -> OK; python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run -> blocks only because refreshed review is still pending for vendored runtime implementation drift, with no refresh_needed drift; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK; make skills-check -> OK; python3 tools/loom_flow.py adopt verify --target . --item WI-763 -> pass; python3 tools/loom_flow.py shadow-parity --target . -> pass; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces); git diff --check -> OK.",
   "fallback_to": null,
   "findings": [
     {
       "id": "unresolved/host-enforcement-readback-proof",
-      "summary": "`loom-pr-merge-gate` still needs final live GitHub readback after this review record is pushed: workflow run on PR head, branch protection or ruleset requiring the stable check name, and controlled-merge consumption of that required-check readback.",
+      "summary": "`loom-pr-merge-gate` still needs final live GitHub readback after this review record is pushed: branch protection or an active ruleset must require the stable check name, the check must pass on the current PR head, and controlled-merge must consume that required-check readback.",
       "severity": "warn",
       "rebuttal": null,
       "disposition": {
         "status": "deferred",
         "summary": "Collect and record final host readback proof after pushing this review record."
       },
-      "details": "Host enforcement truth lives outside the repository tree, so it must be proven after CI sees the final PR head.",
+      "details": "Host enforcement truth lives outside the repository tree, so this finding remains open until the final PR-head CI and branch-protection readback are captured.",
       "code_location": {
         "path": "docs/evidence/validations/validation-pr-762-semantic-review-gate-gap.md",
         "line": 55,
@@ -27,7 +27,7 @@
     },
     {
       "id": "unresolved/pr-gate-required-check-executes-pr-head-code",
-      "summary": "The required check workflow checks out and executes repository code from the PR head. This preserves head binding, but it remains a host-trust decision for repositories that accept untrusted external PRs.",
+      "summary": "The required-check workflow checks out and executes repository code from the PR head. This preserves head binding, but it remains a host-trust decision for repositories that accept untrusted external PRs.",
       "severity": "warn",
       "rebuttal": null,
       "disposition": {
@@ -60,8 +60,8 @@
   ],
   "blocking_issues": [],
   "follow_ups": [
-    "`loom-pr-merge-gate` still needs final live GitHub readback after this review record is pushed: workflow run on PR head, branch protection or ruleset requiring the stable check name, and controlled-merge consumption of that required-check readback.",
-    "The required check workflow checks out and executes repository code from the PR head. This preserves head binding, but it remains a host-trust decision for repositories that accept untrusted external PRs.",
+    "`loom-pr-merge-gate` still needs final live GitHub readback after this review record is pushed: branch protection or an active ruleset must require the stable check name, the check must pass on the current PR head, and controlled-merge must consume that required-check readback.",
+    "The required-check workflow checks out and executes repository code from the PR head. This preserves head binding, but it remains a host-trust decision for repositories that accept untrusted external PRs.",
     "The stock workflow currently targets direct PR merges via `pull_request`; repositories that enable GitHub merge queue must explicitly add and validate `merge_group` support."
   ],
   "consumed_inputs": {
@@ -83,7 +83,7 @@
       }
     },
     "engine_adapter": "loom/default-codex",
-    "engine_evidence": ".loom/runtime/review/WI-763/6b46f96eb0679906120d4fcd776153bb95e4c896/engine-result.json",
-    "normalized_findings": ".loom/runtime/review/WI-763/6b46f96eb0679906120d4fcd776153bb95e4c896/normalized-findings.json"
+    "engine_evidence": ".loom/runtime/review/WI-763/2fd4bf5fd09d867cebc6ffadab7e8d8fa917a3bd/engine-result.json",
+    "normalized_findings": ".loom/runtime/review/WI-763/2fd4bf5fd09d867cebc6ffadab7e8d8fa917a3bd/normalized-findings.json"
   }
 }
