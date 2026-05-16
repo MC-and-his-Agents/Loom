@@ -4,7 +4,6 @@ on:
   pull_request:
     branches:
       - main
-  merge_group:
 
 jobs:
   loom-pr-merge-gate:
@@ -17,16 +16,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-          ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
       - name: Check authored semantic review approval
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
-          PR_HEAD_REF: ${{ github.event.pull_request.head.ref || github.event.merge_group.head_ref || github.ref_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
           args=(pr-gate check --target . --head-sha "$PR_HEAD_SHA" --branch "$PR_HEAD_REF")

@@ -4848,6 +4848,8 @@ def cleanup_scratch_tree(target_root: Path, scratch_dir: Path) -> None:
 def gh_json(root: Path, args: list[str]) -> tuple[dict[str, Any] | None, list[str]]:
     try:
         result = run_process(["gh", *args], root, timeout_seconds=20)
+    except FileNotFoundError:
+        return None, ["gh command is unavailable in PATH"]
     except subprocess.TimeoutExpired:
         return None, [f"gh {' '.join(args)} timed out after 20s"]
     if result.returncode != 0:
