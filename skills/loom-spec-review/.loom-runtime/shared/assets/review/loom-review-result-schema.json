@@ -29,7 +29,9 @@
           "summary",
           "severity",
           "rebuttal",
-          "disposition"
+          "disposition",
+          "details",
+          "code_location"
         ],
         "properties": {
           "id": {
@@ -80,12 +82,20 @@
             "additionalProperties": false
           },
           "details": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "code_location": {
             "type": [
               "object",
               "null"
+            ],
+            "required": [
+              "path",
+              "line",
+              "end_line"
             ],
             "properties": {
               "path": {
