@@ -118,7 +118,7 @@ CODEX_APP_REVIEW_ENGINE = "codex-app-review"
 CODEX_APP_REVIEW_SHADOW_ADAPTER = CODEX_APP_REVIEW_ADAPTER
 AUTHORITATIVE_REVIEW_ADAPTERS = {DEFAULT_REVIEW_ADAPTER, CODEX_APP_REVIEW_ADAPTER}
 SHADOW_REVIEW_ADAPTERS = {CODEX_APP_REVIEW_SHADOW_ADAPTER}
-DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS = 120
+DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS: int | None = None
 REVIEW_ENGINE_PROFILE_SCHEMA = "loom-review-engine-profile/v1"
 REVIEW_ENGINE_PROFILE_IDS = {"default", "high-risk", "spec-review", "repeated-blocker"}
 REVIEW_ENGINE_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
@@ -6280,7 +6280,8 @@ def run_default_review_engine(
     prompt_path.write_text(prompt_text, encoding="utf-8")
 
     effective_kind = review_kind or default_review_kind(context)
-    timeout_seconds = int(engine_profile["timeout_seconds"])
+    raw_timeout_seconds = engine_profile.get("timeout_seconds")
+    timeout_seconds = int(raw_timeout_seconds) if raw_timeout_seconds is not None else None
 
     before_fingerprint, fingerprint_errors = git_tracked_diff_fingerprint(context["target_root"])
     if fingerprint_errors:
@@ -6350,9 +6351,7 @@ def run_default_review_engine(
         failure_detail = f"default review engine `{DEFAULT_REVIEW_ENGINE}` is unavailable in PATH"
     except subprocess.TimeoutExpired:
         failure_reason = "runtime_conflict"
-        failure_detail = (
-            f"default review engine timed out after {timeout_seconds}s"
-        )
+        failure_detail = f"default review engine timed out after {timeout_seconds}s"
     else:
         if completed.returncode != 0:
             failure_reason = "runtime_conflict"
@@ -7140,7 +7139,7 @@ def resolve_review_engine_profile(
         "engine": CODEX_APP_REVIEW_ENGINE if adapter == CODEX_APP_REVIEW_ADAPTER else DEFAULT_REVIEW_ENGINE,
         "model": base_profile["model"],
         "reasoning_effort": base_profile["reasoning_effort"],
-        "timeout_seconds": int(base_profile["timeout_seconds"]),
+        "timeout_seconds": int(base_profile["timeout_seconds"]) if base_profile["timeout_seconds"] is not None else None,
         "context_policy": base_profile["context_policy"],
         "selection_reason": base_profile["selection_reason"],
         "override_reason": reason or None,

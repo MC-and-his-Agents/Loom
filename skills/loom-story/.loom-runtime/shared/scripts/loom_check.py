@@ -3050,8 +3050,9 @@ def require_review_run_payload(
                 failures.append(Failure(category, f"{context} engine profile must include non-empty `{key}`"))
         if profile.get("reasoning_effort") not in {"low", "medium", "high", "xhigh"}:
             failures.append(Failure(category, f"{context} engine profile reasoning effort must stay within the stable vocabulary"))
-        if not isinstance(profile.get("timeout_seconds"), int) or profile.get("timeout_seconds") <= 0:
-            failures.append(Failure(category, f"{context} engine profile must include a positive `timeout_seconds`"))
+        timeout_seconds = profile.get("timeout_seconds")
+        if timeout_seconds is not None and (not isinstance(timeout_seconds, int) or timeout_seconds <= 0):
+            failures.append(Failure(category, f"{context} engine profile timeout must be null or a positive integer"))
         if "override" in profile:
             override = profile.get("override")
             if not isinstance(override, dict):

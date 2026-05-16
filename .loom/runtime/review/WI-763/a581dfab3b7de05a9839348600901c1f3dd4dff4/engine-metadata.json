@@ -1,0 +1,20 @@
+{
+  "engine": "codex",
+  "adapter": "loom/default-codex",
+  "profile": {
+    "schema_version": "loom-review-engine-profile/v1",
+    "profile_id": "high-risk",
+    "adapter": "loom/default-codex",
+    "engine": "codex",
+    "model": "gpt-5.2",
+    "reasoning_effort": "high",
+    "timeout_seconds": 120,
+    "context_policy": "expanded-risk-baseline",
+    "selection_reason": "risk terms in the active item require the high-risk formal review profile",
+    "override_reason": null
+  },
+  "context_pack": ".loom/runtime/review/WI-763/a581dfab3b7de05a9839348600901c1f3dd4dff4/context-pack.json",
+  "failure_reason": "runtime_conflict",
+  "summary": "default review engine timed out after 120s",
+  "reviewed_head": "a581dfab3b7de05a9839348600901c1f3dd4dff4"
+}

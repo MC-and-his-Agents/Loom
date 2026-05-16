@@ -1,0 +1,59 @@
+{
+  "schema_version": "loom-review-context-pack/v1",
+  "item_id": "WI-763",
+  "review_path": ".loom/reviews/WI-763.json",
+  "current_head": "a581dfab3b7de05a9839348600901c1f3dd4dff4",
+  "validation_summary": "2026-05-16 local validation passed after WI-763 spec carrier, spec review, Codex CLI drift fix, runtime-evidence carrier boundary, and strict OpenAI response schema fix: codex exec 0.120.0 no longer accepts --ignore-user-config, so Loom default review engine now preserves codex exec --output-schema without that removed flag; OpenAI response schema now requires additionalProperties:false on nested object schemas, so Loom review result schema was tightened for findings/disposition/code_location; current item runtime evidence may be versioned as carrier-only drift but still cannot satisfy approval truth; PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile for touched Loom runtime entrypoints -> OK; make skills-check -> OK; git diff --check -> OK; python3 tools/loom_flow.py adopt verify --target . --item WI-763 -> pass; python3 tools/loom_flow.py shadow-parity --target . -> pass; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces).",
+  "history_available": true,
+  "history_policy": "not_applicable when no prior review record or normalized findings are available",
+  "recent_findings": [
+    {
+      "source": ".loom/reviews/WI-763.json",
+      "source_kind": "review_record",
+      "reviewed_head": "806c5688584e36c27cb6cf2dcb62485e9e6f8e1b",
+      "validation_summary": "No validation recorded yet.",
+      "id": "scaffolded-block-1",
+      "summary": "Review artifact scaffolded but not yet concluded.",
+      "severity": "block",
+      "disposition": {
+        "status": "rejected",
+        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+      },
+      "repeat_key": "scaffolded-block-1"
+    },
+    {
+      "source": ".loom/reviews/WI-763.json",
+      "source_kind": "review_record",
+      "reviewed_head": "806c5688584e36c27cb6cf2dcb62485e9e6f8e1b",
+      "validation_summary": "No validation recorded yet.",
+      "id": "scaffolded-warn-1",
+      "summary": "Record a real review before asking merge checkpoint to consume it.",
+      "severity": "warn",
+      "disposition": {
+        "status": "deferred",
+        "summary": "This follow-up stays open until a real review is recorded."
+      },
+      "repeat_key": "scaffolded-warn-1"
+    }
+  ],
+  "budget_risk": {
+    "schema_version": "loom-execution-budget-risk/v1",
+    "status": "not_applicable",
+    "enforcement": "advisory",
+    "highest_risk": "none",
+    "risk_dimensions": [],
+    "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+    "budget_summary": "execution budget is not collected for this invocation.",
+    "adapter_evidence_locator": "",
+    "provenance": {
+      "source": "github_host"
+    }
+  },
+  "repeated_blocker_signal": {
+    "schema_version": "loom-repeated-blocker-signal/v1",
+    "result": "absent",
+    "enforcement": "advisory",
+    "summary": "No repeated blocker candidates detected in available review history.",
+    "candidates": []
+  }
+}
