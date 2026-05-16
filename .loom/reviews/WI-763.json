@@ -3,22 +3,22 @@
   "item_id": "WI-763",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Reviewed WI-763 at HEAD fdca20d1e466502f84392ada95628d92ae1f6e92 after final local validation. The PR gate and controlled-merge implementation remain semantically sound: only the authored Loom review record can approve, raw/shadow/runtime evidence cannot satisfy approval, ruleset and branch-protection required-check readbacks are both supported, and status-derived shadow refresh is treated as carrier-only drift without masking implementation changes.",
+  "summary": "Reviewed WI-763 after the installer package version bump and recovery carrier refresh. The authored review covers the current implementation head with only carrier drift from the engine-reviewed commit; PR gate and controlled-merge remain fail-closed, consume only the Loom review_entry record as approval truth, preserve raw/shadow evidence as non-authoritative evidence, and keep default review on loom/default-codex with codex exec structured output.",
   "reviewer": "loom/default-codex",
-  "reviewed_head": "fdca20d1e466502f84392ada95628d92ae1f6e92",
-  "reviewed_validation_summary": "2026-05-16 final local validation passed for WI-763: PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile for touched Loom runtime entrypoints -> OK; make skills-check -> OK; python3 tools/loom_flow.py adopt verify --target . --item WI-763 -> pass; python3 tools/loom_flow.py shadow-parity --target . -> pass; python3 tools/loom_flow.py checkpoint merge --target . --item WI-763 -> pass before final validation refresh; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces); git diff --check -> OK. Covered default review engine drift, strict OpenAI output schema, no formal review timeout, PR gate fail-closed cases, raw evidence bypass boundary, ruleset required-check fixture, and status-shadow carrier drift.",
+  "reviewed_head": "9fa121dfdd70d97119138b3618c4f1d5196ffdb4",
+  "reviewed_validation_summary": "2026-05-16 validation refresh for WI-763 at 6b46f96: PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_check.py tools/loom_flow.py tools/loom_check.py -> OK; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK (0.1.106 -> 0.1.107); git diff --check -> OK; python3 tools/loom_flow.py adopt verify --target . --item WI-763 -> pass; make skills-check -> OK; python3 tools/loom_flow.py shadow-parity --target . -> pass; checkpoint merge intentionally blocked before refreshed record because the version bump was non-carrier drift; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces); python3 tools/loom_flow.py review run --target . --item WI-763 -> default loom/default-codex engine pass with expected stale-record block before this record write.",
   "fallback_to": null,
   "findings": [
     {
       "id": "unresolved/host-enforcement-readback-proof",
-      "summary": "Host enforcement for `loom-pr-merge-gate` is not yet proven by live GitHub readback: branch protection or an active ruleset must require the stable check name, and a real PR-head run must exist before the PR #762 regression class can be closed.",
+      "summary": "`loom-pr-merge-gate` still needs final live GitHub readback after this review record is pushed: workflow run on PR head, branch protection or ruleset requiring the stable check name, and controlled-merge consumption of that required-check readback.",
       "severity": "warn",
       "rebuttal": null,
       "disposition": {
         "status": "deferred",
-        "summary": "Collect and record fresh host readback evidence after the workflow is active on a PR."
+        "summary": "Collect and record final host readback proof after pushing this review record."
       },
-      "details": "Host enforcement truth lives outside the repo tree; workflow presence and local validation are not enough.",
+      "details": "Host enforcement truth lives outside the repository tree, so it must be proven after CI sees the final PR head.",
       "code_location": {
         "path": "docs/evidence/validations/validation-pr-762-semantic-review-gate-gap.md",
         "line": 55,
@@ -26,23 +26,23 @@
       }
     },
     {
-      "id": "new/pr-gate-workflow-executes-pr-head-code",
-      "summary": "The required check workflow checks out and executes repository code from the PR head. This preserves head binding, but it is a host-trust decision for repositories that accept untrusted external PRs.",
+      "id": "unresolved/pr-gate-required-check-executes-pr-head-code",
+      "summary": "The required check workflow checks out and executes repository code from the PR head. This preserves head binding, but it remains a host-trust decision for repositories that accept untrusted external PRs.",
       "severity": "warn",
       "rebuttal": null,
       "disposition": {
         "status": "deferred",
-        "summary": "Documented in the PR merge gate contract; repositories can restrict contributors or replace the workflow body with pinned tooling/API-fetched artifacts before requiring the check."
+        "summary": "Documented as a governance boundary; repositories can restrict contributors or replace the workflow body with pinned tooling/API-fetched artifacts before requiring the check."
       },
-      "details": "The workflow uses read-scoped permissions, but required-check execution of PR-supplied code remains a governance boundary.",
+      "details": "The workflow uses read-scoped permissions, but required-check execution of PR-supplied code remains an explicit trust boundary.",
       "code_location": {
         "path": ".github/workflows/pr-merge-gate.yml",
-        "line": 16,
+        "line": 12,
         "end_line": 35
       }
     },
     {
-      "id": "new/merge-queue-compatibility-merge-group-trigger",
+      "id": "unresolved/merge-queue-compatibility-missing-merge-group-trigger",
       "summary": "The stock workflow currently targets direct PR merges via `pull_request`; repositories that enable GitHub merge queue must explicitly add and validate `merge_group` support.",
       "severity": "warn",
       "rebuttal": null,
@@ -50,7 +50,7 @@
         "status": "deferred",
         "summary": "Keep merge-queue support out of WI-763 direct PR merge scope unless Loom self-governance enables merge queue."
       },
-      "details": "Current live readback showed no active rulesets before this change; merge queue compatibility remains a documented Stage-follow-up decision.",
+      "details": "Current Loom self-governance uses direct PR merge; merge queue compatibility remains a documented follow-up decision.",
       "code_location": {
         "path": ".github/workflows/pr-merge-gate.yml",
         "line": 3,
@@ -60,8 +60,8 @@
   ],
   "blocking_issues": [],
   "follow_ups": [
-    "Host enforcement for `loom-pr-merge-gate` is not yet proven by live GitHub readback: branch protection or an active ruleset must require the stable check name, and a real PR-head run must exist before the PR #762 regression class can be closed.",
-    "The required check workflow checks out and executes repository code from the PR head. This preserves head binding, but it is a host-trust decision for repositories that accept untrusted external PRs.",
+    "`loom-pr-merge-gate` still needs final live GitHub readback after this review record is pushed: workflow run on PR head, branch protection or ruleset requiring the stable check name, and controlled-merge consumption of that required-check readback.",
+    "The required check workflow checks out and executes repository code from the PR head. This preserves head binding, but it remains a host-trust decision for repositories that accept untrusted external PRs.",
     "The stock workflow currently targets direct PR merges via `pull_request`; repositories that enable GitHub merge queue must explicitly add and validate `merge_group` support."
   ],
   "consumed_inputs": {
@@ -83,7 +83,7 @@
       }
     },
     "engine_adapter": "loom/default-codex",
-    "engine_evidence": ".loom/runtime/review/WI-763/fdca20d1e466502f84392ada95628d92ae1f6e92/engine-result.json",
-    "normalized_findings": ".loom/runtime/review/WI-763/fdca20d1e466502f84392ada95628d92ae1f6e92/normalized-findings.json"
+    "engine_evidence": ".loom/runtime/review/WI-763/6b46f96eb0679906120d4fcd776153bb95e4c896/engine-result.json",
+    "normalized_findings": ".loom/runtime/review/WI-763/6b46f96eb0679906120d4fcd776153bb95e4c896/normalized-findings.json"
   }
 }
