@@ -15,3 +15,5 @@ It must fail closed for missing or stale review records, `block` or `fallback` d
 Raw review output, shadow evidence, runtime evidence, CI logs, GitHub review comments, and PR summaries are evidence only. They never satisfy semantic approval.
 
 Host enforcement is proven only by live branch protection or active ruleset readback requiring the stable check name `loom-pr-merge-gate`; workflow presence alone is not enough.
+
+The stock GitHub workflow checks out the verified PR head. That preserves head binding, but repos with untrusted external PRs must make an explicit host-trust decision or replace the workflow body with pinned tooling before requiring the check.

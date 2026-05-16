@@ -122,6 +122,8 @@ Host enforcement is proven only when all of these are true:
 
 Local workflow files alone do not prove host enforcement.
 
+The default GitHub workflow runs on `pull_request` and checks out the PR head SHA that it verifies. That keeps the head-binding contract explicit, but it also means the check executes repository code from the PR head. Repositories that accept untrusted external contributions should treat this as a host-trust decision and either restrict who can run the required check or replace the workflow body with pinned tooling / API-fetched artifacts before enabling it as a required check.
+
 ## 7. Controlled Merge Boundary
 
 `controlled merge` must run or consume this PR gate before delegating to `gh pr merge`.

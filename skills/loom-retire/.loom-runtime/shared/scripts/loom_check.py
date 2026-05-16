@@ -7722,6 +7722,52 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 elif controlled_missing_payload.get("result") != "block":
                     failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must block when loom-pr-merge-gate is not required"))
 
+                ruleset_fixture = write_json_fixture(
+                    positive_target,
+                    ".loom/tmp/pr-gate/branch-ruleset.json",
+                    [
+                        {
+                            "type": "required_status_checks",
+                            "parameters": {
+                                "required_status_checks": [
+                                    {"context": "loom-pr-merge-gate"},
+                                ],
+                            },
+                        },
+                    ],
+                )
+                controlled_ruleset_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "controlled-merge",
+                        "check",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                        "--pr",
+                        "1",
+                        "--pr-payload-file",
+                        pr_fixture,
+                        "--branch-protection-file",
+                        missing_gate_protection,
+                        "--ruleset-file",
+                        ruleset_fixture,
+                        "--status-checks-file",
+                        status_fixture,
+                    ],
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed controlled-merge` ruleset required gate failed: {error}"))
+                elif controlled_ruleset_payload.get("result") != "pass":
+                    failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must pass when an active ruleset requires loom-pr-merge-gate"))
+                else:
+                    host_enforcement = controlled_ruleset_payload.get("host_enforcement")
+                    if not isinstance(host_enforcement, dict) or "loom-pr-merge-gate" not in host_enforcement.get("ruleset_required_contexts", []):
+                        failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must expose ruleset required contexts"))
+
                 missing_review_target = tmp_root / "pr-gate-missing-review"
                 shutil.copytree(positive_target, missing_review_target)
                 review_path = missing_review_target / ".loom/reviews/INIT-0001.json"

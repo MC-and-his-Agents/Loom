@@ -457,6 +457,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     controlled_merge.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
     controlled_merge.add_argument("--status-checks-file", help="Optional repo-relative statusCheckRollup JSON fixture")
     controlled_merge.add_argument("--branch-protection-file", help="Optional repo-relative branch protection JSON fixture")
+    controlled_merge.add_argument("--ruleset-file", help="Optional repo-relative branch rules/ruleset JSON fixture")
 
     state = subparsers.add_parser(
         "state-check",
@@ -9849,6 +9850,31 @@ def required_status_contexts_from_protection(payload: Any) -> list[str]:
     return []
 
 
+def required_status_contexts_from_branch_rules(payload: Any) -> list[str]:
+    rules = payload
+    if isinstance(payload, dict):
+        rules = payload.get("rules") or payload.get("data")
+    if not isinstance(rules, list):
+        return []
+    contexts: list[str] = []
+    for rule in rules:
+        if not isinstance(rule, dict) or rule.get("type") != "required_status_checks":
+            continue
+        parameters = rule.get("parameters") if isinstance(rule.get("parameters"), dict) else {}
+        checks = parameters.get("required_status_checks")
+        if isinstance(checks, list):
+            for check in checks:
+                if isinstance(check, dict) and isinstance(check.get("context"), str):
+                    contexts.append(check["context"])
+                elif isinstance(check, str):
+                    contexts.append(check)
+        for fallback_key in ("contexts", "required_contexts"):
+            fallback_contexts = parameters.get(fallback_key)
+            if isinstance(fallback_contexts, list):
+                contexts.extend(str(context) for context in fallback_contexts if isinstance(context, str) and context.strip())
+    return sorted(set(contexts))
+
+
 def required_check_status_payload(status_rollup: Any, required_contexts: list[str]) -> dict[str, Any]:
     runs = status_rollup if isinstance(status_rollup, list) else []
     by_name: dict[str, list[dict[str, Any]]] = {}
@@ -9897,6 +9923,7 @@ def controlled_merge_payload(
     pr_payload_file: str | None,
     status_checks_file: str | None,
     branch_protection_file: str | None,
+    ruleset_file: str | None,
 ) -> dict[str, Any]:
     detected_owner, detected_repo = detect_github_repo(target_root)
     owner = owner or detected_owner
@@ -9932,6 +9959,18 @@ def controlled_merge_payload(
     if protection_errors:
         missing_inputs.extend(f"branch protection: {message}" for message in protection_errors)
 
+    ruleset_payload, ruleset_errors = load_optional_json_fixture(
+        target_root,
+        ruleset_file,
+        label="branch rules/ruleset fixture",
+    )
+    if ruleset_payload is None and not ruleset_errors and owner and repo_name and isinstance(base_ref, str) and base_ref:
+        ruleset_payload, ruleset_errors = github_public_rest_list(
+            f"repos/{owner}/{repo_name}/rules/branches/{quote(base_ref, safe='')}",
+        )
+    if ruleset_errors and protection_payload is None:
+        missing_inputs.extend(f"branch rules/ruleset: {message}" for message in ruleset_errors)
+
     status_payload, status_errors = load_optional_json_fixture(
         target_root,
         status_checks_file,
@@ -9945,12 +9984,14 @@ def controlled_merge_payload(
     if status_errors:
         missing_inputs.extend(f"status checks: {message}" for message in status_errors)
 
-    required_contexts = required_status_contexts_from_protection(protection_payload)
+    protection_contexts = required_status_contexts_from_protection(protection_payload)
+    ruleset_contexts = required_status_contexts_from_branch_rules(ruleset_payload)
+    required_contexts = sorted(set(protection_contexts + ruleset_contexts))
     required_checks = required_check_status_payload(
         status_payload.get("statusCheckRollup") if isinstance(status_payload, dict) else status_payload,
         required_contexts,
     )
-    if protection_payload is None:
+    if protection_payload is None and ruleset_payload is None:
         missing_inputs.append("branch protection or ruleset readback is unavailable")
     if PR_MERGE_GATE_CHECK_NAME not in required_contexts:
         missing_inputs.append(f"required check `{PR_MERGE_GATE_CHECK_NAME}` is not enforced")
@@ -10009,6 +10050,9 @@ def controlled_merge_payload(
             "required_contexts": required_contexts,
             "required": PR_MERGE_GATE_CHECK_NAME in required_contexts,
             "branch_protection_readable": protection_payload is not None,
+            "branch_protection_required_contexts": protection_contexts,
+            "ruleset_readable": ruleset_payload is not None,
+            "ruleset_required_contexts": ruleset_contexts,
         },
         "merge": merge_result,
     }
@@ -10031,6 +10075,7 @@ def handle_controlled_merge(args: argparse.Namespace) -> int:
             pr_payload_file=args.pr_payload_file,
             status_checks_file=args.status_checks_file,
             branch_protection_file=args.branch_protection_file,
+            ruleset_file=args.ruleset_file,
         )
     )
 

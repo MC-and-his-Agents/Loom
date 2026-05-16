@@ -21,7 +21,7 @@
 - `merge-ready` 已通过
 - 当前 `Work Item` 与 PR 绑定
 - 当前 PR 的 `head_sha`
-- required checks / branch protection / mergeability
+- required checks / branch protection or active ruleset / mergeability
 - 允许的 merge method
 - 目标基线分支
 
@@ -61,7 +61,8 @@ GitHub profile 的 strong governance 默认要求：
 - PR `head_sha` 与受审 `head_sha` 不一致
 - required checks 未全绿
 - merge method 与当前 profile 不一致
-- branch protection 仍禁止当前 merge 行为
+- branch protection 或 active ruleset 仍禁止当前 merge 行为
+- branch protection 与 active ruleset 读面都不可用，无法证明 `pr merge gate` 是宿主强制 check
 
 ## 6. merge 后交接
 
@@ -83,11 +84,11 @@ merge 成功后，`controlled merge` 必须输出最小交接 basis 给 `closeou
 - PR 已 merged，但 merge commit 无法定位
 - merge commit 已进入主干，但 issue / project 仍显示未吸收
 - merge method 与 profile 声明不一致
-- 宿主返回的 mergeability、checks、branch protection 结论互相冲突
+- 宿主返回的 mergeability、checks、branch protection 或 ruleset 结论互相冲突
 
 ## 8. 非目标
 
 - 不在 Loom 文档内冻结 GitHub UI 操作步骤
-- 不接管宿主 branch protection 的底层实现
+- 不接管宿主 branch protection 或 ruleset 的底层实现
 - 不把 `controlled merge` 简化成“PR 绿了就能合”
 - 不把裸 `gh pr merge` 当成 Loom-governed PR 的日常合并入口；它会绕过本地受控合并检查，除非宿主 required check 已经强制 `pr merge gate`
