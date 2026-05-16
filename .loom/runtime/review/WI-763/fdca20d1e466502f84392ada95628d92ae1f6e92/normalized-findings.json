@@ -1,0 +1,68 @@
+{
+  "findings": [
+    {
+      "id": "unresolved/review-record-stale-and-validation-summary-drift",
+      "summary": "`checkpoint merge` fails closed because `.loom/reviews/WI-763.json` is authored for `reviewed_head=ba5dc4b...` while current `HEAD=fdca20d...`, and `reviewed_validation_summary` does not equal `.loom/progress/WI-763.md` `Latest Validation Summary`; therefore `pr-gate` cannot prove “fresh authored semantic review approval” for the current head.",
+      "severity": "block",
+      "rebuttal": null,
+      "disposition": {
+        "status": "accepted",
+        "summary": "Re-author `.loom/reviews/WI-763.json` against current HEAD `fdca20d...` and update `reviewed_validation_summary` to exactly match the current `.loom/progress/WI-763.md` `Latest Validation Summary`, then re-run `python3 tools/loom_flow.py checkpoint merge --target . --item WI-763` to confirm it returns `pass`."
+      },
+      "details": "Evidence from current worktree: `python3 tools/loom_flow.py checkpoint merge --target . --item WI-763` returns `result=block` with missing inputs `review artifact does not match the latest validation summary` and `review artifact is stale for the current HEAD`; `python3 tools/loom_flow.py pr-gate check ...` inherits the same fail-closed conditions.",
+      "code_location": {
+        "path": "skills/shared/scripts/loom_flow.py",
+        "line": 8276,
+        "end_line": 8290
+      }
+    },
+    {
+      "id": "unresolved/host-enforcement-live-readback-not-proven",
+      "summary": "Host enforcement for `loom-pr-merge-gate` is not proven by live GitHub readback in the current evidence set; repository-local workflow presence and local validation do not establish that branch protection or an active ruleset requires the stable check name for `main`, nor that a real PR-head run exists for the same head SHA.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Collect and record fresh host readback evidence (branch protection or ruleset requires `loom-pr-merge-gate`, plus a PR-head check run tied to the reviewed head SHA) before claiming host-enforced closure for the PR #762 regression class."
+      },
+      "details": "This is an explicit contract requirement: host enforcement must be proven via host state, not inferred from repo files.",
+      "code_location": {
+        "path": "docs/methodology/harness/pr-merge-gate.md",
+        "line": 116,
+        "end_line": 123
+      }
+    },
+    {
+      "id": "unresolved/pr-gate-required-check-executes-pr-head-code",
+      "summary": "`.github/workflows/pr-merge-gate.yml` checks out the PR head SHA and runs `python3 tools/loom_flow.py ...` from that checkout; this preserves head binding but executes PR-supplied code as part of a required check, which is a host-trust boundary decision for repos accepting untrusted external PRs.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Document and enforce contributor-trust assumptions before making `loom-pr-merge-gate` required, or redesign the workflow to avoid executing arbitrary PR-head code (e.g., pinned tooling or API-fetched artifacts) for untrusted contribution models."
+      },
+      "details": "Even with read-scoped permissions, running PR-head code inside a required check is a governance/security boundary that must be explicitly owned by the host policy.",
+      "code_location": {
+        "path": ".github/workflows/pr-merge-gate.yml",
+        "line": 16,
+        "end_line": 35
+      }
+    },
+    {
+      "id": "new/controlled-merge-ruleset-read-errors-block-even-with-branch-protection",
+      "summary": "`controlled-merge` treats any branch rules/ruleset read error as `missing_inputs`, which can block merges even when branch protection is readable and sufficient to prove required contexts; this appears stricter than the documented contract that only requires at least one readable enforcement source (branch protection or active ruleset).",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Align code and contract: either (a) only fail closed on ruleset read errors when branch protection is also unavailable (or when ruleset enforcement is required by policy), or (b) update the contract to explicitly require successful ruleset readback even when branch protection is present."
+      },
+      "details": "If the ruleset endpoint can return errors in legitimate “no rulesets configured / feature unavailable” cases, this behavior risks false-negative blocks despite correct branch-protection enforcement.",
+      "code_location": {
+        "path": "skills/shared/scripts/loom_flow.py",
+        "line": 9965,
+        "end_line": 9999
+      }
+    }
+  ]
+}
