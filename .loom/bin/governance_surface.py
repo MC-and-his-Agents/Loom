@@ -51,6 +51,17 @@ WORKSPACE_PROFILE_CONTRACTS = {
         "recommended_action": "declare the repo-specific workspace locator and keep host lifecycle ownership external",
     },
 }
+LOCAL_WORKER_BACKEND_CONTRACT = {
+    "schema_version": "loom-worker-backend/v1",
+    "backend": "local",
+    "ownership": "host-adapter",
+    "execution_boundary": {
+        "run": "read/event surface only; Loom does not start a daemon",
+        "stop": "read/event surface only; Loom does not own worker termination",
+    },
+    "daemon": False,
+    "future_backend_rule": "future backends may change invocation mechanics but must preserve Work Item, workspace, recovery, and ledger truth boundaries",
+}
 GATE_STARTER_ALIASES = {
     "verify": {
         "surface": "verification",
@@ -98,18 +109,222 @@ GATE_STARTER_ALIASES = {
         "summary": "Audit closeout drift without mutating host state.",
     },
 }
-HOST_API_BUDGET_CONTRACT = {
-    "schema_version": "loom-host-api-budget/v1",
-    "default_non_merge_read_mode": "cached_non_merge",
-    "merge_gate_read_mode": "uncached_live_gate",
-    "cache_scope": "process",
-    "rest_first": True,
-    "graphql_allowed_when": "REST cannot express the required relationship",
-    "search_endpoint": "not_in_hot_path",
-    "polling": "not_in_hot_path",
-    "rate_limit_policy": "consume x-ratelimit-* headers from natural responses when available; do not call /rate_limit just to inspect budget",
-    "github_actions_budget": "design for GITHUB_TOKEN per-repository hourly request limits",
+LOOM_EXECUTION_BUDGET_SCHEMA = "loom-execution-budget/v1"
+LOOM_EXECUTION_BUDGET_ENFORCEMENT = "advisory"
+LOOM_EXECUTION_BUDGET_STATUS = {"present", "not_applicable", "unavailable"}
+LOOM_EXECUTION_BUDGET_DIMENSION_IDS = {"turns", "tokens", "requests", "retries", "time_window"}
+LOOM_EXECUTION_BUDGET_DIMENSION_FIELDS = ("id", "unit", "used", "limit", "remaining", "risk", "source")
+LOOM_EXECUTION_BUDGET_RISK_SCHEMA = "loom-execution-budget-risk/v1"
+LOOM_EXECUTION_BUDGET_RISK_LEVELS = {"none", "low", "medium", "high", "unknown"}
+LOOM_EXECUTION_BUDGET_RISK_RANK = {
+    "unknown": -1,
+    "none": 0,
+    "low": 1,
+    "medium": 2,
+    "high": 3,
 }
+
+
+def normalize_execution_budget_dimensions(raw_dimensions: object) -> list[dict[str, Any]]:
+    if not isinstance(raw_dimensions, list):
+        return []
+    dimensions: list[dict[str, Any]] = []
+    for candidate in raw_dimensions:
+        if not isinstance(candidate, dict):
+            continue
+        budget_id = candidate.get("id")
+        if not isinstance(budget_id, str) or budget_id not in LOOM_EXECUTION_BUDGET_DIMENSION_IDS:
+            continue
+        dimension: dict[str, Any] = {"id": budget_id}
+        for field in LOOM_EXECUTION_BUDGET_DIMENSION_FIELDS:
+            if field == "id":
+                continue
+            if field in candidate:
+                dimension[field] = candidate[field]
+        dimensions.append(dimension)
+    return dimensions
+
+
+def execution_budget_payload(
+    *,
+    status: str,
+    summary: str,
+    dimensions: list[dict[str, Any]] | None = None,
+    provenance: dict[str, Any] | None = None,
+    adapter_evidence_locator: str | None = None,
+    enforcement: str = LOOM_EXECUTION_BUDGET_ENFORCEMENT,
+) -> dict[str, Any]:
+    normalized_status = status if status in LOOM_EXECUTION_BUDGET_STATUS else "not_applicable"
+    normalized_dimensions = normalize_execution_budget_dimensions(dimensions or [])
+    if normalized_status != "present":
+        normalized_dimensions = []
+    return {
+        "schema_version": LOOM_EXECUTION_BUDGET_SCHEMA,
+        "status": normalized_status,
+        "enforcement": enforcement,
+        "summary": str(summary).strip() or f"execution budget status is {normalized_status}",
+        "dimensions": normalized_dimensions,
+        "provenance": provenance or {"source": "github_host"},
+        "adapter_evidence_locator": str(adapter_evidence_locator) if adapter_evidence_locator else "",
+    }
+
+
+def normalize_execution_budget_payload(
+    raw: object,
+    *,
+    fallback_status: str = "not_applicable",
+    fallback_summary: str = "execution budget is not currently available",
+    fallback_locator: str = "",
+    fallback_provenance: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        return execution_budget_payload(
+            status=fallback_status,
+            summary=fallback_summary,
+            dimensions=[],
+            provenance=fallback_provenance or {"source": "github_host"},
+            adapter_evidence_locator=fallback_locator,
+        )
+
+    status = raw.get("status")
+    if not isinstance(status, str):
+        status = fallback_status
+    summary = raw.get("summary")
+    dimensions = normalize_execution_budget_dimensions(raw.get("dimensions"))
+    provenance = raw.get("provenance")
+    adapter_evidence_locator = raw.get("adapter_evidence_locator")
+
+    return execution_budget_payload(
+        status=status,
+        summary=summary if isinstance(summary, str) else fallback_summary,
+        dimensions=dimensions,
+        provenance=provenance if isinstance(provenance, dict) else fallback_provenance or {"source": "github_host"},
+        adapter_evidence_locator=str(adapter_evidence_locator) if isinstance(adapter_evidence_locator, str) else fallback_locator,
+        enforcement=(
+            raw.get("enforcement")
+            if isinstance(raw.get("enforcement"), str) and raw.get("enforcement") == LOOM_EXECUTION_BUDGET_ENFORCEMENT
+            else LOOM_EXECUTION_BUDGET_ENFORCEMENT
+        ),
+    )
+
+
+def normalize_execution_budget_risk_level(raw_risk: object) -> str:
+    if isinstance(raw_risk, str):
+        normalized = raw_risk.strip().lower()
+        if normalized in LOOM_EXECUTION_BUDGET_RISK_LEVELS:
+            return normalized
+    return "unknown"
+
+
+def derive_execution_budget_risk(raw_budget: object) -> dict[str, Any]:
+    budget = normalize_execution_budget_payload(raw_budget)
+    status = budget.get("status")
+    enforcement = budget.get("enforcement")
+    dimensions = budget.get("dimensions") if isinstance(budget.get("dimensions"), list) else []
+
+    highest_risk = "none"
+    risk_dimensions: list[str] = []
+    for dimension in dimensions:
+        if not isinstance(dimension, dict):
+            continue
+        risk_level = normalize_execution_budget_risk_level(dimension.get("risk"))
+        if risk_level not in {"low", "medium", "high"}:
+            continue
+        dimension_id = dimension.get("id")
+        if isinstance(dimension_id, str):
+            risk_dimensions.append(dimension_id)
+        if LOOM_EXECUTION_BUDGET_RISK_RANK[risk_level] > LOOM_EXECUTION_BUDGET_RISK_RANK[highest_risk]:
+            highest_risk = risk_level
+
+    risk_dimensions = list(dict.fromkeys(risk_dimensions))
+    if status != "present":
+        highest_risk = "none"
+        risk_dimensions = []
+        summary = f"execution budget is {status}; budget risk remains advisory and non-blocking"
+    elif not risk_dimensions:
+        summary = "execution budget is present with no declared elevated risk dimensions; budget risk remains advisory"
+    else:
+        dimension_summary = ", ".join(risk_dimensions)
+        summary = (
+            f"execution budget reports {highest_risk} advisory risk across {dimension_summary}; "
+            "review and merge-ready may consume it as evidence only"
+        )
+
+    return {
+        "schema_version": LOOM_EXECUTION_BUDGET_RISK_SCHEMA,
+        "status": status,
+        "enforcement": enforcement,
+        "highest_risk": highest_risk,
+        "risk_dimensions": risk_dimensions,
+        "summary": summary,
+        "budget_summary": budget.get("summary"),
+        "adapter_evidence_locator": budget.get("adapter_evidence_locator"),
+        "provenance": budget.get("provenance") if isinstance(budget.get("provenance"), dict) else {"source": "github_host"},
+    }
+
+
+def local_worker_backend_contract() -> dict[str, object]:
+    return deepcopy(LOCAL_WORKER_BACKEND_CONTRACT)
+
+
+def workspace_lifecycle_expectations(workspace_profile: dict[str, object] | None) -> dict[str, object]:
+    profile = workspace_profile if isinstance(workspace_profile, dict) else {}
+    workspace_entry = profile.get("workspace_entry")
+    workspace_path = profile.get("workspace_path")
+    missing_inputs: list[str] = []
+    if not isinstance(workspace_entry, str) or not workspace_entry:
+        missing_inputs.append("workspace_entry")
+    if not isinstance(workspace_path, str) or not workspace_path:
+        missing_inputs.append("workspace_path")
+
+    return {
+        "schema_version": "loom-workspace-lifecycle/v1",
+        "result": "pass" if not missing_inputs else "block",
+        "missing_inputs": missing_inputs,
+        "workspace": {
+            "entry": workspace_entry or None,
+            "path": workspace_path or None,
+            "profile": profile.get("selected") or "unknown",
+            "exists": bool(profile.get("workspace_exists")),
+        },
+        "operations": {
+            "create": {
+                "semantics": "establish or confirm the workspace_entry execution workspace",
+                "creates_host_worktree": False,
+            },
+            "locate": {
+                "semantics": "resolve workspace_entry, recovery_entry, checkpoint, and purity without mutation",
+                "writes_truth": False,
+            },
+            "attach": {
+                "semantics": "locate and bind an existing repo-defined workspace",
+                "creates_workspace": False,
+                "deletes_workspace": False,
+                "takes_host_lifecycle": False,
+            },
+            "handoff": {
+                "semantics": "consume the same workspace/recovery contract and preserve recovery authored fields",
+                "requires_recovery_entry": True,
+            },
+            "cleanup": {
+                "semantics": "remove only explicit Loom-owned temporary residue",
+                "deletes_non_loom_owned": False,
+            },
+            "retire": {
+                "semantics": "write Current Checkpoint to retired while preserving the recovery entry",
+                "deletes_workspace_directory": False,
+            },
+            "execution_boundary": {
+                "run": "read/event surface only",
+                "stop": "read/event surface only",
+            },
+            "remove": {
+                "in_core": False,
+                "fallback_to": "workspace cleanup/retire plus host-owned directory or git worktree lifecycle",
+            },
+        },
+        "worker_backend": local_worker_backend_contract(),
+    }
 GITHUB_STABLE_CHECK_NAMES = ("py-compile", "demo-bootstrap", "repo-local-cli", "loom-check")
 _GITHUB_API_CACHE: dict[tuple[str, ...], Any] = {}
 REPO_INTERFACE_V1_SCHEMA = "loom-repo-interface/v1"
@@ -129,10 +344,78 @@ REPO_INTERFACE_GATE_TYPES = {
 REPO_INTERFACE_CONTEXT_TYPES = {"string", "integer", "number", "boolean"}
 REPO_INTERFACE_MANIFEST_KEYS = {"schema_version", "companion_entry", "repo_interface"}
 REPO_INTERFACE_V1_KEYS = {"schema_version", "companion_entry", "repo_specific_requirements", "specialized_gates"}
-REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {"review_instruction_locators", "metadata_contract", "context_schema"}
+REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {
+    "review_instruction_locators",
+    "metadata_contract",
+    "context_schema",
+    "dynamic_tool_locators",
+    "policy_locators",
+    "hook_locators",
+    "release_targets",
+}
+DECLARED_LOCATOR_REQUIREMENTS = {"required", "optional", "advisory"}
+DECLARED_LOCATOR_OWNERS = {"repo", "repo-companion", "host", "host-adapter", "platform", "external-tool"}
+DYNAMIC_TOOL_HANDSHAKE_SCHEMA = "loom-dynamic-tool-handshake/v1"
+DYNAMIC_TOOL_HANDSHAKE_STATUSES = {"advertised", "unavailable", "unsupported", "failed"}
+DYNAMIC_TOOL_HANDSHAKE_FAILURE_CATEGORIES = {
+    "none",
+    "unavailable",
+    "unsupported",
+    "failed",
+    "invalid_declaration",
+}
+DYNAMIC_TOOL_SURFACES = REPO_INTERFACE_GATE_TYPES | {"attempt_time"}
+HOOK_LOCATOR_LIFECYCLES = {"before-run", "after-run", "cleanup"}
+HOOK_LOCATOR_FALLBACKS = {
+    "admission",
+    "pre_review",
+    "review",
+    "build",
+    "merge_ready",
+    "closeout",
+    "manual_repair",
+    "workspace cleanup|retire",
+    "handoff",
+    "merge",
+}
+HOOK_SAFETY_PATH_CONTAINMENT = {"repo_relative"}
+HOOK_SAFETY_TRUTH_BOUNDARIES = {"runtime_evidence_only", "context_only", "blocking_decision_only"}
+HOOK_SAFETY_CLEANUP_SCOPES = {"not_applicable", "loom_owned_only"}
+HOOK_SAFETY_HOST_TRUST = {"trusted", "requires_review", "untrusted"}
+HOOK_SAFETY_PERMISSION_RISKS = {"none", "approval_required", "sandbox_required", "unknown"}
+HOOK_EXTENSION_PROFILE_SCHEMA = "loom-hooks-extension-profile/v1"
+POLICY_READ_SCHEMA = "loom-policy-read/v1"
+POLICY_READINESS_SCHEMA = "loom-policy-readiness/v1"
+POLICY_TYPES = {"approval", "sandbox"}
+POLICY_READ_STATUSES = {"declared", "missing", "conflict", "unsafe"}
+POLICY_RISK_LEVELS = {"none", "unknown", "conflict", "unsafe"}
+RELEASE_TARGET_SCHEMA = "loom-target-release/v1"
+RELEASE_TARGET_STATUS_SCHEMA = "loom-target-release-status/v1"
+RELEASE_TARGET_ENFORCEMENT = {"blocking", "advisory"}
+RELEASE_TARGET_STATUSES = {
+    "planning",
+    "active",
+    "merge_ready",
+    "unreleased",
+    "released",
+    "reconciled",
+    "closed_out",
+}
+RELEASE_TARGET_SCOPE_KEYS = ("phase", "fr", "work_item", "implementation_pr", "merge_commit")
+RELEASE_TARGET_DELIVERY_STATUSES = {
+    "planned",
+    "active",
+    "unmerged",
+    "merged",
+    "unreleased",
+    "released",
+    "unreconciled",
+    "closed_out",
+    "not_applicable",
+}
 REPO_INTEROP_AVAILABILITY = {"absent", "incomplete", "present"}
 REPO_INTEROP_SCHEMA = "loom-repo-interop/v1"
-REPO_INTEROP_KEYS = {"schema_version", "host_adapters", "repo_native_carriers", "shadow_surfaces"}
+REPO_INTEROP_KEYS = {"schema_version", "host_adapters", "repo_native_carriers", "shadow_surfaces", "external_orchestrators"}
 REPO_INTEROP_COLLECTION_SURFACES = {
     "admission",
     "pre_review",
@@ -140,6 +423,13 @@ REPO_INTEROP_COLLECTION_SURFACES = {
     "build",
     "merge_ready",
     "closeout",
+}
+EXTERNAL_ORCHESTRATOR_OPERATIONS = {
+    "work_item_read",
+    "workspace_attach",
+    "recovery_writeback",
+    "status_read",
+    "gate_read",
 }
 REPO_INTEROP_SHADOW_SURFACES = ("admission", "review", "merge_ready", "closeout")
 GOVERNANCE_CONTROL_VERSION = "loom-governance-control/v1"
@@ -810,21 +1100,980 @@ def validate_context_schema(
     return missing_inputs
 
 
+def locator_field_missing(value: object) -> bool:
+    return not isinstance(value, str) or not value.strip()
+
+
+def validate_dynamic_tool_locator(
+    *,
+    root: Path,
+    entry: object,
+    index: int,
+) -> tuple[list[str], list[str]]:
+    prefix = f"dynamic_tool_locators[{index}]"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"], []
+    entry_id = entry.get("id")
+    locator_label = f"{prefix} `{entry_id}` locator" if isinstance(entry_id, str) and entry_id.strip() else f"{prefix} locator"
+    blocking: list[str] = []
+    optional: list[str] = []
+    for field in ("id", "summary", "owner", "requirement", "surface", "fallback_to"):
+        value = entry.get(field)
+        if not isinstance(value, str) or not value.strip():
+            blocking.append(f"{prefix} missing `{field}`")
+    owner = entry.get("owner")
+    if owner not in DECLARED_LOCATOR_OWNERS:
+        blocking.append(f"{prefix} owner must stay repo/host/platform-owned, not Loom core")
+    requirement = entry.get("requirement")
+    if requirement not in DECLARED_LOCATOR_REQUIREMENTS:
+        blocking.append(f"{prefix} requirement must be `required`, `optional`, or `advisory`")
+    surface = entry.get("surface")
+    if surface not in DYNAMIC_TOOL_SURFACES:
+        blocking.append(
+            f"{prefix} surface must be one of `admission`, `pre_review`, `review`, `build`, `merge_ready`, `closeout`, `attempt_time`"
+        )
+    locator_value = entry.get("locator")
+    locator, target = resolve_locator(root, locator_value)
+    locator_error: str | None = None
+    locator_error_is_optional = False
+    if locator_field_missing(locator_value):
+        locator_error = f"{locator_label} missing `locator`"
+        locator_error_is_optional = requirement in {"optional", "advisory"}
+    elif locator is None or target is None:
+        locator_error = locator_boundary_error(locator_value, label=locator_label)
+    elif not target.exists():
+        locator_error = f"{prefix} locator points to missing path `{locator}`"
+        locator_error_is_optional = requirement in {"optional", "advisory"}
+    if locator_error:
+        if locator_error_is_optional:
+            optional.append(locator_error)
+        else:
+            blocking.append(locator_error)
+    return blocking, optional
+
+
+def validate_hook_locator(
+    *,
+    root: Path,
+    entry: object,
+    index: int,
+) -> tuple[list[str], list[str]]:
+    prefix = f"hook_locators[{index}]"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"], []
+    entry_id = entry.get("id")
+    locator_label = f"{prefix} `{entry_id}` locator" if isinstance(entry_id, str) and entry_id.strip() else f"{prefix} locator"
+    blocking: list[str] = []
+    optional: list[str] = []
+    for field in ("id", "summary", "lifecycle", "owner", "requirement", "fallback_to"):
+        value = entry.get(field)
+        if not isinstance(value, str) or not value.strip():
+            blocking.append(f"{prefix} missing `{field}`")
+    lifecycle = entry.get("lifecycle")
+    if lifecycle not in HOOK_LOCATOR_LIFECYCLES:
+        blocking.append(f"{prefix} lifecycle must be `before-run`, `after-run`, or `cleanup`")
+    owner = entry.get("owner")
+    if owner not in DECLARED_LOCATOR_OWNERS:
+        blocking.append(
+            f"{prefix} owner must be one of `repo`, `repo-companion`, `host`, `host-adapter`, `platform`, `external-tool`"
+        )
+    requirement = entry.get("requirement")
+    if requirement not in DECLARED_LOCATOR_REQUIREMENTS:
+        blocking.append(f"{prefix} requirement must be `required`, `optional`, or `advisory`")
+    fallback_to = entry.get("fallback_to")
+    if fallback_to not in HOOK_LOCATOR_FALLBACKS:
+        blocking.append(f"{prefix} fallback_to must point to a Loom surface or manual repair path")
+
+    forbidden_fields = sorted(
+        set(entry)
+        & {
+            "runtime_state",
+            "execution_result",
+            "authored_progress",
+            "current_stop",
+            "next_step",
+            "blockers",
+            "latest_validation_summary",
+            "current_checkpoint",
+            "current_lane",
+            "recovery_boundary",
+            "closing_condition",
+            "review_verdict",
+            "review_summary",
+            "validation_status",
+            "host_action_result",
+            "closeout_basis",
+        }
+    )
+    if forbidden_fields:
+        blocking.append(f"{prefix} must not carry runtime or authored truth fields: {', '.join(forbidden_fields)}")
+
+    safety = entry.get("safety")
+    safety_errors: list[str] = []
+    if not isinstance(safety, dict):
+        safety_errors.append(f"{prefix} missing `safety` declaration")
+    else:
+        path_containment = safety.get("path_containment")
+        truth_boundary = safety.get("truth_boundary")
+        cleanup_scope = safety.get("cleanup_scope")
+        host_trust = safety.get("host_trust")
+        permission_risk = safety.get("permission_risk")
+        if path_containment not in HOOK_SAFETY_PATH_CONTAINMENT:
+            safety_errors.append(f"{prefix} safety.path_containment must be `repo_relative`")
+        if truth_boundary not in HOOK_SAFETY_TRUTH_BOUNDARIES:
+            safety_errors.append(
+                f"{prefix} safety.truth_boundary must be `runtime_evidence_only`, `context_only`, or `blocking_decision_only`"
+            )
+        if cleanup_scope not in HOOK_SAFETY_CLEANUP_SCOPES:
+            safety_errors.append(f"{prefix} safety.cleanup_scope must be `not_applicable` or `loom_owned_only`")
+        if lifecycle == "cleanup" and cleanup_scope != "loom_owned_only":
+            safety_errors.append(f"{prefix} cleanup hooks must declare safety.cleanup_scope `loom_owned_only`")
+        if lifecycle != "cleanup" and cleanup_scope == "loom_owned_only":
+            safety_errors.append(f"{prefix} non-cleanup hooks must declare safety.cleanup_scope `not_applicable`")
+        if host_trust not in HOOK_SAFETY_HOST_TRUST:
+            safety_errors.append(f"{prefix} safety.host_trust must be `trusted`, `requires_review`, or `untrusted`")
+        elif host_trust == "untrusted":
+            safety_errors.append(f"{prefix} untrusted hook declarations are unsafe and must fail closed")
+        if permission_risk not in HOOK_SAFETY_PERMISSION_RISKS:
+            safety_errors.append(
+                f"{prefix} safety.permission_risk must be `none`, `approval_required`, `sandbox_required`, or `unknown`"
+            )
+        elif permission_risk == "unknown":
+            safety_errors.append(f"{prefix} unknown hook permission risk is unsafe and must fail closed")
+    if safety_errors:
+        if requirement in {"optional", "advisory"}:
+            optional.extend(safety_errors)
+        else:
+            blocking.extend(safety_errors)
+
+    locator_value = entry.get("locator")
+    locator, target = resolve_locator(root, locator_value)
+    locator_error: str | None = None
+    locator_error_is_optional = False
+    if locator_field_missing(locator_value):
+        locator_error = f"{locator_label} missing `locator`"
+        locator_error_is_optional = requirement in {"optional", "advisory"}
+    elif locator is None or target is None:
+        locator_error = locator_boundary_error(locator_value, label=locator_label)
+    elif not target.exists():
+        locator_error = f"{prefix} locator points to missing path `{locator}`"
+        locator_error_is_optional = requirement in {"optional", "advisory"}
+    if locator_error:
+        if locator_error_is_optional:
+            optional.append(locator_error)
+        else:
+            blocking.append(locator_error)
+    return blocking, optional
+
+
+def empty_hook_extension_profile() -> dict[str, Any]:
+    return {
+        "schema_version": HOOK_EXTENSION_PROFILE_SCHEMA,
+        "profile_id": "orchestration-extension/hooks",
+        "enabled": False,
+        "result": "pass",
+        "status": "not_applicable",
+        "summary": "hooks extension profile is not enabled for this repository.",
+        "missing_inputs": [],
+        "missing_optional": [],
+        "checks": [],
+    }
+
+
+def hook_extension_profile_payload(root: Path, hook_locators: object) -> dict[str, Any]:
+    payload = empty_hook_extension_profile()
+    if hook_locators is None:
+        return payload
+    payload.update(
+        {
+            "enabled": True,
+            "status": "present",
+            "summary": "hooks extension profile is enabled and hook declarations are readable.",
+        }
+    )
+    if not isinstance(hook_locators, list):
+        return {
+            **payload,
+            "result": "block",
+            "status": "invalid_declaration",
+            "summary": "hooks extension profile is enabled but hook_locators is not a list.",
+            "missing_inputs": ["hook_locators must be a list"],
+            "checks": [],
+        }
+
+    checks: list[dict[str, Any]] = []
+    missing_inputs: list[str] = []
+    missing_optional: list[str] = []
+    for index, entry in enumerate(hook_locators):
+        blocking, optional = validate_hook_locator(root=root, entry=entry, index=index)
+        if isinstance(entry, dict):
+            hook_id = entry.get("id") if isinstance(entry.get("id"), str) and entry.get("id") else f"hook-{index}"
+            lifecycle = entry.get("lifecycle") if isinstance(entry.get("lifecycle"), str) else "unknown"
+            requirement = entry.get("requirement") if isinstance(entry.get("requirement"), str) else "required"
+            locator = entry.get("locator") if isinstance(entry.get("locator"), str) else ""
+            fallback_to = entry.get("fallback_to") if isinstance(entry.get("fallback_to"), str) else "manual_repair"
+        else:
+            hook_id = f"invalid-{index}"
+            lifecycle = "unknown"
+            requirement = "required"
+            locator = ""
+            fallback_to = "manual_repair"
+        result = "block" if blocking else "warn" if optional else "pass"
+        checks.append(
+            {
+                "id": hook_id,
+                "lifecycle": lifecycle,
+                "requirement": requirement,
+                "locator": locator,
+                "result": result,
+                "summary": "hook declaration is safe for extension consumption."
+                if result == "pass"
+                else "hook declaration has profile-local warnings."
+                if result == "warn"
+                else "hook declaration is unsafe for the configured hooks extension path.",
+                "missing_inputs": blocking,
+                "missing_optional": optional,
+                "fallback_to": fallback_to if result == "block" else None,
+            }
+        )
+        missing_inputs.extend(message for message in blocking if message not in missing_inputs)
+        missing_optional.extend(message for message in optional if message not in missing_optional)
+
+    result = "block" if missing_inputs else "warn" if missing_optional else "pass"
+    summary = "hooks extension profile is enabled and hook declarations are safe."
+    if result == "warn":
+        summary = "hooks extension profile is enabled with profile-local advisory gaps."
+    if result == "block":
+        summary = "hooks extension profile is enabled and unsafe hook declarations block the configured path."
+    return {
+        **payload,
+        "result": result,
+        "summary": summary,
+        "missing_inputs": missing_inputs,
+        "missing_optional": missing_optional,
+        "checks": checks,
+    }
+
+
+def validate_policy_locator(
+    *,
+    root: Path,
+    entry: object,
+    index: int,
+) -> tuple[list[str], list[str]]:
+    blocking: list[str] = []
+    optional: list[str] = []
+    prefix = f"policy_locators[{index}]"
+    locator_label = f"{prefix} locator"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"], optional
+    policy_type = entry.get("policy")
+    if policy_type not in POLICY_TYPES:
+        blocking.append(f"{prefix} policy must be `approval` or `sandbox`")
+    if not isinstance(entry.get("id"), str) or not entry.get("id"):
+        blocking.append(f"{prefix} must include non-empty `id`")
+    if not isinstance(entry.get("summary"), str) or not entry.get("summary"):
+        blocking.append(f"{prefix} must include non-empty `summary`")
+    owner = entry.get("owner")
+    if owner not in DECLARED_LOCATOR_OWNERS:
+        blocking.append(
+            f"{prefix} owner must be one of `repo`, `repo-companion`, `host`, `host-adapter`, `platform`, `external-tool`"
+        )
+    requirement = entry.get("requirement", "required")
+    if requirement not in DECLARED_LOCATOR_REQUIREMENTS:
+        blocking.append(f"{prefix} requirement must be `required`, `optional`, or `advisory`")
+    surface = entry.get("surface")
+    if surface not in DYNAMIC_TOOL_SURFACES:
+        blocking.append(
+            f"{prefix} surface must be one of `admission`, `pre_review`, `review`, `build`, `merge_ready`, `closeout`, `attempt_time`"
+        )
+    locator_value = entry.get("locator")
+    locator, target = resolve_locator(root, locator_value)
+    locator_error: str | None = None
+    locator_error_is_optional = False
+    if locator_field_missing(locator_value):
+        locator_error = f"{locator_label} missing `locator`"
+        locator_error_is_optional = requirement in {"optional", "advisory"}
+    elif locator is None or target is None:
+        locator_error = locator_boundary_error(locator_value, label=locator_label)
+    elif not target.exists():
+        locator_error = f"{prefix} locator points to missing path `{locator}`"
+        locator_error_is_optional = requirement in {"optional", "advisory"}
+    if locator_error:
+        if locator_error_is_optional:
+            optional.append(locator_error)
+        else:
+            blocking.append(locator_error)
+    return blocking, optional
+
+
+def empty_tool_availability() -> dict[str, Any]:
+    return {
+        "schema_version": DYNAMIC_TOOL_HANDSHAKE_SCHEMA,
+        "result": "pass",
+        "summary": "no dynamic tools are declared for this repository.",
+        "declared_tools": [],
+        "failure_summary": {
+            "required_blocking": [],
+            "optional_advisory": [],
+            "by_status": {status: 0 for status in sorted(DYNAMIC_TOOL_HANDSHAKE_STATUSES)},
+        },
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+
+
+def empty_policy_readiness() -> dict[str, Any]:
+    return {
+        "schema_version": POLICY_READINESS_SCHEMA,
+        "result": "pass",
+        "summary": "no approval or sandbox policy read surfaces are declared for this repository.",
+        "declared_policies": [],
+        "approval_policy": None,
+        "sandbox_policy": None,
+        "risk_summary": {
+            "blocking": [],
+            "advisory": [],
+            "by_status": {status: 0 for status in sorted(POLICY_READ_STATUSES)},
+            "by_policy": {policy: "missing" for policy in sorted(POLICY_TYPES)},
+        },
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+
+
+def empty_target_release_status(summary: str = "no target repository release/version surface is declared for this repository.") -> dict[str, Any]:
+    return {
+        "schema_version": RELEASE_TARGET_STATUS_SCHEMA,
+        "result": "not_applicable",
+        "summary": summary,
+        "release_id": None,
+        "display_name": None,
+        "target_branch": None,
+        "release_goal": None,
+        "authored_status": None,
+        "included_scope": {key: [] for key in RELEASE_TARGET_SCOPE_KEYS},
+        "delivery_chain": {
+            "merged": [],
+            "unmerged": [],
+            "unreleased": [],
+            "unreconciled": [],
+        },
+        "release_evidence": {
+            "changelog": {"status": "not_applicable", "locator": None},
+            "release_notes": {"status": "not_applicable", "locator": None},
+            "migration_notes": {"status": "not_applicable", "locator": None},
+            "tag_or_artifact": {"status": "not_applicable", "locator": None},
+            "rollback_basis": {"status": "not_applicable", "locator": None},
+        },
+        "closeout_gaps": [],
+        "rollback_readiness": {"status": "not_applicable", "locator": None},
+        "provenance": {
+            "source_layer": "repo_companion",
+            "source_locator": None,
+            "status_locator": None,
+            "enforcement": None,
+        },
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+
+
+def validate_release_targets(
+    *,
+    root: Path,
+    entry: object,
+) -> list[str]:
+    prefix = "release_targets"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"]
+    missing_inputs: list[str] = []
+    for field in ("catalog_locator", "current_target_locator"):
+        locator, target = resolve_locator(root, entry.get(field))
+        if locator is None or target is None:
+            missing_inputs.append(locator_boundary_error(entry.get(field), label=f"{prefix}.{field}"))
+        elif not target.exists():
+            missing_inputs.append(f"{prefix}.{field} points to missing path `{locator}`")
+    enforcement = entry.get("enforcement")
+    if enforcement not in REPO_INTERFACE_ENFORCEMENT:
+        missing_inputs.append(f"{prefix}.enforcement must be `blocking` or `advisory`")
+    status_locator = entry.get("status_locator")
+    if status_locator not in (None, "", "not_applicable"):
+        locator, target = resolve_locator(root, status_locator)
+        if locator is None or target is None:
+            missing_inputs.append(locator_boundary_error(status_locator, label=f"{prefix}.status_locator"))
+        elif not target.exists():
+            missing_inputs.append(f"{prefix}.status_locator points to missing path `{locator}`")
+    return missing_inputs
+
+
+def normalize_release_scope_entries(entries: object) -> list[dict[str, Any]]:
+    if not isinstance(entries, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        scope_id = entry.get("id")
+        locator = entry.get("locator")
+        delivery_status = entry.get("delivery_status")
+        normalized.append(
+            {
+                "id": scope_id if isinstance(scope_id, str) and scope_id else None,
+                "locator": locator if isinstance(locator, str) and locator else None,
+                "delivery_status": (
+                    delivery_status
+                    if isinstance(delivery_status, str) and delivery_status in RELEASE_TARGET_DELIVERY_STATUSES
+                    else "planned"
+                ),
+            }
+        )
+    return normalized
+
+
+def release_evidence_entry(root: Path, locator_value: object) -> dict[str, Any]:
+    if locator_value in (None, "", "not_applicable"):
+        return {"status": "not_applicable", "locator": None if locator_value in (None, "") else "not_applicable"}
+    locator, target = resolve_locator(root, locator_value)
+    if locator is None or target is None:
+        return {"status": "invalid", "locator": locator_value}
+    if not target.exists():
+        return {"status": "missing", "locator": locator}
+    return {"status": "present", "locator": locator}
+
+
+def target_release_status_from_entry(root: Path, release_targets: object) -> dict[str, Any]:
+    payload = empty_target_release_status()
+    if not isinstance(release_targets, dict):
+        payload.update(
+            {
+                "result": "block",
+                "summary": "target repository release/version declaration is unreadable.",
+                "missing_inputs": ["release_targets must be an object"],
+                "fallback_to": "closeout",
+            }
+        )
+        return payload
+
+    enforcement = release_targets.get("enforcement") if release_targets.get("enforcement") in RELEASE_TARGET_ENFORCEMENT else None
+    payload["provenance"]["enforcement"] = enforcement
+
+    current_locator, current_target = resolve_locator(root, release_targets.get("current_target_locator"))
+    status_locator, status_target = resolve_locator(root, release_targets.get("status_locator"))
+    payload["provenance"]["source_locator"] = current_locator
+    payload["provenance"]["status_locator"] = status_locator
+
+    missing_inputs: list[str] = []
+    closeout_gaps: list[str] = []
+
+    if current_locator is None or current_target is None or not current_target.exists():
+        missing_inputs.append("release_targets.current_target_locator")
+        payload.update(
+            {
+                "result": "block" if enforcement == "blocking" else "not_applicable",
+                "summary": "current target release locator is missing or unreadable.",
+                "missing_inputs": missing_inputs,
+                "fallback_to": "closeout" if enforcement == "blocking" else None,
+            }
+        )
+        return payload
+
+    release_payload = safe_read_json(current_target)
+    if release_payload is None:
+        missing_inputs.append(f"{current_locator} is unreadable")
+    elif release_payload.get("schema_version") != RELEASE_TARGET_SCHEMA:
+        missing_inputs.append(f"{current_locator} schema_version must be `{RELEASE_TARGET_SCHEMA}`")
+    else:
+        payload["release_id"] = release_payload.get("release_id")
+        payload["display_name"] = release_payload.get("display_name")
+        payload["target_branch"] = release_payload.get("target_branch")
+        payload["release_goal"] = release_payload.get("release_goal")
+        payload["authored_status"] = release_payload.get("status")
+
+        for field in ("release_id", "display_name", "target_branch", "release_goal"):
+            if not isinstance(release_payload.get(field), str) or not str(release_payload.get(field)).strip():
+                missing_inputs.append(f"{current_locator} missing `{field}`")
+        status_value = release_payload.get("status")
+        if not isinstance(status_value, str) or status_value not in RELEASE_TARGET_STATUSES:
+            missing_inputs.append(f"{current_locator} status must stay within the stable contract")
+
+        included_scope = release_payload.get("included_scope")
+        if not isinstance(included_scope, dict):
+            missing_inputs.append(f"{current_locator} missing `included_scope`")
+        else:
+            normalized_scope = {key: normalize_release_scope_entries(included_scope.get(key)) for key in RELEASE_TARGET_SCOPE_KEYS}
+            payload["included_scope"] = normalized_scope
+            merged: list[dict[str, Any]] = []
+            unmerged: list[dict[str, Any]] = []
+            unreleased: list[dict[str, Any]] = []
+            unreconciled: list[dict[str, Any]] = []
+            for scope_key, entries in normalized_scope.items():
+                for entry in entries:
+                    item = {"scope": scope_key, **entry}
+                    delivery_status = entry.get("delivery_status")
+                    if delivery_status in {"merged", "unreleased", "released", "unreconciled", "closed_out"}:
+                        merged.append(item)
+                    if delivery_status in {"planned", "active", "unmerged"}:
+                        unmerged.append(item)
+                    if delivery_status == "unreleased":
+                        unreleased.append(item)
+                    if delivery_status == "unreconciled":
+                        unreconciled.append(item)
+            payload["delivery_chain"] = {
+                "merged": merged,
+                "unmerged": unmerged,
+                "unreleased": unreleased,
+                "unreconciled": unreconciled,
+            }
+
+        evidence = release_payload.get("evidence")
+        if not isinstance(evidence, dict):
+            missing_inputs.append(f"{current_locator} missing `evidence`")
+        else:
+            release_evidence = {
+                "changelog": release_evidence_entry(root, evidence.get("changelog_locator")),
+                "release_notes": release_evidence_entry(root, evidence.get("release_notes_locator")),
+                "migration_notes": release_evidence_entry(root, evidence.get("migration_notes_locator")),
+                "tag_or_artifact": release_evidence_entry(root, evidence.get("tag_or_artifact_locator")),
+                "rollback_basis": release_evidence_entry(root, evidence.get("rollback_basis_locator")),
+            }
+            payload["release_evidence"] = release_evidence
+            for evidence_key, evidence_entry in release_evidence.items():
+                if evidence_entry.get("status") in {"missing", "invalid"}:
+                    closeout_gaps.append(f"{evidence_key} evidence is {evidence_entry.get('status')}")
+            rollback_entry = release_evidence["rollback_basis"]
+            payload["rollback_readiness"] = {
+                "status": "ready" if rollback_entry.get("status") == "present" else rollback_entry.get("status"),
+                "locator": rollback_entry.get("locator"),
+            }
+
+        authority = release_payload.get("authority")
+        if not isinstance(authority, dict):
+            missing_inputs.append(f"{current_locator} missing `authority`")
+        else:
+            for field in ("owner", "source_kind", "source_locator"):
+                if not isinstance(authority.get(field), str) or not str(authority.get(field)).strip():
+                    missing_inputs.append(f"{current_locator} authority missing `{field}`")
+
+    if status_locator is not None and status_target is not None and status_target.exists():
+        status_payload = safe_read_json(status_target)
+        if status_payload is None:
+            closeout_gaps.append("repo-owned release status locator is unreadable")
+        elif status_payload.get("schema_version") != RELEASE_TARGET_STATUS_SCHEMA:
+            closeout_gaps.append(f"{status_locator} schema_version must be `{RELEASE_TARGET_STATUS_SCHEMA}`")
+
+    payload["closeout_gaps"] = closeout_gaps
+    blocking = bool(missing_inputs) or (enforcement == "blocking" and bool(closeout_gaps))
+    payload["missing_inputs"] = missing_inputs
+    payload["result"] = "block" if blocking else "pass"
+    payload["summary"] = (
+        "target repository release/version surface is readable."
+        if payload["result"] == "pass"
+        else "target repository release/version surface is present but incomplete or missing required closeout evidence."
+    )
+    payload["fallback_to"] = "closeout" if payload["result"] == "block" else None
+    return payload
+
+
+def empty_release_targets_surface() -> dict[str, Any]:
+    return {
+        "availability": "absent",
+        "catalog": carrier_entry("missing", "unknown", "repo companion interface.release_targets"),
+        "current_target": carrier_entry("missing", "unknown", "repo companion interface.release_targets"),
+        "status": carrier_entry("missing", "unknown", "repo companion interface.release_targets"),
+        "enforcement": "unknown",
+        "summary": "no target repository release/version surface is declared for this repository.",
+        "missing_inputs": [],
+        "target_release": empty_target_release_status(),
+    }
+
+
+def read_tool_handshake_declaration(path: Path) -> tuple[dict[str, Any] | None, list[str]]:
+    if path.suffix.lower() != ".json":
+        return None, []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, [f"tool handshake declaration is unreadable: {exc}"]
+    if not isinstance(payload, dict):
+        return None, ["tool handshake declaration must be a JSON object"]
+    if payload.get("schema_version") != DYNAMIC_TOOL_HANDSHAKE_SCHEMA:
+        return None, [f"tool handshake declaration schema must be `{DYNAMIC_TOOL_HANDSHAKE_SCHEMA}`"]
+    status = payload.get("status")
+    if status not in DYNAMIC_TOOL_HANDSHAKE_STATUSES:
+        return None, [
+            "tool handshake status must be one of `advertised`, `unavailable`, `unsupported`, `failed`"
+        ]
+    failure_category = payload.get("failure_category", "none")
+    if failure_category not in DYNAMIC_TOOL_HANDSHAKE_FAILURE_CATEGORIES:
+        return None, ["tool handshake failure_category is outside the stable vocabulary"]
+    return payload, []
+
+
+def read_policy_declaration(path: Path) -> tuple[dict[str, Any] | None, list[str]]:
+    if path.suffix.lower() != ".json":
+        return None, []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, [f"policy declaration is unreadable: {exc}"]
+    if not isinstance(payload, dict):
+        return None, ["policy declaration must be a JSON object"]
+    if payload.get("schema_version") != POLICY_READ_SCHEMA:
+        return None, [f"policy declaration schema must be `{POLICY_READ_SCHEMA}`"]
+    policy_type = payload.get("policy")
+    if policy_type not in POLICY_TYPES:
+        return None, ["policy declaration policy must be `approval` or `sandbox`"]
+    status = payload.get("status")
+    if status not in POLICY_READ_STATUSES:
+        return None, ["policy declaration status must be one of `declared`, `missing`, `conflict`, `unsafe`"]
+    risk = payload.get("risk", "none")
+    if risk not in POLICY_RISK_LEVELS:
+        return None, ["policy declaration risk is outside the stable vocabulary"]
+    return payload, []
+
+
+def dynamic_tool_status_entry(
+    *,
+    root: Path,
+    entry: object,
+    index: int,
+) -> dict[str, Any]:
+    prefix = f"dynamic_tool_locators[{index}]"
+    if not isinstance(entry, dict):
+        return {
+            "id": f"invalid-{index}",
+            "surface": "unknown",
+            "requirement": "required",
+            "owner": "unknown",
+            "status": "failed",
+            "result": "block",
+            "failure_category": "invalid_declaration",
+            "summary": f"{prefix} must be an object",
+            "evidence": {"status": "missing", "locator": None},
+            "missing_inputs": [f"{prefix} must be an object"],
+            "fallback_to": "admission",
+        }
+
+    tool_id = str(entry.get("id") or f"tool-{index}")
+    requirement = str(entry.get("requirement") or "required")
+    surface = str(entry.get("surface") or "attempt_time")
+    fallback_to = entry.get("fallback_to") if isinstance(entry.get("fallback_to"), str) else "admission"
+    locator_value = entry.get("locator")
+    locator, target = resolve_locator(root, locator_value)
+    missing_inputs: list[str] = []
+    evidence: dict[str, Any] = {
+        "status": "missing",
+        "locator": locator if isinstance(locator, str) else locator_value,
+    }
+    status = "advertised"
+    failure_category = "none"
+    summary = "dynamic tool is declared and its availability locator is readable."
+
+    if locator_field_missing(locator_value):
+        status = "unavailable"
+        failure_category = "unavailable"
+        summary = "dynamic tool has no availability locator."
+        missing_inputs.append(f"{prefix} `{tool_id}` locator missing `locator`")
+    elif locator is None or target is None:
+        status = "failed"
+        failure_category = "invalid_declaration"
+        summary = "dynamic tool availability locator is outside the repository boundary."
+        missing_inputs.append(locator_boundary_error(locator_value, label=f"{prefix} `{tool_id}` locator"))
+    elif not target.exists():
+        status = "unavailable"
+        failure_category = "unavailable"
+        summary = "dynamic tool availability locator points to a missing path."
+        missing_inputs.append(f"{prefix} locator points to missing path `{locator}`")
+    else:
+        evidence = {"status": "present", "locator": locator}
+        declaration, declaration_errors = read_tool_handshake_declaration(target)
+        if declaration_errors:
+            status = "failed"
+            failure_category = "invalid_declaration"
+            summary = "dynamic tool availability declaration is unreadable or invalid."
+            missing_inputs.extend(f"{prefix} `{tool_id}` {message}" for message in declaration_errors)
+        elif declaration:
+            status = str(declaration["status"])
+            failure_category = str(declaration.get("failure_category", "none"))
+            summary = str(declaration.get("summary") or f"dynamic tool handshake reported `{status}`.")
+            fallback_value = declaration.get("fallback_to")
+            if isinstance(fallback_value, str) and fallback_value:
+                fallback_to = fallback_value
+            evidence_payload = declaration.get("evidence")
+            if isinstance(evidence_payload, dict):
+                evidence = {**evidence, **evidence_payload, "locator": locator}
+            if status != "advertised":
+                missing_inputs.append(f"dynamic tool `{tool_id}` is {status}")
+
+    blocking = requirement == "required" and status != "advertised"
+    return {
+        "id": tool_id,
+        "summary": summary,
+        "owner": entry.get("owner"),
+        "requirement": requirement,
+        "surface": surface,
+        "locator": locator if isinstance(locator, str) else locator_value,
+        "status": status,
+        "result": "block" if blocking else "pass",
+        "failure_category": failure_category,
+        "evidence": evidence,
+        "missing_inputs": missing_inputs if blocking else [],
+        "advisory": missing_inputs if not blocking else [],
+        "fallback_to": fallback_to if blocking else None,
+    }
+
+
+def policy_status_entry(
+    *,
+    root: Path,
+    entry: object,
+    index: int,
+) -> dict[str, Any]:
+    prefix = f"policy_locators[{index}]"
+    if not isinstance(entry, dict):
+        return {
+            "id": f"invalid-{index}",
+            "policy": "approval",
+            "surface": "unknown",
+            "requirement": "required",
+            "owner": "unknown",
+            "status": "unsafe",
+            "result": "block",
+            "risk": "unsafe",
+            "summary": f"{prefix} must be an object",
+            "evidence": {"status": "missing", "locator": None},
+            "missing_inputs": [f"{prefix} must be an object"],
+            "fallback_to": "admission",
+        }
+
+    policy_id = str(entry.get("id") or f"policy-{index}")
+    policy_type = str(entry.get("policy") or "approval")
+    requirement = str(entry.get("requirement") or "required")
+    surface = str(entry.get("surface") or "attempt_time")
+    fallback_to = entry.get("fallback_to") if isinstance(entry.get("fallback_to"), str) else "admission"
+    locator_value = entry.get("locator")
+    locator, target = resolve_locator(root, locator_value)
+    missing_inputs: list[str] = []
+    evidence: dict[str, Any] = {
+        "status": "missing",
+        "locator": locator if isinstance(locator, str) else locator_value,
+    }
+    status = "declared"
+    risk = "none"
+    summary = "policy read declaration is readable."
+
+    if locator_field_missing(locator_value):
+        status = "missing"
+        risk = "unknown"
+        summary = "policy read declaration has no locator."
+        missing_inputs.append(f"{prefix} `{policy_id}` locator missing `locator`")
+    elif locator is None or target is None:
+        status = "unsafe"
+        risk = "unsafe"
+        summary = "policy read locator is outside the repository boundary."
+        missing_inputs.append(locator_boundary_error(locator_value, label=f"{prefix} `{policy_id}` locator"))
+    elif not target.exists():
+        status = "missing"
+        risk = "unknown"
+        summary = "policy read locator points to a missing path."
+        missing_inputs.append(f"{prefix} locator points to missing path `{locator}`")
+    else:
+        evidence = {"status": "present", "locator": locator}
+        declaration, declaration_errors = read_policy_declaration(target)
+        if declaration_errors:
+            status = "unsafe"
+            risk = "unsafe"
+            summary = "policy declaration is unreadable or invalid."
+            missing_inputs.extend(f"{prefix} `{policy_id}` {message}" for message in declaration_errors)
+        elif declaration:
+            status = str(declaration["status"])
+            policy_type = str(declaration.get("policy") or policy_type)
+            risk = str(declaration.get("risk", "none"))
+            summary = str(declaration.get("summary") or f"{policy_type} policy read reported `{status}`.")
+            fallback_value = declaration.get("fallback_to")
+            if isinstance(fallback_value, str) and fallback_value:
+                fallback_to = fallback_value
+            evidence_payload = declaration.get("evidence")
+            if isinstance(evidence_payload, dict):
+                evidence = {**evidence, **evidence_payload, "locator": locator}
+            if status != "declared":
+                missing_inputs.append(f"{policy_type} policy `{policy_id}` is {status}")
+
+    blocking = requirement == "required" and status in {"missing", "conflict", "unsafe"}
+    return {
+        "id": policy_id,
+        "summary": summary,
+        "owner": entry.get("owner"),
+        "requirement": requirement,
+        "surface": surface,
+        "policy": policy_type,
+        "locator": locator if isinstance(locator, str) else locator_value,
+        "status": status,
+        "result": "block" if blocking else "pass",
+        "risk": risk,
+        "evidence": evidence,
+        "missing_inputs": missing_inputs if blocking else [],
+        "advisory": missing_inputs if not blocking else [],
+        "fallback_to": fallback_to if blocking else None,
+    }
+
+
+def dynamic_tool_availability_payload(root: Path, dynamic_tool_locators: object) -> dict[str, Any]:
+    payload = empty_tool_availability()
+    if dynamic_tool_locators is None:
+        return payload
+    if not isinstance(dynamic_tool_locators, list):
+        return {
+            **payload,
+            "result": "block",
+            "summary": "dynamic tool locators are declared but not readable as a list.",
+            "missing_inputs": ["dynamic_tool_locators must be a list"],
+            "fallback_to": "admission",
+        }
+
+    tools = [
+        dynamic_tool_status_entry(root=root, entry=entry, index=index)
+        for index, entry in enumerate(dynamic_tool_locators)
+    ]
+    by_status = {status: 0 for status in sorted(DYNAMIC_TOOL_HANDSHAKE_STATUSES)}
+    required_blocking: list[dict[str, Any]] = []
+    optional_advisory: list[dict[str, Any]] = []
+    missing_inputs: list[str] = []
+    fallback_to: str | None = None
+    for tool in tools:
+        status = tool.get("status")
+        if isinstance(status, str) and status in by_status:
+            by_status[status] += 1
+        if tool.get("result") == "block":
+            required_blocking.append(tool)
+            fallback = tool.get("fallback_to")
+            if fallback_to is None and isinstance(fallback, str) and fallback:
+                fallback_to = fallback
+            for message in tool.get("missing_inputs", []):
+                if message not in missing_inputs:
+                    missing_inputs.append(str(message))
+        elif tool.get("status") != "advertised":
+            optional_advisory.append(tool)
+
+    result = "block" if required_blocking else "pass"
+    if required_blocking:
+        summary = "required dynamic tool handshake evidence is unavailable, unsupported, failed, or invalid."
+    elif optional_advisory:
+        summary = "only optional or advisory dynamic tool handshake failures are present."
+    elif tools:
+        summary = "dynamic tool declarations are readable and advertised."
+    else:
+        summary = payload["summary"]
+    return {
+        **payload,
+        "result": result,
+        "summary": summary,
+        "declared_tools": tools,
+        "failure_summary": {
+            "required_blocking": required_blocking,
+            "optional_advisory": optional_advisory,
+            "by_status": by_status,
+        },
+        "missing_inputs": missing_inputs,
+        "fallback_to": fallback_to if result == "block" else None,
+    }
+
+
+def policy_readiness_payload(root: Path, policy_locators: object) -> dict[str, Any]:
+    payload = empty_policy_readiness()
+    if policy_locators is None:
+        return payload
+    if not isinstance(policy_locators, list):
+        return {
+            **payload,
+            "result": "block",
+            "summary": "policy locators are declared but not readable as a list.",
+            "missing_inputs": ["policy_locators must be a list"],
+            "fallback_to": "admission",
+        }
+
+    policies = [
+        policy_status_entry(root=root, entry=entry, index=index)
+        for index, entry in enumerate(policy_locators)
+    ]
+    by_status = {status: 0 for status in sorted(POLICY_READ_STATUSES)}
+    by_policy = {policy: "missing" for policy in sorted(POLICY_TYPES)}
+    blocking: list[dict[str, Any]] = []
+    advisory: list[dict[str, Any]] = []
+    missing_inputs: list[str] = []
+    fallback_to: str | None = None
+    latest_by_policy: dict[str, dict[str, Any]] = {}
+    for policy in policies:
+        status = policy.get("status")
+        if isinstance(status, str) and status in by_status:
+            by_status[status] += 1
+        policy_type = policy.get("policy")
+        if isinstance(policy_type, str) and policy_type in by_policy:
+            by_policy[policy_type] = str(status or "missing")
+            latest_by_policy[policy_type] = policy
+        if policy.get("result") == "block":
+            blocking.append(policy)
+            fallback = policy.get("fallback_to")
+            if fallback_to is None and isinstance(fallback, str) and fallback:
+                fallback_to = fallback
+            for message in policy.get("missing_inputs", []):
+                if message not in missing_inputs:
+                    missing_inputs.append(str(message))
+        elif policy.get("status") != "declared":
+            advisory.append(policy)
+
+    result = "block" if blocking else "pass"
+    if blocking:
+        summary = "required approval or sandbox policy evidence is missing, conflicting, or unsafe."
+    elif advisory:
+        summary = "only optional or advisory approval/sandbox policy risk is present."
+    elif policies:
+        summary = "approval and sandbox policy read declarations are readable."
+    else:
+        summary = payload["summary"]
+    return {
+        **payload,
+        "result": result,
+        "summary": summary,
+        "declared_policies": policies,
+        "approval_policy": latest_by_policy.get("approval"),
+        "sandbox_policy": latest_by_policy.get("sandbox"),
+        "risk_summary": {
+            "blocking": blocking,
+            "advisory": advisory,
+            "by_status": by_status,
+            "by_policy": by_policy,
+        },
+        "missing_inputs": missing_inputs,
+        "fallback_to": fallback_to if result == "block" else None,
+    }
+
+
 def validate_repo_interop_collection_entry(
     *,
     root: Path,
     collection: str,
     entry: object,
     index: int,
-) -> list[str]:
+) -> tuple[list[str], list[str]]:
     prefix = f"{collection}[{index}]"
     if not isinstance(entry, dict):
-        return [f"{prefix} must be an object"]
+        return [f"{prefix} must be an object"], []
+    entry_id = entry.get("id")
+    locator_label = f"{prefix} `{entry_id}` locator" if isinstance(entry_id, str) and entry_id.strip() else f"{prefix} locator"
     missing_inputs: list[str] = []
-    for field in ("id", "summary", "locator"):
+    missing_optional: list[str] = []
+    for field in ("id", "summary", "owner", "requirement", "fallback_to"):
         value = entry.get(field)
         if not isinstance(value, str) or not value.strip():
             missing_inputs.append(f"{prefix} missing `{field}`")
+    owner = entry.get("owner")
+    if owner not in DECLARED_LOCATOR_OWNERS:
+        missing_inputs.append(f"{prefix} owner must stay repo/host/platform-owned, not Loom core")
+    requirement = entry.get("requirement")
+    if requirement not in DECLARED_LOCATOR_REQUIREMENTS:
+        missing_inputs.append(f"{prefix} requirement must be `required`, `optional`, or `advisory`")
     surfaces = entry.get("surfaces")
     if not isinstance(surfaces, list) or not surfaces:
         missing_inputs.append(f"{prefix} must include `surfaces` as a non-empty list")
@@ -834,12 +2083,51 @@ def validate_repo_interop_collection_entry(
                 missing_inputs.append(
                     f"{prefix}.surfaces[{surface_index}] must be one of `admission`, `pre_review`, `review`, `build`, `merge_ready`, `closeout`"
                 )
-    locator, target = resolve_locator(root, entry.get("locator"))
-    if locator is None or target is None:
-        missing_inputs.append(locator_boundary_error(entry.get("locator"), label=f"{prefix} locator"))
+    locator_value = entry.get("locator")
+    locator, target = resolve_locator(root, locator_value)
+    locator_error: str | None = None
+    locator_error_is_optional = False
+    if locator_field_missing(locator_value):
+        locator_error = f"{locator_label} missing `locator`"
+        locator_error_is_optional = requirement in {"optional", "advisory"}
+    elif locator is None or target is None:
+        locator_error = locator_boundary_error(locator_value, label=locator_label)
     elif not target.exists():
-        missing_inputs.append(f"{prefix} locator points to missing path `{locator}`")
-    return missing_inputs
+        locator_error = f"{prefix} locator points to missing path `{locator}`"
+        locator_error_is_optional = requirement in {"optional", "advisory"}
+    if locator_error:
+        if locator_error_is_optional:
+            missing_optional.append(locator_error)
+        else:
+            missing_inputs.append(locator_error)
+    return missing_inputs, missing_optional
+
+
+def validate_external_orchestrator_entry(
+    *,
+    root: Path,
+    entry: object,
+    index: int,
+) -> tuple[list[str], list[str]]:
+    missing_inputs, missing_optional = validate_repo_interop_collection_entry(
+        root=root,
+        collection="external_orchestrators",
+        entry=entry,
+        index=index,
+    )
+    if not isinstance(entry, dict):
+        return missing_inputs, missing_optional
+    prefix = f"external_orchestrators[{index}]"
+    operations = entry.get("operations")
+    if not isinstance(operations, list) or not operations:
+        missing_inputs.append(f"{prefix} must include `operations` as a non-empty list")
+    else:
+        for operation_index, operation in enumerate(operations):
+            if operation not in EXTERNAL_ORCHESTRATOR_OPERATIONS:
+                missing_inputs.append(
+                    f"{prefix}.operations[{operation_index}] must be one of `work_item_read`, `workspace_attach`, `recovery_writeback`, `status_read`, `gate_read`"
+                )
+    return missing_inputs, missing_optional
 
 
 def validate_shadow_surface(
@@ -875,10 +2163,19 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
         "companion_entry": carrier_entry("missing", "unknown", "repo companion manifest"),
         "repo_specific_requirements": carrier_entry("missing", "unknown", "repo companion interface"),
         "specialized_gates": carrier_entry("missing", "unknown", "repo companion interface"),
+        "dynamic_tool_locators": carrier_entry("missing", "unknown", "repo companion interface"),
+        "policy_locators": carrier_entry("missing", "unknown", "repo companion interface"),
+        "hook_locators": carrier_entry("missing", "unknown", "repo companion interface"),
+        "release_targets": empty_release_targets_surface(),
+        "tool_availability": empty_tool_availability(),
+        "policy_readiness": empty_policy_readiness(),
+        "hook_profile": empty_hook_extension_profile(),
         "summary": "no repo companion interface is declared for this repository.",
         "missing_inputs": [],
+        "missing_optional": [],
     }
     missing_inputs: list[str] = []
+    missing_optional: list[str] = []
 
     if not manifest_path.exists():
         if has_legacy_companion_docs(root):
@@ -928,6 +2225,11 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
     )
     repo_interface_surface["repo_specific_requirements"] = manifest_repo_interface
     repo_interface_surface["specialized_gates"] = manifest_repo_interface.copy()
+    repo_interface_surface["dynamic_tool_locators"] = manifest_repo_interface.copy()
+    repo_interface_surface["policy_locators"] = manifest_repo_interface.copy()
+    repo_interface_surface["release_targets"]["catalog"] = manifest_repo_interface.copy()
+    repo_interface_surface["release_targets"]["current_target"] = manifest_repo_interface.copy()
+    repo_interface_surface["release_targets"]["status"] = manifest_repo_interface.copy()
     if manifest_repo_interface_error:
         missing_inputs.append(manifest_repo_interface_error)
 
@@ -1023,6 +2325,101 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
                             entry=context_schema,
                         )
                     )
+                dynamic_tool_locators = interface_payload.get("dynamic_tool_locators")
+                if dynamic_tool_locators is not None:
+                    repo_interface_surface["tool_availability"] = dynamic_tool_availability_payload(
+                        root,
+                        dynamic_tool_locators,
+                    )
+                    if not isinstance(dynamic_tool_locators, list):
+                        missing_inputs.append("dynamic_tool_locators must be a list")
+                    else:
+                        for index, entry in enumerate(dynamic_tool_locators):
+                            blocking, optional = validate_dynamic_tool_locator(
+                                root=root,
+                                entry=entry,
+                                index=index,
+                            )
+                            missing_inputs.extend(blocking)
+                            missing_optional.extend(optional)
+                policy_locators = interface_payload.get("policy_locators")
+                if policy_locators is not None:
+                    repo_interface_surface["policy_readiness"] = policy_readiness_payload(
+                        root,
+                        policy_locators,
+                    )
+                    if not isinstance(policy_locators, list):
+                        missing_inputs.append("policy_locators must be a list")
+                    else:
+                        for index, entry in enumerate(policy_locators):
+                            blocking, optional = validate_policy_locator(
+                                root=root,
+                                entry=entry,
+                                index=index,
+                            )
+                            missing_inputs.extend(blocking)
+                            missing_optional.extend(optional)
+                hook_locators = interface_payload.get("hook_locators")
+                if hook_locators is not None:
+                    repo_interface_surface["hook_profile"] = hook_extension_profile_payload(
+                        root,
+                        hook_locators,
+                    )
+                    repo_interface_surface["hook_locators"] = carrier_entry(
+                        "present",
+                        ".loom/companion/repo-interface.json",
+                        "repo companion interface",
+                    )
+                release_targets = interface_payload.get("release_targets")
+                if release_targets is not None:
+                    blocking_inputs = validate_release_targets(root=root, entry=release_targets)
+                    missing_inputs.extend(blocking_inputs)
+                    repo_interface_surface["release_targets"]["availability"] = "present"
+                    if isinstance(release_targets, dict):
+                        repo_interface_surface["release_targets"]["enforcement"] = (
+                            release_targets.get("enforcement")
+                            if release_targets.get("enforcement") in RELEASE_TARGET_ENFORCEMENT
+                            else "unknown"
+                        )
+                        for source_key, target_key in (
+                            ("catalog_locator", "catalog"),
+                            ("current_target_locator", "current_target"),
+                            ("status_locator", "status"),
+                        ):
+                            locator_value = release_targets.get(source_key)
+                            if locator_value in (None, "", "not_applicable") and source_key == "status_locator":
+                                repo_interface_surface["release_targets"]["status"] = carrier_entry(
+                                    "missing",
+                                    "not_applicable",
+                                    f"repo companion interface.release_targets.{source_key}",
+                                )
+                                continue
+                            repo_interface_surface["release_targets"][target_key], _ = locator_status_entry(
+                                root=root,
+                                raw_locator=locator_value,
+                                source=f"repo companion interface.release_targets.{source_key}",
+                            )
+                    target_release_payload = target_release_status_from_entry(
+                        root,
+                        release_targets,
+                    )
+                    repo_interface_surface["release_targets"]["target_release"] = target_release_payload
+                    if blocking_inputs or target_release_payload.get("result") == "block":
+                        repo_interface_surface["release_targets"]["availability"] = "incomplete"
+                    if target_release_payload.get("result") == "block":
+                        missing_inputs.extend(
+                            str(message)
+                            for message in target_release_payload.get("missing_inputs", [])
+                        )
+                    repo_interface_surface["release_targets"]["summary"] = target_release_payload["summary"]
+                    repo_interface_surface["release_targets"]["missing_inputs"] = list(
+                        dict.fromkeys(
+                            [
+                                *blocking_inputs,
+                                *target_release_payload.get("missing_inputs", []),
+                            ]
+                        )
+                    )
 
     if missing_inputs:
         repo_interface_surface["availability"] = "incomplete"
@@ -1032,9 +2429,12 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
     else:
         repo_interface_surface["availability"] = "present"
         repo_interface_surface["summary"] = (
-            "repo companion manifest and machine-readable repo interface are readable."
+            "repo companion interface is readable with optional tool locator advisories."
+            if missing_optional
+            else "repo companion manifest and machine-readable repo interface are readable."
         )
     repo_interface_surface["missing_inputs"] = list(dict.fromkeys(missing_inputs))
+    repo_interface_surface["missing_optional"] = list(dict.fromkeys(missing_optional))
     return repo_interface_surface, list(dict.fromkeys(missing_inputs))
 
 
@@ -1046,10 +2446,13 @@ def detect_repo_interop(root: Path) -> tuple[dict[str, Any], list[str]]:
         "host_adapters": carrier_entry("missing", "unknown", "repo interop contract"),
         "repo_native_carriers": carrier_entry("missing", "unknown", "repo interop contract"),
         "shadow_surfaces": carrier_entry("missing", "unknown", "repo interop contract"),
+        "external_orchestrators": carrier_entry("missing", "unknown", "repo interop contract"),
         "summary": "no repo interop contract is declared for this repository.",
         "missing_inputs": [],
+        "missing_optional": [],
     }
     missing_inputs: list[str] = []
+    missing_optional: list[str] = []
 
     if not interop_path.exists():
         return repo_interop_surface, missing_inputs
@@ -1072,7 +2475,7 @@ def detect_repo_interop(root: Path) -> tuple[dict[str, Any], list[str]]:
                 + ", ".join(extra_keys)
             )
 
-        for key in ("host_adapters", "repo_native_carriers", "shadow_surfaces"):
+        for key in ("host_adapters", "repo_native_carriers", "shadow_surfaces", "external_orchestrators"):
             repo_interop_surface[key] = carrier_entry(
                 "present",
                 ".loom/companion/interop.json",
@@ -1084,28 +2487,41 @@ def detect_repo_interop(root: Path) -> tuple[dict[str, Any], list[str]]:
             missing_inputs.append("repo interop contract must include `host_adapters` as a list")
         else:
             for index, entry in enumerate(host_adapters):
-                missing_inputs.extend(
-                    validate_repo_interop_collection_entry(
-                        root=root,
-                        collection="host_adapters",
-                        entry=entry,
-                        index=index,
-                    )
+                blocking, optional = validate_repo_interop_collection_entry(
+                    root=root,
+                    collection="host_adapters",
+                    entry=entry,
+                    index=index,
                 )
+                missing_inputs.extend(blocking)
+                missing_optional.extend(optional)
 
         repo_native_carriers = interop_payload.get("repo_native_carriers")
         if not isinstance(repo_native_carriers, list):
             missing_inputs.append("repo interop contract must include `repo_native_carriers` as a list")
         else:
             for index, entry in enumerate(repo_native_carriers):
-                missing_inputs.extend(
-                    validate_repo_interop_collection_entry(
-                        root=root,
-                        collection="repo_native_carriers",
-                        entry=entry,
-                        index=index,
-                    )
+                blocking, optional = validate_repo_interop_collection_entry(
+                    root=root,
+                    collection="repo_native_carriers",
+                    entry=entry,
+                    index=index,
                 )
+                missing_inputs.extend(blocking)
+                missing_optional.extend(optional)
+
+        external_orchestrators = interop_payload.get("external_orchestrators", [])
+        if not isinstance(external_orchestrators, list):
+            missing_inputs.append("repo interop contract must include `external_orchestrators` as a list")
+        else:
+            for index, entry in enumerate(external_orchestrators):
+                blocking, optional = validate_external_orchestrator_entry(
+                    root=root,
+                    entry=entry,
+                    index=index,
+                )
+                missing_inputs.extend(blocking)
+                missing_optional.extend(optional)
 
         shadow_surfaces = interop_payload.get("shadow_surfaces")
         if not isinstance(shadow_surfaces, dict):
@@ -1134,8 +2550,13 @@ def detect_repo_interop(root: Path) -> tuple[dict[str, Any], list[str]]:
         repo_interop_surface["summary"] = "repo interop contract exists, but the machine-readable read surface is incomplete."
     else:
         repo_interop_surface["availability"] = "present"
-        repo_interop_surface["summary"] = "repo interop contract is readable for host adapters, repo-native carriers, and shadow parity."
+        repo_interop_surface["summary"] = (
+            "repo interop contract is readable with optional locator advisories."
+            if missing_optional
+            else "repo interop contract is readable for host adapters, repo-native carriers, shadow parity, and external orchestrator locators."
+        )
     repo_interop_surface["missing_inputs"] = list(dict.fromkeys(missing_inputs))
+    repo_interop_surface["missing_optional"] = list(dict.fromkeys(missing_optional))
     return repo_interop_surface, list(dict.fromkeys(missing_inputs))
 
 
@@ -1393,8 +2814,24 @@ def host_api_snapshot(
     requests: list[dict[str, Any]],
     errors: list[str],
     required_live: bool = False,
+    budget: object | None = None,
 ) -> dict[str, Any]:
     verification_status = "verified" if not errors else "unverified"
+    if errors:
+        budget_payload = execution_budget_payload(
+            status="unavailable",
+            summary="; ".join(errors),
+            provenance={"source": "github_control_plane", "error_count": len(errors)},
+            adapter_evidence_locator="",
+            enforcement=LOOM_EXECUTION_BUDGET_ENFORCEMENT,
+        )
+    else:
+        budget_payload = normalize_execution_budget_payload(
+            budget,
+            fallback_status="not_applicable",
+            fallback_summary="execution budget is not collected for this invocation.",
+            fallback_locator="",
+        )
     return {
         "schema_version": "loom-host-api-snapshot/v1",
         "read_mode": "uncached_live_gate" if required_live else "cached_non_merge",
@@ -1403,7 +2840,7 @@ def host_api_snapshot(
         "cache_scope": "none" if required_live else "process",
         "requests": requests,
         "errors": errors,
-        "budget": HOST_API_BUDGET_CONTRACT,
+        "budget": budget_payload,
     }
 
 

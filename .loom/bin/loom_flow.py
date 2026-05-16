@@ -12,6 +12,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -30,7 +31,15 @@ from fact_chain_support import (
     path_boundary_missing_details,
     resolve_repo_relative_path,
 )
-from governance_surface import build_governance_surface
+from governance_surface import (
+    build_governance_surface,
+    derive_execution_budget_risk,
+    EXTERNAL_ORCHESTRATOR_OPERATIONS,
+    empty_hook_extension_profile,
+    empty_target_release_status,
+    empty_tool_availability,
+    workspace_lifecycle_expectations,
+)
 from runtime_paths import shared_asset, shared_script
 from runtime_state import detect_runtime_state
 
@@ -58,6 +67,7 @@ OWNED_TEMP_ROOTS = (
 )
 OWNED_RUNTIME_EVIDENCE_ROOTS = (
     ".loom/runtime/review",
+    ".loom/runtime/attempts",
 )
 
 TERMINAL_CHECKPOINTS = {
@@ -103,7 +113,138 @@ REVIEW_FINDING_SEVERITIES = {"warn", "block"}
 REVIEW_FINDING_DISPOSITION_STATUSES = {"accepted", "rejected", "deferred"}
 DEFAULT_REVIEW_ENGINE = "codex"
 DEFAULT_REVIEW_ADAPTER = "loom/default-codex"
-DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS = 120
+CODEX_APP_REVIEW_ADAPTER = "loom/codex-app-review"
+CODEX_APP_REVIEW_ENGINE = "codex-app-review"
+CODEX_APP_REVIEW_SHADOW_ADAPTER = CODEX_APP_REVIEW_ADAPTER
+AUTHORITATIVE_REVIEW_ADAPTERS = {DEFAULT_REVIEW_ADAPTER, CODEX_APP_REVIEW_ADAPTER}
+SHADOW_REVIEW_ADAPTERS = {CODEX_APP_REVIEW_SHADOW_ADAPTER}
+DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS: int | None = None
+REVIEW_ENGINE_PROFILE_SCHEMA = "loom-review-engine-profile/v1"
+REVIEW_ENGINE_PROFILE_IDS = {"default", "high-risk", "spec-review", "repeated-blocker"}
+REVIEW_ENGINE_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
+PR_MERGE_GATE_SCHEMA = "loom-pr-merge-gate/v1"
+CONTROLLED_MERGE_SCHEMA = "loom-controlled-merge/v1"
+PR_MERGE_GATE_CHECK_NAME = "loom-pr-merge-gate"
+LIVE_SMOKE_SCHEMA = "loom-live-smoke/v1"
+HOST_ADAPTER_LIVE_DRIFT_SCHEMA = "loom-host-adapter-live-drift/v1"
+DYNAMIC_TOOL_LIVE_AVAILABILITY_SCHEMA = "loom-dynamic-tool-live-availability/v1"
+HOOK_ENVELOPE_SCHEMA = "loom-hook-envelope/v1"
+HOOK_ENVELOPE_LIVE_CHECK_SCHEMA = "loom-hook-envelope-check/v1"
+HOOKS_EXTENSION_PROFILE_SCHEMA = "loom-hooks-extension-profile/v1"
+EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA = "loom-external-orchestrator-conformance/v1"
+LIVE_SMOKE_RETRY_FALLBACK = "live-smoke-retry-or-record-unavailable"
+LIVE_SMOKE_REPLAY_FALLBACK = "record-prior-evidence"
+LIVE_SMOKE_CONFIG_FALLBACK = "live-smoke-config-repair"
+HOOK_ENVELOPE_CATEGORIES = {"context_injection", "blocking_decision", "runtime_evidence"}
+HOOK_ENVELOPE_FAILURE_CLASSIFICATIONS = {
+    "invalid_envelope",
+    "missing_required_input",
+    "unsupported",
+    "not_applicable",
+    "permission_unavailable",
+    "unsafe",
+    "host_mapping_failed",
+}
+HOOK_ENVELOPE_FALLBACKS = {
+    None,
+    "admission",
+    "pre_review",
+    "review",
+    "build",
+    "merge_ready",
+    "closeout",
+    "manual_repair",
+    "workspace cleanup|retire",
+}
+HOOK_ENVELOPE_FORBIDDEN_FIELDS = {
+    "authored_progress",
+    "recovery_truth",
+    "status_truth",
+    "review_verdict",
+    "validation_summary",
+    "host_action_result",
+    "closeout_basis",
+    "current_stop",
+    "next_step",
+    "blockers",
+    "latest_validation_summary",
+    "current_checkpoint",
+    "current_lane",
+    "recovery_boundary",
+    "closing_condition",
+}
+EXTERNAL_ORCHESTRATOR_FORBIDDEN_FIELDS = {
+    "scheduler_state",
+    "attempt_ownership",
+    "authored_progress",
+    "current_checkpoint",
+    "next_step",
+    "blockers",
+    "latest_validation_summary",
+    "status_truth",
+    "gate_verdict",
+    "review_verdict",
+    "validation_summary",
+    "host_action_result",
+    "closeout_basis",
+    "daemon",
+    "scheduler_queue",
+    "branch_ownership",
+    "pr_ownership",
+    "worktree_ownership",
+    "worker_lifecycle",
+}
+EXTERNAL_ORCHESTRATOR_ALLOWED_FALLBACKS = {
+    "work_item",
+    "admission",
+    "binding_repair",
+    "current_checkpoint",
+    "spec_gate",
+    "build_gate",
+    "review_gate",
+    "merge_gate",
+    "build",
+    "review",
+    "merge_ready",
+    "closeout",
+}
+HOOK_CLEANUP_ALLOWED_OWNERSHIPS = {"loom_owned"}
+HOOK_LIFECYCLES = {"before-run", "after-run", "cleanup"}
+HOOK_ADAPTER_RESULTS = {"supported", "not_applicable", "advisory", "unsafe"}
+REVIEW_ENGINE_PROFILES: dict[str, dict[str, Any]] = {
+    "default": {
+        "profile_id": "default",
+        "model": "gpt-5.2",
+        "reasoning_effort": "medium",
+        "timeout_seconds": DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS,
+        "context_policy": "minimal-review-baseline",
+        "selection_reason": "default implementation review profile for normal-risk changes",
+    },
+    "high-risk": {
+        "profile_id": "high-risk",
+        "model": "gpt-5.2",
+        "reasoning_effort": "high",
+        "timeout_seconds": DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS,
+        "context_policy": "expanded-risk-baseline",
+        "selection_reason": "high-risk review profile for shared contracts, security, permissions, sandbox, or host-boundary changes",
+    },
+    "spec-review": {
+        "profile_id": "spec-review",
+        "model": "gpt-5.2",
+        "reasoning_effort": "high",
+        "timeout_seconds": DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS,
+        "context_policy": "formal-spec-suite-baseline",
+        "selection_reason": "formal spec review profile",
+    },
+    "repeated-blocker": {
+        "profile_id": "repeated-blocker",
+        "model": "gpt-5.2",
+        "reasoning_effort": "high",
+        "timeout_seconds": DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS,
+        "context_policy": "recent-findings-and-dispositions",
+        "selection_reason": "repeated blocker review profile",
+    },
+}
 ENGINE_FAILURE_REASONS = {
     "engine_unavailable",
     "schema_drift",
@@ -114,6 +255,45 @@ SHADOW_PARITY_SURFACES = ("admission", "review", "merge_ready", "closeout")
 ADOPTION_DECISIONS_SCHEMA = "loom-adoption-decisions/v1"
 GUIDED_ADOPTION_PLAN_SCHEMA = "loom-guided-adoption-plan/v1"
 COMPANION_GENERATION_SCHEMA = "loom-companion-generation/v1"
+EXECUTION_ATTEMPT_SCHEMA = "loom-execution-attempt/v1"
+EXECUTION_ATTEMPT_RESULTS = {"pass", "block", "fallback"}
+EXECUTION_FAILURE_SCHEMA = "loom-execution-failure/v1"
+EXECUTION_FAILURE_STATUSES = {"present", "not_applicable", "stale", "missing", "invalid"}
+EXECUTION_FAILURE_CLASSIFICATIONS = {
+    "none",
+    "stall",
+    "timeout",
+    "retry_exhaustion",
+    "unknown",
+}
+RETRY_EVIDENCE_SCHEMA = "loom-retry-evidence/v1"
+RETRY_EVIDENCE_STATUSES = {"present", "not_applicable", "stale", "missing", "invalid"}
+EXECUTION_ATTEMPT_FAILURE_CATEGORIES = {
+    "none",
+    "runtime_state",
+    "fact_chain",
+    "state_check",
+    "runtime_evidence",
+    "checkpoint",
+    "review",
+    "repo_specific",
+    "recovery_readiness",
+    "unknown",
+}
+EXECUTION_ATTEMPT_FORBIDDEN_AUTHORED_FIELDS = {
+    "current_stop",
+    "next_step",
+    "blockers",
+    "latest_validation_summary",
+    "current_checkpoint",
+    "current_lane",
+    "recovery_boundary",
+    "closing_condition",
+}
+REVIEW_CONTEXT_PACK_SCHEMA = "loom-review-context-pack/v1"
+REPEATED_BLOCKER_SIGNAL_SCHEMA = "loom-repeated-blocker-signal/v1"
+BUILD_EVIDENCE_SCHEMA = "loom-build-evidence/v1"
+SUBAGENT_OWNERSHIP_SCHEMA = "loom-subagent-ownership/v1"
 
 ADOPTION_DECISION_QUESTIONS: dict[str, str] = {
     "fr_work_item_layer": "Which host planning object owns the FR layer, and how does each FR point to its Work Item?",
@@ -164,7 +344,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
 
     workspace = subparsers.add_parser("workspace", help="Manage Loom workspace lifecycle semantics")
-    workspace.add_argument("operation", choices=("create", "locate", "cleanup", "retire"))
+    workspace.add_argument("operation", choices=("create", "locate", "attach", "cleanup", "retire"))
     workspace.add_argument("--target", required=True, help="Target repository root")
     workspace.add_argument("--item", help="Expected current item id")
     workspace.add_argument(
@@ -242,6 +422,43 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     host_binding.add_argument("--head-sha", help="Implementation head SHA to validate")
     host_binding.add_argument("--base-sha", help="Base SHA used for diff validation")
 
+    pr_gate = subparsers.add_parser("pr-gate", help="Evaluate PR-specific semantic approval before host merge")
+    pr_gate.add_argument("operation", choices=("check",))
+    pr_gate.add_argument("--target", required=True, help="Target repository root")
+    pr_gate.add_argument("--item", help="Expected Loom Work Item id; must match PR body when both are present")
+    pr_gate.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+    pr_gate.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
+    pr_gate.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    pr_gate.add_argument("--pr", type=int, help="GitHub implementation PR number")
+    pr_gate.add_argument("--head-sha", help="Expected PR head SHA")
+    pr_gate.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
+    pr_gate.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+
+    controlled_merge = subparsers.add_parser("controlled-merge", help="Check or execute Loom-controlled PR merge")
+    controlled_merge.add_argument("operation", choices=("check", "merge"))
+    controlled_merge.add_argument("--target", required=True, help="Target repository root")
+    controlled_merge.add_argument("--item", help="Expected Loom Work Item id")
+    controlled_merge.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+    controlled_merge.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
+    controlled_merge.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    controlled_merge.add_argument("--pr", type=int, required=True, help="GitHub implementation PR number")
+    controlled_merge.add_argument("--head-sha", help="Expected PR head SHA")
+    controlled_merge.add_argument("--merge-method", choices=("squash", "merge", "rebase"), default="squash")
+    controlled_merge.add_argument("--delete-branch", action="store_true", help="Delete branch after a successful host merge")
+    controlled_merge.add_argument("--execute", action="store_true", help="Actually delegate to gh pr merge when all gates pass")
+    controlled_merge.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+    controlled_merge.add_argument("--status-checks-file", help="Optional repo-relative statusCheckRollup JSON fixture")
+    controlled_merge.add_argument("--branch-protection-file", help="Optional repo-relative branch protection JSON fixture")
+    controlled_merge.add_argument("--ruleset-file", help="Optional repo-relative branch rules/ruleset JSON fixture")
+
     state = subparsers.add_parser(
         "state-check",
         help="Check active-state consistency, checkpoint completeness, and scope overflow signals",
@@ -270,9 +487,45 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     review.add_argument("--reviewer", help="Reviewer identity")
     review.add_argument("--fallback-to", choices=("admission", "build", "merge"))
     review.add_argument("--findings-file", help="Optional findings JSON path relative to the target root")
-    review.add_argument("--engine-adapter", help="Optional review engine adapter identifier consumed by this record")
+    review.add_argument(
+        "--engine-adapter",
+        choices=tuple(sorted(AUTHORITATIVE_REVIEW_ADAPTERS)),
+        help=(
+            "Optional authoritative review engine adapter for review run/record. "
+            "Default review run remains loom/default-codex."
+        ),
+    )
     review.add_argument("--engine-evidence", help="Optional review engine evidence path relative to the target root")
     review.add_argument("--normalized-findings", help="Optional normalized findings path relative to the target root")
+    review.add_argument(
+        "--codex-app-review-app-server",
+        help="Required explicit app-server/session locator when --engine-adapter loom/codex-app-review is authoritative.",
+    )
+    review.add_argument(
+        "--codex-app-review-thread-id",
+        help="Required Codex App thread id when --engine-adapter loom/codex-app-review is authoritative.",
+    )
+    review.add_argument(
+        "--codex-app-review-cwd",
+        help="Required Codex App thread cwd proof when --engine-adapter loom/codex-app-review is authoritative.",
+    )
+    review.add_argument(
+        "--codex-app-review-raw-file",
+        help="Required repo-relative Codex App normalized review output captured from review/start or same-thread normalization.",
+    )
+    review.add_argument("--engine-profile", choices=tuple(sorted(REVIEW_ENGINE_PROFILE_IDS)), help="Optional deterministic review engine profile override for review run")
+    review.add_argument("--engine-model", help="Optional review engine model override for review run")
+    review.add_argument("--engine-reasoning", choices=tuple(sorted(REVIEW_ENGINE_REASONING_EFFORTS)), help="Optional review engine reasoning effort override for review run")
+    review.add_argument("--engine-override-reason", help="Required reason when overriding review engine profile, model, or reasoning")
+    review.add_argument(
+        "--shadow-engine-adapter",
+        choices=tuple(sorted(SHADOW_REVIEW_ADAPTERS)),
+        help="Optional shadow-only review adapter. Does not replace the default authoritative review engine.",
+    )
+    review.add_argument(
+        "--shadow-review-raw-file",
+        help="Optional repo-relative captured Codex App review text to normalize as shadow evidence.",
+    )
     review.add_argument("--blocking-issue", action="append", default=[], help="Blocking review finding")
     review.add_argument("--follow-up", action="append", default=[], help="Follow-up item recorded by the review")
 
@@ -410,8 +663,47 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     governance_profile.add_argument("--branch", help="GitHub branch name bound to the work item")
     governance_profile.add_argument("--sync", action="store_true", help="Preview host binding repairs; writes are intentionally disabled in this phase")
 
+    live_smoke = subparsers.add_parser(
+        "live-smoke",
+        help="Run or replay versioned adopted-repo live smoke evidence without changing core gates",
+    )
+    live_smoke.add_argument(
+        "operation",
+        choices=(
+            "run",
+            "replay",
+            "host-adapter-drift",
+            "dynamic-tool-availability",
+            "hook-envelope",
+            "hooks-extension",
+            "external-orchestrator-interop",
+        ),
+    )
+    live_smoke.add_argument("--target", help="Adopted repository root for live smoke run")
+    live_smoke.add_argument("--item", default="INIT-0001", help="Expected current item id for the optional resume smoke")
+    live_smoke.add_argument("--prior-evidence", help="Versioned prior-pass evidence to replay without running adopted-repo commands")
+    live_smoke.add_argument("--dry-run", action="store_true", help="Preview the live smoke command plan without running adopted-repo commands")
+    live_smoke.add_argument(
+        "--surface",
+        choices=("attempt_time", "review", "merge_ready", "closeout", "build", "admission", "pre_review", "all"),
+        default="attempt_time",
+        help="Dynamic tool live availability surface; defaults to attempt_time",
+    )
+    live_smoke.add_argument("--envelope", help="Repo-relative Loom hook envelope path for live-smoke hook-envelope")
+    live_smoke.add_argument(
+        "--requirement",
+        choices=("required", "optional", "advisory"),
+        default="required",
+        help="Hook envelope requirement level; defaults to required",
+    )
+    live_smoke.add_argument(
+        "--include-blocking-shadow",
+        action="store_true",
+        help="Explicitly include shadow-parity --blocking in the smoke command set",
+    )
+
     flow = subparsers.add_parser("flow", help="Run a bundled high-frequency Loom flow")
-    flow.add_argument("operation", choices=("pre-review", "review", "spec-review", "resume", "handoff", "merge-ready"))
+    flow.add_argument("operation", choices=("build", "story", "pre-review", "review", "spec-review", "resume", "handoff", "merge-ready"))
     flow.add_argument("--target", required=True, help="Target repository root")
     flow.add_argument("--item", help="Expected current item id")
     flow.add_argument(
@@ -419,6 +711,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=".loom/bootstrap/init-result.json",
         help="Init-result path relative to the target root",
     )
+    flow.add_argument("--build-evidence", help="Optional build evidence JSON path relative to the target root")
 
     return parser.parse_args(argv)
 
@@ -431,6 +724,93 @@ def emit(payload: dict[str, Any]) -> int:
 
 def runtime_state_payload(target_root: Path) -> dict[str, Any]:
     return detect_runtime_state(__file__, "loom-flow", target_root=target_root)
+
+
+def story_flow_payload(
+    *,
+    target_root: Path,
+    runtime_state: dict[str, Any],
+    steps: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "command": "flow",
+        "operation": "story",
+        "result": "pass",
+        "summary": "story intake contract summary is available; runtime does not generate product truth without caller-provided context.",
+        "missing_inputs": [],
+        "fallback_to": None,
+        "runtime_state": runtime_state,
+        "target": str(target_root),
+        "steps": steps
+        + [
+            {
+                "name": "story-contract",
+                "result": "pass",
+                "summary": "User Story and Story Readiness contracts are separated from delivery state.",
+                "missing_inputs": [],
+                "fallback_to": None,
+            }
+        ],
+        "contract_summary": {
+            "mode": "contract-summary",
+            "authority": "docs/methodology/governance/story-intake.md",
+            "runtime_generates_story": False,
+        },
+        "story_contract": {
+            "schema_version": "loom-user-story/v1",
+            "required_fields": [
+                "actor",
+                "capability",
+                "outcome",
+                "business_value",
+                "acceptance_scenarios",
+                "provenance",
+            ],
+            "forbidden_fields": [
+                "delivery_handoff",
+                "spec_locator",
+                "plan_locator",
+                "recovery_state",
+                "review_findings",
+                "pr_summary",
+                "merge_ready_result",
+                "closeout_result",
+            ],
+            "scenario_dimensions": [
+                "happy_path",
+                "negative_path",
+                "edge_case",
+                "alternative_path",
+                "security_permission",
+                "environment_interruption",
+            ],
+        },
+        "readiness_contract": {
+            "schema_version": "loom-story-readiness/v1",
+            "decisions": ["ready", "needs-shaping", "blocked", "not-applicable"],
+            "required_fields": ["decision", "rationale", "story_locator", "checks", "missing_inputs", "fallback_to"],
+            "checks": [
+                "actor_specificity",
+                "outcome_clarity",
+                "value_signal",
+                "acceptance_scenario_quality",
+                "unresolved_blockers",
+                "story_size",
+            ],
+            "authority_boundary": "readiness judges entry into spec / plan, not product strategy correctness.",
+        },
+        "delivery_consumption_contract": {
+            "execution_entry": "Work Item",
+            "spec_consumes": "story scenario id / locator as behavior contract input",
+            "plan_consumes": "story scenario id mapped to tests, checks, manual validation, or not_applicable evidence",
+            "forbidden": "story must not author recovery, review, PR, merge-ready, or closeout state",
+        },
+        "contract": {
+            "story_intake": "docs/methodology/governance/story-intake.md",
+            "story_template": "docs/methodology/templates/scaffold/user-story.md",
+            "spec_suite": "docs/methodology/templates/spec-suite.md",
+        },
+    }
 
 
 def runtime_state_block_payload(
@@ -455,6 +835,2203 @@ def runtime_state_block_payload(
 
 def command_target(target_root: Path) -> str:
     return shlex.quote(str(target_root))
+
+
+def current_iso_timestamp() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def discover_loom_flow_entrypoint() -> Path:
+    source_repo_root = os.environ.get("LOOM_SOURCE_REPO_ROOT")
+    if source_repo_root:
+        candidate = Path(source_repo_root).expanduser().resolve() / "tools/loom_flow.py"
+        if candidate.exists():
+            return candidate
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        candidate = parent / "tools/loom_flow.py"
+        if candidate.exists():
+            return candidate
+    return current
+
+
+def live_smoke_command(args: list[str]) -> str:
+    return " ".join(shlex.quote(part) for part in [sys.executable, str(discover_loom_flow_entrypoint()), *args])
+
+
+def live_smoke_target_metadata(target_root: Path) -> dict[str, Any]:
+    return {
+        "path": str(target_root),
+        "exists": target_root.exists(),
+        "worktree": str(target_root),
+        "git_branch": git_branch(target_root),
+        "head_sha": git_head_sha(target_root),
+    }
+
+
+def live_smoke_release_interpretation(status: str) -> str:
+    if status == "passed":
+        return "fresh live smoke evidence raises release confidence and remains non-blocking by default."
+    if status == "replayed":
+        return "versioned prior-pass evidence can be consumed as release confidence input without rerunning adopted-repo commands."
+    if status == "dry_run":
+        return "dry-run only previews the live smoke command plan and does not create fresh adopted-repo evidence."
+    if status == "unavailable":
+        return "explicit unavailable evidence is a non-blocking confidence input and does not silently pass."
+    return "profile-local live smoke failure lowers release confidence but does not replace orchestration-core gate results."
+
+
+def current_host_adapter_version() -> str | None:
+    source_repo_root = os.environ.get("LOOM_SOURCE_REPO_ROOT")
+    candidates: list[tuple[Path, str]] = []
+    if source_repo_root:
+        candidates.append((Path(source_repo_root).expanduser().resolve() / "plugins/loom/.codex-plugin/plugin.json", "plugin"))
+    installed_skills_root = os.environ.get("LOOM_INSTALLED_SKILLS_ROOT")
+    if installed_skills_root:
+        installed_root = Path(installed_skills_root).expanduser().resolve()
+        candidates.append((installed_root / "loom-init" / "loom-package.json", "package"))
+        candidates.append((installed_root / "loom-adopt" / "loom-package.json", "package"))
+    for path, source in candidates:
+        if not path.exists():
+            continue
+        try:
+            payload = load_json_file(path)
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        if source == "plugin":
+            x_loom = payload.get("x-loom")
+            version = x_loom.get("host_adapter_version") if isinstance(x_loom, dict) else None
+        else:
+            version = payload.get("host_adapter_version")
+        if isinstance(version, str) and version.strip():
+            return version.strip()
+    return None
+
+
+def host_adapter_live_drift_command(target_root: Path) -> str:
+    return live_smoke_command(["live-smoke", "host-adapter-drift", "--target", str(target_root)])
+
+
+def dynamic_tool_live_availability_command(target_root: Path, *, surface: str) -> str:
+    return live_smoke_command(["live-smoke", "dynamic-tool-availability", "--target", str(target_root), "--surface", surface])
+
+
+def hook_envelope_command(target_root: Path, *, envelope: str, requirement: str) -> str:
+    return live_smoke_command(
+        [
+            "live-smoke",
+            "hook-envelope",
+            "--target",
+            str(target_root),
+            "--envelope",
+            envelope,
+            "--requirement",
+            requirement,
+        ]
+    )
+
+
+def host_adapter_live_drift_command_plan(target_root: Path, host_adapters: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    target = command_target(target_root)
+    plan = [
+        {
+            "id": "target-check",
+            "command": f"test -d {target}",
+            "description": "Confirm the adopted-repo target path exists before reading host adapter retained result locators.",
+        },
+        {
+            "id": "repo-interop-contract",
+            "command": f"read {target_root / '.loom/companion/interop.json'}",
+            "description": "Read the repo interop contract and discover declared host adapter retained result locators.",
+        },
+    ]
+    for index, entry in enumerate(host_adapters or []):
+        entry_id = entry.get("id") if isinstance(entry, dict) else None
+        locator = entry.get("locator") if isinstance(entry, dict) else None
+        plan.append(
+            {
+                "id": str(entry_id or f"host-adapter-{index}"),
+                "command": f"read {locator if isinstance(locator, str) and locator else '<missing-locator>'}",
+                "description": "Read the retained host action result envelope declared in repo interop.",
+            }
+        )
+    return plan
+
+
+def dynamic_tool_live_availability_command_plan(
+    target_root: Path,
+    *,
+    surface: str,
+    declared_tools: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    target = command_target(target_root)
+    plan = [
+        {
+            "id": "target-check",
+            "command": f"test -d {target}",
+            "description": "Confirm the adopted-repo target path exists before reading dynamic tool handshake declarations.",
+        },
+        {
+            "id": "repo-interface-contract",
+            "command": f"read {target_root / '.loom/companion/repo-interface.json'}",
+            "description": "Read the repo companion interface and discover declared dynamic tool availability locators.",
+        },
+    ]
+    for index, entry in enumerate(declared_tools or []):
+        entry_id = entry.get("id") if isinstance(entry, dict) else None
+        locator = entry.get("locator") if isinstance(entry, dict) else None
+        plan.append(
+            {
+                "id": str(entry_id or f"dynamic-tool-{index}"),
+                "command": f"read {locator if isinstance(locator, str) and locator else '<missing-locator>'}",
+                "description": f"Read the dynamic tool handshake declaration for surface `{surface}`.",
+            }
+        )
+    return plan
+
+
+def hook_envelope_command_plan(target_root: Path, *, envelope: str | None) -> list[dict[str, Any]]:
+    target = command_target(target_root)
+    return [
+        {
+            "id": "target-check",
+            "command": f"test -d {target}",
+            "description": "Confirm the adopted-repo target path exists before reading the mapped hook envelope.",
+        },
+        {
+            "id": "hook-envelope",
+            "command": f"read {envelope if isinstance(envelope, str) and envelope else '<missing-envelope>'}",
+            "description": "Read the repo-relative Loom-mapped hook envelope without executing any hook.",
+        },
+    ]
+
+
+def hooks_extension_command_plan(target_root: Path) -> list[dict[str, Any]]:
+    target = command_target(target_root)
+    return [
+        {
+            "id": "target-check",
+            "command": f"test -d {target}",
+            "description": "Confirm the adopted-repo target path exists before reading hooks extension declarations.",
+        },
+        {
+            "id": "repo-interface-contract",
+            "command": f"read {target_root / '.loom/companion/repo-interface.json'}",
+            "description": "Read hook_locators from repo companion without executing hooks or writing host state.",
+        },
+    ]
+
+
+def external_orchestrator_conformance_command_plan(
+    target_root: Path,
+    external_orchestrators: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    target = command_target(target_root)
+    plan = [
+        {
+            "id": "target-check",
+            "command": f"test -d {target}",
+            "description": "Confirm the adopted-repo target path exists before reading external orchestrator declarations.",
+        },
+        {
+            "id": "repo-interop-contract",
+            "command": f"read {target_root / '.loom/companion/interop.json'} external_orchestrators",
+            "description": "Read external orchestrator locator declarations without starting a scheduler or daemon.",
+        },
+        {
+            "id": "status-consumer-view",
+            "command": f"{shlex.quote(sys.executable)} tools/loom_status.py --target {shlex.quote(str(target_root))} --item INIT-0001",
+            "description": "Confirm status/gate consumption reuses Loom status control plane v2 and the existing gate chain.",
+        },
+    ]
+    for index, entry in enumerate(external_orchestrators or []):
+        entry_id = entry.get("id") if isinstance(entry, dict) else None
+        locator = entry.get("locator") if isinstance(entry, dict) else None
+        plan.append(
+            {
+                "id": str(entry_id or f"external-orchestrator-{index}"),
+                "command": f"read {locator if isinstance(locator, str) and locator else '<missing-locator>'}",
+                "description": "Read external orchestrator retained evidence without accepting scheduler-owned status or gate truth.",
+            }
+        )
+    return plan
+
+
+def find_forbidden_hook_envelope_fields(value: object, *, prefix: str = "$") -> list[str]:
+    found: list[str] = []
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            key_label = str(key)
+            nested_prefix = f"{prefix}.{key_label}"
+            if key_label in HOOK_ENVELOPE_FORBIDDEN_FIELDS:
+                found.append(nested_prefix)
+            found.extend(find_forbidden_hook_envelope_fields(nested, prefix=nested_prefix))
+    elif isinstance(value, list):
+        for index, nested in enumerate(value):
+            found.extend(find_forbidden_hook_envelope_fields(nested, prefix=f"{prefix}[{index}]"))
+    return found
+
+
+def find_forbidden_external_orchestrator_fields(value: object, *, prefix: str = "$") -> list[str]:
+    found: list[str] = []
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            key_label = str(key)
+            nested_prefix = f"{prefix}.{key_label}"
+            if key_label in EXTERNAL_ORCHESTRATOR_FORBIDDEN_FIELDS:
+                found.append(nested_prefix)
+            found.extend(find_forbidden_external_orchestrator_fields(nested, prefix=nested_prefix))
+    elif isinstance(value, list):
+        for index, nested in enumerate(value):
+            found.extend(find_forbidden_external_orchestrator_fields(nested, prefix=f"{prefix}[{index}]"))
+    return found
+
+
+def find_unsafe_hook_cleanup_targets(value: object, *, prefix: str = "$") -> list[str]:
+    found: list[str] = []
+    if isinstance(value, dict):
+        targets = value.get("cleanup_targets")
+        if isinstance(targets, list):
+            for index, target in enumerate(targets):
+                target_prefix = f"{prefix}.cleanup_targets[{index}]"
+                if not isinstance(target, dict):
+                    found.append(f"{target_prefix} must be an object")
+                    continue
+                ownership = target.get("ownership")
+                if ownership not in HOOK_CLEANUP_ALLOWED_OWNERSHIPS:
+                    found.append(f"{target_prefix}.ownership must be `loom_owned`")
+        for key_label, nested in value.items():
+            found.extend(find_unsafe_hook_cleanup_targets(nested, prefix=f"{prefix}.{key_label}"))
+    elif isinstance(value, list):
+        for index, nested in enumerate(value):
+            found.extend(find_unsafe_hook_cleanup_targets(nested, prefix=f"{prefix}[{index}]"))
+    return found
+
+
+def validate_hook_envelope_payload(envelope: object) -> dict[str, Any]:
+    missing_inputs: list[str] = []
+    evidence: dict[str, Any] = {
+        "schema_status": "unknown",
+        "output_category": None,
+        "failure_classification": None,
+    }
+    if not isinstance(envelope, dict):
+        return {
+            "result": "block",
+            "classification": "invalid_envelope",
+            "summary": "hook envelope must be a JSON object.",
+            "missing_inputs": ["hook envelope must be a JSON object"],
+            "fallback_to": "manual_repair",
+            "evidence": evidence,
+        }
+
+    if envelope.get("schema_version") != HOOK_ENVELOPE_SCHEMA:
+        missing_inputs.append("schema_version must be `loom-hook-envelope/v1`")
+    else:
+        evidence["schema_status"] = "valid"
+
+    hook = envelope.get("hook")
+    if not isinstance(hook, dict):
+        missing_inputs.append("hook envelope missing `hook` object")
+    else:
+        for field in ("id", "locator"):
+            value = hook.get(field)
+            if not isinstance(value, str) or not value.strip():
+                missing_inputs.append(f"hook missing `{field}`")
+        lifecycle = hook.get("lifecycle")
+        if lifecycle not in HOOK_LIFECYCLES:
+            missing_inputs.append("hook.lifecycle must be `before-run`, `after-run`, or `cleanup`")
+
+    input_payload = envelope.get("input")
+    adapter_result = None
+    if not isinstance(input_payload, dict):
+        missing_inputs.append("hook envelope missing `input` object")
+    else:
+        for field in ("item_locator", "workspace_locator", "attempt_locator"):
+            value = input_payload.get(field)
+            if not isinstance(value, str) or not value.strip():
+                missing_inputs.append(f"input missing `{field}`")
+        mapping = input_payload.get("host_adapter_mapping")
+        if not isinstance(mapping, dict):
+            missing_inputs.append("input missing `host_adapter_mapping` object")
+        else:
+            for field in ("host", "event"):
+                value = mapping.get(field)
+                if not isinstance(value, str) or not value.strip():
+                    missing_inputs.append(f"host_adapter_mapping missing `{field}`")
+            if mapping.get("adapter_result") not in HOOK_ADAPTER_RESULTS:
+                missing_inputs.append(
+                    "host_adapter_mapping.adapter_result must be `supported`, `not_applicable`, `advisory`, or `unsafe`"
+                )
+            else:
+                adapter_result = mapping.get("adapter_result")
+
+    output = envelope.get("output")
+    output_category = None
+    if not isinstance(output, dict):
+        missing_inputs.append("hook envelope missing `output` object")
+    else:
+        output_category = output.get("category")
+        evidence["output_category"] = output_category
+        if output_category not in HOOK_ENVELOPE_CATEGORIES:
+            missing_inputs.append("output.category must be `context_injection`, `blocking_decision`, or `runtime_evidence`")
+        summary = output.get("summary")
+        if not isinstance(summary, str) or not summary.strip():
+            missing_inputs.append("output missing `summary`")
+
+    forbidden_fields = find_forbidden_hook_envelope_fields(envelope)
+    if forbidden_fields:
+        missing_inputs.append(f"hook envelope must not carry authored or host truth fields: {', '.join(forbidden_fields)}")
+    unsafe_cleanup_targets = find_unsafe_hook_cleanup_targets(envelope)
+    if unsafe_cleanup_targets:
+        missing_inputs.append(
+            "hook envelope cleanup intent must target Loom-owned residue only: "
+            + ", ".join(unsafe_cleanup_targets)
+        )
+
+    failure = envelope.get("failure")
+    failure_classification = None
+    fallback_to = None
+    if failure is not None:
+        if not isinstance(failure, dict):
+            missing_inputs.append("failure must be an object when present")
+        else:
+            failure_classification = failure.get("classification")
+            evidence["failure_classification"] = failure_classification
+            if failure_classification not in HOOK_ENVELOPE_FAILURE_CLASSIFICATIONS:
+                missing_inputs.append("failure.classification is outside the stable hook envelope vocabulary")
+            fallback_to = failure.get("fallback_to")
+            if fallback_to not in HOOK_ENVELOPE_FALLBACKS:
+                missing_inputs.append("failure.fallback_to must point to a Loom surface or manual repair path")
+            summary = failure.get("summary")
+            if failure_classification and (not isinstance(summary, str) or not summary.strip()):
+                missing_inputs.append("failure with classification must include `summary`")
+
+    if missing_inputs:
+        return {
+            "result": "block",
+            "classification": "invalid_envelope",
+            "summary": "hook envelope is invalid or truth-polluting.",
+            "missing_inputs": missing_inputs,
+            "fallback_to": "manual_repair",
+            "evidence": evidence,
+        }
+
+    if adapter_result == "unsafe":
+        return {
+            "result": "block",
+            "classification": "unsafe",
+            "summary": "hook adapter mapping reports unsafe.",
+            "missing_inputs": ["host_adapter_mapping.adapter_result is unsafe"],
+            "fallback_to": "manual_repair",
+            "evidence": evidence,
+        }
+    if adapter_result == "not_applicable":
+        return {
+            "result": "warn",
+            "classification": "not_applicable",
+            "summary": "hook adapter mapping reports not_applicable.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "evidence": evidence,
+        }
+    if adapter_result == "advisory":
+        return {
+            "result": "warn",
+            "classification": "unsupported",
+            "summary": "hook adapter mapping is advisory and remains profile-local evidence.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "evidence": evidence,
+        }
+
+    if failure_classification == "not_applicable":
+        return {
+            "result": "warn",
+            "classification": "not_applicable",
+            "summary": "hook envelope reports not_applicable.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "evidence": evidence,
+        }
+    if failure_classification:
+        result = "block" if failure_classification in {"permission_unavailable", "unsafe", "host_mapping_failed"} else "warn"
+        return {
+            "result": result,
+            "classification": failure_classification,
+            "summary": str(failure.get("summary") if isinstance(failure, dict) else "hook envelope reports failure."),
+            "missing_inputs": [f"hook envelope reported {failure_classification}"] if result == "block" else [],
+            "fallback_to": fallback_to if result == "block" else None,
+            "evidence": evidence,
+        }
+    return {
+        "result": "pass",
+        "classification": "none",
+        "summary": f"hook envelope maps output as `{output_category}`.",
+        "missing_inputs": [],
+        "fallback_to": None,
+        "evidence": evidence,
+    }
+
+
+def host_adapter_permission_unavailable(payload: dict[str, Any]) -> bool:
+    candidates: list[str] = []
+    for key in ("status", "result", "classification", "failure_category"):
+        value = payload.get(key)
+        if isinstance(value, str):
+            candidates.append(value)
+    read_status = payload.get("read_status")
+    if isinstance(read_status, dict):
+        for key in ("status", "result", "classification", "failure_category"):
+            value = read_status.get(key)
+            if isinstance(value, str):
+                candidates.append(value)
+    normalized = {value.strip().lower().replace("-", "_") for value in candidates if value.strip()}
+    return "permission_unavailable" in normalized
+
+
+def host_adapter_envelope_version(payload: dict[str, Any]) -> str | None:
+    direct = payload.get("host_adapter_version")
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+    version_context = payload.get("version_context")
+    if isinstance(version_context, dict):
+        nested = version_context.get("host_adapter_version")
+        if isinstance(nested, str) and nested.strip():
+            return nested.strip()
+    return None
+
+
+def host_adapter_drift_check(
+    target_root: Path,
+    *,
+    entry: object,
+    index: int,
+    expected_host_adapter_version: str | None,
+) -> dict[str, Any]:
+    prefix = f"host_adapters[{index}]"
+    if not isinstance(entry, dict):
+        return {
+            "id": f"invalid-{index}",
+            "owner": "unknown",
+            "requirement": "required",
+            "surfaces": [],
+            "locator": None,
+            "result": "block",
+            "classification": "invalid_declaration",
+            "summary": f"{prefix} must be an object.",
+            "missing_inputs": [f"{prefix} must be an object"],
+            "fallback_to": "admission",
+            "evidence": {"locator_status": "invalid"},
+        }
+
+    entry_id = str(entry.get("id") or f"host-adapter-{index}")
+    requirement = str(entry.get("requirement") or "required")
+    fallback_to = entry.get("fallback_to") if isinstance(entry.get("fallback_to"), str) and entry.get("fallback_to") else "admission"
+    owner = str(entry.get("owner") or "unknown")
+    surfaces = entry.get("surfaces")
+    locator_value = entry.get("locator")
+    missing_inputs: list[str] = []
+    if not isinstance(entry.get("summary"), str) or not entry.get("summary"):
+        missing_inputs.append(f"{prefix} missing `summary`")
+    if owner not in {"repo", "repo-companion", "host", "host-adapter", "platform", "external-tool"}:
+        missing_inputs.append(f"{prefix} owner must stay repo/host/platform-owned, not Loom core")
+    if requirement not in {"required", "optional", "advisory"}:
+        missing_inputs.append(f"{prefix} requirement must be `required`, `optional`, or `advisory`")
+    if not isinstance(surfaces, list) or not surfaces:
+        missing_inputs.append(f"{prefix} must include `surfaces` as a non-empty list")
+    else:
+        for surface_index, surface in enumerate(surfaces):
+            if surface not in {"admission", "pre_review", "review", "build", "merge_ready", "closeout"}:
+                missing_inputs.append(
+                    f"{prefix}.surfaces[{surface_index}] must be one of `admission`, `pre_review`, `review`, `build`, `merge_ready`, `closeout`"
+                )
+    if not isinstance(locator_value, str) or not locator_value.strip():
+        classification = "locator_missing"
+        result = "block" if requirement == "required" else "warn"
+        return {
+            "id": entry_id,
+            "owner": owner,
+            "requirement": requirement,
+            "surfaces": surfaces if isinstance(surfaces, list) else [],
+            "locator": locator_value,
+            "result": result,
+            "classification": classification,
+            "summary": "host adapter locator is missing.",
+            "missing_inputs": [*missing_inputs, f"{prefix} `{entry_id}` locator missing `locator`"],
+            "fallback_to": fallback_to if result == "block" else None,
+            "evidence": {"locator_status": "missing"},
+        }
+    if missing_inputs:
+        return {
+            "id": entry_id,
+            "owner": owner,
+            "requirement": requirement,
+            "surfaces": surfaces if isinstance(surfaces, list) else [],
+            "locator": locator_value,
+            "result": "block",
+            "classification": "invalid_declaration",
+            "summary": "host adapter declaration is incomplete or invalid.",
+            "missing_inputs": missing_inputs,
+            "fallback_to": fallback_to,
+            "evidence": {"locator_status": "invalid"},
+        }
+
+    locator_path, locator_errors = resolve_repo_relative_path(
+        target_root,
+        locator_value,
+        label=f"{prefix} `{entry_id}` locator",
+    )
+    if locator_errors:
+        return {
+            "id": entry_id,
+            "owner": owner,
+            "requirement": requirement,
+            "surfaces": list(surfaces),
+            "locator": locator_value,
+            "result": "block",
+            "classification": "unsafe_locator",
+            "summary": "host adapter locator is outside the repository boundary or otherwise unsafe.",
+            "missing_inputs": locator_errors,
+            "fallback_to": fallback_to,
+            "evidence": {"locator_status": "unsafe"},
+        }
+    assert locator_path is not None
+    if not locator_path.exists():
+        result = "block" if requirement == "required" else "warn"
+        return {
+            "id": entry_id,
+            "owner": owner,
+            "requirement": requirement,
+            "surfaces": list(surfaces),
+            "locator": locator_value,
+            "result": result,
+            "classification": "locator_missing",
+            "summary": "host adapter locator points to a missing retained result path.",
+            "missing_inputs": [f"{prefix} locator points to missing path `{locator_value}`"],
+            "fallback_to": fallback_to if result == "block" else None,
+            "evidence": {"locator_status": "missing"},
+        }
+    if locator_path.is_dir():
+        result = "block" if requirement == "required" else "warn"
+        return {
+            "id": entry_id,
+            "owner": owner,
+            "requirement": requirement,
+            "surfaces": list(surfaces),
+            "locator": locator_value,
+            "result": result,
+            "classification": "locator_unreadable",
+            "summary": "host adapter locator points to a directory, not a retained result envelope.",
+            "missing_inputs": [f"{prefix} locator points to a directory `{locator_value}`"],
+            "fallback_to": fallback_to if result == "block" else None,
+            "evidence": {"locator_status": "directory"},
+        }
+    try:
+        envelope = load_json_file(locator_path)
+    except (FileNotFoundError, json.JSONDecodeError, OSError) as exc:
+        result = "block" if requirement == "required" else "warn"
+        return {
+            "id": entry_id,
+            "owner": owner,
+            "requirement": requirement,
+            "surfaces": list(surfaces),
+            "locator": locator_value,
+            "result": result,
+            "classification": "locator_unreadable",
+            "summary": "host adapter retained result envelope is unreadable.",
+            "missing_inputs": [f"{prefix} locator is unreadable: {exc}"],
+            "fallback_to": fallback_to if result == "block" else None,
+            "evidence": {"locator_status": "unreadable"},
+        }
+    if not isinstance(envelope, dict):
+        result = "block" if requirement == "required" else "warn"
+        return {
+            "id": entry_id,
+            "owner": owner,
+            "requirement": requirement,
+            "surfaces": list(surfaces),
+            "locator": locator_value,
+            "result": result,
+            "classification": "locator_unreadable",
+            "summary": "host adapter retained result envelope must be a JSON object.",
+            "missing_inputs": [f"{prefix} locator must expose a JSON object envelope"],
+            "fallback_to": fallback_to if result == "block" else None,
+            "evidence": {"locator_status": "invalid-envelope"},
+        }
+
+    declared_version = host_adapter_envelope_version(envelope)
+    evidence = {
+        "locator_status": "readable",
+        "envelope_status": str(envelope.get("status") or envelope.get("result") or "present"),
+        "declared_host_adapter_version": declared_version,
+        "expected_host_adapter_version": expected_host_adapter_version,
+    }
+    summary = str(envelope.get("summary") or "host adapter retained result envelope is readable.")
+    if host_adapter_permission_unavailable(envelope):
+        result = "block" if requirement == "required" else "warn"
+        return {
+            "id": entry_id,
+            "owner": owner,
+            "requirement": requirement,
+            "surfaces": list(surfaces),
+            "locator": locator_value,
+            "result": result,
+            "classification": "permission_unavailable",
+            "summary": summary,
+            "missing_inputs": [f"host adapter `{entry_id}` reported permission_unavailable"],
+            "fallback_to": fallback_to if result == "block" else None,
+            "evidence": evidence,
+        }
+    if declared_version and expected_host_adapter_version and declared_version != expected_host_adapter_version:
+        return {
+            "id": entry_id,
+            "owner": owner,
+            "requirement": requirement,
+            "surfaces": list(surfaces),
+            "locator": locator_value,
+            "result": "warn",
+            "classification": "version_drift",
+            "summary": summary,
+            "missing_inputs": [
+                f"host adapter `{entry_id}` version drift: expected `{expected_host_adapter_version}`, found `{declared_version}`"
+            ],
+            "fallback_to": None,
+            "evidence": evidence,
+        }
+    return {
+        "id": entry_id,
+        "owner": owner,
+        "requirement": requirement,
+        "surfaces": list(surfaces),
+        "locator": locator_value,
+        "result": "pass",
+        "classification": "none",
+        "summary": summary,
+        "missing_inputs": [],
+        "fallback_to": None,
+        "evidence": evidence,
+    }
+
+
+def host_adapter_live_drift_payload(target_root: Path) -> dict[str, Any]:
+    runtime_state = runtime_state_payload(target_root)
+    target = live_smoke_target_metadata(target_root)
+    payload: dict[str, Any] = {
+        "command": "live-smoke",
+        "operation": "host-adapter-drift",
+        "schema_version": HOST_ADAPTER_LIVE_DRIFT_SCHEMA,
+        "runtime_state": runtime_state,
+        "target": target,
+        "command_plan": host_adapter_live_drift_command_plan(target_root),
+        "reports": [],
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if runtime_state.get("result") != "pass":
+        payload.update(
+            {
+                "result": "block",
+                "summary": "host adapter live drift is blocked because the Loom runtime state is inconsistent.",
+                "missing_inputs": live_smoke_missing_inputs([str(message) for message in runtime_state.get("missing_inputs", [])]),
+                "fallback_to": runtime_state.get("fallback_to"),
+                "profile_check": {"id": "host-adapter-live-drift", "result": "block"},
+                "host_adapter_drift": {
+                    "contract_locator": ".loom/companion/interop.json",
+                    "availability": "runtime-blocked",
+                    "expected_host_adapter_version": current_host_adapter_version(),
+                    "checks": [],
+                },
+            }
+        )
+        return payload
+
+    target_report = live_smoke_target_check_report(target_root)
+    payload["reports"] = [target_report]
+    payload["missing_inputs"] = list(target_report.get("missing_inputs", []))
+    if target_report["result"] != "pass":
+        payload.update(
+            {
+                "result": "warn",
+                "summary": "host adapter live drift recorded explicit unavailable evidence for the adopted-repo target.",
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+                "profile_check": {"id": "host-adapter-live-drift", "result": "warn"},
+                "host_adapter_drift": {
+                    "contract_locator": ".loom/companion/interop.json",
+                    "availability": "target-unavailable",
+                    "expected_host_adapter_version": current_host_adapter_version(),
+                    "checks": [],
+                },
+            }
+        )
+        return payload
+
+    governance_surface = build_governance_surface(target_root)
+    repo_interop = governance_surface.get("repo_interop")
+    expected_version = current_host_adapter_version()
+    contract_locator = ".loom/companion/interop.json"
+    availability = "absent"
+    if isinstance(repo_interop, dict):
+        availability = str(repo_interop.get("availability") or "absent")
+        contract = repo_interop.get("contract")
+        if isinstance(contract, dict) and isinstance(contract.get("locator"), str) and contract.get("locator"):
+            contract_locator = str(contract["locator"])
+    interop_report = {
+        "id": "repo-interop-contract",
+        "attempted": True,
+        "command": f"read {target_root / contract_locator}",
+        "reported_command": "repo-interop-contract",
+        "reported_result": availability,
+        "result": "pass",
+        "summary": "repo interop contract is readable.",
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    payload["reports"].append(interop_report)
+
+    if availability == "absent":
+        interop_report.update(
+            {
+                "result": "warn",
+                "summary": "repo interop contract is absent, so no host adapter retained result can be consumed.",
+                "missing_inputs": ["repo interop contract is absent"],
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+            }
+        )
+        payload.update(
+            {
+                "result": "warn",
+                "summary": interop_report["summary"],
+                "missing_inputs": interop_report["missing_inputs"],
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+                "profile_check": {"id": "host-adapter-live-drift", "result": "warn"},
+                "host_adapter_drift": {
+                    "contract_locator": contract_locator,
+                    "availability": "absent",
+                    "expected_host_adapter_version": expected_version,
+                    "checks": [],
+                },
+            }
+        )
+        return payload
+
+    interop_payload, interop_errors = load_repo_interop_contract(repo_interop, target_root=target_root)
+    if interop_errors or not isinstance(interop_payload, dict):
+        interop_report.update(
+            {
+                "result": "block",
+                "summary": "repo interop contract is incomplete or unreadable for host adapter live drift.",
+                "missing_inputs": interop_errors or ["repo interop contract is unreadable"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+            }
+        )
+        payload.update(
+            {
+                "result": "block",
+                "summary": interop_report["summary"],
+                "missing_inputs": list(interop_report["missing_inputs"]),
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                "profile_check": {"id": "host-adapter-live-drift", "result": "block"},
+                "host_adapter_drift": {
+                    "contract_locator": contract_locator,
+                    "availability": "incomplete",
+                    "expected_host_adapter_version": expected_version,
+                    "checks": [],
+                },
+            }
+        )
+        return payload
+
+    host_adapters = interop_payload.get("host_adapters")
+    if not isinstance(host_adapters, list):
+        interop_report.update(
+            {
+                "result": "block",
+                "summary": "repo interop contract does not expose a readable host_adapters list.",
+                "missing_inputs": ["repo interop contract must include `host_adapters` as a list"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+            }
+        )
+        payload.update(
+            {
+                "result": "block",
+                "summary": interop_report["summary"],
+                "missing_inputs": list(interop_report["missing_inputs"]),
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                "profile_check": {"id": "host-adapter-live-drift", "result": "block"},
+                "host_adapter_drift": {
+                    "contract_locator": contract_locator,
+                    "availability": "incomplete",
+                    "expected_host_adapter_version": expected_version,
+                    "checks": [],
+                },
+            }
+        )
+        return payload
+
+    payload["command_plan"] = host_adapter_live_drift_command_plan(target_root, host_adapters=host_adapters)
+    if not host_adapters:
+        interop_report.update(
+            {
+                "result": "warn",
+                "summary": "repo interop contract is readable but declares no host adapters.",
+                "missing_inputs": ["repo interop contract declares no host adapters"],
+                "fallback_to": None,
+            }
+        )
+        payload.update(
+            {
+                "result": "warn",
+                "summary": interop_report["summary"],
+                "missing_inputs": list(interop_report["missing_inputs"]),
+                "fallback_to": None,
+                "profile_check": {"id": "host-adapter-live-drift", "result": "warn"},
+                "host_adapter_drift": {
+                    "contract_locator": contract_locator,
+                    "availability": "present",
+                    "expected_host_adapter_version": expected_version,
+                    "checks": [],
+                },
+            }
+        )
+        return payload
+
+    checks = [
+        host_adapter_drift_check(
+            target_root,
+            entry=entry,
+            index=index,
+            expected_host_adapter_version=expected_version,
+        )
+        for index, entry in enumerate(host_adapters)
+    ]
+    for check in checks:
+        payload["reports"].append(
+            {
+                "id": str(check["id"]),
+                "attempted": True,
+                "command": f"read {check.get('locator') or '<missing-locator>'}",
+                "reported_command": "host-adapter-retained-result",
+                "reported_result": str(check["classification"]),
+                "result": str(check["result"]),
+                "summary": str(check["summary"]),
+                "missing_inputs": list(check.get("missing_inputs", [])),
+                "fallback_to": check.get("fallback_to"),
+            }
+        )
+    missing_inputs = live_smoke_missing_inputs(
+        [message for report in payload["reports"] for message in report.get("missing_inputs", [])]
+    )
+    has_block = any(check["result"] == "block" for check in checks)
+    has_warn = any(check["result"] == "warn" for check in checks)
+    result = "block" if has_block else "warn" if has_warn else "pass"
+    summary = "host adapter retained result locators are readable and show no drift."
+    if result == "warn":
+        summary = "host adapter live drift produced profile-local warnings."
+    if result == "block":
+        summary = "host adapter live drift found blocking retained result declaration or readability gaps."
+    payload.update(
+        {
+            "result": result,
+            "summary": summary,
+            "missing_inputs": missing_inputs,
+            "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK if result == "block" else None,
+            "profile_check": {"id": "host-adapter-live-drift", "result": result},
+            "host_adapter_drift": {
+                "contract_locator": contract_locator,
+                "availability": "present",
+                "expected_host_adapter_version": expected_version,
+                "checks": checks,
+            },
+        }
+    )
+    return payload
+
+
+def hook_envelope_payload(target_root: Path, *, envelope: str, requirement: str) -> dict[str, Any]:
+    runtime_state = runtime_state_payload(target_root)
+    target = live_smoke_target_metadata(target_root)
+    payload: dict[str, Any] = {
+        "command": "live-smoke",
+        "operation": "hook-envelope",
+        "schema_version": HOOK_ENVELOPE_LIVE_CHECK_SCHEMA,
+        "runtime_state": runtime_state,
+        "target": target,
+        "command_plan": hook_envelope_command_plan(target_root, envelope=envelope),
+        "reports": [],
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if requirement not in {"required", "optional", "advisory"}:
+        payload.update(
+            {
+                "result": "block",
+                "summary": "hook envelope check requires requirement to be required, optional, or advisory.",
+                "missing_inputs": ["--requirement must be `required`, `optional`, or `advisory`"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                "profile_check": {"id": "hook-envelope", "result": "block"},
+                "hook_envelope": {
+                    "contract_locator": envelope,
+                    "availability": "invalid-declaration",
+                    "requirement": requirement,
+                    "checks": [],
+                },
+            }
+        )
+        return payload
+    if runtime_state.get("result") != "pass":
+        payload.update(
+            {
+                "result": "block",
+                "summary": "hook envelope check is blocked because the Loom runtime state is inconsistent.",
+                "missing_inputs": live_smoke_missing_inputs([str(message) for message in runtime_state.get("missing_inputs", [])]),
+                "fallback_to": runtime_state.get("fallback_to"),
+                "profile_check": {"id": "hook-envelope", "result": "block"},
+                "hook_envelope": {
+                    "contract_locator": envelope,
+                    "availability": "runtime-blocked",
+                    "requirement": requirement,
+                    "checks": [],
+                },
+            }
+        )
+        return payload
+
+    target_report = live_smoke_target_check_report(target_root)
+    payload["reports"] = [target_report]
+    payload["missing_inputs"] = list(target_report.get("missing_inputs", []))
+    if target_report["result"] != "pass":
+        payload.update(
+            {
+                "result": "warn",
+                "summary": "hook envelope check recorded explicit unavailable evidence for the adopted-repo target.",
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+                "profile_check": {"id": "hook-envelope", "result": "warn"},
+                "hook_envelope": {
+                    "contract_locator": envelope,
+                    "availability": "target-unavailable",
+                    "requirement": requirement,
+                    "checks": [],
+                },
+            }
+        )
+        return payload
+
+    envelope_path, envelope_errors = resolve_repo_relative_path(target_root, envelope, label="hook envelope locator")
+    if envelope_errors:
+        check = {
+            "id": "hook-envelope",
+            "requirement": requirement,
+            "locator": envelope,
+            "result": "block",
+            "classification": "unsafe",
+            "summary": "hook envelope locator is outside the repository boundary or otherwise unsafe.",
+            "missing_inputs": envelope_errors,
+            "fallback_to": "manual_repair",
+            "evidence": {"locator_status": "unsafe"},
+        }
+        payload["reports"].append(
+            {
+                "id": "hook-envelope",
+                "attempted": True,
+                "command": f"read {envelope}",
+                "reported_command": "hook-envelope",
+                "reported_result": "unsafe",
+                "result": "block",
+                "summary": check["summary"],
+                "missing_inputs": envelope_errors,
+                "fallback_to": "manual_repair",
+            }
+        )
+        payload.update(
+            {
+                "result": "block",
+                "summary": "hook envelope check found an unsafe locator.",
+                "missing_inputs": live_smoke_missing_inputs(envelope_errors),
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                "profile_check": {"id": "hook-envelope", "result": "block"},
+                "hook_envelope": {
+                    "contract_locator": envelope,
+                    "availability": "incomplete",
+                    "requirement": requirement,
+                    "checks": [check],
+                },
+            }
+        )
+        return payload
+    assert envelope_path is not None
+
+    if not envelope_path.exists():
+        result = "block" if requirement == "required" else "warn"
+        missing_inputs = [f"hook envelope locator points to missing path `{envelope}`"]
+        check = {
+            "id": "hook-envelope",
+            "requirement": requirement,
+            "locator": envelope,
+            "result": result,
+            "classification": "missing_required_input" if result == "block" else "not_applicable",
+            "summary": "hook envelope locator is missing.",
+            "missing_inputs": missing_inputs,
+            "fallback_to": "manual_repair" if result == "block" else None,
+            "evidence": {"locator_status": "missing"},
+        }
+        payload["reports"].append(
+            {
+                "id": "hook-envelope",
+                "attempted": True,
+                "command": f"read {envelope}",
+                "reported_command": "hook-envelope",
+                "reported_result": "missing",
+                "result": result,
+                "summary": check["summary"],
+                "missing_inputs": missing_inputs,
+                "fallback_to": check["fallback_to"],
+            }
+        )
+        payload.update(
+            {
+                "result": result,
+                "summary": "hook envelope locator is missing.",
+                "missing_inputs": live_smoke_missing_inputs(missing_inputs) if result == "block" else [],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK if result == "block" else None,
+                "profile_check": {"id": "hook-envelope", "result": result},
+                "hook_envelope": {
+                    "contract_locator": envelope,
+                    "availability": "incomplete",
+                    "requirement": requirement,
+                    "checks": [check],
+                },
+            }
+        )
+        return payload
+
+    try:
+        envelope_payload = load_json_file(envelope_path)
+    except (FileNotFoundError, json.JSONDecodeError, OSError) as exc:
+        result = "block" if requirement == "required" else "warn"
+        missing_inputs = [f"hook envelope locator is unreadable: {exc}"]
+        check = {
+            "id": "hook-envelope",
+            "requirement": requirement,
+            "locator": envelope,
+            "result": result,
+            "classification": "invalid_envelope",
+            "summary": "hook envelope locator is unreadable.",
+            "missing_inputs": missing_inputs,
+            "fallback_to": "manual_repair" if result == "block" else None,
+            "evidence": {"locator_status": "unreadable"},
+        }
+    else:
+        check = {
+            "id": "hook-envelope",
+            "requirement": requirement,
+            "locator": envelope,
+            **validate_hook_envelope_payload(envelope_payload),
+        }
+        check["evidence"] = {"locator_status": "readable", **dict(check.get("evidence", {}))}
+        if requirement in {"optional", "advisory"} and check["result"] == "block":
+            check["result"] = "warn"
+            check["fallback_to"] = None
+            check["missing_inputs"] = []
+
+    payload["reports"].append(
+        {
+            "id": "hook-envelope",
+            "attempted": True,
+            "command": f"read {envelope}",
+            "reported_command": "hook-envelope",
+            "reported_result": str(check["classification"]),
+            "result": str(check["result"]),
+            "summary": str(check["summary"]),
+            "missing_inputs": list(check.get("missing_inputs", [])),
+            "fallback_to": check.get("fallback_to"),
+        }
+    )
+    result = str(check["result"])
+    payload.update(
+        {
+            "result": result,
+            "summary": "hook envelope is valid." if result == "pass" else "hook envelope check produced warnings." if result == "warn" else "hook envelope check found blocking errors.",
+            "missing_inputs": live_smoke_missing_inputs(list(check.get("missing_inputs", []))) if result == "block" else [],
+            "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK if result == "block" else None,
+            "profile_check": {"id": "hook-envelope", "result": result},
+            "hook_envelope": {
+                "contract_locator": envelope,
+                "availability": "present",
+                "requirement": requirement,
+                "checks": [check],
+            },
+        }
+    )
+    return payload
+
+
+def hooks_extension_payload(target_root: Path) -> dict[str, Any]:
+    runtime_state = runtime_state_payload(target_root)
+    target = live_smoke_target_metadata(target_root)
+    payload: dict[str, Any] = {
+        "command": "live-smoke",
+        "operation": "hooks-extension",
+        "schema_version": HOOKS_EXTENSION_PROFILE_SCHEMA,
+        "runtime_state": runtime_state,
+        "target": target,
+        "command_plan": hooks_extension_command_plan(target_root),
+        "reports": [],
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if runtime_state.get("result") != "pass":
+        hook_profile = empty_hook_extension_profile()
+        hook_profile.update({"status": "runtime-blocked", "result": "block"})
+        payload.update(
+            {
+                "result": "block",
+                "summary": "hooks extension profile is blocked because the Loom runtime state is inconsistent.",
+                "missing_inputs": live_smoke_missing_inputs([str(message) for message in runtime_state.get("missing_inputs", [])]),
+                "fallback_to": runtime_state.get("fallback_to"),
+                "profile_check": {"id": "hooks-extension", "result": "block"},
+                "core_profile": {"id": "orchestration-core", "hook_enforcement": "not_applicable", "result": "pass"},
+                "hooks_extension": hook_profile,
+            }
+        )
+        return payload
+
+    target_report = live_smoke_target_check_report(target_root)
+    payload["reports"] = [target_report]
+    if target_report["result"] != "pass":
+        hook_profile = empty_hook_extension_profile()
+        hook_profile.update({"status": "target-unavailable", "result": "warn"})
+        payload.update(
+            {
+                "result": "warn",
+                "summary": "hooks extension profile recorded explicit unavailable evidence for the adopted-repo target.",
+                "missing_inputs": list(target_report.get("missing_inputs", [])),
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+                "profile_check": {"id": "hooks-extension", "result": "warn"},
+                "core_profile": {"id": "orchestration-core", "hook_enforcement": "not_applicable", "result": "pass"},
+                "hooks_extension": hook_profile,
+            }
+        )
+        return payload
+
+    governance_surface = build_governance_surface(target_root)
+    repo_interface = governance_surface.get("repo_interface")
+    if not isinstance(repo_interface, dict):
+        hook_profile = empty_hook_extension_profile()
+    else:
+        hook_profile = repo_interface.get("hook_profile")
+        if not isinstance(hook_profile, dict):
+            hook_profile = empty_hook_extension_profile()
+
+    result = str(hook_profile.get("result") or "pass")
+    if result not in {"pass", "warn", "block"}:
+        result = "block"
+    payload["reports"].append(
+        {
+            "id": "hooks-extension",
+            "attempted": True,
+            "command": f"read {target_root / '.loom/companion/repo-interface.json'}",
+            "reported_command": "repo-interface.hook_locators",
+            "reported_result": str(hook_profile.get("status") or "not_applicable"),
+            "result": result,
+            "summary": str(hook_profile.get("summary") or "hooks extension profile is not enabled."),
+            "missing_inputs": list(hook_profile.get("missing_inputs", [])) if result == "block" else [],
+            "fallback_to": "manual_repair" if result == "block" else None,
+        }
+    )
+    payload.update(
+        {
+            "result": result,
+            "summary": str(hook_profile.get("summary") or "hooks extension profile is not enabled."),
+            "missing_inputs": live_smoke_missing_inputs(list(hook_profile.get("missing_inputs", []))) if result == "block" else [],
+            "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK if result == "block" else None,
+            "profile_check": {"id": "hooks-extension", "result": result},
+            "core_profile": {"id": "orchestration-core", "hook_enforcement": "not_applicable", "result": "pass"},
+            "hooks_extension": hook_profile,
+        }
+    )
+    return payload
+
+
+def empty_external_orchestrator_conformance() -> dict[str, Any]:
+    return {
+        "schema_version": EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA,
+        "profile_id": "orchestration-extension/external-orchestrator",
+        "enabled": False,
+        "result": "pass",
+        "status": "not_applicable",
+        "summary": "external orchestrator interop profile is not enabled for this repository.",
+        "missing_inputs": [],
+        "missing_optional": [],
+        "checks": [],
+        "non_goals": {
+            "daemon": False,
+            "scheduler_state_machine": False,
+            "tracker_polling_product": False,
+            "second_status_surface": False,
+            "host_lifecycle_ownership": False,
+        },
+    }
+
+
+def external_orchestrator_conformance_check(
+    target_root: Path,
+    *,
+    entry: object,
+    index: int,
+) -> dict[str, Any]:
+    prefix = f"external_orchestrators[{index}]"
+    if not isinstance(entry, dict):
+        return {
+            "id": f"invalid-{index}",
+            "requirement": "required",
+            "operations": [],
+            "locator": "",
+            "result": "block",
+            "classification": "invalid_declaration",
+            "summary": f"{prefix} must be an object.",
+            "missing_inputs": [f"{prefix} must be an object"],
+            "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+            "evidence": {"locator_status": "invalid-declaration"},
+        }
+
+    entry_id = entry.get("id") if isinstance(entry.get("id"), str) and entry.get("id") else f"external-orchestrator-{index}"
+    requirement = entry.get("requirement") if isinstance(entry.get("requirement"), str) else "required"
+    locator = entry.get("locator") if isinstance(entry.get("locator"), str) else ""
+    fallback_to = entry.get("fallback_to") if isinstance(entry.get("fallback_to"), str) else "admission"
+    operations = entry.get("operations") if isinstance(entry.get("operations"), list) else []
+    blocking: list[str] = []
+    optional: list[str] = []
+
+    if requirement not in {"required", "optional", "advisory"}:
+        blocking.append(f"{prefix}.requirement must be required, optional, or advisory")
+        requirement = "required"
+    if not operations:
+        blocking.append(f"{prefix}.operations must be a non-empty list")
+    unsupported = [str(operation) for operation in operations if operation not in EXTERNAL_ORCHESTRATOR_OPERATIONS]
+    if unsupported:
+        blocking.append(f"{prefix}.operations contains unsupported operations: {', '.join(unsupported)}")
+    if isinstance(fallback_to, str) and fallback_to not in EXTERNAL_ORCHESTRATOR_ALLOWED_FALLBACKS:
+        blocking.append(f"{prefix}.fallback_to must point back to a Loom checkpoint or gate repair surface")
+
+    locator_path, locator_errors = resolve_repo_relative_path(target_root, locator, label=f"{prefix} locator")
+    if locator_errors:
+        blocking.extend(locator_errors)
+    elif locator_path is None or not locator_path.exists() or locator_path.is_dir():
+        message = f"{prefix} locator points to missing or unreadable retained evidence `{locator}`"
+        if requirement in {"optional", "advisory"}:
+            optional.append(message)
+        else:
+            blocking.append(message)
+
+    payload: object = None
+    if locator_path is not None and locator_path.exists() and locator_path.is_file():
+        try:
+            payload = load_json_file(locator_path)
+        except (json.JSONDecodeError, OSError) as exc:
+            blocking.append(f"{prefix} retained evidence is not readable JSON: {exc}")
+    if payload is not None and not isinstance(payload, dict):
+        blocking.append(f"{prefix} retained evidence must be a JSON object")
+    if isinstance(payload, dict):
+        forbidden = find_forbidden_external_orchestrator_fields(payload)
+        if forbidden:
+            blocking.append(f"{prefix} retained evidence contains forbidden authored/scheduler fields: {', '.join(forbidden)}")
+        payload_operation = payload.get("operation")
+        if isinstance(payload_operation, str) and operations and payload_operation not in operations:
+            blocking.append(f"{prefix} retained evidence operation is not declared by the locator")
+        if payload.get("operation") in {"status_read", "gate_read"}:
+            if payload.get("source_layer") != "derived_surface":
+                blocking.append(f"{prefix} status/gate reads must consume the derived status surface")
+            if payload.get("consumed_as") != "summary":
+                blocking.append(f"{prefix} status/gate reads must be consumed as summary")
+        if payload.get("host_lifecycle_ownership") not in {None, "host", "external"}:
+            blocking.append(f"{prefix} retained evidence must not claim Loom owns host lifecycle")
+        payload_fallback = payload.get("fallback_to")
+        if isinstance(payload_fallback, str) and payload_fallback not in EXTERNAL_ORCHESTRATOR_ALLOWED_FALLBACKS:
+            blocking.append(f"{prefix} retained evidence fallback_to must point back to Loom")
+
+    result = "block" if blocking else "warn" if optional else "pass"
+    if result == "warn" and requirement in {"required"}:
+        result = "block"
+    return {
+        "id": entry_id,
+        "requirement": requirement,
+        "operations": operations,
+        "locator": locator,
+        "result": result,
+        "classification": "truth_pollution" if blocking and isinstance(payload, dict) and find_forbidden_external_orchestrator_fields(payload) else "locator_or_contract",
+        "summary": (
+            "external orchestrator retained evidence is readable and respects Loom truth boundaries."
+            if result == "pass"
+            else "external orchestrator retained evidence has profile-local warnings."
+            if result == "warn"
+            else "external orchestrator retained evidence violates interop conformance boundaries."
+        ),
+        "missing_inputs": blocking if result == "block" else [],
+        "missing_optional": optional,
+        "fallback_to": fallback_to if result == "block" else None,
+        "evidence": {
+            "locator_status": "readable" if isinstance(payload, dict) else "missing_or_invalid",
+            "payload_schema_version": payload.get("schema_version") if isinstance(payload, dict) else None,
+            "payload_operation": payload.get("operation") if isinstance(payload, dict) else None,
+        },
+    }
+
+
+def external_orchestrator_conformance_payload(target_root: Path) -> dict[str, Any]:
+    runtime_state = runtime_state_payload(target_root)
+    target = live_smoke_target_metadata(target_root)
+    payload: dict[str, Any] = {
+        "command": "live-smoke",
+        "operation": "external-orchestrator-interop",
+        "schema_version": EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA,
+        "runtime_state": runtime_state,
+        "target": target,
+        "command_plan": external_orchestrator_conformance_command_plan(target_root),
+        "reports": [],
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if runtime_state.get("result") != "pass":
+        conformance = empty_external_orchestrator_conformance()
+        conformance.update({"status": "runtime-blocked", "result": "block"})
+        payload.update(
+            {
+                "result": "block",
+                "summary": "external orchestrator conformance is blocked because the Loom runtime state is inconsistent.",
+                "missing_inputs": live_smoke_missing_inputs([str(message) for message in runtime_state.get("missing_inputs", [])]),
+                "fallback_to": runtime_state.get("fallback_to"),
+                "profile_check": {"id": "external-orchestrator-interop", "result": "block"},
+                "core_profile": {"id": "orchestration-core", "external_orchestrator_enforcement": "not_applicable", "result": "pass"},
+                "external_orchestrator": conformance,
+            }
+        )
+        return payload
+
+    target_report = live_smoke_target_check_report(target_root)
+    payload["reports"] = [target_report]
+    if target_report["result"] != "pass":
+        conformance = empty_external_orchestrator_conformance()
+        conformance.update({"status": "target-unavailable", "result": "warn"})
+        payload.update(
+            {
+                "result": "warn",
+                "summary": "external orchestrator conformance recorded explicit unavailable evidence for the adopted-repo target.",
+                "missing_inputs": list(target_report.get("missing_inputs", [])),
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+                "profile_check": {"id": "external-orchestrator-interop", "result": "warn"},
+                "core_profile": {"id": "orchestration-core", "external_orchestrator_enforcement": "not_applicable", "result": "pass"},
+                "external_orchestrator": conformance,
+            }
+        )
+        return payload
+
+    interop_path = target_root / ".loom" / "companion" / "interop.json"
+    if not interop_path.exists():
+        conformance = empty_external_orchestrator_conformance()
+        payload["reports"].append(
+            {
+                "id": "external-orchestrator-interop",
+                "attempted": True,
+                "command": f"read {interop_path}",
+                "reported_command": "repo-interop.external_orchestrators",
+                "reported_result": "not_applicable",
+                "result": "pass",
+                "summary": "repo interop does not declare external orchestrators.",
+                "missing_inputs": [],
+                "fallback_to": None,
+            }
+        )
+        payload.update(
+            {
+                "result": "pass",
+                "summary": conformance["summary"],
+                "profile_check": {"id": "external-orchestrator-interop", "result": "pass"},
+                "core_profile": {"id": "orchestration-core", "external_orchestrator_enforcement": "not_applicable", "result": "pass"},
+                "external_orchestrator": conformance,
+            }
+        )
+        return payload
+
+    try:
+        interop_payload = load_json_file(interop_path)
+    except (json.JSONDecodeError, OSError) as exc:
+        conformance = empty_external_orchestrator_conformance()
+        conformance.update(
+            {
+                "enabled": True,
+                "result": "block",
+                "status": "invalid_declaration",
+                "summary": "repo interop contract is unreadable for external orchestrator conformance.",
+                "missing_inputs": [f"repo interop contract is unreadable: {exc}"],
+            }
+        )
+        payload.update(
+            {
+                "result": "block",
+                "summary": conformance["summary"],
+                "missing_inputs": conformance["missing_inputs"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                "profile_check": {"id": "external-orchestrator-interop", "result": "block"},
+                "core_profile": {"id": "orchestration-core", "external_orchestrator_enforcement": "not_applicable", "result": "pass"},
+                "external_orchestrator": conformance,
+            }
+        )
+        return payload
+    external_orchestrators = interop_payload.get("external_orchestrators", []) if isinstance(interop_payload, dict) else []
+    if not isinstance(external_orchestrators, list) or not external_orchestrators:
+        conformance = empty_external_orchestrator_conformance()
+        payload["reports"].append(
+            {
+                "id": "external-orchestrator-interop",
+                "attempted": True,
+                "command": f"read {interop_path}",
+                "reported_command": "repo-interop.external_orchestrators",
+                "reported_result": "not_applicable",
+                "result": "pass",
+                "summary": "repo interop is readable but declares no external orchestrators.",
+                "missing_inputs": [],
+                "fallback_to": None,
+            }
+        )
+        payload.update(
+            {
+                "result": "pass",
+                "summary": conformance["summary"],
+                "profile_check": {"id": "external-orchestrator-interop", "result": "pass"},
+                "core_profile": {"id": "orchestration-core", "external_orchestrator_enforcement": "not_applicable", "result": "pass"},
+                "external_orchestrator": conformance,
+            }
+        )
+        return payload
+
+    checks = [
+        external_orchestrator_conformance_check(target_root, entry=entry, index=index)
+        for index, entry in enumerate(external_orchestrators)
+    ]
+    for check in checks:
+        payload["reports"].append(
+            {
+                "id": str(check["id"]),
+                "attempted": True,
+                "command": f"read {check.get('locator') or '<missing-locator>'}",
+                "reported_command": "repo-interop.external_orchestrator",
+                "reported_result": str(check["classification"]),
+                "result": str(check["result"]),
+                "summary": str(check["summary"]),
+                "missing_inputs": list(check.get("missing_inputs", [])),
+                "fallback_to": check.get("fallback_to"),
+            }
+        )
+
+    has_block = any(check["result"] == "block" for check in checks)
+    has_warn = any(check["result"] == "warn" for check in checks)
+    result = "block" if has_block else "warn" if has_warn else "pass"
+    conformance = empty_external_orchestrator_conformance()
+    conformance.update(
+        {
+            "enabled": True,
+            "result": result,
+            "status": "present",
+            "summary": (
+                "external orchestrator conformance passed without introducing a daemon, scheduler state, or second status surface."
+                if result == "pass"
+                else "external orchestrator conformance produced profile-local warnings."
+                if result == "warn"
+                else "external orchestrator conformance found blocking interop drift."
+            ),
+            "missing_inputs": live_smoke_missing_inputs([message for check in checks for message in check.get("missing_inputs", [])]),
+            "missing_optional": [message for check in checks for message in check.get("missing_optional", [])],
+            "checks": checks,
+        }
+    )
+    payload.update(
+        {
+            "result": result,
+            "summary": conformance["summary"],
+            "missing_inputs": conformance["missing_inputs"],
+            "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK if result == "block" else None,
+            "profile_check": {"id": "external-orchestrator-interop", "result": result},
+            "core_profile": {"id": "orchestration-core", "external_orchestrator_enforcement": "not_applicable", "result": "pass"},
+            "external_orchestrator": conformance,
+            "command_plan": external_orchestrator_conformance_command_plan(target_root, external_orchestrators=external_orchestrators),
+        }
+    )
+    return payload
+
+
+def dynamic_tool_live_availability_payload(target_root: Path, *, surface: str) -> dict[str, Any]:
+    runtime_state = runtime_state_payload(target_root)
+    target = live_smoke_target_metadata(target_root)
+    payload: dict[str, Any] = {
+        "command": "live-smoke",
+        "operation": "dynamic-tool-availability",
+        "schema_version": DYNAMIC_TOOL_LIVE_AVAILABILITY_SCHEMA,
+        "runtime_state": runtime_state,
+        "target": target,
+        "command_plan": dynamic_tool_live_availability_command_plan(target_root, surface=surface),
+        "reports": [],
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if runtime_state.get("result") != "pass":
+        payload.update(
+            {
+                "result": "block",
+                "summary": "dynamic tool live availability is blocked because the Loom runtime state is inconsistent.",
+                "missing_inputs": live_smoke_missing_inputs([str(message) for message in runtime_state.get("missing_inputs", [])]),
+                "fallback_to": runtime_state.get("fallback_to"),
+                "profile_check": {"id": "dynamic-tool-live-availability", "result": "block"},
+                "dynamic_tool_availability": {
+                    "contract_locator": ".loom/companion/repo-interface.json",
+                    "availability": "runtime-blocked",
+                    "surface": surface,
+                    "tool_availability": empty_tool_availability(),
+                },
+            }
+        )
+        return payload
+
+    target_report = live_smoke_target_check_report(target_root)
+    payload["reports"] = [target_report]
+    payload["missing_inputs"] = list(target_report.get("missing_inputs", []))
+    if target_report["result"] != "pass":
+        payload.update(
+            {
+                "result": "warn",
+                "summary": "dynamic tool live availability recorded explicit unavailable evidence for the adopted-repo target.",
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+                "profile_check": {"id": "dynamic-tool-live-availability", "result": "warn"},
+                "dynamic_tool_availability": {
+                    "contract_locator": ".loom/companion/repo-interface.json",
+                    "availability": "target-unavailable",
+                    "surface": surface,
+                    "tool_availability": empty_tool_availability(),
+                },
+            }
+        )
+        return payload
+
+    governance_surface = build_governance_surface(target_root)
+    repo_interface = governance_surface.get("repo_interface")
+    contract_locator = ".loom/companion/repo-interface.json"
+    availability = "absent"
+    if isinstance(repo_interface, dict):
+        availability = str(repo_interface.get("availability") or "absent")
+    interface_report = {
+        "id": "repo-interface-contract",
+        "attempted": True,
+        "command": f"read {target_root / contract_locator}",
+        "reported_command": "repo-interface-contract",
+        "reported_result": availability,
+        "result": "pass",
+        "summary": "repo companion interface is readable.",
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    payload["reports"].append(interface_report)
+
+    if availability in {"absent", "companion_docs_only"}:
+        summary = "repo companion interface is absent, so no dynamic tool live evidence can be consumed."
+        if availability == "companion_docs_only":
+            summary = "legacy companion docs are present, but no machine-readable repo companion interface declares dynamic tools."
+        interface_report.update(
+            {
+                "result": "warn",
+                "summary": summary,
+                "missing_inputs": ["repo companion interface is absent"],
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+            }
+        )
+        payload.update(
+            {
+                "result": "warn",
+                "summary": summary,
+                "missing_inputs": ["repo companion interface is absent"],
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+                "profile_check": {"id": "dynamic-tool-live-availability", "result": "warn"},
+                "dynamic_tool_availability": {
+                    "contract_locator": contract_locator,
+                    "availability": "absent",
+                    "surface": surface,
+                    "tool_availability": empty_tool_availability(),
+                },
+            }
+        )
+        return payload
+
+    if not isinstance(repo_interface, dict) or availability == "incomplete":
+        missing_inputs = []
+        if isinstance(repo_interface, dict) and isinstance(repo_interface.get("missing_inputs"), list):
+            missing_inputs = [str(message) for message in repo_interface.get("missing_inputs", [])]
+        if not missing_inputs:
+            missing_inputs = ["repo companion interface is unreadable"]
+        interface_report.update(
+            {
+                "result": "block",
+                "summary": "repo companion interface is incomplete or unreadable for dynamic tool live availability.",
+                "missing_inputs": missing_inputs,
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+            }
+        )
+        payload.update(
+            {
+                "result": "block",
+                "summary": interface_report["summary"],
+                "missing_inputs": live_smoke_missing_inputs(missing_inputs),
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                "profile_check": {"id": "dynamic-tool-live-availability", "result": "block"},
+                "dynamic_tool_availability": {
+                    "contract_locator": contract_locator,
+                    "availability": "incomplete",
+                    "surface": surface,
+                    "tool_availability": empty_tool_availability(),
+                },
+            }
+        )
+        return payload
+
+    if availability != "present":
+        interface_report.update(
+            {
+                "result": "block",
+                "summary": "repo companion interface returned an unknown availability state for dynamic tool live availability.",
+                "missing_inputs": [f"unknown repo companion availability: {availability}"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+            }
+        )
+        payload.update(
+            {
+                "result": "block",
+                "summary": interface_report["summary"],
+                "missing_inputs": interface_report["missing_inputs"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                "profile_check": {"id": "dynamic-tool-live-availability", "result": "block"},
+                "dynamic_tool_availability": {
+                    "contract_locator": contract_locator,
+                    "availability": "incomplete",
+                    "surface": surface,
+                    "tool_availability": empty_tool_availability(),
+                },
+            }
+        )
+        return payload
+
+    tool_availability = repo_interface.get("tool_availability") if surface == "all" else tool_availability_for_surface(repo_interface, surface=surface)
+    if not isinstance(tool_availability, dict):
+        interface_report.update(
+            {
+                "result": "block",
+                "summary": "repo companion interface does not expose readable dynamic tool availability evidence.",
+                "missing_inputs": ["repo companion interface must expose `tool_availability`"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+            }
+        )
+        payload.update(
+            {
+                "result": "block",
+                "summary": interface_report["summary"],
+                "missing_inputs": interface_report["missing_inputs"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                "profile_check": {"id": "dynamic-tool-live-availability", "result": "block"},
+                "dynamic_tool_availability": {
+                    "contract_locator": contract_locator,
+                    "availability": "incomplete",
+                    "surface": surface,
+                    "tool_availability": empty_tool_availability(),
+                },
+            }
+        )
+        return payload
+
+    declared_tools = tool_availability.get("declared_tools")
+    if not isinstance(declared_tools, list):
+        interface_report.update(
+            {
+                "result": "block",
+                "summary": "dynamic tool live availability did not expose a readable declared_tools list.",
+                "missing_inputs": ["tool_availability must include `declared_tools` as a list"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+            }
+        )
+        payload.update(
+            {
+                "result": "block",
+                "summary": interface_report["summary"],
+                "missing_inputs": interface_report["missing_inputs"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                "profile_check": {"id": "dynamic-tool-live-availability", "result": "block"},
+                "dynamic_tool_availability": {
+                    "contract_locator": contract_locator,
+                    "availability": "incomplete",
+                    "surface": surface,
+                    "tool_availability": empty_tool_availability(),
+                },
+            }
+        )
+        return payload
+
+    payload["command_plan"] = dynamic_tool_live_availability_command_plan(
+        target_root,
+        surface=surface,
+        declared_tools=declared_tools,
+    )
+    if not declared_tools:
+        interface_report.update(
+            {
+                "result": "pass",
+                "summary": "repo companion interface is readable and no dynamic tools apply to this live profile.",
+                "missing_inputs": [],
+                "fallback_to": None,
+            }
+        )
+        payload.update(
+            {
+                "result": "pass",
+                "summary": interface_report["summary"],
+                "missing_inputs": [],
+                "fallback_to": None,
+                "profile_check": {"id": "dynamic-tool-live-availability", "result": "pass"},
+                "dynamic_tool_availability": {
+                    "contract_locator": contract_locator,
+                    "availability": "present",
+                    "surface": surface,
+                    "tool_availability": tool_availability,
+                },
+            }
+        )
+        return payload
+
+    advisory_messages: list[str] = []
+    for tool in declared_tools:
+        if not isinstance(tool, dict):
+            continue
+        report_result = "pass"
+        if tool.get("result") == "block":
+            report_result = "block"
+        elif tool.get("status") != "advertised":
+            report_result = "warn"
+        report_missing_inputs = [str(message) for message in tool.get("missing_inputs", [])]
+        if report_result == "warn":
+            report_missing_inputs = [str(message) for message in tool.get("advisory", [])]
+            for message in report_missing_inputs:
+                if message not in advisory_messages:
+                    advisory_messages.append(message)
+        payload["reports"].append(
+            {
+                "id": str(tool.get("id") or "dynamic-tool"),
+                "attempted": True,
+                "command": f"read {tool.get('locator') or '<missing-locator>'}",
+                "reported_command": "dynamic-tool-handshake",
+                "reported_result": str(tool.get("status") or tool.get("failure_category") or "unknown"),
+                "result": report_result,
+                "summary": str(tool.get("summary") or "dynamic tool handshake declaration was read."),
+                "missing_inputs": report_missing_inputs,
+                "fallback_to": tool.get("fallback_to") if report_result == "block" else None,
+            }
+        )
+
+    blocking_messages = [
+        message
+        for report in payload["reports"]
+        if report.get("result") == "block"
+        for message in report.get("missing_inputs", [])
+    ]
+    missing_inputs = live_smoke_missing_inputs([*blocking_messages, *advisory_messages])
+    has_block = tool_availability.get("result") == "block"
+    has_warn = any(report.get("result") == "warn" for report in payload["reports"])
+    result = "block" if has_block else "warn" if has_warn else "pass"
+    summary = "dynamic tool handshake declarations are readable and advertised for this live profile."
+    if result == "warn":
+        summary = "dynamic tool live availability produced profile-local warnings."
+    if result == "block":
+        summary = "dynamic tool live availability found blocking handshake declaration or availability gaps."
+    payload.update(
+        {
+            "result": result,
+            "summary": summary,
+            "missing_inputs": missing_inputs,
+            "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK if result == "block" else None,
+            "profile_check": {"id": "dynamic-tool-live-availability", "result": result},
+            "dynamic_tool_availability": {
+                "contract_locator": contract_locator,
+                "availability": "present",
+                "surface": surface,
+                "tool_availability": tool_availability,
+            },
+        }
+    )
+    return payload
+
+
+def live_smoke_command_plan(target_root: Path, *, item: str, include_blocking_shadow: bool) -> list[dict[str, Any]]:
+    target = command_target(target_root)
+    plan = [
+        {
+            "id": "target-check",
+            "command": f"test -d {target}",
+            "description": "Confirm the adopted-repo target path exists before running live smoke checks.",
+        },
+        {
+            "id": "governance-profile-status",
+            "command": live_smoke_command(["governance-profile", "status", "--target", str(target_root)]),
+            "description": "Read the adopted repo governance maturity surface.",
+        },
+        {
+            "id": "governance-profile-upgrade-plan",
+            "command": live_smoke_command(["governance-profile", "upgrade-plan", "--target", str(target_root)]),
+            "description": "Record upgrade requirements as live confidence input.",
+        },
+        {
+            "id": "runtime-parity",
+            "command": live_smoke_command(["runtime-parity", "validate", "--target", str(target_root)]),
+            "description": "Check Loom core runtime parity against the adopted repo surface.",
+        },
+        {
+            "id": "shadow-parity",
+            "command": live_smoke_command(["shadow-parity", "--target", str(target_root)]),
+            "description": "Read validation-only shadow parity without changing merge gates.",
+        },
+        {
+            "id": "flow-resume",
+            "command": live_smoke_command(["flow", "resume", "--target", str(target_root), "--item", item]),
+            "description": "Exercise resume flow on the adopted repo when the requested item exists.",
+        },
+    ]
+    if include_blocking_shadow:
+        plan.append(
+            {
+                "id": "shadow-parity-blocking",
+                "command": live_smoke_command(["shadow-parity", "--target", str(target_root), "--blocking"]),
+                "description": "Optional explicit blocking-mode shadow parity check; not sufficient blocking-upgrade evidence on its own.",
+            }
+        )
+    return plan
+
+
+def live_smoke_missing_inputs(messages: list[str]) -> list[str]:
+    return list(dict.fromkeys(message for message in messages if isinstance(message, str) and message))
+
+
+def live_smoke_target_check_report(target_root: Path) -> dict[str, Any]:
+    if target_root.exists():
+        return {
+            "id": "target-check",
+            "attempted": True,
+            "command": f"test -d {command_target(target_root)}",
+            "reported_command": "target-check",
+            "reported_result": "pass",
+            "result": "pass",
+            "summary": "adopted-repo target root exists.",
+            "missing_inputs": [],
+            "fallback_to": None,
+        }
+    return {
+        "id": "target-check",
+        "attempted": True,
+        "command": f"test -d {command_target(target_root)}",
+        "reported_command": "target-check",
+        "reported_result": "unavailable",
+        "result": "warn",
+        "summary": "adopted-repo target root is unavailable.",
+        "missing_inputs": [f"adopted repo target is unavailable: {target_root}"],
+        "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+    }
+
+
+def live_smoke_command_report(target_root: Path, *, report_id: str, args: list[str]) -> dict[str, Any]:
+    payload, errors = local_command_json(target_root, args)
+    command = live_smoke_command(args)
+    if payload is None:
+        return {
+            "id": report_id,
+            "attempted": True,
+            "command": command,
+            "reported_command": args[0],
+            "reported_result": "invalid-output",
+            "result": "block",
+            "summary": f"{args[0]} did not return readable JSON output.",
+            "missing_inputs": live_smoke_missing_inputs(errors),
+            "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+        }
+    reported_result = str(payload.get("result") or "unknown")
+    return {
+        "id": report_id,
+        "attempted": True,
+        "command": command,
+        "reported_command": payload.get("command"),
+        "reported_result": reported_result,
+        "result": "pass" if reported_result == "pass" else "warn",
+        "summary": str(payload.get("summary") or f"{args[0]} completed without a summary."),
+        "missing_inputs": live_smoke_missing_inputs([str(message) for message in payload.get("missing_inputs", [])]),
+        "fallback_to": payload.get("fallback_to"),
+    }
+
+
+def parse_live_smoke_code_block(lines: list[str]) -> list[str]:
+    commands: list[str] = []
+    in_block = False
+    for raw_line in lines:
+        stripped = raw_line.strip()
+        if stripped.startswith("```"):
+            if in_block:
+                break
+            in_block = True
+            continue
+        if in_block and stripped:
+            commands.append(stripped)
+    return commands
+
+
+def strip_inline_code(value: str | None) -> str | None:
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    if stripped.startswith("`") and stripped.endswith("`") and len(stripped) >= 2:
+        return stripped[1:-1]
+    return stripped or None
+
+
+def live_smoke_replay_payload(prior_evidence_path: Path, *, runtime_state: dict[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "command": "live-smoke",
+        "operation": "replay",
+        "schema_version": LIVE_SMOKE_SCHEMA,
+        "runtime_state": runtime_state,
+        "command_plan": [],
+        "reports": [],
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if runtime_state.get("result") != "pass":
+        payload.update(
+            {
+                "result": "block",
+                "summary": "live smoke replay is blocked because the Loom runtime state is inconsistent.",
+                "missing_inputs": live_smoke_missing_inputs([str(message) for message in runtime_state.get("missing_inputs", [])]),
+                "fallback_to": runtime_state.get("fallback_to"),
+                "live_smoke": {
+                    "status": "failed",
+                    "executed_at": current_iso_timestamp(),
+                    "release_interpretation": live_smoke_release_interpretation("failed"),
+                },
+            }
+        )
+        return payload
+    if not prior_evidence_path.exists():
+        payload.update(
+            {
+                "result": "block",
+                "summary": "live smoke replay could not read the requested prior evidence.",
+                "missing_inputs": [f"prior evidence path is unavailable: {prior_evidence_path}"],
+                "fallback_to": LIVE_SMOKE_REPLAY_FALLBACK,
+                "live_smoke": {
+                    "status": "failed",
+                    "executed_at": current_iso_timestamp(),
+                    "release_interpretation": live_smoke_release_interpretation("failed"),
+                },
+                "prior_evidence": {
+                    "path": str(prior_evidence_path),
+                    "status": "missing",
+                },
+            }
+        )
+        return payload
+
+    relative_path = str(prior_evidence_path)
+    if prior_evidence_path.is_absolute():
+        relative_path = str(prior_evidence_path.resolve())
+    sections = markdown_sections(prior_evidence_path)
+    commands = parse_live_smoke_code_block(sections.get("2. Commands", []))
+    target_lines = sections.get("1. Target", [])
+    availability_lines = sections.get("4. Current PR Availability Evidence", [])
+    text = prior_evidence_path.read_text(encoding="utf-8")
+    status_match = re.search(r"Current release evidence status:\s*`([^`]+)`", text)
+    if status_match is None or "Release interpretation:" not in text:
+        payload.update(
+            {
+                "result": "block",
+                "summary": "live smoke replay evidence is missing required status or interpretation fields.",
+                "missing_inputs": [f"{relative_path}: missing Current release evidence status or Release interpretation"],
+                "fallback_to": LIVE_SMOKE_REPLAY_FALLBACK,
+                "live_smoke": {
+                    "status": "failed",
+                    "executed_at": current_iso_timestamp(),
+                    "release_interpretation": live_smoke_release_interpretation("failed"),
+                },
+                "prior_evidence": {
+                    "path": relative_path,
+                    "status": "invalid",
+                },
+            }
+        )
+        return payload
+
+    def find_prefix(lines: list[str], prefix: str) -> str | None:
+        for raw_line in lines:
+            stripped = raw_line.strip()
+            if stripped.startswith(prefix):
+                return stripped[len(prefix) :].strip()
+        return None
+
+    prior_status = status_match.group(1).strip()
+    release_interpretation = find_prefix(availability_lines, "- Release interpretation:") or live_smoke_release_interpretation("replayed")
+    replay_report = {
+        "id": "prior-evidence",
+        "attempted": False,
+        "command": f"read {relative_path}",
+        "reported_command": "prior-evidence",
+        "reported_result": prior_status,
+        "result": "pass",
+        "summary": "versioned prior-pass live smoke evidence was replayed without rerunning adopted-repo commands.",
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    payload.update(
+        {
+            "result": "pass",
+            "summary": "versioned prior-pass live smoke evidence was replayed.",
+            "command_plan": [
+                {
+                    "id": "prior-evidence-read",
+                    "command": live_smoke_command(["live-smoke", "replay", "--prior-evidence", relative_path]),
+                    "description": "Replay versioned prior-pass evidence without rerunning adopted-repo commands.",
+                }
+            ],
+            "reports": [replay_report],
+            "live_smoke": {
+                "status": "replayed",
+                "executed_at": current_iso_timestamp(),
+                "release_interpretation": release_interpretation,
+            },
+            "prior_evidence": {
+                "path": relative_path,
+                "status": prior_status,
+                "target_family": find_prefix(target_lines, "- Adopted repo family:"),
+                "smoke_branch": strip_inline_code(find_prefix(target_lines, "- Smoke branch recorded there:")),
+                "smoke_commit": strip_inline_code(find_prefix(target_lines, "- Smoke commit recorded there:")),
+                "smoke_worktree": strip_inline_code(find_prefix(target_lines, "- Smoke worktree recorded there:")),
+                "commands": commands,
+            },
+        }
+    )
+    return payload
+
+
+def live_smoke_run_payload(
+    target_root: Path,
+    *,
+    item: str,
+    dry_run: bool,
+    include_blocking_shadow: bool,
+) -> dict[str, Any]:
+    runtime_state = runtime_state_payload(target_root)
+    command_plan = live_smoke_command_plan(target_root, item=item, include_blocking_shadow=include_blocking_shadow)
+    target = live_smoke_target_metadata(target_root)
+    payload: dict[str, Any] = {
+        "command": "live-smoke",
+        "operation": "run",
+        "schema_version": LIVE_SMOKE_SCHEMA,
+        "runtime_state": runtime_state,
+        "target": target,
+        "command_plan": command_plan,
+        "reports": [],
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if runtime_state.get("result") != "pass":
+        payload.update(
+            {
+                "result": "block",
+                "summary": "live smoke is blocked because the Loom runtime state is inconsistent.",
+                "missing_inputs": live_smoke_missing_inputs([str(message) for message in runtime_state.get("missing_inputs", [])]),
+                "fallback_to": runtime_state.get("fallback_to"),
+                "live_smoke": {
+                    "status": "failed",
+                    "executed_at": current_iso_timestamp(),
+                    "release_interpretation": live_smoke_release_interpretation("failed"),
+                },
+            }
+        )
+        return payload
+
+    target_report = live_smoke_target_check_report(target_root)
+    payload["reports"] = [target_report]
+    payload["missing_inputs"] = list(target_report.get("missing_inputs", []))
+    if target_report["result"] != "pass":
+        payload.update(
+            {
+                "result": "warn",
+                "summary": "live smoke recorded explicit unavailable evidence for the adopted-repo target.",
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+                "live_smoke": {
+                    "status": "unavailable",
+                    "executed_at": current_iso_timestamp(),
+                    "release_interpretation": live_smoke_release_interpretation("unavailable"),
+                },
+            }
+        )
+        return payload
+
+    if dry_run:
+        payload.update(
+            {
+                "result": "pass",
+                "summary": "live smoke command plan was generated without running adopted-repo commands.",
+                "live_smoke": {
+                    "status": "dry_run",
+                    "executed_at": current_iso_timestamp(),
+                    "release_interpretation": live_smoke_release_interpretation("dry_run"),
+                },
+            }
+        )
+        return payload
+
+    reports = [target_report]
+    for report_id, args in (
+        ("governance-profile-status", ["governance-profile", "status", "--target", str(target_root)]),
+        ("governance-profile-upgrade-plan", ["governance-profile", "upgrade-plan", "--target", str(target_root)]),
+        ("runtime-parity", ["runtime-parity", "validate", "--target", str(target_root)]),
+        ("shadow-parity", ["shadow-parity", "--target", str(target_root)]),
+        ("flow-resume", ["flow", "resume", "--target", str(target_root), "--item", item]),
+    ):
+        reports.append(live_smoke_command_report(target_root, report_id=report_id, args=args))
+    if include_blocking_shadow:
+        reports.append(
+            live_smoke_command_report(
+                target_root,
+                report_id="shadow-parity-blocking",
+                args=["shadow-parity", "--target", str(target_root), "--blocking"],
+            )
+        )
+
+    missing_inputs = live_smoke_missing_inputs(
+        [message for report in reports for message in report.get("missing_inputs", [])]
+    )
+    has_internal_block = any(report.get("result") == "block" for report in reports)
+    has_warning = any(report.get("result") == "warn" for report in reports)
+    result = "block" if has_internal_block else "warn" if has_warning else "pass"
+    status = "failed" if has_warning else "passed"
+    summary = "live smoke produced explicit profile-local warnings." if result == "warn" else "live smoke completed across the planned command set."
+    if result == "block":
+        summary = "live smoke failed to produce stable command output."
+    payload.update(
+        {
+            "result": result,
+            "summary": summary,
+            "reports": reports,
+            "missing_inputs": missing_inputs,
+            "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK if result == "block" else LIVE_SMOKE_RETRY_FALLBACK if result == "warn" else None,
+            "live_smoke": {
+                "status": status,
+                "executed_at": current_iso_timestamp(),
+                "release_interpretation": live_smoke_release_interpretation(status),
+            },
+        }
+    )
+    return payload
 
 
 def adoption_validation_commands(target_root: Path) -> list[str]:
@@ -588,6 +3165,15 @@ def default_repo_interface() -> dict[str, Any]:
         },
         "metadata_contract": {"fields": []},
         "context_schema": {"fields": []},
+        "dynamic_tool_locators": [],
+        "policy_locators": [],
+        "hook_locators": [],
+        "release_targets": {
+            "catalog_locator": ".loom/companion/releases/catalog.json",
+            "current_target_locator": ".loom/companion/releases/current.json",
+            "enforcement": "blocking",
+            "status_locator": ".loom/companion/releases/status.json",
+        },
     }
 
 
@@ -601,6 +3187,9 @@ def default_repo_interop() -> dict[str, Any]:
                 "summary": "Repo-owned adoption residue generated as explicit write targets; Loom reads it without promoting the repo-specific rules into core.",
                 "surfaces": list(SHADOW_PARITY_SURFACES),
                 "locator": ".loom/companion",
+                "owner": "repo-companion",
+                "requirement": "required",
+                "fallback_to": "adoption",
             }
         ],
         "shadow_surfaces": {
@@ -644,6 +3233,10 @@ def companion_text_payloads() -> dict[str, str]:
         ".loom/companion/merge-ready.md": "# Companion Merge-Ready Surface\n",
         ".loom/companion/closeout.md": "# Companion Closeout Surface\n",
         ".loom/companion/checkpoints.md": "# Companion Checkpoints\n",
+        ".loom/companion/releases/changelog.md": "# Changelog\n\n- Bootstrap release intake example.\n",
+        ".loom/companion/releases/release-notes.md": "# Release Notes\n\n- Bootstrap release target is ready for Loom-derived status consumption.\n",
+        ".loom/companion/releases/migration-notes.md": "# Migration Notes\n\n- not_applicable\n",
+        ".loom/companion/releases/rollback.md": "# Rollback Basis\n\n- Revert the companion-owned release target declaration and rerun Loom checks.\n",
     }
 
 
@@ -652,6 +3245,48 @@ def companion_json_payloads() -> dict[str, dict[str, Any]]:
         ".loom/companion/manifest.json": default_companion_manifest(),
         ".loom/companion/repo-interface.json": default_repo_interface(),
         ".loom/companion/interop.json": default_repo_interop(),
+        ".loom/companion/releases/catalog.json": {
+            "schema_version": "loom-target-release-catalog/v1",
+            "current_release_id": "bootstrap-v0.1.0",
+            "releases": [
+                {
+                    "release_id": "bootstrap-v0.1.0",
+                    "locator": ".loom/companion/releases/current.json",
+                }
+            ],
+        },
+        ".loom/companion/releases/current.json": {
+            "schema_version": "loom-target-release/v1",
+            "release_id": "bootstrap-v0.1.0",
+            "display_name": "Bootstrap v0.1.0",
+            "target_branch": "main",
+            "release_goal": "Bootstrap the first executable Loom path for this repository.",
+            "status": "unreleased",
+            "included_scope": {
+                "phase": [{"id": "bootstrap-phase", "locator": ".loom/companion/checkpoints.md", "delivery_status": "planned"}],
+                "fr": [],
+                "work_item": [{"id": "INIT-0001", "locator": ".loom/work-items/INIT-0001.md", "delivery_status": "unmerged"}],
+                "implementation_pr": [],
+                "merge_commit": [],
+            },
+            "evidence": {
+                "changelog_locator": ".loom/companion/releases/changelog.md",
+                "release_notes_locator": ".loom/companion/releases/release-notes.md",
+                "migration_notes_locator": ".loom/companion/releases/migration-notes.md",
+                "tag_or_artifact_locator": ".loom/companion/README.md",
+                "rollback_basis_locator": ".loom/companion/releases/rollback.md",
+            },
+            "authority": {
+                "owner": "repo-companion",
+                "source_kind": "repo_owned_locator",
+                "source_locator": ".loom/companion/releases/current.json",
+            },
+        },
+        ".loom/companion/releases/status.json": {
+            "schema_version": "loom-target-release-status/v1",
+            "result": "pass",
+            "summary": "repo-owned release status example is readable.",
+        },
     }
 
 
@@ -753,6 +3388,203 @@ def repo_specific_default_fallback(surface: str) -> str:
     }[surface]
 
 
+def tool_availability_for_surface(repo_interface: object, *, surface: str) -> dict[str, Any]:
+    empty_payload = {
+        "schema_version": "loom-dynamic-tool-handshake/v1",
+        "surface": surface,
+        "result": "pass",
+        "summary": "no dynamic tool handshake evidence applies to this surface.",
+        "declared_tools": [],
+        "blocking_tools": [],
+        "advisory_tools": [],
+        "failure_summary": {
+            "required_blocking": [],
+            "optional_advisory": [],
+            "by_status": {
+                "advertised": 0,
+                "failed": 0,
+                "unavailable": 0,
+                "unsupported": 0,
+            },
+        },
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if not isinstance(repo_interface, dict):
+        return empty_payload
+    tool_availability = repo_interface.get("tool_availability")
+    if not isinstance(tool_availability, dict):
+        return empty_payload
+    declared_tools = tool_availability.get("declared_tools")
+    if not isinstance(declared_tools, list):
+        return empty_payload
+
+    applicable: list[dict[str, Any]] = []
+    for tool in declared_tools:
+        if not isinstance(tool, dict):
+            continue
+        tool_surface = tool.get("surface")
+        if tool_surface in {surface, "attempt_time"}:
+            applicable.append(tool)
+    by_status = {
+        "advertised": 0,
+        "failed": 0,
+        "unavailable": 0,
+        "unsupported": 0,
+    }
+    blocking_tools: list[dict[str, Any]] = []
+    advisory_tools: list[dict[str, Any]] = []
+    missing_inputs: list[str] = []
+    fallback_to: str | None = None
+    for tool in applicable:
+        status = tool.get("status")
+        if isinstance(status, str) and status in by_status:
+            by_status[status] += 1
+        if tool.get("result") == "block":
+            blocking_tools.append(tool)
+            fallback = tool.get("fallback_to")
+            if fallback_to is None and isinstance(fallback, str) and fallback:
+                fallback_to = fallback
+            for message in tool.get("missing_inputs", []):
+                if message not in missing_inputs:
+                    missing_inputs.append(str(message))
+        elif tool.get("status") != "advertised":
+            advisory_tools.append(tool)
+
+    result = "block" if blocking_tools else "pass"
+    if blocking_tools:
+        summary = "required dynamic tool handshake evidence blocks this surface."
+    elif advisory_tools:
+        summary = "only optional or advisory dynamic tool handshake failures apply to this surface."
+    elif applicable:
+        summary = "dynamic tool handshake evidence is advertised for this surface."
+    else:
+        summary = empty_payload["summary"]
+    return {
+        **empty_payload,
+        "result": result,
+        "summary": summary,
+        "declared_tools": applicable,
+        "blocking_tools": blocking_tools,
+        "advisory_tools": advisory_tools,
+        "failure_summary": {
+            "required_blocking": blocking_tools,
+            "optional_advisory": advisory_tools,
+            "by_status": by_status,
+        },
+        "missing_inputs": missing_inputs,
+        "fallback_to": fallback_to if result == "block" else None,
+    }
+
+
+def policy_readiness_for_surface(repo_interface: object, *, surface: str) -> dict[str, Any]:
+    empty_payload = {
+        "schema_version": "loom-policy-readiness/v1",
+        "surface": surface,
+        "result": "pass",
+        "summary": "no approval or sandbox policy evidence applies to this surface.",
+        "declared_policies": [],
+        "blocking_policies": [],
+        "advisory_policies": [],
+        "approval_policy": None,
+        "sandbox_policy": None,
+        "risk_summary": {
+            "blocking": [],
+            "advisory": [],
+            "by_status": {
+                "conflict": 0,
+                "declared": 0,
+                "missing": 0,
+                "unsafe": 0,
+            },
+            "by_policy": {
+                "approval": "missing",
+                "sandbox": "missing",
+            },
+        },
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if not isinstance(repo_interface, dict):
+        return empty_payload
+    policy_readiness = repo_interface.get("policy_readiness")
+    if not isinstance(policy_readiness, dict):
+        return empty_payload
+    declared_policies = policy_readiness.get("declared_policies")
+    if not isinstance(declared_policies, list):
+        return empty_payload
+
+    applicable: list[dict[str, Any]] = []
+    for policy in declared_policies:
+        if not isinstance(policy, dict):
+            continue
+        policy_surface = policy.get("surface")
+        if policy_surface in {surface, "attempt_time"}:
+            applicable.append(policy)
+
+    by_status = {
+        "conflict": 0,
+        "declared": 0,
+        "missing": 0,
+        "unsafe": 0,
+    }
+    by_policy = {
+        "approval": "missing",
+        "sandbox": "missing",
+    }
+    blocking_policies: list[dict[str, Any]] = []
+    advisory_policies: list[dict[str, Any]] = []
+    missing_inputs: list[str] = []
+    fallback_to: str | None = None
+    latest_by_policy: dict[str, dict[str, Any]] = {}
+    for policy in applicable:
+        status = policy.get("status")
+        if isinstance(status, str) and status in by_status:
+            by_status[status] += 1
+        policy_type = policy.get("policy")
+        if isinstance(policy_type, str) and policy_type in by_policy:
+            by_policy[policy_type] = str(status or "missing")
+            latest_by_policy[policy_type] = policy
+        if policy.get("result") == "block":
+            blocking_policies.append(policy)
+            fallback = policy.get("fallback_to")
+            if fallback_to is None and isinstance(fallback, str) and fallback:
+                fallback_to = fallback
+            for message in policy.get("missing_inputs", []):
+                if message not in missing_inputs:
+                    missing_inputs.append(str(message))
+        elif policy.get("status") != "declared":
+            advisory_policies.append(policy)
+
+    result = "block" if blocking_policies else "pass"
+    if blocking_policies:
+        summary = "required approval or sandbox policy evidence blocks this surface."
+    elif advisory_policies:
+        summary = "only optional or advisory approval/sandbox policy risk applies to this surface."
+    elif applicable:
+        summary = "approval and sandbox policy evidence is declared for this surface."
+    else:
+        summary = empty_payload["summary"]
+    return {
+        **empty_payload,
+        "result": result,
+        "summary": summary,
+        "declared_policies": applicable,
+        "blocking_policies": blocking_policies,
+        "advisory_policies": advisory_policies,
+        "approval_policy": latest_by_policy.get("approval"),
+        "sandbox_policy": latest_by_policy.get("sandbox"),
+        "risk_summary": {
+            "blocking": blocking_policies,
+            "advisory": advisory_policies,
+            "by_status": by_status,
+            "by_policy": by_policy,
+        },
+        "missing_inputs": missing_inputs,
+        "fallback_to": fallback_to if result == "block" else None,
+    }
+
+
 def repo_specific_requirements_payload(
     repo_interface: object,
     *,
@@ -769,6 +3601,8 @@ def repo_specific_requirements_payload(
         "summary": "no repo companion requirements are declared for this surface.",
         "missing_inputs": [],
         "fallback_to": None,
+        "tool_availability": tool_availability_for_surface(repo_interface, surface=surface),
+        "policy_readiness": policy_readiness_for_surface(repo_interface, surface=surface),
     }
     if not isinstance(repo_interface, dict):
         return {
@@ -879,6 +3713,25 @@ def repo_specific_requirements_payload(
         result = "pass"
         fallback_to = None
         missing_inputs = []
+
+    tool_availability = tool_availability_for_surface(repo_interface, surface=surface)
+    if tool_availability.get("result") == "block":
+        result = "block"
+        fallback_to = fallback_to or tool_availability.get("fallback_to") or repo_specific_default_fallback(surface)
+        for message in tool_availability.get("missing_inputs", []):
+            if message not in missing_inputs:
+                missing_inputs.append(str(message))
+        if not blocking:
+            summary = "required dynamic tool handshake evidence blocks this surface."
+    policy_readiness = policy_readiness_for_surface(repo_interface, surface=surface)
+    if policy_readiness.get("result") == "block":
+        result = "block"
+        fallback_to = fallback_to or policy_readiness.get("fallback_to") or repo_specific_default_fallback(surface)
+        for message in policy_readiness.get("missing_inputs", []):
+            if message not in missing_inputs:
+                missing_inputs.append(str(message))
+        if not blocking and tool_availability.get("result") != "block":
+            summary = "required approval or sandbox policy evidence blocks this surface."
     return {
         "surface": surface,
         "result": result,
@@ -889,6 +3742,8 @@ def repo_specific_requirements_payload(
         "summary": summary,
         "missing_inputs": missing_inputs,
         "fallback_to": fallback_to,
+        "tool_availability": tool_availability,
+        "policy_readiness": policy_readiness,
     }
 
 
@@ -1391,6 +4246,593 @@ def write_json_file(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def execution_attempt_directory(target_root: Path, item_id: str) -> Path:
+    return target_root / ".loom/runtime/attempts" / item_id
+
+
+def execution_attempt_locator(item_id: str, filename: str = "latest.json") -> str:
+    return f".loom/runtime/attempts/{item_id}/{filename}"
+
+
+def collect_forbidden_execution_attempt_paths(payload: Any, prefix: str = "") -> list[str]:
+    found: list[str] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            path = f"{prefix}.{key}" if prefix else str(key)
+            if key in EXECUTION_ATTEMPT_FORBIDDEN_AUTHORED_FIELDS:
+                found.append(path)
+            found.extend(collect_forbidden_execution_attempt_paths(value, path))
+    elif isinstance(payload, list):
+        for index, value in enumerate(payload):
+            found.extend(collect_forbidden_execution_attempt_paths(value, f"{prefix}[{index}]"))
+    return found
+
+
+def execution_attempt_failure_category(payload: dict[str, Any]) -> str:
+    if payload.get("result") == "pass":
+        return "none"
+    missing_inputs = payload.get("missing_inputs")
+    haystack = " ".join(str(item).lower() for item in missing_inputs if isinstance(missing_inputs, list))
+    steps = payload.get("steps")
+    if isinstance(steps, list):
+        for step in steps:
+            if not isinstance(step, dict) or step.get("result") not in {"block", "fallback"}:
+                continue
+            name = str(step.get("name") or "")
+            if "runtime-state" in name:
+                return "runtime_state"
+            if "fact-chain" in name:
+                return "fact_chain"
+            if "state-check" in name:
+                return "state_check"
+            if "runtime-evidence" in name:
+                return "runtime_evidence"
+            if "checkpoint" in name:
+                return "checkpoint"
+            if "review" in name:
+                return "review"
+    if "runtime state" in haystack:
+        return "runtime_state"
+    if "fact-chain" in haystack or "fact chain" in haystack:
+        return "fact_chain"
+    if "runtime_evidence" in haystack or "runtime evidence" in haystack:
+        return "runtime_evidence"
+    if "checkpoint" in haystack:
+        return "checkpoint"
+    if "review" in haystack:
+        return "review"
+    if "repo-specific" in haystack or "companion" in haystack:
+        return "repo_specific"
+    if "recovery readiness" in haystack:
+        return "recovery_readiness"
+    return "unknown"
+
+
+def classify_execution_failure_text(text: str) -> str:
+    lowered = text.strip().lower()
+    if not lowered:
+        return "unknown"
+    if "retry_exhaustion" in lowered or "retry exhaustion" in lowered or "retries exhausted" in lowered:
+        return "retry_exhaustion"
+    if "timed out" in lowered or re.search(r"\btimeout\b", lowered):
+        return "timeout"
+    if "stall" in lowered or "stalled" in lowered:
+        return "stall"
+    return "unknown"
+
+
+def execution_failure_details(payload: dict[str, Any]) -> dict[str, Any]:
+    if payload.get("result") == "pass":
+        return {
+            "classification": "none",
+            "summary": "latest execution attempt completed without an execution failure classification.",
+            "fallback_to": None,
+        }
+
+    explicit = payload.get("execution_failure")
+    if isinstance(explicit, dict):
+        classification = explicit.get("classification") or explicit.get("kind")
+        summary = explicit.get("summary")
+        fallback_to = explicit.get("fallback_to")
+        if isinstance(classification, str) and classification in EXECUTION_FAILURE_CLASSIFICATIONS:
+            normalized_summary = (
+                str(summary).strip()
+                if isinstance(summary, str) and str(summary).strip()
+                else f"execution failure classified as `{classification}`."
+            )
+            return {
+                "classification": classification,
+                "summary": normalized_summary,
+                "fallback_to": str(fallback_to) if isinstance(fallback_to, str) and fallback_to.strip() else payload.get("fallback_to"),
+            }
+
+    texts: list[str] = []
+    summary = payload.get("summary")
+    if isinstance(summary, str) and summary.strip():
+        texts.append(summary.strip())
+    missing_inputs = payload.get("missing_inputs")
+    if isinstance(missing_inputs, list):
+        texts.extend(str(item).strip() for item in missing_inputs if str(item).strip())
+    steps = payload.get("steps")
+    if isinstance(steps, list):
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            for field in ("summary", "name"):
+                value = step.get(field)
+                if isinstance(value, str) and value.strip():
+                    texts.append(value.strip())
+            step_missing = step.get("missing_inputs")
+            if isinstance(step_missing, list):
+                texts.extend(str(item).strip() for item in step_missing if str(item).strip())
+    engine = payload.get("engine")
+    if isinstance(engine, dict):
+        failure_reason = engine.get("failure_reason")
+        if isinstance(failure_reason, str) and failure_reason.strip():
+            texts.append(failure_reason.strip())
+
+    classification = "unknown"
+    matched_summary: str | None = None
+    for candidate in texts:
+        classification = classify_execution_failure_text(candidate)
+        if classification != "unknown":
+            matched_summary = candidate
+            break
+
+    summary_text = next((candidate for candidate in texts if candidate), None)
+    return {
+        "classification": classification,
+        "summary": matched_summary or summary_text or "execution attempt blocked without a classified execution failure.",
+        "fallback_to": payload.get("fallback_to"),
+    }
+
+
+def execution_attempt_summary_from_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
+    evidence = envelope.get("evidence") if isinstance(envelope.get("evidence"), dict) else {}
+    failure = envelope.get("failure") if isinstance(envelope.get("failure"), dict) else {}
+    return {
+        "schema_version": EXECUTION_ATTEMPT_SCHEMA,
+        "attempt_id": envelope.get("attempt_id"),
+        "item_id": envelope.get("item_id"),
+        "command": envelope.get("command"),
+        "operation": envelope.get("operation"),
+        "result": envelope.get("result"),
+        "failure_category": failure.get("category"),
+        "execution_classification": failure.get("execution_classification"),
+        "execution_summary": failure.get("execution_summary"),
+        "fallback_to": failure.get("fallback_to"),
+        "evidence": {
+            "status": evidence.get("status"),
+            "locator": evidence.get("locator"),
+            "latest_locator": evidence.get("latest_locator"),
+        },
+    }
+
+
+def build_execution_attempt_envelope(
+    context: dict[str, Any],
+    *,
+    command: str,
+    operation: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    head_sha = git_head_sha(context["target_root"]) or "unknown-head"
+    created_at = utc_now_iso()
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            {
+                "item_id": context["item_id"],
+                "command": command,
+                "operation": operation,
+                "head_sha": head_sha,
+                "created_at": created_at,
+                "result": payload.get("result"),
+            },
+            sort_keys=True,
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()[:12]
+    attempt_id = f"{context['item_id']}-{operation}-{head_sha[:12]}-{fingerprint}".replace("/", "-")
+    attempt_locator = execution_attempt_locator(context["item_id"], f"{attempt_id}.json")
+    latest_locator = execution_attempt_locator(context["item_id"])
+    result = payload.get("result") if payload.get("result") in EXECUTION_ATTEMPT_RESULTS else "block"
+    missing_inputs = payload.get("missing_inputs")
+    if not isinstance(missing_inputs, list):
+        missing_inputs = []
+    failure_category = execution_attempt_failure_category(payload)
+    if failure_category not in EXECUTION_ATTEMPT_FAILURE_CATEGORIES:
+        failure_category = "unknown"
+    execution_failure = execution_failure_details(payload)
+    steps = payload.get("steps")
+    step_summary = []
+    if isinstance(steps, list):
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            step_summary.append(
+                {
+                    "name": step.get("name"),
+                    "result": step.get("result"),
+                    "fallback_to": step.get("fallback_to"),
+                    "missing_count": len(step.get("missing_inputs", [])) if isinstance(step.get("missing_inputs"), list) else 0,
+                }
+            )
+    return {
+        "schema_version": EXECUTION_ATTEMPT_SCHEMA,
+        "attempt_id": attempt_id,
+        "item_id": context["item_id"],
+        "command": command,
+        "operation": operation,
+        "result": result,
+        "created_at": created_at,
+        "head_sha": head_sha,
+        "branch": git_branch(context["target_root"]) or "unknown-branch",
+        "workspace": {
+            "entry": context["workspace_entry"],
+            "path": relative_to_root(context["workspace_path"], context["target_root"]),
+        },
+        "failure": {
+            "category": failure_category,
+            "execution_classification": execution_failure["classification"],
+            "execution_summary": execution_failure["summary"],
+            "missing_inputs": missing_inputs,
+            "fallback_to": execution_failure["fallback_to"],
+        },
+        "steps": step_summary,
+        "evidence": {
+            "status": "present",
+            "locator": attempt_locator,
+            "latest_locator": latest_locator,
+        },
+    }
+
+
+def persist_execution_attempt(
+    context: dict[str, Any],
+    *,
+    command: str,
+    operation: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    envelope = build_execution_attempt_envelope(context, command=command, operation=operation, payload=payload)
+    forbidden = collect_forbidden_execution_attempt_paths(envelope)
+    if forbidden:
+        envelope["evidence"] = {
+            "status": "invalid",
+            "locator": None,
+            "latest_locator": execution_attempt_locator(context["item_id"]),
+            "missing_inputs": [f"execution_attempt includes authored progress field `{path}`" for path in forbidden],
+        }
+        return execution_attempt_summary_from_envelope(envelope)
+
+    evidence = envelope["evidence"]
+    try:
+        attempt_path, attempt_errors = resolve_repo_relative_path(
+            context["target_root"],
+            str(evidence["locator"]),
+            label="execution_attempt evidence locator",
+        )
+        latest_path, latest_errors = resolve_repo_relative_path(
+            context["target_root"],
+            str(evidence["latest_locator"]),
+            label="execution_attempt latest locator",
+        )
+        if attempt_errors or latest_errors:
+            raise ValueError("; ".join([*attempt_errors, *latest_errors]))
+        assert attempt_path is not None
+        assert latest_path is not None
+        write_json_file(attempt_path, envelope)
+        write_json_file(latest_path, envelope)
+    except Exception as exc:
+        envelope["evidence"] = {
+            "status": "missing",
+            "locator": evidence.get("locator"),
+            "latest_locator": evidence.get("latest_locator"),
+            "missing_inputs": [f"execution_attempt evidence could not be written: {exc}"],
+        }
+    return execution_attempt_summary_from_envelope(envelope)
+
+
+def validate_execution_attempt_envelope(
+    payload: Any,
+    *,
+    target_root: Path,
+    expected_item: str,
+    expected_head: str | None = None,
+) -> tuple[dict[str, Any] | None, list[str], str]:
+    if not isinstance(payload, dict):
+        return None, ["execution_attempt evidence must be a JSON object"], "invalid"
+    errors: list[str] = []
+    if payload.get("schema_version") != EXECUTION_ATTEMPT_SCHEMA:
+        errors.append(f"execution_attempt schema_version must be `{EXECUTION_ATTEMPT_SCHEMA}`")
+    for field in ("attempt_id", "item_id", "command", "operation", "created_at", "head_sha"):
+        if not isinstance(payload.get(field), str) or not str(payload.get(field)).strip():
+            errors.append(f"execution_attempt `{field}` must be a non-empty string")
+    if payload.get("item_id") != expected_item:
+        errors.append(f"execution_attempt item_id does not match `{expected_item}`")
+    if payload.get("result") not in EXECUTION_ATTEMPT_RESULTS:
+        errors.append("execution_attempt result must be pass, block, or fallback")
+    workspace = payload.get("workspace")
+    if not isinstance(workspace, dict):
+        errors.append("execution_attempt workspace must be an object")
+    else:
+        for field in ("entry", "path"):
+            if not isinstance(workspace.get(field), str) or not workspace.get(field):
+                errors.append(f"execution_attempt workspace.{field} must be a non-empty string")
+    failure = payload.get("failure")
+    if not isinstance(failure, dict):
+        errors.append("execution_attempt failure must be an object")
+    else:
+        if failure.get("category") not in EXECUTION_ATTEMPT_FAILURE_CATEGORIES:
+            errors.append("execution_attempt failure.category is outside the stable vocabulary")
+        if failure.get("execution_classification") not in EXECUTION_FAILURE_CLASSIFICATIONS:
+            errors.append("execution_attempt failure.execution_classification is outside the stable vocabulary")
+        if not isinstance(failure.get("execution_summary"), str) or not str(failure.get("execution_summary")).strip():
+            errors.append("execution_attempt failure.execution_summary must be a non-empty string")
+        if not isinstance(failure.get("missing_inputs"), list):
+            errors.append("execution_attempt failure.missing_inputs must be a list")
+    evidence = payload.get("evidence")
+    if not isinstance(evidence, dict):
+        errors.append("execution_attempt evidence must be an object")
+    else:
+        locator = evidence.get("locator")
+        if not isinstance(locator, str) or not locator.strip():
+            errors.append("execution_attempt evidence.locator must be a non-empty string")
+        elif resolve_repo_relative_path(target_root, locator, label="execution_attempt evidence locator")[1]:
+            errors.append("execution_attempt evidence.locator must stay inside the target root")
+        if evidence.get("status") not in {"present", "missing", "invalid"}:
+            errors.append("execution_attempt evidence.status must be present, missing, or invalid")
+    forbidden = collect_forbidden_execution_attempt_paths(payload)
+    for path in forbidden:
+        errors.append(f"execution_attempt must not include authored progress field `{path}`")
+    if errors:
+        return payload, errors, "invalid"
+    if expected_head and payload.get("head_sha") != expected_head:
+        return payload, [], "stale"
+    return payload, [], "fresh"
+
+
+def latest_execution_attempt_payload(target_root: Path, item_id: str) -> dict[str, Any]:
+    locator = execution_attempt_locator(item_id)
+    path, path_errors = resolve_repo_relative_path(target_root, locator, label="execution_attempt latest locator")
+    if path_errors:
+        return {
+            "schema_version": EXECUTION_ATTEMPT_SCHEMA,
+            "status": "missing",
+            "freshness": "missing",
+            "summary": "latest execution attempt evidence locator is invalid.",
+            "evidence": {"locator": locator, "status": "missing"},
+            "missing_inputs": path_errors,
+            "attempt": None,
+        }
+    assert path is not None
+    if not path.exists():
+        return {
+            "schema_version": EXECUTION_ATTEMPT_SCHEMA,
+            "status": "missing",
+            "freshness": "missing",
+            "summary": "latest execution attempt evidence is not present.",
+            "evidence": {"locator": locator, "status": "missing"},
+            "missing_inputs": [f"missing execution_attempt evidence: {locator}"],
+            "attempt": None,
+        }
+    try:
+        raw = load_json_file(path)
+    except Exception as exc:
+        return {
+            "schema_version": EXECUTION_ATTEMPT_SCHEMA,
+            "status": "invalid",
+            "freshness": "unreadable",
+            "summary": "latest execution attempt evidence is unreadable.",
+            "evidence": {"locator": locator, "status": "invalid"},
+            "missing_inputs": [str(exc)],
+            "attempt": None,
+        }
+    current_head = git_head_sha(target_root) or "unknown-head"
+    envelope, errors, freshness = validate_execution_attempt_envelope(
+        raw,
+        target_root=target_root,
+        expected_item=item_id,
+        expected_head=current_head,
+    )
+    status = "present" if freshness == "fresh" else ("stale" if freshness == "stale" else "invalid")
+    summary = (
+        "latest execution attempt evidence is fresh for the current item and HEAD."
+        if freshness == "fresh"
+        else "latest execution attempt evidence exists but is stale for the current HEAD."
+        if freshness == "stale"
+        else "latest execution attempt evidence is invalid."
+    )
+    return {
+        "schema_version": EXECUTION_ATTEMPT_SCHEMA,
+        "status": status,
+        "freshness": freshness,
+        "summary": summary,
+        "evidence": {"locator": locator, "status": "present" if freshness in {"fresh", "stale"} else "invalid"},
+        "missing_inputs": errors,
+        "attempt": envelope,
+    }
+
+
+def execution_attempt_history_payload(target_root: Path, item_id: str) -> list[dict[str, Any]]:
+    directory = execution_attempt_directory(target_root, item_id)
+    if not directory.exists():
+        return []
+    attempts: list[dict[str, Any]] = []
+    for path in sorted(directory.glob("*.json")):
+        if path.name == "latest.json":
+            continue
+        try:
+            payload = load_json_file(path)
+        except Exception:
+            continue
+        envelope, errors, _ = validate_execution_attempt_envelope(
+            payload,
+            target_root=target_root,
+            expected_item=item_id,
+            expected_head=None,
+        )
+        if errors or envelope is None:
+            continue
+        attempts.append(envelope)
+    attempts.sort(key=lambda entry: (str(entry.get("created_at") or ""), str(entry.get("attempt_id") or "")))
+    return attempts
+
+
+def latest_execution_failure_payload(latest_attempt: dict[str, Any]) -> dict[str, Any]:
+    evidence = latest_attempt.get("evidence") if isinstance(latest_attempt, dict) else {}
+    locator = evidence.get("locator") if isinstance(evidence, dict) else None
+    freshness = latest_attempt.get("freshness") if isinstance(latest_attempt, dict) else None
+    status = latest_attempt.get("status") if isinstance(latest_attempt, dict) else None
+    provenance = {
+        "source_layer": "derived_surface",
+        "source_locator": locator,
+        "source_binding": "latest_execution_attempt",
+        "freshness": freshness if isinstance(freshness, str) else "missing",
+        "conflict": "none",
+    }
+    if status == "missing":
+        return {
+            "schema_version": EXECUTION_FAILURE_SCHEMA,
+            "status": "missing",
+            "classification": "unknown",
+            "summary": latest_attempt.get("summary") if isinstance(latest_attempt.get("summary"), str) else "latest execution attempt evidence is missing.",
+            "fallback_to": None,
+            "provenance": provenance,
+        }
+    if status == "invalid":
+        return {
+            "schema_version": EXECUTION_FAILURE_SCHEMA,
+            "status": "invalid",
+            "classification": "unknown",
+            "summary": latest_attempt.get("summary") if isinstance(latest_attempt.get("summary"), str) else "latest execution attempt evidence is invalid.",
+            "fallback_to": None,
+            "provenance": provenance,
+        }
+
+    attempt = latest_attempt.get("attempt") if isinstance(latest_attempt, dict) else None
+    failure = attempt.get("failure") if isinstance(attempt, dict) else None
+    classification = failure.get("execution_classification") if isinstance(failure, dict) else None
+    if not isinstance(classification, str) or classification not in EXECUTION_FAILURE_CLASSIFICATIONS:
+        classification = "unknown"
+    summary = failure.get("execution_summary") if isinstance(failure, dict) else None
+    fallback_to = failure.get("fallback_to") if isinstance(failure, dict) else None
+    normalized_summary = (
+        str(summary).strip()
+        if isinstance(summary, str) and str(summary).strip()
+        else "latest execution attempt did not record a readable execution failure summary."
+    )
+    if freshness == "stale":
+        return {
+            "schema_version": EXECUTION_FAILURE_SCHEMA,
+            "status": "stale",
+            "classification": classification,
+            "summary": "latest execution failure evidence exists but is stale for the current HEAD.",
+            "fallback_to": str(fallback_to) if isinstance(fallback_to, str) and fallback_to.strip() else None,
+            "provenance": provenance,
+        }
+    if classification == "none":
+        return {
+            "schema_version": EXECUTION_FAILURE_SCHEMA,
+            "status": "not_applicable",
+            "classification": "none",
+            "summary": normalized_summary,
+            "fallback_to": None,
+            "provenance": provenance,
+        }
+    return {
+        "schema_version": EXECUTION_FAILURE_SCHEMA,
+        "status": "present",
+        "classification": classification,
+        "summary": normalized_summary,
+        "fallback_to": str(fallback_to) if isinstance(fallback_to, str) and fallback_to.strip() else None,
+        "provenance": provenance,
+    }
+
+
+def latest_retry_evidence_payload(target_root: Path, item_id: str) -> dict[str, Any]:
+    latest_attempt = latest_execution_attempt_payload(target_root, item_id)
+    history = execution_attempt_history_payload(target_root, item_id)
+    evidence = latest_attempt.get("evidence") if isinstance(latest_attempt, dict) else {}
+    locator = evidence.get("locator") if isinstance(evidence, dict) else None
+    freshness = latest_attempt.get("freshness") if isinstance(latest_attempt, dict) else None
+    provenance = {
+        "source_layer": "derived_surface",
+        "source_locator": locator,
+        "source_binding": "execution_attempt_history",
+        "freshness": freshness if isinstance(freshness, str) else "missing",
+        "conflict": "none",
+    }
+    if latest_attempt.get("status") == "missing":
+        return {
+            "schema_version": RETRY_EVIDENCE_SCHEMA,
+            "status": "missing",
+            "attempt_count": 0,
+            "retry_count": 0,
+            "latest_attempt_id": None,
+            "latest_attempt_result": None,
+            "latest_failure_classification": "unknown",
+            "latest_failure_summary": latest_attempt.get("summary"),
+            "exhausted": False,
+            "scheduler_ownership": "external",
+            "stale_attempt_count": 0,
+            "provenance": provenance,
+        }
+    if latest_attempt.get("status") == "invalid":
+        return {
+            "schema_version": RETRY_EVIDENCE_SCHEMA,
+            "status": "invalid",
+            "attempt_count": 0,
+            "retry_count": 0,
+            "latest_attempt_id": None,
+            "latest_attempt_result": None,
+            "latest_failure_classification": "unknown",
+            "latest_failure_summary": latest_attempt.get("summary"),
+            "exhausted": False,
+            "scheduler_ownership": "external",
+            "stale_attempt_count": 0,
+            "provenance": provenance,
+        }
+
+    latest_envelope = latest_attempt.get("attempt") if isinstance(latest_attempt.get("attempt"), dict) else {}
+    current_head = git_head_sha(target_root) or "unknown-head"
+    current_attempts = [entry for entry in history if entry.get("head_sha") == current_head]
+    stale_attempts = [entry for entry in history if entry.get("head_sha") != current_head]
+    failure = latest_envelope.get("failure") if isinstance(latest_envelope, dict) else {}
+    classification = failure.get("execution_classification") if isinstance(failure, dict) else None
+    if not isinstance(classification, str) or classification not in EXECUTION_FAILURE_CLASSIFICATIONS:
+        classification = "unknown"
+    summary = failure.get("execution_summary") if isinstance(failure, dict) else latest_attempt.get("summary")
+    latest_attempt_id = latest_envelope.get("attempt_id") if isinstance(latest_envelope, dict) else None
+    latest_attempt_result = latest_envelope.get("result") if isinstance(latest_envelope, dict) else None
+    attempt_count = len(current_attempts)
+    retry_count = max(0, attempt_count - 1)
+    if latest_attempt.get("freshness") == "stale":
+        status = "stale"
+    elif attempt_count <= 1 and classification == "none":
+        status = "not_applicable"
+    else:
+        status = "present"
+    return {
+        "schema_version": RETRY_EVIDENCE_SCHEMA,
+        "status": status,
+        "attempt_count": attempt_count,
+        "retry_count": retry_count,
+        "latest_attempt_id": latest_attempt_id if isinstance(latest_attempt_id, str) and latest_attempt_id else None,
+        "latest_attempt_result": latest_attempt_result if isinstance(latest_attempt_result, str) else None,
+        "latest_failure_classification": classification,
+        "latest_failure_summary": str(summary).strip() if isinstance(summary, str) and str(summary).strip() else None,
+        "exhausted": classification == "retry_exhaustion",
+        "scheduler_ownership": "external",
+        "stale_attempt_count": len(stale_attempts),
+        "provenance": provenance,
+    }
+
+
 def cleanup_scratch_tree(target_root: Path, scratch_dir: Path) -> None:
     shutil.rmtree(scratch_dir, ignore_errors=True)
     for candidate in (scratch_dir.parent, scratch_dir.parent.parent):
@@ -1407,6 +4849,8 @@ def cleanup_scratch_tree(target_root: Path, scratch_dir: Path) -> None:
 def gh_json(root: Path, args: list[str]) -> tuple[dict[str, Any] | None, list[str]]:
     try:
         result = run_process(["gh", *args], root, timeout_seconds=20)
+    except FileNotFoundError:
+        return None, ["gh command is unavailable in PATH"]
     except subprocess.TimeoutExpired:
         return None, [f"gh {' '.join(args)} timed out after 20s"]
     if result.returncode != 0:
@@ -1526,6 +4970,7 @@ def normalize_rest_pr(payload: dict[str, Any]) -> dict[str, Any]:
         "mergeCommit": {"oid": merge_commit_sha} if isinstance(merge_commit_sha, str) and merge_commit_sha else None,
         "mergeStateStatus": str(payload.get("mergeable_state")).upper() if payload.get("mergeable_state") else None,
         "headRefName": head.get("ref"),
+        "headRefOid": head.get("sha"),
         "baseRefName": base.get("ref"),
     }
 
@@ -1625,6 +5070,8 @@ def relative_to_root(path: Path, root: Path) -> str:
 
 def resolve_workspace_path(target_root: Path, workspace_entry: str) -> tuple[Path | None, list[str]]:
     errors: list[str] = []
+    if not workspace_entry.strip():
+        return None, ["missing workspace entry locator"]
     raw = Path(workspace_entry)
     if raw.is_absolute():
         resolved = raw.resolve()
@@ -1838,12 +5285,15 @@ def shadow_evidence_paths_for_sources(target_root: Path, source_paths: set[str])
 
 
 def allowed_post_review_carrier_paths(context: dict[str, Any], *review_paths: str) -> set[str]:
-    allowed = {
+    source_paths = {
         *review_paths,
         str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"]),
         str(context["report"]["fact_chain"]["entry_points"]["status_surface"]),
     }
-    allowed.update(shadow_evidence_paths_for_sources(context["target_root"], set(review_paths)))
+    allowed = {
+        *source_paths,
+    }
+    allowed.update(shadow_evidence_paths_for_sources(context["target_root"], source_paths))
     review_shadow_root = context["target_root"] / ".loom/shadow"
     if review_shadow_root.exists():
         for evidence_path in sorted(review_shadow_root.glob("review-*.json")):
@@ -1853,6 +5303,13 @@ def allowed_post_review_carrier_paths(context: dict[str, Any], *review_paths: st
                 continue
             if isinstance(payload, dict):
                 allowed.add(evidence_path.relative_to(context["target_root"]).as_posix())
+    item_id = context.get("item_id")
+    if isinstance(item_id, str) and item_id.strip():
+        for runtime_root in OWNED_RUNTIME_EVIDENCE_ROOTS:
+            item_runtime_root = context["target_root"] / runtime_root / item_id
+            if item_runtime_root.exists():
+                for evidence_path in sorted(path for path in item_runtime_root.rglob("*") if path.is_file()):
+                    allowed.add(evidence_path.relative_to(context["target_root"]).as_posix())
     return allowed
 
 
@@ -2318,6 +5775,140 @@ def load_findings_file(target_root: Path, findings_file: str) -> tuple[list[dict
     return findings, []
 
 
+def repeated_blocker_key(finding: dict[str, Any]) -> str:
+    finding_id = finding.get("id")
+    if isinstance(finding_id, str) and finding_id.strip():
+        return re.sub(r"[^a-z0-9]+", "-", finding_id.lower()).strip("-")
+    summary = str(finding.get("summary", "")).lower()
+    words = re.findall(r"[a-z0-9]+", summary)
+    return "-".join(words[:10]) or "unknown"
+
+
+def review_context_finding_entry(
+    *,
+    source: str,
+    source_kind: str,
+    reviewed_head: str | None,
+    validation_summary: str | None,
+    finding: dict[str, Any],
+) -> dict[str, Any]:
+    disposition = finding.get("disposition")
+    disposition_status = disposition.get("status") if isinstance(disposition, dict) else None
+    disposition_summary = disposition.get("summary") if isinstance(disposition, dict) else None
+    return {
+        "source": source,
+        "source_kind": source_kind,
+        "reviewed_head": reviewed_head,
+        "validation_summary": validation_summary,
+        "id": finding.get("id"),
+        "summary": finding.get("summary"),
+        "severity": finding.get("severity"),
+        "disposition": {
+            "status": disposition_status,
+            "summary": disposition_summary,
+        } if disposition_status or disposition_summary else None,
+        "repeat_key": repeated_blocker_key(finding),
+    }
+
+
+def build_review_context_pack(context: dict[str, Any], review_path: str) -> dict[str, Any]:
+    governance_surface = build_governance_surface(context["target_root"])
+    github_control_plane = (
+        governance_surface.get("github_control_plane")
+        if isinstance(governance_surface, dict)
+        else None
+    )
+    execution_budget = (
+        github_control_plane.get("api_snapshot", {}).get("budget")
+        if isinstance(github_control_plane, dict)
+        else None
+    )
+    budget_risk = derive_execution_budget_risk(execution_budget)
+    recent_findings: list[dict[str, Any]] = []
+    review_record, _, review_errors = load_review_record(context["target_root"], context["item_id"], review_path)
+    if review_record and not review_errors:
+        for finding in review_record.get("findings", []):
+            if isinstance(finding, dict):
+                recent_findings.append(
+                    review_context_finding_entry(
+                        source=review_path,
+                        source_kind="review_record",
+                        reviewed_head=review_record.get("reviewed_head"),
+                        validation_summary=review_record.get("reviewed_validation_summary"),
+                        finding=finding,
+                    )
+                )
+
+    runtime_history_root = context["target_root"] / ".loom/runtime/review" / context["item_id"]
+    if runtime_history_root.exists():
+        for findings_path in sorted(runtime_history_root.glob("*/normalized-findings.json")):
+            try:
+                payload = load_json_file(findings_path)
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+            raw_findings = payload.get("findings") if isinstance(payload, dict) else None
+            findings, errors = normalize_review_findings(raw_findings, relative=relative_to_root(findings_path, context["target_root"]))
+            if errors:
+                continue
+            metadata_path = findings_path.parent / "engine-metadata.json"
+            metadata: dict[str, Any] = {}
+            if metadata_path.exists():
+                try:
+                    loaded = load_json_file(metadata_path)
+                    if isinstance(loaded, dict):
+                        metadata = loaded
+                except (OSError, ValueError, json.JSONDecodeError):
+                    metadata = {}
+            for finding in findings:
+                recent_findings.append(
+                    review_context_finding_entry(
+                        source=relative_to_root(findings_path, context["target_root"]),
+                        source_kind="normalized_findings",
+                        reviewed_head=metadata.get("reviewed_head") if isinstance(metadata.get("reviewed_head"), str) else None,
+                        validation_summary=metadata.get("validation_summary") if isinstance(metadata.get("validation_summary"), str) else None,
+                        finding=finding,
+                    )
+                )
+
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for finding in recent_findings:
+        if finding.get("severity") == "block":
+            groups.setdefault(str(finding.get("repeat_key") or "unknown"), []).append(finding)
+    candidates = [
+        {
+            "repeat_key": key,
+            "count": len(entries),
+            "sources": [entry["source"] for entry in entries],
+            "summaries": [entry["summary"] for entry in entries if entry.get("summary")],
+            "recommended_action": "treat as a root-cause candidate before repeating another local patch",
+        }
+        for key, entries in sorted(groups.items())
+        if len(entries) >= 2
+    ]
+    return {
+        "schema_version": REVIEW_CONTEXT_PACK_SCHEMA,
+        "item_id": context["item_id"],
+        "review_path": review_path,
+        "current_head": git_head_sha(context["target_root"]) or "unknown-head",
+        "validation_summary": context["latest_validation_summary"],
+        "history_available": bool(recent_findings),
+        "history_policy": "not_applicable when no prior review record or normalized findings are available",
+        "recent_findings": recent_findings[-20:],
+        "budget_risk": budget_risk,
+        "repeated_blocker_signal": {
+            "schema_version": REPEATED_BLOCKER_SIGNAL_SCHEMA,
+            "result": "present" if candidates else "absent",
+            "enforcement": "advisory",
+            "summary": (
+                "Repeated blocker candidates are present; reviewer should classify root-cause risk."
+                if candidates
+                else "No repeated blocker candidates detected in available review history."
+            ),
+            "candidates": candidates,
+        },
+    }
+
+
 def load_review_record(
     target_root: Path,
     item_id: str,
@@ -2473,6 +6064,17 @@ def build_review_flow_payload(
 
     build_payload = checkpoint_payload("build", context)
     governance_surface = build_governance_surface(target_root)
+    github_control_plane = (
+        governance_surface.get("github_control_plane")
+        if isinstance(governance_surface, dict)
+        else None
+    )
+    execution_budget = (
+        github_control_plane.get("api_snapshot", {}).get("budget")
+        if isinstance(github_control_plane, dict)
+        else None
+    )
+    budget_risk = derive_execution_budget_risk(execution_budget)
     surface_name = "review"
     repo_specific_requirements = repo_specific_requirements_payload(
         governance_surface.get("repo_interface"),
@@ -2627,6 +6229,7 @@ def build_review_flow_payload(
             "checks": state_payload["checks"],
         },
         "runtime_evidence": runtime_fields,
+        "budget_risk": budget_risk,
         "build_checkpoint": {
             "result": build_payload["result"],
             "summary": build_payload["summary"],
@@ -2658,6 +6261,7 @@ def run_default_review_engine(
     context: dict[str, Any],
     build_payload: dict[str, Any],
     review_path: str,
+    engine_profile: dict[str, Any],
     *,
     review_kind: str | None = None,
 ) -> dict[str, Any]:
@@ -2667,17 +6271,23 @@ def run_default_review_engine(
     result_path = runtime_root / "engine-result.json"
     findings_path = runtime_root / "normalized-findings.json"
     metadata_path = runtime_root / "engine-metadata.json"
+    context_pack_path = runtime_root / "context-pack.json"
     scratch_dir = context["target_root"] / ".loom/runtime/tmp" / "review-engine" / context["item_id"]
+    context_pack = build_review_context_pack(context, review_path)
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    write_json_file(context_pack_path, context_pack)
     prompt_text = build_default_review_prompt(
         context=context,
         build_payload=build_payload,
         runtime_fields=runtime_evidence_from_report(context["report"])[0],
         review_path=review_path,
+        context_pack=context_pack,
     )
-    runtime_root.mkdir(parents=True, exist_ok=True)
     prompt_path.write_text(prompt_text, encoding="utf-8")
 
     effective_kind = review_kind or default_review_kind(context)
+    raw_timeout_seconds = engine_profile.get("timeout_seconds")
+    timeout_seconds = int(raw_timeout_seconds) if raw_timeout_seconds is not None else None
 
     before_fingerprint, fingerprint_errors = git_tracked_diff_fingerprint(context["target_root"])
     if fingerprint_errors:
@@ -2690,6 +6300,7 @@ def run_default_review_engine(
             "engine": {
                 "engine": DEFAULT_REVIEW_ENGINE,
                 "adapter": DEFAULT_REVIEW_ADAPTER,
+                "profile": engine_profile,
                 "result": "block",
                 "failure_reason": "runtime_conflict",
                 "reviewed_head": reviewed_head,
@@ -2699,6 +6310,7 @@ def run_default_review_engine(
                     "raw_result": relative_to_root(result_path, context["target_root"]),
                     "normalized_findings": relative_to_root(findings_path, context["target_root"]),
                     "metadata": relative_to_root(metadata_path, context["target_root"]),
+                    "context_pack": relative_to_root(context_pack_path, context["target_root"]),
                 },
             },
         }
@@ -2720,6 +6332,10 @@ def run_default_review_engine(
                 "exec",
                 "-C",
                 str(context["target_root"]),
+                "-m",
+                str(engine_profile["model"]),
+                "-c",
+                f"model_reasoning_effort={json.dumps(engine_profile['reasoning_effort'])}",
                 "-s",
                 "workspace-write",
                 "--output-schema",
@@ -2734,16 +6350,14 @@ def run_default_review_engine(
             text=True,
             capture_output=True,
             check=False,
-            timeout=DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
     except FileNotFoundError:
         failure_reason = "engine_unavailable"
         failure_detail = f"default review engine `{DEFAULT_REVIEW_ENGINE}` is unavailable in PATH"
     except subprocess.TimeoutExpired:
         failure_reason = "runtime_conflict"
-        failure_detail = (
-            f"default review engine timed out after {DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS}s"
-        )
+        failure_detail = f"default review engine timed out after {timeout_seconds}s"
     else:
         if completed.returncode != 0:
             failure_reason = "runtime_conflict"
@@ -2779,6 +6393,7 @@ def run_default_review_engine(
         "raw_result": relative_to_root(result_path, context["target_root"]),
         "normalized_findings": relative_to_root(findings_path, context["target_root"]),
         "metadata": relative_to_root(metadata_path, context["target_root"]),
+        "context_pack": relative_to_root(context_pack_path, context["target_root"]),
     }
 
     if failure_reason is not None:
@@ -2787,6 +6402,8 @@ def run_default_review_engine(
             {
                 "engine": DEFAULT_REVIEW_ENGINE,
                 "adapter": DEFAULT_REVIEW_ADAPTER,
+                "profile": engine_profile,
+                "context_pack": relative_to_root(context_pack_path, context["target_root"]),
                 "failure_reason": failure_reason,
                 "summary": failure_detail,
                 "reviewed_head": reviewed_head,
@@ -2801,6 +6418,7 @@ def run_default_review_engine(
             "engine": {
                 "engine": DEFAULT_REVIEW_ENGINE,
                 "adapter": DEFAULT_REVIEW_ADAPTER,
+                "profile": engine_profile,
                 "result": "block",
                 "failure_reason": failure_reason,
                 "reviewed_head": reviewed_head,
@@ -2821,6 +6439,8 @@ def run_default_review_engine(
             {
                 "engine": DEFAULT_REVIEW_ENGINE,
                 "adapter": DEFAULT_REVIEW_ADAPTER,
+                "profile": engine_profile,
+                "context_pack": relative_to_root(context_pack_path, context["target_root"]),
                 "failure_reason": "schema_drift",
                 "summary": "normalized engine output did not satisfy Loom review schema",
                 "errors": normalization_errors,
@@ -2836,6 +6456,7 @@ def run_default_review_engine(
             "engine": {
                 "engine": DEFAULT_REVIEW_ENGINE,
                 "adapter": DEFAULT_REVIEW_ADAPTER,
+                "profile": engine_profile,
                 "result": "block",
                 "failure_reason": "schema_drift",
                 "reviewed_head": reviewed_head,
@@ -2849,11 +6470,14 @@ def run_default_review_engine(
             {
                 "engine": DEFAULT_REVIEW_ENGINE,
                 "adapter": DEFAULT_REVIEW_ADAPTER,
+                "profile": engine_profile,
+                "context_pack": relative_to_root(context_pack_path, context["target_root"]),
                 "result": "pass",
                 "reviewed_head": reviewed_head,
                 "decision": normalized_payload["decision"],
                 "summary": normalized_payload["summary"],
                 "kind": effective_kind,
+                "validation_summary": context["latest_validation_summary"],
             },
         )
     cleanup_scratch_tree(context["target_root"], scratch_dir)
@@ -2865,6 +6489,7 @@ def run_default_review_engine(
         "engine": {
             "engine": DEFAULT_REVIEW_ENGINE,
             "adapter": DEFAULT_REVIEW_ADAPTER,
+            "profile": engine_profile,
             "result": "pass",
             "failure_reason": None,
             "reviewed_head": reviewed_head,
@@ -2878,7 +6503,10 @@ def run_default_review_engine(
             "findings_file": relative_to_root(findings_path, context["target_root"]),
             "engine_adapter": DEFAULT_REVIEW_ADAPTER,
             "engine_evidence": relative_to_root(result_path, context["target_root"]),
+            "engine_profile": engine_profile,
+            "context_pack": relative_to_root(context_pack_path, context["target_root"]),
             "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+            "budget_risk": context_pack.get("budget_risk"),
         },
     }
 
@@ -2912,7 +6540,14 @@ def render_recovery_entry(item_id: str, values: dict[str, str]) -> str:
         f"- Blockers: {values['blockers']}\n"
         f"- Latest Validation Summary: {values['latest_validation_summary']}\n"
         f"- Recovery Boundary: {values['recovery_boundary']}\n"
-        f"- Current Lane: {values['current_lane']}\n"
+        f"- Current Lane: {values['current_lane']}\n\n"
+        "## Execution Ledger\n\n"
+        "- Ledger Binding: recovery_entry\n"
+        "- Plan Locator: not_applicable\n"
+        "- Acceptance Locator: not_applicable\n"
+        "- Validation Evidence Locator: not_applicable\n"
+        "- Handoff Notes Locator: not_applicable\n"
+        "- Evidence Freshness: not_applicable\n"
     )
 
 
@@ -3253,6 +6888,22 @@ def collect_temp_paths(target_root: Path) -> list[Path]:
     return paths
 
 
+def cleanup_candidates(target_root: Path) -> tuple[list[Path], list[str]]:
+    candidates: list[Path] = []
+    unsafe: list[str] = []
+    for temp_root in collect_temp_paths(target_root):
+        if temp_root.is_file():
+            unsafe.append(relative_to_root(temp_root, target_root))
+            continue
+        for child in sorted(temp_root.iterdir(), key=lambda path: path.name):
+            marker = child / ".loom-owned" if child.is_dir() else child.with_name(f"{child.name}.loom-owned")
+            if marker.exists():
+                candidates.append(child)
+            else:
+                unsafe.append(relative_to_root(child, target_root))
+    return candidates, unsafe
+
+
 def path_matches_owned_roots(path: str, roots: tuple[str, ...]) -> bool:
     normalized = path.rstrip("/")
     for root in roots:
@@ -3422,6 +7073,98 @@ def implementation_review_kind(context: dict[str, Any]) -> str:
     return "code_review"
 
 
+def review_engine_profile_selection(context: dict[str, Any], review_kind: str) -> tuple[str, str]:
+    if review_kind == "spec_review":
+        return "spec-review", "spec review requires the formal spec profile instead of inheriting host defaults"
+    haystack = " ".join(
+        str(context.get(key, ""))
+        for key in (
+            "goal",
+            "scope",
+            "execution_path",
+            "current_stop",
+            "next_step",
+            "blockers",
+            "latest_validation_summary",
+        )
+    ).lower()
+    high_risk_terms = (
+        "security",
+        "permission",
+        "approval",
+        "sandbox",
+        "host",
+        "adapter",
+        "shared contract",
+        "contract",
+        "runtime",
+        "release",
+    )
+    if any(term in haystack for term in high_risk_terms):
+        return "high-risk", "risk terms in the active item require the high-risk formal review profile"
+    if "repeated blocker" in haystack or "repeated-blocker" in haystack:
+        return "repeated-blocker", "active item references repeated blocker review handling"
+    return "default", "default implementation review profile for normal-risk changes"
+
+
+def resolve_review_engine_profile(
+    context: dict[str, Any],
+    review_kind: str,
+    *,
+    adapter: str = DEFAULT_REVIEW_ADAPTER,
+    requested_profile: str | None = None,
+    requested_model: str | None = None,
+    requested_reasoning: str | None = None,
+    override_reason: str | None = None,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    if adapter not in AUTHORITATIVE_REVIEW_ADAPTERS:
+        return None, [f"unsupported authoritative review adapter: {adapter}"]
+    selected_profile, selection_reason = review_engine_profile_selection(context, review_kind)
+    if requested_profile:
+        selected_profile = requested_profile
+        selection_reason = f"profile override requested `{requested_profile}`"
+    base_profile = dict(REVIEW_ENGINE_PROFILES[selected_profile])
+    base_profile["selection_reason"] = selection_reason
+    previous_profile = dict(base_profile)
+    override_requested = any(value for value in (requested_profile, requested_model, requested_reasoning))
+    reason = override_reason.strip() if isinstance(override_reason, str) else ""
+    if override_requested and not reason:
+        return None, ["review engine profile override requires --engine-override-reason"]
+    if requested_model:
+        base_profile["model"] = requested_model.strip()
+    if requested_reasoning:
+        base_profile["reasoning_effort"] = requested_reasoning
+    if not isinstance(base_profile.get("model"), str) or not base_profile["model"].strip():
+        return None, ["review engine profile model must be non-empty"]
+    if base_profile.get("reasoning_effort") not in REVIEW_ENGINE_REASONING_EFFORTS:
+        return None, ["review engine profile reasoning effort is outside the stable vocabulary"]
+    resolved = {
+        "schema_version": REVIEW_ENGINE_PROFILE_SCHEMA,
+        "profile_id": base_profile["profile_id"],
+        "adapter": adapter,
+        "engine": CODEX_APP_REVIEW_ENGINE if adapter == CODEX_APP_REVIEW_ADAPTER else DEFAULT_REVIEW_ENGINE,
+        "model": base_profile["model"],
+        "reasoning_effort": base_profile["reasoning_effort"],
+        "timeout_seconds": int(base_profile["timeout_seconds"]) if base_profile["timeout_seconds"] is not None else None,
+        "context_policy": base_profile["context_policy"],
+        "selection_reason": base_profile["selection_reason"],
+        "override_reason": reason or None,
+    }
+    if override_requested:
+        resolved["override"] = {
+            "previous_profile": previous_profile,
+            "selected_profile": {
+                "profile_id": resolved["profile_id"],
+                "model": resolved["model"],
+                "reasoning_effort": resolved["reasoning_effort"],
+                "timeout_seconds": resolved["timeout_seconds"],
+                "context_policy": resolved["context_policy"],
+            },
+            "reason": reason,
+        }
+    return resolved, []
+
+
 def review_focus_paths(context: dict[str, Any]) -> list[str]:
     result = run_git(context["target_root"], ["diff", "--name-only", "--no-renames", "HEAD", "--"])
     if result is not None and result.returncode == 0:
@@ -3461,6 +7204,468 @@ def normalize_engine_review_result(payload: Any, *, relative: str) -> tuple[dict
         "summary": summary.strip(),
         "findings": findings,
     }, []
+
+
+def normalize_codex_app_review_text(raw_text: str, *, relative: str) -> tuple[dict[str, Any] | None, list[str]]:
+    text = raw_text.strip()
+    if not text:
+        return None, [f"Codex App review raw output `{relative}` is empty"]
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, dict):
+        normalized, errors = normalize_engine_review_result(parsed, relative=relative)
+        if normalized is not None and not errors:
+            return normalized, []
+
+    first_line = next((line.strip() for line in text.splitlines() if line.strip()), "")
+    summary = first_line[:240] if first_line else "Codex App review returned raw text."
+    return {
+        "decision": "fallback",
+        "summary": "Codex App review raw output was captured as shadow evidence and normalized for comparison only.",
+        "findings": [
+            {
+                "id": "codex-app-review-raw-output",
+                "summary": summary,
+                "severity": "warn",
+                "rebuttal": None,
+                "disposition": {
+                    "status": "deferred",
+                    "summary": "Shadow-only finding; formal disposition must still be authored through the single review record.",
+                },
+                "details": text[:4000],
+            }
+        ],
+    }, []
+
+
+def normalize_authoritative_codex_app_review_text(raw_text: str, *, relative: str) -> tuple[dict[str, Any] | None, list[str]]:
+    text = raw_text.strip()
+    if not text:
+        return None, [f"Codex App authoritative review output `{relative}` is empty"]
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        return None, [f"Codex App authoritative review output `{relative}` must be normalized JSON: {exc}"]
+    normalized, errors = normalize_engine_review_result(parsed, relative=relative)
+    if errors or normalized is None:
+        return None, errors
+    return normalized, []
+
+
+def shadow_adapter_slug(adapter: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]", "-", adapter).strip("-") or "unknown-adapter"
+
+
+def compare_review_findings(default_findings: list[dict[str, Any]], shadow_findings: list[dict[str, Any]]) -> dict[str, Any]:
+    default_ids = {str(finding.get("id")) for finding in default_findings if isinstance(finding, dict) and finding.get("id")}
+    shadow_ids = {str(finding.get("id")) for finding in shadow_findings if isinstance(finding, dict) and finding.get("id")}
+    shared = sorted(default_ids & shadow_ids)
+    default_only = sorted(default_ids - shadow_ids)
+    shadow_only = sorted(shadow_ids - default_ids)
+    result = "match" if not default_only and not shadow_only else "difference"
+    return {
+        "schema_version": "loom-review-shadow-diff/v1",
+        "result": result,
+        "summary": (
+            "Shadow review findings match the default review finding ids."
+            if result == "match"
+            else "Shadow review findings differ from the default review finding ids."
+        ),
+        "default_finding_ids": sorted(default_ids),
+        "shadow_finding_ids": sorted(shadow_ids),
+        "shared_finding_ids": shared,
+        "default_only_finding_ids": default_only,
+        "shadow_only_finding_ids": shadow_only,
+    }
+
+
+def run_codex_app_review_shadow_adapter(
+    context: dict[str, Any],
+    *,
+    adapter: str | None,
+    raw_file: str | None,
+    default_engine_payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not adapter:
+        return None
+    reviewed_head = git_head_sha(context["target_root"]) or "unknown-head"
+    runtime_root = review_runtime_root(context, reviewed_head)
+    shadow_root = runtime_root / "shadow" / shadow_adapter_slug(adapter)
+    raw_path = shadow_root / "raw-review.txt"
+    findings_path = shadow_root / "normalized-findings.json"
+    metadata_path = shadow_root / "metadata.json"
+    diff_path = shadow_root / "parity-diff.json"
+    evidence = {
+        "runtime_root": relative_to_root(shadow_root, context["target_root"]),
+        "raw_review": relative_to_root(raw_path, context["target_root"]),
+        "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+        "metadata": relative_to_root(metadata_path, context["target_root"]),
+        "parity_diff": relative_to_root(diff_path, context["target_root"]),
+    }
+
+    if adapter != CODEX_APP_REVIEW_SHADOW_ADAPTER:
+        return {
+            "adapter": adapter,
+            "result": "unavailable",
+            "summary": "Unsupported shadow review adapter.",
+            "missing_inputs": [f"unsupported shadow review adapter: {adapter}"],
+            "blocking": False,
+            "authoritative": False,
+            "evidence": evidence,
+        }
+
+    if not raw_file:
+        metadata = {
+            "schema_version": "loom-review-shadow-metadata/v1",
+            "adapter": adapter,
+            "result": "unavailable",
+            "reviewed_head": reviewed_head,
+            "summary": "Codex App review shadow adapter requires captured raw review text or a future live app-server runner.",
+            "missing_inputs": ["--shadow-review-raw-file"],
+            "authoritative": False,
+        }
+        shadow_root.mkdir(parents=True, exist_ok=True)
+        write_json_file(metadata_path, metadata)
+        return {
+            "adapter": adapter,
+            "result": "unavailable",
+            "summary": "Codex App review shadow adapter was requested but no raw review evidence was provided.",
+            "missing_inputs": ["--shadow-review-raw-file"],
+            "blocking": False,
+            "authoritative": False,
+            "evidence": evidence,
+        }
+
+    source_path, source_errors = resolve_repo_relative_path(context["target_root"], raw_file, label="shadow review raw file")
+    if source_errors or source_path is None:
+        shadow_root.mkdir(parents=True, exist_ok=True)
+        write_json_file(
+            metadata_path,
+            {
+                "schema_version": "loom-review-shadow-metadata/v1",
+                "adapter": adapter,
+                "result": "block",
+                "reviewed_head": reviewed_head,
+                "missing_inputs": source_errors,
+                "authoritative": False,
+            },
+        )
+        return {
+            "adapter": adapter,
+            "result": "block",
+            "summary": "Codex App review shadow adapter refused an unsafe raw review locator.",
+            "missing_inputs": source_errors,
+            "blocking": False,
+            "authoritative": False,
+            "evidence": evidence,
+        }
+
+    try:
+        raw_text = source_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return {
+            "adapter": adapter,
+            "result": "block",
+            "summary": "Codex App review shadow adapter could not read raw review evidence.",
+            "missing_inputs": [f"shadow review raw file: {exc.strerror or exc}"],
+            "blocking": False,
+            "authoritative": False,
+            "evidence": evidence,
+        }
+
+    shadow_root.mkdir(parents=True, exist_ok=True)
+    raw_path.write_text(raw_text, encoding="utf-8")
+    normalized, normalization_errors = normalize_codex_app_review_text(
+        raw_text,
+        relative=relative_to_root(source_path, context["target_root"]),
+    )
+    if normalization_errors or normalized is None:
+        write_json_file(
+            metadata_path,
+            {
+                "schema_version": "loom-review-shadow-metadata/v1",
+                "adapter": adapter,
+                "result": "block",
+                "reviewed_head": reviewed_head,
+                "missing_inputs": normalization_errors,
+                "raw_source": relative_to_root(source_path, context["target_root"]),
+                "authoritative": False,
+            },
+        )
+        return {
+            "adapter": adapter,
+            "result": "block",
+            "summary": "Codex App review shadow output could not be normalized safely.",
+            "missing_inputs": normalization_errors,
+            "blocking": False,
+            "authoritative": False,
+            "evidence": evidence,
+        }
+
+    write_json_file(findings_path, {"findings": normalized["findings"]})
+    default_findings: list[dict[str, Any]] = []
+    review_record_input = default_engine_payload.get("review_record_input")
+    if isinstance(review_record_input, dict):
+        default_findings_file = review_record_input.get("findings_file")
+        if isinstance(default_findings_file, str):
+            loaded_findings, _ = load_findings_file(context["target_root"], default_findings_file)
+            if isinstance(loaded_findings, list):
+                default_findings = loaded_findings
+    parity_diff = compare_review_findings(default_findings, normalized["findings"])
+    write_json_file(diff_path, parity_diff)
+    write_json_file(
+        metadata_path,
+        {
+            "schema_version": "loom-review-shadow-metadata/v1",
+            "adapter": adapter,
+            "result": "pass",
+            "reviewed_head": reviewed_head,
+            "raw_source": relative_to_root(source_path, context["target_root"]),
+            "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+            "parity_diff": relative_to_root(diff_path, context["target_root"]),
+            "authoritative": False,
+            "summary": normalized["summary"],
+        },
+    )
+    return {
+        "adapter": adapter,
+        "result": "pass",
+        "summary": "Codex App review shadow evidence was captured and normalized for comparison only.",
+        "missing_inputs": [],
+        "blocking": False,
+        "authoritative": False,
+        "evidence": evidence,
+        "decision": normalized["decision"],
+        "parity_diff": parity_diff,
+    }
+
+
+def run_codex_app_review_authoritative_adapter(
+    context: dict[str, Any],
+    build_payload: dict[str, Any],
+    review_path: str,
+    engine_profile: dict[str, Any],
+    *,
+    review_kind: str,
+    app_server: str | None,
+    thread_id: str | None,
+    thread_cwd: str | None,
+    raw_file: str | None,
+) -> dict[str, Any]:
+    reviewed_head = git_head_sha(context["target_root"]) or "unknown-head"
+    runtime_root = review_runtime_root(context, reviewed_head)
+    raw_path = runtime_root / "engine-result.json"
+    findings_path = runtime_root / "normalized-findings.json"
+    metadata_path = runtime_root / "engine-metadata.json"
+    context_pack_path = runtime_root / "context-pack.json"
+    instructions_path = runtime_root / "prompt.txt"
+    context_pack = build_review_context_pack(context, review_path)
+    evidence = {
+        "runtime_root": relative_to_root(runtime_root, context["target_root"]),
+        "prompt": relative_to_root(instructions_path, context["target_root"]),
+        "raw_result": relative_to_root(raw_path, context["target_root"]),
+        "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+        "metadata": relative_to_root(metadata_path, context["target_root"]),
+        "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+    }
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    write_json_file(context_pack_path, context_pack)
+    instructions_path.write_text(
+        build_default_review_prompt(
+            context=context,
+            build_payload=build_payload,
+            runtime_fields=runtime_evidence_from_report(context["report"])[0],
+            review_path=review_path,
+            context_pack=context_pack,
+        ),
+        encoding="utf-8",
+    )
+
+    missing_inputs: list[str] = []
+    for label, value in (
+        ("--codex-app-review-app-server", app_server),
+        ("--codex-app-review-thread-id", thread_id),
+        ("--codex-app-review-cwd", thread_cwd),
+        ("--codex-app-review-raw-file", raw_file),
+    ):
+        if not isinstance(value, str) or not value.strip():
+            missing_inputs.append(label)
+
+    cwd_relative: str | None = None
+    if isinstance(thread_cwd, str) and thread_cwd.strip():
+        try:
+            cwd_path = Path(thread_cwd).expanduser().resolve()
+        except OSError as exc:
+            missing_inputs.append(f"Codex App review cwd could not be resolved: {exc}")
+        else:
+            if cwd_path != context["target_root"]:
+                missing_inputs.append(
+                    f"Codex App review cwd `{cwd_path}` does not match target root `{context['target_root']}`"
+                )
+            else:
+                cwd_relative = relative_to_root(cwd_path, context["target_root"])
+
+    source_path: Path | None = None
+    source_relative: str | None = None
+    if isinstance(raw_file, str) and raw_file.strip():
+        source_path, source_errors = resolve_repo_relative_path(
+            context["target_root"],
+            raw_file,
+            label="Codex App authoritative review raw file",
+        )
+        missing_inputs.extend(source_errors)
+        if source_path is not None:
+            source_relative = relative_to_root(source_path, context["target_root"])
+
+    if missing_inputs:
+        write_json_file(
+            metadata_path,
+            {
+                "schema_version": "loom-review-engine-metadata/v1",
+                "engine": CODEX_APP_REVIEW_ENGINE,
+                "adapter": CODEX_APP_REVIEW_ADAPTER,
+                "profile": engine_profile,
+                "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+                "result": "block",
+                "failure_reason": "runtime_conflict",
+                "summary": "Codex App authoritative review adapter is missing required live binding proof.",
+                "missing_inputs": missing_inputs,
+                "reviewed_head": reviewed_head,
+                "app_server": app_server,
+                "thread_id": thread_id,
+                "thread_cwd": cwd_relative or thread_cwd,
+            },
+        )
+        return {
+            "result": "block",
+            "summary": "Codex App authoritative review adapter failed closed before a formal review record could be authored.",
+            "missing_inputs": missing_inputs,
+            "fallback_to": None,
+            "engine": {
+                "engine": CODEX_APP_REVIEW_ENGINE,
+                "adapter": CODEX_APP_REVIEW_ADAPTER,
+                "profile": engine_profile,
+                "result": "block",
+                "failure_reason": "runtime_conflict",
+                "reviewed_head": reviewed_head,
+                "evidence": evidence,
+            },
+            "engine_metadata": {
+                "app_server": app_server,
+                "thread_id": thread_id,
+                "thread_cwd": cwd_relative or thread_cwd,
+                "raw_source": source_relative,
+            },
+        }
+
+    try:
+        raw_text = source_path.read_text(encoding="utf-8") if source_path is not None else ""
+    except OSError as exc:
+        raw_text = ""
+        normalization_errors = [f"Codex App authoritative review raw file: {exc.strerror or exc}"]
+        normalized = None
+    else:
+        normalized, normalization_errors = normalize_authoritative_codex_app_review_text(
+            raw_text,
+            relative=source_relative or str(raw_file),
+        )
+
+    if normalization_errors or normalized is None:
+        if raw_text:
+            raw_path.write_text(raw_text, encoding="utf-8")
+        write_json_file(
+            metadata_path,
+            {
+                "schema_version": "loom-review-engine-metadata/v1",
+                "engine": CODEX_APP_REVIEW_ENGINE,
+                "adapter": CODEX_APP_REVIEW_ADAPTER,
+                "profile": engine_profile,
+                "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+                "result": "block",
+                "failure_reason": "schema_drift",
+                "summary": "Codex App authoritative review output did not satisfy the Loom review result schema.",
+                "errors": normalization_errors,
+                "reviewed_head": reviewed_head,
+                "app_server": app_server,
+                "thread_id": thread_id,
+                "thread_cwd": cwd_relative,
+                "raw_source": source_relative,
+            },
+        )
+        return {
+            "result": "block",
+            "summary": "Codex App authoritative review output could not be normalized safely.",
+            "missing_inputs": normalization_errors,
+            "fallback_to": None,
+            "engine": {
+                "engine": CODEX_APP_REVIEW_ENGINE,
+                "adapter": CODEX_APP_REVIEW_ADAPTER,
+                "profile": engine_profile,
+                "result": "block",
+                "failure_reason": "schema_drift",
+                "reviewed_head": reviewed_head,
+                "evidence": evidence,
+            },
+            "engine_metadata": {
+                "app_server": app_server,
+                "thread_id": thread_id,
+                "thread_cwd": cwd_relative,
+                "raw_source": source_relative,
+            },
+        }
+
+    raw_path.write_text(raw_text, encoding="utf-8")
+    write_json_file(findings_path, {"findings": normalized["findings"]})
+    metadata = {
+        "schema_version": "loom-review-engine-metadata/v1",
+        "engine": CODEX_APP_REVIEW_ENGINE,
+        "adapter": CODEX_APP_REVIEW_ADAPTER,
+        "profile": engine_profile,
+        "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+        "result": "pass",
+        "reviewed_head": reviewed_head,
+        "decision": normalized["decision"],
+        "summary": normalized["summary"],
+        "kind": review_kind,
+        "validation_summary": context["latest_validation_summary"],
+        "app_server": app_server,
+        "thread_id": thread_id,
+        "thread_cwd": cwd_relative,
+        "raw_source": source_relative,
+        "authority_boundary": "normalized review_record_input only; raw Codex App output remains runtime evidence",
+    }
+    write_json_file(metadata_path, metadata)
+    return {
+        "result": "pass",
+        "summary": "Codex App authoritative review adapter produced a Loom-normalized formal review draft.",
+        "missing_inputs": [],
+        "fallback_to": None,
+        "engine": {
+            "engine": CODEX_APP_REVIEW_ENGINE,
+            "adapter": CODEX_APP_REVIEW_ADAPTER,
+            "profile": engine_profile,
+            "result": "pass",
+            "failure_reason": None,
+            "reviewed_head": reviewed_head,
+            "evidence": evidence,
+        },
+        "engine_metadata": metadata,
+        "review_record_input": {
+            "decision": normalized["decision"],
+            "summary": normalized["summary"],
+            "reviewer": CODEX_APP_REVIEW_ADAPTER,
+            "kind": review_kind,
+            "findings_file": relative_to_root(findings_path, context["target_root"]),
+            "engine_adapter": CODEX_APP_REVIEW_ADAPTER,
+            "engine_evidence": relative_to_root(raw_path, context["target_root"]),
+            "engine_profile": engine_profile,
+            "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+            "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+            "budget_risk": context_pack.get("budget_risk"),
+        },
+    }
 
 
 def manual_review_payload(
@@ -3505,6 +7710,7 @@ def build_default_review_prompt(
     build_payload: dict[str, Any],
     runtime_fields: dict[str, dict[str, Any]],
     review_path: str,
+    context_pack: dict[str, Any],
 ) -> str:
     focus_paths = review_focus_paths(context)
     is_spec_review = review_path == default_spec_review_path(context["item_id"])
@@ -3519,6 +7725,24 @@ def build_default_review_prompt(
     path_lines = [f"- `{path}`" for path in focus_paths[:20]]
     if len(focus_paths) > 20:
         path_lines.append(f"- ... ({len(focus_paths) - 20} more paths omitted)")
+    recent_findings = context_pack.get("recent_findings") if isinstance(context_pack.get("recent_findings"), list) else []
+    recent_lines = [
+        f"- {entry.get('severity')}: {entry.get('summary')} (disposition={((entry.get('disposition') or {}).get('status') if isinstance(entry.get('disposition'), dict) else None) or 'none'}, source={entry.get('source')})"
+        for entry in recent_findings[:10]
+        if isinstance(entry, dict)
+    ]
+    if not recent_lines:
+        recent_lines = ["- not_applicable: no prior review findings were available."]
+    repeated_signal = context_pack.get("repeated_blocker_signal") if isinstance(context_pack.get("repeated_blocker_signal"), dict) else {}
+    budget_risk = context_pack.get("budget_risk") if isinstance(context_pack.get("budget_risk"), dict) else {}
+    repeated_candidates = repeated_signal.get("candidates") if isinstance(repeated_signal.get("candidates"), list) else []
+    repeated_lines = [
+        f"- {candidate.get('repeat_key')}: count={candidate.get('count')}, sources={', '.join(str(source) for source in candidate.get('sources', []))}"
+        for candidate in repeated_candidates[:10]
+        if isinstance(candidate, dict)
+    ]
+    if not repeated_lines:
+        repeated_lines = ["- absent: no repeated blocker candidate detected."]
     return "\n".join(
         [
             "你是 Loom 默认 formal reviewer。",
@@ -3558,6 +7782,23 @@ def build_default_review_prompt(
             "",
             "优先审查这些路径：",
             *path_lines,
+            "",
+            "Recent Review Context Pack：",
+            f"- Schema: {context_pack.get('schema_version')}",
+            f"- History Available: {context_pack.get('history_available')}",
+            (
+                "- Budget Risk: "
+                f"{budget_risk.get('highest_risk', 'none')} "
+                f"(status={budget_risk.get('status', 'not_applicable')}, "
+                f"enforcement={budget_risk.get('enforcement', 'advisory')})"
+            ),
+            f"- Budget Risk Summary: {budget_risk.get('summary', 'not_applicable')}",
+            f"- Repeated Blocker Signal: {repeated_signal.get('result', 'absent')} ({repeated_signal.get('enforcement', 'advisory')})",
+            "Recent Findings:",
+            *recent_lines,
+            "Repeated Blocker Candidates:",
+            *repeated_lines,
+            "- 请将发现分类为 new、unresolved 或 repeated/root-cause candidate；不要在没有证据时把 repeat 自动升级成 hard gate。",
             "",
             "Findings 写作要求：",
             "- 每条 finding 必须包含 `id`、`summary`、`severity`、`rebuttal`、`disposition`。",
@@ -3851,6 +8092,7 @@ def purity_report_from_context(context: dict[str, Any], fact_chain_errors: list[
 def base_workspace_payload(context: dict[str, Any], operation: str) -> dict[str, Any]:
     purity = purity_report_from_context(context)
     workspace_profile = workspace_profile_from_context(context)
+    lifecycle_expectations = workspace_lifecycle_expectations(workspace_profile)
     return {
         "command": "workspace",
         "operation": operation,
@@ -3877,6 +8119,7 @@ def base_workspace_payload(context: dict[str, Any], operation: str) -> dict[str,
             "normalized": context["current_checkpoint"],
         },
         "purity": purity,
+        "lifecycle_expectations": lifecycle_expectations,
         "missing_inputs": [],
         "fallback_to": None,
     }
@@ -3989,7 +8232,20 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
     review_record: dict[str, Any] | None = None
     review_path: str | None = None
     spec_review: dict[str, Any] | None = None
+    budget_risk: dict[str, Any] | None = None
     if stage == "merge":
+        governance_surface = build_governance_surface(context["target_root"])
+        github_control_plane = (
+            governance_surface.get("github_control_plane")
+            if isinstance(governance_surface, dict)
+            else None
+        )
+        execution_budget = (
+            github_control_plane.get("api_snapshot", {}).get("budget")
+            if isinstance(github_control_plane, dict)
+            else None
+        )
+        budget_risk = derive_execution_budget_risk(execution_budget)
         pr_template, pr_template_errors = check_pr_template(context["target_root"])
         if pr_template_errors:
             missing_inputs.extend(pr_template_errors)
@@ -4050,6 +8306,8 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
     else:
         fallback_label = fallback_to or "admission"
         summary = f"{stage} checkpoint cannot proceed from the current state; fall back to `{fallback_label}`."
+    if stage == "merge" and isinstance(budget_risk, dict) and budget_risk.get("status") == "present":
+        summary = f"{summary} Budget risk remains advisory: {budget_risk.get('summary')}"
 
     payload = {
         "command": "checkpoint",
@@ -4090,6 +8348,8 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
         }
     if spec_review is not None:
         payload["spec_review"] = spec_review
+    if budget_risk is not None:
+        payload["budget_risk"] = budget_risk
     return payload
 
 
@@ -4128,7 +8388,7 @@ def handle_workspace(args: argparse.Namespace) -> int:
             {
                 "command": "workspace",
                 "operation": args.operation,
-                "result": "fallback",
+                "result": "block",
                 "summary": "workspace lifecycle command could not read a valid Loom fact chain.",
                 "missing_inputs": [f"fact-chain: {message}" for message in errors],
                 "fallback_to": "admission",
@@ -4144,11 +8404,19 @@ def handle_workspace(args: argparse.Namespace) -> int:
     workspace_path = context["workspace_path"]
     purity = payload["purity"]
 
-    if args.operation == "locate":
+    if args.operation in {"locate", "attach"}:
         payload["result"] = "pass" if not purity["hard_failures"] else "block"
-        payload["summary"] = "workspace location was resolved from the fact chain."
+        payload["summary"] = (
+            "workspace was attached by resolving an existing workspace_entry binding."
+            if args.operation == "attach"
+            else "workspace location was resolved from the fact chain."
+        )
         if purity["hard_failures"]:
-            payload["summary"] = "workspace location resolved, but the workspace is not execution-ready."
+            payload["summary"] = (
+                "workspace attachment resolved, but the workspace is not execution-ready."
+                if args.operation == "attach"
+                else "workspace location resolved, but the workspace is not execution-ready."
+            )
             payload["missing_inputs"] = list(purity["hard_failures"])
         return emit_workspace(payload)
 
@@ -4179,11 +8447,17 @@ def handle_workspace(args: argparse.Namespace) -> int:
 
     if args.operation == "cleanup":
         owned_dirty, foreign_dirty = dirty_paths_by_owner(target_root)
-        temp_paths = collect_temp_paths(target_root)
+        temp_paths, unsafe_temp_paths = cleanup_candidates(target_root)
         if foreign_dirty:
             payload["result"] = "block"
             payload["summary"] = "cleanup stopped because the workspace contains non-Loom changes."
             payload["missing_inputs"] = [f"non-loom residue: {path}" for path in foreign_dirty]
+            return emit_workspace(payload)
+        if unsafe_temp_paths:
+            payload["result"] = "block"
+            payload["summary"] = "cleanup stopped because a Loom temp root contains unmarked content."
+            payload["missing_inputs"] = [f"unmarked temp content: {path}" for path in unsafe_temp_paths]
+            payload["retained_paths"] = unsafe_temp_paths
             return emit_workspace(payload)
 
         removed: list[str] = []
@@ -4222,7 +8496,15 @@ def handle_workspace(args: argparse.Namespace) -> int:
         cleanup_payload["missing_inputs"] = [f"non-loom residue: {path}" for path in foreign_dirty]
         return emit_workspace(cleanup_payload)
 
-    for temp_path in collect_temp_paths(target_root):
+    temp_paths, unsafe_temp_paths = cleanup_candidates(target_root)
+    if unsafe_temp_paths:
+        cleanup_payload["result"] = "block"
+        cleanup_payload["summary"] = "retire cannot proceed because cleanup would touch unmarked temp content."
+        cleanup_payload["missing_inputs"] = [f"unmarked temp content: {path}" for path in unsafe_temp_paths]
+        cleanup_payload["retained_paths"] = unsafe_temp_paths
+        return emit_workspace(cleanup_payload)
+
+    for temp_path in temp_paths:
         relative = relative_to_root(temp_path, target_root)
         tracked = git_tracked_files(target_root, relative)
         if tracked:
@@ -4416,6 +8698,21 @@ def report_recovery_readiness(report: dict[str, Any]) -> dict[str, Any]:
         "missing_inputs": ["fact-chain recovery_readiness"],
         "fallback_to": "admission",
         "checks": {},
+    }
+
+
+def report_execution_ledger(report: dict[str, Any]) -> dict[str, Any]:
+    ledger = report.get("execution_ledger")
+    if isinstance(ledger, dict):
+        return ledger
+    return {
+        "authoritative_carrier": "recovery_entry",
+        "status": "missing",
+        "completeness": "missing",
+        "freshness": "missing",
+        "fields": {},
+        "missing_fields": ["execution_ledger"],
+        "forbidden_authored_fields": [],
     }
 
 
@@ -5177,10 +9474,620 @@ def handle_host_binding(args: argparse.Namespace) -> int:
     )
 
 
+def load_optional_json_fixture(target_root: Path, fixture: str | None, *, label: str) -> tuple[Any | None, list[str]]:
+    if not fixture:
+        return None, []
+    path, errors = resolve_repo_relative_path(target_root, fixture, label=label)
+    if errors:
+        return None, errors
+    assert path is not None
+    if not path.exists() or not path.is_file():
+        return None, [f"{label} points to a missing file: {fixture}"]
+    try:
+        return json.loads(path.read_text(encoding="utf-8")), []
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, [f"invalid {label} `{fixture}`: {exc}"]
+
+
+def normalize_pr_fixture_payload(payload: Any) -> tuple[dict[str, Any] | None, list[str]]:
+    if not isinstance(payload, dict):
+        return None, ["PR payload fixture must be a JSON object"]
+    normalized = dict(payload)
+    if "isDraft" not in normalized and "draft" in normalized:
+        normalized["isDraft"] = bool(normalized.get("draft"))
+    if "headRefOid" not in normalized:
+        head = normalized.get("head") if isinstance(normalized.get("head"), dict) else None
+        if isinstance(head, dict) and isinstance(head.get("sha"), str):
+            normalized["headRefOid"] = head.get("sha")
+    if "headRefName" not in normalized:
+        head = normalized.get("head") if isinstance(normalized.get("head"), dict) else None
+        if isinstance(head, dict) and isinstance(head.get("ref"), str):
+            normalized["headRefName"] = head.get("ref")
+    if "baseRefName" not in normalized:
+        base = normalized.get("base") if isinstance(normalized.get("base"), dict) else None
+        if isinstance(base, dict) and isinstance(base.get("ref"), str):
+            normalized["baseRefName"] = base.get("ref")
+    if "state" in normalized:
+        normalized["state"] = str(normalized.get("state") or "unknown").upper()
+    else:
+        normalized["state"] = "OPEN"
+    return normalized, []
+
+
+def infer_pr_number_from_ref(ref: str | None) -> int | None:
+    if not isinstance(ref, str):
+        return None
+    for pattern in (r"(?:^|/)pr[-/](\d+)(?:[-/]|$)", r"pull/(\d+)/(?:head|merge)$"):
+        match = re.search(pattern, ref, flags=re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+    return None
+
+
+def pr_work_item_from_body(body: Any) -> str | None:
+    if not isinstance(body, str):
+        return None
+    patterns = (
+        r"(?im)^\s*[-*]?\s*Loom Work Item\s*:\s*`?([A-Z]+-\d+|INIT-\d+)`?\s*$",
+        r"(?im)^\s*[-*]?\s*Work Item\s*:\s*`?([A-Z]+-\d+|INIT-\d+)`?\s*$",
+        r"(?im)^\s*[-*]?\s*Loom-Work-Item\s*:\s*`?([A-Z]+-\d+|INIT-\d+)`?\s*$",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, body)
+        if match:
+            return match.group(1).strip()
+    return None
+
+
+def pr_body_mentions_item(body: Any, item_id: str) -> bool:
+    if not isinstance(body, str):
+        return False
+    return bool(re.search(rf"(?<![A-Z0-9-]){re.escape(item_id)}(?![A-Z0-9-])", body))
+
+
+def load_pr_payload_for_gate(
+    *,
+    target_root: Path,
+    owner: str | None,
+    repo_name: str | None,
+    pr_number: int | None,
+    head_sha: str | None,
+    branch_name: str | None,
+    pr_payload_file: str | None,
+) -> tuple[dict[str, Any] | None, int | None, list[str], list[dict[str, Any]]]:
+    missing_inputs: list[str] = []
+    inferences: list[dict[str, Any]] = []
+    fixture, fixture_errors = load_optional_json_fixture(target_root, pr_payload_file, label="PR payload fixture")
+    if fixture_errors:
+        return None, pr_number, fixture_errors, inferences
+    if fixture is not None:
+        payload, errors = normalize_pr_fixture_payload(fixture)
+        if errors:
+            return None, pr_number, errors, inferences
+        inferred_number = pr_number or (int(payload["number"]) if isinstance(payload.get("number"), int) else None)
+        return payload, inferred_number, [], inferences
+
+    inferred_pr = pr_number or infer_pr_number_from_ref(branch_name)
+    if inferred_pr is not None and pr_number is None:
+        inferences.append({"from": "branch", "to": "pr", "status": "inferred", "pr": inferred_pr})
+
+    if inferred_pr is None and owner and repo_name and head_sha:
+        pulls, pull_errors = github_commit_pulls(target_root, owner, repo_name, head_sha)
+        if pull_errors:
+            missing_inputs.extend(f"head_sha: {message}" for message in pull_errors)
+        elif len(pulls) == 1 and isinstance(pulls[0].get("number"), int):
+            inferred_pr = int(pulls[0]["number"])
+            inferences.append({"from": "head_sha", "to": "pr", "status": "inferred", "pr": inferred_pr})
+        elif len(pulls) > 1:
+            missing_inputs.append("head_sha resolves to multiple PRs; pass --pr explicitly")
+
+    if inferred_pr is None:
+        return None, None, missing_inputs or ["pr | head-sha | branch"], inferences
+    if not owner or not repo_name:
+        return None, inferred_pr, ["owner/repo"], inferences
+    payload, errors = github_pr_payload(target_root, owner, repo_name, inferred_pr)
+    return payload, inferred_pr, errors, inferences
+
+
+def pr_gate_failure_taxonomy(missing_inputs: list[str], gate_result: str) -> list[str]:
+    categories: set[str] = set()
+    for message in missing_inputs:
+        lowered = str(message).lower()
+        if "pr" in lowered and ("unreadable" in lowered or "payload" in lowered or "head_sha" in lowered):
+            categories.add("pr_unreadable")
+        if "work item" in lowered or "current item mismatch" in lowered:
+            categories.add("work_item_binding_conflict" if "mismatch" in lowered else "work_item_binding_missing")
+        if "fact-chain" in lowered or "fact chain" in lowered:
+            categories.add("fact_chain_unreadable")
+        if "missing review" in lowered or "missing implementation review" in lowered or "missing review artifact" in lowered:
+            categories.add("review_missing")
+        if "schema_version" in lowered or "invalid review" in lowered:
+            categories.add("review_schema_invalid")
+        if "decision is blocking" in lowered or "decision is fallback" in lowered or "not approved" in lowered:
+            categories.add("review_not_approved")
+        if "stale" in lowered or "implementation drift" in lowered:
+            categories.add("review_stale")
+        if "validation summary" in lowered:
+            categories.add("validation_summary_drift")
+        if "reviewed_head" in lowered or "head binding" in lowered:
+            categories.add("head_binding_drift")
+        if "checkout head" in lowered:
+            categories.add("checkout_head_drift")
+        if "raw" in lowered or "shadow" in lowered:
+            categories.add("raw_evidence_bypass")
+        if "required check" in lowered or "branch protection" in lowered or "ruleset" in lowered:
+            categories.add("host_enforcement_unverified")
+    if gate_result == "fallback":
+        categories.add("prior_gate_fallback")
+    return sorted(categories)
+
+
+def pr_gate_payload(
+    *,
+    target_root: Path,
+    output_relative: str,
+    expected_item: str | None,
+    owner: str | None,
+    repo_name: str | None,
+    pr_number: int | None,
+    head_sha: str | None,
+    branch_name: str | None,
+    pr_payload_file: str | None,
+) -> dict[str, Any]:
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    owner = owner or detected_owner
+    repo_name = repo_name or detected_repo
+    missing_inputs: list[str] = []
+    steps: list[dict[str, Any]] = []
+
+    runtime_state = runtime_state_payload(target_root)
+    steps.append(
+        {
+            "name": "runtime-state",
+            "result": runtime_state["result"],
+            "summary": runtime_state["summary"],
+            "missing_inputs": runtime_state["missing_inputs"],
+            "fallback_to": runtime_state["fallback_to"],
+        }
+    )
+    if runtime_state["result"] != "pass":
+        missing_inputs.extend(str(message) for message in runtime_state.get("missing_inputs", []))
+
+    pr_payload, effective_pr, pr_errors, inferences = load_pr_payload_for_gate(
+        target_root=target_root,
+        owner=owner,
+        repo_name=repo_name,
+        pr_number=pr_number,
+        head_sha=head_sha,
+        branch_name=branch_name,
+        pr_payload_file=pr_payload_file,
+    )
+    if pr_errors:
+        missing_inputs.extend(f"pr: {message}" for message in pr_errors)
+
+    body_item = pr_work_item_from_body(pr_payload.get("body") if isinstance(pr_payload, dict) else None)
+    effective_item = expected_item or body_item
+    if expected_item and body_item and expected_item != body_item:
+        missing_inputs.append(f"PR body Work Item `{body_item}` does not match expected `{expected_item}`")
+    if effective_item is None:
+        missing_inputs.append("PR body is missing `Loom Work Item: <item>`")
+
+    context: dict[str, Any] = {}
+    context_errors: list[str] = []
+    if effective_item is not None:
+        context, context_errors = load_context(target_root, output_relative, effective_item)
+    else:
+        context, context_errors = load_context(target_root, output_relative, expected_item)
+    if context_errors:
+        missing_inputs.extend(f"fact-chain: {message}" for message in context_errors)
+
+    pr_head = head_sha
+    if isinstance(pr_payload, dict) and isinstance(pr_payload.get("headRefOid"), str):
+        if pr_head and pr_payload["headRefOid"] != pr_head:
+            missing_inputs.append("PR payload headRefOid does not match --head-sha")
+        pr_head = pr_payload["headRefOid"]
+    if not pr_head:
+        missing_inputs.append("PR head SHA is unavailable")
+
+    pr_state = pr_payload.get("state") if isinstance(pr_payload, dict) else None
+    if pr_payload is not None:
+        if pr_state not in {"OPEN"}:
+            missing_inputs.append(f"PR state must be OPEN before controlled merge: {pr_state}")
+        if pr_payload.get("isDraft") is True:
+            missing_inputs.append("PR is draft")
+        if context and not pr_body_mentions_item(pr_payload.get("body"), context["item_id"]):
+            missing_inputs.append(f"PR body does not mention Loom Work Item `{context['item_id']}`")
+
+    current_head = git_head_sha(target_root)
+    if pr_head and current_head and pr_head != current_head:
+        missing_inputs.append("checkout head does not match PR head")
+
+    merge_checkpoint: dict[str, Any] = {
+        "result": "block",
+        "summary": "merge checkpoint was not evaluated.",
+        "missing_inputs": ["fact-chain"],
+        "fallback_to": "admission",
+    }
+    review_approval: dict[str, Any] = {
+        "status": "unavailable",
+        "path": None,
+        "decision": None,
+        "reviewed_head": None,
+        "head_binding": None,
+    }
+    if context:
+        merge_checkpoint = checkpoint_payload("merge", context)
+        review_record, review_path, review_errors = load_review_record(target_root, context["item_id"], context["review_entry"])
+        if review_record is None:
+            review_approval = {
+                "status": "missing",
+                "path": review_path,
+                "decision": None,
+                "reviewed_head": None,
+                "head_binding": None,
+                "missing_inputs": review_errors or [f"missing review artifact: {review_path}"],
+            }
+        else:
+            review_approval = {
+                "status": "approved" if review_record.get("decision") == "allow" and not review_errors else "not_approved",
+                "path": review_path,
+                "decision": review_record.get("decision"),
+                "reviewed_head": review_record.get("reviewed_head"),
+                "reviewed_validation_summary": review_record.get("reviewed_validation_summary"),
+                "head_binding": review_record.get("head_binding"),
+                "missing_inputs": review_errors,
+            }
+        if merge_checkpoint.get("result") in {"block", "fallback"}:
+            missing_inputs.extend(str(message) for message in merge_checkpoint.get("missing_inputs", []))
+        steps.append(
+            {
+                "name": "checkpoint-merge",
+                "result": merge_checkpoint.get("result"),
+                "summary": merge_checkpoint.get("summary"),
+                "missing_inputs": merge_checkpoint.get("missing_inputs", []),
+                "fallback_to": merge_checkpoint.get("fallback_to"),
+            }
+        )
+
+    # Make the bypass boundary explicit even when raw evidence is present in the repository.
+    if context:
+        runtime_review_root = target_root / ".loom/runtime/review" / context["item_id"]
+        raw_evidence_present = runtime_review_root.exists() and any(runtime_review_root.glob("**/*"))
+    else:
+        raw_evidence_present = False
+
+    result = "pass"
+    fallback_to: str | None = None
+    for step in steps:
+        if step.get("result") == "fallback":
+            result = "fallback"
+            fallback_to = step.get("fallback_to") or "build"
+            break
+        if step.get("result") == "block" and result == "pass":
+            result = "block"
+            fallback_to = step.get("fallback_to")
+    if missing_inputs and result == "pass":
+        result = "block"
+        fallback_to = fallback_to or "build"
+
+    failure_taxonomy = pr_gate_failure_taxonomy(missing_inputs, result)
+    if raw_evidence_present and review_approval.get("status") != "approved" and "raw_evidence_bypass" not in failure_taxonomy:
+        failure_taxonomy.append("raw_evidence_bypass")
+    return {
+        "command": "pr-gate",
+        "operation": "check",
+        "schema_version": PR_MERGE_GATE_SCHEMA,
+        "result": result,
+        "summary": (
+            "PR merge gate found fresh authored semantic review approval for the current PR head."
+            if result == "pass"
+            else "PR merge gate is blocked or falling back before host merge."
+        ),
+        "missing_inputs": sorted(set(missing_inputs)),
+        "fallback_to": fallback_to,
+        "repository": {"owner": owner, "name": repo_name},
+        "pr": {
+            "number": effective_pr,
+            "state": pr_state,
+            "isDraft": pr_payload.get("isDraft") if isinstance(pr_payload, dict) else None,
+            "headRefName": pr_payload.get("headRefName") if isinstance(pr_payload, dict) else branch_name,
+            "baseRefName": pr_payload.get("baseRefName") if isinstance(pr_payload, dict) else None,
+            "head_sha": pr_head,
+            "url": pr_payload.get("url") if isinstance(pr_payload, dict) else None,
+            "work_item_from_body": body_item,
+        },
+        "work_item": {
+            "id": context.get("item_id") if context else effective_item,
+            "path": relative_to_root(context["work_item_path"], target_root) if context else None,
+            "review_entry": context.get("review_entry") if context else None,
+        },
+        "review_approval": review_approval,
+        "merge_checkpoint": merge_checkpoint,
+        "host_enforcement": {
+            "stable_check_name": PR_MERGE_GATE_CHECK_NAME,
+            "status": "not_checked",
+            "reason": "pr-gate check proves PR-local semantic approval; controlled-merge checks host required status.",
+        },
+        "approval_boundary": {
+            "authored_truth": "work_item.review_entry",
+            "raw_review_evidence_satisfies_approval": False,
+            "shadow_evidence_satisfies_approval": False,
+            "ci_success_satisfies_approval": False,
+            "raw_evidence_present": raw_evidence_present,
+        },
+        "failure_taxonomy": sorted(failure_taxonomy),
+        "steps": steps,
+        "inferences": inferences,
+    }
+
+
+def handle_pr_gate(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    return emit(
+        pr_gate_payload(
+            target_root=target_root,
+            output_relative=args.output,
+            expected_item=args.item,
+            owner=args.owner,
+            repo_name=args.repo_name,
+            pr_number=args.pr,
+            head_sha=args.head_sha,
+            branch_name=args.branch,
+            pr_payload_file=args.pr_payload_file,
+        )
+    )
+
+
+def required_status_contexts_from_protection(payload: Any) -> list[str]:
+    if not isinstance(payload, dict):
+        return []
+    required_status = payload.get("required_status_checks")
+    if not isinstance(required_status, dict):
+        return []
+    contexts = required_status.get("contexts")
+    if isinstance(contexts, list):
+        return [str(context) for context in contexts if isinstance(context, str) and context.strip()]
+    checks = required_status.get("checks")
+    if isinstance(checks, list):
+        return [str(check.get("context")) for check in checks if isinstance(check, dict) and isinstance(check.get("context"), str)]
+    return []
+
+
+def required_status_contexts_from_branch_rules(payload: Any) -> list[str]:
+    rules = payload
+    if isinstance(payload, dict):
+        rules = payload.get("rules") or payload.get("data")
+    if not isinstance(rules, list):
+        return []
+    contexts: list[str] = []
+    for rule in rules:
+        if not isinstance(rule, dict) or rule.get("type") != "required_status_checks":
+            continue
+        parameters = rule.get("parameters") if isinstance(rule.get("parameters"), dict) else {}
+        checks = parameters.get("required_status_checks")
+        if isinstance(checks, list):
+            for check in checks:
+                if isinstance(check, dict) and isinstance(check.get("context"), str):
+                    contexts.append(check["context"])
+                elif isinstance(check, str):
+                    contexts.append(check)
+        for fallback_key in ("contexts", "required_contexts"):
+            fallback_contexts = parameters.get(fallback_key)
+            if isinstance(fallback_contexts, list):
+                contexts.extend(str(context) for context in fallback_contexts if isinstance(context, str) and context.strip())
+    return sorted(set(contexts))
+
+
+def required_check_status_payload(status_rollup: Any, required_contexts: list[str]) -> dict[str, Any]:
+    runs = status_rollup if isinstance(status_rollup, list) else []
+    by_name: dict[str, list[dict[str, Any]]] = {}
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        name = run.get("name") or run.get("context")
+        if isinstance(name, str):
+            by_name.setdefault(name, []).append(run)
+    missing: list[str] = []
+    pending: list[str] = []
+    failing: list[str] = []
+    for context in required_contexts:
+        entries = by_name.get(context, [])
+        if not entries:
+            missing.append(context)
+            continue
+        if any(entry.get("conclusion") == "SUCCESS" or entry.get("state") == "SUCCESS" for entry in entries):
+            continue
+        if any(entry.get("status") not in {None, "COMPLETED"} for entry in entries):
+            pending.append(context)
+        else:
+            failing.append(context)
+    result = "pass" if not missing and not pending and not failing else "block"
+    return {
+        "result": result,
+        "required_contexts": required_contexts,
+        "missing": missing,
+        "pending": pending,
+        "failing": failing,
+    }
+
+
+def controlled_merge_payload(
+    *,
+    target_root: Path,
+    output_relative: str,
+    expected_item: str | None,
+    owner: str | None,
+    repo_name: str | None,
+    pr_number: int,
+    head_sha: str | None,
+    merge_method: str,
+    delete_branch: bool,
+    execute: bool,
+    pr_payload_file: str | None,
+    status_checks_file: str | None,
+    branch_protection_file: str | None,
+    ruleset_file: str | None,
+) -> dict[str, Any]:
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    owner = owner or detected_owner
+    repo_name = repo_name or detected_repo
+    pr_gate = pr_gate_payload(
+        target_root=target_root,
+        output_relative=output_relative,
+        expected_item=expected_item,
+        owner=owner,
+        repo_name=repo_name,
+        pr_number=pr_number,
+        head_sha=head_sha,
+        branch_name=None,
+        pr_payload_file=pr_payload_file,
+    )
+    missing_inputs = [f"pr-gate: {message}" for message in pr_gate.get("missing_inputs", [])]
+    result = pr_gate.get("result")
+    fallback_to = pr_gate.get("fallback_to")
+
+    pr_payload = pr_gate.get("pr") if isinstance(pr_gate.get("pr"), dict) else {}
+    base_ref = pr_payload.get("baseRefName") if isinstance(pr_payload, dict) else None
+
+    protection_payload, protection_errors = load_optional_json_fixture(
+        target_root,
+        branch_protection_file,
+        label="branch protection fixture",
+    )
+    if protection_payload is None and not protection_errors and owner and repo_name and isinstance(base_ref, str) and base_ref:
+        protection_payload, protection_errors = gh_rest_json(
+            target_root,
+            f"repos/{owner}/{repo_name}/branches/{quote(base_ref, safe='')}/protection",
+        )
+    if protection_errors:
+        missing_inputs.extend(f"branch protection: {message}" for message in protection_errors)
+
+    ruleset_payload, ruleset_errors = load_optional_json_fixture(
+        target_root,
+        ruleset_file,
+        label="branch rules/ruleset fixture",
+    )
+    if ruleset_payload is None and not ruleset_errors and owner and repo_name and isinstance(base_ref, str) and base_ref:
+        ruleset_payload, ruleset_errors = github_public_rest_list(
+            f"repos/{owner}/{repo_name}/rules/branches/{quote(base_ref, safe='')}",
+        )
+    if ruleset_errors:
+        missing_inputs.extend(f"branch rules/ruleset: {message}" for message in ruleset_errors)
+
+    status_payload, status_errors = load_optional_json_fixture(
+        target_root,
+        status_checks_file,
+        label="status checks fixture",
+    )
+    if status_payload is None and not status_errors:
+        status_payload, status_errors = gh_json(
+            target_root,
+            ["pr", "view", str(pr_number), "--json", "statusCheckRollup"],
+        )
+    if status_errors:
+        missing_inputs.extend(f"status checks: {message}" for message in status_errors)
+
+    protection_contexts = required_status_contexts_from_protection(protection_payload)
+    ruleset_contexts = required_status_contexts_from_branch_rules(ruleset_payload)
+    required_contexts = sorted(set(protection_contexts + ruleset_contexts))
+    required_checks = required_check_status_payload(
+        status_payload.get("statusCheckRollup") if isinstance(status_payload, dict) else status_payload,
+        required_contexts,
+    )
+    if protection_payload is None and ruleset_payload is None:
+        missing_inputs.append("branch protection or ruleset readback is unavailable")
+    if PR_MERGE_GATE_CHECK_NAME not in required_contexts:
+        missing_inputs.append(f"required check `{PR_MERGE_GATE_CHECK_NAME}` is not enforced")
+    if required_checks["result"] != "pass":
+        labels = {"missing": "missing", "pending": "pending", "failing": "failing"}
+        for key in ("missing", "pending", "failing"):
+            for context in required_checks[key]:
+                missing_inputs.append(f"required check `{context}` is {labels[key]}")
+
+    merge_result: dict[str, Any] = {
+        "attempted": False,
+        "executed": False,
+        "dry_run": not execute,
+        "method": merge_method,
+        "delete_branch": delete_branch,
+    }
+    if missing_inputs and result == "pass":
+        result = "block"
+        fallback_to = fallback_to or "merge"
+    if result == "pass" and execute:
+        command = ["gh", "pr", "merge", str(pr_number), f"--{merge_method}"]
+        if delete_branch:
+            command.append("--delete-branch")
+        completed = run_process(command, target_root)
+        merge_result["attempted"] = True
+        merge_result["command"] = command
+        merge_result["returncode"] = completed.returncode
+        merge_result["stdout"] = completed.stdout.strip()
+        merge_result["stderr"] = completed.stderr.strip()
+        if completed.returncode == 0:
+            merge_result["executed"] = True
+        else:
+            result = "block"
+            fallback_to = "merge"
+            missing_inputs.append(completed.stderr.strip() or completed.stdout.strip() or "gh pr merge failed")
+
+    return {
+        "command": "controlled-merge",
+        "operation": "merge" if execute else "check",
+        "schema_version": CONTROLLED_MERGE_SCHEMA,
+        "result": result,
+        "summary": (
+            "controlled merge preconditions passed and host merge was delegated."
+            if result == "pass" and execute
+            else "controlled merge preconditions passed; host merge was not executed."
+            if result == "pass"
+            else "controlled merge is blocked before host merge delegation."
+        ),
+        "missing_inputs": sorted(set(str(message) for message in missing_inputs)),
+        "fallback_to": fallback_to,
+        "repository": {"owner": owner, "name": repo_name},
+        "pr_gate": pr_gate,
+        "required_checks": required_checks,
+        "host_enforcement": {
+            "stable_check_name": PR_MERGE_GATE_CHECK_NAME,
+            "required_contexts": required_contexts,
+            "required": PR_MERGE_GATE_CHECK_NAME in required_contexts,
+            "branch_protection_readable": protection_payload is not None,
+            "branch_protection_required_contexts": protection_contexts,
+            "ruleset_readable": ruleset_payload is not None,
+            "ruleset_required_contexts": ruleset_contexts,
+        },
+        "merge": merge_result,
+    }
+
+
+def handle_controlled_merge(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    return emit(
+        controlled_merge_payload(
+            target_root=target_root,
+            output_relative=args.output,
+            expected_item=args.item,
+            owner=args.owner,
+            repo_name=args.repo_name,
+            pr_number=args.pr,
+            head_sha=args.head_sha,
+            merge_method=args.merge_method,
+            delete_branch=args.delete_branch,
+            execute=args.execute and args.operation == "merge",
+            pr_payload_file=args.pr_payload_file,
+            status_checks_file=args.status_checks_file,
+            branch_protection_file=args.branch_protection_file,
+            ruleset_file=args.ruleset_file,
+        )
+    )
+
+
 def host_lifecycle_payload(context: dict[str, Any]) -> dict[str, Any]:
     branch = git_branch(context["target_root"])
     purity = purity_report_from_context(context)
     workspace_profile = workspace_profile_from_context(context)
+    lifecycle_expectations = workspace_lifecycle_expectations(workspace_profile)
     worktree_root = current_cwd_relative(context["target_root"])
     branch_status = "report_only" if branch else "host_managed_without_local_branch"
     pr_status = "report_only"
@@ -5212,7 +10119,8 @@ def host_lifecycle_payload(context: dict[str, Any]) -> dict[str, Any]:
                 "entry": context["workspace_entry"],
                 "path": relative_to_root(context["workspace_path"], context["target_root"]),
                 "profile": workspace_profile,
-                "lifecycle_entry": "python3 .loom/bin/loom_flow.py workspace create|locate|cleanup|retire",
+                "lifecycle_entry": "python3 .loom/bin/loom_flow.py workspace create|locate|attach|cleanup|retire",
+                "lifecycle_expectations": lifecycle_expectations,
             },
             "branch": {
                 "ownership": "host",
@@ -5233,6 +10141,7 @@ def host_lifecycle_payload(context: dict[str, Any]) -> dict[str, Any]:
             },
         },
         "purity": purity,
+        "lifecycle_expectations": lifecycle_expectations,
     }
 
 
@@ -6806,11 +11715,24 @@ def closeout_payload(
     elif fact_chain_context is not None:
         missing_inputs.extend(report_blocking_messages(fact_chain_context["report"]))
     governance_surface = build_governance_surface(target_root)
+    repo_interface = governance_surface.get("repo_interface")
     repo_specific_requirements = repo_specific_requirements_payload(
-        governance_surface.get("repo_interface"),
+        repo_interface,
         target_root=target_root,
         surface="closeout",
     )
+    release_targets = repo_interface.get("release_targets") if isinstance(repo_interface, dict) else None
+    target_release = (
+        release_targets.get("target_release")
+        if isinstance(release_targets, dict)
+        else empty_target_release_status()
+    )
+    release_enforcement = (
+        release_targets.get("enforcement")
+        if isinstance(release_targets, dict) and isinstance(release_targets.get("enforcement"), str)
+        else "unknown"
+    )
+    closeout_findings: list[dict[str, Any]] = []
     gate: dict[str, Any] = {"skipped": skip_gate}
     if not skip_gate:
         repo_gate = target_root / ".loom/bin/loom_check.py"
@@ -6930,6 +11852,72 @@ def closeout_payload(
     if issue_payload is not None and issue_payload.get("state") != "CLOSED":
         missing_inputs.append("issue is not closed")
 
+    target_release_gaps = target_release.get("closeout_gaps") if isinstance(target_release, dict) else []
+    if not isinstance(target_release_gaps, list):
+        target_release_gaps = []
+    delivery_chain = target_release.get("delivery_chain") if isinstance(target_release, dict) else {}
+    unreleased = delivery_chain.get("unreleased") if isinstance(delivery_chain, dict) else []
+    unreconciled = delivery_chain.get("unreconciled") if isinstance(delivery_chain, dict) else []
+    if not isinstance(unreleased, list):
+        unreleased = []
+    if not isinstance(unreconciled, list):
+        unreconciled = []
+    if isinstance(target_release, dict) and target_release.get("result") == "block" and release_enforcement == "blocking":
+        missing_inputs.extend(
+            f"target_release: {message}"
+            for message in target_release.get("missing_inputs", [])
+        )
+        closeout_findings.append(
+            {
+                "category": "gate_failure",
+                "kind": "target_release_unreadable",
+                "severity": "block",
+                "subject": target_release.get("release_id") or "target release",
+                "why_blocking": "target repository release/version truth is declared as blocking but unreadable.",
+                "fallback_to": "closeout",
+                "evidence": {"missing_inputs": target_release.get("missing_inputs", [])},
+            }
+        )
+    if target_release_gaps and release_enforcement == "blocking":
+        missing_inputs.extend(f"target_release gap: {gap}" for gap in target_release_gaps)
+        closeout_findings.append(
+            {
+                "category": "gate_failure",
+                "kind": "release_evidence_gap",
+                "severity": "block",
+                "subject": target_release.get("release_id") or "target release",
+                "why_blocking": "target release closeout evidence is incomplete.",
+                "fallback_to": "merge",
+                "evidence": {"gaps": target_release_gaps},
+            }
+        )
+    if unreleased:
+        missing_inputs.append("target release contains merged but unreleased work")
+        closeout_findings.append(
+            {
+                "category": "gate_failure",
+                "kind": "merged_but_unreleased",
+                "severity": "block",
+                "subject": target_release.get("release_id") or "target release",
+                "why_blocking": "merged work is still marked unreleased in the target release surface.",
+                "fallback_to": "merge",
+                "evidence": {"unreleased": unreleased},
+            }
+        )
+    if unreconciled:
+        missing_inputs.append("target release contains released but unreconciled work")
+        closeout_findings.append(
+            {
+                "category": "drift",
+                "kind": "released_but_unreconciled",
+                "severity": "block",
+                "subject": target_release.get("release_id") or "target release",
+                "why_blocking": "released work is still marked unreconciled in the target release surface.",
+                "fallback_to": "reconciliation-sync",
+                "evidence": {"unreconciled": unreconciled},
+            }
+        )
+
     result = "pass" if not missing_inputs else "block"
     summary = (
         "closeout state is consistent across gate, GitHub issue/PR, project, and main."
@@ -6940,6 +11928,12 @@ def closeout_payload(
     if result == "block" and closeout_summary_override is not None:
         summary = closeout_summary_override
         fallback_to = closeout_fallback
+    elif result == "block" and closeout_findings:
+        primary_finding = closeout_findings[0]
+        summary = str(primary_finding.get("why_blocking") or summary)
+        fallback_value = primary_finding.get("fallback_to")
+        if isinstance(fallback_value, str) and fallback_value:
+            fallback_to = fallback_value
     elif result == "pass" and isinstance(reconciliation_payload, dict) and reconciliation_payload.get("result") == "warn":
         summary = "closeout state is consistent, but reconciliation audit reported non-blocking warnings that still need review."
     if result == "pass" and repo_specific_requirements["result"] == "block":
@@ -6961,6 +11955,8 @@ def closeout_payload(
             "pr": pr_payload,
             "project": project_payload,
             "repo_specific_requirements": repo_specific_requirements,
+            "target_release": target_release,
+            "findings": closeout_findings,
             **(
                 {
                     "provenance": report_provenance(fact_chain_context["report"]),
@@ -7456,6 +12452,44 @@ def handle_review(args: argparse.Namespace) -> int:
     if args.operation == "run":
         flow_operation = "spec-review" if inferred_spec_review else "review"
         review_kind = "spec_review" if inferred_spec_review else implementation_review_kind(context)
+        requested_engine_adapter = args.engine_adapter or DEFAULT_REVIEW_ADAPTER
+        engine_profile, engine_profile_errors = resolve_review_engine_profile(
+            context,
+            review_kind,
+            adapter=requested_engine_adapter,
+            requested_profile=args.engine_profile,
+            requested_model=args.engine_model,
+            requested_reasoning=args.engine_reasoning,
+            override_reason=args.engine_override_reason,
+        )
+        if engine_profile_errors or engine_profile is None:
+            manual_review = manual_review_payload(
+                context=context,
+                findings_file=None,
+                kind=review_kind,
+                review_record_path=review_path,
+            )
+            return emit(
+                {
+                    "command": "review",
+                    "operation": "run",
+                    "item": {"id": context["item_id"]},
+                    "result": "block",
+                    "summary": "default review engine profile could not be resolved safely.",
+                    "missing_inputs": engine_profile_errors,
+                    "fallback_to": None,
+                    "engine": {
+                        "engine": CODEX_APP_REVIEW_ENGINE if requested_engine_adapter == CODEX_APP_REVIEW_ADAPTER else DEFAULT_REVIEW_ENGINE,
+                        "adapter": requested_engine_adapter,
+                        "profile": None,
+                        "result": "not_run",
+                        "failure_reason": "runtime_conflict",
+                        "reviewed_head": git_head_sha(target_root) or "unknown-head",
+                        "evidence": None,
+                    },
+                    "manual_review": manual_review,
+                }
+            )
         flow_payload = build_review_flow_payload(target_root, args.output, args.item, operation=flow_operation)
         review_surface = flow_payload.get("review") or (flow_payload.get("spec_review") if inferred_spec_review else None)
         if flow_payload["result"] != "pass":
@@ -7478,14 +12512,16 @@ def handle_review(args: argparse.Namespace) -> int:
                     "runtime_state": flow_payload.get("runtime_state"),
                     "state_check": flow_payload.get("state_check"),
                     "runtime_evidence": flow_payload.get("runtime_evidence"),
+                    "budget_risk": flow_payload.get("budget_risk"),
                     "build_checkpoint": flow_payload.get("build_checkpoint"),
                     "review": review_surface,
                     "spec_review": flow_payload.get("spec_review"),
                     "repo_specific_requirements": flow_payload.get("repo_specific_requirements"),
                     "current_checkpoint": flow_payload.get("current_checkpoint"),
                     "engine": {
-                        "engine": DEFAULT_REVIEW_ENGINE,
-                        "adapter": DEFAULT_REVIEW_ADAPTER,
+                        "engine": CODEX_APP_REVIEW_ENGINE if requested_engine_adapter == CODEX_APP_REVIEW_ADAPTER else DEFAULT_REVIEW_ENGINE,
+                        "adapter": requested_engine_adapter,
+                        "profile": engine_profile,
                         "result": "not_run",
                         "failure_reason": None,
                         "reviewed_head": git_head_sha(target_root) or "unknown-head",
@@ -7496,7 +12532,32 @@ def handle_review(args: argparse.Namespace) -> int:
             )
 
         build_payload = flow_payload["build_checkpoint"]
-        engine_payload = run_default_review_engine(context, build_payload, review_path, review_kind=review_kind)
+        if requested_engine_adapter == CODEX_APP_REVIEW_ADAPTER:
+            engine_payload = run_codex_app_review_authoritative_adapter(
+                context,
+                build_payload,
+                review_path,
+                engine_profile,
+                review_kind=review_kind,
+                app_server=args.codex_app_review_app_server,
+                thread_id=args.codex_app_review_thread_id,
+                thread_cwd=args.codex_app_review_cwd,
+                raw_file=args.codex_app_review_raw_file,
+            )
+        else:
+            engine_payload = run_default_review_engine(
+                context,
+                build_payload,
+                review_path,
+                engine_profile,
+                review_kind=review_kind,
+            )
+        shadow_engine_payload = run_codex_app_review_shadow_adapter(
+            context,
+            adapter=args.shadow_engine_adapter,
+            raw_file=args.shadow_review_raw_file,
+            default_engine_payload=engine_payload,
+        )
         review_record_input = engine_payload.get("review_record_input")
         findings_file = (
             review_record_input.get("findings_file")
@@ -7513,7 +12574,7 @@ def handle_review(args: argparse.Namespace) -> int:
         summary = (
             engine_payload["summary"]
             if result == "pass"
-            else "default review engine failed closed; record any formal review conclusion through the single review record."
+            else f"{requested_engine_adapter} review engine failed closed; record any formal review conclusion through the single review record."
         )
         return emit(
             {
@@ -7528,12 +12589,15 @@ def handle_review(args: argparse.Namespace) -> int:
                 "runtime_state": flow_payload.get("runtime_state"),
                 "state_check": flow_payload.get("state_check"),
                 "runtime_evidence": flow_payload.get("runtime_evidence"),
+                "budget_risk": flow_payload.get("budget_risk"),
                 "build_checkpoint": flow_payload.get("build_checkpoint"),
                 "review": review_surface,
                 "spec_review": flow_payload.get("spec_review"),
                 "repo_specific_requirements": flow_payload.get("repo_specific_requirements"),
                 "current_checkpoint": flow_payload.get("current_checkpoint"),
                 "engine": engine_payload["engine"],
+                **({"engine_metadata": engine_payload["engine_metadata"]} if isinstance(engine_payload.get("engine_metadata"), dict) else {}),
+                **({"shadow_engine": shadow_engine_payload} if isinstance(shadow_engine_payload, dict) else {}),
                 "manual_review": manual_review,
                 **({"review_record_input": review_record_input} if isinstance(review_record_input, dict) else {}),
             }
@@ -7641,6 +12705,18 @@ def handle_review(args: argparse.Namespace) -> int:
         )
 
     blocking_issues, follow_ups = compat_lists_from_findings(findings)
+    governance_surface = build_governance_surface(target_root)
+    github_control_plane = (
+        governance_surface.get("github_control_plane")
+        if isinstance(governance_surface, dict)
+        else None
+    )
+    execution_budget = (
+        github_control_plane.get("api_snapshot", {}).get("budget")
+        if isinstance(github_control_plane, dict)
+        else None
+    )
+    budget_risk = derive_execution_budget_risk(execution_budget)
     review_payload = {
         "schema_version": "loom-review/v1",
         "item_id": context["item_id"],
@@ -7659,6 +12735,7 @@ def handle_review(args: argparse.Namespace) -> int:
             "recovery_entry": str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"]),
             "status_surface": str(context["report"]["fact_chain"]["entry_points"]["status_surface"]),
             "build_checkpoint": build_payload["result"],
+            "budget_risk": budget_risk,
             "engine_adapter": args.engine_adapter,
             "engine_evidence": args.engine_evidence,
             "normalized_findings": args.normalized_findings,
@@ -7707,6 +12784,7 @@ def handle_review(args: argparse.Namespace) -> int:
             "missing_inputs": [],
             "fallback_to": None,
             "review": {"path": review_path, "record": verified_record},
+            "budget_risk": budget_risk,
             "build_checkpoint": {
                 "result": build_payload["result"],
                 "summary": build_payload["summary"],
@@ -8229,6 +13307,237 @@ def handle_work_item(args: argparse.Namespace) -> int:
     return emit(payload)
 
 
+def build_required_inputs(context: dict[str, Any]) -> list[dict[str, Any]]:
+    plan_path = context["target_root"] / ".loom/specs" / context["item_id"] / "plan.md"
+    spec_path = context["target_root"] / ".loom/specs" / context["item_id"] / "spec.md"
+    validation_summary = context["latest_validation_summary"].strip()
+    return [
+        {
+            "id": "work_item",
+            "status": "present" if context["work_item_path"].exists() else "missing",
+            "locator": relative_to_root(context["work_item_path"], context["target_root"]),
+        },
+        {
+            "id": "spec",
+            "status": "present" if spec_path.exists() else "missing",
+            "locator": relative_to_root(spec_path, context["target_root"]),
+        },
+        {
+            "id": "plan",
+            "status": "present" if plan_path.exists() else "missing",
+            "locator": relative_to_root(plan_path, context["target_root"]),
+        },
+        {
+            "id": "recovery_baseline",
+            "status": "present" if context["recovery_path"].exists() else "missing",
+            "locator": relative_to_root(context["recovery_path"], context["target_root"]),
+        },
+        {
+            "id": "validation_baseline",
+            "status": "present" if validation_summary and validation_summary.lower() != "not yet run for wi-706." else "missing",
+            "locator": "Latest Validation Summary",
+        },
+        {
+            "id": "workspace",
+            "status": "present" if context["workspace_path"].exists() else "missing",
+            "locator": context["workspace_entry"],
+        },
+        {
+            "id": "ownership_constraints",
+            "status": "present" if "ownership" in context["scope"].lower() or "ownership" in context["closing_condition"].lower() else "missing",
+            "locator": "Work Item Scope / Closing Condition",
+        },
+    ]
+
+
+def delegation_required_field_errors(delegation: dict[str, Any], index: int) -> list[str]:
+    required = (
+        "task_goal",
+        "context_locators",
+        "read_scope",
+        "write_ownership",
+        "non_goals",
+        "validation_expectation",
+        "output_format",
+        "integration_target",
+    )
+    errors: list[str] = []
+    for field in required:
+        value = delegation.get(field)
+        if value in (None, "", [], {}):
+            errors.append(f"delegation[{index}] missing `{field}`")
+    if not isinstance(delegation.get("context_locators"), list):
+        errors.append(f"delegation[{index}] context_locators must be a list")
+    if not isinstance(delegation.get("read_scope"), list):
+        errors.append(f"delegation[{index}] read_scope must be a list")
+    if not isinstance(delegation.get("write_ownership"), list):
+        errors.append(f"delegation[{index}] write_ownership must be a list")
+    return errors
+
+
+def overlap_write_ownership(delegations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    owners: dict[str, list[str]] = {}
+    for index, delegation in enumerate(delegations):
+        name = str(delegation.get("id") or f"delegation[{index}]")
+        write_ownership = delegation.get("write_ownership")
+        if not isinstance(write_ownership, list):
+            continue
+        for path in write_ownership:
+            if isinstance(path, str) and path:
+                owners.setdefault(path, []).append(name)
+    return [
+        {
+            "path": path,
+            "owners": names,
+            "result": "block",
+            "summary": "overlapping write ownership must be integrated locally before review or merge-ready",
+        }
+        for path, names in sorted(owners.items())
+        if len(names) > 1
+    ]
+
+
+def repeated_blocker_signal(delegations: list[dict[str, Any]]) -> dict[str, Any]:
+    by_signature: dict[str, list[str]] = {}
+    for index, delegation in enumerate(delegations):
+        signature = delegation.get("blocker_signature") or delegation.get("blocker")
+        if not isinstance(signature, str) or not signature:
+            continue
+        name = str(delegation.get("id") or f"delegation[{index}]")
+        by_signature.setdefault(signature, []).append(name)
+    repeated = [
+        {
+            "signature": signature,
+            "sources": sources,
+            "count": len(sources),
+            "recommended_action": "pause delegation retries and resolve root cause in the main execution lane",
+        }
+        for signature, sources in sorted(by_signature.items())
+        if len(sources) > 1
+    ]
+    return {
+        "schema_version": REPEATED_BLOCKER_SIGNAL_SCHEMA,
+        "result": "block" if repeated else "pass",
+        "summary": (
+            "repeated blocker candidates require root-cause escalation."
+            if repeated
+            else "no repeated blocker candidates were detected."
+        ),
+        "repeated": repeated,
+    }
+
+
+def read_build_evidence(target_root: Path, relative_path: str | None) -> tuple[dict[str, Any] | None, list[str], str | None]:
+    if not relative_path:
+        return None, ["build evidence is required before build readiness can be claimed"], None
+    evidence_path, errors = resolve_repo_relative_path(target_root, relative_path, label="build evidence")
+    if errors:
+        return None, errors, relative_path
+    assert evidence_path is not None
+    if not evidence_path.exists():
+        return None, [f"build evidence is missing: {relative_path}"], relative_path
+    try:
+        payload = load_json_file(evidence_path)
+    except json.JSONDecodeError as exc:
+        return None, [f"build evidence is invalid JSON: {exc.msg}"], relative_path
+    if not isinstance(payload, dict):
+        return None, ["build evidence must be a JSON object"], relative_path
+    return payload, [], relative_path
+
+
+def build_execution_payload(context: dict[str, Any], evidence_relative: str | None) -> dict[str, Any]:
+    required_inputs = build_required_inputs(context)
+    missing_inputs = [
+        f"required build input `{entry['id']}` is missing"
+        for entry in required_inputs
+        if entry.get("status") != "present"
+    ]
+    evidence, evidence_errors, evidence_locator = read_build_evidence(context["target_root"], evidence_relative)
+    missing_inputs.extend(evidence_errors)
+
+    delegations: list[dict[str, Any]] = []
+    integration_evidence: list[dict[str, Any]] = []
+    ownership_conflicts: list[dict[str, Any]] = []
+    repeated_signal = {
+        "schema_version": REPEATED_BLOCKER_SIGNAL_SCHEMA,
+        "result": "pass",
+        "summary": "no delegation evidence was available.",
+        "repeated": [],
+    }
+    delegation_errors: list[str] = []
+    unintegrated: list[str] = []
+
+    if evidence is not None:
+        if evidence.get("schema_version") != BUILD_EVIDENCE_SCHEMA:
+            missing_inputs.append(f"build evidence schema must be `{BUILD_EVIDENCE_SCHEMA}`")
+        raw_delegations = evidence.get("delegations")
+        if not isinstance(raw_delegations, list):
+            missing_inputs.append("build evidence must declare `delegations`")
+        else:
+            delegations = [entry for entry in raw_delegations if isinstance(entry, dict)]
+            if len(delegations) != len(raw_delegations):
+                missing_inputs.append("every delegation entry must be an object")
+            for index, delegation in enumerate(delegations):
+                delegation_errors.extend(delegation_required_field_errors(delegation, index))
+                status = delegation.get("status")
+                if status != "integrated":
+                    unintegrated.append(str(delegation.get("id") or f"delegation[{index}]"))
+        raw_integration = evidence.get("integration_evidence")
+        if isinstance(raw_integration, list):
+            integration_evidence = [entry for entry in raw_integration if isinstance(entry, dict)]
+        elif raw_integration is not None:
+            missing_inputs.append("build evidence `integration_evidence` must be a list when present")
+        ownership_conflicts = overlap_write_ownership(delegations)
+        repeated_signal = repeated_blocker_signal(delegations)
+
+    missing_inputs.extend(delegation_errors)
+    missing_inputs.extend(f"delegation `{name}` output is not integrated into Loom carriers" for name in unintegrated)
+    missing_inputs.extend(f"overlapping write ownership for `{conflict['path']}`" for conflict in ownership_conflicts)
+    if repeated_signal.get("result") == "block":
+        missing_inputs.append("repeated blocker candidates require root-cause escalation before build readiness")
+
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "schema_version": "loom-build-execution/v1",
+        "result": result,
+        "summary": (
+            "build execution evidence is integrated and ready for review."
+            if result == "pass"
+            else "build execution evidence is missing, unintegrated, overlapping, or repeatedly blocked."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": None if result == "pass" else "build",
+        "required_inputs": required_inputs,
+        "ownership_contract": {
+            "schema_version": SUBAGENT_OWNERSHIP_SCHEMA,
+            "required_fields": [
+                "task_goal",
+                "context_locators",
+                "read_scope",
+                "write_ownership",
+                "non_goals",
+                "validation_expectation",
+                "output_format",
+                "integration_target",
+            ],
+            "main_executor_responsibilities": [
+                "integrate delegated output into implementation",
+                "record validation evidence",
+                "update recovery and status carriers",
+                "feed integrated evidence into later review inputs",
+            ],
+        },
+        "delegation_evidence": {
+            "locator": evidence_locator,
+            "delegations": delegations,
+            "unintegrated": unintegrated,
+        },
+        "integration_evidence": integration_evidence,
+        "ownership_conflicts": ownership_conflicts,
+        "repeated_blocker_signal": repeated_signal,
+    }
+
+
 def handle_flow(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
     runtime_state = runtime_state_payload(target_root)
@@ -8255,6 +13564,9 @@ def handle_flow(args: argparse.Namespace) -> int:
             }
         )
 
+    if args.operation == "story":
+        return emit(story_flow_payload(target_root=target_root, runtime_state=runtime_state, steps=steps))
+
     context, errors = load_context(target_root, args.output, args.item)
     if errors:
         return emit(
@@ -8271,7 +13583,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             }
         )
 
-    if args.operation not in {"pre-review", "review", "spec-review", "resume", "handoff", "merge-ready"}:
+    if args.operation not in {"build", "pre-review", "review", "spec-review", "resume", "handoff", "merge-ready"}:
         return emit(
             {
                 "command": "flow",
@@ -8285,7 +13597,14 @@ def handle_flow(args: argparse.Namespace) -> int:
             }
         )
     if args.operation in {"review", "spec-review"}:
-        return emit(build_review_flow_payload(target_root, args.output, args.item, operation=args.operation))
+        payload = build_review_flow_payload(target_root, args.output, args.item, operation=args.operation)
+        payload["execution_attempt"] = persist_execution_attempt(
+            context,
+            command="flow",
+            operation=args.operation,
+            payload=payload,
+        )
+        return emit(payload)
 
     steps.append(
         {
@@ -8314,6 +13633,7 @@ def handle_flow(args: argparse.Namespace) -> int:
     )
 
     review_payload: dict[str, Any] | None = None
+    build_execution: dict[str, Any] | None = None
     governance_surface = build_governance_surface(target_root)
     upgrade_path = maturity_upgrade_path(governance_surface, target_root)
     repo_interface = governance_surface.get("repo_interface")
@@ -8351,7 +13671,41 @@ def handle_flow(args: argparse.Namespace) -> int:
                 "runtime_evidence": runtime_fields,
             }
         )
-        if args.operation == "merge-ready":
+        if args.operation == "build":
+            admission_payload = checkpoint_payload("admission", context)
+            locate_payload = base_workspace_payload(context, "locate")
+            locate_result = "pass" if not locate_payload["purity"]["hard_failures"] else "block"
+            build_execution = build_execution_payload(context, args.build_evidence)
+            steps.extend(
+                [
+                    {
+                        "name": "checkpoint-admission",
+                        "result": admission_payload["result"],
+                        "summary": admission_payload["summary"],
+                        "missing_inputs": admission_payload["missing_inputs"],
+                        "fallback_to": admission_payload["fallback_to"],
+                    },
+                    {
+                        "name": "workspace-locate",
+                        "result": locate_result,
+                        "summary": (
+                            "workspace is location-resolved and execution-ready."
+                            if locate_result == "pass"
+                            else "workspace is location-resolved but not execution-ready."
+                        ),
+                        "missing_inputs": list(locate_payload["purity"]["hard_failures"]),
+                        "fallback_to": "admission" if locate_payload["purity"]["hard_failures"] else None,
+                    },
+                    {
+                        "name": "build-execution",
+                        "result": build_execution["result"],
+                        "summary": build_execution["summary"],
+                        "missing_inputs": build_execution["missing_inputs"],
+                        "fallback_to": build_execution["fallback_to"],
+                    },
+                ]
+            )
+        elif args.operation == "merge-ready":
             build_payload = checkpoint_payload("build", context)
             merge_payload = checkpoint_payload("merge", context)
             repo_specific_requirements = repo_specific_requirements_payload(
@@ -8469,6 +13823,14 @@ def handle_flow(args: argparse.Namespace) -> int:
             if result == "pass"
             else "handoff flow produced the minimum writeback checklist, but blocking signals remain before transfer."
         )
+    elif args.operation == "build":
+        summary = (
+            "build flow found integrated execution evidence and can proceed toward review."
+            if result == "pass"
+            else "build flow found missing, unintegrated, overlapping, or repeatedly blocked execution evidence."
+        )
+        if build_execution and build_execution["result"] == "block":
+            fallback_to = fallback_to or "build"
     elif args.operation == "merge-ready":
         if isinstance(repo_specific_requirements, dict) and result == "block" and repo_specific_requirements["result"] == "block":
             summary = "merge-ready flow found companion-declared blocking requirements that Loom core does not satisfy on its own."
@@ -8545,14 +13907,14 @@ def handle_flow(args: argparse.Namespace) -> int:
 
     fact_chain_provenance = report_provenance(context["report"])
     recovery_readiness = report_recovery_readiness(context["report"])
+    execution_ledger = report_execution_ledger(context["report"])
     blocking_failures = report_blocking_failures(context["report"])
     if recovery_readiness.get("result") == "block" and result == "pass":
         result = "block"
         fallback_to = fallback_to or recovery_readiness.get("fallback_to") or "admission"
         summary = "flow rebuilt context but recovery readiness is blocking."
 
-    return emit(
-        {
+    payload = {
             "command": "flow",
             "operation": args.operation,
             "item": {
@@ -8569,6 +13931,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             "runtime_state": runtime_state,
             "provenance": fact_chain_provenance,
             "recovery_readiness": recovery_readiness,
+            "execution_ledger": execution_ledger,
             "blocking_failures": blocking_failures,
             **({"governance_surface": governance_surface} if args.operation == "resume" else {}),
             **({"maturity_upgrade_path": upgrade_path} if args.operation == "resume" else {}),
@@ -8591,6 +13954,7 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "fallback_to": state_payload["fallback_to"],
                         "checks": state_payload["checks"],
                     },
+                    "lifecycle_expectations": locate_payload["lifecycle_expectations"],
                 }
                 if args.operation in {"resume", "handoff"}
                 else {}
@@ -8644,12 +14008,37 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "checks": state_payload["checks"],
                     },
                     "runtime_evidence": runtime_fields,
+                    "build_execution": build_execution,
+                    "current_checkpoint": {
+                        "raw": context["current_checkpoint_raw"],
+                        "normalized": context["current_checkpoint"],
+                    },
+                    "current_lane": context["current_lane"],
+                }
+                if args.operation == "build"
+                else {}
+            ),
+            **(
+                {
+                    "state_check": {
+                        "result": state_payload["result"],
+                        "summary": state_payload["summary"],
+                        "missing_inputs": state_payload["missing_inputs"],
+                        "fallback_to": state_payload["fallback_to"],
+                        "checks": state_payload["checks"],
+                    },
+                    "runtime_evidence": runtime_fields,
                     "build_checkpoint": {
                         "result": build_payload["result"],
                         "summary": build_payload["summary"],
                         "missing_inputs": build_payload["missing_inputs"],
                         "fallback_to": build_payload["fallback_to"],
                     },
+                    "budget_risk": derive_execution_budget_risk(
+                        governance_surface.get("github_control_plane", {}).get("api_snapshot", {}).get("budget")
+                        if isinstance(governance_surface.get("github_control_plane"), dict)
+                        else None
+                    ),
                     "review": review_payload,
                     "repo_specific_requirements": repo_specific_requirements,
                     "current_checkpoint": {
@@ -8683,6 +14072,7 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "fallback_to": merge_payload["fallback_to"],
                         "pr_template": merge_payload.get("pr_template"),
                     },
+                    "budget_risk": merge_payload.get("budget_risk"),
                     "spec_review": merge_payload.get("spec_review"),
                     "current_checkpoint": {
                         "raw": context["current_checkpoint_raw"],
@@ -8696,7 +14086,13 @@ def handle_flow(args: argparse.Namespace) -> int:
                 else {}
             ),
         }
+    payload["execution_attempt"] = persist_execution_attempt(
+        context,
+        command="flow",
+        operation=args.operation,
+        payload=payload,
     )
+    return emit(payload)
 
 
 def handle_shadow_parity(args: argparse.Namespace) -> int:
@@ -8785,6 +14181,220 @@ def handle_shadow_parity(args: argparse.Namespace) -> int:
     return emit(payload)
 
 
+def handle_live_smoke(args: argparse.Namespace) -> int:
+    if args.operation == "run":
+        if not args.target:
+            return emit(
+                {
+                    "command": "live-smoke",
+                    "operation": "run",
+                    "schema_version": LIVE_SMOKE_SCHEMA,
+                    "result": "block",
+                    "summary": "live smoke run requires --target.",
+                    "missing_inputs": ["pass --target <adopted_repo_root>"],
+                    "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                    "runtime_state": runtime_state_payload(Path.cwd()),
+                    "command_plan": [],
+                    "reports": [],
+                    "live_smoke": {
+                        "status": "failed",
+                        "executed_at": current_iso_timestamp(),
+                        "release_interpretation": live_smoke_release_interpretation("failed"),
+                    },
+                }
+            )
+        return emit(
+            live_smoke_run_payload(
+                Path(args.target).expanduser().resolve(),
+                item=args.item,
+                dry_run=args.dry_run,
+                include_blocking_shadow=args.include_blocking_shadow,
+            )
+        )
+    if args.operation == "host-adapter-drift":
+        if not args.target:
+            return emit(
+                {
+                    "command": "live-smoke",
+                    "operation": "host-adapter-drift",
+                    "schema_version": HOST_ADAPTER_LIVE_DRIFT_SCHEMA,
+                    "result": "block",
+                    "summary": "host adapter live drift requires --target.",
+                    "missing_inputs": ["pass --target <adopted_repo_root>"],
+                    "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                    "runtime_state": runtime_state_payload(Path.cwd()),
+                    "command_plan": [],
+                    "reports": [],
+                    "profile_check": {"id": "host-adapter-live-drift", "result": "block"},
+                    "host_adapter_drift": {
+                        "contract_locator": ".loom/companion/interop.json",
+                        "availability": "missing-target",
+                        "expected_host_adapter_version": current_host_adapter_version(),
+                        "checks": [],
+                    },
+                }
+            )
+        return emit(host_adapter_live_drift_payload(Path(args.target).expanduser().resolve()))
+    if args.operation == "dynamic-tool-availability":
+        if not args.target:
+            return emit(
+                {
+                    "command": "live-smoke",
+                    "operation": "dynamic-tool-availability",
+                    "schema_version": DYNAMIC_TOOL_LIVE_AVAILABILITY_SCHEMA,
+                    "result": "block",
+                    "summary": "dynamic tool live availability requires --target.",
+                    "missing_inputs": ["pass --target <adopted_repo_root>"],
+                    "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                    "runtime_state": runtime_state_payload(Path.cwd()),
+                    "command_plan": [],
+                    "reports": [],
+                    "profile_check": {"id": "dynamic-tool-live-availability", "result": "block"},
+                    "dynamic_tool_availability": {
+                        "contract_locator": ".loom/companion/repo-interface.json",
+                        "availability": "missing-target",
+                        "surface": args.surface,
+                        "tool_availability": empty_tool_availability(),
+                    },
+                }
+            )
+        return emit(
+            dynamic_tool_live_availability_payload(
+                Path(args.target).expanduser().resolve(),
+                surface=args.surface,
+            )
+        )
+    if args.operation == "hook-envelope":
+        if not args.target:
+            return emit(
+                {
+                    "command": "live-smoke",
+                    "operation": "hook-envelope",
+                    "schema_version": HOOK_ENVELOPE_LIVE_CHECK_SCHEMA,
+                    "result": "block",
+                    "summary": "hook envelope check requires --target.",
+                    "missing_inputs": ["pass --target <adopted_repo_root>"],
+                    "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                    "runtime_state": runtime_state_payload(Path.cwd()),
+                    "target": live_smoke_target_metadata(Path.cwd()),
+                    "command_plan": [],
+                    "reports": [],
+                    "profile_check": {"id": "hook-envelope", "result": "block"},
+                    "hook_envelope": {
+                        "contract_locator": args.envelope,
+                        "availability": "missing-target",
+                        "requirement": args.requirement,
+                        "checks": [],
+                    },
+                }
+            )
+        if not args.envelope:
+            target_root = Path(args.target).expanduser().resolve()
+            return emit(
+                {
+                    "command": "live-smoke",
+                    "operation": "hook-envelope",
+                    "schema_version": HOOK_ENVELOPE_LIVE_CHECK_SCHEMA,
+                    "result": "block",
+                    "summary": "hook envelope check requires --envelope.",
+                    "missing_inputs": ["pass --envelope <repo_relative_envelope_path>"],
+                    "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                    "runtime_state": runtime_state_payload(target_root),
+                    "target": live_smoke_target_metadata(target_root),
+                    "command_plan": hook_envelope_command_plan(target_root, envelope=args.envelope),
+                    "reports": [],
+                    "profile_check": {"id": "hook-envelope", "result": "block"},
+                    "hook_envelope": {
+                        "contract_locator": args.envelope,
+                        "availability": "missing-envelope",
+                        "requirement": args.requirement,
+                        "checks": [],
+                    },
+                }
+            )
+        return emit(
+            hook_envelope_payload(
+                Path(args.target).expanduser().resolve(),
+                envelope=args.envelope,
+                requirement=args.requirement,
+            )
+        )
+    if args.operation == "hooks-extension":
+        if not args.target:
+            return emit(
+                {
+                    "command": "live-smoke",
+                    "operation": "hooks-extension",
+                    "schema_version": HOOKS_EXTENSION_PROFILE_SCHEMA,
+                    "result": "block",
+                    "summary": "hooks extension profile requires --target.",
+                    "missing_inputs": ["pass --target <adopted_repo_root>"],
+                    "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                    "runtime_state": runtime_state_payload(Path.cwd()),
+                    "target": live_smoke_target_metadata(Path.cwd()),
+                    "command_plan": [],
+                    "reports": [],
+                    "profile_check": {"id": "hooks-extension", "result": "block"},
+                    "core_profile": {"id": "orchestration-core", "hook_enforcement": "not_applicable", "result": "pass"},
+                    "hooks_extension": {
+                        **empty_hook_extension_profile(),
+                        "status": "missing-target",
+                        "result": "block",
+                    },
+                }
+            )
+        return emit(hooks_extension_payload(Path(args.target).expanduser().resolve()))
+    if args.operation == "external-orchestrator-interop":
+        if not args.target:
+            return emit(
+                {
+                    "command": "live-smoke",
+                    "operation": "external-orchestrator-interop",
+                    "schema_version": EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA,
+                    "result": "block",
+                    "summary": "external orchestrator conformance requires --target.",
+                    "missing_inputs": ["pass --target <adopted_repo_root>"],
+                    "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                    "runtime_state": runtime_state_payload(Path.cwd()),
+                    "target": live_smoke_target_metadata(Path.cwd()),
+                    "command_plan": [],
+                    "reports": [],
+                    "profile_check": {"id": "external-orchestrator-interop", "result": "block"},
+                    "core_profile": {"id": "orchestration-core", "external_orchestrator_enforcement": "not_applicable", "result": "pass"},
+                    "external_orchestrator": {
+                        **empty_external_orchestrator_conformance(),
+                        "status": "missing-target",
+                        "result": "block",
+                    },
+                }
+            )
+        return emit(external_orchestrator_conformance_payload(Path(args.target).expanduser().resolve()))
+
+    repo_root = Path(os.environ.get("LOOM_SOURCE_REPO_ROOT", Path.cwd())).expanduser().resolve()
+    runtime_state = runtime_state_payload(repo_root)
+    if not args.prior_evidence:
+        return emit(
+            {
+                "command": "live-smoke",
+                "operation": "replay",
+                "schema_version": LIVE_SMOKE_SCHEMA,
+                "result": "block",
+                "summary": "live smoke replay requires --prior-evidence.",
+                "missing_inputs": ["pass --prior-evidence <versioned_evidence_path>"],
+                "fallback_to": LIVE_SMOKE_REPLAY_FALLBACK,
+                "runtime_state": runtime_state,
+                "command_plan": [],
+                "reports": [],
+                "live_smoke": {
+                    "status": "failed",
+                    "executed_at": current_iso_timestamp(),
+                    "release_interpretation": live_smoke_release_interpretation("failed"),
+                },
+            }
+        )
+    return emit(live_smoke_replay_payload(Path(args.prior_evidence).expanduser().resolve(), runtime_state=runtime_state))
+
+
 def handle_runtime_parity(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
     return emit(
@@ -8808,6 +14418,10 @@ def main(argv: list[str] | None = None) -> int:
         return handle_carrier(args)
     if args.command == "host-binding":
         return handle_host_binding(args)
+    if args.command == "pr-gate":
+        return handle_pr_gate(args)
+    if args.command == "controlled-merge":
+        return handle_controlled_merge(args)
     if args.command == "runtime-evidence":
         return handle_runtime_evidence(args)
     if args.command == "state-check":
@@ -8826,6 +14440,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_reconciliation(args)
     if args.command == "shadow-parity":
         return handle_shadow_parity(args)
+    if args.command == "live-smoke":
+        return handle_live_smoke(args)
     if args.command == "runtime-parity":
         return handle_runtime_parity(args)
     if args.command == "governance-profile":

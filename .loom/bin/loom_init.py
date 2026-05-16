@@ -14,7 +14,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from fact_chain_support import inspect_fact_chain
-from governance_surface import build_governance_surface
+from governance_surface import build_governance_surface, workspace_lifecycle_expectations
 from runtime_paths import registry_path, shared_asset
 from runtime_state import detect_runtime_state
 
@@ -87,6 +87,30 @@ SKILL_SIGNAL_RULES: dict[str, tuple[str, ...]] = {
         "resume the current item",
         "continue the current item",
         "next step",
+    ),
+    "loom-build": (
+        "实现当前事项",
+        "执行 build",
+        "implementation round",
+        "build round",
+        "loom build",
+        "subagent-driven",
+        "subagent driven",
+        "集成 subagent",
+        "repeated blocker",
+    ),
+    "loom-story": (
+        "user story",
+        "story readiness",
+        "story shaping",
+        "story-to-delivery",
+        "product context",
+        "acceptance scenarios",
+        "actor specificity",
+        "scenario coverage",
+        "用户故事",
+        "故事准入",
+        "产品上下文",
     ),
     "loom-pre-review": (
         "review 前",
@@ -163,6 +187,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     bootstrap.add_argument("--write", action="store_true", help="Write bootstrap artifacts into the target repo")
     bootstrap.add_argument("--verify", action="store_true", help="Verify written artifacts after scaffolding")
     bootstrap.add_argument("--force", action="store_true", help="Overwrite Loom-managed artifacts when needed")
+    bootstrap.add_argument(
+        "--portable-output",
+        action="store_true",
+        help="Normalize machine-local paths and branch names in written bootstrap metadata",
+    )
     bootstrap.add_argument(
         "--install-pr-template",
         action="store_true",
@@ -1054,9 +1083,74 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
         },
         "runtime_state": runtime_state_payload(target_root),
         "governance_surface": governance_surface,
+        "lifecycle_expectations": workspace_lifecycle_expectations(governance_surface.get("workspace_profile")),
         "maturity_upgrade_path": init_maturity_upgrade_path(governance_surface),
     }
     return result
+
+
+def git_branch_name(target_root: Path) -> str | None:
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(target_root), "rev-parse", "--abbrev-ref", "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    branch = completed.stdout.strip()
+    if completed.returncode != 0 or not branch or branch == "HEAD":
+        return None
+    return branch
+
+
+def portable_bootstrap_value(
+    value: object,
+    replacements: list[tuple[str, str]],
+    current_branch: str | None,
+    path: tuple[str, ...] = (),
+) -> object:
+    if isinstance(value, dict):
+        return {
+            key: portable_bootstrap_value(child, replacements, current_branch, path + (key,))
+            for key, child in value.items()
+        }
+    if isinstance(value, list):
+        return [portable_bootstrap_value(child, replacements, current_branch, path) for child in value]
+    if not isinstance(value, str):
+        return value
+    if current_branch and value == current_branch and path[-1:] != ("default_branch",):
+        return "${CURRENT_BRANCH}"
+    portable = value
+    for source, replacement in replacements:
+        portable = portable.replace(source, replacement)
+    return portable
+
+
+def portable_bootstrap_result(result: dict[str, object], target_root: Path) -> dict[str, object]:
+    replacement_inputs = [
+        (str(target_root.resolve()), "${TARGET_ROOT}"),
+        (os.environ.get("LOOM_SOURCE_REPO_ROOT", ""), "${SOURCE_REPO_ROOT}"),
+        (os.environ.get("LOOM_INSTALLED_SKILLS_ROOT", ""), "${INSTALLED_SKILLS_ROOT}"),
+    ]
+    replacements = sorted(
+        [(source, replacement) for source, replacement in replacement_inputs if source],
+        key=lambda pair: len(pair[0]),
+        reverse=True,
+    )
+    portable = portable_bootstrap_value(result, replacements, git_branch_name(target_root))
+    assert isinstance(portable, dict)
+    portable["portable_output"] = {
+        "enabled": True,
+        "path_placeholders": {
+            "target_root": "${TARGET_ROOT}",
+            "source_repo_root": "${SOURCE_REPO_ROOT}",
+            "installed_skills_root": "${INSTALLED_SKILLS_ROOT}",
+            "current_branch": "${CURRENT_BRANCH}",
+        },
+    }
+    return portable
 
 
 def init_maturity_upgrade_path(governance_surface: dict[str, object]) -> dict[str, object]:
@@ -1221,6 +1315,15 @@ def repo_interface_payload() -> dict[str, object]:
         },
         "metadata_contract": {"fields": []},
         "context_schema": {"fields": []},
+        "dynamic_tool_locators": [],
+        "policy_locators": [],
+        "hook_locators": [],
+        "release_targets": {
+            "catalog_locator": ".loom/companion/releases/catalog.json",
+            "current_target_locator": ".loom/companion/releases/current.json",
+            "enforcement": "blocking",
+            "status_locator": ".loom/companion/releases/status.json",
+        },
     }
 
 
@@ -1234,6 +1337,9 @@ def repo_interop_payload() -> dict[str, object]:
                 "summary": "Repo-owned adoption residue generated as explicit write targets; Loom reads it without promoting the repo-specific rules into core.",
                 "surfaces": list(SHADOW_PARITY_SURFACES),
                 "locator": ".loom/companion",
+                "owner": "repo-companion",
+                "requirement": "required",
+                "fallback_to": "adoption",
             }
         ],
         "shadow_surfaces": {
@@ -1316,7 +1422,14 @@ def render_progress(result: dict[str, object]) -> str:
         "- Blockers: None recorded.\n"
         "- Latest Validation Summary: Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist.\n"
         "- Recovery Boundary: Bootstrap result at `.loom/bootstrap/init-result.json`; bootstrap manifest at `.loom/bootstrap/manifest.json`.\n"
-        "- Current Lane: bootstrap verification only\n"
+        "- Current Lane: bootstrap verification only\n\n"
+        "## Execution Ledger\n\n"
+        "- Ledger Binding: recovery_entry\n"
+        "- Plan Locator: .loom/specs/INIT-0001/plan.md\n"
+        "- Acceptance Locator: .loom/specs/INIT-0001/spec.md\n"
+        "- Validation Evidence Locator: python3 .loom/bin/loom_init.py verify --target .\n"
+        "- Handoff Notes Locator: not_applicable\n"
+        "- Evidence Freshness: current\n"
     )
 
 
@@ -1500,6 +1613,59 @@ def scaffold_target(
         (target_root / ".loom/companion/review.md", render_companion_review(), "text"),
         (target_root / ".loom/companion/merge-ready.md", render_companion_merge_ready(), "text"),
         (target_root / ".loom/companion/closeout.md", render_companion_closeout(), "text"),
+        (target_root / ".loom/companion/releases/changelog.md", "# Changelog\n\n- Bootstrap release intake example.\n", "text"),
+        (target_root / ".loom/companion/releases/release-notes.md", "# Release Notes\n\n- Bootstrap release target is ready for Loom-derived status consumption.\n", "text"),
+        (target_root / ".loom/companion/releases/migration-notes.md", "# Migration Notes\n\n- not_applicable\n", "text"),
+        (target_root / ".loom/companion/releases/rollback.md", "# Rollback Basis\n\n- Revert the companion-owned release target declaration and rerun Loom checks.\n", "text"),
+        (
+            target_root / ".loom/companion/releases/catalog.json",
+            {
+                "schema_version": "loom-target-release-catalog/v1",
+                "current_release_id": "bootstrap-v0.1.0",
+                "releases": [{"release_id": "bootstrap-v0.1.0", "locator": ".loom/companion/releases/current.json"}],
+            },
+            "json",
+        ),
+        (
+            target_root / ".loom/companion/releases/current.json",
+            {
+                "schema_version": "loom-target-release/v1",
+                "release_id": "bootstrap-v0.1.0",
+                "display_name": "Bootstrap v0.1.0",
+                "target_branch": "main",
+                "release_goal": "Bootstrap the first executable Loom path for this repository.",
+                "status": "unreleased",
+                "included_scope": {
+                    "phase": [{"id": "bootstrap-phase", "locator": ".loom/companion/checkpoints.md", "delivery_status": "planned"}],
+                    "fr": [],
+                    "work_item": [{"id": "INIT-0001", "locator": ".loom/work-items/INIT-0001.md", "delivery_status": "unmerged"}],
+                    "implementation_pr": [],
+                    "merge_commit": [],
+                },
+                "evidence": {
+                    "changelog_locator": ".loom/companion/releases/changelog.md",
+                    "release_notes_locator": ".loom/companion/releases/release-notes.md",
+                    "migration_notes_locator": ".loom/companion/releases/migration-notes.md",
+                    "tag_or_artifact_locator": ".loom/companion/README.md",
+                    "rollback_basis_locator": ".loom/companion/releases/rollback.md",
+                },
+                "authority": {
+                    "owner": "repo-companion",
+                    "source_kind": "repo_owned_locator",
+                    "source_locator": ".loom/companion/releases/current.json",
+                },
+            },
+            "json",
+        ),
+        (
+            target_root / ".loom/companion/releases/status.json",
+            {
+                "schema_version": "loom-target-release-status/v1",
+                "result": "pass",
+                "summary": "repo-owned release status example is readable.",
+            },
+            "json",
+        ),
     ]
     if attach_only:
         pass
@@ -1920,9 +2086,10 @@ def bootstrap(args: argparse.Namespace) -> int:
 
     if args.write:
         try:
+            scaffold_result = portable_bootstrap_result(result, target_root) if args.portable_output else result
             written, touched = scaffold_target(
                 target_root=target_root,
-                result=result,
+                result=scaffold_result,
                 output_path=output_path,
                 force=args.force,
                 install_pr_template=args.install_pr_template,
@@ -1949,7 +2116,8 @@ def bootstrap(args: argparse.Namespace) -> int:
     else:
         result["write"] = {"enabled": False, "written_files": 0, "touched": []}
 
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    output_result = portable_bootstrap_result(result, target_root) if args.portable_output else result
+    print(json.dumps(output_result, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -2186,7 +2354,7 @@ def route(args: argparse.Namespace) -> int:
             mode="fallback",
             matched_signals=[],
             summary="task signals are insufficient for stable routing",
-            missing_inputs=["one stable scenario signal such as adopt, resume, pre-review, spec-review, review, handoff, retire, or merge-ready"],
+            missing_inputs=["one stable scenario signal such as adopt, resume, story, pre-review, spec-review, review, handoff, retire, or merge-ready"],
             fallback_to="loom-init",
             governance_surface=None,
             runtime_state=runtime_state,

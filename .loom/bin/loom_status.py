@@ -6,7 +6,12 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from governance_surface import build_governance_surface
+from governance_surface import (
+    build_governance_surface,
+    derive_execution_budget_risk,
+    empty_target_release_status,
+    normalize_execution_budget_payload,
+)
 from loom_flow import (
     checkpoint_payload,
     closeout_payload,
@@ -16,10 +21,14 @@ from loom_flow import (
     github_issue_payload,
     github_pr_payload,
     implementation_review_status_payload,
+    latest_execution_failure_payload,
+    latest_execution_attempt_payload,
+    latest_retry_evidence_payload,
     load_context,
     report_blocking_failures,
     report_blocking_messages,
     report_provenance,
+    report_execution_ledger,
     report_recovery_readiness,
     runtime_state_payload,
     spec_review_gate_payload,
@@ -193,6 +202,50 @@ def governance_control_status(
         "head_binding": head_binding,
         "gate_chain": gates,
         "maturity": control_plane.get("maturity"),
+    }
+
+
+def external_orchestrator_consumer_status(
+    *,
+    control_status: dict[str, object],
+    provenance: dict[str, object],
+    recovery_readiness: dict[str, object],
+) -> dict[str, object]:
+    gate_chain = control_status.get("gate_chain")
+    if not isinstance(gate_chain, list):
+        gate_chain = []
+    external_gates = []
+    for gate in gate_chain:
+        if not isinstance(gate, dict):
+            continue
+        external_gates.append(
+            {
+                "name": gate.get("name"),
+                "result": gate.get("result"),
+                "classification": gate.get("classification"),
+                "missing_inputs": gate.get("missing_inputs", []),
+                "fallback_to": gate.get("fallback_to"),
+            }
+        )
+
+    return {
+        "schema_version": control_status.get("schema_version", "loom-governance-status/v2"),
+        "view": "external_orchestrator_consumer",
+        "result": control_status.get("result", "block"),
+        "current_gate": control_status.get("current_gate"),
+        "classifications": control_status.get("classifications", []),
+        "missing_inputs": control_status.get("missing_inputs", []),
+        "head_binding": control_status.get("head_binding", {}),
+        "gate_chain": external_gates,
+        "allowed_operations": ["status_read", "gate_read"],
+        "source_policy": {
+            "status_source": "derived_from_status_control_plane_v2",
+            "gate_source": "derived_from_governance_gate_chain",
+            "writeback": "recovery_entry_only",
+            "fallback_to": "current_checkpoint",
+        },
+        "provenance": provenance,
+        "recovery_readiness": recovery_readiness,
     }
 
 
@@ -378,6 +431,8 @@ def full_closeout_status_payload(
         "pr": payload.get("pr"),
         "project": payload.get("project"),
         "repo_specific_requirements": payload.get("repo_specific_requirements"),
+        "target_release": payload.get("target_release"),
+        "findings": payload.get("findings"),
     }
 
 
@@ -418,8 +473,43 @@ def main(argv: list[str]) -> int:
     workspace_profile = governance_surface.get("workspace_profile")
     gate_starter = governance_surface.get("gate_starter")
     github_control_plane = governance_surface.get("github_control_plane")
+    repo_interface = governance_surface.get("repo_interface")
+    tool_availability = (
+        repo_interface.get("tool_availability")
+        if isinstance(repo_interface, dict)
+        else None
+    )
+    policy_readiness = (
+        repo_interface.get("policy_readiness")
+        if isinstance(repo_interface, dict)
+        else None
+    )
+    release_targets = (
+        repo_interface.get("release_targets")
+        if isinstance(repo_interface, dict)
+        else None
+    )
+    target_release = (
+        release_targets.get("target_release")
+        if isinstance(release_targets, dict)
+        else None
+    )
+    if not isinstance(target_release, dict):
+        target_release = empty_target_release_status()
     ci_check_presence = github_control_plane.get("ci_check_presence") if isinstance(github_control_plane, dict) else None
     host_enforcement = github_control_plane.get("host_enforcement") if isinstance(github_control_plane, dict) else None
+    execution_budget = (
+        github_control_plane.get("api_snapshot", {}).get("budget")
+        if isinstance(github_control_plane, dict)
+        else None
+    )
+    execution_budget = normalize_execution_budget_payload(
+        execution_budget,
+        fallback_status="not_applicable",
+        fallback_summary="execution budget is not available for this execution path",
+        fallback_provenance={"source": "github_control_plane"},
+    )
+    execution_budget_risk = derive_execution_budget_risk(execution_budget)
     github_status, github_errors = github_status_payload(
         target_root,
         issue_number=args.issue,
@@ -461,6 +551,9 @@ def main(argv: list[str]) -> int:
         github_status=github_status,
         github_errors=github_errors,
     )
+    latest_execution_attempt = latest_execution_attempt_payload(target_root, context["item_id"])
+    execution_failure = latest_execution_failure_payload(latest_execution_attempt)
+    retry_evidence = latest_retry_evidence_payload(target_root, context["item_id"])
 
     missing_inputs: list[str] = []
     for section in (spec_review, review, merge_ready):
@@ -473,6 +566,9 @@ def main(argv: list[str]) -> int:
     for message in control_status.get("missing_inputs", []):
         if message not in missing_inputs:
             missing_inputs.append(str(message))
+    for message in governance_surface.get("missing_inputs", []) if isinstance(governance_surface, dict) else []:
+        if message not in missing_inputs:
+            missing_inputs.append(str(message))
     for message in report_blocking_messages(context["report"]):
         if message not in missing_inputs:
             missing_inputs.append(message)
@@ -483,6 +579,14 @@ def main(argv: list[str]) -> int:
         if result == "pass"
         else "status surface is readable, but one or more governance gates are still blocking or stale."
     )
+    provenance = report_provenance(context["report"])
+    recovery_readiness = report_recovery_readiness(context["report"])
+    external_orchestrator = external_orchestrator_consumer_status(
+        control_status=control_status,
+        provenance=provenance,
+        recovery_readiness=recovery_readiness,
+    )
+
     return emit(
         {
             "command": "status",
@@ -491,8 +595,16 @@ def main(argv: list[str]) -> int:
             "missing_inputs": missing_inputs,
             "fallback_to": "admission" if missing_inputs else None,
             "runtime_state": runtime_state,
-            "provenance": report_provenance(context["report"]),
-            "recovery_readiness": report_recovery_readiness(context["report"]),
+            "provenance": provenance,
+            "recovery_readiness": recovery_readiness,
+            "execution_ledger": report_execution_ledger(context["report"]),
+            "latest_execution_attempt": latest_execution_attempt,
+            "execution_failure": execution_failure,
+            "retry_evidence": retry_evidence,
+            "tool_availability": tool_availability,
+            "policy_readiness": policy_readiness,
+            "execution_budget": execution_budget,
+            "execution_budget_risk": execution_budget_risk,
             "blocking_failures": report_blocking_failures(context["report"]),
             "item": {
                 "id": context["item_id"],
@@ -520,11 +632,13 @@ def main(argv: list[str]) -> int:
             "review": review,
             "merge_ready": merge_ready,
             "closeout": closeout,
+            "target_release": target_release,
             "workspace_profile": workspace_profile,
             "gate_starter": gate_starter,
             "ci_check_presence": ci_check_presence,
             "host_enforcement": host_enforcement,
             "governance_status": control_status,
+            "external_orchestrator": external_orchestrator,
             "governance_surface": governance_surface,
             "github": github_status,
         }
