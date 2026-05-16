@@ -77,16 +77,33 @@
                 "minLength": 1
               }
             },
-            "additionalProperties": true
+            "additionalProperties": false
           },
           "details": {
             "type": "string"
           },
           "code_location": {
-            "type": "object"
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "line": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "end_line": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
           }
         },
-        "additionalProperties": true
+        "additionalProperties": false
       }
     }
   }
