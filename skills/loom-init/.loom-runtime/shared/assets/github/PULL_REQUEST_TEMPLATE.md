@@ -19,4 +19,5 @@ Validation details:
 ## Related Work
 
 - Issue:
+- Loom Work Item:
 - Spec / plan:

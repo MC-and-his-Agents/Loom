@@ -1,0 +1,52 @@
+{
+  "findings": [
+    {
+      "id": "unresolved/host-enforcement-readback-proof",
+      "summary": "`loom-pr-merge-gate` still needs final live GitHub readback after this review record is pushed: branch protection or an active ruleset must require the stable check name, the check must pass on the current PR head, and controlled-merge must consume that required-check readback.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Collect and record final host readback proof after pushing this review record."
+      },
+      "details": "Host enforcement truth lives outside the repository tree, so this finding remains open until the final PR-head CI and branch-protection readback are captured.",
+      "code_location": {
+        "path": "docs/evidence/validations/validation-pr-762-semantic-review-gate-gap.md",
+        "line": 55,
+        "end_line": 63
+      }
+    },
+    {
+      "id": "unresolved/pr-gate-required-check-executes-pr-head-code",
+      "summary": "The required-check workflow checks out and executes repository code from the PR head. This preserves head binding, but it remains a host-trust decision for repositories that accept untrusted external PRs.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Documented as a governance boundary; repositories can restrict contributors or replace the workflow body with pinned tooling/API-fetched artifacts before requiring the check."
+      },
+      "details": "The workflow uses read-scoped permissions, but required-check execution of PR-supplied code remains an explicit trust boundary.",
+      "code_location": {
+        "path": ".github/workflows/pr-merge-gate.yml",
+        "line": 12,
+        "end_line": 35
+      }
+    },
+    {
+      "id": "unresolved/merge-queue-compatibility-missing-merge-group-trigger",
+      "summary": "The stock workflow currently targets direct PR merges via `pull_request`; repositories that enable GitHub merge queue must explicitly add and validate `merge_group` support.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Keep merge-queue support out of WI-763 direct PR merge scope unless Loom self-governance enables merge queue."
+      },
+      "details": "Current Loom self-governance uses direct PR merge; merge queue compatibility remains a documented follow-up decision.",
+      "code_location": {
+        "path": ".github/workflows/pr-merge-gate.yml",
+        "line": 3,
+        "end_line": 6
+      }
+    }
+  ]
+}

@@ -29,7 +29,9 @@
           "summary",
           "severity",
           "rebuttal",
-          "disposition"
+          "disposition",
+          "details",
+          "code_location"
         ],
         "properties": {
           "id": {
@@ -77,16 +79,41 @@
                 "minLength": 1
               }
             },
-            "additionalProperties": true
+            "additionalProperties": false
           },
           "details": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "code_location": {
-            "type": "object"
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "path",
+              "line",
+              "end_line"
+            ],
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "line": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "end_line": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
           }
         },
-        "additionalProperties": true
+        "additionalProperties": false
       }
     }
   }

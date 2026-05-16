@@ -1,0 +1,84 @@
+{
+  "findings": [
+    {
+      "id": "new/review-record-stale-for-current-head",
+      "summary": "`checkpoint merge` fails closed because the authored implementation review record `.loom/reviews/WI-763.json` is stale for the current HEAD (`reviewed_head` is pinned to `a547ff0d...` while non-carrier implementation changes exist after that head). Until a fresh authored review is recorded for the current HEAD (or the head-binding contract is updated to cover the actual post-review changes), `pr-gate` cannot provide PR-head approval truth for host enforcement.",
+      "severity": "block",
+      "rebuttal": null,
+      "disposition": {
+        "status": "accepted",
+        "summary": "Re-author `.loom/reviews/WI-763.json` against current HEAD `ba5dc4bacaf9` (and re-run the local validation summarized in the record), then confirm `python3 tools/loom_flow.py checkpoint merge --target . --item WI-763` returns `pass` before treating PR gating as satisfied."
+      },
+      "details": "category: new; evidence: `checkpoint merge` reports `review artifact is stale for the current HEAD`, so the approval truth is not fresh for the current implementation head.",
+      "code_location": {
+        "path": ".loom/reviews/WI-763.json",
+        "line": 8,
+        "end_line": 8
+      }
+    },
+    {
+      "id": "new/progress-stop-claims-carrier-only-drift-but-merge-checkpoint-blocks",
+      "summary": "`.loom/progress/WI-763.md` claims only carrier-only drift exists after the reviewed head, but `checkpoint merge` currently blocks on stale review artifact, indicating post-review changes exceed the allowed carrier set for head-binding freshness. This mismatch risks operators believing PR gating is ready when it is not.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Update `.loom/progress/WI-763.md` to reflect the current merge-checkpoint truth (stale review artifact) until a new authored review record is bound to the current HEAD and `checkpoint merge` passes."
+      },
+      "details": "category: new; boundary: recovery surface should not contradict gate-chain freshness checks.",
+      "code_location": {
+        "path": ".loom/progress/WI-763.md",
+        "line": 7,
+        "end_line": 7
+      }
+    },
+    {
+      "id": "unresolved/host-enforcement-readback-proof",
+      "summary": "Host enforcement for `loom-pr-merge-gate` is not yet proven by live GitHub readback (required check via branch protection or active ruleset, plus a real PR-head run); repo-local workflow presence and local validation are not sufficient to claim “host-enforced” closure for the PR #762 regression class.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Collect and record fresh host readback evidence that `loom-pr-merge-gate` is required on `main` (branch protection and/or ruleset) and that the check ran for the target PR head SHA."
+      },
+      "details": "category: unresolved; boundary: requires host state readback outside the repo tree.",
+      "code_location": {
+        "path": "docs/evidence/validations/validation-pr-762-semantic-review-gate-gap.md",
+        "line": 55,
+        "end_line": 63
+      }
+    },
+    {
+      "id": "new/pr-gate-workflow-executes-pr-head-code",
+      "summary": "The required check workflow checks out and executes repository code from the PR head (`python3 tools/loom_flow.py ...`). This is acceptable for trusted contributor sets, but it is a security/trust boundary decision if untrusted external PRs can trigger the required check.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Document and enforce contributor trust assumptions before making `loom-pr-merge-gate` required (or redesign the workflow to avoid executing arbitrary PR-head code via pinned tooling / API-fetched artifacts)."
+      },
+      "details": "category: new; boundary: host-required check executes PR-supplied code with a read-scoped token.",
+      "code_location": {
+        "path": ".github/workflows/pr-merge-gate.yml",
+        "line": 16,
+        "end_line": 35
+      }
+    },
+    {
+      "id": "new/merge-queue-compatibility-merge_group-trigger",
+      "summary": "The host workflow is triggered only on `pull_request`. If the repository uses GitHub merge queue, required checks must also trigger on `merge_group` or the host-enforced gate can be skipped/never reported for merge-queue merge groups.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Decide whether Loom self-governance supports merge queue; if yes, add `merge_group` trigger (and validate required-check naming/readback under merge queue) before treating host enforcement as complete."
+      },
+      "details": "category: new; boundary: host enforcement behavior differs between direct PR merge and merge queue unless `merge_group` is supported.",
+      "code_location": {
+        "path": ".github/workflows/pr-merge-gate.yml",
+        "line": 3,
+        "end_line": 6
+      }
+    }
+  ]
+}

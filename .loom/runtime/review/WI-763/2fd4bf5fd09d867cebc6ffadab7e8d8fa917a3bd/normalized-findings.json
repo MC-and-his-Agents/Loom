@@ -1,0 +1,68 @@
+{
+  "findings": [
+    {
+      "id": "repeated/root-cause-candidate/review-record-stale-vs-head-and-validation",
+      "summary": "`checkpoint merge` and `pr-gate check` fail closed because `.loom/reviews/WI-763.json` is stale for current HEAD and its `reviewed_validation_summary` does not equal `.loom/progress/WI-763.md` `Latest Validation Summary`; this violates WI-763 closing condition (“fresh authored review record for the PR head”) and prevents demonstrating a passing PR-head approval gate on this branch.",
+      "severity": "block",
+      "rebuttal": null,
+      "disposition": {
+        "status": "accepted",
+        "summary": "Record a refreshed authored implementation review bound to the current HEAD and current `latest_validation_summary`, then re-run `checkpoint merge` / `pr-gate check` to confirm the gate passes for the PR head."
+      },
+      "details": "Observed on HEAD `2fd4bf5fd09d867cebc6ffadab7e8d8fa917a3bd`: `python3 tools/loom_flow.py checkpoint merge --target . --item WI-763` => `result=block` with missing inputs including `review artifact does not match the latest validation summary` and `review artifact is stale for the current HEAD`; `python3 tools/loom_flow.py pr-gate check ...` also returns `result=block` for the same reasons. Review record binds `reviewed_head=9fa121df...` and `reviewed_validation_summary` referencing `... at 6b46f96`, while recovery `Latest Validation Summary` is `... at 8aef9fa`.",
+      "code_location": {
+        "path": ".loom/reviews/WI-763.json",
+        "line": 8,
+        "end_line": 9
+      }
+    },
+    {
+      "id": "unresolved/host-enforcement-readback-proof",
+      "summary": "Goal requires “host-enforce” semantics, but current repo-local evidence still lacks live GitHub readback proving `loom-pr-merge-gate` is required (branch protection or active ruleset) and ran on the current PR head; without that, WI-763 cannot close the PR #762 regression class on the host platform.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "After pushing the PR head, record host readback evidence: required-check enforcement (branch protection/ruleset) + PR-head workflow run + controlled-merge consuming that readback."
+      },
+      "details": "This is explicitly part of WI-763 `Closing Condition` and cannot be fully satisfied by repo-local workflow presence alone.",
+      "code_location": {
+        "path": ".loom/work-items/WI-763.md",
+        "line": 13,
+        "end_line": 13
+      }
+    },
+    {
+      "id": "unresolved/pr-gate-required-check-executes-pr-head-code",
+      "summary": "The required-check workflow checks out and executes repository code from the PR head (`python3 tools/loom_flow.py ...`). This preserves explicit head binding, but it is a host trust-boundary decision for repos that accept untrusted external PRs.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Keep this as an explicit governance boundary; if untrusted PRs are allowed, restrict who can trigger the required check or replace the workflow body with pinned tooling / API-fetched artifacts before requiring it."
+      },
+      "details": "Current workflow uses `contents: read` and `pull-requests: read`, but the primary risk is executing PR-supplied code as a required check.",
+      "code_location": {
+        "path": ".github/workflows/pr-merge-gate.yml",
+        "line": 12,
+        "end_line": 35
+      }
+    },
+    {
+      "id": "unresolved/merge-queue-compatibility-missing-merge-group-trigger",
+      "summary": "Stock `loom-pr-merge-gate` workflow triggers only on `pull_request`; if GitHub merge queue is enabled, required checks may need `merge_group` coverage to avoid enforcement gaps or non-reporting on merge groups.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Treat merge-queue compatibility as an explicit follow-up decision; add `merge_group` and validate only when Loom self-governance enables merge queue."
+      },
+      "details": "WI-763 scope appears to target direct PR merges; this remains a compatibility boundary to document/decide explicitly.",
+      "code_location": {
+        "path": ".github/workflows/pr-merge-gate.yml",
+        "line": 3,
+        "end_line": 6
+      }
+    }
+  ]
+}

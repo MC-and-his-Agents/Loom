@@ -1,0 +1,20 @@
+{
+  "engine": "codex",
+  "adapter": "loom/default-codex",
+  "profile": {
+    "schema_version": "loom-review-engine-profile/v1",
+    "profile_id": "high-risk",
+    "adapter": "loom/default-codex",
+    "engine": "codex",
+    "model": "gpt-5.2",
+    "reasoning_effort": "high",
+    "timeout_seconds": 120,
+    "context_policy": "expanded-risk-baseline",
+    "selection_reason": "risk terms in the active item require the high-risk formal review profile",
+    "override_reason": null
+  },
+  "context_pack": ".loom/runtime/review/WI-763/7d2df908c1be26417cee4bebac65819e056189de/context-pack.json",
+  "failure_reason": "runtime_conflict",
+  "summary": "error: unexpected argument '--ignore-user-config' found\n\n  tip: to pass '--ignore-user-config' as a value, use '-- --ignore-user-config'\n\nUsage: codex exec [OPTIONS] [PROMPT]\n       codex exec [OPTIONS] <COMMAND> [ARGS]\n\nFor more information, try '--help'.",
+  "reviewed_head": "7d2df908c1be26417cee4bebac65819e056189de"
+}

@@ -1,0 +1,23 @@
+{
+  "engine": "codex",
+  "adapter": "loom/default-codex",
+  "profile": {
+    "schema_version": "loom-review-engine-profile/v1",
+    "profile_id": "high-risk",
+    "adapter": "loom/default-codex",
+    "engine": "codex",
+    "model": "gpt-5.2",
+    "reasoning_effort": "high",
+    "timeout_seconds": null,
+    "context_policy": "expanded-risk-baseline",
+    "selection_reason": "risk terms in the active item require the high-risk formal review profile",
+    "override_reason": null
+  },
+  "context_pack": ".loom/runtime/review/WI-763/7a5cabece6370e8416ca76294b7f955e37c7ba9d/context-pack.json",
+  "result": "pass",
+  "reviewed_head": "7a5cabece6370e8416ca76294b7f955e37c7ba9d",
+  "decision": "allow",
+  "summary": "Reviewed WI-763 work tree at HEAD `7a5cabe`. The PR-specific gate (`loom-pr-merge-gate` workflow + `pr-gate check`) and `controlled-merge check|merge` boundaries match the spec: only authored `review_entry` with `decision==allow` can satisfy approval; raw/shadow/runtime evidence and CI success cannot. Local validation and installed-runtime fixtures cover pass/fail-closed scenarios; remaining items are host enforcement proof and recording this review into the authored review record.",
+  "kind": "code_review",
+  "validation_summary": "2026-05-16 local validation passed after WI-763 spec carrier, spec review, Codex CLI drift fix, runtime-evidence carrier boundary, and strict OpenAI response schema fix: codex exec 0.120.0 no longer accepts --ignore-user-config, so Loom default review engine now preserves codex exec --output-schema without that removed flag; OpenAI response schema now requires additionalProperties:false on nested object schemas, so Loom review result schema was tightened for findings/disposition/code_location; current item runtime evidence may be versioned as carrier-only drift but still cannot satisfy approval truth; PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile for touched Loom runtime entrypoints -> OK; make skills-check -> OK; git diff --check -> OK; python3 tools/loom_flow.py adopt verify --target . --item WI-763 -> pass; python3 tools/loom_flow.py shadow-parity --target . -> pass; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces)."
+}

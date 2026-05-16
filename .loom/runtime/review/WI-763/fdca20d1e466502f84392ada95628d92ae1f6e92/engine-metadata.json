@@ -1,0 +1,23 @@
+{
+  "engine": "codex",
+  "adapter": "loom/default-codex",
+  "profile": {
+    "schema_version": "loom-review-engine-profile/v1",
+    "profile_id": "high-risk",
+    "adapter": "loom/default-codex",
+    "engine": "codex",
+    "model": "gpt-5.2",
+    "reasoning_effort": "high",
+    "timeout_seconds": null,
+    "context_policy": "expanded-risk-baseline",
+    "selection_reason": "risk terms in the active item require the high-risk formal review profile",
+    "override_reason": null
+  },
+  "context_pack": ".loom/runtime/review/WI-763/fdca20d1e466502f84392ada95628d92ae1f6e92/context-pack.json",
+  "result": "pass",
+  "reviewed_head": "fdca20d1e466502f84392ada95628d92ae1f6e92",
+  "decision": "block",
+  "summary": "WI-763 cannot be concluded as formally approved at the current worktree HEAD because the authored implementation review record is not fresh for the current HEAD and its validation summary binding does not match the current fact chain; both `checkpoint merge` and `pr-gate check` fail closed accordingly. Additional host-enforcement and trust-boundary items remain deferred.",
+  "kind": "code_review",
+  "validation_summary": "2026-05-16 final local validation passed for WI-763: PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile for touched Loom runtime entrypoints -> OK; make skills-check -> OK; python3 tools/loom_flow.py adopt verify --target . --item WI-763 -> pass; python3 tools/loom_flow.py shadow-parity --target . -> pass; python3 tools/loom_flow.py checkpoint merge --target . --item WI-763 -> pass before final validation refresh; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces); git diff --check -> OK. Covered default review engine drift, strict OpenAI output schema, no formal review timeout, PR gate fail-closed cases, raw evidence bypass boundary, ruleset required-check fixture, and status-shadow carrier drift."
+}

@@ -1,0 +1,199 @@
+{
+  "schema_version": "loom-review-context-pack/v1",
+  "item_id": "WI-763",
+  "review_path": ".loom/reviews/WI-763.json",
+  "current_head": "a547ff0d05d6929d718490a389634056374267d8",
+  "validation_summary": "2026-05-16 local validation passed after WI-763 spec carrier, spec review, Codex CLI drift fix, runtime-evidence carrier boundary, and strict OpenAI response schema fix: codex exec 0.120.0 no longer accepts --ignore-user-config, so Loom default review engine now preserves codex exec --output-schema without that removed flag; OpenAI response schema now requires additionalProperties:false on nested object schemas, so Loom review result schema was tightened for findings/disposition/code_location; current item runtime evidence may be versioned as carrier-only drift but still cannot satisfy approval truth; PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile for touched Loom runtime entrypoints -> OK; make skills-check -> OK; git diff --check -> OK; python3 tools/loom_flow.py adopt verify --target . --item WI-763 -> pass; python3 tools/loom_flow.py shadow-parity --target . -> pass; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces).",
+  "history_available": true,
+  "history_policy": "not_applicable when no prior review record or normalized findings are available",
+  "recent_findings": [
+    {
+      "source": ".loom/reviews/WI-763.json",
+      "source_kind": "review_record",
+      "reviewed_head": "806c5688584e36c27cb6cf2dcb62485e9e6f8e1b",
+      "validation_summary": "No validation recorded yet.",
+      "id": "scaffolded-block-1",
+      "summary": "Review artifact scaffolded but not yet concluded.",
+      "severity": "block",
+      "disposition": {
+        "status": "rejected",
+        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+      },
+      "repeat_key": "scaffolded-block-1"
+    },
+    {
+      "source": ".loom/reviews/WI-763.json",
+      "source_kind": "review_record",
+      "reviewed_head": "806c5688584e36c27cb6cf2dcb62485e9e6f8e1b",
+      "validation_summary": "No validation recorded yet.",
+      "id": "scaffolded-warn-1",
+      "summary": "Record a real review before asking merge checkpoint to consume it.",
+      "severity": "warn",
+      "disposition": {
+        "status": "deferred",
+        "summary": "This follow-up stays open until a real review is recorded."
+      },
+      "repeat_key": "scaffolded-warn-1"
+    },
+    {
+      "source": ".loom/runtime/review/WI-763/7a5cabece6370e8416ca76294b7f955e37c7ba9d/normalized-findings.json",
+      "source_kind": "normalized_findings",
+      "reviewed_head": "7a5cabece6370e8416ca76294b7f955e37c7ba9d",
+      "validation_summary": "2026-05-16 local validation passed after WI-763 spec carrier, spec review, Codex CLI drift fix, runtime-evidence carrier boundary, and strict OpenAI response schema fix: codex exec 0.120.0 no longer accepts --ignore-user-config, so Loom default review engine now preserves codex exec --output-schema without that removed flag; OpenAI response schema now requires additionalProperties:false on nested object schemas, so Loom review result schema was tightened for findings/disposition/code_location; current item runtime evidence may be versioned as carrier-only drift but still cannot satisfy approval truth; PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile for touched Loom runtime entrypoints -> OK; make skills-check -> OK; git diff --check -> OK; python3 tools/loom_flow.py adopt verify --target . --item WI-763 -> pass; python3 tools/loom_flow.py shadow-parity --target . -> pass; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces).",
+      "id": "unresolved/host-enforcement-readback-proof",
+      "summary": "Host enforcement is not yet proven by live readback: branch protection or an active ruleset must require the stable check name `loom-pr-merge-gate` on `main`, and the proof should be captured as fresh evidence before claiming “host-enforced” closure.",
+      "severity": "warn",
+      "disposition": {
+        "status": "deferred",
+        "summary": "Complete Phase 3: enable/verify required check via live host readback and record the evidence in the WI-763 fact chain / host proof artifacts."
+      },
+      "repeat_key": "unresolved-host-enforcement-readback-proof"
+    },
+    {
+      "source": ".loom/runtime/review/WI-763/7a5cabece6370e8416ca76294b7f955e37c7ba9d/normalized-findings.json",
+      "source_kind": "normalized_findings",
+      "reviewed_head": "7a5cabece6370e8416ca76294b7f955e37c7ba9d",
+      "validation_summary": "2026-05-16 local validation passed after WI-763 spec carrier, spec review, Codex CLI drift fix, runtime-evidence carrier boundary, and strict OpenAI response schema fix: codex exec 0.120.0 no longer accepts --ignore-user-config, so Loom default review engine now preserves codex exec --output-schema without that removed flag; OpenAI response schema now requires additionalProperties:false on nested object schemas, so Loom review result schema was tightened for findings/disposition/code_location; current item runtime evidence may be versioned as carrier-only drift but still cannot satisfy approval truth; PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile for touched Loom runtime entrypoints -> OK; make skills-check -> OK; git diff --check -> OK; python3 tools/loom_flow.py adopt verify --target . --item WI-763 -> pass; python3 tools/loom_flow.py shadow-parity --target . -> pass; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces).",
+      "id": "unresolved/authored-review-record-still-scaffolded",
+      "summary": "`.loom/reviews/WI-763.json` remains a scaffold (`decision: fallback`, placeholder reviewer/validation summary), so `checkpoint merge` / `pr-gate` will fail closed until a real authored review record is recorded and bound to the current `latest_validation_summary` and reviewed head (carrier-only drift allowed).",
+      "severity": "warn",
+      "disposition": {
+        "status": "deferred",
+        "summary": "Record this formal review result into `.loom/reviews/WI-763.json` with `decision: allow`, correct `reviewer`, and freshness bindings (reviewed head + reviewed validation summary)."
+      },
+      "repeat_key": "unresolved-authored-review-record-still-scaffolded"
+    },
+    {
+      "source": ".loom/runtime/review/WI-763/7a5cabece6370e8416ca76294b7f955e37c7ba9d/normalized-findings.json",
+      "source_kind": "normalized_findings",
+      "reviewed_head": "7a5cabece6370e8416ca76294b7f955e37c7ba9d",
+      "validation_summary": "2026-05-16 local validation passed after WI-763 spec carrier, spec review, Codex CLI drift fix, runtime-evidence carrier boundary, and strict OpenAI response schema fix: codex exec 0.120.0 no longer accepts --ignore-user-config, so Loom default review engine now preserves codex exec --output-schema without that removed flag; OpenAI response schema now requires additionalProperties:false on nested object schemas, so Loom review result schema was tightened for findings/disposition/code_location; current item runtime evidence may be versioned as carrier-only drift but still cannot satisfy approval truth; PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile for touched Loom runtime entrypoints -> OK; make skills-check -> OK; git diff --check -> OK; python3 tools/loom_flow.py adopt verify --target . --item WI-763 -> pass; python3 tools/loom_flow.py shadow-parity --target . -> pass; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces).",
+      "id": "new/workflow-executes-pr-head-code",
+      "summary": "The required check workflow checks out and executes repo code at the PR head (`python3 tools/loom_flow.py ...`). This is acceptable for trusted contributor sets, but it increases risk if untrusted PRs can run the required check with a read-scoped token.",
+      "severity": "warn",
+      "disposition": {
+        "status": "deferred",
+        "summary": "Document contributor trust assumptions for enabling this required check, or redesign the gate to avoid executing arbitrary PR code (e.g., validate via API-fetched artifacts / pinned tooling)."
+      },
+      "repeat_key": "new-workflow-executes-pr-head-code"
+    },
+    {
+      "source": ".loom/runtime/review/WI-763/7a5cabece6370e8416ca76294b7f955e37c7ba9d/normalized-findings.json",
+      "source_kind": "normalized_findings",
+      "reviewed_head": "7a5cabece6370e8416ca76294b7f955e37c7ba9d",
+      "validation_summary": "2026-05-16 local validation passed after WI-763 spec carrier, spec review, Codex CLI drift fix, runtime-evidence carrier boundary, and strict OpenAI response schema fix: codex exec 0.120.0 no longer accepts --ignore-user-config, so Loom default review engine now preserves codex exec --output-schema without that removed flag; OpenAI response schema now requires additionalProperties:false on nested object schemas, so Loom review result schema was tightened for findings/disposition/code_location; current item runtime evidence may be versioned as carrier-only drift but still cannot satisfy approval truth; PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile for touched Loom runtime entrypoints -> OK; make skills-check -> OK; git diff --check -> OK; python3 tools/loom_flow.py adopt verify --target . --item WI-763 -> pass; python3 tools/loom_flow.py shadow-parity --target . -> pass; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces).",
+      "id": "new/ruleset-and-merge-queue-compatibility-needs-explicit-decision",
+      "summary": "`controlled-merge` verifies enforcement via branch protection required status contexts; it does not currently read GitHub rulesets. Also, the workflow triggers only on `pull_request` (not `merge_group`), so merge-queue usage may require an explicit compatibility decision.",
+      "severity": "warn",
+      "disposition": {
+        "status": "deferred",
+        "summary": "Either (a) scope enforcement verification to branch protection only and document it, or (b) add ruleset readback support; confirm whether `merge_group` support is needed for the repo’s merge strategy."
+      },
+      "repeat_key": "new-ruleset-and-merge-queue-compatibility-needs-explicit-decision"
+    },
+    {
+      "source": ".loom/runtime/review/WI-763/c1d4cdfa423f7f433f5bc2b21201de908d15cc0b/normalized-findings.json",
+      "source_kind": "normalized_findings",
+      "reviewed_head": "c1d4cdfa423f7f433f5bc2b21201de908d15cc0b",
+      "validation_summary": "2026-05-16 local validation passed after WI-763 spec carrier, spec review, Codex CLI drift fix, runtime-evidence carrier boundary, and strict OpenAI response schema fix: codex exec 0.120.0 no longer accepts --ignore-user-config, so Loom default review engine now preserves codex exec --output-schema without that removed flag; OpenAI response schema now requires additionalProperties:false on nested object schemas, so Loom review result schema was tightened for findings/disposition/code_location; current item runtime evidence may be versioned as carrier-only drift but still cannot satisfy approval truth; PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile for touched Loom runtime entrypoints -> OK; make skills-check -> OK; git diff --check -> OK; python3 tools/loom_flow.py adopt verify --target . --item WI-763 -> pass; python3 tools/loom_flow.py shadow-parity --target . -> pass; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces).",
+      "id": "unresolved-host-enforcement-readback-proof",
+      "summary": "Host enforcement closure still requires live readback evidence that `loom-pr-merge-gate` is required on `main` (branch protection or an active ruleset); workflow presence alone is not proof.",
+      "severity": "warn",
+      "disposition": {
+        "status": "deferred",
+        "summary": "Collect and record live GitHub branch protection / ruleset readback showing `loom-pr-merge-gate` is required on `main`, and confirm a real PR head run exists for the same head SHA."
+      },
+      "repeat_key": "unresolved-host-enforcement-readback-proof"
+    },
+    {
+      "source": ".loom/runtime/review/WI-763/c1d4cdfa423f7f433f5bc2b21201de908d15cc0b/normalized-findings.json",
+      "source_kind": "normalized_findings",
+      "reviewed_head": "c1d4cdfa423f7f433f5bc2b21201de908d15cc0b",
+      "validation_summary": "2026-05-16 local validation passed after WI-763 spec carrier, spec review, Codex CLI drift fix, runtime-evidence carrier boundary, and strict OpenAI response schema fix: codex exec 0.120.0 no longer accepts --ignore-user-config, so Loom default review engine now preserves codex exec --output-schema without that removed flag; OpenAI response schema now requires additionalProperties:false on nested object schemas, so Loom review result schema was tightened for findings/disposition/code_location; current item runtime evidence may be versioned as carrier-only drift but still cannot satisfy approval truth; PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile for touched Loom runtime entrypoints -> OK; make skills-check -> OK; git diff --check -> OK; python3 tools/loom_flow.py adopt verify --target . --item WI-763 -> pass; python3 tools/loom_flow.py shadow-parity --target . -> pass; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces).",
+      "id": "new-merge-group-event-pr-inference-risk",
+      "summary": "`.github/workflows/pr-merge-gate.yml` runs on `merge_group`, but the gate payload currently relies on inferring a unique PR from `head_sha`/branch when PR number is absent; merge-queue commits can map to multiple PRs and may fail closed unexpectedly.",
+      "severity": "warn",
+      "disposition": {
+        "status": "deferred",
+        "summary": "Either (a) remove/limit `merge_group` until the PR binding for merge queue is made deterministic, or (b) extend `pr-gate`/workflow to extract an unambiguous PR binding for merge-queue runs."
+      },
+      "repeat_key": "new-merge-group-event-pr-inference-risk"
+    },
+    {
+      "source": ".loom/runtime/review/WI-763/c1d4cdfa423f7f433f5bc2b21201de908d15cc0b/normalized-findings.json",
+      "source_kind": "normalized_findings",
+      "reviewed_head": "c1d4cdfa423f7f433f5bc2b21201de908d15cc0b",
+      "validation_summary": "2026-05-16 local validation passed after WI-763 spec carrier, spec review, Codex CLI drift fix, runtime-evidence carrier boundary, and strict OpenAI response schema fix: codex exec 0.120.0 no longer accepts --ignore-user-config, so Loom default review engine now preserves codex exec --output-schema without that removed flag; OpenAI response schema now requires additionalProperties:false on nested object schemas, so Loom review result schema was tightened for findings/disposition/code_location; current item runtime evidence may be versioned as carrier-only drift but still cannot satisfy approval truth; PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile for touched Loom runtime entrypoints -> OK; make skills-check -> OK; git diff --check -> OK; python3 tools/loom_flow.py adopt verify --target . --item WI-763 -> pass; python3 tools/loom_flow.py shadow-parity --target . -> pass; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces).",
+      "id": "new-gh-cli-hard-dependency-in-pr-gate",
+      "summary": "`pr-gate`/`controlled-merge` read GitHub state via `gh` first, but `gh_json()` does not handle `FileNotFoundError`; environments without `gh` would crash instead of falling back to token-authenticated REST.",
+      "severity": "warn",
+      "disposition": {
+        "status": "deferred",
+        "summary": "Catch `FileNotFoundError` in `gh_json()` (and treat it as a normal error path) so the REST fallback can execute; document the runtime prerequisite if `gh` is intentionally required."
+      },
+      "repeat_key": "new-gh-cli-hard-dependency-in-pr-gate"
+    },
+    {
+      "source": ".loom/runtime/review/WI-763/f7f91781d75301b624a4b8cc937f8bce2666b9ad/normalized-findings.json",
+      "source_kind": "normalized_findings",
+      "reviewed_head": "f7f91781d75301b624a4b8cc937f8bce2666b9ad",
+      "validation_summary": "2026-05-16 local validation passed after WI-763 spec carrier, spec review, Codex CLI drift fix, runtime-evidence carrier boundary, and strict OpenAI response schema fix: codex exec 0.120.0 no longer accepts --ignore-user-config, so Loom default review engine now preserves codex exec --output-schema without that removed flag; OpenAI response schema now requires additionalProperties:false on nested object schemas, so Loom review result schema was tightened for findings/disposition/code_location; current item runtime evidence may be versioned as carrier-only drift but still cannot satisfy approval truth; PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile for touched Loom runtime entrypoints -> OK; make skills-check -> OK; git diff --check -> OK; python3 tools/loom_flow.py adopt verify --target . --item WI-763 -> pass; python3 tools/loom_flow.py shadow-parity --target . -> pass; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces).",
+      "id": "new-pr-merge-gate-workflow-checkout-head-drift",
+      "summary": "`.github/workflows/pr-merge-gate.yml` checks out the default ref, but `pr-gate` requires the local checkout `HEAD` to match the PR head SHA; for `pull_request` events this is likely the merge ref rather than the PR head, so the required check will fail closed (`checkout_head_drift`) even when review truth exists.",
+      "severity": "block",
+      "disposition": {
+        "status": "rejected",
+        "summary": "Fix the workflow to checkout the PR head SHA (or explicitly handle merge refs while preserving the head-binding contract) before treating `loom-pr-merge-gate` as a reliable host-enforced gate."
+      },
+      "repeat_key": "new-pr-merge-gate-workflow-checkout-head-drift"
+    },
+    {
+      "source": ".loom/runtime/review/WI-763/f7f91781d75301b624a4b8cc937f8bce2666b9ad/normalized-findings.json",
+      "source_kind": "normalized_findings",
+      "reviewed_head": "f7f91781d75301b624a4b8cc937f8bce2666b9ad",
+      "validation_summary": "2026-05-16 local validation passed after WI-763 spec carrier, spec review, Codex CLI drift fix, runtime-evidence carrier boundary, and strict OpenAI response schema fix: codex exec 0.120.0 no longer accepts --ignore-user-config, so Loom default review engine now preserves codex exec --output-schema without that removed flag; OpenAI response schema now requires additionalProperties:false on nested object schemas, so Loom review result schema was tightened for findings/disposition/code_location; current item runtime evidence may be versioned as carrier-only drift but still cannot satisfy approval truth; PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile for touched Loom runtime entrypoints -> OK; make skills-check -> OK; git diff --check -> OK; python3 tools/loom_flow.py adopt verify --target . --item WI-763 -> pass; python3 tools/loom_flow.py shadow-parity --target . -> pass; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces).",
+      "id": "unresolved-wi-763-review-record-scaffold",
+      "summary": "The authored implementation review record `.loom/reviews/WI-763.json` is still a scaffold placeholder (`decision: fallback`, reviewer unset, reviewed_head/validation_summary not bound to current truth), which blocks `checkpoint merge` and therefore blocks `pr-gate` from finding “fresh authored semantic review approval”.",
+      "severity": "block",
+      "disposition": {
+        "status": "rejected",
+        "summary": "Record a real formal review for WI-763 with `decision=allow|block|fallback`, bind it to the current head and `latest_validation_summary`, and ensure findings/dispositions reflect the final semantic judgment."
+      },
+      "repeat_key": "unresolved-wi-763-review-record-scaffold"
+    },
+    {
+      "source": ".loom/runtime/review/WI-763/f7f91781d75301b624a4b8cc937f8bce2666b9ad/normalized-findings.json",
+      "source_kind": "normalized_findings",
+      "reviewed_head": "f7f91781d75301b624a4b8cc937f8bce2666b9ad",
+      "validation_summary": "2026-05-16 local validation passed after WI-763 spec carrier, spec review, Codex CLI drift fix, runtime-evidence carrier boundary, and strict OpenAI response schema fix: codex exec 0.120.0 no longer accepts --ignore-user-config, so Loom default review engine now preserves codex exec --output-schema without that removed flag; OpenAI response schema now requires additionalProperties:false on nested object schemas, so Loom review result schema was tightened for findings/disposition/code_location; current item runtime evidence may be versioned as carrier-only drift but still cannot satisfy approval truth; PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile for touched Loom runtime entrypoints -> OK; make skills-check -> OK; git diff --check -> OK; python3 tools/loom_flow.py adopt verify --target . --item WI-763 -> pass; python3 tools/loom_flow.py shadow-parity --target . -> pass; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces).",
+      "id": "unresolved-host-enforcement-readback-proof",
+      "summary": "Spec review follow-up remains open: live GitHub readback must prove `loom-pr-merge-gate` is required on `main` (branch protection or ruleset) for host enforcement; repository workflow presence alone does not prove enforcement.",
+      "severity": "warn",
+      "disposition": {
+        "status": "deferred",
+        "summary": "Complete live host readback evidence before asserting the PR #762 regression is closed under host enforcement."
+      },
+      "repeat_key": "unresolved-host-enforcement-readback-proof"
+    }
+  ],
+  "budget_risk": {
+    "schema_version": "loom-execution-budget-risk/v1",
+    "status": "not_applicable",
+    "enforcement": "advisory",
+    "highest_risk": "none",
+    "risk_dimensions": [],
+    "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+    "budget_summary": "execution budget is not collected for this invocation.",
+    "adapter_evidence_locator": "",
+    "provenance": {
+      "source": "github_host"
+    }
+  },
+  "repeated_blocker_signal": {
+    "schema_version": "loom-repeated-blocker-signal/v1",
+    "result": "absent",
+    "enforcement": "advisory",
+    "summary": "No repeated blocker candidates detected in available review history.",
+    "candidates": []
+  }
+}
