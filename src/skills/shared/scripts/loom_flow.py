@@ -5297,6 +5297,13 @@ def allowed_post_review_carrier_paths(context: dict[str, Any], *review_paths: st
                 continue
             if isinstance(payload, dict):
                 allowed.add(evidence_path.relative_to(context["target_root"]).as_posix())
+    item_id = context.get("item_id")
+    if isinstance(item_id, str) and item_id.strip():
+        for runtime_root in OWNED_RUNTIME_EVIDENCE_ROOTS:
+            item_runtime_root = context["target_root"] / runtime_root / item_id
+            if item_runtime_root.exists():
+                for evidence_path in sorted(path for path in item_runtime_root.rglob("*") if path.is_file()):
+                    allowed.add(evidence_path.relative_to(context["target_root"]).as_posix())
     return allowed
 
 
@@ -6316,7 +6323,6 @@ def run_default_review_engine(
             [
                 DEFAULT_REVIEW_ENGINE,
                 "exec",
-                "--ignore-user-config",
                 "-C",
                 str(context["target_root"]),
                 "-m",
