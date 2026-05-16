@@ -62,8 +62,10 @@ Loom 的宿主动作面不是新的 umbrella CLI，也不是宿主平台替身�
 | 类别 | 稳定入口 | 宿主写入 | 说明 |
 | --- | --- | --- | --- |
 | boundary read | `python3 tools/loom_flow.py host-lifecycle --target <repo> [--item <id>]` | 否 | 读取 workspace / branch / PR / git worktree 的 ownership boundary |
+| PR merge gate | `python3 tools/loom_flow.py pr-gate check --target <repo> --pr <n>` | 否 | 证明当前 PR head 已有 fresh authored review approval |
 | merge control read | `python3 tools/loom_flow.py checkpoint merge --target <repo> [--item <id>]` | 否 | 读取 Loom 对 required checks / validation / review / risk rollback 的放行结论 |
 | merge control summary | `python3 tools/loom_flow.py flow merge-ready --target <repo> [--item <id>]` | 否 | 汇总进入 host merge 前的统一放行摘要 |
+| controlled merge | `python3 tools/loom_flow.py controlled-merge check\|merge --target <repo> --pr <n>` | `merge` 会写宿主 | 先消费 PR merge gate、merge-ready 与 required checks，再委托 `gh pr merge` |
 | drift audit | `python3 tools/loom_flow.py reconciliation audit --target <repo> [--issue <n>] [--pr <n>] [--project <n>]` | 否 | 只读 issue / PR / project 控制面并输出 drift findings |
 | control-plane sync | `python3 tools/loom_flow.py reconciliation sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>] [--comment-file <path>] [--dry-run]` | 是 | 只修机械可证明的 reconciliation drift |
 | closeout check | `python3 tools/loom_flow.py closeout check --target <repo> [--issue <n>] [--pr <n>] [--project <n>]` | 否 | 校验 main、issue、PR、project 与仓内结果是否一致 |
@@ -103,8 +105,10 @@ Loom 的宿主动作面不是新的 umbrella CLI，也不是宿主平台替身�
 | 入口 | 允许结果 | `fallback_to` 纪律 |
 | --- | --- | --- |
 | `host-lifecycle` | `pass` / `block` | 只在事实链无法读取时回到 `admission`；正常边界读取不产生 `fallback` 结果 |
+| `pr-gate check` | `pass` / `block` / `fallback` | `fallback_to` 只能指向 Loom 内部 gate 修复面；不得指向宿主 merge |
 | `checkpoint merge` | `pass` / `block` / `fallback` | `fallback_to` 只能指向 Loom 内部 checkpoint，不得指向宿主控制面动作 |
 | `flow merge-ready` | `pass` / `block` / `fallback` | `fallback_to` 只能指向 Loom 内部 checkpoint 摘要，不得把 host merge 伪装成回退目标 |
+| `controlled-merge check\|merge` | `pass` / `block` / `fallback` | `merge` 只有在所有前置为 `pass` 且显式执行时才委托宿主；否则不写宿主 |
 | `reconciliation audit` | `pass` / `warn` / `fix-needed` / `block` | 非 `pass` 时只允许 `manual-reconciliation` 或 `null`；它负责报 drift，不把 drift 伪装成 `fallback` |
 | `reconciliation sync` | `pass` / `block` | `block` 时只允许指向 `manual-reconciliation` 或 `null`；`--dry-run` 也不得把未解决 drift 伪装成通过 |
 | `closeout check` | `pass` / `block` | 普通 closeout 缺口指向 `merge`；若 reconciliation 为 `fix-needed` 必须指向 `reconciliation-sync`；若 reconciliation 为 `block` 必须指向 `manual-reconciliation` |

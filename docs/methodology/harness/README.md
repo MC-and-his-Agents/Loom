@@ -60,6 +60,8 @@
   - 定义 `Work Item` 与 branch / PR / head / merge commit 的绑定链
 - [controlled-merge.md](./controlled-merge.md)
   - 定义 GitHub merge control plane 的默认消费与 merge 后交接
+- [pr-merge-gate.md](./pr-merge-gate.md)
+  - 定义 PR-specific semantic review approval 与宿主 required check 的桥接合同
 - [reconciliation-audit.md](./reconciliation-audit.md)
   - 定义 closeout / reconciliation 统一状态面的 drift 审计合同
 - [recovery-model.md](./recovery-model.md)

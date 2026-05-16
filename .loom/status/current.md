@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-533
-- Goal: Complete `v0.10.0` / `#533` repository release closeout with release truth, merged main scope, validation evidence, GitHub release tag, and phase status aligned.
-- Scope: Verify `#533`, `#649`, and `#693` are complete on `main`; bind the repository release candidate to `v0.10.0`; include merged PRs `#728` through `#733`; publish the root release only after post-merge verification agrees.
-- Execution Path: phase/v0.10.0/release-closeout/533
+- Item ID: WI-763
+- Goal: Host-enforce Loom semantic review approval before PR merge
+- Scope: Add a PR-specific merge gate, host workflow, controlled merge wrapper, PR #762 regression evidence, generated skill surfaces, and validation proving raw review evidence cannot satisfy approval.
+- Execution Path: self-governance/pr-semantic-review-gate/763
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-533.md
-- Review Entry: .loom/reviews/WI-533.json
-- Validation Entry: make check
-- Closing Condition: `main` contains the merged v0.10.0 candidate scope; `VERSION` declares `v0.10.0`; generated skill package metadata exposes the same repository release candidate; `make check` and `npm --prefix packages/loom-installer run check:release` pass cleanly; GitHub release/tag `v0.10.0` points at the verified final release commit; and release truth matches the completed phase set.
+- Recovery Entry: .loom/progress/WI-763.md
+- Review Entry: .loom/reviews/WI-763.json
+- Validation Entry: python3 tools/loom_check.py . && make skills-check && git diff --check
+- Closing Condition: PR gate is implemented and required by host branch protection or ruleset; this branch has a fresh authored review record for the PR head; controlled merge consumes only the authored Loom review record and required-check readback; #763 and child issues contain proof; implementation is merged; main readback proves loom-pr-merge-gate is required.
 - Current Checkpoint: build checkpoint
-- Current Stop: `WI-533` is active on `work/533-v0.10.0-closeout`; repository release truth is still `v0.9.0` while the merged v0.10.0 candidate scope is already on `main`.
-- Next Step: Update `VERSION` and generated `repo_version` surfaces to `v0.10.0`, bump installer package version, refresh release closeout carriers, run `make check` and `npm --prefix packages/loom-installer run check:release`, merge the closeout PR, rerun those checks on `main`, then publish GitHub tag/release `v0.10.0`.
+- Current Stop: PR-specific semantic review gate, controlled merge wrapper, host workflow, generated skill surfaces, and PR #762 regression evidence are implemented locally.
+- Next Step: Open the implementation PR, record formal review for the PR head, require loom-pr-merge-gate on main, and merge through controlled-merge after live checks pass.
 - Blockers: None recorded.
-- Latest Validation Summary: `main` already contains PRs `#728` `#729` `#730` `#731` `#732` and `#733`; `#533`, `#649`, and `#693` are closed as completed; post-merge `make check` and `npm --prefix packages/loom-installer run check:release` passed after `#733`; current repository release truth still lags at `v0.9.0`.
-- Recovery Boundary: Branch `work/533-v0.10.0-closeout`; active item `WI-533`; final release publication occurs only after the closeout PR merges and post-merge verification passes.
-- Current Lane: v0.10.0 / #533 repository release closeout
+- Latest Validation Summary: 2026-05-16 local validation passed: PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile for touched Loom runtime entrypoints; python3 tools/skills_surface.py generate; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces); make skills-check -> OK; git diff --check -> OK.
+- Recovery Boundary: Branch harden-pr-semantic-review-gate; parent issue #763; active Work Item WI-763; raw review evidence remains runtime evidence only and never approval truth.
+- Current Lane: self-governance / #763 semantic review host enforcement
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-533.md
-- Dynamic Truth: .loom/progress/WI-533.md
+- Static Truth: .loom/work-items/WI-763.md
+- Dynamic Truth: .loom/progress/WI-763.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

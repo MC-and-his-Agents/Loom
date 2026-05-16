@@ -122,6 +122,9 @@ DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS = 120
 REVIEW_ENGINE_PROFILE_SCHEMA = "loom-review-engine-profile/v1"
 REVIEW_ENGINE_PROFILE_IDS = {"default", "high-risk", "spec-review", "repeated-blocker"}
 REVIEW_ENGINE_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
+PR_MERGE_GATE_SCHEMA = "loom-pr-merge-gate/v1"
+CONTROLLED_MERGE_SCHEMA = "loom-controlled-merge/v1"
+PR_MERGE_GATE_CHECK_NAME = "loom-pr-merge-gate"
 LIVE_SMOKE_SCHEMA = "loom-live-smoke/v1"
 HOST_ADAPTER_LIVE_DRIFT_SCHEMA = "loom-host-adapter-live-drift/v1"
 DYNAMIC_TOOL_LIVE_AVAILABILITY_SCHEMA = "loom-dynamic-tool-live-availability/v1"
@@ -418,6 +421,42 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     host_binding.add_argument("--branch", help="GitHub branch name")
     host_binding.add_argument("--head-sha", help="Implementation head SHA to validate")
     host_binding.add_argument("--base-sha", help="Base SHA used for diff validation")
+
+    pr_gate = subparsers.add_parser("pr-gate", help="Evaluate PR-specific semantic approval before host merge")
+    pr_gate.add_argument("operation", choices=("check",))
+    pr_gate.add_argument("--target", required=True, help="Target repository root")
+    pr_gate.add_argument("--item", help="Expected Loom Work Item id; must match PR body when both are present")
+    pr_gate.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+    pr_gate.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
+    pr_gate.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    pr_gate.add_argument("--pr", type=int, help="GitHub implementation PR number")
+    pr_gate.add_argument("--head-sha", help="Expected PR head SHA")
+    pr_gate.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
+    pr_gate.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+
+    controlled_merge = subparsers.add_parser("controlled-merge", help="Check or execute Loom-controlled PR merge")
+    controlled_merge.add_argument("operation", choices=("check", "merge"))
+    controlled_merge.add_argument("--target", required=True, help="Target repository root")
+    controlled_merge.add_argument("--item", help="Expected Loom Work Item id")
+    controlled_merge.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+    controlled_merge.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
+    controlled_merge.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    controlled_merge.add_argument("--pr", type=int, required=True, help="GitHub implementation PR number")
+    controlled_merge.add_argument("--head-sha", help="Expected PR head SHA")
+    controlled_merge.add_argument("--merge-method", choices=("squash", "merge", "rebase"), default="squash")
+    controlled_merge.add_argument("--delete-branch", action="store_true", help="Delete branch after a successful host merge")
+    controlled_merge.add_argument("--execute", action="store_true", help="Actually delegate to gh pr merge when all gates pass")
+    controlled_merge.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+    controlled_merge.add_argument("--status-checks-file", help="Optional repo-relative statusCheckRollup JSON fixture")
+    controlled_merge.add_argument("--branch-protection-file", help="Optional repo-relative branch protection JSON fixture")
 
     state = subparsers.add_parser(
         "state-check",
@@ -4928,6 +4967,7 @@ def normalize_rest_pr(payload: dict[str, Any]) -> dict[str, Any]:
         "mergeCommit": {"oid": merge_commit_sha} if isinstance(merge_commit_sha, str) and merge_commit_sha else None,
         "mergeStateStatus": str(payload.get("mergeable_state")).upper() if payload.get("mergeable_state") else None,
         "headRefName": head.get("ref"),
+        "headRefOid": head.get("sha"),
         "baseRefName": base.get("ref"),
     }
 
@@ -9423,6 +9463,571 @@ def handle_host_binding(args: argparse.Namespace) -> int:
     )
 
 
+def load_optional_json_fixture(target_root: Path, fixture: str | None, *, label: str) -> tuple[Any | None, list[str]]:
+    if not fixture:
+        return None, []
+    path, errors = resolve_repo_relative_path(target_root, fixture, label=label)
+    if errors:
+        return None, errors
+    assert path is not None
+    if not path.exists() or not path.is_file():
+        return None, [f"{label} points to a missing file: {fixture}"]
+    try:
+        return load_json_file(path), []
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return None, [f"invalid {label} `{fixture}`: {exc}"]
+
+
+def normalize_pr_fixture_payload(payload: Any) -> tuple[dict[str, Any] | None, list[str]]:
+    if not isinstance(payload, dict):
+        return None, ["PR payload fixture must be a JSON object"]
+    normalized = dict(payload)
+    if "isDraft" not in normalized and "draft" in normalized:
+        normalized["isDraft"] = bool(normalized.get("draft"))
+    if "headRefOid" not in normalized:
+        head = normalized.get("head") if isinstance(normalized.get("head"), dict) else None
+        if isinstance(head, dict) and isinstance(head.get("sha"), str):
+            normalized["headRefOid"] = head.get("sha")
+    if "headRefName" not in normalized:
+        head = normalized.get("head") if isinstance(normalized.get("head"), dict) else None
+        if isinstance(head, dict) and isinstance(head.get("ref"), str):
+            normalized["headRefName"] = head.get("ref")
+    if "baseRefName" not in normalized:
+        base = normalized.get("base") if isinstance(normalized.get("base"), dict) else None
+        if isinstance(base, dict) and isinstance(base.get("ref"), str):
+            normalized["baseRefName"] = base.get("ref")
+    if "state" in normalized:
+        normalized["state"] = str(normalized.get("state") or "unknown").upper()
+    else:
+        normalized["state"] = "OPEN"
+    return normalized, []
+
+
+def infer_pr_number_from_ref(ref: str | None) -> int | None:
+    if not isinstance(ref, str):
+        return None
+    for pattern in (r"(?:^|/)pr[-/](\d+)(?:[-/]|$)", r"pull/(\d+)/(?:head|merge)$"):
+        match = re.search(pattern, ref, flags=re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+    return None
+
+
+def pr_work_item_from_body(body: Any) -> str | None:
+    if not isinstance(body, str):
+        return None
+    patterns = (
+        r"(?im)^\s*[-*]?\s*Loom Work Item\s*:\s*`?([A-Z]+-\d+|INIT-\d+)`?\s*$",
+        r"(?im)^\s*[-*]?\s*Work Item\s*:\s*`?([A-Z]+-\d+|INIT-\d+)`?\s*$",
+        r"(?im)^\s*[-*]?\s*Loom-Work-Item\s*:\s*`?([A-Z]+-\d+|INIT-\d+)`?\s*$",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, body)
+        if match:
+            return match.group(1).strip()
+    return None
+
+
+def pr_body_mentions_item(body: Any, item_id: str) -> bool:
+    if not isinstance(body, str):
+        return False
+    return bool(re.search(rf"(?<![A-Z0-9-]){re.escape(item_id)}(?![A-Z0-9-])", body))
+
+
+def load_pr_payload_for_gate(
+    *,
+    target_root: Path,
+    owner: str | None,
+    repo_name: str | None,
+    pr_number: int | None,
+    head_sha: str | None,
+    branch_name: str | None,
+    pr_payload_file: str | None,
+) -> tuple[dict[str, Any] | None, int | None, list[str], list[dict[str, Any]]]:
+    missing_inputs: list[str] = []
+    inferences: list[dict[str, Any]] = []
+    fixture, fixture_errors = load_optional_json_fixture(target_root, pr_payload_file, label="PR payload fixture")
+    if fixture_errors:
+        return None, pr_number, fixture_errors, inferences
+    if fixture is not None:
+        payload, errors = normalize_pr_fixture_payload(fixture)
+        if errors:
+            return None, pr_number, errors, inferences
+        inferred_number = pr_number or (int(payload["number"]) if isinstance(payload.get("number"), int) else None)
+        return payload, inferred_number, [], inferences
+
+    inferred_pr = pr_number or infer_pr_number_from_ref(branch_name)
+    if inferred_pr is not None and pr_number is None:
+        inferences.append({"from": "branch", "to": "pr", "status": "inferred", "pr": inferred_pr})
+
+    if inferred_pr is None and owner and repo_name and head_sha:
+        pulls, pull_errors = github_commit_pulls(target_root, owner, repo_name, head_sha)
+        if pull_errors:
+            missing_inputs.extend(f"head_sha: {message}" for message in pull_errors)
+        elif len(pulls) == 1 and isinstance(pulls[0].get("number"), int):
+            inferred_pr = int(pulls[0]["number"])
+            inferences.append({"from": "head_sha", "to": "pr", "status": "inferred", "pr": inferred_pr})
+        elif len(pulls) > 1:
+            missing_inputs.append("head_sha resolves to multiple PRs; pass --pr explicitly")
+
+    if inferred_pr is None:
+        return None, None, missing_inputs or ["pr | head-sha | branch"], inferences
+    if not owner or not repo_name:
+        return None, inferred_pr, ["owner/repo"], inferences
+    payload, errors = github_pr_payload(target_root, owner, repo_name, inferred_pr)
+    return payload, inferred_pr, errors, inferences
+
+
+def pr_gate_failure_taxonomy(missing_inputs: list[str], gate_result: str) -> list[str]:
+    categories: set[str] = set()
+    for message in missing_inputs:
+        lowered = str(message).lower()
+        if "pr" in lowered and ("unreadable" in lowered or "payload" in lowered or "head_sha" in lowered):
+            categories.add("pr_unreadable")
+        if "work item" in lowered or "current item mismatch" in lowered:
+            categories.add("work_item_binding_conflict" if "mismatch" in lowered else "work_item_binding_missing")
+        if "fact-chain" in lowered or "fact chain" in lowered:
+            categories.add("fact_chain_unreadable")
+        if "missing review" in lowered or "missing implementation review" in lowered or "missing review artifact" in lowered:
+            categories.add("review_missing")
+        if "schema_version" in lowered or "invalid review" in lowered:
+            categories.add("review_schema_invalid")
+        if "decision is blocking" in lowered or "decision is fallback" in lowered or "not approved" in lowered:
+            categories.add("review_not_approved")
+        if "stale" in lowered or "implementation drift" in lowered:
+            categories.add("review_stale")
+        if "validation summary" in lowered:
+            categories.add("validation_summary_drift")
+        if "reviewed_head" in lowered or "head binding" in lowered:
+            categories.add("head_binding_drift")
+        if "checkout head" in lowered:
+            categories.add("checkout_head_drift")
+        if "raw" in lowered or "shadow" in lowered:
+            categories.add("raw_evidence_bypass")
+        if "required check" in lowered or "branch protection" in lowered or "ruleset" in lowered:
+            categories.add("host_enforcement_unverified")
+    if gate_result == "fallback":
+        categories.add("prior_gate_fallback")
+    return sorted(categories)
+
+
+def pr_gate_payload(
+    *,
+    target_root: Path,
+    output_relative: str,
+    expected_item: str | None,
+    owner: str | None,
+    repo_name: str | None,
+    pr_number: int | None,
+    head_sha: str | None,
+    branch_name: str | None,
+    pr_payload_file: str | None,
+) -> dict[str, Any]:
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    owner = owner or detected_owner
+    repo_name = repo_name or detected_repo
+    missing_inputs: list[str] = []
+    steps: list[dict[str, Any]] = []
+
+    runtime_state = runtime_state_payload(target_root)
+    steps.append(
+        {
+            "name": "runtime-state",
+            "result": runtime_state["result"],
+            "summary": runtime_state["summary"],
+            "missing_inputs": runtime_state["missing_inputs"],
+            "fallback_to": runtime_state["fallback_to"],
+        }
+    )
+    if runtime_state["result"] != "pass":
+        missing_inputs.extend(str(message) for message in runtime_state.get("missing_inputs", []))
+
+    pr_payload, effective_pr, pr_errors, inferences = load_pr_payload_for_gate(
+        target_root=target_root,
+        owner=owner,
+        repo_name=repo_name,
+        pr_number=pr_number,
+        head_sha=head_sha,
+        branch_name=branch_name,
+        pr_payload_file=pr_payload_file,
+    )
+    if pr_errors:
+        missing_inputs.extend(f"pr: {message}" for message in pr_errors)
+
+    body_item = pr_work_item_from_body(pr_payload.get("body") if isinstance(pr_payload, dict) else None)
+    effective_item = expected_item or body_item
+    if expected_item and body_item and expected_item != body_item:
+        missing_inputs.append(f"PR body Work Item `{body_item}` does not match expected `{expected_item}`")
+    if effective_item is None:
+        missing_inputs.append("PR body is missing `Loom Work Item: <item>`")
+
+    context: dict[str, Any] = {}
+    context_errors: list[str] = []
+    if effective_item is not None:
+        context, context_errors = load_context(target_root, output_relative, effective_item)
+    else:
+        context, context_errors = load_context(target_root, output_relative, expected_item)
+    if context_errors:
+        missing_inputs.extend(f"fact-chain: {message}" for message in context_errors)
+
+    pr_head = head_sha
+    if isinstance(pr_payload, dict) and isinstance(pr_payload.get("headRefOid"), str):
+        if pr_head and pr_payload["headRefOid"] != pr_head:
+            missing_inputs.append("PR payload headRefOid does not match --head-sha")
+        pr_head = pr_payload["headRefOid"]
+    if not pr_head:
+        missing_inputs.append("PR head SHA is unavailable")
+
+    pr_state = pr_payload.get("state") if isinstance(pr_payload, dict) else None
+    if pr_payload is not None:
+        if pr_state not in {"OPEN"}:
+            missing_inputs.append(f"PR state must be OPEN before controlled merge: {pr_state}")
+        if pr_payload.get("isDraft") is True:
+            missing_inputs.append("PR is draft")
+        if context and not pr_body_mentions_item(pr_payload.get("body"), context["item_id"]):
+            missing_inputs.append(f"PR body does not mention Loom Work Item `{context['item_id']}`")
+
+    current_head = git_head_sha(target_root)
+    if pr_head and current_head and pr_head != current_head:
+        missing_inputs.append("checkout head does not match PR head")
+
+    merge_checkpoint: dict[str, Any] = {
+        "result": "block",
+        "summary": "merge checkpoint was not evaluated.",
+        "missing_inputs": ["fact-chain"],
+        "fallback_to": "admission",
+    }
+    review_approval: dict[str, Any] = {
+        "status": "unavailable",
+        "path": None,
+        "decision": None,
+        "reviewed_head": None,
+        "head_binding": None,
+    }
+    if context:
+        merge_checkpoint = checkpoint_payload("merge", context)
+        review_record, review_path, review_errors = load_review_record(target_root, context["item_id"], context["review_entry"])
+        if review_record is None:
+            review_approval = {
+                "status": "missing",
+                "path": review_path,
+                "decision": None,
+                "reviewed_head": None,
+                "head_binding": None,
+                "missing_inputs": review_errors or [f"missing review artifact: {review_path}"],
+            }
+        else:
+            review_approval = {
+                "status": "approved" if review_record.get("decision") == "allow" and not review_errors else "not_approved",
+                "path": review_path,
+                "decision": review_record.get("decision"),
+                "reviewed_head": review_record.get("reviewed_head"),
+                "reviewed_validation_summary": review_record.get("reviewed_validation_summary"),
+                "head_binding": review_record.get("head_binding"),
+                "missing_inputs": review_errors,
+            }
+        if merge_checkpoint.get("result") in {"block", "fallback"}:
+            missing_inputs.extend(str(message) for message in merge_checkpoint.get("missing_inputs", []))
+        steps.append(
+            {
+                "name": "checkpoint-merge",
+                "result": merge_checkpoint.get("result"),
+                "summary": merge_checkpoint.get("summary"),
+                "missing_inputs": merge_checkpoint.get("missing_inputs", []),
+                "fallback_to": merge_checkpoint.get("fallback_to"),
+            }
+        )
+
+    # Make the bypass boundary explicit even when raw evidence is present in the repository.
+    if context:
+        runtime_review_root = target_root / ".loom/runtime/review" / context["item_id"]
+        raw_evidence_present = runtime_review_root.exists() and any(runtime_review_root.glob("**/*"))
+    else:
+        raw_evidence_present = False
+
+    result = "pass"
+    fallback_to: str | None = None
+    for step in steps:
+        if step.get("result") == "fallback":
+            result = "fallback"
+            fallback_to = step.get("fallback_to") or "build"
+            break
+        if step.get("result") == "block" and result == "pass":
+            result = "block"
+            fallback_to = step.get("fallback_to")
+    if missing_inputs and result == "pass":
+        result = "block"
+        fallback_to = fallback_to or "build"
+
+    failure_taxonomy = pr_gate_failure_taxonomy(missing_inputs, result)
+    if raw_evidence_present and review_approval.get("status") != "approved" and "raw_evidence_bypass" not in failure_taxonomy:
+        failure_taxonomy.append("raw_evidence_bypass")
+    return {
+        "command": "pr-gate",
+        "operation": "check",
+        "schema_version": PR_MERGE_GATE_SCHEMA,
+        "result": result,
+        "summary": (
+            "PR merge gate found fresh authored semantic review approval for the current PR head."
+            if result == "pass"
+            else "PR merge gate is blocked or falling back before host merge."
+        ),
+        "missing_inputs": sorted(set(missing_inputs)),
+        "fallback_to": fallback_to,
+        "repository": {"owner": owner, "name": repo_name},
+        "pr": {
+            "number": effective_pr,
+            "state": pr_state,
+            "isDraft": pr_payload.get("isDraft") if isinstance(pr_payload, dict) else None,
+            "headRefName": pr_payload.get("headRefName") if isinstance(pr_payload, dict) else branch_name,
+            "baseRefName": pr_payload.get("baseRefName") if isinstance(pr_payload, dict) else None,
+            "head_sha": pr_head,
+            "url": pr_payload.get("url") if isinstance(pr_payload, dict) else None,
+            "work_item_from_body": body_item,
+        },
+        "work_item": {
+            "id": context.get("item_id") if context else effective_item,
+            "path": relative_to_root(context["work_item_path"], target_root) if context else None,
+            "review_entry": context.get("review_entry") if context else None,
+        },
+        "review_approval": review_approval,
+        "merge_checkpoint": merge_checkpoint,
+        "host_enforcement": {
+            "stable_check_name": PR_MERGE_GATE_CHECK_NAME,
+            "status": "not_checked",
+            "reason": "pr-gate check proves PR-local semantic approval; controlled-merge checks host required status.",
+        },
+        "approval_boundary": {
+            "authored_truth": "work_item.review_entry",
+            "raw_review_evidence_satisfies_approval": False,
+            "shadow_evidence_satisfies_approval": False,
+            "ci_success_satisfies_approval": False,
+            "raw_evidence_present": raw_evidence_present,
+        },
+        "failure_taxonomy": sorted(failure_taxonomy),
+        "steps": steps,
+        "inferences": inferences,
+    }
+
+
+def handle_pr_gate(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    return emit(
+        pr_gate_payload(
+            target_root=target_root,
+            output_relative=args.output,
+            expected_item=args.item,
+            owner=args.owner,
+            repo_name=args.repo_name,
+            pr_number=args.pr,
+            head_sha=args.head_sha,
+            branch_name=args.branch,
+            pr_payload_file=args.pr_payload_file,
+        )
+    )
+
+
+def required_status_contexts_from_protection(payload: Any) -> list[str]:
+    if not isinstance(payload, dict):
+        return []
+    required_status = payload.get("required_status_checks")
+    if not isinstance(required_status, dict):
+        return []
+    contexts = required_status.get("contexts")
+    if isinstance(contexts, list):
+        return [str(context) for context in contexts if isinstance(context, str) and context.strip()]
+    checks = required_status.get("checks")
+    if isinstance(checks, list):
+        return [str(check.get("context")) for check in checks if isinstance(check, dict) and isinstance(check.get("context"), str)]
+    return []
+
+
+def required_check_status_payload(status_rollup: Any, required_contexts: list[str]) -> dict[str, Any]:
+    runs = status_rollup if isinstance(status_rollup, list) else []
+    by_name: dict[str, list[dict[str, Any]]] = {}
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        name = run.get("name") or run.get("context")
+        if isinstance(name, str):
+            by_name.setdefault(name, []).append(run)
+    missing: list[str] = []
+    pending: list[str] = []
+    failing: list[str] = []
+    for context in required_contexts:
+        entries = by_name.get(context, [])
+        if not entries:
+            missing.append(context)
+            continue
+        if any(entry.get("conclusion") == "SUCCESS" or entry.get("state") == "SUCCESS" for entry in entries):
+            continue
+        if any(entry.get("status") not in {None, "COMPLETED"} for entry in entries):
+            pending.append(context)
+        else:
+            failing.append(context)
+    result = "pass" if not missing and not pending and not failing else "block"
+    return {
+        "result": result,
+        "required_contexts": required_contexts,
+        "missing": missing,
+        "pending": pending,
+        "failing": failing,
+    }
+
+
+def controlled_merge_payload(
+    *,
+    target_root: Path,
+    output_relative: str,
+    expected_item: str | None,
+    owner: str | None,
+    repo_name: str | None,
+    pr_number: int,
+    head_sha: str | None,
+    merge_method: str,
+    delete_branch: bool,
+    execute: bool,
+    pr_payload_file: str | None,
+    status_checks_file: str | None,
+    branch_protection_file: str | None,
+) -> dict[str, Any]:
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    owner = owner or detected_owner
+    repo_name = repo_name or detected_repo
+    pr_gate = pr_gate_payload(
+        target_root=target_root,
+        output_relative=output_relative,
+        expected_item=expected_item,
+        owner=owner,
+        repo_name=repo_name,
+        pr_number=pr_number,
+        head_sha=head_sha,
+        branch_name=None,
+        pr_payload_file=pr_payload_file,
+    )
+    missing_inputs = [f"pr-gate: {message}" for message in pr_gate.get("missing_inputs", [])]
+    result = pr_gate.get("result")
+    fallback_to = pr_gate.get("fallback_to")
+
+    pr_payload = pr_gate.get("pr") if isinstance(pr_gate.get("pr"), dict) else {}
+    base_ref = pr_payload.get("baseRefName") if isinstance(pr_payload, dict) else None
+
+    protection_payload, protection_errors = load_optional_json_fixture(
+        target_root,
+        branch_protection_file,
+        label="branch protection fixture",
+    )
+    if protection_payload is None and not protection_errors and owner and repo_name and isinstance(base_ref, str) and base_ref:
+        protection_payload, protection_errors = gh_rest_json(
+            target_root,
+            f"repos/{owner}/{repo_name}/branches/{quote(base_ref, safe='')}/protection",
+        )
+    if protection_errors:
+        missing_inputs.extend(f"branch protection: {message}" for message in protection_errors)
+
+    status_payload, status_errors = load_optional_json_fixture(
+        target_root,
+        status_checks_file,
+        label="status checks fixture",
+    )
+    if status_payload is None and not status_errors:
+        status_payload, status_errors = gh_json(
+            target_root,
+            ["pr", "view", str(pr_number), "--json", "statusCheckRollup"],
+        )
+    if status_errors:
+        missing_inputs.extend(f"status checks: {message}" for message in status_errors)
+
+    required_contexts = required_status_contexts_from_protection(protection_payload)
+    required_checks = required_check_status_payload(
+        status_payload.get("statusCheckRollup") if isinstance(status_payload, dict) else status_payload,
+        required_contexts,
+    )
+    if protection_payload is None:
+        missing_inputs.append("branch protection or ruleset readback is unavailable")
+    if PR_MERGE_GATE_CHECK_NAME not in required_contexts:
+        missing_inputs.append(f"required check `{PR_MERGE_GATE_CHECK_NAME}` is not enforced")
+    if required_checks["result"] != "pass":
+        labels = {"missing": "missing", "pending": "pending", "failing": "failing"}
+        for key in ("missing", "pending", "failing"):
+            for context in required_checks[key]:
+                missing_inputs.append(f"required check `{context}` is {labels[key]}")
+
+    merge_result: dict[str, Any] = {
+        "attempted": False,
+        "executed": False,
+        "dry_run": not execute,
+        "method": merge_method,
+        "delete_branch": delete_branch,
+    }
+    if missing_inputs and result == "pass":
+        result = "block"
+        fallback_to = fallback_to or "merge"
+    if result == "pass" and execute:
+        command = ["gh", "pr", "merge", str(pr_number), f"--{merge_method}"]
+        if delete_branch:
+            command.append("--delete-branch")
+        completed = run_process(command, target_root)
+        merge_result["attempted"] = True
+        merge_result["command"] = command
+        merge_result["returncode"] = completed.returncode
+        merge_result["stdout"] = completed.stdout.strip()
+        merge_result["stderr"] = completed.stderr.strip()
+        if completed.returncode == 0:
+            merge_result["executed"] = True
+        else:
+            result = "block"
+            fallback_to = "merge"
+            missing_inputs.append(completed.stderr.strip() or completed.stdout.strip() or "gh pr merge failed")
+
+    return {
+        "command": "controlled-merge",
+        "operation": "merge" if execute else "check",
+        "schema_version": CONTROLLED_MERGE_SCHEMA,
+        "result": result,
+        "summary": (
+            "controlled merge preconditions passed and host merge was delegated."
+            if result == "pass" and execute
+            else "controlled merge preconditions passed; host merge was not executed."
+            if result == "pass"
+            else "controlled merge is blocked before host merge delegation."
+        ),
+        "missing_inputs": sorted(set(str(message) for message in missing_inputs)),
+        "fallback_to": fallback_to,
+        "repository": {"owner": owner, "name": repo_name},
+        "pr_gate": pr_gate,
+        "required_checks": required_checks,
+        "host_enforcement": {
+            "stable_check_name": PR_MERGE_GATE_CHECK_NAME,
+            "required_contexts": required_contexts,
+            "required": PR_MERGE_GATE_CHECK_NAME in required_contexts,
+            "branch_protection_readable": protection_payload is not None,
+        },
+        "merge": merge_result,
+    }
+
+
+def handle_controlled_merge(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    return emit(
+        controlled_merge_payload(
+            target_root=target_root,
+            output_relative=args.output,
+            expected_item=args.item,
+            owner=args.owner,
+            repo_name=args.repo_name,
+            pr_number=args.pr,
+            head_sha=args.head_sha,
+            merge_method=args.merge_method,
+            delete_branch=args.delete_branch,
+            execute=args.execute and args.operation == "merge",
+            pr_payload_file=args.pr_payload_file,
+            status_checks_file=args.status_checks_file,
+            branch_protection_file=args.branch_protection_file,
+        )
+    )
+
+
 def host_lifecycle_payload(context: dict[str, Any]) -> dict[str, Any]:
     branch = git_branch(context["target_root"])
     purity = purity_report_from_context(context)
@@ -13758,6 +14363,10 @@ def main(argv: list[str] | None = None) -> int:
         return handle_carrier(args)
     if args.command == "host-binding":
         return handle_host_binding(args)
+    if args.command == "pr-gate":
+        return handle_pr_gate(args)
+    if args.command == "controlled-merge":
+        return handle_controlled_merge(args)
     if args.command == "runtime-evidence":
         return handle_runtime_evidence(args)
     if args.command == "state-check":

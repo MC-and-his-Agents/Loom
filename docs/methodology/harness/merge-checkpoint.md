@@ -4,6 +4,7 @@
 
 前序消费链见 [gate-chain.md](./gate-chain.md)。
 受控合并合同见 [controlled-merge.md](./controlled-merge.md)。
+PR-specific host enforcement bridge 见 [pr-merge-gate.md](./pr-merge-gate.md)。
 
 ## 1. 能力定位
 
@@ -121,6 +122,7 @@
 ## 7. 边界约束
 
 - 不直接消费 engine raw output、prompt、日志或其他 evidence 文件
+- 不把 raw review、shadow evidence、CI 成功或 PR body 摘要当成 semantic approval
 - 不跳过 review record 直接读取 reviewer 会话结论
 - 不把 `merge-ready` 写成宿主按钮说明
 - 不让当前层绕过前序 gate 缺口

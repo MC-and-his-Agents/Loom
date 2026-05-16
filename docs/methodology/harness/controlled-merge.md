@@ -17,6 +17,7 @@
 
 进入 `controlled merge` 前，至少应能读取：
 
+- PR-specific `pr merge gate` 已通过，见 [pr-merge-gate.md](./pr-merge-gate.md)
 - `merge-ready` 已通过
 - 当前 `Work Item` 与 PR 绑定
 - 当前 PR 的 `head_sha`
@@ -54,6 +55,7 @@ GitHub profile 的 strong governance 默认要求：
 
 以下情况至少要直接阻断：
 
+- `pr merge gate` 未通过，或无法证明当前 PR head 已有 fresh authored review approval
 - `merge-ready` 未通过
 - implementation review 或 `spec_review` 已 stale
 - PR `head_sha` 与受审 `head_sha` 不一致
@@ -88,3 +90,4 @@ merge 成功后，`controlled merge` 必须输出最小交接 basis 给 `closeou
 - 不在 Loom 文档内冻结 GitHub UI 操作步骤
 - 不接管宿主 branch protection 的底层实现
 - 不把 `controlled merge` 简化成“PR 绿了就能合”
+- 不把裸 `gh pr merge` 当成 Loom-governed PR 的日常合并入口；它会绕过本地受控合并检查，除非宿主 required check 已经强制 `pr merge gate`
