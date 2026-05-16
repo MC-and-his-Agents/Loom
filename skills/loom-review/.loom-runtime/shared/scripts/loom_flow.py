@@ -5285,12 +5285,15 @@ def shadow_evidence_paths_for_sources(target_root: Path, source_paths: set[str])
 
 
 def allowed_post_review_carrier_paths(context: dict[str, Any], *review_paths: str) -> set[str]:
-    allowed = {
+    source_paths = {
         *review_paths,
         str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"]),
         str(context["report"]["fact_chain"]["entry_points"]["status_surface"]),
     }
-    allowed.update(shadow_evidence_paths_for_sources(context["target_root"], set(review_paths)))
+    allowed = {
+        *source_paths,
+    }
+    allowed.update(shadow_evidence_paths_for_sources(context["target_root"], source_paths))
     review_shadow_root = context["target_root"] / ".loom/shadow"
     if review_shadow_root.exists():
         for evidence_path in sorted(review_shadow_root.glob("review-*.json")):
