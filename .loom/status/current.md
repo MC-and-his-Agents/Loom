@@ -12,10 +12,10 @@
 - Validation Entry: python3 tools/loom_check.py . && make skills-check && git diff --check
 - Closing Condition: PR gate is implemented and required by host branch protection or ruleset; this branch has a fresh authored review record for the PR head; controlled merge consumes only the authored Loom review record and required-check readback; #763 and child issues contain proof; implementation is merged; main readback proves loom-pr-merge-gate is required.
 - Current Checkpoint: build checkpoint
-- Current Stop: PR-specific semantic review gate, controlled merge wrapper, host workflow, generated skill surfaces, and PR #762 regression evidence are implemented locally.
-- Next Step: Open the implementation PR, record formal review for the PR head, require loom-pr-merge-gate on main, and merge through controlled-merge after live checks pass.
+- Current Stop: Implementation, formal spec suite, spec review, generated surfaces, and PR #762 regression evidence are locally complete and validated.
+- Next Step: Run implementation semantic review, open the PR, require loom-pr-merge-gate on main, and merge through controlled-merge after live checks pass.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-05-16 local validation passed: PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile for touched Loom runtime entrypoints; python3 tools/skills_surface.py generate; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces); make skills-check -> OK; git diff --check -> OK.
+- Latest Validation Summary: 2026-05-16 local validation passed after WI-763 spec carrier and spec review: PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile for touched Loom runtime entrypoints -> OK; make skills-check -> OK; git diff --check -> OK; python3 tools/loom_flow.py adopt verify --target . --item WI-763 -> pass; python3 tools/loom_flow.py shadow-parity --target . -> pass; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces).
 - Recovery Boundary: Branch harden-pr-semantic-review-gate; parent issue #763; active Work Item WI-763; raw review evidence remains runtime evidence only and never approval truth.
 - Current Lane: self-governance / #763 semantic review host enforcement
 
