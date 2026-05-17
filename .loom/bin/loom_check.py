@@ -3028,7 +3028,7 @@ def require_review_run_payload(
     if not isinstance(engine, dict):
         return
     engine_adapter = engine.get("adapter")
-    if engine_adapter not in {"loom/default-codex", "loom/codex-app-review"}:
+    if engine_adapter not in {"loom/default-codex-exec", "loom/codex-app-review"}:
         failures.append(Failure(category, f"{context} adapter must be a supported authoritative review adapter"))
     expected_engine = "codex-app-review" if engine_adapter == "loom/codex-app-review" else "codex"
     if engine.get("engine") != expected_engine:
@@ -3126,6 +3126,19 @@ def require_review_run_payload(
                 for key in ("runtime_root", "raw_review", "normalized_findings", "metadata", "parity_diff"):
                     if not isinstance(evidence.get(key), str) or not evidence.get(key):
                         failures.append(Failure(category, f"{context} shadow_engine evidence must include non-empty `{key}`"))
+    engine_metadata = payload.get("engine_metadata")
+    if engine_adapter == "loom/codex-app-review" and engine.get("result") == "pass":
+        if not isinstance(engine_metadata, dict):
+            failures.append(Failure(category, f"{context} app review pass must expose `engine_metadata`"))
+        else:
+            for key in ("selected_adapter", "selection_source", "app_server", "thread_id", "thread_cwd", "raw_result", "normalized_findings", "context_pack", "reviewed_head"):
+                value = engine_metadata.get(key)
+                if not isinstance(value, str) or not value:
+                    failures.append(Failure(category, f"{context} app review metadata must include non-empty `{key}`"))
+            if engine_metadata.get("selected_adapter") != "loom/codex-app-review":
+                failures.append(Failure(category, f"{context} app review metadata must bind the selected adapter"))
+            if "normalized review_record_input only" not in str(engine_metadata.get("authority_boundary", "")):
+                failures.append(Failure(category, f"{context} app review metadata must keep raw App output outside merge-ready truth"))
 
 
 def require_runtime_state_payload(
@@ -5725,7 +5738,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
 
         prepare_review_target(review_target, "review run positive chain")
         write_fake_codex(fake_bin / "codex", mode="success")
-        success_env = prepend_path_env(fake_bin)
+        success_env = prepend_path_env(fake_bin, {"CI": "", "CODEX_CI": ""})
 
         payload, error = load_command_json(
             root,
@@ -5753,10 +5766,10 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             )
             if isinstance(payload, dict):
                 engine = payload.get("engine") if isinstance(payload.get("engine"), dict) else {}
-                if engine.get("engine") != "codex" or engine.get("adapter") != "loom/default-codex":
+                if engine.get("engine") != "codex" or engine.get("adapter") != "loom/default-codex-exec":
                     failures.append(Failure("daily-execution-cli", "`review run` positive chain must keep the default codex exec adapter"))
                 review_record_input = payload.get("review_record_input") if isinstance(payload.get("review_record_input"), dict) else {}
-                if review_record_input.get("engine_adapter") != "loom/default-codex" or review_record_input.get("reviewer") != "loom/default-codex":
+                if review_record_input.get("engine_adapter") != "loom/default-codex-exec" or review_record_input.get("reviewer") != "loom/default-codex-exec":
                     failures.append(Failure("daily-execution-cli", "`review run` positive chain must keep default review_record_input adapter"))
                 evidence = payload.get("engine", {}).get("evidence") if isinstance(payload.get("engine"), dict) else None
                 context_pack_path = evidence.get("context_pack") if isinstance(evidence, dict) else None
@@ -5845,7 +5858,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             )
             if isinstance(payload, dict):
                 review_record_input = payload.get("review_record_input") if isinstance(payload.get("review_record_input"), dict) else {}
-                if review_record_input.get("engine_adapter") != "loom/default-codex":
+                if review_record_input.get("engine_adapter") != "loom/default-codex-exec":
                     failures.append(Failure("daily-execution-cli", "`review run` shadow adapter must not replace default review_record_input engine adapter"))
                 shadow_engine = payload.get("shadow_engine") if isinstance(payload.get("shadow_engine"), dict) else {}
                 if shadow_engine.get("result") != "pass":
@@ -5891,8 +5904,219 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             if shadow_engine.get("result") != "unavailable":
                 failures.append(Failure("daily-execution-cli", "`review run` shadow unavailable must not block the default review path"))
             review_record_input = payload.get("review_record_input") if isinstance(payload, dict) and isinstance(payload.get("review_record_input"), dict) else {}
-            if review_record_input.get("engine_adapter") != "loom/default-codex":
+            if review_record_input.get("engine_adapter") != "loom/default-codex-exec":
                 failures.append(Failure("daily-execution-cli", "`review run` shadow unavailable must preserve the default review record input"))
+
+        app_default_target = Path(tmp) / "review-run-codex-app-default"
+        prepare_review_target(app_default_target, "review run Codex App host default")
+        app_default_raw = app_default_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
+        app_default_raw.parent.mkdir(parents=True, exist_ok=True)
+        app_default_raw.write_text(
+            json.dumps(
+                {
+                    "decision": "allow",
+                    "summary": "Codex App default reviewer found the item ready.",
+                    "findings": [
+                        {
+                            "id": "codex-app-default-warn-1",
+                            "summary": "Codex App default review noted a tracked follow-up.",
+                            "severity": "warn",
+                            "rebuttal": None,
+                            "disposition": {
+                                "status": "accepted",
+                                "summary": "The finding is recorded through the single review record boundary.",
+                            },
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        write_fake_codex(fake_bin / "codex", mode="fail_if_called")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(app_default_target),
+                "--item",
+                "INIT-0001",
+                "--codex-app-review-app-server",
+                "stdio://stage3-default-proof",
+                "--codex-app-review-thread-id",
+                "thread-stage3-default-proof",
+                "--codex-app-review-cwd",
+                str(app_default_target),
+                "--codex-app-review-raw-file",
+                ".loom/runtime/tmp/codex-app-review-normalized.json",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` Codex App host default failed: {error}"))
+        else:
+            require_review_run_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`review run` Codex App host default",
+                payload=payload,
+                expected_result={"pass"},
+            )
+            if isinstance(payload, dict):
+                engine = payload.get("engine") if isinstance(payload.get("engine"), dict) else {}
+                if engine.get("adapter") != "loom/codex-app-review" or engine.get("engine") != "codex-app-review":
+                    failures.append(Failure("daily-execution-cli", "`review run` Codex App host default must select the app adapter"))
+                review_record_input = payload.get("review_record_input") if isinstance(payload.get("review_record_input"), dict) else {}
+                if review_record_input.get("engine_adapter") != "loom/codex-app-review" or review_record_input.get("reviewer") != "loom/codex-app-review":
+                    failures.append(Failure("daily-execution-cli", "`review run` Codex App host default must author app adapter review_record_input"))
+                metadata = payload.get("engine_metadata") if isinstance(payload.get("engine_metadata"), dict) else {}
+                if metadata.get("selection_source") != "codex-app-host-default" or metadata.get("thread_id") != "thread-stage3-default-proof":
+                    failures.append(Failure("daily-execution-cli", "`review run` Codex App host default must expose selected adapter and thread proof metadata"))
+                merge_payload, merge_error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        "tools/loom_flow.py",
+                        "flow",
+                        "merge-ready",
+                        "--target",
+                        str(app_default_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if merge_error:
+                    failures.append(Failure("daily-execution-cli", f"`merge-ready before authored default app review record` failed: {merge_error}"))
+                elif merge_payload.get("result") == "pass":
+                    failures.append(Failure("daily-execution-cli", "`merge-ready` must not consume default Codex App raw evidence before review record is authored"))
+
+        app_ci_fallback_target = Path(tmp) / "review-run-codex-app-ci-fallback"
+        prepare_review_target(app_ci_fallback_target, "review run Codex App CI fallback")
+        app_ci_raw = app_ci_fallback_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
+        app_ci_raw.parent.mkdir(parents=True, exist_ok=True)
+        app_ci_raw.write_text(app_default_raw.read_text(encoding="utf-8"), encoding="utf-8")
+        write_fake_codex(fake_bin / "codex", mode="success")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(app_ci_fallback_target),
+                "--item",
+                "INIT-0001",
+                "--codex-app-review-app-server",
+                "stdio://stage3-ci-proof",
+                "--codex-app-review-thread-id",
+                "thread-stage3-ci-proof",
+                "--codex-app-review-cwd",
+                str(app_ci_fallback_target),
+                "--codex-app-review-raw-file",
+                ".loom/runtime/tmp/codex-app-review-normalized.json",
+            ],
+            env=prepend_path_env(fake_bin, {"CODEX_CI": "1"}),
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` Codex App CI fallback failed: {error}"))
+        else:
+            require_review_run_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`review run` Codex App CI fallback",
+                payload=payload,
+                expected_result={"pass"},
+            )
+            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
+            metadata = payload.get("engine_metadata") if isinstance(payload, dict) and isinstance(payload.get("engine_metadata"), dict) else {}
+            if engine.get("adapter") != "loom/default-codex-exec" or metadata.get("fallback_reason") != "ci-or-codex-ci":
+                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI fallback must keep the default codex exec adapter"))
+
+        app_unavailable_fallback_target = Path(tmp) / "review-run-codex-app-unavailable-fallback"
+        prepare_review_target(app_unavailable_fallback_target, "review run Codex App unavailable fallback")
+        write_fake_codex(fake_bin / "codex", mode="success")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(app_unavailable_fallback_target),
+                "--item",
+                "INIT-0001",
+                "--codex-app-review-app-server",
+                f"unix://{tmp}/missing-codex-app.sock",
+                "--codex-app-review-thread-id",
+                "thread-stage3-missing-endpoint",
+                "--codex-app-review-cwd",
+                str(app_unavailable_fallback_target),
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` Codex App unavailable fallback failed: {error}"))
+        else:
+            require_review_run_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`review run` Codex App unavailable fallback",
+                payload=payload,
+                expected_result={"pass"},
+            )
+            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
+            metadata = payload.get("engine_metadata") if isinstance(payload, dict) and isinstance(payload.get("engine_metadata"), dict) else {}
+            if engine.get("adapter") != "loom/default-codex-exec" or metadata.get("fallback_reason") != "app-server-unavailable":
+                failures.append(Failure("daily-execution-cli", "`review run` Codex App unavailable fallback must record default adapter fallback"))
+
+        app_conflict_target = Path(tmp) / "review-run-codex-app-proof-conflict"
+        prepare_review_target(app_conflict_target, "review run Codex App proof conflict")
+        app_conflict_raw = app_conflict_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
+        app_conflict_raw.parent.mkdir(parents=True, exist_ok=True)
+        app_conflict_raw.write_text(app_default_raw.read_text(encoding="utf-8"), encoding="utf-8")
+        write_fake_codex(fake_bin / "codex", mode="fail_if_called")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(app_conflict_target),
+                "--item",
+                "INIT-0001",
+                "--codex-app-review-app-server",
+                "stdio://stage3-conflict-proof",
+                "--codex-app-review-thread-id",
+                "thread-stage3-conflict-proof",
+                "--codex-app-review-cwd",
+                str(Path(tmp) / "different-cwd"),
+                "--codex-app-review-raw-file",
+                ".loom/runtime/tmp/codex-app-review-normalized.json",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` Codex App proof conflict failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`review run` Codex App proof conflict must fail closed"))
+        else:
+            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
+            if engine.get("adapter") != "loom/codex-app-review" or engine.get("failure_reason") != "runtime_conflict":
+                failures.append(Failure("daily-execution-cli", "`review run` Codex App proof conflict must not fallback to default codex"))
+            if "does not match target root" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
+                failures.append(Failure("daily-execution-cli", "`review run` Codex App proof conflict must expose cwd mismatch"))
+            if isinstance(payload, dict) and isinstance(payload.get("review_record_input"), dict):
+                failures.append(Failure("daily-execution-cli", "`review run` Codex App proof conflict must not emit review_record_input"))
 
         app_authoritative_target = Path(tmp) / "review-run-codex-app-authoritative"
         prepare_review_target(app_authoritative_target, "review run Codex App authoritative")
@@ -7339,9 +7563,9 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         if isinstance(spec_review_record_input, dict)
                         else ".loom/review-findings.json",
                         "--engine-adapter",
-                        str(spec_review_record_input.get("engine_adapter", "loom/default-codex"))
+                        str(spec_review_record_input.get("engine_adapter", "loom/default-codex-exec"))
                         if isinstance(spec_review_record_input, dict)
-                        else "loom/default-codex",
+                        else "loom/default-codex-exec",
                         "--engine-evidence",
                         str(spec_review_record_input.get("engine_evidence", ".loom/runtime/review/INIT-0001/unknown-head/engine-result.json"))
                         if isinstance(spec_review_record_input, dict)
@@ -7500,7 +7724,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         "--findings-file",
                         str(review_record_input.get("findings_file", ".loom/review-findings.json")) if isinstance(review_record_input, dict) else ".loom/review-findings.json",
                         "--engine-adapter",
-                        str(review_record_input.get("engine_adapter", "loom/default-codex")) if isinstance(review_record_input, dict) else "loom/default-codex",
+                        str(review_record_input.get("engine_adapter", "loom/default-codex-exec")) if isinstance(review_record_input, dict) else "loom/default-codex-exec",
                         "--engine-evidence",
                         str(review_record_input.get("engine_evidence", ".loom/runtime/review/INIT-0001/unknown-head/engine-result.json"))
                         if isinstance(review_record_input, dict)
