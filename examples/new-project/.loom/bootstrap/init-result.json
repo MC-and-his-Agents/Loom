@@ -462,8 +462,8 @@
         "source": "repo companion manifest.repo_interface"
       },
       "hook_locators": {
-        "status": "missing",
-        "locator": "unknown",
+        "status": "present",
+        "locator": ".loom/companion/repo-interface.json",
         "source": "repo companion interface"
       },
       "release_targets": {
@@ -615,10 +615,10 @@
       "hook_profile": {
         "schema_version": "loom-hooks-extension-profile/v1",
         "profile_id": "orchestration-extension/hooks",
-        "enabled": false,
+        "enabled": true,
         "result": "pass",
-        "status": "not_applicable",
-        "summary": "hooks extension profile is not enabled for this repository.",
+        "status": "present",
+        "summary": "hooks extension profile is enabled and hook declarations are safe.",
         "missing_inputs": [],
         "missing_optional": [],
         "checks": []
