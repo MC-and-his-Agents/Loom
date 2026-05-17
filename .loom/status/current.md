@@ -12,10 +12,10 @@
 - Validation Entry: python3 -m py_compile tools/loom_flow.py tools/loom_check.py skills/shared/scripts/*.py src/skills/shared/scripts/*.py && python3 tools/loom_check.py && make check
 - Closing Condition: PR #770 contains the #750 phase 3 implementation and docs; generated surfaces are synchronized; installer version behavior truth is bumped; py_compile, loom_check, make check, and PR gates pass; the branch is pushed with fresh authored spec and implementation review records.
 - Current Checkpoint: merge checkpoint
-- Current Stop: Implementation, documentation, generated surfaces, installer version bump, and local validation are complete on branch work/750-codex-app-default-review-adapter; fresh review records are being recorded for PR #770.
-- Next Step: Commit the WI-750 fact chain, record spec and implementation review records against the reviewed heads, update PR #770 body with the Loom Work Item binding, push, and confirm PR gates.
+- Current Stop: Implementation, documentation, generated surfaces, installer version bump, local validation refresh, and fresh review records are complete on branch work/750-codex-app-default-review-adapter.
+- Next Step: Update PR #770 body with the Loom Work Item binding, push, and confirm PR gates.
 - Blockers: None recorded.
-- Latest Validation Summary: pending final validation refresh for WI-750 after fact-chain and installer version updates.
+- Latest Validation Summary: 2026-05-17 validation for WI-750: python3 -m py_compile tools/loom_flow.py tools/loom_check.py skills/shared/scripts/*.py src/skills/shared/scripts/*.py -> OK; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK (0.1.107 -> 0.1.108); python3 tools/version_surface_check.py -> OK; python3 tools/loom_flow.py fact-chain --target . --item WI-750 -> pass; python3 tools/loom_check.py -> OK; make check -> OK; git diff --check -> OK.
 - Recovery Boundary: Branch work/750-codex-app-default-review-adapter; issue #750 phase 3; PR #770; raw Codex App review evidence remains runtime evidence only and never approval truth.
 - Current Lane: #750 phase 3 / Codex App default review adapter
 

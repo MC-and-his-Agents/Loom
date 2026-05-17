@@ -1,0 +1,23 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-750",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "#750 phase 3 is approved: review runs now default to the Codex App review adapter only with complete host proof, CI/headless/missing or unavailable App host paths fall back to default-codex, proof conflicts fail closed, metadata records the selected adapter and evidence locators, generated surfaces are synchronized, and raw App evidence remains outside merge approval truth.",
+  "reviewer": "codex",
+  "reviewed_head": "5ab3ab64bf09e56cec4e309aa58efecfe8f91098",
+  "reviewed_validation_summary": "2026-05-17 validation for WI-750: python3 -m py_compile tools/loom_flow.py tools/loom_check.py skills/shared/scripts/*.py src/skills/shared/scripts/*.py -> OK; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK (0.1.107 -> 0.1.108); python3 tools/version_surface_check.py -> OK; python3 tools/loom_flow.py fact-chain --target . --item WI-750 -> pass; python3 tools/loom_check.py -> OK; make check -> OK; git diff --check -> OK.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-750.md",
+    "recovery_entry": ".loom/progress/WI-750.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
