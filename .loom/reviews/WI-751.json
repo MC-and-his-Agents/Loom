@@ -3,10 +3,10 @@
   "item_id": "WI-751",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-751 implementation is approved for validation unblock: current runtime, checker fixtures, docs, and generated skill surfaces use loom/default-codex-exec for exec fallback and preserve loom/codex-app-review plus single review_entry approval truth.",
-  "reviewer": "codex",
-  "reviewed_head": "b096f1e349048dd31fab438d00d53857937314f6",
-  "reviewed_validation_summary": "Initial #751 validation: python3 tools/skills_surface.py check -> OK; python3 tools/version_surface_check.py -> OK; python3 -m py_compile tools/loom_flow.py tools/loom_check.py skills/shared/scripts/*.py src/skills/shared/scripts/*.py -> OK; python3 tools/loom_flow.py fact-chain --target . --item WI-751 -> pass; full loom_check pending until reviewed implementation commit.",
+  "summary": "WI-751 implementation is approved at current head: adapter contract vocabulary is synchronized to loom/default-codex-exec, Codex App review remains authoritative when selected, generated skill/demo surfaces are refreshed, and local validation passed including loom_check and make check.",
+  "reviewer": "loom/default-codex-exec",
+  "reviewed_head": "621806b23d662d97ce81fb6ce60a67217686f8c0",
+  "reviewed_validation_summary": "#751 local validation passed: python3 tools/skills_surface.py check -> OK; python3 tools/version_surface_check.py -> OK; python3 -m py_compile tools/loom_flow.py tools/loom_check.py skills/shared/scripts/*.py src/skills/shared/scripts/*.py -> OK; python3 tools/loom_flow.py shadow-parity --target . -> pass; python3 tools/loom_check.py -> OK (36 surfaces); make check -> OK.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -29,7 +29,7 @@
         "source": "github_host"
       }
     },
-    "engine_adapter": null,
+    "engine_adapter": "loom/default-codex-exec",
     "engine_evidence": null,
     "normalized_findings": null
   }
