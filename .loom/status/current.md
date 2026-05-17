@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-763
-- Goal: Host-enforce Loom semantic review approval before PR merge
-- Scope: Add a PR-specific merge gate, host workflow, controlled merge wrapper, PR #762 regression evidence, generated skill surfaces, and validation proving raw review evidence cannot satisfy approval.
-- Execution Path: self-governance/pr-semantic-review-gate/763
+- Item ID: WI-750
+- Goal: Switch Codex App host review runs to the Codex App review adapter by default when verified host proof is complete.
+- Scope: Update review adapter selection, Codex App live runner behavior, review metadata, fallback/fail-closed semantics, generated skill surfaces, and review execution documentation for #750 phase 3.
+- Execution Path: phase/codex-app-review-default/750
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-763.md
-- Review Entry: .loom/reviews/WI-763.json
-- Validation Entry: python3 tools/loom_check.py . && make skills-check && git diff --check
-- Closing Condition: PR gate is implemented and required by host branch protection or ruleset; this branch has a fresh authored review record for the PR head; controlled merge consumes only the authored Loom review record and required-check readback; #763 and child issues contain proof; implementation is merged; main readback proves loom-pr-merge-gate is required.
+- Recovery Entry: .loom/progress/WI-750.md
+- Review Entry: .loom/reviews/WI-750.json
+- Validation Entry: python3 -m py_compile tools/loom_flow.py tools/loom_check.py skills/shared/scripts/*.py src/skills/shared/scripts/*.py && python3 tools/loom_check.py && make check
+- Closing Condition: PR #770 contains the #750 phase 3 implementation and docs; generated surfaces are synchronized; installer version behavior truth is bumped; py_compile, loom_check, make check, and PR gates pass; the branch is pushed with fresh authored spec and implementation review records.
 - Current Checkpoint: merge checkpoint
-- Current Stop: Local implementation, ruleset fixture support, installer package version bump, vendored .loom/bin runtime refresh, validation refresh, and default loom/default-codex review evidence are complete on branch harden-pr-semantic-review-gate.
-- Next Step: Record the refreshed authored implementation review for the vendored runtime refresh, push PR #769, prove live PR-head checks and host readback, then merge through controlled-merge.
+- Current Stop: Implementation, documentation, generated surfaces, installer version bump, and local validation are complete on branch work/750-codex-app-default-review-adapter; fresh review records are being recorded for PR #770.
+- Next Step: Commit the WI-750 fact chain, record spec and implementation review records against the reviewed heads, update PR #770 body with the Loom Work Item binding, push, and confirm PR gates.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-05-16 validation refresh for WI-763 at 8aef9fa: PYTHONPYCACHEPREFIX=/tmp/loom-pycache python3 -m py_compile .loom/bin/*.py src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_check.py tools/loom_flow.py tools/loom_check.py -> OK; python3 .loom/bin/loom_init.py verify --target . -> OK; python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run -> blocks only because refreshed review is still pending for vendored runtime implementation drift, with no refresh_needed drift; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK; make skills-check -> OK; python3 tools/loom_flow.py adopt verify --target . --item WI-763 -> pass; python3 tools/loom_flow.py shadow-parity --target . -> pass; MISE_NO_CONFIG=1 LOOM_INSTALLER_TEST_PYTHON_BIN=/Users/claw/.local/share/mise/installs/python/3.12.13/bin/python3.12 python3 tools/loom_check.py . -> OK (36 surfaces); git diff --check -> OK.
-- Recovery Boundary: Branch harden-pr-semantic-review-gate; parent issue #763; active Work Item WI-763; raw review evidence remains runtime evidence only and never approval truth.
-- Current Lane: self-governance / #763 semantic review host enforcement
+- Latest Validation Summary: pending final validation refresh for WI-750 after fact-chain and installer version updates.
+- Recovery Boundary: Branch work/750-codex-app-default-review-adapter; issue #750 phase 3; PR #770; raw Codex App review evidence remains runtime evidence only and never approval truth.
+- Current Lane: #750 phase 3 / Codex App default review adapter
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-763.md
-- Dynamic Truth: .loom/progress/WI-763.md
+- Static Truth: .loom/work-items/WI-750.md
+- Dynamic Truth: .loom/progress/WI-750.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
