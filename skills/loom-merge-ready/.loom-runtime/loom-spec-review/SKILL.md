@@ -46,7 +46,7 @@ description: 负责 formal spec review 执行层。Use when Codex needs to revie
 
 1. 运行 `flow spec-review`，确认 formal spec 路径、build checkpoint 与 runtime 读面齐全
 2. 若 `flow spec-review` 非 `pass`，直接返回 `block` 或 `fallback`
-3. 运行 `review run`，用默认 Codex adapter 或显式 opt-in Codex App authoritative adapter 生成 Loom-normalized spec findings
+3. 运行 `review run`，在 verified Codex App host default、显式 authoritative adapter 或 headless fallback 中选择安全路径，生成 Loom-normalized spec findings
 4. 若 `review run` fail-closed，回到 manual review 写回同一 spec review record
 5. 用 `review record` 写入 `kind = spec_review` 的正式结论
 
@@ -56,7 +56,7 @@ description: 负责 formal spec review 执行层。Use when Codex needs to revie
 - 不替代 merge-ready 放行判断
 - 不直接执行 merge 或平台动作
 - 不回写 recovery entry、status control plane 或其他 authored 真相载体
-- 不把 Codex App raw review output 直接升级成 spec review authored truth；显式 opt-in Codex App path 仍必须经同一 normalized `review_record_input` 与 spec review record 边界
+- 不把 Codex App raw review output 直接升级成 spec review authored truth；verified host default 与显式 Codex App path 都必须经同一 normalized `review_record_input` 与 spec review record 边界
 
 ## 4. 输出要求
 

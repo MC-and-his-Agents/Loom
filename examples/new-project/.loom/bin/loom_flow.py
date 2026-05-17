@@ -34,6 +34,8 @@ from fact_chain_support import (
 from governance_surface import (
     build_governance_surface,
     derive_execution_budget_risk,
+    EXTERNAL_ORCHESTRATOR_OPERATIONS,
+    empty_hook_extension_profile,
     empty_target_release_status,
     empty_tool_availability,
     workspace_lifecycle_expectations,
@@ -111,16 +113,108 @@ REVIEW_FINDING_SEVERITIES = {"warn", "block"}
 REVIEW_FINDING_DISPOSITION_STATUSES = {"accepted", "rejected", "deferred"}
 DEFAULT_REVIEW_ENGINE = "codex"
 DEFAULT_REVIEW_ADAPTER = "loom/default-codex"
-DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS = 120
+CODEX_APP_REVIEW_ADAPTER = "loom/codex-app-review"
+CODEX_APP_REVIEW_ENGINE = "codex-app-review"
+CODEX_APP_REVIEW_SHADOW_ADAPTER = CODEX_APP_REVIEW_ADAPTER
+AUTHORITATIVE_REVIEW_ADAPTERS = {DEFAULT_REVIEW_ADAPTER, CODEX_APP_REVIEW_ADAPTER}
+SHADOW_REVIEW_ADAPTERS = {CODEX_APP_REVIEW_SHADOW_ADAPTER}
+CODEX_APP_REVIEW_ENDPOINT_ENV = "LOOM_CODEX_APP_REVIEW_ENDPOINT"
+CODEX_APP_REVIEW_THREAD_ID_ENV = "LOOM_CODEX_APP_REVIEW_THREAD_ID"
+CODEX_APP_REVIEW_CWD_ENV = "LOOM_CODEX_APP_REVIEW_CWD"
+CODEX_THREAD_ID_ENV = "CODEX_THREAD_ID"
+DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS: int | None = None
 REVIEW_ENGINE_PROFILE_SCHEMA = "loom-review-engine-profile/v1"
 REVIEW_ENGINE_PROFILE_IDS = {"default", "high-risk", "spec-review", "repeated-blocker"}
 REVIEW_ENGINE_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
+PR_MERGE_GATE_SCHEMA = "loom-pr-merge-gate/v1"
+CONTROLLED_MERGE_SCHEMA = "loom-controlled-merge/v1"
+PR_MERGE_GATE_CHECK_NAME = "loom-pr-merge-gate"
 LIVE_SMOKE_SCHEMA = "loom-live-smoke/v1"
 HOST_ADAPTER_LIVE_DRIFT_SCHEMA = "loom-host-adapter-live-drift/v1"
 DYNAMIC_TOOL_LIVE_AVAILABILITY_SCHEMA = "loom-dynamic-tool-live-availability/v1"
+HOOK_ENVELOPE_SCHEMA = "loom-hook-envelope/v1"
+HOOK_ENVELOPE_LIVE_CHECK_SCHEMA = "loom-hook-envelope-check/v1"
+HOOKS_EXTENSION_PROFILE_SCHEMA = "loom-hooks-extension-profile/v1"
+EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA = "loom-external-orchestrator-conformance/v1"
 LIVE_SMOKE_RETRY_FALLBACK = "live-smoke-retry-or-record-unavailable"
 LIVE_SMOKE_REPLAY_FALLBACK = "record-prior-evidence"
 LIVE_SMOKE_CONFIG_FALLBACK = "live-smoke-config-repair"
+HOOK_ENVELOPE_CATEGORIES = {"context_injection", "blocking_decision", "runtime_evidence"}
+HOOK_ENVELOPE_FAILURE_CLASSIFICATIONS = {
+    "invalid_envelope",
+    "missing_required_input",
+    "unsupported",
+    "not_applicable",
+    "permission_unavailable",
+    "unsafe",
+    "host_mapping_failed",
+}
+HOOK_ENVELOPE_FALLBACKS = {
+    None,
+    "admission",
+    "pre_review",
+    "review",
+    "build",
+    "merge_ready",
+    "closeout",
+    "manual_repair",
+    "workspace cleanup|retire",
+}
+HOOK_ENVELOPE_FORBIDDEN_FIELDS = {
+    "authored_progress",
+    "recovery_truth",
+    "status_truth",
+    "review_verdict",
+    "validation_summary",
+    "host_action_result",
+    "closeout_basis",
+    "current_stop",
+    "next_step",
+    "blockers",
+    "latest_validation_summary",
+    "current_checkpoint",
+    "current_lane",
+    "recovery_boundary",
+    "closing_condition",
+}
+EXTERNAL_ORCHESTRATOR_FORBIDDEN_FIELDS = {
+    "scheduler_state",
+    "attempt_ownership",
+    "authored_progress",
+    "current_checkpoint",
+    "next_step",
+    "blockers",
+    "latest_validation_summary",
+    "status_truth",
+    "gate_verdict",
+    "review_verdict",
+    "validation_summary",
+    "host_action_result",
+    "closeout_basis",
+    "daemon",
+    "scheduler_queue",
+    "branch_ownership",
+    "pr_ownership",
+    "worktree_ownership",
+    "worker_lifecycle",
+}
+EXTERNAL_ORCHESTRATOR_ALLOWED_FALLBACKS = {
+    "work_item",
+    "admission",
+    "binding_repair",
+    "current_checkpoint",
+    "spec_gate",
+    "build_gate",
+    "review_gate",
+    "merge_gate",
+    "build",
+    "review",
+    "merge_ready",
+    "closeout",
+}
+HOOK_CLEANUP_ALLOWED_OWNERSHIPS = {"loom_owned"}
+HOOK_LIFECYCLES = {"before-run", "after-run", "cleanup"}
+HOOK_ADAPTER_RESULTS = {"supported", "not_applicable", "advisory", "unsafe"}
 REVIEW_ENGINE_PROFILES: dict[str, dict[str, Any]] = {
     "default": {
         "profile_id": "default",
@@ -332,6 +426,43 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     host_binding.add_argument("--head-sha", help="Implementation head SHA to validate")
     host_binding.add_argument("--base-sha", help="Base SHA used for diff validation")
 
+    pr_gate = subparsers.add_parser("pr-gate", help="Evaluate PR-specific semantic approval before host merge")
+    pr_gate.add_argument("operation", choices=("check",))
+    pr_gate.add_argument("--target", required=True, help="Target repository root")
+    pr_gate.add_argument("--item", help="Expected Loom Work Item id; must match PR body when both are present")
+    pr_gate.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+    pr_gate.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
+    pr_gate.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    pr_gate.add_argument("--pr", type=int, help="GitHub implementation PR number")
+    pr_gate.add_argument("--head-sha", help="Expected PR head SHA")
+    pr_gate.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
+    pr_gate.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+
+    controlled_merge = subparsers.add_parser("controlled-merge", help="Check or execute Loom-controlled PR merge")
+    controlled_merge.add_argument("operation", choices=("check", "merge"))
+    controlled_merge.add_argument("--target", required=True, help="Target repository root")
+    controlled_merge.add_argument("--item", help="Expected Loom Work Item id")
+    controlled_merge.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+    controlled_merge.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
+    controlled_merge.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    controlled_merge.add_argument("--pr", type=int, required=True, help="GitHub implementation PR number")
+    controlled_merge.add_argument("--head-sha", help="Expected PR head SHA")
+    controlled_merge.add_argument("--merge-method", choices=("squash", "merge", "rebase"), default="squash")
+    controlled_merge.add_argument("--delete-branch", action="store_true", help="Delete branch after a successful host merge")
+    controlled_merge.add_argument("--execute", action="store_true", help="Actually delegate to gh pr merge when all gates pass")
+    controlled_merge.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+    controlled_merge.add_argument("--status-checks-file", help="Optional repo-relative statusCheckRollup JSON fixture")
+    controlled_merge.add_argument("--branch-protection-file", help="Optional repo-relative branch protection JSON fixture")
+    controlled_merge.add_argument("--ruleset-file", help="Optional repo-relative branch rules/ruleset JSON fixture")
+
     state = subparsers.add_parser(
         "state-check",
         help="Check active-state consistency, checkpoint completeness, and scope overflow signals",
@@ -360,13 +491,45 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     review.add_argument("--reviewer", help="Reviewer identity")
     review.add_argument("--fallback-to", choices=("admission", "build", "merge"))
     review.add_argument("--findings-file", help="Optional findings JSON path relative to the target root")
-    review.add_argument("--engine-adapter", help="Optional review engine adapter identifier consumed by this record")
+    review.add_argument(
+        "--engine-adapter",
+        choices=tuple(sorted(AUTHORITATIVE_REVIEW_ADAPTERS)),
+        help=(
+            "Optional authoritative review engine adapter for review run/record. "
+            "When omitted, verified Codex App sessions use loom/codex-app-review; headless/CI fallback remains loom/default-codex."
+        ),
+    )
     review.add_argument("--engine-evidence", help="Optional review engine evidence path relative to the target root")
     review.add_argument("--normalized-findings", help="Optional normalized findings path relative to the target root")
+    review.add_argument(
+        "--codex-app-review-app-server",
+        help=f"Codex App app-server/session locator. Defaults to ${CODEX_APP_REVIEW_ENDPOINT_ENV} when available.",
+    )
+    review.add_argument(
+        "--codex-app-review-thread-id",
+        help=f"Codex App thread id. Defaults to ${CODEX_APP_REVIEW_THREAD_ID_ENV}, or ${CODEX_THREAD_ID_ENV} when an endpoint is present.",
+    )
+    review.add_argument(
+        "--codex-app-review-cwd",
+        help=f"Codex App thread cwd proof. Defaults to ${CODEX_APP_REVIEW_CWD_ENV}.",
+    )
+    review.add_argument(
+        "--codex-app-review-raw-file",
+        help="Optional repo-relative Codex App normalized review output captured from review/start or same-thread normalization.",
+    )
     review.add_argument("--engine-profile", choices=tuple(sorted(REVIEW_ENGINE_PROFILE_IDS)), help="Optional deterministic review engine profile override for review run")
     review.add_argument("--engine-model", help="Optional review engine model override for review run")
     review.add_argument("--engine-reasoning", choices=tuple(sorted(REVIEW_ENGINE_REASONING_EFFORTS)), help="Optional review engine reasoning effort override for review run")
     review.add_argument("--engine-override-reason", help="Required reason when overriding review engine profile, model, or reasoning")
+    review.add_argument(
+        "--shadow-engine-adapter",
+        choices=tuple(sorted(SHADOW_REVIEW_ADAPTERS)),
+        help="Optional shadow-only review adapter. Does not replace the default authoritative review engine.",
+    )
+    review.add_argument(
+        "--shadow-review-raw-file",
+        help="Optional repo-relative captured Codex App review text to normalize as shadow evidence.",
+    )
     review.add_argument("--blocking-issue", action="append", default=[], help="Blocking review finding")
     review.add_argument("--follow-up", action="append", default=[], help="Follow-up item recorded by the review")
 
@@ -508,7 +671,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "live-smoke",
         help="Run or replay versioned adopted-repo live smoke evidence without changing core gates",
     )
-    live_smoke.add_argument("operation", choices=("run", "replay", "host-adapter-drift", "dynamic-tool-availability"))
+    live_smoke.add_argument(
+        "operation",
+        choices=(
+            "run",
+            "replay",
+            "host-adapter-drift",
+            "dynamic-tool-availability",
+            "hook-envelope",
+            "hooks-extension",
+            "external-orchestrator-interop",
+        ),
+    )
     live_smoke.add_argument("--target", help="Adopted repository root for live smoke run")
     live_smoke.add_argument("--item", default="INIT-0001", help="Expected current item id for the optional resume smoke")
     live_smoke.add_argument("--prior-evidence", help="Versioned prior-pass evidence to replay without running adopted-repo commands")
@@ -518,6 +692,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         choices=("attempt_time", "review", "merge_ready", "closeout", "build", "admission", "pre_review", "all"),
         default="attempt_time",
         help="Dynamic tool live availability surface; defaults to attempt_time",
+    )
+    live_smoke.add_argument("--envelope", help="Repo-relative Loom hook envelope path for live-smoke hook-envelope")
+    live_smoke.add_argument(
+        "--requirement",
+        choices=("required", "optional", "advisory"),
+        default="required",
+        help="Hook envelope requirement level; defaults to required",
     )
     live_smoke.add_argument(
         "--include-blocking-shadow",
@@ -741,6 +922,21 @@ def dynamic_tool_live_availability_command(target_root: Path, *, surface: str) -
     return live_smoke_command(["live-smoke", "dynamic-tool-availability", "--target", str(target_root), "--surface", surface])
 
 
+def hook_envelope_command(target_root: Path, *, envelope: str, requirement: str) -> str:
+    return live_smoke_command(
+        [
+            "live-smoke",
+            "hook-envelope",
+            "--target",
+            str(target_root),
+            "--envelope",
+            envelope,
+            "--requirement",
+            requirement,
+        ]
+    )
+
+
 def host_adapter_live_drift_command_plan(target_root: Path, host_adapters: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     target = command_target(target_root)
     plan = [
@@ -798,6 +994,290 @@ def dynamic_tool_live_availability_command_plan(
             }
         )
     return plan
+
+
+def hook_envelope_command_plan(target_root: Path, *, envelope: str | None) -> list[dict[str, Any]]:
+    target = command_target(target_root)
+    return [
+        {
+            "id": "target-check",
+            "command": f"test -d {target}",
+            "description": "Confirm the adopted-repo target path exists before reading the mapped hook envelope.",
+        },
+        {
+            "id": "hook-envelope",
+            "command": f"read {envelope if isinstance(envelope, str) and envelope else '<missing-envelope>'}",
+            "description": "Read the repo-relative Loom-mapped hook envelope without executing any hook.",
+        },
+    ]
+
+
+def hooks_extension_command_plan(target_root: Path) -> list[dict[str, Any]]:
+    target = command_target(target_root)
+    return [
+        {
+            "id": "target-check",
+            "command": f"test -d {target}",
+            "description": "Confirm the adopted-repo target path exists before reading hooks extension declarations.",
+        },
+        {
+            "id": "repo-interface-contract",
+            "command": f"read {target_root / '.loom/companion/repo-interface.json'}",
+            "description": "Read hook_locators from repo companion without executing hooks or writing host state.",
+        },
+    ]
+
+
+def external_orchestrator_conformance_command_plan(
+    target_root: Path,
+    external_orchestrators: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    target = command_target(target_root)
+    plan = [
+        {
+            "id": "target-check",
+            "command": f"test -d {target}",
+            "description": "Confirm the adopted-repo target path exists before reading external orchestrator declarations.",
+        },
+        {
+            "id": "repo-interop-contract",
+            "command": f"read {target_root / '.loom/companion/interop.json'} external_orchestrators",
+            "description": "Read external orchestrator locator declarations without starting a scheduler or daemon.",
+        },
+        {
+            "id": "status-consumer-view",
+            "command": f"{shlex.quote(sys.executable)} tools/loom_status.py --target {shlex.quote(str(target_root))} --item INIT-0001",
+            "description": "Confirm status/gate consumption reuses Loom status control plane v2 and the existing gate chain.",
+        },
+    ]
+    for index, entry in enumerate(external_orchestrators or []):
+        entry_id = entry.get("id") if isinstance(entry, dict) else None
+        locator = entry.get("locator") if isinstance(entry, dict) else None
+        plan.append(
+            {
+                "id": str(entry_id or f"external-orchestrator-{index}"),
+                "command": f"read {locator if isinstance(locator, str) and locator else '<missing-locator>'}",
+                "description": "Read external orchestrator retained evidence without accepting scheduler-owned status or gate truth.",
+            }
+        )
+    return plan
+
+
+def find_forbidden_hook_envelope_fields(value: object, *, prefix: str = "$") -> list[str]:
+    found: list[str] = []
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            key_label = str(key)
+            nested_prefix = f"{prefix}.{key_label}"
+            if key_label in HOOK_ENVELOPE_FORBIDDEN_FIELDS:
+                found.append(nested_prefix)
+            found.extend(find_forbidden_hook_envelope_fields(nested, prefix=nested_prefix))
+    elif isinstance(value, list):
+        for index, nested in enumerate(value):
+            found.extend(find_forbidden_hook_envelope_fields(nested, prefix=f"{prefix}[{index}]"))
+    return found
+
+
+def find_forbidden_external_orchestrator_fields(value: object, *, prefix: str = "$") -> list[str]:
+    found: list[str] = []
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            key_label = str(key)
+            nested_prefix = f"{prefix}.{key_label}"
+            if key_label in EXTERNAL_ORCHESTRATOR_FORBIDDEN_FIELDS:
+                found.append(nested_prefix)
+            found.extend(find_forbidden_external_orchestrator_fields(nested, prefix=nested_prefix))
+    elif isinstance(value, list):
+        for index, nested in enumerate(value):
+            found.extend(find_forbidden_external_orchestrator_fields(nested, prefix=f"{prefix}[{index}]"))
+    return found
+
+
+def find_unsafe_hook_cleanup_targets(value: object, *, prefix: str = "$") -> list[str]:
+    found: list[str] = []
+    if isinstance(value, dict):
+        targets = value.get("cleanup_targets")
+        if isinstance(targets, list):
+            for index, target in enumerate(targets):
+                target_prefix = f"{prefix}.cleanup_targets[{index}]"
+                if not isinstance(target, dict):
+                    found.append(f"{target_prefix} must be an object")
+                    continue
+                ownership = target.get("ownership")
+                if ownership not in HOOK_CLEANUP_ALLOWED_OWNERSHIPS:
+                    found.append(f"{target_prefix}.ownership must be `loom_owned`")
+        for key_label, nested in value.items():
+            found.extend(find_unsafe_hook_cleanup_targets(nested, prefix=f"{prefix}.{key_label}"))
+    elif isinstance(value, list):
+        for index, nested in enumerate(value):
+            found.extend(find_unsafe_hook_cleanup_targets(nested, prefix=f"{prefix}[{index}]"))
+    return found
+
+
+def validate_hook_envelope_payload(envelope: object) -> dict[str, Any]:
+    missing_inputs: list[str] = []
+    evidence: dict[str, Any] = {
+        "schema_status": "unknown",
+        "output_category": None,
+        "failure_classification": None,
+    }
+    if not isinstance(envelope, dict):
+        return {
+            "result": "block",
+            "classification": "invalid_envelope",
+            "summary": "hook envelope must be a JSON object.",
+            "missing_inputs": ["hook envelope must be a JSON object"],
+            "fallback_to": "manual_repair",
+            "evidence": evidence,
+        }
+
+    if envelope.get("schema_version") != HOOK_ENVELOPE_SCHEMA:
+        missing_inputs.append("schema_version must be `loom-hook-envelope/v1`")
+    else:
+        evidence["schema_status"] = "valid"
+
+    hook = envelope.get("hook")
+    if not isinstance(hook, dict):
+        missing_inputs.append("hook envelope missing `hook` object")
+    else:
+        for field in ("id", "locator"):
+            value = hook.get(field)
+            if not isinstance(value, str) or not value.strip():
+                missing_inputs.append(f"hook missing `{field}`")
+        lifecycle = hook.get("lifecycle")
+        if lifecycle not in HOOK_LIFECYCLES:
+            missing_inputs.append("hook.lifecycle must be `before-run`, `after-run`, or `cleanup`")
+
+    input_payload = envelope.get("input")
+    adapter_result = None
+    if not isinstance(input_payload, dict):
+        missing_inputs.append("hook envelope missing `input` object")
+    else:
+        for field in ("item_locator", "workspace_locator", "attempt_locator"):
+            value = input_payload.get(field)
+            if not isinstance(value, str) or not value.strip():
+                missing_inputs.append(f"input missing `{field}`")
+        mapping = input_payload.get("host_adapter_mapping")
+        if not isinstance(mapping, dict):
+            missing_inputs.append("input missing `host_adapter_mapping` object")
+        else:
+            for field in ("host", "event"):
+                value = mapping.get(field)
+                if not isinstance(value, str) or not value.strip():
+                    missing_inputs.append(f"host_adapter_mapping missing `{field}`")
+            if mapping.get("adapter_result") not in HOOK_ADAPTER_RESULTS:
+                missing_inputs.append(
+                    "host_adapter_mapping.adapter_result must be `supported`, `not_applicable`, `advisory`, or `unsafe`"
+                )
+            else:
+                adapter_result = mapping.get("adapter_result")
+
+    output = envelope.get("output")
+    output_category = None
+    if not isinstance(output, dict):
+        missing_inputs.append("hook envelope missing `output` object")
+    else:
+        output_category = output.get("category")
+        evidence["output_category"] = output_category
+        if output_category not in HOOK_ENVELOPE_CATEGORIES:
+            missing_inputs.append("output.category must be `context_injection`, `blocking_decision`, or `runtime_evidence`")
+        summary = output.get("summary")
+        if not isinstance(summary, str) or not summary.strip():
+            missing_inputs.append("output missing `summary`")
+
+    forbidden_fields = find_forbidden_hook_envelope_fields(envelope)
+    if forbidden_fields:
+        missing_inputs.append(f"hook envelope must not carry authored or host truth fields: {', '.join(forbidden_fields)}")
+    unsafe_cleanup_targets = find_unsafe_hook_cleanup_targets(envelope)
+    if unsafe_cleanup_targets:
+        missing_inputs.append(
+            "hook envelope cleanup intent must target Loom-owned residue only: "
+            + ", ".join(unsafe_cleanup_targets)
+        )
+
+    failure = envelope.get("failure")
+    failure_classification = None
+    fallback_to = None
+    if failure is not None:
+        if not isinstance(failure, dict):
+            missing_inputs.append("failure must be an object when present")
+        else:
+            failure_classification = failure.get("classification")
+            evidence["failure_classification"] = failure_classification
+            if failure_classification not in HOOK_ENVELOPE_FAILURE_CLASSIFICATIONS:
+                missing_inputs.append("failure.classification is outside the stable hook envelope vocabulary")
+            fallback_to = failure.get("fallback_to")
+            if fallback_to not in HOOK_ENVELOPE_FALLBACKS:
+                missing_inputs.append("failure.fallback_to must point to a Loom surface or manual repair path")
+            summary = failure.get("summary")
+            if failure_classification and (not isinstance(summary, str) or not summary.strip()):
+                missing_inputs.append("failure with classification must include `summary`")
+
+    if missing_inputs:
+        return {
+            "result": "block",
+            "classification": "invalid_envelope",
+            "summary": "hook envelope is invalid or truth-polluting.",
+            "missing_inputs": missing_inputs,
+            "fallback_to": "manual_repair",
+            "evidence": evidence,
+        }
+
+    if adapter_result == "unsafe":
+        return {
+            "result": "block",
+            "classification": "unsafe",
+            "summary": "hook adapter mapping reports unsafe.",
+            "missing_inputs": ["host_adapter_mapping.adapter_result is unsafe"],
+            "fallback_to": "manual_repair",
+            "evidence": evidence,
+        }
+    if adapter_result == "not_applicable":
+        return {
+            "result": "warn",
+            "classification": "not_applicable",
+            "summary": "hook adapter mapping reports not_applicable.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "evidence": evidence,
+        }
+    if adapter_result == "advisory":
+        return {
+            "result": "warn",
+            "classification": "unsupported",
+            "summary": "hook adapter mapping is advisory and remains profile-local evidence.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "evidence": evidence,
+        }
+
+    if failure_classification == "not_applicable":
+        return {
+            "result": "warn",
+            "classification": "not_applicable",
+            "summary": "hook envelope reports not_applicable.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "evidence": evidence,
+        }
+    if failure_classification:
+        result = "block" if failure_classification in {"permission_unavailable", "unsafe", "host_mapping_failed"} else "warn"
+        return {
+            "result": result,
+            "classification": failure_classification,
+            "summary": str(failure.get("summary") if isinstance(failure, dict) else "hook envelope reports failure."),
+            "missing_inputs": [f"hook envelope reported {failure_classification}"] if result == "block" else [],
+            "fallback_to": fallback_to if result == "block" else None,
+            "evidence": evidence,
+        }
+    return {
+        "result": "pass",
+        "classification": "none",
+        "summary": f"hook envelope maps output as `{output_category}`.",
+        "missing_inputs": [],
+        "fallback_to": None,
+        "evidence": evidence,
+    }
 
 
 def host_adapter_permission_unavailable(payload: dict[str, Any]) -> bool:
@@ -1269,6 +1749,618 @@ def host_adapter_live_drift_payload(target_root: Path) -> dict[str, Any]:
                 "expected_host_adapter_version": expected_version,
                 "checks": checks,
             },
+        }
+    )
+    return payload
+
+
+def hook_envelope_payload(target_root: Path, *, envelope: str, requirement: str) -> dict[str, Any]:
+    runtime_state = runtime_state_payload(target_root)
+    target = live_smoke_target_metadata(target_root)
+    payload: dict[str, Any] = {
+        "command": "live-smoke",
+        "operation": "hook-envelope",
+        "schema_version": HOOK_ENVELOPE_LIVE_CHECK_SCHEMA,
+        "runtime_state": runtime_state,
+        "target": target,
+        "command_plan": hook_envelope_command_plan(target_root, envelope=envelope),
+        "reports": [],
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if requirement not in {"required", "optional", "advisory"}:
+        payload.update(
+            {
+                "result": "block",
+                "summary": "hook envelope check requires requirement to be required, optional, or advisory.",
+                "missing_inputs": ["--requirement must be `required`, `optional`, or `advisory`"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                "profile_check": {"id": "hook-envelope", "result": "block"},
+                "hook_envelope": {
+                    "contract_locator": envelope,
+                    "availability": "invalid-declaration",
+                    "requirement": requirement,
+                    "checks": [],
+                },
+            }
+        )
+        return payload
+    if runtime_state.get("result") != "pass":
+        payload.update(
+            {
+                "result": "block",
+                "summary": "hook envelope check is blocked because the Loom runtime state is inconsistent.",
+                "missing_inputs": live_smoke_missing_inputs([str(message) for message in runtime_state.get("missing_inputs", [])]),
+                "fallback_to": runtime_state.get("fallback_to"),
+                "profile_check": {"id": "hook-envelope", "result": "block"},
+                "hook_envelope": {
+                    "contract_locator": envelope,
+                    "availability": "runtime-blocked",
+                    "requirement": requirement,
+                    "checks": [],
+                },
+            }
+        )
+        return payload
+
+    target_report = live_smoke_target_check_report(target_root)
+    payload["reports"] = [target_report]
+    payload["missing_inputs"] = list(target_report.get("missing_inputs", []))
+    if target_report["result"] != "pass":
+        payload.update(
+            {
+                "result": "warn",
+                "summary": "hook envelope check recorded explicit unavailable evidence for the adopted-repo target.",
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+                "profile_check": {"id": "hook-envelope", "result": "warn"},
+                "hook_envelope": {
+                    "contract_locator": envelope,
+                    "availability": "target-unavailable",
+                    "requirement": requirement,
+                    "checks": [],
+                },
+            }
+        )
+        return payload
+
+    envelope_path, envelope_errors = resolve_repo_relative_path(target_root, envelope, label="hook envelope locator")
+    if envelope_errors:
+        check = {
+            "id": "hook-envelope",
+            "requirement": requirement,
+            "locator": envelope,
+            "result": "block",
+            "classification": "unsafe",
+            "summary": "hook envelope locator is outside the repository boundary or otherwise unsafe.",
+            "missing_inputs": envelope_errors,
+            "fallback_to": "manual_repair",
+            "evidence": {"locator_status": "unsafe"},
+        }
+        payload["reports"].append(
+            {
+                "id": "hook-envelope",
+                "attempted": True,
+                "command": f"read {envelope}",
+                "reported_command": "hook-envelope",
+                "reported_result": "unsafe",
+                "result": "block",
+                "summary": check["summary"],
+                "missing_inputs": envelope_errors,
+                "fallback_to": "manual_repair",
+            }
+        )
+        payload.update(
+            {
+                "result": "block",
+                "summary": "hook envelope check found an unsafe locator.",
+                "missing_inputs": live_smoke_missing_inputs(envelope_errors),
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                "profile_check": {"id": "hook-envelope", "result": "block"},
+                "hook_envelope": {
+                    "contract_locator": envelope,
+                    "availability": "incomplete",
+                    "requirement": requirement,
+                    "checks": [check],
+                },
+            }
+        )
+        return payload
+    assert envelope_path is not None
+
+    if not envelope_path.exists():
+        result = "block" if requirement == "required" else "warn"
+        missing_inputs = [f"hook envelope locator points to missing path `{envelope}`"]
+        check = {
+            "id": "hook-envelope",
+            "requirement": requirement,
+            "locator": envelope,
+            "result": result,
+            "classification": "missing_required_input" if result == "block" else "not_applicable",
+            "summary": "hook envelope locator is missing.",
+            "missing_inputs": missing_inputs,
+            "fallback_to": "manual_repair" if result == "block" else None,
+            "evidence": {"locator_status": "missing"},
+        }
+        payload["reports"].append(
+            {
+                "id": "hook-envelope",
+                "attempted": True,
+                "command": f"read {envelope}",
+                "reported_command": "hook-envelope",
+                "reported_result": "missing",
+                "result": result,
+                "summary": check["summary"],
+                "missing_inputs": missing_inputs,
+                "fallback_to": check["fallback_to"],
+            }
+        )
+        payload.update(
+            {
+                "result": result,
+                "summary": "hook envelope locator is missing.",
+                "missing_inputs": live_smoke_missing_inputs(missing_inputs) if result == "block" else [],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK if result == "block" else None,
+                "profile_check": {"id": "hook-envelope", "result": result},
+                "hook_envelope": {
+                    "contract_locator": envelope,
+                    "availability": "incomplete",
+                    "requirement": requirement,
+                    "checks": [check],
+                },
+            }
+        )
+        return payload
+
+    try:
+        envelope_payload = load_json_file(envelope_path)
+    except (FileNotFoundError, json.JSONDecodeError, OSError) as exc:
+        result = "block" if requirement == "required" else "warn"
+        missing_inputs = [f"hook envelope locator is unreadable: {exc}"]
+        check = {
+            "id": "hook-envelope",
+            "requirement": requirement,
+            "locator": envelope,
+            "result": result,
+            "classification": "invalid_envelope",
+            "summary": "hook envelope locator is unreadable.",
+            "missing_inputs": missing_inputs,
+            "fallback_to": "manual_repair" if result == "block" else None,
+            "evidence": {"locator_status": "unreadable"},
+        }
+    else:
+        check = {
+            "id": "hook-envelope",
+            "requirement": requirement,
+            "locator": envelope,
+            **validate_hook_envelope_payload(envelope_payload),
+        }
+        check["evidence"] = {"locator_status": "readable", **dict(check.get("evidence", {}))}
+        if requirement in {"optional", "advisory"} and check["result"] == "block":
+            check["result"] = "warn"
+            check["fallback_to"] = None
+            check["missing_inputs"] = []
+
+    payload["reports"].append(
+        {
+            "id": "hook-envelope",
+            "attempted": True,
+            "command": f"read {envelope}",
+            "reported_command": "hook-envelope",
+            "reported_result": str(check["classification"]),
+            "result": str(check["result"]),
+            "summary": str(check["summary"]),
+            "missing_inputs": list(check.get("missing_inputs", [])),
+            "fallback_to": check.get("fallback_to"),
+        }
+    )
+    result = str(check["result"])
+    payload.update(
+        {
+            "result": result,
+            "summary": "hook envelope is valid." if result == "pass" else "hook envelope check produced warnings." if result == "warn" else "hook envelope check found blocking errors.",
+            "missing_inputs": live_smoke_missing_inputs(list(check.get("missing_inputs", []))) if result == "block" else [],
+            "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK if result == "block" else None,
+            "profile_check": {"id": "hook-envelope", "result": result},
+            "hook_envelope": {
+                "contract_locator": envelope,
+                "availability": "present",
+                "requirement": requirement,
+                "checks": [check],
+            },
+        }
+    )
+    return payload
+
+
+def hooks_extension_payload(target_root: Path) -> dict[str, Any]:
+    runtime_state = runtime_state_payload(target_root)
+    target = live_smoke_target_metadata(target_root)
+    payload: dict[str, Any] = {
+        "command": "live-smoke",
+        "operation": "hooks-extension",
+        "schema_version": HOOKS_EXTENSION_PROFILE_SCHEMA,
+        "runtime_state": runtime_state,
+        "target": target,
+        "command_plan": hooks_extension_command_plan(target_root),
+        "reports": [],
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if runtime_state.get("result") != "pass":
+        hook_profile = empty_hook_extension_profile()
+        hook_profile.update({"status": "runtime-blocked", "result": "block"})
+        payload.update(
+            {
+                "result": "block",
+                "summary": "hooks extension profile is blocked because the Loom runtime state is inconsistent.",
+                "missing_inputs": live_smoke_missing_inputs([str(message) for message in runtime_state.get("missing_inputs", [])]),
+                "fallback_to": runtime_state.get("fallback_to"),
+                "profile_check": {"id": "hooks-extension", "result": "block"},
+                "core_profile": {"id": "orchestration-core", "hook_enforcement": "not_applicable", "result": "pass"},
+                "hooks_extension": hook_profile,
+            }
+        )
+        return payload
+
+    target_report = live_smoke_target_check_report(target_root)
+    payload["reports"] = [target_report]
+    if target_report["result"] != "pass":
+        hook_profile = empty_hook_extension_profile()
+        hook_profile.update({"status": "target-unavailable", "result": "warn"})
+        payload.update(
+            {
+                "result": "warn",
+                "summary": "hooks extension profile recorded explicit unavailable evidence for the adopted-repo target.",
+                "missing_inputs": list(target_report.get("missing_inputs", [])),
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+                "profile_check": {"id": "hooks-extension", "result": "warn"},
+                "core_profile": {"id": "orchestration-core", "hook_enforcement": "not_applicable", "result": "pass"},
+                "hooks_extension": hook_profile,
+            }
+        )
+        return payload
+
+    governance_surface = build_governance_surface(target_root)
+    repo_interface = governance_surface.get("repo_interface")
+    if not isinstance(repo_interface, dict):
+        hook_profile = empty_hook_extension_profile()
+    else:
+        hook_profile = repo_interface.get("hook_profile")
+        if not isinstance(hook_profile, dict):
+            hook_profile = empty_hook_extension_profile()
+
+    result = str(hook_profile.get("result") or "pass")
+    if result not in {"pass", "warn", "block"}:
+        result = "block"
+    payload["reports"].append(
+        {
+            "id": "hooks-extension",
+            "attempted": True,
+            "command": f"read {target_root / '.loom/companion/repo-interface.json'}",
+            "reported_command": "repo-interface.hook_locators",
+            "reported_result": str(hook_profile.get("status") or "not_applicable"),
+            "result": result,
+            "summary": str(hook_profile.get("summary") or "hooks extension profile is not enabled."),
+            "missing_inputs": list(hook_profile.get("missing_inputs", [])) if result == "block" else [],
+            "fallback_to": "manual_repair" if result == "block" else None,
+        }
+    )
+    payload.update(
+        {
+            "result": result,
+            "summary": str(hook_profile.get("summary") or "hooks extension profile is not enabled."),
+            "missing_inputs": live_smoke_missing_inputs(list(hook_profile.get("missing_inputs", []))) if result == "block" else [],
+            "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK if result == "block" else None,
+            "profile_check": {"id": "hooks-extension", "result": result},
+            "core_profile": {"id": "orchestration-core", "hook_enforcement": "not_applicable", "result": "pass"},
+            "hooks_extension": hook_profile,
+        }
+    )
+    return payload
+
+
+def empty_external_orchestrator_conformance() -> dict[str, Any]:
+    return {
+        "schema_version": EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA,
+        "profile_id": "orchestration-extension/external-orchestrator",
+        "enabled": False,
+        "result": "pass",
+        "status": "not_applicable",
+        "summary": "external orchestrator interop profile is not enabled for this repository.",
+        "missing_inputs": [],
+        "missing_optional": [],
+        "checks": [],
+        "non_goals": {
+            "daemon": False,
+            "scheduler_state_machine": False,
+            "tracker_polling_product": False,
+            "second_status_surface": False,
+            "host_lifecycle_ownership": False,
+        },
+    }
+
+
+def external_orchestrator_conformance_check(
+    target_root: Path,
+    *,
+    entry: object,
+    index: int,
+) -> dict[str, Any]:
+    prefix = f"external_orchestrators[{index}]"
+    if not isinstance(entry, dict):
+        return {
+            "id": f"invalid-{index}",
+            "requirement": "required",
+            "operations": [],
+            "locator": "",
+            "result": "block",
+            "classification": "invalid_declaration",
+            "summary": f"{prefix} must be an object.",
+            "missing_inputs": [f"{prefix} must be an object"],
+            "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+            "evidence": {"locator_status": "invalid-declaration"},
+        }
+
+    entry_id = entry.get("id") if isinstance(entry.get("id"), str) and entry.get("id") else f"external-orchestrator-{index}"
+    requirement = entry.get("requirement") if isinstance(entry.get("requirement"), str) else "required"
+    locator = entry.get("locator") if isinstance(entry.get("locator"), str) else ""
+    fallback_to = entry.get("fallback_to") if isinstance(entry.get("fallback_to"), str) else "admission"
+    operations = entry.get("operations") if isinstance(entry.get("operations"), list) else []
+    blocking: list[str] = []
+    optional: list[str] = []
+
+    if requirement not in {"required", "optional", "advisory"}:
+        blocking.append(f"{prefix}.requirement must be required, optional, or advisory")
+        requirement = "required"
+    if not operations:
+        blocking.append(f"{prefix}.operations must be a non-empty list")
+    unsupported = [str(operation) for operation in operations if operation not in EXTERNAL_ORCHESTRATOR_OPERATIONS]
+    if unsupported:
+        blocking.append(f"{prefix}.operations contains unsupported operations: {', '.join(unsupported)}")
+    if isinstance(fallback_to, str) and fallback_to not in EXTERNAL_ORCHESTRATOR_ALLOWED_FALLBACKS:
+        blocking.append(f"{prefix}.fallback_to must point back to a Loom checkpoint or gate repair surface")
+
+    locator_path, locator_errors = resolve_repo_relative_path(target_root, locator, label=f"{prefix} locator")
+    if locator_errors:
+        blocking.extend(locator_errors)
+    elif locator_path is None or not locator_path.exists() or locator_path.is_dir():
+        message = f"{prefix} locator points to missing or unreadable retained evidence `{locator}`"
+        if requirement in {"optional", "advisory"}:
+            optional.append(message)
+        else:
+            blocking.append(message)
+
+    payload: object = None
+    if locator_path is not None and locator_path.exists() and locator_path.is_file():
+        try:
+            payload = load_json_file(locator_path)
+        except (json.JSONDecodeError, OSError) as exc:
+            blocking.append(f"{prefix} retained evidence is not readable JSON: {exc}")
+    if payload is not None and not isinstance(payload, dict):
+        blocking.append(f"{prefix} retained evidence must be a JSON object")
+    if isinstance(payload, dict):
+        forbidden = find_forbidden_external_orchestrator_fields(payload)
+        if forbidden:
+            blocking.append(f"{prefix} retained evidence contains forbidden authored/scheduler fields: {', '.join(forbidden)}")
+        payload_operation = payload.get("operation")
+        if isinstance(payload_operation, str) and operations and payload_operation not in operations:
+            blocking.append(f"{prefix} retained evidence operation is not declared by the locator")
+        if payload.get("operation") in {"status_read", "gate_read"}:
+            if payload.get("source_layer") != "derived_surface":
+                blocking.append(f"{prefix} status/gate reads must consume the derived status surface")
+            if payload.get("consumed_as") != "summary":
+                blocking.append(f"{prefix} status/gate reads must be consumed as summary")
+        if payload.get("host_lifecycle_ownership") not in {None, "host", "external"}:
+            blocking.append(f"{prefix} retained evidence must not claim Loom owns host lifecycle")
+        payload_fallback = payload.get("fallback_to")
+        if isinstance(payload_fallback, str) and payload_fallback not in EXTERNAL_ORCHESTRATOR_ALLOWED_FALLBACKS:
+            blocking.append(f"{prefix} retained evidence fallback_to must point back to Loom")
+
+    result = "block" if blocking else "warn" if optional else "pass"
+    if result == "warn" and requirement in {"required"}:
+        result = "block"
+    return {
+        "id": entry_id,
+        "requirement": requirement,
+        "operations": operations,
+        "locator": locator,
+        "result": result,
+        "classification": "truth_pollution" if blocking and isinstance(payload, dict) and find_forbidden_external_orchestrator_fields(payload) else "locator_or_contract",
+        "summary": (
+            "external orchestrator retained evidence is readable and respects Loom truth boundaries."
+            if result == "pass"
+            else "external orchestrator retained evidence has profile-local warnings."
+            if result == "warn"
+            else "external orchestrator retained evidence violates interop conformance boundaries."
+        ),
+        "missing_inputs": blocking if result == "block" else [],
+        "missing_optional": optional,
+        "fallback_to": fallback_to if result == "block" else None,
+        "evidence": {
+            "locator_status": "readable" if isinstance(payload, dict) else "missing_or_invalid",
+            "payload_schema_version": payload.get("schema_version") if isinstance(payload, dict) else None,
+            "payload_operation": payload.get("operation") if isinstance(payload, dict) else None,
+        },
+    }
+
+
+def external_orchestrator_conformance_payload(target_root: Path) -> dict[str, Any]:
+    runtime_state = runtime_state_payload(target_root)
+    target = live_smoke_target_metadata(target_root)
+    payload: dict[str, Any] = {
+        "command": "live-smoke",
+        "operation": "external-orchestrator-interop",
+        "schema_version": EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA,
+        "runtime_state": runtime_state,
+        "target": target,
+        "command_plan": external_orchestrator_conformance_command_plan(target_root),
+        "reports": [],
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
+    if runtime_state.get("result") != "pass":
+        conformance = empty_external_orchestrator_conformance()
+        conformance.update({"status": "runtime-blocked", "result": "block"})
+        payload.update(
+            {
+                "result": "block",
+                "summary": "external orchestrator conformance is blocked because the Loom runtime state is inconsistent.",
+                "missing_inputs": live_smoke_missing_inputs([str(message) for message in runtime_state.get("missing_inputs", [])]),
+                "fallback_to": runtime_state.get("fallback_to"),
+                "profile_check": {"id": "external-orchestrator-interop", "result": "block"},
+                "core_profile": {"id": "orchestration-core", "external_orchestrator_enforcement": "not_applicable", "result": "pass"},
+                "external_orchestrator": conformance,
+            }
+        )
+        return payload
+
+    target_report = live_smoke_target_check_report(target_root)
+    payload["reports"] = [target_report]
+    if target_report["result"] != "pass":
+        conformance = empty_external_orchestrator_conformance()
+        conformance.update({"status": "target-unavailable", "result": "warn"})
+        payload.update(
+            {
+                "result": "warn",
+                "summary": "external orchestrator conformance recorded explicit unavailable evidence for the adopted-repo target.",
+                "missing_inputs": list(target_report.get("missing_inputs", [])),
+                "fallback_to": LIVE_SMOKE_RETRY_FALLBACK,
+                "profile_check": {"id": "external-orchestrator-interop", "result": "warn"},
+                "core_profile": {"id": "orchestration-core", "external_orchestrator_enforcement": "not_applicable", "result": "pass"},
+                "external_orchestrator": conformance,
+            }
+        )
+        return payload
+
+    interop_path = target_root / ".loom" / "companion" / "interop.json"
+    if not interop_path.exists():
+        conformance = empty_external_orchestrator_conformance()
+        payload["reports"].append(
+            {
+                "id": "external-orchestrator-interop",
+                "attempted": True,
+                "command": f"read {interop_path}",
+                "reported_command": "repo-interop.external_orchestrators",
+                "reported_result": "not_applicable",
+                "result": "pass",
+                "summary": "repo interop does not declare external orchestrators.",
+                "missing_inputs": [],
+                "fallback_to": None,
+            }
+        )
+        payload.update(
+            {
+                "result": "pass",
+                "summary": conformance["summary"],
+                "profile_check": {"id": "external-orchestrator-interop", "result": "pass"},
+                "core_profile": {"id": "orchestration-core", "external_orchestrator_enforcement": "not_applicable", "result": "pass"},
+                "external_orchestrator": conformance,
+            }
+        )
+        return payload
+
+    try:
+        interop_payload = load_json_file(interop_path)
+    except (json.JSONDecodeError, OSError) as exc:
+        conformance = empty_external_orchestrator_conformance()
+        conformance.update(
+            {
+                "enabled": True,
+                "result": "block",
+                "status": "invalid_declaration",
+                "summary": "repo interop contract is unreadable for external orchestrator conformance.",
+                "missing_inputs": [f"repo interop contract is unreadable: {exc}"],
+            }
+        )
+        payload.update(
+            {
+                "result": "block",
+                "summary": conformance["summary"],
+                "missing_inputs": conformance["missing_inputs"],
+                "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                "profile_check": {"id": "external-orchestrator-interop", "result": "block"},
+                "core_profile": {"id": "orchestration-core", "external_orchestrator_enforcement": "not_applicable", "result": "pass"},
+                "external_orchestrator": conformance,
+            }
+        )
+        return payload
+    external_orchestrators = interop_payload.get("external_orchestrators", []) if isinstance(interop_payload, dict) else []
+    if not isinstance(external_orchestrators, list) or not external_orchestrators:
+        conformance = empty_external_orchestrator_conformance()
+        payload["reports"].append(
+            {
+                "id": "external-orchestrator-interop",
+                "attempted": True,
+                "command": f"read {interop_path}",
+                "reported_command": "repo-interop.external_orchestrators",
+                "reported_result": "not_applicable",
+                "result": "pass",
+                "summary": "repo interop is readable but declares no external orchestrators.",
+                "missing_inputs": [],
+                "fallback_to": None,
+            }
+        )
+        payload.update(
+            {
+                "result": "pass",
+                "summary": conformance["summary"],
+                "profile_check": {"id": "external-orchestrator-interop", "result": "pass"},
+                "core_profile": {"id": "orchestration-core", "external_orchestrator_enforcement": "not_applicable", "result": "pass"},
+                "external_orchestrator": conformance,
+            }
+        )
+        return payload
+
+    checks = [
+        external_orchestrator_conformance_check(target_root, entry=entry, index=index)
+        for index, entry in enumerate(external_orchestrators)
+    ]
+    for check in checks:
+        payload["reports"].append(
+            {
+                "id": str(check["id"]),
+                "attempted": True,
+                "command": f"read {check.get('locator') or '<missing-locator>'}",
+                "reported_command": "repo-interop.external_orchestrator",
+                "reported_result": str(check["classification"]),
+                "result": str(check["result"]),
+                "summary": str(check["summary"]),
+                "missing_inputs": list(check.get("missing_inputs", [])),
+                "fallback_to": check.get("fallback_to"),
+            }
+        )
+
+    has_block = any(check["result"] == "block" for check in checks)
+    has_warn = any(check["result"] == "warn" for check in checks)
+    result = "block" if has_block else "warn" if has_warn else "pass"
+    conformance = empty_external_orchestrator_conformance()
+    conformance.update(
+        {
+            "enabled": True,
+            "result": result,
+            "status": "present",
+            "summary": (
+                "external orchestrator conformance passed without introducing a daemon, scheduler state, or second status surface."
+                if result == "pass"
+                else "external orchestrator conformance produced profile-local warnings."
+                if result == "warn"
+                else "external orchestrator conformance found blocking interop drift."
+            ),
+            "missing_inputs": live_smoke_missing_inputs([message for check in checks for message in check.get("missing_inputs", [])]),
+            "missing_optional": [message for check in checks for message in check.get("missing_optional", [])],
+            "checks": checks,
+        }
+    )
+    payload.update(
+        {
+            "result": result,
+            "summary": conformance["summary"],
+            "missing_inputs": conformance["missing_inputs"],
+            "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK if result == "block" else None,
+            "profile_check": {"id": "external-orchestrator-interop", "result": result},
+            "core_profile": {"id": "orchestration-core", "external_orchestrator_enforcement": "not_applicable", "result": "pass"},
+            "external_orchestrator": conformance,
+            "command_plan": external_orchestrator_conformance_command_plan(target_root, external_orchestrators=external_orchestrators),
         }
     )
     return payload
@@ -2079,6 +3171,7 @@ def default_repo_interface() -> dict[str, Any]:
         "context_schema": {"fields": []},
         "dynamic_tool_locators": [],
         "policy_locators": [],
+        "hook_locators": [],
         "release_targets": {
             "catalog_locator": ".loom/companion/releases/catalog.json",
             "current_target_locator": ".loom/companion/releases/current.json",
@@ -3161,6 +4254,19 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def truthy_env(name: str) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return False
+    return value.strip().lower() not in {"", "0", "false", "no", "off"}
+
+
+def non_empty_str(value: object) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
 def execution_attempt_directory(target_root: Path, item_id: str) -> Path:
     return target_root / ".loom/runtime/attempts" / item_id
 
@@ -3760,6 +4866,8 @@ def cleanup_scratch_tree(target_root: Path, scratch_dir: Path) -> None:
 def gh_json(root: Path, args: list[str]) -> tuple[dict[str, Any] | None, list[str]]:
     try:
         result = run_process(["gh", *args], root, timeout_seconds=20)
+    except FileNotFoundError:
+        return None, ["gh command is unavailable in PATH"]
     except subprocess.TimeoutExpired:
         return None, [f"gh {' '.join(args)} timed out after 20s"]
     if result.returncode != 0:
@@ -3879,6 +4987,7 @@ def normalize_rest_pr(payload: dict[str, Any]) -> dict[str, Any]:
         "mergeCommit": {"oid": merge_commit_sha} if isinstance(merge_commit_sha, str) and merge_commit_sha else None,
         "mergeStateStatus": str(payload.get("mergeable_state")).upper() if payload.get("mergeable_state") else None,
         "headRefName": head.get("ref"),
+        "headRefOid": head.get("sha"),
         "baseRefName": base.get("ref"),
     }
 
@@ -4193,12 +5302,15 @@ def shadow_evidence_paths_for_sources(target_root: Path, source_paths: set[str])
 
 
 def allowed_post_review_carrier_paths(context: dict[str, Any], *review_paths: str) -> set[str]:
-    allowed = {
+    source_paths = {
         *review_paths,
         str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"]),
         str(context["report"]["fact_chain"]["entry_points"]["status_surface"]),
     }
-    allowed.update(shadow_evidence_paths_for_sources(context["target_root"], set(review_paths)))
+    allowed = {
+        *source_paths,
+    }
+    allowed.update(shadow_evidence_paths_for_sources(context["target_root"], source_paths))
     review_shadow_root = context["target_root"] / ".loom/shadow"
     if review_shadow_root.exists():
         for evidence_path in sorted(review_shadow_root.glob("review-*.json")):
@@ -4208,6 +5320,13 @@ def allowed_post_review_carrier_paths(context: dict[str, Any], *review_paths: st
                 continue
             if isinstance(payload, dict):
                 allowed.add(evidence_path.relative_to(context["target_root"]).as_posix())
+    item_id = context.get("item_id")
+    if isinstance(item_id, str) and item_id.strip():
+        for runtime_root in OWNED_RUNTIME_EVIDENCE_ROOTS:
+            item_runtime_root = context["target_root"] / runtime_root / item_id
+            if item_runtime_root.exists():
+                for evidence_path in sorted(path for path in item_runtime_root.rglob("*") if path.is_file()):
+                    allowed.add(evidence_path.relative_to(context["target_root"]).as_posix())
     return allowed
 
 
@@ -5162,8 +6281,26 @@ def run_default_review_engine(
     engine_profile: dict[str, Any],
     *,
     review_kind: str | None = None,
+    adapter_selection: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     reviewed_head = git_head_sha(context["target_root"]) or "unknown-head"
+    selection_metadata = review_adapter_selection_metadata(
+        adapter_selection
+        or {
+            "adapter": DEFAULT_REVIEW_ADAPTER,
+            "selection_source": "explicit-or-legacy-default",
+            "fallback_reason": None,
+            "binding_summary": codex_app_binding_summary(
+                context["target_root"],
+                app_server=None,
+                thread_id=None,
+                thread_cwd=None,
+                reviewed_head=reviewed_head,
+                raw_file=None,
+            ),
+        },
+        reviewed_head=reviewed_head,
+    )
     runtime_root = review_runtime_root(context, reviewed_head)
     prompt_path = runtime_root / "prompt.txt"
     result_path = runtime_root / "engine-result.json"
@@ -5184,7 +6321,8 @@ def run_default_review_engine(
     prompt_path.write_text(prompt_text, encoding="utf-8")
 
     effective_kind = review_kind or default_review_kind(context)
-    timeout_seconds = int(engine_profile["timeout_seconds"])
+    raw_timeout_seconds = engine_profile.get("timeout_seconds")
+    timeout_seconds = int(raw_timeout_seconds) if raw_timeout_seconds is not None else None
 
     before_fingerprint, fingerprint_errors = git_tracked_diff_fingerprint(context["target_root"])
     if fingerprint_errors:
@@ -5210,6 +6348,7 @@ def run_default_review_engine(
                     "context_pack": relative_to_root(context_pack_path, context["target_root"]),
                 },
             },
+            "engine_metadata": selection_metadata,
         }
 
     scratch_dir.mkdir(parents=True, exist_ok=True)
@@ -5227,7 +6366,6 @@ def run_default_review_engine(
             [
                 DEFAULT_REVIEW_ENGINE,
                 "exec",
-                "--ignore-user-config",
                 "-C",
                 str(context["target_root"]),
                 "-m",
@@ -5255,9 +6393,7 @@ def run_default_review_engine(
         failure_detail = f"default review engine `{DEFAULT_REVIEW_ENGINE}` is unavailable in PATH"
     except subprocess.TimeoutExpired:
         failure_reason = "runtime_conflict"
-        failure_detail = (
-            f"default review engine timed out after {timeout_seconds}s"
-        )
+        failure_detail = f"default review engine timed out after {timeout_seconds}s"
     else:
         if completed.returncode != 0:
             failure_reason = "runtime_conflict"
@@ -5303,6 +6439,7 @@ def run_default_review_engine(
                 "engine": DEFAULT_REVIEW_ENGINE,
                 "adapter": DEFAULT_REVIEW_ADAPTER,
                 "profile": engine_profile,
+                **selection_metadata,
                 "context_pack": relative_to_root(context_pack_path, context["target_root"]),
                 "failure_reason": failure_reason,
                 "summary": failure_detail,
@@ -5324,6 +6461,7 @@ def run_default_review_engine(
                 "reviewed_head": reviewed_head,
                 "evidence": engine_evidence,
             },
+            "engine_metadata": selection_metadata,
         }
 
     if raw_payload is not None and not result_path.exists():
@@ -5340,6 +6478,7 @@ def run_default_review_engine(
                 "engine": DEFAULT_REVIEW_ENGINE,
                 "adapter": DEFAULT_REVIEW_ADAPTER,
                 "profile": engine_profile,
+                **selection_metadata,
                 "context_pack": relative_to_root(context_pack_path, context["target_root"]),
                 "failure_reason": "schema_drift",
                 "summary": "normalized engine output did not satisfy Loom review schema",
@@ -5362,6 +6501,7 @@ def run_default_review_engine(
                 "reviewed_head": reviewed_head,
                 "evidence": engine_evidence,
             },
+            "engine_metadata": selection_metadata,
         }
 
     write_json_file(findings_path, {"findings": normalized_payload["findings"]})
@@ -5371,6 +6511,7 @@ def run_default_review_engine(
                 "engine": DEFAULT_REVIEW_ENGINE,
                 "adapter": DEFAULT_REVIEW_ADAPTER,
                 "profile": engine_profile,
+                **selection_metadata,
                 "context_pack": relative_to_root(context_pack_path, context["target_root"]),
                 "result": "pass",
                 "reviewed_head": reviewed_head,
@@ -5394,6 +6535,13 @@ def run_default_review_engine(
             "failure_reason": None,
             "reviewed_head": reviewed_head,
             "evidence": engine_evidence,
+        },
+        "engine_metadata": {
+            **selection_metadata,
+            "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+            "raw_result": relative_to_root(result_path, context["target_root"]),
+            "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+            "metadata": relative_to_root(metadata_path, context["target_root"]),
         },
         "review_record_input": {
             "decision": normalized_payload["decision"],
@@ -6011,11 +7159,14 @@ def resolve_review_engine_profile(
     context: dict[str, Any],
     review_kind: str,
     *,
+    adapter: str = DEFAULT_REVIEW_ADAPTER,
     requested_profile: str | None = None,
     requested_model: str | None = None,
     requested_reasoning: str | None = None,
     override_reason: str | None = None,
 ) -> tuple[dict[str, Any] | None, list[str]]:
+    if adapter not in AUTHORITATIVE_REVIEW_ADAPTERS:
+        return None, [f"unsupported authoritative review adapter: {adapter}"]
     selected_profile, selection_reason = review_engine_profile_selection(context, review_kind)
     if requested_profile:
         selected_profile = requested_profile
@@ -6038,11 +7189,11 @@ def resolve_review_engine_profile(
     resolved = {
         "schema_version": REVIEW_ENGINE_PROFILE_SCHEMA,
         "profile_id": base_profile["profile_id"],
-        "adapter": DEFAULT_REVIEW_ADAPTER,
-        "engine": DEFAULT_REVIEW_ENGINE,
+        "adapter": adapter,
+        "engine": CODEX_APP_REVIEW_ENGINE if adapter == CODEX_APP_REVIEW_ADAPTER else DEFAULT_REVIEW_ENGINE,
         "model": base_profile["model"],
         "reasoning_effort": base_profile["reasoning_effort"],
-        "timeout_seconds": int(base_profile["timeout_seconds"]),
+        "timeout_seconds": int(base_profile["timeout_seconds"]) if base_profile["timeout_seconds"] is not None else None,
         "context_policy": base_profile["context_policy"],
         "selection_reason": base_profile["selection_reason"],
         "override_reason": reason or None,
@@ -6101,6 +7252,822 @@ def normalize_engine_review_result(payload: Any, *, relative: str) -> tuple[dict
         "summary": summary.strip(),
         "findings": findings,
     }, []
+
+
+def normalize_codex_app_review_text(raw_text: str, *, relative: str) -> tuple[dict[str, Any] | None, list[str]]:
+    text = raw_text.strip()
+    if not text:
+        return None, [f"Codex App review raw output `{relative}` is empty"]
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, dict):
+        normalized, errors = normalize_engine_review_result(parsed, relative=relative)
+        if normalized is not None and not errors:
+            return normalized, []
+
+    first_line = next((line.strip() for line in text.splitlines() if line.strip()), "")
+    summary = first_line[:240] if first_line else "Codex App review returned raw text."
+    return {
+        "decision": "fallback",
+        "summary": "Codex App review raw output was captured as shadow evidence and normalized for comparison only.",
+        "findings": [
+            {
+                "id": "codex-app-review-raw-output",
+                "summary": summary,
+                "severity": "warn",
+                "rebuttal": None,
+                "disposition": {
+                    "status": "deferred",
+                    "summary": "Shadow-only finding; formal disposition must still be authored through the single review record.",
+                },
+                "details": text[:4000],
+            }
+        ],
+    }, []
+
+
+def normalize_authoritative_codex_app_review_text(raw_text: str, *, relative: str) -> tuple[dict[str, Any] | None, list[str]]:
+    text = raw_text.strip()
+    if not text:
+        return None, [f"Codex App authoritative review output `{relative}` is empty"]
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        return None, [f"Codex App authoritative review output `{relative}` must be normalized JSON: {exc}"]
+    normalized, errors = normalize_engine_review_result(parsed, relative=relative)
+    if errors or normalized is None:
+        return None, errors
+    return normalized, []
+
+
+def codex_app_endpoint_socket_path(app_server: str | None) -> Path | None:
+    endpoint = non_empty_str(app_server)
+    if endpoint is None:
+        return None
+    if endpoint.startswith("unix://"):
+        path_text = endpoint.removeprefix("unix://")
+    elif endpoint.startswith("/"):
+        path_text = endpoint
+    else:
+        return None
+    if not path_text:
+        return None
+    return Path(path_text).expanduser()
+
+
+def codex_app_endpoint_is_live_capable(app_server: str | None) -> bool:
+    socket_path = codex_app_endpoint_socket_path(app_server)
+    return socket_path is not None and socket_path.exists()
+
+
+def codex_app_review_bindings_from_args_env(args: argparse.Namespace) -> dict[str, str | None]:
+    app_server = non_empty_str(args.codex_app_review_app_server) or non_empty_str(os.environ.get(CODEX_APP_REVIEW_ENDPOINT_ENV))
+    thread_id = (
+        non_empty_str(args.codex_app_review_thread_id)
+        or non_empty_str(os.environ.get(CODEX_APP_REVIEW_THREAD_ID_ENV))
+        or (non_empty_str(os.environ.get(CODEX_THREAD_ID_ENV)) if app_server else None)
+    )
+    thread_cwd = non_empty_str(args.codex_app_review_cwd) or non_empty_str(os.environ.get(CODEX_APP_REVIEW_CWD_ENV))
+    raw_file = non_empty_str(args.codex_app_review_raw_file)
+    return {
+        "app_server": app_server,
+        "thread_id": thread_id,
+        "thread_cwd": thread_cwd,
+        "raw_file": raw_file,
+    }
+
+
+def codex_app_binding_summary(
+    target_root: Path,
+    *,
+    app_server: str | None,
+    thread_id: str | None,
+    thread_cwd: str | None,
+    reviewed_head: str,
+    raw_file: str | None,
+) -> dict[str, Any]:
+    cwd_match: bool | None = None
+    cwd_summary: str | None = thread_cwd
+    if non_empty_str(thread_cwd):
+        try:
+            cwd_path = Path(str(thread_cwd)).expanduser().resolve()
+        except OSError:
+            cwd_match = False
+        else:
+            cwd_match = cwd_path == target_root
+            cwd_summary = str(cwd_path)
+    raw_source: str | None = None
+    if non_empty_str(raw_file):
+        raw_path, raw_errors = resolve_repo_relative_path(target_root, str(raw_file), label="Codex App authoritative review raw file")
+        if raw_path is not None and not raw_errors:
+            raw_source = relative_to_root(raw_path, target_root)
+        else:
+            raw_source = str(raw_file)
+    return {
+        "app_server": app_server,
+        "thread_id": thread_id,
+        "thread_cwd": cwd_summary,
+        "thread_cwd_matches_target_root": cwd_match,
+        "target_root": str(target_root),
+        "reviewed_head": reviewed_head,
+        "raw_source": raw_source,
+        "live_endpoint_capable": codex_app_endpoint_is_live_capable(app_server),
+    }
+
+
+def select_review_adapter(
+    args: argparse.Namespace,
+    target_root: Path,
+    *,
+    reviewed_head: str,
+) -> dict[str, Any]:
+    bindings = codex_app_review_bindings_from_args_env(args)
+    explicit_adapter = non_empty_str(args.engine_adapter)
+    if explicit_adapter:
+        return {
+            "adapter": explicit_adapter,
+            "selection_source": "explicit-cli",
+            "fallback_reason": None,
+            **bindings,
+            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **bindings),
+        }
+
+    if truthy_env("CI") or truthy_env("CODEX_CI"):
+        return {
+            "adapter": DEFAULT_REVIEW_ADAPTER,
+            "selection_source": "headless-fallback",
+            "fallback_reason": "ci-or-codex-ci",
+            **bindings,
+            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **bindings),
+        }
+
+    app_server = bindings["app_server"]
+    thread_id = bindings["thread_id"]
+    thread_cwd = bindings["thread_cwd"]
+    raw_file = bindings["raw_file"]
+    if not app_server or not thread_id or not thread_cwd:
+        return {
+            "adapter": DEFAULT_REVIEW_ADAPTER,
+            "selection_source": "host-proof-fallback",
+            "fallback_reason": "missing-codex-app-host-proof",
+            **bindings,
+            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **bindings),
+        }
+    if not raw_file and not codex_app_endpoint_is_live_capable(app_server):
+        return {
+            "adapter": DEFAULT_REVIEW_ADAPTER,
+            "selection_source": "host-proof-fallback",
+            "fallback_reason": "app-server-unavailable",
+            **bindings,
+            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **bindings),
+        }
+    return {
+        "adapter": CODEX_APP_REVIEW_ADAPTER,
+        "selection_source": "codex-app-host-default",
+        "fallback_reason": None,
+        **bindings,
+        "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **bindings),
+    }
+
+
+def review_adapter_selection_metadata(selection: dict[str, Any], *, reviewed_head: str) -> dict[str, Any]:
+    return {
+        "selected_adapter": selection["adapter"],
+        "selection_source": selection.get("selection_source"),
+        "fallback_reason": selection.get("fallback_reason"),
+        "app_server": selection.get("app_server"),
+        "thread_id": selection.get("thread_id"),
+        "thread_cwd": selection.get("thread_cwd"),
+        "target_root": selection.get("binding_summary", {}).get("target_root")
+        if isinstance(selection.get("binding_summary"), dict)
+        else None,
+        "reviewed_head": reviewed_head,
+        "thread_target_binding": selection.get("binding_summary"),
+    }
+
+
+def jsonrpc_send_request(stdin: Any, *, request_id: int, method: str, params: dict[str, Any]) -> None:
+    stdin.write(json.dumps({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}) + "\n")
+    stdin.flush()
+
+
+def jsonrpc_read_response(stdout: Any, *, request_id: int) -> tuple[dict[str, Any] | None, list[dict[str, Any]], list[str]]:
+    notifications: list[dict[str, Any]] = []
+    while True:
+        line = stdout.readline()
+        if not line:
+            return None, notifications, [f"app-server closed before response id {request_id}"]
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("id") == request_id:
+            return payload, notifications, []
+        notifications.append(payload)
+
+
+def find_exited_review_text(payload: Any) -> str | None:
+    if isinstance(payload, dict):
+        if payload.get("type") == "exitedReviewMode" and isinstance(payload.get("review"), str):
+            return payload["review"]
+        for value in payload.values():
+            found = find_exited_review_text(value)
+            if found is not None:
+                return found
+    elif isinstance(payload, list):
+        for value in payload:
+            found = find_exited_review_text(value)
+            if found is not None:
+                return found
+    return None
+
+
+def find_normalized_review_payload(payload: Any) -> dict[str, Any] | None:
+    normalized, errors = normalize_engine_review_result(payload, relative="app-server turn/start output")
+    if normalized is not None and not errors:
+        return normalized
+    if isinstance(payload, dict):
+        for value in payload.values():
+            found = find_normalized_review_payload(value)
+            if found is not None:
+                return found
+    elif isinstance(payload, list):
+        for value in payload:
+            found = find_normalized_review_payload(value)
+            if found is not None:
+                return found
+    return None
+
+
+def app_server_proxy_command(app_server: str) -> list[str] | None:
+    socket_path = codex_app_endpoint_socket_path(app_server)
+    if socket_path is None:
+        return None
+    return ["codex", "app-server", "proxy", "--sock", str(socket_path)]
+
+
+def run_codex_app_live_review(
+    *,
+    app_server: str,
+    thread_id: str,
+    reviewed_head: str,
+    thread_cwd: str,
+    prompt_text: str,
+) -> tuple[str | None, dict[str, Any], list[str]]:
+    command = app_server_proxy_command(app_server)
+    if command is None:
+        return None, {}, [f"unsupported Codex App review endpoint: {app_server}"]
+    try:
+        process = subprocess.Popen(
+            command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except OSError as exc:
+        return None, {}, [f"Codex App review endpoint is unavailable: {exc}"]
+    assert process.stdin is not None
+    assert process.stdout is not None
+    metadata: dict[str, Any] = {"review_target": {"type": "commit", "sha": reviewed_head}}
+    try:
+        jsonrpc_send_request(process.stdin, request_id=1, method="initialize", params={"clientInfo": {"name": "loom", "version": "stage3"}, "capabilities": {}})
+        initialize_response, _, initialize_errors = jsonrpc_read_response(process.stdout, request_id=1)
+        if initialize_errors:
+            return None, metadata, initialize_errors
+        if isinstance(initialize_response, dict) and isinstance(initialize_response.get("error"), dict):
+            return None, metadata, [f"Codex App initialize failed: {initialize_response['error']}"]
+
+        jsonrpc_send_request(
+            process.stdin,
+            request_id=2,
+            method="review/start",
+            params={
+                "threadId": thread_id,
+                "delivery": "inline",
+                "target": {"type": "commit", "sha": reviewed_head},
+            },
+        )
+        review_response, review_notifications, review_errors = jsonrpc_read_response(process.stdout, request_id=2)
+        if review_errors:
+            return None, metadata, review_errors
+        if isinstance(review_response, dict) and isinstance(review_response.get("error"), dict):
+            return None, metadata, [f"Codex App review/start failed: {review_response['error']}"]
+        result = review_response.get("result") if isinstance(review_response, dict) else None
+        if isinstance(result, dict):
+            metadata["review_thread_id"] = result.get("reviewThreadId")
+        review_text = find_exited_review_text(result) or find_exited_review_text(review_notifications)
+        if not isinstance(review_text, str) or not review_text.strip():
+            return None, metadata, ["Codex App review/start did not return exitedReviewMode.review"]
+
+        parsed_review, parsed_errors = normalize_authoritative_codex_app_review_text(review_text, relative="app-server review/start output")
+        if parsed_review is not None and not parsed_errors:
+            metadata["normalization_source"] = "review-start-json"
+            return review_text, {**metadata, "normalized": parsed_review}, []
+
+        jsonrpc_send_request(
+            process.stdin,
+            request_id=3,
+            method="turn/start",
+            params={
+                "threadId": metadata.get("review_thread_id") or thread_id,
+                "cwd": thread_cwd,
+                "input": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "Normalize this Codex App review output into the provided JSON schema. "
+                            "Return only the structured review result.\n\n"
+                            f"{review_text}"
+                        ),
+                    }
+                ],
+                "outputSchema": load_json_file(review_engine_schema_path()),
+            },
+        )
+        turn_response, turn_notifications, turn_errors = jsonrpc_read_response(process.stdout, request_id=3)
+        if turn_errors:
+            return review_text, metadata, turn_errors
+        if isinstance(turn_response, dict) and isinstance(turn_response.get("error"), dict):
+            return review_text, metadata, [f"Codex App turn/start normalization failed: {turn_response['error']}"]
+        normalized = find_normalized_review_payload(turn_response.get("result") if isinstance(turn_response, dict) else None)
+        if normalized is None:
+            normalized = find_normalized_review_payload(turn_notifications)
+        if normalized is None:
+            return review_text, metadata, ["Codex App turn/start did not return a Loom review result"]
+        metadata["normalization_source"] = "turn-start-output-schema"
+        return review_text, {**metadata, "normalized": normalized}, []
+    finally:
+        try:
+            process.terminate()
+        except OSError:
+            pass
+
+
+def shadow_adapter_slug(adapter: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]", "-", adapter).strip("-") or "unknown-adapter"
+
+
+def compare_review_findings(default_findings: list[dict[str, Any]], shadow_findings: list[dict[str, Any]]) -> dict[str, Any]:
+    default_ids = {str(finding.get("id")) for finding in default_findings if isinstance(finding, dict) and finding.get("id")}
+    shadow_ids = {str(finding.get("id")) for finding in shadow_findings if isinstance(finding, dict) and finding.get("id")}
+    shared = sorted(default_ids & shadow_ids)
+    default_only = sorted(default_ids - shadow_ids)
+    shadow_only = sorted(shadow_ids - default_ids)
+    result = "match" if not default_only and not shadow_only else "difference"
+    return {
+        "schema_version": "loom-review-shadow-diff/v1",
+        "result": result,
+        "summary": (
+            "Shadow review findings match the default review finding ids."
+            if result == "match"
+            else "Shadow review findings differ from the default review finding ids."
+        ),
+        "default_finding_ids": sorted(default_ids),
+        "shadow_finding_ids": sorted(shadow_ids),
+        "shared_finding_ids": shared,
+        "default_only_finding_ids": default_only,
+        "shadow_only_finding_ids": shadow_only,
+    }
+
+
+def run_codex_app_review_shadow_adapter(
+    context: dict[str, Any],
+    *,
+    adapter: str | None,
+    raw_file: str | None,
+    default_engine_payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not adapter:
+        return None
+    reviewed_head = git_head_sha(context["target_root"]) or "unknown-head"
+    runtime_root = review_runtime_root(context, reviewed_head)
+    shadow_root = runtime_root / "shadow" / shadow_adapter_slug(adapter)
+    raw_path = shadow_root / "raw-review.txt"
+    findings_path = shadow_root / "normalized-findings.json"
+    metadata_path = shadow_root / "metadata.json"
+    diff_path = shadow_root / "parity-diff.json"
+    evidence = {
+        "runtime_root": relative_to_root(shadow_root, context["target_root"]),
+        "raw_review": relative_to_root(raw_path, context["target_root"]),
+        "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+        "metadata": relative_to_root(metadata_path, context["target_root"]),
+        "parity_diff": relative_to_root(diff_path, context["target_root"]),
+    }
+
+    if adapter != CODEX_APP_REVIEW_SHADOW_ADAPTER:
+        return {
+            "adapter": adapter,
+            "result": "unavailable",
+            "summary": "Unsupported shadow review adapter.",
+            "missing_inputs": [f"unsupported shadow review adapter: {adapter}"],
+            "blocking": False,
+            "authoritative": False,
+            "evidence": evidence,
+        }
+
+    if not raw_file:
+        metadata = {
+            "schema_version": "loom-review-shadow-metadata/v1",
+            "adapter": adapter,
+            "result": "unavailable",
+            "reviewed_head": reviewed_head,
+            "summary": "Codex App review shadow adapter requires captured raw review text or a future live app-server runner.",
+            "missing_inputs": ["--shadow-review-raw-file"],
+            "authoritative": False,
+        }
+        shadow_root.mkdir(parents=True, exist_ok=True)
+        write_json_file(metadata_path, metadata)
+        return {
+            "adapter": adapter,
+            "result": "unavailable",
+            "summary": "Codex App review shadow adapter was requested but no raw review evidence was provided.",
+            "missing_inputs": ["--shadow-review-raw-file"],
+            "blocking": False,
+            "authoritative": False,
+            "evidence": evidence,
+        }
+
+    source_path, source_errors = resolve_repo_relative_path(context["target_root"], raw_file, label="shadow review raw file")
+    if source_errors or source_path is None:
+        shadow_root.mkdir(parents=True, exist_ok=True)
+        write_json_file(
+            metadata_path,
+            {
+                "schema_version": "loom-review-shadow-metadata/v1",
+                "adapter": adapter,
+                "result": "block",
+                "reviewed_head": reviewed_head,
+                "missing_inputs": source_errors,
+                "authoritative": False,
+            },
+        )
+        return {
+            "adapter": adapter,
+            "result": "block",
+            "summary": "Codex App review shadow adapter refused an unsafe raw review locator.",
+            "missing_inputs": source_errors,
+            "blocking": False,
+            "authoritative": False,
+            "evidence": evidence,
+        }
+
+    try:
+        raw_text = source_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return {
+            "adapter": adapter,
+            "result": "block",
+            "summary": "Codex App review shadow adapter could not read raw review evidence.",
+            "missing_inputs": [f"shadow review raw file: {exc.strerror or exc}"],
+            "blocking": False,
+            "authoritative": False,
+            "evidence": evidence,
+        }
+
+    shadow_root.mkdir(parents=True, exist_ok=True)
+    raw_path.write_text(raw_text, encoding="utf-8")
+    normalized, normalization_errors = normalize_codex_app_review_text(
+        raw_text,
+        relative=relative_to_root(source_path, context["target_root"]),
+    )
+    if normalization_errors or normalized is None:
+        write_json_file(
+            metadata_path,
+            {
+                "schema_version": "loom-review-shadow-metadata/v1",
+                "adapter": adapter,
+                "result": "block",
+                "reviewed_head": reviewed_head,
+                "missing_inputs": normalization_errors,
+                "raw_source": relative_to_root(source_path, context["target_root"]),
+                "authoritative": False,
+            },
+        )
+        return {
+            "adapter": adapter,
+            "result": "block",
+            "summary": "Codex App review shadow output could not be normalized safely.",
+            "missing_inputs": normalization_errors,
+            "blocking": False,
+            "authoritative": False,
+            "evidence": evidence,
+        }
+
+    write_json_file(findings_path, {"findings": normalized["findings"]})
+    default_findings: list[dict[str, Any]] = []
+    review_record_input = default_engine_payload.get("review_record_input")
+    if isinstance(review_record_input, dict):
+        default_findings_file = review_record_input.get("findings_file")
+        if isinstance(default_findings_file, str):
+            loaded_findings, _ = load_findings_file(context["target_root"], default_findings_file)
+            if isinstance(loaded_findings, list):
+                default_findings = loaded_findings
+    parity_diff = compare_review_findings(default_findings, normalized["findings"])
+    write_json_file(diff_path, parity_diff)
+    write_json_file(
+        metadata_path,
+        {
+            "schema_version": "loom-review-shadow-metadata/v1",
+            "adapter": adapter,
+            "result": "pass",
+            "reviewed_head": reviewed_head,
+            "raw_source": relative_to_root(source_path, context["target_root"]),
+            "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+            "parity_diff": relative_to_root(diff_path, context["target_root"]),
+            "authoritative": False,
+            "summary": normalized["summary"],
+        },
+    )
+    return {
+        "adapter": adapter,
+        "result": "pass",
+        "summary": "Codex App review shadow evidence was captured and normalized for comparison only.",
+        "missing_inputs": [],
+        "blocking": False,
+        "authoritative": False,
+        "evidence": evidence,
+        "decision": normalized["decision"],
+        "parity_diff": parity_diff,
+    }
+
+
+def run_codex_app_review_authoritative_adapter(
+    context: dict[str, Any],
+    build_payload: dict[str, Any],
+    review_path: str,
+    engine_profile: dict[str, Any],
+    *,
+    review_kind: str,
+    app_server: str | None,
+    thread_id: str | None,
+    thread_cwd: str | None,
+    raw_file: str | None,
+    adapter_selection: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    reviewed_head = git_head_sha(context["target_root"]) or "unknown-head"
+    selection_metadata = review_adapter_selection_metadata(
+        adapter_selection
+        or {
+            "adapter": CODEX_APP_REVIEW_ADAPTER,
+            "selection_source": "explicit-cli",
+            "fallback_reason": None,
+            "app_server": app_server,
+            "thread_id": thread_id,
+            "thread_cwd": thread_cwd,
+            "raw_file": raw_file,
+            "binding_summary": codex_app_binding_summary(
+                context["target_root"],
+                app_server=app_server,
+                thread_id=thread_id,
+                thread_cwd=thread_cwd,
+                reviewed_head=reviewed_head,
+                raw_file=raw_file,
+            ),
+        },
+        reviewed_head=reviewed_head,
+    )
+    runtime_root = review_runtime_root(context, reviewed_head)
+    raw_path = runtime_root / "engine-result.json"
+    findings_path = runtime_root / "normalized-findings.json"
+    metadata_path = runtime_root / "engine-metadata.json"
+    context_pack_path = runtime_root / "context-pack.json"
+    instructions_path = runtime_root / "prompt.txt"
+    context_pack = build_review_context_pack(context, review_path)
+    evidence = {
+        "runtime_root": relative_to_root(runtime_root, context["target_root"]),
+        "prompt": relative_to_root(instructions_path, context["target_root"]),
+        "raw_result": relative_to_root(raw_path, context["target_root"]),
+        "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+        "metadata": relative_to_root(metadata_path, context["target_root"]),
+        "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+    }
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    write_json_file(context_pack_path, context_pack)
+    instructions_path.write_text(
+        build_default_review_prompt(
+            context=context,
+            build_payload=build_payload,
+            runtime_fields=runtime_evidence_from_report(context["report"])[0],
+            review_path=review_path,
+            context_pack=context_pack,
+        ),
+        encoding="utf-8",
+    )
+
+    missing_inputs: list[str] = []
+    for label, value in (
+        ("--codex-app-review-app-server", app_server),
+        ("--codex-app-review-thread-id", thread_id),
+        ("--codex-app-review-cwd", thread_cwd),
+    ):
+        if not isinstance(value, str) or not value.strip():
+            missing_inputs.append(label)
+
+    cwd_relative: str | None = None
+    if isinstance(thread_cwd, str) and thread_cwd.strip():
+        try:
+            cwd_path = Path(thread_cwd).expanduser().resolve()
+        except OSError as exc:
+            missing_inputs.append(f"Codex App review cwd could not be resolved: {exc}")
+        else:
+            if cwd_path != context["target_root"]:
+                missing_inputs.append(
+                    f"Codex App review cwd `{cwd_path}` does not match target root `{context['target_root']}`"
+                )
+            else:
+                cwd_relative = relative_to_root(cwd_path, context["target_root"])
+
+    source_path: Path | None = None
+    source_relative: str | None = None
+    if isinstance(raw_file, str) and raw_file.strip():
+        source_path, source_errors = resolve_repo_relative_path(
+            context["target_root"],
+            raw_file,
+            label="Codex App authoritative review raw file",
+        )
+        missing_inputs.extend(source_errors)
+        if source_path is not None:
+            source_relative = relative_to_root(source_path, context["target_root"])
+    elif not codex_app_endpoint_is_live_capable(app_server):
+        missing_inputs.append("--codex-app-review-raw-file or live app-server endpoint")
+
+    if missing_inputs:
+        write_json_file(
+            metadata_path,
+            {
+                "schema_version": "loom-review-engine-metadata/v1",
+                "engine": CODEX_APP_REVIEW_ENGINE,
+                "adapter": CODEX_APP_REVIEW_ADAPTER,
+                "profile": engine_profile,
+                **selection_metadata,
+                "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+                "result": "block",
+                "failure_reason": "runtime_conflict",
+                "summary": "Codex App authoritative review adapter is missing required live binding proof.",
+                "missing_inputs": missing_inputs,
+                "reviewed_head": reviewed_head,
+                "app_server": app_server,
+                "thread_id": thread_id,
+                "thread_cwd": cwd_relative or thread_cwd,
+            },
+        )
+        return {
+            "result": "block",
+            "summary": "Codex App authoritative review adapter failed closed before a formal review record could be authored.",
+            "missing_inputs": missing_inputs,
+            "fallback_to": None,
+            "engine": {
+                "engine": CODEX_APP_REVIEW_ENGINE,
+                "adapter": CODEX_APP_REVIEW_ADAPTER,
+                "profile": engine_profile,
+                "result": "block",
+                "failure_reason": "runtime_conflict",
+                "reviewed_head": reviewed_head,
+                "evidence": evidence,
+            },
+            "engine_metadata": {
+                **selection_metadata,
+                "app_server": app_server,
+                "thread_id": thread_id,
+                "thread_cwd": cwd_relative or thread_cwd,
+                "raw_source": source_relative,
+            },
+        }
+
+    live_metadata: dict[str, Any] = {}
+    if source_path is not None:
+        try:
+            raw_text = source_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raw_text = ""
+            normalization_errors = [f"Codex App authoritative review raw file: {exc.strerror or exc}"]
+            normalized = None
+        else:
+            normalized, normalization_errors = normalize_authoritative_codex_app_review_text(
+                raw_text,
+                relative=source_relative or str(raw_file),
+            )
+    else:
+        raw_text, live_metadata, normalization_errors = run_codex_app_live_review(
+            app_server=str(app_server),
+            thread_id=str(thread_id),
+            reviewed_head=reviewed_head,
+            thread_cwd=str(thread_cwd),
+            prompt_text=instructions_path.read_text(encoding="utf-8"),
+        )
+        normalized = live_metadata.get("normalized") if isinstance(live_metadata.get("normalized"), dict) else None
+        if raw_text is None:
+            raw_text = ""
+
+    if normalization_errors or normalized is None:
+        if raw_text:
+            raw_path.write_text(raw_text, encoding="utf-8")
+        write_json_file(
+            metadata_path,
+            {
+                "schema_version": "loom-review-engine-metadata/v1",
+                "engine": CODEX_APP_REVIEW_ENGINE,
+                "adapter": CODEX_APP_REVIEW_ADAPTER,
+                "profile": engine_profile,
+                **selection_metadata,
+                "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+                "result": "block",
+                "failure_reason": "schema_drift",
+                "summary": "Codex App authoritative review output did not satisfy the Loom review result schema.",
+                "errors": normalization_errors,
+                "reviewed_head": reviewed_head,
+                "app_server": app_server,
+                "thread_id": thread_id,
+                "thread_cwd": cwd_relative,
+                "raw_source": source_relative,
+                **({"live_review": live_metadata} if live_metadata else {}),
+            },
+        )
+        return {
+            "result": "block",
+            "summary": "Codex App authoritative review output could not be normalized safely.",
+            "missing_inputs": normalization_errors,
+            "fallback_to": None,
+            "engine": {
+                "engine": CODEX_APP_REVIEW_ENGINE,
+                "adapter": CODEX_APP_REVIEW_ADAPTER,
+                "profile": engine_profile,
+                "result": "block",
+                "failure_reason": "schema_drift",
+                "reviewed_head": reviewed_head,
+                "evidence": evidence,
+            },
+            "engine_metadata": {
+                **selection_metadata,
+                "app_server": app_server,
+                "thread_id": thread_id,
+                "thread_cwd": cwd_relative,
+                "raw_source": source_relative,
+                **({"live_review": live_metadata} if live_metadata else {}),
+            },
+        }
+
+    raw_path.write_text(raw_text, encoding="utf-8")
+    write_json_file(findings_path, {"findings": normalized["findings"]})
+    metadata = {
+        "schema_version": "loom-review-engine-metadata/v1",
+        "engine": CODEX_APP_REVIEW_ENGINE,
+        "adapter": CODEX_APP_REVIEW_ADAPTER,
+        "profile": engine_profile,
+        **selection_metadata,
+        "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+        "result": "pass",
+        "reviewed_head": reviewed_head,
+        "decision": normalized["decision"],
+        "summary": normalized["summary"],
+        "kind": review_kind,
+        "validation_summary": context["latest_validation_summary"],
+        "app_server": app_server,
+        "thread_id": thread_id,
+        "thread_cwd": cwd_relative,
+        "raw_source": source_relative,
+        "raw_result": relative_to_root(raw_path, context["target_root"]),
+        "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+        "metadata": relative_to_root(metadata_path, context["target_root"]),
+        "review_thread_id": live_metadata.get("review_thread_id") if live_metadata else (thread_id if source_path is not None else None),
+        **({"live_review": {key: value for key, value in live_metadata.items() if key != "normalized"}} if live_metadata else {}),
+        "authority_boundary": "normalized review_record_input only; raw Codex App output remains runtime evidence",
+    }
+    write_json_file(metadata_path, metadata)
+    return {
+        "result": "pass",
+        "summary": "Codex App authoritative review adapter produced a Loom-normalized formal review draft.",
+        "missing_inputs": [],
+        "fallback_to": None,
+        "engine": {
+            "engine": CODEX_APP_REVIEW_ENGINE,
+            "adapter": CODEX_APP_REVIEW_ADAPTER,
+            "profile": engine_profile,
+            "result": "pass",
+            "failure_reason": None,
+            "reviewed_head": reviewed_head,
+            "evidence": evidence,
+        },
+        "engine_metadata": metadata,
+        "review_record_input": {
+            "decision": normalized["decision"],
+            "summary": normalized["summary"],
+            "reviewer": CODEX_APP_REVIEW_ADAPTER,
+            "kind": review_kind,
+            "findings_file": relative_to_root(findings_path, context["target_root"]),
+            "engine_adapter": CODEX_APP_REVIEW_ADAPTER,
+            "engine_evidence": relative_to_root(raw_path, context["target_root"]),
+            "engine_profile": engine_profile,
+            "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+            "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+            "budget_risk": context_pack.get("budget_risk"),
+        },
+    }
 
 
 def manual_review_payload(
@@ -7905,6 +9872,615 @@ def handle_host_binding(args: argparse.Namespace) -> int:
             branch_name=args.branch,
             head_sha=args.head_sha,
             base_sha=args.base_sha,
+        )
+    )
+
+
+def load_optional_json_fixture(target_root: Path, fixture: str | None, *, label: str) -> tuple[Any | None, list[str]]:
+    if not fixture:
+        return None, []
+    path, errors = resolve_repo_relative_path(target_root, fixture, label=label)
+    if errors:
+        return None, errors
+    assert path is not None
+    if not path.exists() or not path.is_file():
+        return None, [f"{label} points to a missing file: {fixture}"]
+    try:
+        return json.loads(path.read_text(encoding="utf-8")), []
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, [f"invalid {label} `{fixture}`: {exc}"]
+
+
+def normalize_pr_fixture_payload(payload: Any) -> tuple[dict[str, Any] | None, list[str]]:
+    if not isinstance(payload, dict):
+        return None, ["PR payload fixture must be a JSON object"]
+    normalized = dict(payload)
+    if "isDraft" not in normalized and "draft" in normalized:
+        normalized["isDraft"] = bool(normalized.get("draft"))
+    if "headRefOid" not in normalized:
+        head = normalized.get("head") if isinstance(normalized.get("head"), dict) else None
+        if isinstance(head, dict) and isinstance(head.get("sha"), str):
+            normalized["headRefOid"] = head.get("sha")
+    if "headRefName" not in normalized:
+        head = normalized.get("head") if isinstance(normalized.get("head"), dict) else None
+        if isinstance(head, dict) and isinstance(head.get("ref"), str):
+            normalized["headRefName"] = head.get("ref")
+    if "baseRefName" not in normalized:
+        base = normalized.get("base") if isinstance(normalized.get("base"), dict) else None
+        if isinstance(base, dict) and isinstance(base.get("ref"), str):
+            normalized["baseRefName"] = base.get("ref")
+    if "state" in normalized:
+        normalized["state"] = str(normalized.get("state") or "unknown").upper()
+    else:
+        normalized["state"] = "OPEN"
+    return normalized, []
+
+
+def infer_pr_number_from_ref(ref: str | None) -> int | None:
+    if not isinstance(ref, str):
+        return None
+    for pattern in (r"(?:^|/)pr[-/](\d+)(?:[-/]|$)", r"pull/(\d+)/(?:head|merge)$"):
+        match = re.search(pattern, ref, flags=re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+    return None
+
+
+def pr_work_item_from_body(body: Any) -> str | None:
+    if not isinstance(body, str):
+        return None
+    patterns = (
+        r"(?im)^\s*[-*]?\s*Loom Work Item\s*:\s*`?([A-Z]+-\d+|INIT-\d+)`?\s*$",
+        r"(?im)^\s*[-*]?\s*Work Item\s*:\s*`?([A-Z]+-\d+|INIT-\d+)`?\s*$",
+        r"(?im)^\s*[-*]?\s*Loom-Work-Item\s*:\s*`?([A-Z]+-\d+|INIT-\d+)`?\s*$",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, body)
+        if match:
+            return match.group(1).strip()
+    return None
+
+
+def pr_body_mentions_item(body: Any, item_id: str) -> bool:
+    if not isinstance(body, str):
+        return False
+    return bool(re.search(rf"(?<![A-Z0-9-]){re.escape(item_id)}(?![A-Z0-9-])", body))
+
+
+def load_pr_payload_for_gate(
+    *,
+    target_root: Path,
+    owner: str | None,
+    repo_name: str | None,
+    pr_number: int | None,
+    head_sha: str | None,
+    branch_name: str | None,
+    pr_payload_file: str | None,
+) -> tuple[dict[str, Any] | None, int | None, list[str], list[dict[str, Any]]]:
+    missing_inputs: list[str] = []
+    inferences: list[dict[str, Any]] = []
+    fixture, fixture_errors = load_optional_json_fixture(target_root, pr_payload_file, label="PR payload fixture")
+    if fixture_errors:
+        return None, pr_number, fixture_errors, inferences
+    if fixture is not None:
+        payload, errors = normalize_pr_fixture_payload(fixture)
+        if errors:
+            return None, pr_number, errors, inferences
+        inferred_number = pr_number or (int(payload["number"]) if isinstance(payload.get("number"), int) else None)
+        return payload, inferred_number, [], inferences
+
+    inferred_pr = pr_number or infer_pr_number_from_ref(branch_name)
+    if inferred_pr is not None and pr_number is None:
+        inferences.append({"from": "branch", "to": "pr", "status": "inferred", "pr": inferred_pr})
+
+    if inferred_pr is None and owner and repo_name and head_sha:
+        pulls, pull_errors = github_commit_pulls(target_root, owner, repo_name, head_sha)
+        if pull_errors:
+            missing_inputs.extend(f"head_sha: {message}" for message in pull_errors)
+        elif len(pulls) == 1 and isinstance(pulls[0].get("number"), int):
+            inferred_pr = int(pulls[0]["number"])
+            inferences.append({"from": "head_sha", "to": "pr", "status": "inferred", "pr": inferred_pr})
+        elif len(pulls) > 1:
+            missing_inputs.append("head_sha resolves to multiple PRs; pass --pr explicitly")
+
+    if inferred_pr is None:
+        return None, None, missing_inputs or ["pr | head-sha | branch"], inferences
+    if not owner or not repo_name:
+        return None, inferred_pr, ["owner/repo"], inferences
+    payload, errors = github_pr_payload(target_root, owner, repo_name, inferred_pr)
+    return payload, inferred_pr, errors, inferences
+
+
+def pr_gate_failure_taxonomy(missing_inputs: list[str], gate_result: str) -> list[str]:
+    categories: set[str] = set()
+    for message in missing_inputs:
+        lowered = str(message).lower()
+        if "pr" in lowered and ("unreadable" in lowered or "payload" in lowered or "head_sha" in lowered):
+            categories.add("pr_unreadable")
+        if "work item" in lowered or "current item mismatch" in lowered:
+            categories.add("work_item_binding_conflict" if "mismatch" in lowered else "work_item_binding_missing")
+        if "fact-chain" in lowered or "fact chain" in lowered:
+            categories.add("fact_chain_unreadable")
+        if "missing review" in lowered or "missing implementation review" in lowered or "missing review artifact" in lowered:
+            categories.add("review_missing")
+        if "schema_version" in lowered or "invalid review" in lowered:
+            categories.add("review_schema_invalid")
+        if "decision is blocking" in lowered or "decision is fallback" in lowered or "not approved" in lowered:
+            categories.add("review_not_approved")
+        if "stale" in lowered or "implementation drift" in lowered:
+            categories.add("review_stale")
+        if "validation summary" in lowered:
+            categories.add("validation_summary_drift")
+        if "reviewed_head" in lowered or "head binding" in lowered:
+            categories.add("head_binding_drift")
+        if "checkout head" in lowered:
+            categories.add("checkout_head_drift")
+        if "raw" in lowered or "shadow" in lowered:
+            categories.add("raw_evidence_bypass")
+        if "required check" in lowered or "branch protection" in lowered or "ruleset" in lowered:
+            categories.add("host_enforcement_unverified")
+    if gate_result == "fallback":
+        categories.add("prior_gate_fallback")
+    return sorted(categories)
+
+
+def pr_gate_payload(
+    *,
+    target_root: Path,
+    output_relative: str,
+    expected_item: str | None,
+    owner: str | None,
+    repo_name: str | None,
+    pr_number: int | None,
+    head_sha: str | None,
+    branch_name: str | None,
+    pr_payload_file: str | None,
+) -> dict[str, Any]:
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    owner = owner or detected_owner
+    repo_name = repo_name or detected_repo
+    missing_inputs: list[str] = []
+    steps: list[dict[str, Any]] = []
+
+    runtime_state = runtime_state_payload(target_root)
+    steps.append(
+        {
+            "name": "runtime-state",
+            "result": runtime_state["result"],
+            "summary": runtime_state["summary"],
+            "missing_inputs": runtime_state["missing_inputs"],
+            "fallback_to": runtime_state["fallback_to"],
+        }
+    )
+    if runtime_state["result"] != "pass":
+        missing_inputs.extend(str(message) for message in runtime_state.get("missing_inputs", []))
+
+    pr_payload, effective_pr, pr_errors, inferences = load_pr_payload_for_gate(
+        target_root=target_root,
+        owner=owner,
+        repo_name=repo_name,
+        pr_number=pr_number,
+        head_sha=head_sha,
+        branch_name=branch_name,
+        pr_payload_file=pr_payload_file,
+    )
+    if pr_errors:
+        missing_inputs.extend(f"pr: {message}" for message in pr_errors)
+
+    body_item = pr_work_item_from_body(pr_payload.get("body") if isinstance(pr_payload, dict) else None)
+    effective_item = expected_item or body_item
+    if expected_item and body_item and expected_item != body_item:
+        missing_inputs.append(f"PR body Work Item `{body_item}` does not match expected `{expected_item}`")
+    if effective_item is None:
+        missing_inputs.append("PR body is missing `Loom Work Item: <item>`")
+
+    context: dict[str, Any] = {}
+    context_errors: list[str] = []
+    if effective_item is not None:
+        context, context_errors = load_context(target_root, output_relative, effective_item)
+    else:
+        context, context_errors = load_context(target_root, output_relative, expected_item)
+    if context_errors:
+        missing_inputs.extend(f"fact-chain: {message}" for message in context_errors)
+
+    pr_head = head_sha
+    if isinstance(pr_payload, dict) and isinstance(pr_payload.get("headRefOid"), str):
+        if pr_head and pr_payload["headRefOid"] != pr_head:
+            missing_inputs.append("PR payload headRefOid does not match --head-sha")
+        pr_head = pr_payload["headRefOid"]
+    if not pr_head:
+        missing_inputs.append("PR head SHA is unavailable")
+
+    pr_state = pr_payload.get("state") if isinstance(pr_payload, dict) else None
+    if pr_payload is not None:
+        if pr_state not in {"OPEN"}:
+            missing_inputs.append(f"PR state must be OPEN before controlled merge: {pr_state}")
+        if pr_payload.get("isDraft") is True:
+            missing_inputs.append("PR is draft")
+        if context and not pr_body_mentions_item(pr_payload.get("body"), context["item_id"]):
+            missing_inputs.append(f"PR body does not mention Loom Work Item `{context['item_id']}`")
+
+    current_head = git_head_sha(target_root)
+    if pr_head and current_head and pr_head != current_head:
+        missing_inputs.append("checkout head does not match PR head")
+
+    merge_checkpoint: dict[str, Any] = {
+        "result": "block",
+        "summary": "merge checkpoint was not evaluated.",
+        "missing_inputs": ["fact-chain"],
+        "fallback_to": "admission",
+    }
+    review_approval: dict[str, Any] = {
+        "status": "unavailable",
+        "path": None,
+        "decision": None,
+        "reviewed_head": None,
+        "head_binding": None,
+    }
+    if context:
+        merge_checkpoint = checkpoint_payload("merge", context)
+        review_record, review_path, review_errors = load_review_record(target_root, context["item_id"], context["review_entry"])
+        if review_record is None:
+            review_approval = {
+                "status": "missing",
+                "path": review_path,
+                "decision": None,
+                "reviewed_head": None,
+                "head_binding": None,
+                "missing_inputs": review_errors or [f"missing review artifact: {review_path}"],
+            }
+        else:
+            review_approval = {
+                "status": "approved" if review_record.get("decision") == "allow" and not review_errors else "not_approved",
+                "path": review_path,
+                "decision": review_record.get("decision"),
+                "reviewed_head": review_record.get("reviewed_head"),
+                "reviewed_validation_summary": review_record.get("reviewed_validation_summary"),
+                "head_binding": review_record.get("head_binding"),
+                "missing_inputs": review_errors,
+            }
+        if merge_checkpoint.get("result") in {"block", "fallback"}:
+            missing_inputs.extend(str(message) for message in merge_checkpoint.get("missing_inputs", []))
+        steps.append(
+            {
+                "name": "checkpoint-merge",
+                "result": merge_checkpoint.get("result"),
+                "summary": merge_checkpoint.get("summary"),
+                "missing_inputs": merge_checkpoint.get("missing_inputs", []),
+                "fallback_to": merge_checkpoint.get("fallback_to"),
+            }
+        )
+
+    # Make the bypass boundary explicit even when raw evidence is present in the repository.
+    if context:
+        runtime_review_root = target_root / ".loom/runtime/review" / context["item_id"]
+        raw_evidence_present = runtime_review_root.exists() and any(runtime_review_root.glob("**/*"))
+    else:
+        raw_evidence_present = False
+
+    result = "pass"
+    fallback_to: str | None = None
+    for step in steps:
+        if step.get("result") == "fallback":
+            result = "fallback"
+            fallback_to = step.get("fallback_to") or "build"
+            break
+        if step.get("result") == "block" and result == "pass":
+            result = "block"
+            fallback_to = step.get("fallback_to")
+    if missing_inputs and result == "pass":
+        result = "block"
+        fallback_to = fallback_to or "build"
+
+    failure_taxonomy = pr_gate_failure_taxonomy(missing_inputs, result)
+    if raw_evidence_present and review_approval.get("status") != "approved" and "raw_evidence_bypass" not in failure_taxonomy:
+        failure_taxonomy.append("raw_evidence_bypass")
+    return {
+        "command": "pr-gate",
+        "operation": "check",
+        "schema_version": PR_MERGE_GATE_SCHEMA,
+        "result": result,
+        "summary": (
+            "PR merge gate found fresh authored semantic review approval for the current PR head."
+            if result == "pass"
+            else "PR merge gate is blocked or falling back before host merge."
+        ),
+        "missing_inputs": sorted(set(missing_inputs)),
+        "fallback_to": fallback_to,
+        "repository": {"owner": owner, "name": repo_name},
+        "pr": {
+            "number": effective_pr,
+            "state": pr_state,
+            "isDraft": pr_payload.get("isDraft") if isinstance(pr_payload, dict) else None,
+            "headRefName": pr_payload.get("headRefName") if isinstance(pr_payload, dict) else branch_name,
+            "baseRefName": pr_payload.get("baseRefName") if isinstance(pr_payload, dict) else None,
+            "head_sha": pr_head,
+            "url": pr_payload.get("url") if isinstance(pr_payload, dict) else None,
+            "work_item_from_body": body_item,
+        },
+        "work_item": {
+            "id": context.get("item_id") if context else effective_item,
+            "path": relative_to_root(context["work_item_path"], target_root) if context else None,
+            "review_entry": context.get("review_entry") if context else None,
+        },
+        "review_approval": review_approval,
+        "merge_checkpoint": merge_checkpoint,
+        "host_enforcement": {
+            "stable_check_name": PR_MERGE_GATE_CHECK_NAME,
+            "status": "not_checked",
+            "reason": "pr-gate check proves PR-local semantic approval; controlled-merge checks host required status.",
+        },
+        "approval_boundary": {
+            "authored_truth": "work_item.review_entry",
+            "raw_review_evidence_satisfies_approval": False,
+            "shadow_evidence_satisfies_approval": False,
+            "ci_success_satisfies_approval": False,
+            "raw_evidence_present": raw_evidence_present,
+        },
+        "failure_taxonomy": sorted(failure_taxonomy),
+        "steps": steps,
+        "inferences": inferences,
+    }
+
+
+def handle_pr_gate(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    return emit(
+        pr_gate_payload(
+            target_root=target_root,
+            output_relative=args.output,
+            expected_item=args.item,
+            owner=args.owner,
+            repo_name=args.repo_name,
+            pr_number=args.pr,
+            head_sha=args.head_sha,
+            branch_name=args.branch,
+            pr_payload_file=args.pr_payload_file,
+        )
+    )
+
+
+def required_status_contexts_from_protection(payload: Any) -> list[str]:
+    if not isinstance(payload, dict):
+        return []
+    required_status = payload.get("required_status_checks")
+    if not isinstance(required_status, dict):
+        return []
+    contexts = required_status.get("contexts")
+    if isinstance(contexts, list):
+        return [str(context) for context in contexts if isinstance(context, str) and context.strip()]
+    checks = required_status.get("checks")
+    if isinstance(checks, list):
+        return [str(check.get("context")) for check in checks if isinstance(check, dict) and isinstance(check.get("context"), str)]
+    return []
+
+
+def required_status_contexts_from_branch_rules(payload: Any) -> list[str]:
+    rules = payload
+    if isinstance(payload, dict):
+        rules = payload.get("rules") or payload.get("data")
+    if not isinstance(rules, list):
+        return []
+    contexts: list[str] = []
+    for rule in rules:
+        if not isinstance(rule, dict) or rule.get("type") != "required_status_checks":
+            continue
+        parameters = rule.get("parameters") if isinstance(rule.get("parameters"), dict) else {}
+        checks = parameters.get("required_status_checks")
+        if isinstance(checks, list):
+            for check in checks:
+                if isinstance(check, dict) and isinstance(check.get("context"), str):
+                    contexts.append(check["context"])
+                elif isinstance(check, str):
+                    contexts.append(check)
+        for fallback_key in ("contexts", "required_contexts"):
+            fallback_contexts = parameters.get(fallback_key)
+            if isinstance(fallback_contexts, list):
+                contexts.extend(str(context) for context in fallback_contexts if isinstance(context, str) and context.strip())
+    return sorted(set(contexts))
+
+
+def required_check_status_payload(status_rollup: Any, required_contexts: list[str]) -> dict[str, Any]:
+    runs = status_rollup if isinstance(status_rollup, list) else []
+    by_name: dict[str, list[dict[str, Any]]] = {}
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        name = run.get("name") or run.get("context")
+        if isinstance(name, str):
+            by_name.setdefault(name, []).append(run)
+    missing: list[str] = []
+    pending: list[str] = []
+    failing: list[str] = []
+    for context in required_contexts:
+        entries = by_name.get(context, [])
+        if not entries:
+            missing.append(context)
+            continue
+        if any(entry.get("conclusion") == "SUCCESS" or entry.get("state") == "SUCCESS" for entry in entries):
+            continue
+        if any(entry.get("status") not in {None, "COMPLETED"} for entry in entries):
+            pending.append(context)
+        else:
+            failing.append(context)
+    result = "pass" if not missing and not pending and not failing else "block"
+    return {
+        "result": result,
+        "required_contexts": required_contexts,
+        "missing": missing,
+        "pending": pending,
+        "failing": failing,
+    }
+
+
+def controlled_merge_payload(
+    *,
+    target_root: Path,
+    output_relative: str,
+    expected_item: str | None,
+    owner: str | None,
+    repo_name: str | None,
+    pr_number: int,
+    head_sha: str | None,
+    merge_method: str,
+    delete_branch: bool,
+    execute: bool,
+    pr_payload_file: str | None,
+    status_checks_file: str | None,
+    branch_protection_file: str | None,
+    ruleset_file: str | None,
+) -> dict[str, Any]:
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    owner = owner or detected_owner
+    repo_name = repo_name or detected_repo
+    pr_gate = pr_gate_payload(
+        target_root=target_root,
+        output_relative=output_relative,
+        expected_item=expected_item,
+        owner=owner,
+        repo_name=repo_name,
+        pr_number=pr_number,
+        head_sha=head_sha,
+        branch_name=None,
+        pr_payload_file=pr_payload_file,
+    )
+    missing_inputs = [f"pr-gate: {message}" for message in pr_gate.get("missing_inputs", [])]
+    result = pr_gate.get("result")
+    fallback_to = pr_gate.get("fallback_to")
+
+    pr_payload = pr_gate.get("pr") if isinstance(pr_gate.get("pr"), dict) else {}
+    base_ref = pr_payload.get("baseRefName") if isinstance(pr_payload, dict) else None
+
+    protection_payload, protection_errors = load_optional_json_fixture(
+        target_root,
+        branch_protection_file,
+        label="branch protection fixture",
+    )
+    if protection_payload is None and not protection_errors and owner and repo_name and isinstance(base_ref, str) and base_ref:
+        protection_payload, protection_errors = gh_rest_json(
+            target_root,
+            f"repos/{owner}/{repo_name}/branches/{quote(base_ref, safe='')}/protection",
+        )
+    if protection_errors:
+        missing_inputs.extend(f"branch protection: {message}" for message in protection_errors)
+
+    ruleset_payload, ruleset_errors = load_optional_json_fixture(
+        target_root,
+        ruleset_file,
+        label="branch rules/ruleset fixture",
+    )
+    if ruleset_payload is None and not ruleset_errors and owner and repo_name and isinstance(base_ref, str) and base_ref:
+        ruleset_payload, ruleset_errors = github_public_rest_list(
+            f"repos/{owner}/{repo_name}/rules/branches/{quote(base_ref, safe='')}",
+        )
+    if ruleset_errors:
+        missing_inputs.extend(f"branch rules/ruleset: {message}" for message in ruleset_errors)
+
+    status_payload, status_errors = load_optional_json_fixture(
+        target_root,
+        status_checks_file,
+        label="status checks fixture",
+    )
+    if status_payload is None and not status_errors:
+        status_payload, status_errors = gh_json(
+            target_root,
+            ["pr", "view", str(pr_number), "--json", "statusCheckRollup"],
+        )
+    if status_errors:
+        missing_inputs.extend(f"status checks: {message}" for message in status_errors)
+
+    protection_contexts = required_status_contexts_from_protection(protection_payload)
+    ruleset_contexts = required_status_contexts_from_branch_rules(ruleset_payload)
+    required_contexts = sorted(set(protection_contexts + ruleset_contexts))
+    required_checks = required_check_status_payload(
+        status_payload.get("statusCheckRollup") if isinstance(status_payload, dict) else status_payload,
+        required_contexts,
+    )
+    if protection_payload is None and ruleset_payload is None:
+        missing_inputs.append("branch protection or ruleset readback is unavailable")
+    if PR_MERGE_GATE_CHECK_NAME not in required_contexts:
+        missing_inputs.append(f"required check `{PR_MERGE_GATE_CHECK_NAME}` is not enforced")
+    if required_checks["result"] != "pass":
+        labels = {"missing": "missing", "pending": "pending", "failing": "failing"}
+        for key in ("missing", "pending", "failing"):
+            for context in required_checks[key]:
+                missing_inputs.append(f"required check `{context}` is {labels[key]}")
+
+    merge_result: dict[str, Any] = {
+        "attempted": False,
+        "executed": False,
+        "dry_run": not execute,
+        "method": merge_method,
+        "delete_branch": delete_branch,
+    }
+    if missing_inputs and result == "pass":
+        result = "block"
+        fallback_to = fallback_to or "merge"
+    if result == "pass" and execute:
+        command = ["gh", "pr", "merge", str(pr_number), f"--{merge_method}"]
+        if delete_branch:
+            command.append("--delete-branch")
+        completed = run_process(command, target_root)
+        merge_result["attempted"] = True
+        merge_result["command"] = command
+        merge_result["returncode"] = completed.returncode
+        merge_result["stdout"] = completed.stdout.strip()
+        merge_result["stderr"] = completed.stderr.strip()
+        if completed.returncode == 0:
+            merge_result["executed"] = True
+        else:
+            result = "block"
+            fallback_to = "merge"
+            missing_inputs.append(completed.stderr.strip() or completed.stdout.strip() or "gh pr merge failed")
+
+    return {
+        "command": "controlled-merge",
+        "operation": "merge" if execute else "check",
+        "schema_version": CONTROLLED_MERGE_SCHEMA,
+        "result": result,
+        "summary": (
+            "controlled merge preconditions passed and host merge was delegated."
+            if result == "pass" and execute
+            else "controlled merge preconditions passed; host merge was not executed."
+            if result == "pass"
+            else "controlled merge is blocked before host merge delegation."
+        ),
+        "missing_inputs": sorted(set(str(message) for message in missing_inputs)),
+        "fallback_to": fallback_to,
+        "repository": {"owner": owner, "name": repo_name},
+        "pr_gate": pr_gate,
+        "required_checks": required_checks,
+        "host_enforcement": {
+            "stable_check_name": PR_MERGE_GATE_CHECK_NAME,
+            "required_contexts": required_contexts,
+            "required": PR_MERGE_GATE_CHECK_NAME in required_contexts,
+            "branch_protection_readable": protection_payload is not None,
+            "branch_protection_required_contexts": protection_contexts,
+            "ruleset_readable": ruleset_payload is not None,
+            "ruleset_required_contexts": ruleset_contexts,
+        },
+        "merge": merge_result,
+    }
+
+
+def handle_controlled_merge(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    return emit(
+        controlled_merge_payload(
+            target_root=target_root,
+            output_relative=args.output,
+            expected_item=args.item,
+            owner=args.owner,
+            repo_name=args.repo_name,
+            pr_number=args.pr,
+            head_sha=args.head_sha,
+            merge_method=args.merge_method,
+            delete_branch=args.delete_branch,
+            execute=args.execute and args.operation == "merge",
+            pr_payload_file=args.pr_payload_file,
+            status_checks_file=args.status_checks_file,
+            branch_protection_file=args.branch_protection_file,
+            ruleset_file=args.ruleset_file,
         )
     )
 
@@ -10278,9 +12854,13 @@ def handle_review(args: argparse.Namespace) -> int:
     if args.operation == "run":
         flow_operation = "spec-review" if inferred_spec_review else "review"
         review_kind = "spec_review" if inferred_spec_review else implementation_review_kind(context)
+        current_head = git_head_sha(target_root) or "unknown-head"
+        adapter_selection = select_review_adapter(args, target_root, reviewed_head=current_head)
+        requested_engine_adapter = str(adapter_selection["adapter"])
         engine_profile, engine_profile_errors = resolve_review_engine_profile(
             context,
             review_kind,
+            adapter=requested_engine_adapter,
             requested_profile=args.engine_profile,
             requested_model=args.engine_model,
             requested_reasoning=args.engine_reasoning,
@@ -10303,14 +12883,15 @@ def handle_review(args: argparse.Namespace) -> int:
                     "missing_inputs": engine_profile_errors,
                     "fallback_to": None,
                     "engine": {
-                        "engine": DEFAULT_REVIEW_ENGINE,
-                        "adapter": DEFAULT_REVIEW_ADAPTER,
+                        "engine": CODEX_APP_REVIEW_ENGINE if requested_engine_adapter == CODEX_APP_REVIEW_ADAPTER else DEFAULT_REVIEW_ENGINE,
+                        "adapter": requested_engine_adapter,
                         "profile": None,
                         "result": "not_run",
                         "failure_reason": "runtime_conflict",
-                        "reviewed_head": git_head_sha(target_root) or "unknown-head",
+                        "reviewed_head": current_head,
                         "evidence": None,
                     },
+                    "engine_metadata": review_adapter_selection_metadata(adapter_selection, reviewed_head=current_head),
                     "manual_review": manual_review,
                 }
             )
@@ -10343,25 +12924,47 @@ def handle_review(args: argparse.Namespace) -> int:
                     "repo_specific_requirements": flow_payload.get("repo_specific_requirements"),
                     "current_checkpoint": flow_payload.get("current_checkpoint"),
                     "engine": {
-                        "engine": DEFAULT_REVIEW_ENGINE,
-                        "adapter": DEFAULT_REVIEW_ADAPTER,
+                        "engine": CODEX_APP_REVIEW_ENGINE if requested_engine_adapter == CODEX_APP_REVIEW_ADAPTER else DEFAULT_REVIEW_ENGINE,
+                        "adapter": requested_engine_adapter,
                         "profile": engine_profile,
                         "result": "not_run",
                         "failure_reason": None,
-                        "reviewed_head": git_head_sha(target_root) or "unknown-head",
+                        "reviewed_head": current_head,
                         "evidence": None,
                     },
+                    "engine_metadata": review_adapter_selection_metadata(adapter_selection, reviewed_head=current_head),
                     "manual_review": manual_review,
                 }
             )
 
         build_payload = flow_payload["build_checkpoint"]
-        engine_payload = run_default_review_engine(
+        if requested_engine_adapter == CODEX_APP_REVIEW_ADAPTER:
+            engine_payload = run_codex_app_review_authoritative_adapter(
+                context,
+                build_payload,
+                review_path,
+                engine_profile,
+                review_kind=review_kind,
+                app_server=adapter_selection.get("app_server") if isinstance(adapter_selection.get("app_server"), str) else None,
+                thread_id=adapter_selection.get("thread_id") if isinstance(adapter_selection.get("thread_id"), str) else None,
+                thread_cwd=adapter_selection.get("thread_cwd") if isinstance(adapter_selection.get("thread_cwd"), str) else None,
+                raw_file=adapter_selection.get("raw_file") if isinstance(adapter_selection.get("raw_file"), str) else None,
+                adapter_selection=adapter_selection,
+            )
+        else:
+            engine_payload = run_default_review_engine(
+                context,
+                build_payload,
+                review_path,
+                engine_profile,
+                review_kind=review_kind,
+                adapter_selection=adapter_selection,
+            )
+        shadow_engine_payload = run_codex_app_review_shadow_adapter(
             context,
-            build_payload,
-            review_path,
-            engine_profile,
-            review_kind=review_kind,
+            adapter=args.shadow_engine_adapter,
+            raw_file=args.shadow_review_raw_file,
+            default_engine_payload=engine_payload,
         )
         review_record_input = engine_payload.get("review_record_input")
         findings_file = (
@@ -10379,7 +12982,7 @@ def handle_review(args: argparse.Namespace) -> int:
         summary = (
             engine_payload["summary"]
             if result == "pass"
-            else "default review engine failed closed; record any formal review conclusion through the single review record."
+            else f"{requested_engine_adapter} review engine failed closed; record any formal review conclusion through the single review record."
         )
         return emit(
             {
@@ -10401,6 +13004,8 @@ def handle_review(args: argparse.Namespace) -> int:
                 "repo_specific_requirements": flow_payload.get("repo_specific_requirements"),
                 "current_checkpoint": flow_payload.get("current_checkpoint"),
                 "engine": engine_payload["engine"],
+                **({"engine_metadata": engine_payload["engine_metadata"]} if isinstance(engine_payload.get("engine_metadata"), dict) else {}),
+                **({"shadow_engine": shadow_engine_payload} if isinstance(shadow_engine_payload, dict) else {}),
                 "manual_review": manual_review,
                 **({"review_record_input": review_record_input} if isinstance(review_record_input, dict) else {}),
             }
@@ -12067,6 +14672,111 @@ def handle_live_smoke(args: argparse.Namespace) -> int:
                 surface=args.surface,
             )
         )
+    if args.operation == "hook-envelope":
+        if not args.target:
+            return emit(
+                {
+                    "command": "live-smoke",
+                    "operation": "hook-envelope",
+                    "schema_version": HOOK_ENVELOPE_LIVE_CHECK_SCHEMA,
+                    "result": "block",
+                    "summary": "hook envelope check requires --target.",
+                    "missing_inputs": ["pass --target <adopted_repo_root>"],
+                    "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                    "runtime_state": runtime_state_payload(Path.cwd()),
+                    "target": live_smoke_target_metadata(Path.cwd()),
+                    "command_plan": [],
+                    "reports": [],
+                    "profile_check": {"id": "hook-envelope", "result": "block"},
+                    "hook_envelope": {
+                        "contract_locator": args.envelope,
+                        "availability": "missing-target",
+                        "requirement": args.requirement,
+                        "checks": [],
+                    },
+                }
+            )
+        if not args.envelope:
+            target_root = Path(args.target).expanduser().resolve()
+            return emit(
+                {
+                    "command": "live-smoke",
+                    "operation": "hook-envelope",
+                    "schema_version": HOOK_ENVELOPE_LIVE_CHECK_SCHEMA,
+                    "result": "block",
+                    "summary": "hook envelope check requires --envelope.",
+                    "missing_inputs": ["pass --envelope <repo_relative_envelope_path>"],
+                    "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                    "runtime_state": runtime_state_payload(target_root),
+                    "target": live_smoke_target_metadata(target_root),
+                    "command_plan": hook_envelope_command_plan(target_root, envelope=args.envelope),
+                    "reports": [],
+                    "profile_check": {"id": "hook-envelope", "result": "block"},
+                    "hook_envelope": {
+                        "contract_locator": args.envelope,
+                        "availability": "missing-envelope",
+                        "requirement": args.requirement,
+                        "checks": [],
+                    },
+                }
+            )
+        return emit(
+            hook_envelope_payload(
+                Path(args.target).expanduser().resolve(),
+                envelope=args.envelope,
+                requirement=args.requirement,
+            )
+        )
+    if args.operation == "hooks-extension":
+        if not args.target:
+            return emit(
+                {
+                    "command": "live-smoke",
+                    "operation": "hooks-extension",
+                    "schema_version": HOOKS_EXTENSION_PROFILE_SCHEMA,
+                    "result": "block",
+                    "summary": "hooks extension profile requires --target.",
+                    "missing_inputs": ["pass --target <adopted_repo_root>"],
+                    "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                    "runtime_state": runtime_state_payload(Path.cwd()),
+                    "target": live_smoke_target_metadata(Path.cwd()),
+                    "command_plan": [],
+                    "reports": [],
+                    "profile_check": {"id": "hooks-extension", "result": "block"},
+                    "core_profile": {"id": "orchestration-core", "hook_enforcement": "not_applicable", "result": "pass"},
+                    "hooks_extension": {
+                        **empty_hook_extension_profile(),
+                        "status": "missing-target",
+                        "result": "block",
+                    },
+                }
+            )
+        return emit(hooks_extension_payload(Path(args.target).expanduser().resolve()))
+    if args.operation == "external-orchestrator-interop":
+        if not args.target:
+            return emit(
+                {
+                    "command": "live-smoke",
+                    "operation": "external-orchestrator-interop",
+                    "schema_version": EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA,
+                    "result": "block",
+                    "summary": "external orchestrator conformance requires --target.",
+                    "missing_inputs": ["pass --target <adopted_repo_root>"],
+                    "fallback_to": LIVE_SMOKE_CONFIG_FALLBACK,
+                    "runtime_state": runtime_state_payload(Path.cwd()),
+                    "target": live_smoke_target_metadata(Path.cwd()),
+                    "command_plan": [],
+                    "reports": [],
+                    "profile_check": {"id": "external-orchestrator-interop", "result": "block"},
+                    "core_profile": {"id": "orchestration-core", "external_orchestrator_enforcement": "not_applicable", "result": "pass"},
+                    "external_orchestrator": {
+                        **empty_external_orchestrator_conformance(),
+                        "status": "missing-target",
+                        "result": "block",
+                    },
+                }
+            )
+        return emit(external_orchestrator_conformance_payload(Path(args.target).expanduser().resolve()))
 
     repo_root = Path(os.environ.get("LOOM_SOURCE_REPO_ROOT", Path.cwd())).expanduser().resolve()
     runtime_state = runtime_state_payload(repo_root)
@@ -12116,6 +14826,10 @@ def main(argv: list[str] | None = None) -> int:
         return handle_carrier(args)
     if args.command == "host-binding":
         return handle_host_binding(args)
+    if args.command == "pr-gate":
+        return handle_pr_gate(args)
+    if args.command == "controlled-merge":
+        return handle_controlled_merge(args)
     if args.command == "runtime-evidence":
         return handle_runtime_evidence(args)
     if args.command == "state-check":
