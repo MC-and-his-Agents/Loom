@@ -112,7 +112,7 @@ REVIEW_KINDS = {"general_review", "code_review", "spec_review"}
 REVIEW_FINDING_SEVERITIES = {"warn", "block"}
 REVIEW_FINDING_DISPOSITION_STATUSES = {"accepted", "rejected", "deferred"}
 DEFAULT_REVIEW_ENGINE = "codex"
-DEFAULT_REVIEW_ADAPTER = "loom/default-codex"
+DEFAULT_REVIEW_ADAPTER = "loom/default-codex-exec"
 CODEX_APP_REVIEW_ADAPTER = "loom/codex-app-review"
 CODEX_APP_REVIEW_ENGINE = "codex-app-review"
 CODEX_APP_REVIEW_SHADOW_ADAPTER = CODEX_APP_REVIEW_ADAPTER
@@ -496,7 +496,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         choices=tuple(sorted(AUTHORITATIVE_REVIEW_ADAPTERS)),
         help=(
             "Optional authoritative review engine adapter for review run/record. "
-            "When omitted, verified Codex App sessions use loom/codex-app-review; headless/CI fallback remains loom/default-codex."
+            "When omitted, verified Codex App sessions use loom/codex-app-review; headless/CI fallback remains loom/default-codex-exec."
         ),
     )
     review.add_argument("--engine-evidence", help="Optional review engine evidence path relative to the target root")

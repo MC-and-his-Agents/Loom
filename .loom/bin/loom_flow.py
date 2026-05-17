@@ -112,12 +112,16 @@ REVIEW_KINDS = {"general_review", "code_review", "spec_review"}
 REVIEW_FINDING_SEVERITIES = {"warn", "block"}
 REVIEW_FINDING_DISPOSITION_STATUSES = {"accepted", "rejected", "deferred"}
 DEFAULT_REVIEW_ENGINE = "codex"
-DEFAULT_REVIEW_ADAPTER = "loom/default-codex"
+DEFAULT_REVIEW_ADAPTER = "loom/default-codex-exec"
 CODEX_APP_REVIEW_ADAPTER = "loom/codex-app-review"
 CODEX_APP_REVIEW_ENGINE = "codex-app-review"
 CODEX_APP_REVIEW_SHADOW_ADAPTER = CODEX_APP_REVIEW_ADAPTER
 AUTHORITATIVE_REVIEW_ADAPTERS = {DEFAULT_REVIEW_ADAPTER, CODEX_APP_REVIEW_ADAPTER}
 SHADOW_REVIEW_ADAPTERS = {CODEX_APP_REVIEW_SHADOW_ADAPTER}
+CODEX_APP_REVIEW_ENDPOINT_ENV = "LOOM_CODEX_APP_REVIEW_ENDPOINT"
+CODEX_APP_REVIEW_THREAD_ID_ENV = "LOOM_CODEX_APP_REVIEW_THREAD_ID"
+CODEX_APP_REVIEW_CWD_ENV = "LOOM_CODEX_APP_REVIEW_CWD"
+CODEX_THREAD_ID_ENV = "CODEX_THREAD_ID"
 DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS: int | None = None
 REVIEW_ENGINE_PROFILE_SCHEMA = "loom-review-engine-profile/v1"
 REVIEW_ENGINE_PROFILE_IDS = {"default", "high-risk", "spec-review", "repeated-blocker"}
@@ -492,26 +496,26 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         choices=tuple(sorted(AUTHORITATIVE_REVIEW_ADAPTERS)),
         help=(
             "Optional authoritative review engine adapter for review run/record. "
-            "Default review run remains loom/default-codex."
+            "When omitted, verified Codex App sessions use loom/codex-app-review; headless/CI fallback remains loom/default-codex-exec."
         ),
     )
     review.add_argument("--engine-evidence", help="Optional review engine evidence path relative to the target root")
     review.add_argument("--normalized-findings", help="Optional normalized findings path relative to the target root")
     review.add_argument(
         "--codex-app-review-app-server",
-        help="Required explicit app-server/session locator when --engine-adapter loom/codex-app-review is authoritative.",
+        help=f"Codex App app-server/session locator. Defaults to ${CODEX_APP_REVIEW_ENDPOINT_ENV} when available.",
     )
     review.add_argument(
         "--codex-app-review-thread-id",
-        help="Required Codex App thread id when --engine-adapter loom/codex-app-review is authoritative.",
+        help=f"Codex App thread id. Defaults to ${CODEX_APP_REVIEW_THREAD_ID_ENV}, or ${CODEX_THREAD_ID_ENV} when an endpoint is present.",
     )
     review.add_argument(
         "--codex-app-review-cwd",
-        help="Required Codex App thread cwd proof when --engine-adapter loom/codex-app-review is authoritative.",
+        help=f"Codex App thread cwd proof. Defaults to ${CODEX_APP_REVIEW_CWD_ENV}.",
     )
     review.add_argument(
         "--codex-app-review-raw-file",
-        help="Required repo-relative Codex App normalized review output captured from review/start or same-thread normalization.",
+        help="Optional repo-relative Codex App normalized review output captured from review/start or same-thread normalization.",
     )
     review.add_argument("--engine-profile", choices=tuple(sorted(REVIEW_ENGINE_PROFILE_IDS)), help="Optional deterministic review engine profile override for review run")
     review.add_argument("--engine-model", help="Optional review engine model override for review run")
@@ -4250,6 +4254,19 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def truthy_env(name: str) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return False
+    return value.strip().lower() not in {"", "0", "false", "no", "off"}
+
+
+def non_empty_str(value: object) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
 def execution_attempt_directory(target_root: Path, item_id: str) -> Path:
     return target_root / ".loom/runtime/attempts" / item_id
 
@@ -6264,8 +6281,26 @@ def run_default_review_engine(
     engine_profile: dict[str, Any],
     *,
     review_kind: str | None = None,
+    adapter_selection: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     reviewed_head = git_head_sha(context["target_root"]) or "unknown-head"
+    selection_metadata = review_adapter_selection_metadata(
+        adapter_selection
+        or {
+            "adapter": DEFAULT_REVIEW_ADAPTER,
+            "selection_source": "explicit-or-legacy-default",
+            "fallback_reason": None,
+            "binding_summary": codex_app_binding_summary(
+                context["target_root"],
+                app_server=None,
+                thread_id=None,
+                thread_cwd=None,
+                reviewed_head=reviewed_head,
+                raw_file=None,
+            ),
+        },
+        reviewed_head=reviewed_head,
+    )
     runtime_root = review_runtime_root(context, reviewed_head)
     prompt_path = runtime_root / "prompt.txt"
     result_path = runtime_root / "engine-result.json"
@@ -6313,6 +6348,7 @@ def run_default_review_engine(
                     "context_pack": relative_to_root(context_pack_path, context["target_root"]),
                 },
             },
+            "engine_metadata": selection_metadata,
         }
 
     scratch_dir.mkdir(parents=True, exist_ok=True)
@@ -6403,6 +6439,7 @@ def run_default_review_engine(
                 "engine": DEFAULT_REVIEW_ENGINE,
                 "adapter": DEFAULT_REVIEW_ADAPTER,
                 "profile": engine_profile,
+                **selection_metadata,
                 "context_pack": relative_to_root(context_pack_path, context["target_root"]),
                 "failure_reason": failure_reason,
                 "summary": failure_detail,
@@ -6424,6 +6461,7 @@ def run_default_review_engine(
                 "reviewed_head": reviewed_head,
                 "evidence": engine_evidence,
             },
+            "engine_metadata": selection_metadata,
         }
 
     if raw_payload is not None and not result_path.exists():
@@ -6440,6 +6478,7 @@ def run_default_review_engine(
                 "engine": DEFAULT_REVIEW_ENGINE,
                 "adapter": DEFAULT_REVIEW_ADAPTER,
                 "profile": engine_profile,
+                **selection_metadata,
                 "context_pack": relative_to_root(context_pack_path, context["target_root"]),
                 "failure_reason": "schema_drift",
                 "summary": "normalized engine output did not satisfy Loom review schema",
@@ -6462,6 +6501,7 @@ def run_default_review_engine(
                 "reviewed_head": reviewed_head,
                 "evidence": engine_evidence,
             },
+            "engine_metadata": selection_metadata,
         }
 
     write_json_file(findings_path, {"findings": normalized_payload["findings"]})
@@ -6471,6 +6511,7 @@ def run_default_review_engine(
                 "engine": DEFAULT_REVIEW_ENGINE,
                 "adapter": DEFAULT_REVIEW_ADAPTER,
                 "profile": engine_profile,
+                **selection_metadata,
                 "context_pack": relative_to_root(context_pack_path, context["target_root"]),
                 "result": "pass",
                 "reviewed_head": reviewed_head,
@@ -6494,6 +6535,13 @@ def run_default_review_engine(
             "failure_reason": None,
             "reviewed_head": reviewed_head,
             "evidence": engine_evidence,
+        },
+        "engine_metadata": {
+            **selection_metadata,
+            "context_pack": relative_to_root(context_pack_path, context["target_root"]),
+            "raw_result": relative_to_root(result_path, context["target_root"]),
+            "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+            "metadata": relative_to_root(metadata_path, context["target_root"]),
         },
         "review_record_input": {
             "decision": normalized_payload["decision"],
@@ -7254,6 +7302,312 @@ def normalize_authoritative_codex_app_review_text(raw_text: str, *, relative: st
     return normalized, []
 
 
+def codex_app_endpoint_socket_path(app_server: str | None) -> Path | None:
+    endpoint = non_empty_str(app_server)
+    if endpoint is None:
+        return None
+    if endpoint.startswith("unix://"):
+        path_text = endpoint.removeprefix("unix://")
+    elif endpoint.startswith("/"):
+        path_text = endpoint
+    else:
+        return None
+    if not path_text:
+        return None
+    return Path(path_text).expanduser()
+
+
+def codex_app_endpoint_is_live_capable(app_server: str | None) -> bool:
+    socket_path = codex_app_endpoint_socket_path(app_server)
+    return socket_path is not None and socket_path.exists()
+
+
+def codex_app_review_bindings_from_args_env(args: argparse.Namespace) -> dict[str, str | None]:
+    app_server = non_empty_str(args.codex_app_review_app_server) or non_empty_str(os.environ.get(CODEX_APP_REVIEW_ENDPOINT_ENV))
+    thread_id = (
+        non_empty_str(args.codex_app_review_thread_id)
+        or non_empty_str(os.environ.get(CODEX_APP_REVIEW_THREAD_ID_ENV))
+        or (non_empty_str(os.environ.get(CODEX_THREAD_ID_ENV)) if app_server else None)
+    )
+    thread_cwd = non_empty_str(args.codex_app_review_cwd) or non_empty_str(os.environ.get(CODEX_APP_REVIEW_CWD_ENV))
+    raw_file = non_empty_str(args.codex_app_review_raw_file)
+    return {
+        "app_server": app_server,
+        "thread_id": thread_id,
+        "thread_cwd": thread_cwd,
+        "raw_file": raw_file,
+    }
+
+
+def codex_app_binding_summary(
+    target_root: Path,
+    *,
+    app_server: str | None,
+    thread_id: str | None,
+    thread_cwd: str | None,
+    reviewed_head: str,
+    raw_file: str | None,
+) -> dict[str, Any]:
+    cwd_match: bool | None = None
+    cwd_summary: str | None = thread_cwd
+    if non_empty_str(thread_cwd):
+        try:
+            cwd_path = Path(str(thread_cwd)).expanduser().resolve()
+        except OSError:
+            cwd_match = False
+        else:
+            cwd_match = cwd_path == target_root
+            cwd_summary = str(cwd_path)
+    raw_source: str | None = None
+    if non_empty_str(raw_file):
+        raw_path, raw_errors = resolve_repo_relative_path(target_root, str(raw_file), label="Codex App authoritative review raw file")
+        if raw_path is not None and not raw_errors:
+            raw_source = relative_to_root(raw_path, target_root)
+        else:
+            raw_source = str(raw_file)
+    return {
+        "app_server": app_server,
+        "thread_id": thread_id,
+        "thread_cwd": cwd_summary,
+        "thread_cwd_matches_target_root": cwd_match,
+        "target_root": str(target_root),
+        "reviewed_head": reviewed_head,
+        "raw_source": raw_source,
+        "live_endpoint_capable": codex_app_endpoint_is_live_capable(app_server),
+    }
+
+
+def select_review_adapter(
+    args: argparse.Namespace,
+    target_root: Path,
+    *,
+    reviewed_head: str,
+) -> dict[str, Any]:
+    bindings = codex_app_review_bindings_from_args_env(args)
+    explicit_adapter = non_empty_str(args.engine_adapter)
+    if explicit_adapter:
+        return {
+            "adapter": explicit_adapter,
+            "selection_source": "explicit-cli",
+            "fallback_reason": None,
+            **bindings,
+            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **bindings),
+        }
+
+    if truthy_env("CI") or truthy_env("CODEX_CI"):
+        return {
+            "adapter": DEFAULT_REVIEW_ADAPTER,
+            "selection_source": "headless-fallback",
+            "fallback_reason": "ci-or-codex-ci",
+            **bindings,
+            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **bindings),
+        }
+
+    app_server = bindings["app_server"]
+    thread_id = bindings["thread_id"]
+    thread_cwd = bindings["thread_cwd"]
+    raw_file = bindings["raw_file"]
+    if not app_server or not thread_id or not thread_cwd:
+        return {
+            "adapter": DEFAULT_REVIEW_ADAPTER,
+            "selection_source": "host-proof-fallback",
+            "fallback_reason": "missing-codex-app-host-proof",
+            **bindings,
+            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **bindings),
+        }
+    if not raw_file and not codex_app_endpoint_is_live_capable(app_server):
+        return {
+            "adapter": DEFAULT_REVIEW_ADAPTER,
+            "selection_source": "host-proof-fallback",
+            "fallback_reason": "app-server-unavailable",
+            **bindings,
+            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **bindings),
+        }
+    return {
+        "adapter": CODEX_APP_REVIEW_ADAPTER,
+        "selection_source": "codex-app-host-default",
+        "fallback_reason": None,
+        **bindings,
+        "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **bindings),
+    }
+
+
+def review_adapter_selection_metadata(selection: dict[str, Any], *, reviewed_head: str) -> dict[str, Any]:
+    return {
+        "selected_adapter": selection["adapter"],
+        "selection_source": selection.get("selection_source"),
+        "fallback_reason": selection.get("fallback_reason"),
+        "app_server": selection.get("app_server"),
+        "thread_id": selection.get("thread_id"),
+        "thread_cwd": selection.get("thread_cwd"),
+        "target_root": selection.get("binding_summary", {}).get("target_root")
+        if isinstance(selection.get("binding_summary"), dict)
+        else None,
+        "reviewed_head": reviewed_head,
+        "thread_target_binding": selection.get("binding_summary"),
+    }
+
+
+def jsonrpc_send_request(stdin: Any, *, request_id: int, method: str, params: dict[str, Any]) -> None:
+    stdin.write(json.dumps({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}) + "\n")
+    stdin.flush()
+
+
+def jsonrpc_read_response(stdout: Any, *, request_id: int) -> tuple[dict[str, Any] | None, list[dict[str, Any]], list[str]]:
+    notifications: list[dict[str, Any]] = []
+    while True:
+        line = stdout.readline()
+        if not line:
+            return None, notifications, [f"app-server closed before response id {request_id}"]
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("id") == request_id:
+            return payload, notifications, []
+        notifications.append(payload)
+
+
+def find_exited_review_text(payload: Any) -> str | None:
+    if isinstance(payload, dict):
+        if payload.get("type") == "exitedReviewMode" and isinstance(payload.get("review"), str):
+            return payload["review"]
+        for value in payload.values():
+            found = find_exited_review_text(value)
+            if found is not None:
+                return found
+    elif isinstance(payload, list):
+        for value in payload:
+            found = find_exited_review_text(value)
+            if found is not None:
+                return found
+    return None
+
+
+def find_normalized_review_payload(payload: Any) -> dict[str, Any] | None:
+    normalized, errors = normalize_engine_review_result(payload, relative="app-server turn/start output")
+    if normalized is not None and not errors:
+        return normalized
+    if isinstance(payload, dict):
+        for value in payload.values():
+            found = find_normalized_review_payload(value)
+            if found is not None:
+                return found
+    elif isinstance(payload, list):
+        for value in payload:
+            found = find_normalized_review_payload(value)
+            if found is not None:
+                return found
+    return None
+
+
+def app_server_proxy_command(app_server: str) -> list[str] | None:
+    socket_path = codex_app_endpoint_socket_path(app_server)
+    if socket_path is None:
+        return None
+    return ["codex", "app-server", "proxy", "--sock", str(socket_path)]
+
+
+def run_codex_app_live_review(
+    *,
+    app_server: str,
+    thread_id: str,
+    reviewed_head: str,
+    thread_cwd: str,
+    prompt_text: str,
+) -> tuple[str | None, dict[str, Any], list[str]]:
+    command = app_server_proxy_command(app_server)
+    if command is None:
+        return None, {}, [f"unsupported Codex App review endpoint: {app_server}"]
+    try:
+        process = subprocess.Popen(
+            command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except OSError as exc:
+        return None, {}, [f"Codex App review endpoint is unavailable: {exc}"]
+    assert process.stdin is not None
+    assert process.stdout is not None
+    metadata: dict[str, Any] = {"review_target": {"type": "commit", "sha": reviewed_head}}
+    try:
+        jsonrpc_send_request(process.stdin, request_id=1, method="initialize", params={"clientInfo": {"name": "loom", "version": "stage3"}, "capabilities": {}})
+        initialize_response, _, initialize_errors = jsonrpc_read_response(process.stdout, request_id=1)
+        if initialize_errors:
+            return None, metadata, initialize_errors
+        if isinstance(initialize_response, dict) and isinstance(initialize_response.get("error"), dict):
+            return None, metadata, [f"Codex App initialize failed: {initialize_response['error']}"]
+
+        jsonrpc_send_request(
+            process.stdin,
+            request_id=2,
+            method="review/start",
+            params={
+                "threadId": thread_id,
+                "delivery": "inline",
+                "target": {"type": "commit", "sha": reviewed_head},
+            },
+        )
+        review_response, review_notifications, review_errors = jsonrpc_read_response(process.stdout, request_id=2)
+        if review_errors:
+            return None, metadata, review_errors
+        if isinstance(review_response, dict) and isinstance(review_response.get("error"), dict):
+            return None, metadata, [f"Codex App review/start failed: {review_response['error']}"]
+        result = review_response.get("result") if isinstance(review_response, dict) else None
+        if isinstance(result, dict):
+            metadata["review_thread_id"] = result.get("reviewThreadId")
+        review_text = find_exited_review_text(result) or find_exited_review_text(review_notifications)
+        if not isinstance(review_text, str) or not review_text.strip():
+            return None, metadata, ["Codex App review/start did not return exitedReviewMode.review"]
+
+        parsed_review, parsed_errors = normalize_authoritative_codex_app_review_text(review_text, relative="app-server review/start output")
+        if parsed_review is not None and not parsed_errors:
+            metadata["normalization_source"] = "review-start-json"
+            return review_text, {**metadata, "normalized": parsed_review}, []
+
+        jsonrpc_send_request(
+            process.stdin,
+            request_id=3,
+            method="turn/start",
+            params={
+                "threadId": metadata.get("review_thread_id") or thread_id,
+                "cwd": thread_cwd,
+                "input": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "Normalize this Codex App review output into the provided JSON schema. "
+                            "Return only the structured review result.\n\n"
+                            f"{review_text}"
+                        ),
+                    }
+                ],
+                "outputSchema": load_json_file(review_engine_schema_path()),
+            },
+        )
+        turn_response, turn_notifications, turn_errors = jsonrpc_read_response(process.stdout, request_id=3)
+        if turn_errors:
+            return review_text, metadata, turn_errors
+        if isinstance(turn_response, dict) and isinstance(turn_response.get("error"), dict):
+            return review_text, metadata, [f"Codex App turn/start normalization failed: {turn_response['error']}"]
+        normalized = find_normalized_review_payload(turn_response.get("result") if isinstance(turn_response, dict) else None)
+        if normalized is None:
+            normalized = find_normalized_review_payload(turn_notifications)
+        if normalized is None:
+            return review_text, metadata, ["Codex App turn/start did not return a Loom review result"]
+        metadata["normalization_source"] = "turn-start-output-schema"
+        return review_text, {**metadata, "normalized": normalized}, []
+    finally:
+        try:
+            process.terminate()
+        except OSError:
+            pass
+
+
 def shadow_adapter_slug(adapter: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]", "-", adapter).strip("-") or "unknown-adapter"
 
@@ -7453,8 +7807,30 @@ def run_codex_app_review_authoritative_adapter(
     thread_id: str | None,
     thread_cwd: str | None,
     raw_file: str | None,
+    adapter_selection: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     reviewed_head = git_head_sha(context["target_root"]) or "unknown-head"
+    selection_metadata = review_adapter_selection_metadata(
+        adapter_selection
+        or {
+            "adapter": CODEX_APP_REVIEW_ADAPTER,
+            "selection_source": "explicit-cli",
+            "fallback_reason": None,
+            "app_server": app_server,
+            "thread_id": thread_id,
+            "thread_cwd": thread_cwd,
+            "raw_file": raw_file,
+            "binding_summary": codex_app_binding_summary(
+                context["target_root"],
+                app_server=app_server,
+                thread_id=thread_id,
+                thread_cwd=thread_cwd,
+                reviewed_head=reviewed_head,
+                raw_file=raw_file,
+            ),
+        },
+        reviewed_head=reviewed_head,
+    )
     runtime_root = review_runtime_root(context, reviewed_head)
     raw_path = runtime_root / "engine-result.json"
     findings_path = runtime_root / "normalized-findings.json"
@@ -7488,7 +7864,6 @@ def run_codex_app_review_authoritative_adapter(
         ("--codex-app-review-app-server", app_server),
         ("--codex-app-review-thread-id", thread_id),
         ("--codex-app-review-cwd", thread_cwd),
-        ("--codex-app-review-raw-file", raw_file),
     ):
         if not isinstance(value, str) or not value.strip():
             missing_inputs.append(label)
@@ -7518,6 +7893,8 @@ def run_codex_app_review_authoritative_adapter(
         missing_inputs.extend(source_errors)
         if source_path is not None:
             source_relative = relative_to_root(source_path, context["target_root"])
+    elif not codex_app_endpoint_is_live_capable(app_server):
+        missing_inputs.append("--codex-app-review-raw-file or live app-server endpoint")
 
     if missing_inputs:
         write_json_file(
@@ -7527,6 +7904,7 @@ def run_codex_app_review_authoritative_adapter(
                 "engine": CODEX_APP_REVIEW_ENGINE,
                 "adapter": CODEX_APP_REVIEW_ADAPTER,
                 "profile": engine_profile,
+                **selection_metadata,
                 "context_pack": relative_to_root(context_pack_path, context["target_root"]),
                 "result": "block",
                 "failure_reason": "runtime_conflict",
@@ -7553,6 +7931,7 @@ def run_codex_app_review_authoritative_adapter(
                 "evidence": evidence,
             },
             "engine_metadata": {
+                **selection_metadata,
                 "app_server": app_server,
                 "thread_id": thread_id,
                 "thread_cwd": cwd_relative or thread_cwd,
@@ -7560,17 +7939,30 @@ def run_codex_app_review_authoritative_adapter(
             },
         }
 
-    try:
-        raw_text = source_path.read_text(encoding="utf-8") if source_path is not None else ""
-    except OSError as exc:
-        raw_text = ""
-        normalization_errors = [f"Codex App authoritative review raw file: {exc.strerror or exc}"]
-        normalized = None
+    live_metadata: dict[str, Any] = {}
+    if source_path is not None:
+        try:
+            raw_text = source_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raw_text = ""
+            normalization_errors = [f"Codex App authoritative review raw file: {exc.strerror or exc}"]
+            normalized = None
+        else:
+            normalized, normalization_errors = normalize_authoritative_codex_app_review_text(
+                raw_text,
+                relative=source_relative or str(raw_file),
+            )
     else:
-        normalized, normalization_errors = normalize_authoritative_codex_app_review_text(
-            raw_text,
-            relative=source_relative or str(raw_file),
+        raw_text, live_metadata, normalization_errors = run_codex_app_live_review(
+            app_server=str(app_server),
+            thread_id=str(thread_id),
+            reviewed_head=reviewed_head,
+            thread_cwd=str(thread_cwd),
+            prompt_text=instructions_path.read_text(encoding="utf-8"),
         )
+        normalized = live_metadata.get("normalized") if isinstance(live_metadata.get("normalized"), dict) else None
+        if raw_text is None:
+            raw_text = ""
 
     if normalization_errors or normalized is None:
         if raw_text:
@@ -7582,6 +7974,7 @@ def run_codex_app_review_authoritative_adapter(
                 "engine": CODEX_APP_REVIEW_ENGINE,
                 "adapter": CODEX_APP_REVIEW_ADAPTER,
                 "profile": engine_profile,
+                **selection_metadata,
                 "context_pack": relative_to_root(context_pack_path, context["target_root"]),
                 "result": "block",
                 "failure_reason": "schema_drift",
@@ -7592,6 +7985,7 @@ def run_codex_app_review_authoritative_adapter(
                 "thread_id": thread_id,
                 "thread_cwd": cwd_relative,
                 "raw_source": source_relative,
+                **({"live_review": live_metadata} if live_metadata else {}),
             },
         )
         return {
@@ -7609,10 +8003,12 @@ def run_codex_app_review_authoritative_adapter(
                 "evidence": evidence,
             },
             "engine_metadata": {
+                **selection_metadata,
                 "app_server": app_server,
                 "thread_id": thread_id,
                 "thread_cwd": cwd_relative,
                 "raw_source": source_relative,
+                **({"live_review": live_metadata} if live_metadata else {}),
             },
         }
 
@@ -7623,6 +8019,7 @@ def run_codex_app_review_authoritative_adapter(
         "engine": CODEX_APP_REVIEW_ENGINE,
         "adapter": CODEX_APP_REVIEW_ADAPTER,
         "profile": engine_profile,
+        **selection_metadata,
         "context_pack": relative_to_root(context_pack_path, context["target_root"]),
         "result": "pass",
         "reviewed_head": reviewed_head,
@@ -7634,6 +8031,11 @@ def run_codex_app_review_authoritative_adapter(
         "thread_id": thread_id,
         "thread_cwd": cwd_relative,
         "raw_source": source_relative,
+        "raw_result": relative_to_root(raw_path, context["target_root"]),
+        "normalized_findings": relative_to_root(findings_path, context["target_root"]),
+        "metadata": relative_to_root(metadata_path, context["target_root"]),
+        "review_thread_id": live_metadata.get("review_thread_id") if live_metadata else (thread_id if source_path is not None else None),
+        **({"live_review": {key: value for key, value in live_metadata.items() if key != "normalized"}} if live_metadata else {}),
         "authority_boundary": "normalized review_record_input only; raw Codex App output remains runtime evidence",
     }
     write_json_file(metadata_path, metadata)
@@ -12452,7 +12854,9 @@ def handle_review(args: argparse.Namespace) -> int:
     if args.operation == "run":
         flow_operation = "spec-review" if inferred_spec_review else "review"
         review_kind = "spec_review" if inferred_spec_review else implementation_review_kind(context)
-        requested_engine_adapter = args.engine_adapter or DEFAULT_REVIEW_ADAPTER
+        current_head = git_head_sha(target_root) or "unknown-head"
+        adapter_selection = select_review_adapter(args, target_root, reviewed_head=current_head)
+        requested_engine_adapter = str(adapter_selection["adapter"])
         engine_profile, engine_profile_errors = resolve_review_engine_profile(
             context,
             review_kind,
@@ -12484,9 +12888,10 @@ def handle_review(args: argparse.Namespace) -> int:
                         "profile": None,
                         "result": "not_run",
                         "failure_reason": "runtime_conflict",
-                        "reviewed_head": git_head_sha(target_root) or "unknown-head",
+                        "reviewed_head": current_head,
                         "evidence": None,
                     },
+                    "engine_metadata": review_adapter_selection_metadata(adapter_selection, reviewed_head=current_head),
                     "manual_review": manual_review,
                 }
             )
@@ -12524,9 +12929,10 @@ def handle_review(args: argparse.Namespace) -> int:
                         "profile": engine_profile,
                         "result": "not_run",
                         "failure_reason": None,
-                        "reviewed_head": git_head_sha(target_root) or "unknown-head",
+                        "reviewed_head": current_head,
                         "evidence": None,
                     },
+                    "engine_metadata": review_adapter_selection_metadata(adapter_selection, reviewed_head=current_head),
                     "manual_review": manual_review,
                 }
             )
@@ -12539,10 +12945,11 @@ def handle_review(args: argparse.Namespace) -> int:
                 review_path,
                 engine_profile,
                 review_kind=review_kind,
-                app_server=args.codex_app_review_app_server,
-                thread_id=args.codex_app_review_thread_id,
-                thread_cwd=args.codex_app_review_cwd,
-                raw_file=args.codex_app_review_raw_file,
+                app_server=adapter_selection.get("app_server") if isinstance(adapter_selection.get("app_server"), str) else None,
+                thread_id=adapter_selection.get("thread_id") if isinstance(adapter_selection.get("thread_id"), str) else None,
+                thread_cwd=adapter_selection.get("thread_cwd") if isinstance(adapter_selection.get("thread_cwd"), str) else None,
+                raw_file=adapter_selection.get("raw_file") if isinstance(adapter_selection.get("raw_file"), str) else None,
+                adapter_selection=adapter_selection,
             )
         else:
             engine_payload = run_default_review_engine(
@@ -12551,6 +12958,7 @@ def handle_review(args: argparse.Namespace) -> int:
                 review_path,
                 engine_profile,
                 review_kind=review_kind,
+                adapter_selection=adapter_selection,
             )
         shadow_engine_payload = run_codex_app_review_shadow_adapter(
             context,
