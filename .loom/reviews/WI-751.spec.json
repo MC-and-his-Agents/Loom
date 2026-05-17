@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-751",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-751 spec suite matches #751 phase 4: adapter vocabulary is split into loom/codex-app-review and loom/default-codex-exec, fallback/fail-closed behavior remains explicit, generated surfaces and release gate validation are covered, and parent #746 closeout is gated on #751 merge evidence.",
+  "reviewer": "codex",
+  "reviewed_head": "126ef4a0ed7dffaa3e41a227ae9d2141dccddf25",
+  "reviewed_validation_summary": "Initial #751 validation: python3 tools/skills_surface.py check -> OK; python3 tools/version_surface_check.py -> OK; python3 -m py_compile tools/loom_flow.py tools/loom_check.py skills/shared/scripts/*.py src/skills/shared/scripts/*.py -> OK; python3 tools/loom_flow.py fact-chain --target . --item WI-751 -> pass; full loom_check pending until reviewed implementation commit.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-751.md",
+    "recovery_entry": ".loom/progress/WI-751.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
