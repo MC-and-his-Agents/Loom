@@ -350,6 +350,7 @@ REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {
     "context_schema",
     "dynamic_tool_locators",
     "policy_locators",
+    "hook_locators",
     "release_targets",
 }
 DECLARED_LOCATOR_REQUIREMENTS = {"required", "optional", "advisory"}
@@ -364,6 +365,25 @@ DYNAMIC_TOOL_HANDSHAKE_FAILURE_CATEGORIES = {
     "invalid_declaration",
 }
 DYNAMIC_TOOL_SURFACES = REPO_INTERFACE_GATE_TYPES | {"attempt_time"}
+HOOK_LOCATOR_LIFECYCLES = {"before-run", "after-run", "cleanup"}
+HOOK_LOCATOR_FALLBACKS = {
+    "admission",
+    "pre_review",
+    "review",
+    "build",
+    "merge_ready",
+    "closeout",
+    "manual_repair",
+    "workspace cleanup|retire",
+    "handoff",
+    "merge",
+}
+HOOK_SAFETY_PATH_CONTAINMENT = {"repo_relative"}
+HOOK_SAFETY_TRUTH_BOUNDARIES = {"runtime_evidence_only", "context_only", "blocking_decision_only"}
+HOOK_SAFETY_CLEANUP_SCOPES = {"not_applicable", "loom_owned_only"}
+HOOK_SAFETY_HOST_TRUST = {"trusted", "requires_review", "untrusted"}
+HOOK_SAFETY_PERMISSION_RISKS = {"none", "approval_required", "sandbox_required", "unknown"}
+HOOK_EXTENSION_PROFILE_SCHEMA = "loom-hooks-extension-profile/v1"
 POLICY_READ_SCHEMA = "loom-policy-read/v1"
 POLICY_READINESS_SCHEMA = "loom-policy-readiness/v1"
 POLICY_TYPES = {"approval", "sandbox"}
@@ -395,7 +415,7 @@ RELEASE_TARGET_DELIVERY_STATUSES = {
 }
 REPO_INTEROP_AVAILABILITY = {"absent", "incomplete", "present"}
 REPO_INTEROP_SCHEMA = "loom-repo-interop/v1"
-REPO_INTEROP_KEYS = {"schema_version", "host_adapters", "repo_native_carriers", "shadow_surfaces"}
+REPO_INTEROP_KEYS = {"schema_version", "host_adapters", "repo_native_carriers", "shadow_surfaces", "external_orchestrators"}
 REPO_INTEROP_COLLECTION_SURFACES = {
     "admission",
     "pre_review",
@@ -403,6 +423,13 @@ REPO_INTEROP_COLLECTION_SURFACES = {
     "build",
     "merge_ready",
     "closeout",
+}
+EXTERNAL_ORCHESTRATOR_OPERATIONS = {
+    "work_item_read",
+    "workspace_attach",
+    "recovery_writeback",
+    "status_read",
+    "gate_read",
 }
 REPO_INTEROP_SHADOW_SURFACES = ("admission", "review", "merge_ready", "closeout")
 GOVERNANCE_CONTROL_VERSION = "loom-governance-control/v1"
@@ -1123,6 +1150,209 @@ def validate_dynamic_tool_locator(
         else:
             blocking.append(locator_error)
     return blocking, optional
+
+
+def validate_hook_locator(
+    *,
+    root: Path,
+    entry: object,
+    index: int,
+) -> tuple[list[str], list[str]]:
+    prefix = f"hook_locators[{index}]"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"], []
+    entry_id = entry.get("id")
+    locator_label = f"{prefix} `{entry_id}` locator" if isinstance(entry_id, str) and entry_id.strip() else f"{prefix} locator"
+    blocking: list[str] = []
+    optional: list[str] = []
+    for field in ("id", "summary", "lifecycle", "owner", "requirement", "fallback_to"):
+        value = entry.get(field)
+        if not isinstance(value, str) or not value.strip():
+            blocking.append(f"{prefix} missing `{field}`")
+    lifecycle = entry.get("lifecycle")
+    if lifecycle not in HOOK_LOCATOR_LIFECYCLES:
+        blocking.append(f"{prefix} lifecycle must be `before-run`, `after-run`, or `cleanup`")
+    owner = entry.get("owner")
+    if owner not in DECLARED_LOCATOR_OWNERS:
+        blocking.append(
+            f"{prefix} owner must be one of `repo`, `repo-companion`, `host`, `host-adapter`, `platform`, `external-tool`"
+        )
+    requirement = entry.get("requirement")
+    if requirement not in DECLARED_LOCATOR_REQUIREMENTS:
+        blocking.append(f"{prefix} requirement must be `required`, `optional`, or `advisory`")
+    fallback_to = entry.get("fallback_to")
+    if fallback_to not in HOOK_LOCATOR_FALLBACKS:
+        blocking.append(f"{prefix} fallback_to must point to a Loom surface or manual repair path")
+
+    forbidden_fields = sorted(
+        set(entry)
+        & {
+            "runtime_state",
+            "execution_result",
+            "authored_progress",
+            "current_stop",
+            "next_step",
+            "blockers",
+            "latest_validation_summary",
+            "current_checkpoint",
+            "current_lane",
+            "recovery_boundary",
+            "closing_condition",
+            "review_verdict",
+            "review_summary",
+            "validation_status",
+            "host_action_result",
+            "closeout_basis",
+        }
+    )
+    if forbidden_fields:
+        blocking.append(f"{prefix} must not carry runtime or authored truth fields: {', '.join(forbidden_fields)}")
+
+    safety = entry.get("safety")
+    safety_errors: list[str] = []
+    if not isinstance(safety, dict):
+        safety_errors.append(f"{prefix} missing `safety` declaration")
+    else:
+        path_containment = safety.get("path_containment")
+        truth_boundary = safety.get("truth_boundary")
+        cleanup_scope = safety.get("cleanup_scope")
+        host_trust = safety.get("host_trust")
+        permission_risk = safety.get("permission_risk")
+        if path_containment not in HOOK_SAFETY_PATH_CONTAINMENT:
+            safety_errors.append(f"{prefix} safety.path_containment must be `repo_relative`")
+        if truth_boundary not in HOOK_SAFETY_TRUTH_BOUNDARIES:
+            safety_errors.append(
+                f"{prefix} safety.truth_boundary must be `runtime_evidence_only`, `context_only`, or `blocking_decision_only`"
+            )
+        if cleanup_scope not in HOOK_SAFETY_CLEANUP_SCOPES:
+            safety_errors.append(f"{prefix} safety.cleanup_scope must be `not_applicable` or `loom_owned_only`")
+        if lifecycle == "cleanup" and cleanup_scope != "loom_owned_only":
+            safety_errors.append(f"{prefix} cleanup hooks must declare safety.cleanup_scope `loom_owned_only`")
+        if lifecycle != "cleanup" and cleanup_scope == "loom_owned_only":
+            safety_errors.append(f"{prefix} non-cleanup hooks must declare safety.cleanup_scope `not_applicable`")
+        if host_trust not in HOOK_SAFETY_HOST_TRUST:
+            safety_errors.append(f"{prefix} safety.host_trust must be `trusted`, `requires_review`, or `untrusted`")
+        elif host_trust == "untrusted":
+            safety_errors.append(f"{prefix} untrusted hook declarations are unsafe and must fail closed")
+        if permission_risk not in HOOK_SAFETY_PERMISSION_RISKS:
+            safety_errors.append(
+                f"{prefix} safety.permission_risk must be `none`, `approval_required`, `sandbox_required`, or `unknown`"
+            )
+        elif permission_risk == "unknown":
+            safety_errors.append(f"{prefix} unknown hook permission risk is unsafe and must fail closed")
+    if safety_errors:
+        if requirement in {"optional", "advisory"}:
+            optional.extend(safety_errors)
+        else:
+            blocking.extend(safety_errors)
+
+    locator_value = entry.get("locator")
+    locator, target = resolve_locator(root, locator_value)
+    locator_error: str | None = None
+    locator_error_is_optional = False
+    if locator_field_missing(locator_value):
+        locator_error = f"{locator_label} missing `locator`"
+        locator_error_is_optional = requirement in {"optional", "advisory"}
+    elif locator is None or target is None:
+        locator_error = locator_boundary_error(locator_value, label=locator_label)
+    elif not target.exists():
+        locator_error = f"{prefix} locator points to missing path `{locator}`"
+        locator_error_is_optional = requirement in {"optional", "advisory"}
+    if locator_error:
+        if locator_error_is_optional:
+            optional.append(locator_error)
+        else:
+            blocking.append(locator_error)
+    return blocking, optional
+
+
+def empty_hook_extension_profile() -> dict[str, Any]:
+    return {
+        "schema_version": HOOK_EXTENSION_PROFILE_SCHEMA,
+        "profile_id": "orchestration-extension/hooks",
+        "enabled": False,
+        "result": "pass",
+        "status": "not_applicable",
+        "summary": "hooks extension profile is not enabled for this repository.",
+        "missing_inputs": [],
+        "missing_optional": [],
+        "checks": [],
+    }
+
+
+def hook_extension_profile_payload(root: Path, hook_locators: object) -> dict[str, Any]:
+    payload = empty_hook_extension_profile()
+    if hook_locators is None:
+        return payload
+    payload.update(
+        {
+            "enabled": True,
+            "status": "present",
+            "summary": "hooks extension profile is enabled and hook declarations are readable.",
+        }
+    )
+    if not isinstance(hook_locators, list):
+        return {
+            **payload,
+            "result": "block",
+            "status": "invalid_declaration",
+            "summary": "hooks extension profile is enabled but hook_locators is not a list.",
+            "missing_inputs": ["hook_locators must be a list"],
+            "checks": [],
+        }
+
+    checks: list[dict[str, Any]] = []
+    missing_inputs: list[str] = []
+    missing_optional: list[str] = []
+    for index, entry in enumerate(hook_locators):
+        blocking, optional = validate_hook_locator(root=root, entry=entry, index=index)
+        if isinstance(entry, dict):
+            hook_id = entry.get("id") if isinstance(entry.get("id"), str) and entry.get("id") else f"hook-{index}"
+            lifecycle = entry.get("lifecycle") if isinstance(entry.get("lifecycle"), str) else "unknown"
+            requirement = entry.get("requirement") if isinstance(entry.get("requirement"), str) else "required"
+            locator = entry.get("locator") if isinstance(entry.get("locator"), str) else ""
+            fallback_to = entry.get("fallback_to") if isinstance(entry.get("fallback_to"), str) else "manual_repair"
+        else:
+            hook_id = f"invalid-{index}"
+            lifecycle = "unknown"
+            requirement = "required"
+            locator = ""
+            fallback_to = "manual_repair"
+        result = "block" if blocking else "warn" if optional else "pass"
+        checks.append(
+            {
+                "id": hook_id,
+                "lifecycle": lifecycle,
+                "requirement": requirement,
+                "locator": locator,
+                "result": result,
+                "summary": "hook declaration is safe for extension consumption."
+                if result == "pass"
+                else "hook declaration has profile-local warnings."
+                if result == "warn"
+                else "hook declaration is unsafe for the configured hooks extension path.",
+                "missing_inputs": blocking,
+                "missing_optional": optional,
+                "fallback_to": fallback_to if result == "block" else None,
+            }
+        )
+        missing_inputs.extend(message for message in blocking if message not in missing_inputs)
+        missing_optional.extend(message for message in optional if message not in missing_optional)
+
+    result = "block" if missing_inputs else "warn" if missing_optional else "pass"
+    summary = "hooks extension profile is enabled and hook declarations are safe."
+    if result == "warn":
+        summary = "hooks extension profile is enabled with profile-local advisory gaps."
+    if result == "block":
+        summary = "hooks extension profile is enabled and unsafe hook declarations block the configured path."
+    return {
+        **payload,
+        "result": result,
+        "summary": summary,
+        "missing_inputs": missing_inputs,
+        "missing_optional": missing_optional,
+        "checks": checks,
+    }
 
 
 def validate_policy_locator(
@@ -1873,6 +2103,33 @@ def validate_repo_interop_collection_entry(
     return missing_inputs, missing_optional
 
 
+def validate_external_orchestrator_entry(
+    *,
+    root: Path,
+    entry: object,
+    index: int,
+) -> tuple[list[str], list[str]]:
+    missing_inputs, missing_optional = validate_repo_interop_collection_entry(
+        root=root,
+        collection="external_orchestrators",
+        entry=entry,
+        index=index,
+    )
+    if not isinstance(entry, dict):
+        return missing_inputs, missing_optional
+    prefix = f"external_orchestrators[{index}]"
+    operations = entry.get("operations")
+    if not isinstance(operations, list) or not operations:
+        missing_inputs.append(f"{prefix} must include `operations` as a non-empty list")
+    else:
+        for operation_index, operation in enumerate(operations):
+            if operation not in EXTERNAL_ORCHESTRATOR_OPERATIONS:
+                missing_inputs.append(
+                    f"{prefix}.operations[{operation_index}] must be one of `work_item_read`, `workspace_attach`, `recovery_writeback`, `status_read`, `gate_read`"
+                )
+    return missing_inputs, missing_optional
+
+
 def validate_shadow_surface(
     *,
     root: Path,
@@ -1908,9 +2165,11 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
         "specialized_gates": carrier_entry("missing", "unknown", "repo companion interface"),
         "dynamic_tool_locators": carrier_entry("missing", "unknown", "repo companion interface"),
         "policy_locators": carrier_entry("missing", "unknown", "repo companion interface"),
+        "hook_locators": carrier_entry("missing", "unknown", "repo companion interface"),
         "release_targets": empty_release_targets_surface(),
         "tool_availability": empty_tool_availability(),
         "policy_readiness": empty_policy_readiness(),
+        "hook_profile": empty_hook_extension_profile(),
         "summary": "no repo companion interface is declared for this repository.",
         "missing_inputs": [],
         "missing_optional": [],
@@ -2100,6 +2359,17 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
                             )
                             missing_inputs.extend(blocking)
                             missing_optional.extend(optional)
+                hook_locators = interface_payload.get("hook_locators")
+                if hook_locators is not None:
+                    repo_interface_surface["hook_profile"] = hook_extension_profile_payload(
+                        root,
+                        hook_locators,
+                    )
+                    repo_interface_surface["hook_locators"] = carrier_entry(
+                        "present",
+                        ".loom/companion/repo-interface.json",
+                        "repo companion interface",
+                    )
                 release_targets = interface_payload.get("release_targets")
                 if release_targets is not None:
                     blocking_inputs = validate_release_targets(root=root, entry=release_targets)
@@ -2176,6 +2446,7 @@ def detect_repo_interop(root: Path) -> tuple[dict[str, Any], list[str]]:
         "host_adapters": carrier_entry("missing", "unknown", "repo interop contract"),
         "repo_native_carriers": carrier_entry("missing", "unknown", "repo interop contract"),
         "shadow_surfaces": carrier_entry("missing", "unknown", "repo interop contract"),
+        "external_orchestrators": carrier_entry("missing", "unknown", "repo interop contract"),
         "summary": "no repo interop contract is declared for this repository.",
         "missing_inputs": [],
         "missing_optional": [],
@@ -2204,7 +2475,7 @@ def detect_repo_interop(root: Path) -> tuple[dict[str, Any], list[str]]:
                 + ", ".join(extra_keys)
             )
 
-        for key in ("host_adapters", "repo_native_carriers", "shadow_surfaces"):
+        for key in ("host_adapters", "repo_native_carriers", "shadow_surfaces", "external_orchestrators"):
             repo_interop_surface[key] = carrier_entry(
                 "present",
                 ".loom/companion/interop.json",
@@ -2233,6 +2504,19 @@ def detect_repo_interop(root: Path) -> tuple[dict[str, Any], list[str]]:
                 blocking, optional = validate_repo_interop_collection_entry(
                     root=root,
                     collection="repo_native_carriers",
+                    entry=entry,
+                    index=index,
+                )
+                missing_inputs.extend(blocking)
+                missing_optional.extend(optional)
+
+        external_orchestrators = interop_payload.get("external_orchestrators", [])
+        if not isinstance(external_orchestrators, list):
+            missing_inputs.append("repo interop contract must include `external_orchestrators` as a list")
+        else:
+            for index, entry in enumerate(external_orchestrators):
+                blocking, optional = validate_external_orchestrator_entry(
+                    root=root,
                     entry=entry,
                     index=index,
                 )
@@ -2269,7 +2553,7 @@ def detect_repo_interop(root: Path) -> tuple[dict[str, Any], list[str]]:
         repo_interop_surface["summary"] = (
             "repo interop contract is readable with optional locator advisories."
             if missing_optional
-            else "repo interop contract is readable for host adapters, repo-native carriers, and shadow parity."
+            else "repo interop contract is readable for host adapters, repo-native carriers, shadow parity, and external orchestrator locators."
         )
     repo_interop_surface["missing_inputs"] = list(dict.fromkeys(missing_inputs))
     repo_interop_surface["missing_optional"] = list(dict.fromkeys(missing_optional))
