@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-750
-- Goal: Switch Codex App host review runs to the Codex App review adapter by default when verified host proof is complete.
-- Scope: Update review adapter selection, Codex App live runner behavior, review metadata, fallback/fail-closed semantics, generated skill surfaces, and review execution documentation for #750 phase 3.
-- Execution Path: phase/codex-app-review-default/750
+- Item ID: WI-751
+- Goal: Clean up the Codex review adapter contract vocabulary and release gate for #751 phase 4.
+- Scope: Rename the exec-hosted fallback adapter contract to loom/default-codex-exec, synchronize runtime scripts, generated skill surfaces, documentation, fixtures, checkers, and prove merge-ready consumes only the authored review record.
+- Execution Path: phase/codex-review-adapter-contract-cleanup/751
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-750.md
-- Review Entry: .loom/reviews/WI-750.json
-- Validation Entry: python3 -m py_compile tools/loom_flow.py tools/loom_check.py skills/shared/scripts/*.py src/skills/shared/scripts/*.py && python3 tools/loom_check.py && make check
-- Closing Condition: PR #770 contains the #750 phase 3 implementation and docs; generated surfaces are synchronized; installer version behavior truth is bumped; py_compile, loom_check, make check, and PR gates pass; the branch is pushed with fresh authored spec and implementation review records.
-- Current Checkpoint: merge checkpoint
-- Current Stop: Implementation, documentation, generated surfaces, installer version bump, local validation refresh, and fresh review records are complete on branch work/750-codex-app-default-review-adapter.
-- Next Step: Update PR #770 body with the Loom Work Item binding, push, and confirm PR gates.
+- Recovery Entry: .loom/progress/WI-751.md
+- Review Entry: .loom/reviews/WI-751.json
+- Validation Entry: python3 tools/version_surface_check.py && python3 -m py_compile tools/loom_flow.py tools/loom_check.py skills/shared/scripts/*.py src/skills/shared/scripts/*.py && python3 tools/loom_check.py && make check
+- Closing Condition: #751 implementation, generated surfaces, docs, review records, PR gates, required checks, controlled merge, post-merge validation, #751 closeout, and parent #746 closeout are all complete with GitHub truth readback.
+- Current Checkpoint: build checkpoint
+- Current Stop: Adapter vocabulary cleanup, generated skill surface sync, WI-751 fact-chain scaffold, and formal spec suite are implemented on branch work/751-codex-review-adapter-contract-cleanup; implementation commit and review records are next.
+- Next Step: Commit implementation, record fresh spec and implementation reviews, then prepare PR and merge gate evidence.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-05-17 validation for WI-750: python3 -m py_compile tools/loom_flow.py tools/loom_check.py skills/shared/scripts/*.py src/skills/shared/scripts/*.py -> OK; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK (0.1.107 -> 0.1.108); python3 tools/version_surface_check.py -> OK; python3 tools/loom_flow.py fact-chain --target . --item WI-750 -> pass; python3 tools/loom_check.py -> OK; make check -> OK; git diff --check -> OK.
-- Recovery Boundary: Branch work/750-codex-app-default-review-adapter; issue #750 phase 3; PR #770; raw Codex App review evidence remains runtime evidence only and never approval truth.
-- Current Lane: #750 phase 3 / Codex App default review adapter
+- Latest Validation Summary: Initial #751 validation: python3 tools/skills_surface.py check -> OK; python3 tools/version_surface_check.py -> OK; python3 -m py_compile tools/loom_flow.py tools/loom_check.py skills/shared/scripts/*.py src/skills/shared/scripts/*.py -> OK; python3 tools/loom_flow.py fact-chain --target . --item WI-751 -> pass; full loom_check pending until reviewed implementation commit.
+- Recovery Boundary: Branch work/751-codex-review-adapter-contract-cleanup; issue #751 phase 4; parent #746 closeout after #751 merge.
+- Current Lane: #751 phase 4 / Codex review adapter contract cleanup
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-750.md
-- Dynamic Truth: .loom/progress/WI-750.md
+- Static Truth: .loom/work-items/WI-751.md
+- Dynamic Truth: .loom/progress/WI-751.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

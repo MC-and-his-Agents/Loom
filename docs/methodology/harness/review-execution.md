@@ -53,7 +53,7 @@ Loom 把 review 分成三层：
 默认 engine 按宿主 proof 选择：
 
 - 已验证 Codex App host context 默认选择 `loom/codex-app-review`，不启动嵌套 `codex exec`
-- `CI` / `CODEX_CI`、headless、host proof 缺失或 app-server unavailable 时 fallback 到 `loom/default-codex`，能力来源仍是 `codex exec --output-schema`
+- `CI` / `CODEX_CI`、headless、host proof 缺失或 app-server unavailable 时 fallback 到 `loom/default-codex-exec`，能力来源仍是 `codex exec --output-schema`
 - 显式 `--engine-adapter` 优先级最高，继续保留 Stage 2 authoritative opt-in / fallback 调试入口
 
 若 engine 不可用、schema 漂移、runtime 冲突或运行后改动了 tracked repo 内容，`review run` 必须返回 `block`，并指向 manual review 继续写回同一 `review record`；不得把这类失败伪装成 checkpoint fallback。
@@ -67,7 +67,7 @@ Codex App review adapter 有三种入口：
 - shadow 输出可以包含 raw review、normalized findings、metadata 与 parity diff
 - shadow 输出不得 author `review_entry`，不得替代 `review_record_input.engine_adapter`
 - shadow unavailable / failure 不得阻断 default review run，也不得被 merge-ready 直接消费
-- authoritative Codex App path 必须提供 app-server/session locator、thread id、thread cwd proof；live app-server unavailable 时默认 fallback 到 `loom/default-codex`
+- authoritative Codex App path 必须提供 app-server/session locator、thread id、thread cwd proof；live app-server unavailable 时默认 fallback 到 `loom/default-codex-exec`
 - thread cwd proof 必须等于 target root；cwd / target / reviewed head 绑定冲突或 schema proof 失败时必须 fail closed
 - authoritative Codex App raw output 只作为 runtime evidence 保留；只有归一化后的 `review_record_input` 可被 `review record` 写入单一 authored truth
 - authoritative Codex App runtime files 使用与默认 engine 相同的 `.loom/runtime/review/<item>/<head>/engine-result.json`、`normalized-findings.json`、`engine-metadata.json` 和 `context-pack.json` 边界，保证历史 review context pack 可以继续读取 prior findings
@@ -81,7 +81,7 @@ Codex App review adapter 有三种入口：
 
 Resolved profile 的 schema 为 `loom-review-engine-profile/v1`，至少包含：
 
-- `adapter`: `loom/default-codex` 或 verified/explicit `loom/codex-app-review`
+- `adapter`: `loom/default-codex-exec` 或 verified/explicit `loom/codex-app-review`
 - `engine`: `codex` 或 verified/explicit `codex-app-review`
 - `profile_id`: `default`、`high-risk`、`spec-review` 或 `repeated-blocker`
 - `model`: 显式传给 engine 的 model

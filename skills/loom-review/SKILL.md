@@ -44,7 +44,7 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
 
 这个 skill 先用 `flow review` 读取正式 review 的机械基线，再用 `review run` 选择安全的 authoritative adapter 并生成 Loom-normalized findings，最后用 `review record` 把审查结论写成可消费载体。
 
-已验证 Codex App host context 中，默认 `review run` 使用 `loom/codex-app-review`，并必须证明 app-server/session locator、thread id、cwd proof、target root 与 reviewed head 绑定一致；该路径不得启动嵌套 `codex exec`。`CI` / `CODEX_CI`、headless、host proof 缺失或 app-server unavailable 时 fallback 到 `loom/default-codex` + `codex exec --output-schema`。proof 冲突、cwd / target / head 不匹配或 schema normalization 失败时必须 fail closed 并回到 manual review 写同一 review record。
+已验证 Codex App host context 中，默认 `review run` 使用 `loom/codex-app-review`，并必须证明 app-server/session locator、thread id、cwd proof、target root 与 reviewed head 绑定一致；该路径不得启动嵌套 `codex exec`。`CI` / `CODEX_CI`、headless、host proof 缺失或 app-server unavailable 时 fallback 到 `loom/default-codex-exec` + `codex exec --output-schema`。proof 冲突、cwd / target / head 不匹配或 schema normalization 失败时必须 fail closed 并回到 manual review 写同一 review record。
 
 安装态或 repo-local 开发态可以把这些 `loom ...` 动作映射到底层 `scripts/...` 或共享 runtime carrier；但 `loom-review` 自身的场景合同、进入时机和输出责任保持不变。
 
