@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-783.json
 - Validation Entry: make skills-check; make loom-check
 - Closing Condition: #783 is implemented, validated, reviewed, merged, and the policy is available to installed skills
-- Current Checkpoint: admission checkpoint
-- Current Stop: Work item scaffolded and waiting for the first execution pass.
-- Next Step: Write the first recovery update for this work item.
+- Current Checkpoint: merge checkpoint
+- Current Stop: #783 implementation, docs, generated skill surface, and installer version bump are ready for PR gate consumption.
+- Next Step: Merge PR #785 after CI and Loom PR gate pass, then close issue #783.
 - Blockers: None recorded.
-- Latest Validation Summary: No validation recorded yet.
-- Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-783.md`.
-- Current Lane: not yet assigned
+- Latest Validation Summary: make skills-check -> OK; make loom-check -> OK; installer package version bumped to 0.1.110 for generated skills payload change.
+- Recovery Boundary: #783 is bounded to .loom surfaces version-control policy documentation, installed skills reference propagation, generated skills surface refresh, and required PR gate metadata.
+- Current Lane: PR #785
 
 ## Runtime Evidence
 
