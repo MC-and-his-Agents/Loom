@@ -42,6 +42,8 @@ Verify it with:
 make skills-check
 ```
 
+This install surface is distinct from target repository `.loom` governance carriers. When Loom adopts a target repository, stable `.loom` carriers must follow [loom-surfaces-version-control.md](./loom-surfaces-version-control.md); installers and adapters must not hide them with a blanket `.loom/` ignore.
+
 ## Full Repo Install
 
 Full repo install is the default user journey. It exposes the complete Loom scenario surface:

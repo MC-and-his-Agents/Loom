@@ -25,6 +25,7 @@
 - GitHub profile 升级路径：[github-profile-upgrade.md](./github-profile-upgrade.md)
 - CI required checks bootstrap：[ci-required-checks-bootstrap.md](./ci-required-checks-bootstrap.md)
 - 目标仓库 release / version 合同：[target-repo-version-contract.md](./target-repo-version-contract.md)
+- `.loom` surfaces 版本控制策略：[loom-surfaces-version-control.md](./loom-surfaces-version-control.md)
 - 统一安装体验：[unified-install-experience.md](./unified-install-experience.md)
 - 宿主适配矩阵：`host-adapter-matrix.md`
 - 单 skill 安装合同：[single-skill-contract.md](./single-skill-contract.md)

@@ -82,6 +82,7 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
   - `skills/shared/references/adoption/routing-and-checkpoints.md`
   - `skills/shared/references/adoption/lightweight-retrofit-default.md`
   - `skills/shared/references/adoption/deep-existing-repo-default.md`
+  - `skills/shared/references/adoption/loom-surfaces-version-control.md`
 - `skills/shared/references/harness/recovery-model.md`
 - `skills/shared/references/harness/fact-chain-contract.md`
 - `skills/shared/references/harness/item-context-contract.md`

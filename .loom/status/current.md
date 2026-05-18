@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-751
-- Goal: Clean up the Codex review adapter contract vocabulary and release gate for #751 phase 4.
-- Scope: Rename the exec-hosted fallback adapter contract to loom/default-codex-exec, synchronize runtime scripts, generated skill surfaces, documentation, fixtures, checkers, and prove merge-ready consumes only the authored review record.
-- Execution Path: phase/codex-review-adapter-contract-cleanup/751
+- Item ID: WI-783
+- Goal: Record the .loom surfaces version-control policy for adoption/install safety
+- Scope: Add the canonical adoption policy, link it from adoption and install docs, mirror it into the generated skills surface, and validate skills/loom checks
+- Execution Path: docs/adoption
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-751.md
-- Review Entry: .loom/reviews/WI-751.json
-- Validation Entry: python3 tools/version_surface_check.py && python3 -m py_compile tools/loom_flow.py tools/loom_check.py skills/shared/scripts/*.py src/skills/shared/scripts/*.py && python3 tools/loom_check.py && make check
-- Closing Condition: #751 implementation, generated surfaces, docs, review records, PR gates, required checks, controlled merge, post-merge validation, #751 closeout, and parent #746 closeout are all complete with GitHub truth readback.
+- Recovery Entry: .loom/progress/WI-783.md
+- Review Entry: .loom/reviews/WI-783.json
+- Validation Entry: make skills-check; make loom-check
+- Closing Condition: #783 is implemented, validated, reviewed, merged, and the policy is available to installed skills
 - Current Checkpoint: merge checkpoint
-- Current Stop: #751 implementation, root .loom/bin carrier, generated skill/demo surfaces, installer version gate, shadow carrier refresh, loom_check, make check, and node installer release/test checks are passing locally on branch work/751-codex-review-adapter-contract-cleanup.
-- Next Step: Commit installer version gate update, refresh implementation review at latest head, push PR #771, then wait for required checks and controlled merge.
+- Current Stop: #783 implementation, docs, generated skill surface, and installer version bump are ready for PR gate consumption.
+- Next Step: Merge PR #785 after CI and Loom PR gate pass, then close issue #783.
 - Blockers: None recorded.
-- Latest Validation Summary: #751 local validation passed after root carrier sync and installer gate bump: python3 tools/skills_surface.py check -> OK; python3 tools/version_surface_check.py -> OK; python3 -m py_compile tools/loom_flow.py tools/loom_check.py .loom/bin/loom_flow.py .loom/bin/loom_check.py skills/shared/scripts/*.py src/skills/shared/scripts/*.py -> OK; python3 .loom/bin/loom_init.py verify --target . -> OK; python3 tools/loom_check.py -> OK (36 surfaces); make check -> OK; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK (0.1.108 -> 0.1.109); npm --prefix packages/loom-installer run check:release -> OK; npm --prefix packages/loom-installer test -> OK (20 tests).
-- Recovery Boundary: Branch work/751-codex-review-adapter-contract-cleanup in /Users/mc/dev/Loom-worktrees/751-codex-review-adapter-contract-cleanup; PR #771; issue #751 phase 4; parent #746 closeout after #751 merge.
-- Current Lane: #751 phase 4 / Codex review adapter contract cleanup
+- Latest Validation Summary: make skills-check -> OK; make loom-check -> OK; installer package version bumped to 0.1.110 for generated skills payload change.
+- Recovery Boundary: #783 is bounded to .loom surfaces version-control policy documentation, installed skills reference propagation, generated skills surface refresh, and required PR gate metadata.
+- Current Lane: PR #785
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-751.md
-- Dynamic Truth: .loom/progress/WI-751.md
+- Static Truth: .loom/work-items/WI-783.md
+- Dynamic Truth: .loom/progress/WI-783.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

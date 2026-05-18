@@ -22,6 +22,7 @@ external-runtime 的目标是让成熟 adopted repo 最终可以：
 - `loom_init verify` 已经要求 `.loom/bin/*` 与 `.loom/bootstrap/manifest.json` 一致
 - manifest 中的 runtime artifact `sha256` 是当前 fail-closed trust boundary
 - strong-governance adopted repo 仍需要本地可审计 runtime provenance
+- vendored `.loom/bin/**` 在该阶段属于 [.loom surfaces 版本控制策略](./loom-surfaces-version-control.md) 中的稳定 carrier，必须 Git 可见
 
 因此，external-runtime 只是一条显式迁移路径，不是当前默认安装形态。
 
@@ -79,6 +80,8 @@ external-runtime companion 必须显式声明 runtime locator，而不是依赖�
    - `shadow-parity --blocking`，仅限显式 strong profile smoke
 4. 确认 `.loom/companion`、status、work item、review、shadow evidence 均未因 runtime locator 改变而漂移
 5. 只在以上检查通过后删除或停止提交 vendored `.loom/bin`
+
+停止提交 vendored `.loom/bin` 时，不得引入 blanket `.loom/` ignore；`.loom/companion`、`interop.json` 与其他已启用治理载体必须继续 Git 可见。
 
 ## 6. Rollback
 
