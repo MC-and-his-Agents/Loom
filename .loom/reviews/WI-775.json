@@ -5,7 +5,7 @@
   "kind": "general_review",
   "summary": "The implementation exposes adoption intent through CLI and intake, reports detected mode/risk/planned writes in bootstrap output, blocks ambiguous full-bootstrap writes without explicit intent, preserves attach-only from generated work/progress/status truth, and keeps later profile/attach-only hardening issues out of scope.",
   "reviewer": "codex",
-  "reviewed_head": "fb60d65bc13ac4db7900b8d7f8b089ac78e818a3",
+  "reviewed_head": "31d42772064b13b823256c8b64af791ba26f020c",
   "reviewed_validation_summary": "py_compile -> OK; make skills-check -> OK; targeted adoption intent fixture -> OK; loom-init verify examples/new-project -> OK; loom-init verify root -> OK; make loom-check -> OK; adopt verify root -> OK; installer version bump check -> OK.",
   "fallback_to": null,
   "findings": [],
