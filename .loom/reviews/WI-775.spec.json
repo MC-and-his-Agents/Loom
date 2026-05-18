@@ -1,0 +1,20 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-775",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "The WI-775 spec is sufficient for the adoption-intent checkpoint: it captures explicit CLI/intake intent, output evidence, fail-closed full-bootstrap writes, attach-only/execution-control fixtures, generated surface refresh, and defers profile/attach-only hardening to later issues.",
+  "reviewer": "codex",
+  "reviewed_head": "00b595032f14b6169444136adbd5c4f4596e1923",
+  "reviewed_validation_summary": "Spec reviewed after implementation against issue #775 acceptance criteria and current local validation plan.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-775.md",
+    "spec": ".loom/specs/WI-775/spec.md",
+    "plan": ".loom/specs/WI-775/plan.md",
+    "implementation_contract": ".loom/specs/WI-775/implementation-contract.md"
+  }
+}

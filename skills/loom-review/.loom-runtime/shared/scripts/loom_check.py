@@ -4338,6 +4338,37 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
 
         deep_target = tmp_root / "deep-existing"
         write_repo(deep_target, validation_entry=True, pr_template=True, workflow_doc=True)
+        deep_dry_payload, deep_dry_error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_init.py",
+                "bootstrap",
+                "--target",
+                str(deep_target),
+                "--intent",
+                "attach-only",
+            ],
+        )
+        if deep_dry_error:
+            failures.append(Failure("deep-existing-bootstrap", f"`deep-existing dry-run` failed: {deep_dry_error}"))
+        else:
+            intent = deep_dry_payload.get("adoption_intent")
+            risk = deep_dry_payload.get("risk_summary")
+            planned = deep_dry_payload.get("planned_writes")
+            detected = deep_dry_payload.get("detected_repository_mode")
+            write = deep_dry_payload.get("write")
+            if not isinstance(intent, dict) or intent.get("effective") != "attach-only":
+                failures.append(Failure("deep-existing-bootstrap", "`deep-existing dry-run` must report `adoption_intent.effective = attach-only`"))
+            if not isinstance(risk, dict) or risk.get("repo_owned_truth_risk") != "preserved":
+                failures.append(Failure("deep-existing-bootstrap", "`deep-existing dry-run` must report preserved repo-owned truth risk"))
+            if not isinstance(planned, list) or not planned:
+                failures.append(Failure("deep-existing-bootstrap", "`deep-existing dry-run` must report planned write targets"))
+            if not isinstance(detected, dict) or detected.get("scenario_key") != "complex-existing":
+                failures.append(Failure("deep-existing-bootstrap", "`deep-existing dry-run` must report detected repository mode"))
+            if not isinstance(write, dict) or write.get("enabled") is not False:
+                failures.append(Failure("deep-existing-bootstrap", "`deep-existing dry-run` must keep write.enabled = false"))
+
         deep_payload, deep_error = load_command_json(
             root,
             [
@@ -4346,6 +4377,8 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                 "bootstrap",
                 "--target",
                 str(deep_target),
+                "--intent",
+                "attach-only",
                 "--write",
                 "--force",
                 "--verify",
@@ -4404,18 +4437,58 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
             ],
         )
         if full_error:
-            failures.append(Failure("deep-existing-bootstrap", f"`full-bootstrap fallback sample` failed: {full_error}"))
+            failures.append(Failure("deep-existing-bootstrap", f"`full-bootstrap ambiguous intent sample` failed: {full_error}"))
         else:
             recommended = full_payload.get("recommended_adoption")
             if not isinstance(recommended, dict) or recommended.get("path") != "full-bootstrap":
                 failures.append(Failure("deep-existing-bootstrap", "complex existing sample without overload must keep `recommended_adoption.path = full-bootstrap`"))
+            if full_payload.get("result") != "block":
+                failures.append(Failure("deep-existing-bootstrap", "complex existing full-bootstrap write must block when adoption intent is unspecified"))
+            risk = full_payload.get("risk_summary")
+            if not isinstance(risk, dict) or risk.get("requires_explicit_intent") is not True:
+                failures.append(Failure("deep-existing-bootstrap", "ambiguous full-bootstrap write must report `risk_summary.requires_explicit_intent = true`"))
             for required in (
                 ".loom/work-items/INIT-0001.md",
                 ".loom/progress/INIT-0001.md",
                 ".loom/status/current.md",
             ):
-                if not (full_target / required).exists():
-                    failures.append(Failure("deep-existing-bootstrap", f"`full-bootstrap fallback sample` must generate `{required}`"))
+                if (full_target / required).exists():
+                    failures.append(Failure("deep-existing-bootstrap", f"`full-bootstrap ambiguous intent sample` must not generate `{required}` before explicit intent"))
+
+        explicit_full_target = tmp_root / "full-bootstrap-explicit"
+        write_repo(explicit_full_target, validation_entry=False, pr_template=False, workflow_doc=False)
+        explicit_payload, explicit_error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_init.py",
+                "bootstrap",
+                "--target",
+                str(explicit_full_target),
+                "--intent",
+                "execution-control",
+                "--write",
+                "--force",
+                "--verify",
+                "--install-pr-template",
+            ],
+        )
+        if explicit_error:
+            failures.append(Failure("deep-existing-bootstrap", f"`explicit execution-control bootstrap sample` failed: {explicit_error}"))
+        else:
+            intent = explicit_payload.get("adoption_intent")
+            recommended = explicit_payload.get("recommended_adoption")
+            if not isinstance(intent, dict) or intent.get("effective") != "execution-control":
+                failures.append(Failure("deep-existing-bootstrap", "explicit full-bootstrap sample must report `adoption_intent.effective = execution-control`"))
+            if not isinstance(recommended, dict) or recommended.get("path") != "full-bootstrap":
+                failures.append(Failure("deep-existing-bootstrap", "explicit execution-control sample must select `recommended_adoption.path = full-bootstrap`"))
+            for required in (
+                ".loom/work-items/INIT-0001.md",
+                ".loom/progress/INIT-0001.md",
+                ".loom/status/current.md",
+            ):
+                if not (explicit_full_target / required).exists():
+                    failures.append(Failure("deep-existing-bootstrap", f"`explicit execution-control bootstrap sample` must generate `{required}`"))
     return failures
 
 
@@ -5671,6 +5744,8 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     "bootstrap",
                     "--target",
                     ".",
+                    "--intent",
+                    "execution-control",
                     "--write",
                     "--force",
                     "--verify",
@@ -7246,6 +7321,8 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         "bootstrap",
                         "--target",
                         str(target),
+                        "--intent",
+                        "execution-control",
                         "--write",
                         "--force",
                         "--verify",

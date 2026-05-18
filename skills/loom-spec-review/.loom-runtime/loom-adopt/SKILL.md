@@ -46,7 +46,7 @@ description: 负责把仓库接入 Loom 的初始化场景入口。Use when Code
 
 本 skill 不新增新 CLI，固定复用：
 
-- `python3 scripts/loom-adopt.py bootstrap --target <repo>`
+- `python3 scripts/loom-adopt.py bootstrap --target <repo> [--intent observe-only|skill-install-only|attach-only|light-governance|execution-control|strong-governance]`
 - `python3 scripts/loom-adopt.py verify --target <repo>`
 - `python3 scripts/loom-adopt.py fact-chain --target <repo>`
 
@@ -56,6 +56,7 @@ description: 负责把仓库接入 Loom 的初始化场景入口。Use when Code
    - 读取目标仓库根规则、验证入口、已有治理载体、repo-specific gates、retained host actions、repo-native carriers、现有 companion / interop locator
 2. `judge`
    - 判断这是 `新项目`、`小型既有仓库` 还是 `复杂既有仓库`
+   - 消费或输出 `adoption_intent`；当 intent 不明确且写入会创建重执行控制面时，先停在 decision prompt / dry-run，不静默写入
    - 输出本轮启用能力、暂不启用能力、升级触发条件、source locator、write target 与 validation command
 3. `write`
    - 只有用户要求实际落盘时才执行 `bootstrap --write`

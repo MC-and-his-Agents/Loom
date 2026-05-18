@@ -22,7 +22,8 @@
       "long_running_recovery_pain",
       "shared_contract_or_high_risk_boundary",
       "purity_or_scope_signals",
-      "merge_review_semantic_overload"
+      "merge_review_semantic_overload",
+      "adoption_intent"
     ]
   },
   "output_contract": {
@@ -30,6 +31,10 @@
     "required_sections": [
       "project_judgment",
       "recommended_adoption",
+      "adoption_intent",
+      "detected_repository_mode",
+      "risk_summary",
+      "planned_writes",
       "deferred_capabilities",
       "fact_chain",
       "initial_artifacts",

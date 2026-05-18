@@ -28,6 +28,16 @@ TOOL_VERSION = "1.3.0"
 CONTRACT_VERSION = "1.3.0"
 WORK_ITEM_ID = "INIT-0001"
 SHADOW_PARITY_SURFACES = ("admission", "review", "merge_ready", "closeout")
+ADOPTION_INTENTS = (
+    "observe-only",
+    "skill-install-only",
+    "attach-only",
+    "light-governance",
+    "execution-control",
+    "strong-governance",
+)
+UNSPECIFIED_ADOPTION_INTENT = "unspecified"
+NON_WRITABLE_ADOPTION_PATHS = {"defer", "skill-install-only"}
 
 RUNTIME_ARTIFACT_SOURCES = {
     ".loom/bin/loom_init.py": RUNTIME_SOURCE,
@@ -179,6 +189,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Override scenario detection",
     )
     bootstrap.add_argument("--intake", help="Optional intake JSON file")
+    bootstrap.add_argument(
+        "--intent",
+        choices=ADOPTION_INTENTS,
+        help=(
+            "Explicit adoption intent: observe-only, skill-install-only, attach-only, "
+            "light-governance, execution-control, or strong-governance"
+        ),
+    )
     bootstrap.add_argument(
         "--output",
         help="Output path for init-result.json relative to target root",
@@ -546,11 +564,38 @@ def detect_repository_type(root: Path) -> str:
     return "existing"
 
 
-def load_or_detect_intake(root: Path, intake_path: str | None) -> dict[str, object]:
+def normalize_adoption_intent(raw_intent: object, *, source: str) -> str:
+    if raw_intent in (None, ""):
+        return UNSPECIFIED_ADOPTION_INTENT
+    if not isinstance(raw_intent, str):
+        raise RuntimeError(f"{source} adoption_intent must be a string")
+    if raw_intent == UNSPECIFIED_ADOPTION_INTENT:
+        return raw_intent
+    if raw_intent not in ADOPTION_INTENTS:
+        allowed = ", ".join((*ADOPTION_INTENTS, UNSPECIFIED_ADOPTION_INTENT))
+        raise RuntimeError(f"{source} adoption_intent must be one of: {allowed}")
+    return raw_intent
+
+
+def apply_adoption_intent(payload: dict[str, object], cli_intent: str | None) -> dict[str, object]:
+    if cli_intent:
+        payload["adoption_intent"] = normalize_adoption_intent(cli_intent, source="cli")
+        payload["adoption_intent_source"] = "cli"
+        return payload
+    if "adoption_intent" in payload:
+        payload["adoption_intent"] = normalize_adoption_intent(payload.get("adoption_intent"), source="intake")
+        payload["adoption_intent_source"] = "intake"
+        return payload
+    payload["adoption_intent"] = UNSPECIFIED_ADOPTION_INTENT
+    payload["adoption_intent_source"] = "unspecified"
+    return payload
+
+
+def load_or_detect_intake(root: Path, intake_path: str | None, cli_intent: str | None = None) -> dict[str, object]:
     if intake_path:
         payload = read_json(Path(intake_path).expanduser().resolve())
         payload.setdefault("schema_version", "loom-init-intake/v1")
-        return payload
+        return apply_adoption_intent(payload, cli_intent)
 
     repository_type = detect_repository_type(root)
     root_boundary_docs = detect_root_boundary(root)
@@ -568,7 +613,7 @@ def load_or_detect_intake(root: Path, intake_path: str | None) -> dict[str, obje
         "merge_review_semantic_overload": detect_merge_review_overload(root, validation_entry),
         "notes": "autodetected by loom_init.py",
     }
-    return payload
+    return apply_adoption_intent(payload, cli_intent)
 
 
 def classify_scenario(intake: dict[str, object], override: str) -> str:
@@ -626,6 +671,18 @@ def recovery_mode(scenario: str) -> str:
 
 
 def recommended_adoption_path(scenario: str, intake: dict[str, object]) -> str:
+    intent = str(intake.get("adoption_intent", UNSPECIFIED_ADOPTION_INTENT))
+    if intent == "observe-only":
+        return "defer"
+    if intent == "skill-install-only":
+        return "skill-install-only"
+    if intent == "attach-only":
+        return "deep-existing-repo"
+    if intent == "light-governance":
+        return "minimal-bootstrap" if scenario == "new" else "lightweight-retrofit"
+    if intent in {"execution-control", "strong-governance"}:
+        return "full-bootstrap"
+
     if scenario == "new":
         return "minimal-bootstrap"
     if scenario == "small-existing":
@@ -642,6 +699,36 @@ def recommended_adoption_path(scenario: str, intake: dict[str, object]) -> str:
 
 def uses_attach_only_path(adoption_path: str) -> bool:
     return adoption_path == "deep-existing-repo"
+
+
+def effective_adoption_intent(adoption_path: str, intake: dict[str, object]) -> str:
+    requested = str(intake.get("adoption_intent", UNSPECIFIED_ADOPTION_INTENT))
+    if requested != UNSPECIFIED_ADOPTION_INTENT:
+        return requested
+    if adoption_path == "deep-existing-repo":
+        return "attach-only"
+    if adoption_path in {"minimal-bootstrap", "lightweight-retrofit"}:
+        return "light-governance"
+    if adoption_path == "full-bootstrap":
+        return "execution-control"
+    if adoption_path in NON_WRITABLE_ADOPTION_PATHS:
+        return adoption_path
+    return UNSPECIFIED_ADOPTION_INTENT
+
+
+def is_heavy_execution_path(adoption_path: str) -> bool:
+    return adoption_path == "full-bootstrap"
+
+
+def adoption_intent_payload(adoption_path: str, intake: dict[str, object]) -> dict[str, object]:
+    requested = str(intake.get("adoption_intent", UNSPECIFIED_ADOPTION_INTENT))
+    source = str(intake.get("adoption_intent_source", "unspecified"))
+    return {
+        "requested": requested,
+        "effective": effective_adoption_intent(adoption_path, intake),
+        "source": source,
+        "requires_explicit_confirmation": requested == UNSPECIFIED_ADOPTION_INTENT and is_heavy_execution_path(adoption_path),
+    }
 
 
 def rule_refs_for_capabilities(scenario: str, adoption_path: str) -> list[dict[str, object]]:
@@ -783,6 +870,8 @@ def attach_only_artifact_paths(target_root: Path, install_pr_template: bool) -> 
 
 
 def initial_work_items(scenario: str, target_root: Path, adoption_path: str, install_pr_template: bool) -> list[dict[str, object]]:
+    if adoption_path in NON_WRITABLE_ADOPTION_PATHS:
+        return []
     if uses_attach_only_path(adoption_path):
         return [
             {
@@ -839,6 +928,9 @@ def initial_work_items(scenario: str, target_root: Path, adoption_path: str, ins
 
 
 def initial_artifacts(target_root: Path, install_pr_template: bool, adoption_path: str) -> list[dict[str, str]]:
+    if adoption_path in NON_WRITABLE_ADOPTION_PATHS:
+        return []
+
     artifacts = [
         {
             "path": ".loom/README.md",
@@ -965,9 +1057,131 @@ def initial_artifacts(target_root: Path, install_pr_template: bool, adoption_pat
     return artifacts
 
 
+def write_owner_for_path(path: str) -> str:
+    if path.startswith(".loom/companion/") or path.startswith(".loom/shadow/"):
+        return "repo-companion"
+    if path.startswith(".loom/bin/"):
+        return "loom-runtime"
+    if path in {".github/PULL_REQUEST_TEMPLATE.md", ".gitignore"}:
+        return "repo-owned"
+    return "loom"
+
+
+def append_planned_write(
+    planned: list[dict[str, object]],
+    seen: set[str],
+    *,
+    path: str,
+    kind: str,
+    adoption_path: str,
+) -> None:
+    if path in seen:
+        return
+    seen.add(path)
+    planned.append(
+        {
+            "path": path,
+            "kind": kind,
+            "owner": write_owner_for_path(path),
+            "requires_intent": (
+                "execution-control"
+                if is_heavy_execution_path(adoption_path)
+                and path.startswith((".loom/work-items/", ".loom/progress/", ".loom/status/", ".loom/specs/"))
+                else None
+            ),
+        }
+    )
+
+
+def planned_write_targets(result: dict[str, object], adoption_path: str) -> list[dict[str, object]]:
+    if adoption_path in NON_WRITABLE_ADOPTION_PATHS:
+        return []
+    artifacts = result.get("initial_artifacts")
+    if not isinstance(artifacts, list):
+        return []
+    planned: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        path = artifact.get("path")
+        if not isinstance(path, str) or not path or path in seen:
+            continue
+        append_planned_write(
+            planned,
+            seen,
+            path=path,
+            kind=str(artifact.get("kind", "artifact")),
+            adoption_path=adoption_path,
+        )
+    for path, kind in (
+        (".loom/companion/README.md", "repo-companion-entry"),
+        (".loom/companion/manifest.json", "repo-companion-manifest"),
+        (".loom/companion/repo-interface.json", "repo-companion-interface"),
+        (".loom/companion/interop.json", "repo-interop-contract"),
+        (".loom/companion/checkpoints.md", "repo-companion-doc"),
+        (".loom/companion/review.md", "repo-companion-doc"),
+        (".loom/companion/merge-ready.md", "repo-companion-doc"),
+        (".loom/companion/closeout.md", "repo-companion-doc"),
+        (".loom/companion/releases/changelog.md", "repo-release-surface"),
+        (".loom/companion/releases/release-notes.md", "repo-release-surface"),
+        (".loom/companion/releases/migration-notes.md", "repo-release-surface"),
+        (".loom/companion/releases/rollback.md", "repo-release-surface"),
+        (".loom/companion/releases/catalog.json", "repo-release-surface"),
+        (".loom/companion/releases/current.json", "repo-release-surface"),
+        (".loom/companion/releases/status.json", "repo-release-surface"),
+        (".loom/shadow/admission-loom.json", "shadow-parity-surface"),
+        (".loom/shadow/admission-repo.json", "shadow-parity-surface"),
+        (".loom/shadow/review-loom.json", "shadow-parity-surface"),
+        (".loom/shadow/review-repo.json", "shadow-parity-surface"),
+        (".loom/shadow/merge-ready-loom.json", "shadow-parity-surface"),
+        (".loom/shadow/merge-ready-repo.json", "shadow-parity-surface"),
+        (".loom/shadow/closeout-loom.json", "shadow-parity-surface"),
+        (".loom/shadow/closeout-repo.json", "shadow-parity-surface"),
+        (".gitignore", "gitignore"),
+    ):
+        append_planned_write(planned, seen, path=path, kind=kind, adoption_path=adoption_path)
+    return planned
+
+
+def intentionally_absent_targets(adoption_path: str) -> list[dict[str, str]]:
+    if uses_attach_only_path(adoption_path):
+        return [
+            {"path": ".loom/work-items/**", "reason": "attach-only preserves host-owned work item truth"},
+            {"path": ".loom/progress/**", "reason": "attach-only preserves host-owned recovery truth"},
+            {"path": ".loom/status/current.md", "reason": "attach-only does not author Loom status truth"},
+            {"path": ".loom/specs/**", "reason": "attach-only does not author Loom execution specs"},
+        ]
+    if adoption_path == "defer":
+        return [{"path": "*", "reason": "observe-only intent is read-only"}]
+    if adoption_path == "skill-install-only":
+        return [{"path": ".loom/work-items/**", "reason": "skill install does not adopt execution governance"}]
+    return []
+
+
+def risk_summary(adoption_path: str, intake: dict[str, object], planned: list[dict[str, object]]) -> dict[str, object]:
+    heavy_writes = any(isinstance(item.get("requires_intent"), str) for item in planned)
+    requested = str(intake.get("adoption_intent", UNSPECIFIED_ADOPTION_INTENT))
+    requires_explicit_intent = requested == UNSPECIFIED_ADOPTION_INTENT and is_heavy_execution_path(adoption_path)
+    repo_owned_truth_risk = "preserved" if uses_attach_only_path(adoption_path) else ("high" if heavy_writes else "low")
+    missing_inputs: list[str] = []
+    if adoption_path in NON_WRITABLE_ADOPTION_PATHS:
+        missing_inputs.append(f"{adoption_path} does not write bootstrap artifacts")
+    if requires_explicit_intent:
+        missing_inputs.append("explicit --intent execution-control or --intent strong-governance is required before writing full-bootstrap carriers")
+    return {
+        "heavy_writes": heavy_writes,
+        "repo_owned_truth_risk": repo_owned_truth_risk,
+        "requires_explicit_intent": requires_explicit_intent,
+        "missing_inputs": missing_inputs,
+        "fallback_to": "adoption" if missing_inputs else None,
+    }
+
+
 def build_result(target_root: Path, scenario: str, intake: dict[str, object], install_pr_template: bool) -> dict[str, object]:
     adoption_path = recommended_adoption_path(scenario, intake)
     attach_only = uses_attach_only_path(adoption_path)
+    read_only_adoption = adoption_path in NON_WRITABLE_ADOPTION_PATHS
     main_problem = {
         "new": "the repository has no controlled Loom entry yet",
         "small-existing": "the repo has a baseline but still lacks a stable Loom adoption entry and explicit first artifacts",
@@ -1024,6 +1238,17 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
         "deferred_capabilities": deferred_capabilities(scenario, adoption_path),
         "fact_chain": (
             {
+                "mode": "intent-only dry-run",
+                "read_entry": "not_applicable",
+                "entry_points": {
+                    "current_item_id": "not_applicable",
+                    "work_item": "not_applicable",
+                    "recovery_entry": "not_applicable",
+                    "status_surface": "not_applicable",
+                },
+            }
+            if read_only_adoption
+            else {
                 "mode": "repo-native attach-only",
                 "read_entry": "not_applicable",
                 "entry_points": {
@@ -1086,6 +1311,16 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
         "lifecycle_expectations": workspace_lifecycle_expectations(governance_surface.get("workspace_profile")),
         "maturity_upgrade_path": init_maturity_upgrade_path(governance_surface),
     }
+    planned = planned_write_targets(result, adoption_path)
+    result["detected_repository_mode"] = {
+        "repository_type": intake.get("repository_type"),
+        "scenario_key": scenario,
+        "governance_surface_mode": governance_surface.get("repository_mode"),
+    }
+    result["adoption_intent"] = adoption_intent_payload(adoption_path, intake)
+    result["planned_writes"] = planned
+    result["intentionally_absent"] = intentionally_absent_targets(adoption_path)
+    result["risk_summary"] = risk_summary(adoption_path, intake, planned)
     return result
 
 
@@ -1196,6 +1431,16 @@ def init_maturity_upgrade_path(governance_surface: dict[str, object]) -> dict[st
         ],
         "gate_rollout": gate_rollout,
     }
+
+
+def bootstrap_write_blockers(result: dict[str, object]) -> list[str]:
+    risk = result.get("risk_summary")
+    if not isinstance(risk, dict):
+        return []
+    missing = risk.get("missing_inputs")
+    if isinstance(missing, list):
+        return [str(item) for item in missing if str(item)]
+    return []
 
 
 def render_loom_readme(result: dict[str, object]) -> str:
@@ -1810,6 +2055,10 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
         for key in (
             "project_judgment",
             "recommended_adoption",
+            "adoption_intent",
+            "detected_repository_mode",
+            "risk_summary",
+            "planned_writes",
             "deferred_capabilities",
             "fact_chain",
             "initial_artifacts",
@@ -2075,7 +2324,11 @@ def bootstrap(args: argparse.Namespace) -> int:
         print(f"loom-init: target is not a directory: {target_root}", file=sys.stderr)
         return 2
 
-    intake = load_or_detect_intake(target_root, args.intake)
+    try:
+        intake = load_or_detect_intake(target_root, args.intake, args.intent)
+    except RuntimeError as exc:
+        print(f"loom-init: {exc}", file=sys.stderr)
+        return 2
     scenario = classify_scenario(intake, args.scenario)
     result = build_result(target_root, scenario, intake, args.install_pr_template)
     try:
@@ -2085,6 +2338,15 @@ def bootstrap(args: argparse.Namespace) -> int:
         return 2
 
     if args.write:
+        blockers = bootstrap_write_blockers(result)
+        if blockers:
+            result["result"] = "block"
+            result["summary"] = "bootstrap write requires an explicit adoption intent before creating the requested surface."
+            result["missing_inputs"] = blockers
+            result["fallback_to"] = "adoption"
+            result["write"] = {"enabled": False, "written_files": 0, "touched": []}
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 2
         try:
             scaffold_result = portable_bootstrap_result(result, target_root) if args.portable_output else result
             written, touched = scaffold_target(

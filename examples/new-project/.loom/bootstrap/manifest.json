@@ -35,7 +35,7 @@
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "606562d90aaf13dd07fc181311ae67133e3b3775503f6f41f7798b5e530c2b53"
+      "sha256": "5e334dd723f06f9313579c18ba2dd790bf5021dea69d508335238cef80696b61"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
@@ -77,7 +77,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "64d195e3c9b8922659429fdd78e07bbee8ab0fb63fd750f35bfc5ab8c24e684c"
+      "sha256": "5c64e6c4ff5c409449a4cf247c7fa5aaf0fac5ca054c9c466bb66ad6be2c4513"
     },
     {
       "path": "AGENTS.md",
