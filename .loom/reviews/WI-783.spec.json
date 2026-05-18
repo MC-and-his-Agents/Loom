@@ -2,8 +2,8 @@
   "schema_version": "loom-review/v1",
   "item_id": "WI-783",
   "decision": "allow",
-  "kind": "general_review",
-  "summary": "The implementation records a canonical .loom surfaces version-control policy, links it from adoption/install docs, mirrors it into installed skill references, refreshes generated skills, and keeps behavior enforcement deferred to the later #781/#782 checkpoints.",
+  "kind": "spec_review",
+  "summary": "The WI-783 spec is sufficient for the documentation checkpoint: it defines the policy acceptance criteria, explicitly excludes behavior enforcement, and lists the generated skills propagation and validation requirements.",
   "reviewer": "codex",
   "reviewed_head": "de1b10e57f6ad942887e4078be8a0e53d3d64e04",
   "reviewed_validation_summary": "make skills-check -> OK; make loom-check -> OK; installer package version bumped to 0.1.110 for generated skills payload change.",
@@ -13,8 +13,8 @@
   "follow_ups": [],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-783.md",
-    "recovery_entry": ".loom/progress/WI-783.md",
-    "status_surface": ".loom/status/current.md",
-    "spec_review": ".loom/reviews/WI-783.spec.json"
+    "spec": ".loom/specs/WI-783/spec.md",
+    "plan": ".loom/specs/WI-783/plan.md",
+    "implementation_contract": ".loom/specs/WI-783/implementation-contract.md"
   }
 }
