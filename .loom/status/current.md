@@ -11,9 +11,9 @@
 - Review Entry: .loom/reviews/WI-775.json
 - Validation Entry: make skills-check; python3 tools/loom_check.py .
 - Closing Condition: #775 is implemented, validated, reviewed, merged, and issue state reflects the PR
-- Current Checkpoint: admission checkpoint
-- Current Stop: #775 implementation, generated surfaces, example fixture, installer version bump, and local gates are ready for PR gate consumption.
-- Next Step: Wait for PR #786 checks, merge, close issue #775, then continue with #778.
+- Current Checkpoint: merge checkpoint
+- Current Stop: #775 implementation, generated surfaces, example fixture, installer version bump, local gates, and semantic review are ready for PR gate consumption.
+- Next Step: Wait for PR #786 required checks, merge, close issue #775, then continue with #778.
 - Blockers: None recorded.
 - Latest Validation Summary: py_compile -> OK; make skills-check -> OK; targeted adoption intent fixture -> OK; loom-init verify examples/new-project -> OK; loom-init verify root -> OK; make loom-check -> OK; adopt verify root -> OK; installer version bump check -> OK.
 - Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-775.md`.
