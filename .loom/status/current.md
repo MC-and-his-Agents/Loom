@@ -13,11 +13,11 @@
 - Closing Condition: #775 is implemented, validated, reviewed, merged, and issue state reflects the PR
 - Current Checkpoint: admission checkpoint
 - Current Stop: #775 implementation, generated surfaces, example fixture, installer version bump, and local gates are ready for PR gate consumption.
-- Next Step: Commit, push, open PR for #775, wait for checks, merge, then close issue #775.
+- Next Step: Wait for PR #786 checks, merge, close issue #775, then continue with #778.
 - Blockers: None recorded.
-- Latest Validation Summary: py_compile -> OK; make skills-check -> OK; targeted adoption intent fixture -> OK; loom-init verify examples/new-project -> OK; loom-init verify root -> OK; make loom-check -> OK.
+- Latest Validation Summary: py_compile -> OK; make skills-check -> OK; targeted adoption intent fixture -> OK; loom-init verify examples/new-project -> OK; loom-init verify root -> OK; make loom-check -> OK; adopt verify root -> OK; installer version bump check -> OK.
 - Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-775.md`.
-- Current Lane: branch work/775-adoption-intent
+- Current Lane: PR #786
 
 ## Runtime Evidence
 
