@@ -25,8 +25,8 @@
     "purity_or_scope_signals": "clean",
     "merge_review_semantic_overload": false,
     "notes": "autodetected by loom_init.py",
-    "adoption_intent": "unspecified",
-    "adoption_intent_source": "unspecified"
+    "adoption_intent": "execution-control",
+    "adoption_intent_source": "cli"
   },
   "project_judgment": {
     "scenario": "新项目",
@@ -35,7 +35,7 @@
     "why_this_path": "the repo is still establishing its first baseline, so the bootstrap should create the smallest stable entry and first artifacts"
   },
   "recommended_adoption": {
-    "path": "minimal-bootstrap",
+    "path": "full-bootstrap",
     "integration_mode": "root",
     "recovery_mode": "checkpoint-lite",
     "capabilities": [
@@ -63,16 +63,17 @@
       }
     ]
   },
+  "scaffold_profile": {
+    "name": "execution-control",
+    "writes_artifacts": true,
+    "writes_work_item_carriers": true,
+    "description": "Loom-owned work item, progress, review, status, and spec carriers"
+  },
   "deferred_capabilities": [
     {
-      "name": "full-status-surface",
-      "reason": "no runnable system or multi-lane environment is visible yet",
-      "upgrade_trigger": "a runtime lane, logs, metrics, or UI verification path becomes required"
-    },
-    {
-      "name": "merge-checkpoint-hardening",
-      "reason": "implementation has not entered regular merge flow yet",
-      "upgrade_trigger": "multiple contributors or repeated merge reviews begin to consume the same facts"
+      "name": "strong-governance-host-gates",
+      "reason": "execution-control writes Loom-owned execution carriers but does not require host merge and closeout gates as a profile precondition",
+      "upgrade_trigger": "host required checks, controlled merge, or closeout reconciliation become part of the adoption contract"
     }
   ],
   "fact_chain": {
@@ -112,10 +113,130 @@
       "source": "generated"
     },
     {
+      "path": ".loom/companion/README.md",
+      "kind": "repo-companion-entry",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/manifest.json",
+      "kind": "repo-companion-manifest",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/repo-interface.json",
+      "kind": "repo-companion-interface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/interop.json",
+      "kind": "repo-interop-contract",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/checkpoints.md",
+      "kind": "repo-companion-doc",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/review.md",
+      "kind": "repo-companion-doc",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/merge-ready.md",
+      "kind": "repo-companion-doc",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/closeout.md",
+      "kind": "repo-companion-doc",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/releases/changelog.md",
+      "kind": "repo-release-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/releases/release-notes.md",
+      "kind": "repo-release-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/releases/migration-notes.md",
+      "kind": "repo-release-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/releases/rollback.md",
+      "kind": "repo-release-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/releases/catalog.json",
+      "kind": "repo-release-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/releases/current.json",
+      "kind": "repo-release-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/releases/status.json",
+      "kind": "repo-release-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/shadow/admission-loom.json",
+      "kind": "shadow-parity-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/shadow/admission-repo.json",
+      "kind": "shadow-parity-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/shadow/review-loom.json",
+      "kind": "shadow-parity-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/shadow/review-repo.json",
+      "kind": "shadow-parity-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/shadow/merge-ready-loom.json",
+      "kind": "shadow-parity-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/shadow/merge-ready-repo.json",
+      "kind": "shadow-parity-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/shadow/closeout-loom.json",
+      "kind": "shadow-parity-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/shadow/closeout-repo.json",
+      "kind": "shadow-parity-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".gitignore",
+      "kind": "gitignore",
+      "source": "generated"
+    },
+    {
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "5e334dd723f06f9313579c18ba2dd790bf5021dea69d508335238cef80696b61"
+      "sha256": "dbb335ffe4e59d544276393ed9440507db1e5ed750d75370767c52448b6fd3d3"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
@@ -157,22 +278,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "5c64e6c4ff5c409449a4cf247c7fa5aaf0fac5ca054c9c466bb66ad6be2c4513"
-    },
-    {
-      "path": "AGENTS.md",
-      "kind": "root-entry",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/work-items/INIT-0001.md",
-      "kind": "work-item",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/progress/INIT-0001.md",
-      "kind": "progress",
-      "source": "generated"
+      "sha256": "e00a54e0381d01f4ec3ae3ea5ce2e50262e82676250e0cb8d3c50e25f3489422"
     },
     {
       "path": ".loom/reviews/INIT-0001.json",
@@ -182,11 +288,6 @@
     {
       "path": ".loom/reviews/INIT-0001.spec.json",
       "kind": "review-entry",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/status/current.md",
-      "kind": "status-surface",
       "source": "generated"
     },
     {
@@ -205,6 +306,21 @@
       "source": "skills/shared/assets/templates/scaffold/implementation-contract.md"
     },
     {
+      "path": ".loom/work-items/INIT-0001.md",
+      "kind": "work-item",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/progress/INIT-0001.md",
+      "kind": "progress",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/status/current.md",
+      "kind": "status-surface",
+      "source": "generated"
+    },
+    {
       "path": ".github/PULL_REQUEST_TEMPLATE.md",
       "kind": "pr-template",
       "source": "skills/shared/assets/github/PULL_REQUEST_TEMPLATE.md"
@@ -221,22 +337,52 @@
       "review_entry": ".loom/reviews/INIT-0001.json",
       "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
       "artifacts": [
+        ".loom/README.md",
+        ".loom/bootstrap/intake.snapshot.json",
         ".loom/bootstrap/init-result.json",
-        ".loom/work-items/INIT-0001.md",
-        ".loom/progress/INIT-0001.md",
-        ".loom/reviews/INIT-0001.json",
-        ".loom/reviews/INIT-0001.spec.json",
-        ".loom/status/current.md",
+        ".loom/bootstrap/manifest.json",
+        ".loom/bootstrap/capability-map.md",
+        ".loom/companion/README.md",
+        ".loom/companion/manifest.json",
+        ".loom/companion/repo-interface.json",
+        ".loom/companion/interop.json",
+        ".loom/companion/checkpoints.md",
+        ".loom/companion/review.md",
+        ".loom/companion/merge-ready.md",
+        ".loom/companion/closeout.md",
+        ".loom/companion/releases/changelog.md",
+        ".loom/companion/releases/release-notes.md",
+        ".loom/companion/releases/migration-notes.md",
+        ".loom/companion/releases/rollback.md",
+        ".loom/companion/releases/catalog.json",
+        ".loom/companion/releases/current.json",
+        ".loom/companion/releases/status.json",
+        ".loom/shadow/admission-loom.json",
+        ".loom/shadow/admission-repo.json",
+        ".loom/shadow/review-loom.json",
+        ".loom/shadow/review-repo.json",
+        ".loom/shadow/merge-ready-loom.json",
+        ".loom/shadow/merge-ready-repo.json",
+        ".loom/shadow/closeout-loom.json",
+        ".loom/shadow/closeout-repo.json",
+        ".gitignore",
         ".loom/bin/loom_init.py",
         ".loom/bin/fact_chain_support.py",
         ".loom/bin/governance_surface.py",
         ".loom/bin/loom_flow.py",
         ".loom/bin/loom_status.py",
         ".loom/bin/runtime_paths.py",
+        ".loom/bin/runtime_state.py",
         ".loom/bin/loom_check.py",
+        ".loom/reviews/INIT-0001.json",
+        ".loom/reviews/INIT-0001.spec.json",
         ".loom/specs/INIT-0001/spec.md",
         ".loom/specs/INIT-0001/plan.md",
-        ".loom/specs/INIT-0001/implementation-contract.md"
+        ".loom/specs/INIT-0001/implementation-contract.md",
+        ".loom/work-items/INIT-0001.md",
+        ".loom/progress/INIT-0001.md",
+        ".loom/status/current.md",
+        ".github/PULL_REQUEST_TEMPLATE.md"
       ],
       "closing_condition": "The generated entry, work item, recovery entry, and templates are readable and verified",
       "post_build_continuation": "Promote the first real downstream issue after the bootstrap artifacts are accepted",
@@ -1453,9 +1599,9 @@
     "governance_surface_mode": "new"
   },
   "adoption_intent": {
-    "requested": "unspecified",
-    "effective": "light-governance",
-    "source": "unspecified",
+    "requested": "execution-control",
+    "effective": "execution-control",
+    "source": "cli",
     "requires_explicit_confirmation": false
   },
   "planned_writes": [
@@ -1487,114 +1633,6 @@
       "path": ".loom/bootstrap/capability-map.md",
       "kind": "capability-map",
       "owner": "loom",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/bin/loom_init.py",
-      "kind": "loom-tool",
-      "owner": "loom-runtime",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/bin/fact_chain_support.py",
-      "kind": "loom-tool-support",
-      "owner": "loom-runtime",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/bin/governance_surface.py",
-      "kind": "loom-tool-support",
-      "owner": "loom-runtime",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/bin/loom_flow.py",
-      "kind": "loom-tool",
-      "owner": "loom-runtime",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/bin/loom_status.py",
-      "kind": "loom-tool",
-      "owner": "loom-runtime",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/bin/runtime_paths.py",
-      "kind": "loom-tool-support",
-      "owner": "loom-runtime",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/bin/runtime_state.py",
-      "kind": "loom-tool-support",
-      "owner": "loom-runtime",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/bin/loom_check.py",
-      "kind": "loom-tool",
-      "owner": "loom-runtime",
-      "requires_intent": null
-    },
-    {
-      "path": "AGENTS.md",
-      "kind": "root-entry",
-      "owner": "loom",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/work-items/INIT-0001.md",
-      "kind": "work-item",
-      "owner": "loom",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/progress/INIT-0001.md",
-      "kind": "progress",
-      "owner": "loom",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/reviews/INIT-0001.json",
-      "kind": "review-entry",
-      "owner": "loom",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/reviews/INIT-0001.spec.json",
-      "kind": "review-entry",
-      "owner": "loom",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/status/current.md",
-      "kind": "status-surface",
-      "owner": "loom",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/specs/INIT-0001/spec.md",
-      "kind": "spec",
-      "owner": "loom",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/specs/INIT-0001/plan.md",
-      "kind": "plan",
-      "owner": "loom",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/specs/INIT-0001/implementation-contract.md",
-      "kind": "implementation-contract",
-      "owner": "loom",
-      "requires_intent": null
-    },
-    {
-      "path": ".github/PULL_REQUEST_TEMPLATE.md",
-      "kind": "pr-template",
-      "owner": "repo-owned",
       "requires_intent": null
     },
     {
@@ -1740,12 +1778,121 @@
       "kind": "gitignore",
       "owner": "repo-owned",
       "requires_intent": null
+    },
+    {
+      "path": ".loom/bin/loom_init.py",
+      "kind": "loom-tool",
+      "owner": "loom-runtime",
+      "requires_intent": null
+    },
+    {
+      "path": ".loom/bin/fact_chain_support.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime",
+      "requires_intent": null
+    },
+    {
+      "path": ".loom/bin/governance_surface.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime",
+      "requires_intent": null
+    },
+    {
+      "path": ".loom/bin/loom_flow.py",
+      "kind": "loom-tool",
+      "owner": "loom-runtime",
+      "requires_intent": null
+    },
+    {
+      "path": ".loom/bin/loom_status.py",
+      "kind": "loom-tool",
+      "owner": "loom-runtime",
+      "requires_intent": null
+    },
+    {
+      "path": ".loom/bin/runtime_paths.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime",
+      "requires_intent": null
+    },
+    {
+      "path": ".loom/bin/runtime_state.py",
+      "kind": "loom-tool-support",
+      "owner": "loom-runtime",
+      "requires_intent": null
+    },
+    {
+      "path": ".loom/bin/loom_check.py",
+      "kind": "loom-tool",
+      "owner": "loom-runtime",
+      "requires_intent": null
+    },
+    {
+      "path": ".loom/reviews/INIT-0001.json",
+      "kind": "review-entry",
+      "owner": "loom",
+      "requires_intent": null
+    },
+    {
+      "path": ".loom/reviews/INIT-0001.spec.json",
+      "kind": "review-entry",
+      "owner": "loom",
+      "requires_intent": null
+    },
+    {
+      "path": ".loom/specs/INIT-0001/spec.md",
+      "kind": "spec",
+      "owner": "loom",
+      "requires_intent": "execution-control"
+    },
+    {
+      "path": ".loom/specs/INIT-0001/plan.md",
+      "kind": "plan",
+      "owner": "loom",
+      "requires_intent": "execution-control"
+    },
+    {
+      "path": ".loom/specs/INIT-0001/implementation-contract.md",
+      "kind": "implementation-contract",
+      "owner": "loom",
+      "requires_intent": "execution-control"
+    },
+    {
+      "path": ".loom/work-items/INIT-0001.md",
+      "kind": "work-item",
+      "owner": "loom",
+      "requires_intent": "execution-control"
+    },
+    {
+      "path": ".loom/progress/INIT-0001.md",
+      "kind": "progress",
+      "owner": "loom",
+      "requires_intent": "execution-control"
+    },
+    {
+      "path": ".loom/status/current.md",
+      "kind": "status-surface",
+      "owner": "loom",
+      "requires_intent": "execution-control"
+    },
+    {
+      "path": ".github/PULL_REQUEST_TEMPLATE.md",
+      "kind": "pr-template",
+      "owner": "repo-owned",
+      "requires_intent": null
     }
   ],
   "intentionally_absent": [],
+  "upgrade_triggers": [
+    {
+      "from_profile": "execution-control",
+      "capability": "strong-governance-host-gates",
+      "trigger": "host required checks, controlled merge, or closeout reconciliation become part of the adoption contract"
+    }
+  ],
   "risk_summary": {
-    "heavy_writes": false,
-    "repo_owned_truth_risk": "low",
+    "heavy_writes": true,
+    "repo_owned_truth_risk": "high",
     "requires_explicit_intent": false,
     "missing_inputs": [],
     "fallback_to": null

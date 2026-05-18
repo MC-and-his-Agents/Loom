@@ -38,6 +38,14 @@ ADOPTION_INTENTS = (
 )
 UNSPECIFIED_ADOPTION_INTENT = "unspecified"
 NON_WRITABLE_ADOPTION_PATHS = {"defer", "skill-install-only"}
+SCAFFOLD_PROFILES = (
+    "observe-only",
+    "skill-install-only",
+    "attach-only",
+    "light-governance",
+    "execution-control",
+    "strong-governance",
+)
 
 RUNTIME_ARTIFACT_SOURCES = {
     ".loom/bin/loom_init.py": RUNTIME_SOURCE,
@@ -720,6 +728,29 @@ def is_heavy_execution_path(adoption_path: str) -> bool:
     return adoption_path == "full-bootstrap"
 
 
+def scaffold_profile_key(adoption_path: str, intake: dict[str, object]) -> str:
+    requested = str(intake.get("adoption_intent", UNSPECIFIED_ADOPTION_INTENT))
+    if requested in SCAFFOLD_PROFILES:
+        return requested
+    if adoption_path == "defer":
+        return "observe-only"
+    if adoption_path == "skill-install-only":
+        return "skill-install-only"
+    if uses_attach_only_path(adoption_path):
+        return "attach-only"
+    if adoption_path == "full-bootstrap":
+        return "execution-control"
+    return "light-governance"
+
+
+def profile_has_work_item_carriers(profile: str) -> bool:
+    return profile in {"execution-control", "strong-governance"}
+
+
+def profile_writes_artifacts(profile: str) -> bool:
+    return profile not in {"observe-only", "skill-install-only"}
+
+
 def adoption_intent_payload(adoption_path: str, intake: dict[str, object]) -> dict[str, object]:
     requested = str(intake.get("adoption_intent", UNSPECIFIED_ADOPTION_INTENT))
     source = str(intake.get("adoption_intent_source", "unspecified"))
@@ -795,7 +826,28 @@ def rule_refs_for_capabilities(scenario: str, adoption_path: str) -> list[dict[s
     return common
 
 
-def deferred_capabilities(scenario: str, adoption_path: str) -> list[dict[str, str]]:
+def deferred_capabilities(scenario: str, adoption_path: str, profile: str) -> list[dict[str, str]]:
+    if profile == "light-governance":
+        return [
+            {
+                "name": "loom-owned-work-item-progress-status",
+                "reason": "light-governance keeps first-round adoption to a companion, review/spec, and PR-template loop",
+                "upgrade_trigger": "the repo explicitly opts into execution-control or needs Loom-owned recovery/status carriers",
+            },
+            {
+                "name": "host-gate-merge-closeout-control",
+                "reason": "light-governance does not claim host merge, release, or closeout control",
+                "upgrade_trigger": "required checks, merge-ready, or closeout must be consumed as Loom-owned gates",
+            },
+        ]
+    if profile == "execution-control":
+        return [
+            {
+                "name": "strong-governance-host-gates",
+                "reason": "execution-control writes Loom-owned execution carriers but does not require host merge and closeout gates as a profile precondition",
+                "upgrade_trigger": "host required checks, controlled merge, or closeout reconciliation become part of the adoption contract",
+            }
+        ]
     if scenario == "new":
         return [
             {
@@ -844,6 +896,97 @@ def deferred_capabilities(scenario: str, adoption_path: str) -> list[dict[str, s
     ]
 
 
+def upgrade_triggers(deferred: list[dict[str, str]], profile: str) -> list[dict[str, str]]:
+    return [
+        {
+            "from_profile": profile,
+            "capability": item["name"],
+            "trigger": item["upgrade_trigger"],
+        }
+        for item in deferred
+        if item.get("upgrade_trigger")
+    ]
+
+
+def profile_common_artifacts() -> list[dict[str, str]]:
+    artifacts: list[dict[str, str]] = [
+        {"path": ".loom/README.md", "kind": "rule-entry", "source": "generated"},
+        {"path": ".loom/bootstrap/intake.snapshot.json", "kind": "intake", "source": "generated"},
+        {"path": ".loom/bootstrap/init-result.json", "kind": "init-result", "source": "generated"},
+        {"path": ".loom/bootstrap/manifest.json", "kind": "manifest", "source": "generated"},
+        {"path": ".loom/bootstrap/capability-map.md", "kind": "capability-map", "source": "generated"},
+        {"path": ".loom/companion/README.md", "kind": "repo-companion-entry", "source": "generated"},
+        {"path": ".loom/companion/manifest.json", "kind": "repo-companion-manifest", "source": "generated"},
+        {"path": ".loom/companion/repo-interface.json", "kind": "repo-companion-interface", "source": "generated"},
+        {"path": ".loom/companion/interop.json", "kind": "repo-interop-contract", "source": "generated"},
+        {"path": ".loom/companion/checkpoints.md", "kind": "repo-companion-doc", "source": "generated"},
+        {"path": ".loom/companion/review.md", "kind": "repo-companion-doc", "source": "generated"},
+        {"path": ".loom/companion/merge-ready.md", "kind": "repo-companion-doc", "source": "generated"},
+        {"path": ".loom/companion/closeout.md", "kind": "repo-companion-doc", "source": "generated"},
+        {"path": ".loom/companion/releases/changelog.md", "kind": "repo-release-surface", "source": "generated"},
+        {"path": ".loom/companion/releases/release-notes.md", "kind": "repo-release-surface", "source": "generated"},
+        {"path": ".loom/companion/releases/migration-notes.md", "kind": "repo-release-surface", "source": "generated"},
+        {"path": ".loom/companion/releases/rollback.md", "kind": "repo-release-surface", "source": "generated"},
+        {"path": ".loom/companion/releases/catalog.json", "kind": "repo-release-surface", "source": "generated"},
+        {"path": ".loom/companion/releases/current.json", "kind": "repo-release-surface", "source": "generated"},
+        {"path": ".loom/companion/releases/status.json", "kind": "repo-release-surface", "source": "generated"},
+        {"path": ".loom/shadow/admission-loom.json", "kind": "shadow-parity-surface", "source": "generated"},
+        {"path": ".loom/shadow/admission-repo.json", "kind": "shadow-parity-surface", "source": "generated"},
+        {"path": ".loom/shadow/review-loom.json", "kind": "shadow-parity-surface", "source": "generated"},
+        {"path": ".loom/shadow/review-repo.json", "kind": "shadow-parity-surface", "source": "generated"},
+        {"path": ".loom/shadow/merge-ready-loom.json", "kind": "shadow-parity-surface", "source": "generated"},
+        {"path": ".loom/shadow/merge-ready-repo.json", "kind": "shadow-parity-surface", "source": "generated"},
+        {"path": ".loom/shadow/closeout-loom.json", "kind": "shadow-parity-surface", "source": "generated"},
+        {"path": ".loom/shadow/closeout-repo.json", "kind": "shadow-parity-surface", "source": "generated"},
+        {"path": ".gitignore", "kind": "gitignore", "source": "generated"},
+        runtime_artifact(".loom/bin/loom_init.py", "loom-tool", RUNTIME_SOURCE),
+        runtime_artifact(".loom/bin/fact_chain_support.py", "loom-tool-support", FACT_CHAIN_RUNTIME_SOURCE),
+        runtime_artifact(".loom/bin/governance_surface.py", "loom-tool-support", GOVERNANCE_RUNTIME_SOURCE),
+        runtime_artifact(".loom/bin/loom_flow.py", "loom-tool", FLOW_RUNTIME_SOURCE),
+        runtime_artifact(".loom/bin/loom_status.py", "loom-tool", STATUS_RUNTIME_SOURCE),
+        runtime_artifact(".loom/bin/runtime_paths.py", "loom-tool-support", "skills/shared/scripts/runtime_paths.py"),
+        runtime_artifact(".loom/bin/runtime_state.py", "loom-tool-support", "skills/shared/scripts/runtime_state.py"),
+        runtime_artifact(".loom/bin/loom_check.py", "loom-tool", CHECK_RUNTIME_SOURCE),
+    ]
+    return artifacts
+
+
+def profile_light_artifacts(target_root: Path) -> list[dict[str, str]]:
+    artifacts: list[dict[str, str]] = []
+    if not (target_root / "AGENTS.md").exists():
+        artifacts.append({"path": "AGENTS.md", "kind": "root-entry", "source": "generated"})
+    artifacts.extend(
+        [
+            {"path": ".loom/reviews/INIT-0001.json", "kind": "review-entry", "source": "generated"},
+            {"path": ".loom/reviews/INIT-0001.spec.json", "kind": "review-entry", "source": "generated"},
+            {"path": ".loom/specs/INIT-0001/spec.md", "kind": "spec", "source": "skills/shared/assets/templates/scaffold/spec.md"},
+            {"path": ".loom/specs/INIT-0001/plan.md", "kind": "plan", "source": "skills/shared/assets/templates/scaffold/plan.md"},
+            {
+                "path": ".loom/specs/INIT-0001/implementation-contract.md",
+                "kind": "implementation-contract",
+                "source": "skills/shared/assets/templates/scaffold/implementation-contract.md",
+            },
+        ]
+    )
+    return artifacts
+
+
+def profile_execution_artifacts(target_root: Path) -> list[dict[str, str]]:
+    artifacts = profile_light_artifacts(target_root)
+    artifacts.extend(
+        [
+            {"path": ".loom/work-items/INIT-0001.md", "kind": "work-item", "source": "generated"},
+            {"path": ".loom/progress/INIT-0001.md", "kind": "progress", "source": "generated"},
+            {"path": ".loom/status/current.md", "kind": "status-surface", "source": "generated"},
+        ]
+    )
+    return artifacts
+
+
+def artifact_paths(artifacts: list[dict[str, str]]) -> list[str]:
+    return [artifact["path"] for artifact in artifacts]
+
+
 def attach_only_artifact_paths(target_root: Path, install_pr_template: bool) -> list[str]:
     artifacts = [
         ".loom/README.md",
@@ -869,7 +1012,13 @@ def attach_only_artifact_paths(target_root: Path, install_pr_template: bool) -> 
     return artifacts
 
 
-def initial_work_items(scenario: str, target_root: Path, adoption_path: str, install_pr_template: bool) -> list[dict[str, object]]:
+def initial_work_items(
+    scenario: str,
+    target_root: Path,
+    adoption_path: str,
+    install_pr_template: bool,
+    profile: str,
+) -> list[dict[str, object]]:
     if adoption_path in NON_WRITABLE_ADOPTION_PATHS:
         return []
     if uses_attach_only_path(adoption_path):
@@ -889,26 +1038,7 @@ def initial_work_items(scenario: str, target_root: Path, adoption_path: str, ins
                 "owner_for_checkpoint_lite": "repository owner or current attach operator",
             }
         ]
-    artifacts = [
-        ".loom/bootstrap/init-result.json",
-        ".loom/work-items/INIT-0001.md",
-        ".loom/progress/INIT-0001.md",
-        ".loom/reviews/INIT-0001.json",
-        ".loom/reviews/INIT-0001.spec.json",
-        ".loom/status/current.md",
-        ".loom/bin/loom_init.py",
-        ".loom/bin/fact_chain_support.py",
-        ".loom/bin/governance_surface.py",
-        ".loom/bin/loom_flow.py",
-        ".loom/bin/loom_status.py",
-        ".loom/bin/runtime_paths.py",
-        ".loom/bin/loom_check.py",
-        ".loom/specs/INIT-0001/spec.md",
-        ".loom/specs/INIT-0001/plan.md",
-        ".loom/specs/INIT-0001/implementation-contract.md",
-    ]
-    if not (target_root / ".github/PULL_REQUEST_TEMPLATE.md").exists():
-        artifacts.append(".github/PULL_REQUEST_TEMPLATE.md")
+    artifacts = artifact_paths(initial_artifacts(target_root, install_pr_template, adoption_path, profile))
     return [
         {
             "id": WORK_ITEM_ID,
@@ -927,125 +1057,15 @@ def initial_work_items(scenario: str, target_root: Path, adoption_path: str, ins
     ]
 
 
-def initial_artifacts(target_root: Path, install_pr_template: bool, adoption_path: str) -> list[dict[str, str]]:
-    if adoption_path in NON_WRITABLE_ADOPTION_PATHS:
+def initial_artifacts(target_root: Path, install_pr_template: bool, adoption_path: str, profile: str) -> list[dict[str, str]]:
+    if not profile_writes_artifacts(profile):
         return []
 
-    artifacts = [
-        {
-            "path": ".loom/README.md",
-            "kind": "rule-entry",
-            "source": "generated",
-        },
-        {
-            "path": ".loom/bootstrap/intake.snapshot.json",
-            "kind": "intake",
-            "source": "generated",
-        },
-        {
-            "path": ".loom/bootstrap/init-result.json",
-            "kind": "init-result",
-            "source": "generated",
-        },
-        {
-            "path": ".loom/bootstrap/manifest.json",
-            "kind": "manifest",
-            "source": "generated",
-        },
-        {
-            "path": ".loom/bootstrap/capability-map.md",
-            "kind": "capability-map",
-            "source": "generated",
-        },
-        runtime_artifact(".loom/bin/loom_init.py", "loom-tool", RUNTIME_SOURCE),
-        runtime_artifact(".loom/bin/fact_chain_support.py", "loom-tool-support", FACT_CHAIN_RUNTIME_SOURCE),
-        runtime_artifact(".loom/bin/governance_surface.py", "loom-tool-support", GOVERNANCE_RUNTIME_SOURCE),
-        runtime_artifact(".loom/bin/loom_flow.py", "loom-tool", FLOW_RUNTIME_SOURCE),
-        runtime_artifact(".loom/bin/loom_status.py", "loom-tool", STATUS_RUNTIME_SOURCE),
-        runtime_artifact(".loom/bin/runtime_paths.py", "loom-tool-support", "skills/shared/scripts/runtime_paths.py"),
-        runtime_artifact(".loom/bin/runtime_state.py", "loom-tool-support", "skills/shared/scripts/runtime_state.py"),
-        runtime_artifact(".loom/bin/loom_check.py", "loom-tool", CHECK_RUNTIME_SOURCE),
-    ]
-    if uses_attach_only_path(adoption_path):
-        artifacts.extend(
-            [
-                {
-                    "path": ".loom/companion/README.md",
-                    "kind": "repo-companion-entry",
-                    "source": "generated",
-                },
-                {
-                    "path": ".loom/companion/checkpoints.md",
-                    "kind": "repo-companion-doc",
-                    "source": "generated",
-                },
-                {
-                    "path": ".loom/companion/review.md",
-                    "kind": "repo-companion-doc",
-                    "source": "generated",
-                },
-                {
-                    "path": ".loom/companion/merge-ready.md",
-                    "kind": "repo-companion-doc",
-                    "source": "generated",
-                },
-                {
-                    "path": ".loom/companion/closeout.md",
-                    "kind": "repo-companion-doc",
-                    "source": "generated",
-                },
-            ]
-        )
-    else:
-        artifacts.extend(
-            [
-                {
-                    "path": "AGENTS.md",
-                    "kind": "root-entry",
-                    "source": "generated",
-                },
-                {
-                    "path": ".loom/work-items/INIT-0001.md",
-                    "kind": "work-item",
-                    "source": "generated",
-                },
-                {
-                    "path": ".loom/progress/INIT-0001.md",
-                    "kind": "progress",
-                    "source": "generated",
-                },
-                {
-                    "path": ".loom/reviews/INIT-0001.json",
-                    "kind": "review-entry",
-                    "source": "generated",
-                },
-                {
-                    "path": ".loom/reviews/INIT-0001.spec.json",
-                    "kind": "review-entry",
-                    "source": "generated",
-                },
-                {
-                    "path": ".loom/status/current.md",
-                    "kind": "status-surface",
-                    "source": "generated",
-                },
-                {
-                    "path": ".loom/specs/INIT-0001/spec.md",
-                    "kind": "spec",
-                    "source": "skills/shared/assets/templates/scaffold/spec.md",
-                },
-                {
-                    "path": ".loom/specs/INIT-0001/plan.md",
-                    "kind": "plan",
-                    "source": "skills/shared/assets/templates/scaffold/plan.md",
-                },
-                {
-                    "path": ".loom/specs/INIT-0001/implementation-contract.md",
-                    "kind": "implementation-contract",
-                    "source": "skills/shared/assets/templates/scaffold/implementation-contract.md",
-                },
-            ]
-        )
+    artifacts = profile_common_artifacts()
+    if profile == "light-governance":
+        artifacts.extend(profile_light_artifacts(target_root))
+    elif profile in {"execution-control", "strong-governance"}:
+        artifacts.extend(profile_execution_artifacts(target_root))
     if install_pr_template or not (target_root / ".github/PULL_REQUEST_TEMPLATE.md").exists():
         artifacts.append(
             {
@@ -1144,8 +1164,8 @@ def planned_write_targets(result: dict[str, object], adoption_path: str) -> list
     return planned
 
 
-def intentionally_absent_targets(adoption_path: str) -> list[dict[str, str]]:
-    if uses_attach_only_path(adoption_path):
+def intentionally_absent_targets(adoption_path: str, profile: str) -> list[dict[str, str]]:
+    if profile == "attach-only":
         return [
             {"path": ".loom/work-items/**", "reason": "attach-only preserves host-owned work item truth"},
             {"path": ".loom/progress/**", "reason": "attach-only preserves host-owned recovery truth"},
@@ -1156,6 +1176,12 @@ def intentionally_absent_targets(adoption_path: str) -> list[dict[str, str]]:
         return [{"path": "*", "reason": "observe-only intent is read-only"}]
     if adoption_path == "skill-install-only":
         return [{"path": ".loom/work-items/**", "reason": "skill install does not adopt execution governance"}]
+    if profile == "light-governance":
+        return [
+            {"path": ".loom/work-items/**", "reason": "light-governance does not author Loom work item truth"},
+            {"path": ".loom/progress/**", "reason": "light-governance does not author Loom recovery truth"},
+            {"path": ".loom/status/current.md", "reason": "light-governance does not author Loom status truth"},
+        ]
     return []
 
 
@@ -1180,8 +1206,10 @@ def risk_summary(adoption_path: str, intake: dict[str, object], planned: list[di
 
 def build_result(target_root: Path, scenario: str, intake: dict[str, object], install_pr_template: bool) -> dict[str, object]:
     adoption_path = recommended_adoption_path(scenario, intake)
+    profile = scaffold_profile_key(adoption_path, intake)
     attach_only = uses_attach_only_path(adoption_path)
     read_only_adoption = adoption_path in NON_WRITABLE_ADOPTION_PATHS
+    has_work_item_carriers = profile_has_work_item_carriers(profile)
     main_problem = {
         "new": "the repository has no controlled Loom entry yet",
         "small-existing": "the repo has a baseline but still lacks a stable Loom adoption entry and explicit first artifacts",
@@ -1235,7 +1263,20 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
             "recovery_mode": recovery_mode(scenario),
             "capabilities": rule_refs_for_capabilities(scenario, adoption_path),
         },
-        "deferred_capabilities": deferred_capabilities(scenario, adoption_path),
+        "scaffold_profile": {
+            "name": profile,
+            "writes_artifacts": profile_writes_artifacts(profile),
+            "writes_work_item_carriers": has_work_item_carriers,
+            "description": {
+                "observe-only": "read-only repository observation; no Loom adoption carriers are written",
+                "skill-install-only": "skill/runtime installation intent without repository governance adoption carriers",
+                "attach-only": "companion/read-surface attachment that preserves repo-owned execution truth",
+                "light-governance": "companion, review/spec, and PR-template loop without Loom-owned work item/progress/status carriers",
+                "execution-control": "Loom-owned work item, progress, review, status, and spec carriers",
+                "strong-governance": "execution-control surface prepared for host gates, required checks, merge, and closeout consumption",
+            }[profile],
+        },
+        "deferred_capabilities": deferred_capabilities(scenario, adoption_path, profile),
         "fact_chain": (
             {
                 "mode": "intent-only dry-run",
@@ -1260,6 +1301,17 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
             }
             if attach_only
             else {
+                "mode": "profile-guided light-governance",
+                "read_entry": "not_applicable",
+                "entry_points": {
+                    "current_item_id": WORK_ITEM_ID,
+                    "work_item": "not_applicable",
+                    "recovery_entry": "not_applicable",
+                    "status_surface": "not_applicable",
+                },
+            }
+            if not has_work_item_carriers
+            else {
                 "mode": "work-item + recovery-entry + derived status-surface",
                 "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
                 "entry_points": {
@@ -1270,8 +1322,8 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
                 },
             }
         ),
-        "initial_artifacts": initial_artifacts(target_root, install_pr_template, adoption_path),
-        "initial_work_items": initial_work_items(scenario, target_root, adoption_path, install_pr_template),
+        "initial_artifacts": initial_artifacts(target_root, install_pr_template, adoption_path, profile),
+        "initial_work_items": initial_work_items(scenario, target_root, adoption_path, install_pr_template, profile),
         "validation_and_closing": {
             "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
             "checkpoint_relationship": (
@@ -1282,6 +1334,12 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
                 ]
                 if attach_only
                 else [
+                    "admission checkpoint confirms the companion entry, review record, spec suite, and PR template are readable",
+                    "build checkpoint confirms generated light-governance surfaces are internally consistent",
+                    "merge checkpoint remains repo-owned until the intent upgrades to execution-control or strong-governance",
+                ]
+                if profile == "light-governance"
+                else [
                     "admission checkpoint confirms the bootstrap work item and first artifacts are readable",
                     "build checkpoint confirms generated carriers and templates are internally consistent",
                     "merge checkpoint should only pass after downstream repo truth, docs, and delivery state align",
@@ -1290,6 +1348,8 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
             "clean_state": (
                 "all generated attach-only Loom artifacts are readable, verified, and do not introduce Loom-owned recovery/status placeholders"
                 if attach_only
+                else "all generated light-governance artifacts are readable, verified, and do not introduce Loom-owned work/progress/status carriers"
+                if profile == "light-governance"
                 else "all generated Loom artifacts are readable, verified, and free of conflicting duplicates"
             ),
             "close_when": (
@@ -1299,6 +1359,12 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
                     "the bootstrap manifest does not declare Loom-owned recovery/status carriers for this path",
                 ]
                 if attach_only
+                else [
+                    "the target repo has a readable Loom companion entry",
+                    "the review record, spec suite, and PR template exist",
+                    "the bootstrap manifest and init-result are verifiable",
+                ]
+                if profile == "light-governance"
                 else [
                     "the target repo has a readable root or companion Loom entry",
                     "the first work item, progress carrier, and spec/plan artifacts exist",
@@ -1312,6 +1378,7 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
         "maturity_upgrade_path": init_maturity_upgrade_path(governance_surface),
     }
     planned = planned_write_targets(result, adoption_path)
+    deferred = result["deferred_capabilities"]
     result["detected_repository_mode"] = {
         "repository_type": intake.get("repository_type"),
         "scenario_key": scenario,
@@ -1319,7 +1386,8 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
     }
     result["adoption_intent"] = adoption_intent_payload(adoption_path, intake)
     result["planned_writes"] = planned
-    result["intentionally_absent"] = intentionally_absent_targets(adoption_path)
+    result["intentionally_absent"] = intentionally_absent_targets(adoption_path, profile)
+    result["upgrade_triggers"] = upgrade_triggers(deferred if isinstance(deferred, list) else [], profile)
     result["risk_summary"] = risk_summary(adoption_path, intake, planned)
     return result
 
@@ -1445,16 +1513,26 @@ def bootstrap_write_blockers(result: dict[str, object]) -> list[str]:
 
 def render_loom_readme(result: dict[str, object]) -> str:
     run = result["run"]
-    attach_only = uses_attach_only_path(str(result["recommended_adoption"]["path"]))
-    path_lines = (
-        "- Repo companion entry: `.loom/companion/README.md`\n"
-        "- Companion checkpoints: `.loom/companion/checkpoints.md`\n"
-        "- Companion review surface: `.loom/companion/review.md`\n"
-        if attach_only
-        else "- First work item: `.loom/work-items/INIT-0001.md`\n"
-        "- Progress carrier: `.loom/progress/INIT-0001.md`\n"
-        "- Status surface: `.loom/status/current.md`\n"
-    )
+    profile = result.get("scaffold_profile")
+    profile_name = str(profile.get("name")) if isinstance(profile, dict) else "execution-control"
+    if profile_name == "attach-only":
+        path_lines = (
+            "- Repo companion entry: `.loom/companion/README.md`\n"
+            "- Companion checkpoints: `.loom/companion/checkpoints.md`\n"
+            "- Companion review surface: `.loom/companion/review.md`\n"
+        )
+    elif profile_name == "light-governance":
+        path_lines = (
+            "- Repo companion entry: `.loom/companion/README.md`\n"
+            "- Review record: `.loom/reviews/INIT-0001.json`\n"
+            "- Spec suite: `.loom/specs/INIT-0001/`\n"
+        )
+    else:
+        path_lines = (
+            "- First work item: `.loom/work-items/INIT-0001.md`\n"
+            "- Progress carrier: `.loom/progress/INIT-0001.md`\n"
+            "- Status surface: `.loom/status/current.md`\n"
+        )
     return (
         "# Loom Bootstrap\n\n"
         f"This directory was generated by `{RUNTIME_SOURCE}`.\n\n"
@@ -1842,7 +1920,10 @@ def scaffold_target(
 ) -> tuple[int, list[str]]:
     written = 0
     touched: list[str] = []
-    attach_only = uses_attach_only_path(str(result["recommended_adoption"]["path"]))
+    profile = result.get("scaffold_profile")
+    profile_name = str(profile.get("name")) if isinstance(profile, dict) else "execution-control"
+    writes_light_loop = profile_name in {"light-governance", "execution-control", "strong-governance"}
+    writes_work_item_carriers = profile_has_work_item_carriers(profile_name)
 
     writes: list[tuple[Path, str | dict[str, object], str]] = [
         (target_root / ".loom/README.md", render_loom_readme(result), "text"),
@@ -1912,15 +1993,18 @@ def scaffold_target(
             "json",
         ),
     ]
-    if attach_only:
-        pass
-    else:
+    if writes_light_loop:
+        writes.extend(
+            [
+                (target_root / ".loom/reviews/INIT-0001.json", render_review_entry(result), "text"),
+                (target_root / ".loom/reviews/INIT-0001.spec.json", render_spec_review_entry(result), "text"),
+            ]
+        )
+    if writes_work_item_carriers:
         writes.extend(
             [
                 (target_root / ".loom/work-items/INIT-0001.md", render_work_item(result), "text"),
                 (target_root / ".loom/progress/INIT-0001.md", render_progress(result), "text"),
-                (target_root / ".loom/reviews/INIT-0001.json", render_review_entry(result), "text"),
-                (target_root / ".loom/reviews/INIT-0001.spec.json", render_spec_review_entry(result), "text"),
                 (target_root / ".loom/status/current.md", render_status(result), "text"),
             ]
         )
@@ -1957,7 +2041,7 @@ def scaffold_target(
         if copy_file(source, destination, force=force):
             written += 1
             touched.append(str(destination.relative_to(target_root)))
-    if not attach_only:
+    if writes_light_loop:
         for source, destination in (
             (shared_asset(__file__, "templates/scaffold/spec.md"), target_root / ".loom/specs/INIT-0001/spec.md"),
             (shared_asset(__file__, "templates/scaffold/plan.md"), target_root / ".loom/specs/INIT-0001/plan.md"),
@@ -1977,7 +2061,7 @@ def scaffold_target(
             touched.append(str(pr_template_target.relative_to(target_root)))
 
     root_agents = target_root / "AGENTS.md"
-    if not attach_only and not root_agents.exists():
+    if writes_light_loop and not root_agents.exists():
         if write_text(root_agents, render_root_agents(), force=force):
             written += 1
             touched.append(str(root_agents.relative_to(target_root)))
@@ -2007,59 +2091,36 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
         adoption = result.get("recommended_adoption")
         if isinstance(adoption, dict):
             attach_only = uses_attach_only_path(str(adoption.get("path", "")))
-        required_paths = [
-            ".loom/README.md",
-            ".loom/bootstrap/intake.snapshot.json",
-            str(output_path.relative_to(target_root)),
-            ".loom/bootstrap/manifest.json",
-            ".loom/bootstrap/capability-map.md",
-            ".loom/bin/loom_init.py",
-            ".loom/bin/fact_chain_support.py",
-            ".loom/bin/governance_surface.py",
-            ".loom/bin/loom_flow.py",
-            ".loom/bin/runtime_paths.py",
-            ".loom/bin/runtime_state.py",
-            ".loom/bin/loom_check.py",
-            ".loom/companion/README.md",
-            ".loom/companion/manifest.json",
-            ".loom/companion/repo-interface.json",
-            ".loom/companion/interop.json",
-            ".loom/companion/checkpoints.md",
-            ".loom/companion/review.md",
-            ".loom/companion/merge-ready.md",
-            ".loom/companion/closeout.md",
-            ".loom/shadow/admission-loom.json",
-            ".loom/shadow/admission-repo.json",
-            ".loom/shadow/review-loom.json",
-            ".loom/shadow/review-repo.json",
-            ".loom/shadow/merge-ready-loom.json",
-            ".loom/shadow/merge-ready-repo.json",
-            ".loom/shadow/closeout-loom.json",
-            ".loom/shadow/closeout-repo.json",
-        ]
-        if attach_only:
-            pass
+        scaffold_profile = result.get("scaffold_profile")
+        profile_name = str(scaffold_profile.get("name")) if isinstance(scaffold_profile, dict) else (
+            "attach-only" if attach_only else "execution-control"
+        )
+        initial_artifact_list = result.get("initial_artifacts")
+        planned_writes = result.get("planned_writes")
+        if isinstance(initial_artifact_list, list):
+            required_paths = [
+                str(item.get("path"))
+                for item in initial_artifact_list
+                if isinstance(item, dict) and isinstance(item.get("path"), str)
+            ]
+        elif isinstance(planned_writes, list):
+            required_paths = [
+                str(item.get("path"))
+                for item in planned_writes
+                if isinstance(item, dict) and isinstance(item.get("path"), str)
+            ]
         else:
-            required_paths.extend(
-                [
-                    "AGENTS.md",
-                    ".loom/work-items/INIT-0001.md",
-                    ".loom/progress/INIT-0001.md",
-                    ".loom/reviews/INIT-0001.json",
-                    ".loom/status/current.md",
-                    ".loom/specs/INIT-0001/spec.md",
-                    ".loom/specs/INIT-0001/plan.md",
-                    ".loom/specs/INIT-0001/implementation-contract.md",
-                ]
-            )
+            required_paths = []
         for key in (
             "project_judgment",
             "recommended_adoption",
+            "scaffold_profile",
             "adoption_intent",
             "detected_repository_mode",
             "risk_summary",
             "planned_writes",
             "deferred_capabilities",
+            "upgrade_triggers",
             "fact_chain",
             "initial_artifacts",
             "initial_work_items",
@@ -2127,12 +2188,33 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
             for forbidden in (".loom/work-items/INIT-0001.md", ".loom/progress/INIT-0001.md", ".loom/status/current.md"):
                 if forbidden in declared_generated:
                     errors.append(f"deep-existing-repo bootstrap must not declare generated carrier `{forbidden}`")
+        if profile_name == "light-governance":
+            declared_generated = {
+                artifact.get("path")
+                for artifact in result.get("initial_artifacts", [])
+                if isinstance(artifact, dict) and isinstance(artifact.get("path"), str)
+            }
+            for forbidden in (".loom/work-items/INIT-0001.md", ".loom/progress/INIT-0001.md", ".loom/status/current.md"):
+                if forbidden in declared_generated:
+                    errors.append(f"light-governance bootstrap must not declare execution-control carrier `{forbidden}`")
 
     for relative in required_paths:
         if not (target_root / relative).exists():
             errors.append(f"missing required artifact: {relative}")
 
-    if not attach_only:
+    profile_writes_work_items = False
+    if output_path.exists():
+        try:
+            result_for_profile = read_json(output_path)
+            scaffold_profile = result_for_profile.get("scaffold_profile")
+            profile_name = str(scaffold_profile.get("name")) if isinstance(scaffold_profile, dict) else (
+                "attach-only" if attach_only else "execution-control"
+            )
+            profile_writes_work_items = profile_has_work_item_carriers(profile_name)
+        except json.JSONDecodeError:
+            profile_writes_work_items = not attach_only
+
+    if profile_writes_work_items:
         fact_chain_report, fact_chain_errors = inspect_fact_chain(
             target_root,
             str(output_path.relative_to(target_root)),
@@ -2192,7 +2274,7 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
                 {"pass"},
             ),
         ]
-        if not attach_only:
+        if profile_writes_work_items:
             commands.extend(
                 [
                     (
@@ -2207,7 +2289,7 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
                     ),
                 ]
             )
-        if current_item_id and not attach_only:
+        if current_item_id and profile_writes_work_items:
             commands.extend(
                 [
                     (

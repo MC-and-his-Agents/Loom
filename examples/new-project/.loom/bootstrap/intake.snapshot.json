@@ -10,6 +10,6 @@
   "purity_or_scope_signals": "clean",
   "merge_review_semantic_overload": false,
   "notes": "autodetected by loom_init.py",
-  "adoption_intent": "unspecified",
-  "adoption_intent_source": "unspecified"
+  "adoption_intent": "execution-control",
+  "adoption_intent_source": "cli"
 }
