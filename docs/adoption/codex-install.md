@@ -28,6 +28,8 @@ Enable Loom skills in Codex via native skill discovery. Clone the repository and
 
 Codex should start from `loom-init` after discovery reloads. The npm installer is not the Codex default path; it remains available for adapter-specific and single-skill helper flows.
 
+This installs Loom's own generated skill surface. It does not define which `.loom` files an adopted target repository should commit. Target repository `.loom` carrier visibility is defined in [loom-surfaces-version-control.md](./loom-surfaces-version-control.md).
+
 ## Verify
 
 ```bash

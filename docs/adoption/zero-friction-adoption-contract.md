@@ -141,6 +141,7 @@ generated `repo interop` 只能生成或更新以下内容：
 - 未生成的 companion / interop surface 被显式记录为 intentionally absent
 - repo-owned residue 保留在原 ownership
 - 没有新增平行事实链或平行状态面
+- 稳定 `.loom` carrier 遵守 [.loom surfaces 版本控制策略](./loom-surfaces-version-control.md)，不能被 blanket `.loom/` ignore 隐藏
 
 ## 7. Adopt Verify Closure
 
@@ -150,6 +151,7 @@ generated `repo interop` 只能生成或更新以下内容：
 - generated interop locators 存在，或被标记为 intentionally absent
 - companion / interop 边界未承载运行态真相、host action result 或 closeout result
 - repo-specific 判断都有 source locator、reasoning、writeback target 与 verification evidence
+- 稳定 `.loom` carrier 对 Git 可见；`.loom/runtime`、`.loom/tmp`、`.loom/cache` 等运行态残留不被误报为必须提交
 - `fact-chain` 能复读 adoption 结果
 - resume guidance 能给出后续 continuation entry 或明确说明无需恢复
 
@@ -181,5 +183,7 @@ adoption 完成后，`loom-resume` 不消费 adoption 输出作为新的事实�
   - 成熟治理重仓的 attach-only 默认路径
 - [github-profile-upgrade.md](./github-profile-upgrade.md)
   - GitHub profile 的 advisory / blocking / rollback gate rollout 合同
+- [loom-surfaces-version-control.md](./loom-surfaces-version-control.md)
+  - 冻结稳定 `.loom` carrier 与运行态 scratch 的 Git 可见性边界
 
 本合同只定义 adoption 闭环，不复制这些合同的 schema 或 gate 规则。

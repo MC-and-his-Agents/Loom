@@ -82,6 +82,7 @@
     "shared/references/adoption/repo-companion-contract.md",
     "shared/references/adoption/repo-interop-contract.md",
     "shared/references/adoption/target-repo-version-contract.md",
+    "shared/references/adoption/loom-surfaces-version-control.md",
     "loom-init",
     "loom-adopt",
     "loom-resume",

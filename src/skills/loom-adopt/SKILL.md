@@ -34,6 +34,7 @@ description: 负责把仓库接入 Loom 的初始化场景入口。Use when Code
   - [../shared/references/adoption/zero-friction-adoption-contract.md](../shared/references/adoption/zero-friction-adoption-contract.md)
   - [../shared/references/adoption/lightweight-retrofit-default.md](../shared/references/adoption/lightweight-retrofit-default.md)
   - [../shared/references/adoption/routing-and-checkpoints.md](../shared/references/adoption/routing-and-checkpoints.md)
+  - [../shared/references/adoption/loom-surfaces-version-control.md](../shared/references/adoption/loom-surfaces-version-control.md)
   - [../shared/references/harness/fact-chain-contract.md](../shared/references/harness/fact-chain-contract.md)
   - [../loom-init/references/input-signals.md](../loom-init/references/input-signals.md)
   - [../loom-init/references/output-contract.md](../loom-init/references/output-contract.md)
