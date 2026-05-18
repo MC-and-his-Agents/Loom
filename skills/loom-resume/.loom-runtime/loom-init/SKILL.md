@@ -57,12 +57,14 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 
 当前安装态中的最小可执行入口为：
 
-- `loom init bootstrap --target <repo>`
+- `loom init bootstrap --target <repo> [--intent observe-only|skill-install-only|attach-only|light-governance|execution-control|strong-governance]`
 - `loom init verify --target <repo>`
 - `loom init fact-chain --target <repo>`
 - `loom route --target <repo> [--skill <id>] [--task "<request>"]`
 
 安装态或 repo-local 开发态可以把这些 `loom ...` 动作映射到底层 `scripts/...` 或 `tools/...` carrier；首层用户入口仍然是 `loom-init` 这个 skill。
+
+`--intent` 用来表达采用意图，而不是仓库静态分类。未显式给出 intent 时，dry-run 仍会输出推荐路径、风险摘要和计划写入载体；如果实际写入会创建重执行控制面，必须先显式选择 `execution-control` 或 `strong-governance`。
 
 ## 1. 读取顺序
 

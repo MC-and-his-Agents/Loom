@@ -25,6 +25,11 @@
 
 至少列出：
 
+- `adoption_intent`
+  - `requested`
+  - `effective`
+  - `source`
+  - `requires_explicit_confirmation`
 - 本轮启用的能力清单
 - 每项能力分别映射到哪些 `governance`、`harness`、`templates`、`adoption` 规则
 - 这次采用的是最小装配、轻量 retrofit 还是更完整装配
@@ -46,6 +51,10 @@
 
 至少说明：
 
+- `detected_repository_mode`：静态检测到的仓库模式和 scenario
+- `risk_summary`：是否会写入重执行控制面、是否保护 repo-owned truth、是否需要显式 intent
+- `planned_writes`：dry-run / write 即将落盘的稳定载体集合
+- `intentionally_absent`：因 attach-only、observe-only 或 skill-install-only 而明确不生成的载体
 - 初始能力清单的承载位置
 - 首批 `Work Item` 或等价事项清单的承载位置
 - 恢复主入口是什么

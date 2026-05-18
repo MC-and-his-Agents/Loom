@@ -49,6 +49,8 @@ zero-friction adoption 固定按 `read -> judge -> write -> verify` 关闭。
   - `new | small-existing | complex-existing | unknown`
 - `adoption_path`
   - `minimal-bootstrap | lightweight-retrofit | recognize-and-attach | defer`
+- `adoption_intent`
+  - `observe-only | skill-install-only | attach-only | light-governance | execution-control | strong-governance | unspecified`
 - `enabled_capabilities`
 - `deferred_capabilities`
 - `upgrade_triggers`
@@ -59,6 +61,8 @@ zero-friction adoption 固定按 `read -> judge -> write -> verify` 关闭。
 
 当判断需要 repo-specific 信息时，Loom 输出必须给出固定 decision prompt，而不是让执行者自由猜测。
 
+当 `adoption_intent = unspecified` 且写入计划会创建 Loom-authored `work-items`、`progress`、`status` 或 `specs` 等重执行控制面时，CLI 必须 fail closed：输出候选 intent、风险摘要和 planned writes，不得静默落盘。
+
 ## 3. Decision Prompt Fields
 
 decision prompt 至少包含：
@@ -67,6 +71,8 @@ decision prompt 至少包含：
 - `adoption_scope`
 - `write_intent`
   - `dry-run | write`
+- `adoption_intent`
+  - 用户显式选择的接入意图；未给出时必须写为 `unspecified`
 - `repository_mode_guess`
   - 可为 `unknown`
 - `existing_governance_signals`
