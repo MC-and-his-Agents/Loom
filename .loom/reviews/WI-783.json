@@ -5,7 +5,7 @@
   "kind": "general_review",
   "summary": "The implementation records a canonical .loom surfaces version-control policy, links it from adoption/install docs, mirrors it into installed skill references, refreshes generated skills, and keeps behavior enforcement deferred to the later #781/#782 checkpoints.",
   "reviewer": "codex",
-  "reviewed_head": "de1b10e57f6ad942887e4078be8a0e53d3d64e04",
+  "reviewed_head": "94dd0c72c059fa63d53c8c445f665f6bf6e4c985",
   "reviewed_validation_summary": "make skills-check -> OK; make loom-check -> OK; installer package version bumped to 0.1.110 for generated skills payload change.",
   "fallback_to": null,
   "findings": [],
