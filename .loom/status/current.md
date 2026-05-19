@@ -11,11 +11,11 @@
 - Review Entry: .loom/reviews/WI-784.json
 - Validation Entry: python3 -m py_compile src/skills/shared/scripts/loom_init.py src/skills/shared/scripts/loom_check.py src/skills/shared/scripts/governance_surface.py; python3 tools/skills_surface.py check; make skills-check; make loom-check
 - Closing Condition: #784 is implemented, validated, reviewed, merged, and issue state reflects the PR
-- Current Checkpoint: build checkpoint
-- Current Stop: #784 implementation, generated skills surfaces, targeted attach-only fixtures, and loom-check have passed locally.
-- Next Step: Record implementation review, run adoption verify for WI-784, then prepare PR for issue #784.
+- Current Checkpoint: merge checkpoint
+- Current Stop: #784 implementation, installer version bump, local validation, and refreshed reviews are ready for PR gate consumption.
+- Next Step: Wait for PR #788 required checks, merge, close issue #784, then continue with #779.
 - Blockers: None recorded.
-- Latest Validation Summary: py_compile -> OK; source attach-only dry-run/write/verify fixture -> OK; source poison verify fixture -> OK; skills surface check -> OK; generated attach-only dry-run/write/verify fixture -> OK; generated poison verify fixture -> OK; make skills-check -> OK; make loom-check -> OK; adopt verify root -> OK.
+- Latest Validation Summary: py_compile -> OK; source attach-only dry-run/write/verify fixture -> OK; source poison verify fixture -> OK; skills surface check -> OK; generated attach-only dry-run/write/verify fixture -> OK; generated poison verify fixture -> OK; make skills-check -> OK; make loom-check -> OK; installer version bump check -> OK; loom-init verify root -> OK; fact-chain WI-784 -> OK; adopt verify root -> OK.
 - Recovery Boundary: .loom/work-items/WI-784.md is the active static work item carrier.
 - Current Lane: work/784-attach-only-protection
 
