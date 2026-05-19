@@ -66,7 +66,7 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 
 `--intent` 用来表达采用意图，而不是仓库静态分类。未显式给出 intent 时，dry-run 仍会输出推荐路径、风险摘要和计划写入载体；如果实际写入会创建重执行控制面，必须先显式选择 `execution-control` 或 `strong-governance`。
 
-每个 intent 会收敛到一个 `scaffold_profile`。`observe-only` 与 `skill-install-only` 不写 adoption carriers；`attach-only` 只写 companion/read surfaces；`light-governance` 写 companion、review/spec 与 PR 最小闭环但不写 Loom-owned work/progress/status；`execution-control` 与 `strong-governance` 才写 Loom-owned execution carriers。
+每个 intent 会收敛到一个 `scaffold_profile`。`observe-only` 与 `skill-install-only` 不写 adoption carriers；`attach-only` 只写 companion/read surfaces，并显式禁止 `.loom/work-items/**`、`.loom/progress/**`、`.loom/status/current.md`、`.loom/reviews/**`、`.loom/specs/**` 等 Loom-authored truth carriers；`light-governance` 写 companion、review/spec 与 PR 最小闭环但不写 Loom-owned work/progress/status；`execution-control` 与 `strong-governance` 才写 Loom-owned execution carriers。
 
 ## 1. 读取顺序
 

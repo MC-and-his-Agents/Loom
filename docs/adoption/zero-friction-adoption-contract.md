@@ -63,6 +63,8 @@ zero-friction adoption 固定按 `read -> judge -> write -> verify` 关闭。
 
 当 `adoption_intent = unspecified` 且写入计划会创建 Loom-authored `work-items`、`progress`、`status` 或 `specs` 等重执行控制面时，CLI 必须 fail closed：输出候选 intent、风险摘要和 planned writes，不得静默落盘。
 
+当 `adoption_intent = attach-only` 时，dry-run / write 输出必须同时列出 required carriers 与 `forbidden_authored_carriers`。默认禁止 `.loom/work-items/**`、`.loom/progress/**`、`.loom/status/current.md`、`.loom/reviews/**`、`.loom/specs/**`；verify 必须检查磁盘存在、`init-result` 声明、`planned_writes`、bootstrap manifest 与 write touched。发现任一 forbidden carrier 时必须 fail closed，并要求迁移到宿主 truth locator、删除 competing carrier，或显式升级到 `execution-control`。
+
 ## 3. Decision Prompt Fields
 
 decision prompt 至少包含：

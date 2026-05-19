@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-784",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "The WI-784 spec matches the implemented attach-only protection contract, including forbidden authored carriers, host truth locators, fail-closed verify behavior, execution-control regression coverage, and the installer version bump needed for changed install behavior.",
+  "reviewer": "codex",
+  "reviewed_head": "3c04e94dd55b93d2afa54f214e24942a29a381b5",
+  "reviewed_validation_summary": "py_compile -> OK; source attach-only dry-run/write/verify fixture -> OK; source poison verify fixture -> OK; skills surface check -> OK; generated attach-only dry-run/write/verify fixture -> OK; generated poison verify fixture -> OK; make skills-check -> OK; make loom-check -> OK; installer version bump check -> OK; loom-init verify root -> OK; fact-chain WI-784 -> OK; adopt verify root -> OK.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-784.md",
+    "recovery_entry": ".loom/progress/WI-784.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

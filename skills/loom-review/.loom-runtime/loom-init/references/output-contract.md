@@ -35,6 +35,8 @@
   - `writes_artifacts`
   - `writes_work_item_carriers`
   - `description`
+  - `required_carriers`
+  - `forbidden_authored_carriers`
 - 本轮启用的能力清单
 - 每项能力分别映射到哪些 `governance`、`harness`、`templates`、`adoption` 规则
 - 这次采用的是最小装配、轻量 retrofit 还是更完整装配
@@ -59,7 +61,9 @@
 
 - `detected_repository_mode`：静态检测到的仓库模式和 scenario
 - `risk_summary`：是否会写入重执行控制面、是否保护 repo-owned truth、是否需要显式 intent
+- `required_carriers`：本 profile 必须落盘或保持可读的稳定载体
 - `planned_writes`：dry-run / write 即将落盘的稳定载体集合
+- `forbidden_authored_carriers`：本 profile 明确禁止生成、声明或保留的 Loom-authored truth carrier
 - `intentionally_absent`：因 attach-only、light-governance、observe-only 或 skill-install-only 而明确不生成的载体
 - 初始能力清单的承载位置
 - 首批 `Work Item` 或等价事项清单的承载位置
@@ -119,6 +123,8 @@
 - attach-only 必备工件是什么
 - 哪些 repo-native carriers 继续保留
 - 哪些 Loom-owned carriers 本轮不会生成
+- `forbidden_authored_carriers` 必须至少包含 `.loom/work-items/**`、`.loom/progress/**`、`.loom/status/current.md`、`.loom/reviews/**`、`.loom/specs/**`
+- verify 必须同时检查磁盘存在、`init-result` 声明、`planned_writes`、manifest artifacts 与 write touched，不得让 forbidden carrier 形成第二事实链
 
 `init-result` 只允许承接 locator-only 信息，不并行复制实时停点、下一步、阻断项或最近验证摘要。
 

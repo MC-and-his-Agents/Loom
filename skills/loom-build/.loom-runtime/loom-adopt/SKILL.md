@@ -57,7 +57,7 @@ description: 负责把仓库接入 Loom 的初始化场景入口。Use when Code
 2. `judge`
    - 判断这是 `新项目`、`小型既有仓库` 还是 `复杂既有仓库`
    - 消费或输出 `adoption_intent`；当 intent 不明确且写入会创建重执行控制面时，先停在 decision prompt / dry-run，不静默写入
-   - 输出 `scaffold_profile`，并按该 profile 列出 required、planned 与 intentionally absent carriers
+   - 输出 `scaffold_profile`，并按该 profile 列出 required、planned、intentionally absent 与 forbidden authored carriers
    - 输出本轮启用能力、暂不启用能力、升级触发条件、source locator、write target 与 validation command
 3. `write`
    - 只有用户要求实际落盘时才执行 `bootstrap --write`

@@ -57,8 +57,12 @@
 - `.loom/work-items/*`
 - `.loom/progress/*`
 - `.loom/status/current.md`
+- `.loom/reviews/*`
+- `.loom/specs/*`
 - Loom-owned recovery/status carriers 的 bootstrap placeholder
 - 对 branch / PR / worktree / merge / ruleset 的底层宿主重写
+
+若上述 Loom-authored carriers 已存在、被 `init-result` / manifest 声明为 generated，或出现在 attach-only planned writes 中，verify 必须 fail closed。执行者只能迁移到宿主 truth locator、删除 competing carrier，或显式升级 intent 到 `execution-control`。
 
 ## 6. 升级信号
 

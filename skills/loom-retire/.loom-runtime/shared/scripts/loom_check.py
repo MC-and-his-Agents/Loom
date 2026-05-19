@@ -4336,6 +4336,28 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
             if pr_template:
                 (target / ".github" / "PULL_REQUEST_TEMPLATE.md").write_text("## Summary\n", encoding="utf-8")
 
+        attach_only_forbidden_patterns = (
+            ".loom/work-items/**",
+            ".loom/progress/**",
+            ".loom/status/current.md",
+            ".loom/reviews/**",
+            ".loom/specs/**",
+        )
+
+        def matches_forbidden(path: str, pattern: str) -> bool:
+            if pattern.endswith("/**"):
+                prefix = pattern[:-3]
+                return path == prefix or path.startswith(prefix + "/")
+            return path == pattern
+
+        def forbidden_match(path: object) -> str | None:
+            if not isinstance(path, str):
+                return None
+            for pattern in attach_only_forbidden_patterns:
+                if matches_forbidden(path, pattern):
+                    return pattern
+            return None
+
         deep_target = tmp_root / "deep-existing"
         write_repo(deep_target, validation_entry=True, pr_template=True, workflow_doc=True)
         deep_dry_payload, deep_dry_error = load_command_json(
@@ -4356,6 +4378,8 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
             intent = deep_dry_payload.get("adoption_intent")
             risk = deep_dry_payload.get("risk_summary")
             planned = deep_dry_payload.get("planned_writes")
+            required = deep_dry_payload.get("required_carriers")
+            forbidden = deep_dry_payload.get("forbidden_authored_carriers")
             detected = deep_dry_payload.get("detected_repository_mode")
             write = deep_dry_payload.get("write")
             if not isinstance(intent, dict) or intent.get("effective") != "attach-only":
@@ -4364,6 +4388,18 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                 failures.append(Failure("deep-existing-bootstrap", "`deep-existing dry-run` must report preserved repo-owned truth risk"))
             if not isinstance(planned, list) or not planned:
                 failures.append(Failure("deep-existing-bootstrap", "`deep-existing dry-run` must report planned write targets"))
+            else:
+                for item in planned:
+                    if isinstance(item, dict):
+                        pattern = forbidden_match(item.get("path"))
+                        if pattern:
+                            failures.append(Failure("deep-existing-bootstrap", f"`deep-existing dry-run` planned write must not match forbidden carrier `{pattern}`"))
+            if not isinstance(required, list) or not required:
+                failures.append(Failure("deep-existing-bootstrap", "`deep-existing dry-run` must report required carriers"))
+            if not isinstance(forbidden, list) or {
+                item.get("path") for item in forbidden if isinstance(item, dict)
+            } != set(attach_only_forbidden_patterns):
+                failures.append(Failure("deep-existing-bootstrap", "`deep-existing dry-run` must report the full attach-only forbidden carrier list"))
             if not isinstance(detected, dict) or detected.get("scenario_key") != "complex-existing":
                 failures.append(Failure("deep-existing-bootstrap", "`deep-existing dry-run` must report detected repository mode"))
             if not isinstance(write, dict) or write.get("enabled") is not False:
@@ -4391,6 +4427,7 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
             recommended = deep_payload.get("recommended_adoption")
             verification = deep_payload.get("verification")
             governance_surface = deep_payload.get("governance_surface")
+            repo_interface_path = deep_target / ".loom/companion/repo-interface.json"
             if not isinstance(recommended, dict) or recommended.get("path") != "deep-existing-repo":
                 failures.append(Failure("deep-existing-bootstrap", "`deep-existing bootstrap` must select `recommended_adoption.path = deep-existing-repo`"))
             run = deep_payload.get("run")
@@ -4413,12 +4450,79 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                 ".loom/work-items/INIT-0001.md",
                 ".loom/progress/INIT-0001.md",
                 ".loom/status/current.md",
+                ".loom/reviews/INIT-0001.json",
+                ".loom/specs/INIT-0001/spec.md",
             ):
                 if (deep_target / forbidden).exists():
                     failures.append(Failure("deep-existing-bootstrap", f"`deep-existing bootstrap` must not generate `{forbidden}`"))
             fact_chain = deep_payload.get("fact_chain")
             if not isinstance(fact_chain, dict) or fact_chain.get("mode") != "repo-native attach-only":
                 failures.append(Failure("deep-existing-bootstrap", "`deep-existing bootstrap` must keep `fact_chain.mode = repo-native attach-only`"))
+            if repo_interface_path.exists():
+                repo_interface = json.loads(repo_interface_path.read_text(encoding="utf-8"))
+                host_truth = repo_interface.get("host_truth_locators")
+                if not isinstance(host_truth, dict) or set(host_truth.keys()) != {"work_item", "project_status", "review", "closeout"}:
+                    failures.append(Failure("deep-existing-bootstrap", "`deep-existing bootstrap` repo-interface must declare attach-only host truth locators"))
+
+        poisoned_files_target = tmp_root / "deep-existing-poison-files"
+        if deep_target.exists() and (deep_target / ".loom/bin/loom_init.py").exists():
+            shutil.copytree(deep_target, poisoned_files_target)
+            (poisoned_files_target / ".loom/reviews").mkdir(parents=True, exist_ok=True)
+            (poisoned_files_target / ".loom/specs/EXISTING").mkdir(parents=True, exist_ok=True)
+            (poisoned_files_target / ".loom/reviews/EXISTING.json").write_text("{}", encoding="utf-8")
+            (poisoned_files_target / ".loom/specs/EXISTING/spec.md").write_text("# Existing Spec\n", encoding="utf-8")
+            poisoned_payload, poisoned_error = load_command_json(
+                root,
+                [
+                    "python3",
+                    str(poisoned_files_target / ".loom/bin/loom_init.py"),
+                    "verify",
+                    "--target",
+                    str(poisoned_files_target),
+                ],
+            )
+            if poisoned_error:
+                failures.append(Failure("deep-existing-bootstrap", f"`attach-only forbidden file verify` failed: {poisoned_error}"))
+            else:
+                errors_text = json.dumps(poisoned_payload.get("errors", []), ensure_ascii=False) if poisoned_payload else ""
+                if poisoned_payload.get("ok") is not False:
+                    failures.append(Failure("deep-existing-bootstrap", "`attach-only forbidden file verify` must fail closed"))
+                if "forbidden authored carrier" not in errors_text or "second truth chain" not in errors_text:
+                    failures.append(Failure("deep-existing-bootstrap", "`attach-only forbidden file verify` must explain the second truth-chain risk"))
+
+        poisoned_decl_target = tmp_root / "deep-existing-poison-declarations"
+        if deep_target.exists() and (deep_target / ".loom/bin/loom_init.py").exists():
+            shutil.copytree(deep_target, poisoned_decl_target)
+            init_result_path = poisoned_decl_target / ".loom/bootstrap/init-result.json"
+            manifest_path = poisoned_decl_target / ".loom/bootstrap/manifest.json"
+            init_result = json.loads(init_result_path.read_text(encoding="utf-8"))
+            init_result.setdefault("planned_writes", []).append(
+                {"path": ".loom/work-items/POISON.md", "kind": "work-item", "owner": "loom"}
+            )
+            init_result_path.write_text(json.dumps(init_result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest.setdefault("artifacts", []).append(
+                {"path": ".loom/progress/POISON.md", "kind": "progress", "source": "generated"}
+            )
+            manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            poisoned_payload, poisoned_error = load_command_json(
+                root,
+                [
+                    "python3",
+                    str(poisoned_decl_target / ".loom/bin/loom_init.py"),
+                    "verify",
+                    "--target",
+                    str(poisoned_decl_target),
+                ],
+            )
+            if poisoned_error:
+                failures.append(Failure("deep-existing-bootstrap", f"`attach-only forbidden declaration verify` failed: {poisoned_error}"))
+            else:
+                errors_text = json.dumps(poisoned_payload.get("errors", []), ensure_ascii=False) if poisoned_payload else ""
+                if poisoned_payload.get("ok") is not False:
+                    failures.append(Failure("deep-existing-bootstrap", "`attach-only forbidden declaration verify` must fail closed"))
+                if "planned_writes" not in errors_text or "manifest.artifacts" not in errors_text:
+                    failures.append(Failure("deep-existing-bootstrap", "`attach-only forbidden declaration verify` must name poisoned declaration sources"))
 
         full_target = tmp_root / "full-bootstrap"
         write_repo(full_target, validation_entry=False, pr_template=False, workflow_doc=False)
@@ -4489,6 +4593,8 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                 ".loom/work-items/INIT-0001.md",
                 ".loom/progress/INIT-0001.md",
                 ".loom/status/current.md",
+                ".loom/reviews/INIT-0001.json",
+                ".loom/specs/INIT-0001/spec.md",
             ):
                 if not (explicit_full_target / required).exists():
                     failures.append(Failure("deep-existing-bootstrap", f"`explicit execution-control bootstrap sample` must generate `{required}`"))
