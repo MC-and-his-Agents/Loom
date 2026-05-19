@@ -11,11 +11,11 @@
 - Review Entry: .loom/reviews/WI-777.json
 - Validation Entry: targeted decision-prompt fixtures; python3 tools/skills_surface.py check; make loom-demo-new-project; make skills-check; make loom-check
 - Closing Condition: #777 is implemented, validated, reviewed, merged, and issue state reflects the PR
-- Current Checkpoint: build
-- Current Stop: #777 implementation and installer version bump are committed on work/777-adoption-decision-prompt; PR body binding is updated; final carrier refresh and host checks are pending.
-- Next Step: Refresh status/review carriers, rerun loom-check and make check, then push PR #815 for host gates.
+- Current Checkpoint: merge
+- Current Stop: #777 implementation, installer version bump, PR body binding, review refresh, shadow parity refresh, and final local validation are complete on work/777-adoption-decision-prompt.
+- Next Step: Push PR #815, wait for host checks, run PR gate and controlled merge, then close #777 and reconcile parent issues.
 - Blockers: None recorded.
-- Latest Validation Summary: py_compile passed for changed runtime surfaces; git diff --check passed; python3 tools/skills_surface.py check passed; make skills-check passed; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed after installer version bump to 0.1.119; root purity-check passed. Final loom-check and make check are pending after carrier refresh.
+- Latest Validation Summary: py_compile passed for changed runtime surfaces; git diff --check passed; python3 tools/skills_surface.py check passed; make skills-check passed; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed after installer version bump to 0.1.119; root verify passed; fact-chain passed; closeout check/sync --skip-gate passed; shadow-parity passed; adopt verify passed; PYTHONDONTWRITEBYTECODE=1 make loom-check passed with 36 surfaces after one network retry; PYTHONDONTWRITEBYTECODE=1 make check passed with 36 surfaces.
 - Recovery Boundary: .loom/work-items/WI-777.md is the active static work item carrier; WI-776 is retained as merged historical evidence.
 - Current Lane: work/777-adoption-decision-prompt
 
