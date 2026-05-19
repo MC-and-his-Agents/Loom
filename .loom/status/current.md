@@ -11,11 +11,11 @@
 - Review Entry: .loom/reviews/WI-780.json
 - Validation Entry: python3 -m py_compile src/skills/shared/scripts/loom_init.py src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_check.py; targeted #780 release target fixture; python3 tools/skills_surface.py check; make skills-check; make loom-check
 - Closing Condition: #780 is implemented, validated, reviewed, merged, and issue state reflects the PR
-- Current Checkpoint: build
-- Current Stop: #780 implementation and generated surface refresh are complete; release target absence semantics were tightened after local review.
-- Next Step: Run final targeted validation, record reviews, commit, push, and open PR for #780.
+- Current Checkpoint: merge
+- Current Stop: #780 implementation, spec review, implementation review, targeted fixtures, skills check, root adoption verify, shadow parity, and make loom-check are complete.
+- Next Step: Push branch, open PR for #780, run PR gate, wait required checks, merge, and confirm issue #780 closes.
 - Blockers: None recorded.
-- Latest Validation Summary: py_compile -> OK; targeted #780 release target fixture -> OK; python3 tools/skills_surface.py check -> OK; make skills-check -> OK; make loom-check currently blocked on WI/review/shadow bookkeeping, not release target behavior.
+- Latest Validation Summary: py_compile -> OK; targeted #780 release target fixtures -> OK; example absent surface assertion -> OK; python3 tools/skills_surface.py check -> OK; make skills-check -> OK; root state-check -> pass; root adopt verify -> pass; root shadow-parity -> pass; make loom-check -> OK (36 surfaces).
 - Recovery Boundary: .loom/work-items/WI-780.md is the active static work item carrier.
 - Current Lane: work/780-stop-placeholder-release-target-truth
 
