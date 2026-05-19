@@ -1,39 +1,49 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-779",
-  "decision": "fallback",
+  "decision": "allow",
   "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "f3538c99bd1b02d2ca1710e006d4483b3584af28",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
+  "summary": "#779 aligns lightweight-retrofit behavior and docs: light-governance avoids Loom-owned work item/progress/status/spec carriers, verify fails closed on forbidden light carriers, execution-control still generates and declares full carriers, generated skill surfaces were refreshed from source, and Galileo's four consistency findings were fixed.",
+  "reviewer": "codex",
+  "reviewed_head": "27087d6e21cb6d657a1eadc0d50bc630edf14428",
+  "reviewed_validation_summary": "py_compile -> OK; targeted #779 adoption fixture -> OK; python3 tools/skills_surface.py check -> OK; make skills-check -> OK; make loom-check -> OK; installer version bump check -> OK (no bump required).",
+  "fallback_to": null,
   "findings": [
     {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
-      }
-    },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
+      "id": "compat-follow-up-1",
+      "summary": "Continue with #780 for release target truth placeholder removal.",
       "severity": "warn",
       "rebuttal": null,
       "disposition": {
         "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
+        "summary": "Projected from compatibility `follow_ups`."
       }
     }
   ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
+  "blocking_issues": [],
   "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "Continue with #780 for release target truth placeholder removal."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-779.md",
+    "recovery_entry": ".loom/progress/WI-779.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": "loom/default-codex-exec",
+    "engine_evidence": "Galileo subagent review; targeted local validation; make skills-check; make loom-check",
+    "normalized_findings": null
+  }
 }
