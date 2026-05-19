@@ -155,7 +155,7 @@
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "07367e836e2c8540a20843e8c4893b113e2f2bb96fbf7dc3dc6302a839ccd05d"
+      "sha256": "7e804af8d4537d44cba1b90b42da6979ac2ac58516d8daab1931537cbfe2bfc3"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
@@ -197,7 +197,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "d6f7cec925a964fdab329d7b65ff41a4053b82bfa6fcf35f5f2ecb839eb0b33c"
+      "sha256": "008a3d09ccc474b42b84a23b0cd099932732ceac8c209f2433158d267ec79471"
     },
     {
       "path": ".loom/reviews/INIT-0001.json",
@@ -207,6 +207,21 @@
     {
       "path": ".loom/reviews/INIT-0001.spec.json",
       "kind": "review-entry",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/work-items/INIT-0001.md",
+      "kind": "work-item",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/progress/INIT-0001.md",
+      "kind": "progress",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/status/current.md",
+      "kind": "status-surface",
       "source": "generated"
     },
     {
@@ -223,21 +238,6 @@
       "path": ".loom/specs/INIT-0001/implementation-contract.md",
       "kind": "implementation-contract",
       "source": "skills/shared/assets/templates/scaffold/implementation-contract.md"
-    },
-    {
-      "path": ".loom/work-items/INIT-0001.md",
-      "kind": "work-item",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/progress/INIT-0001.md",
-      "kind": "progress",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/status/current.md",
-      "kind": "status-surface",
-      "source": "generated"
     },
     {
       "path": ".github/PULL_REQUEST_TEMPLATE.md",

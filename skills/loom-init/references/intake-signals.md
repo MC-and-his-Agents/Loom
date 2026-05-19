@@ -26,7 +26,7 @@
 - 是否已有 CI / 基础测试
 - 是否已有统一的仓库级验证入口
 - 当前主要缺口属于哪一类：
-  - 治理入口 / review 合同 / 条件化 spec 路径
+  - 治理入口 / review 合同 / 条件化 spec-review 路径
   - 恢复 / 状态 / 执行支撑
 - 是否有明显长任务恢复痛点
 - 是否存在共享契约 / 共享数据模型 / 核心抽象 / 高风险链路
@@ -77,7 +77,7 @@
 - 已有清晰根级边界文档
 - 已有 CI / 基础测试
 - 已有统一的仓库级验证入口
-- 当前缺口主要在治理入口、review 合同、条件化 spec 路径
+- 当前缺口主要在治理入口、review 合同、条件化 spec-review 路径
 - 尚无明显长任务恢复痛点
 - 当前没有需要立即进入更重路径的共享边界或高风险核心抽象信号
 - 当前主产物本身不是共享 contract、shared skill 或 governance module
@@ -86,8 +86,8 @@
 
 - 直接采用 [../../shared/references/adoption/lightweight-retrofit-default.md](../.loom-runtime/shared/references/adoption/lightweight-retrofit-default.md)
 - 默认 `companion docs` 接入
-- 默认装配最小治理包
-- 默认不装配完整 recovery、`Work Item`、`status control plane` 与重 harness
+- 默认装配最小治理包、repo companion、bootstrap metadata、review guidance 与 PR 模板
+- 默认不装配完整 recovery、`Work Item`、`status control plane`、formal spec suite 与重 harness
 - 若需要轻量跨轮承接，默认 `checkpoint-lite`
 
 ### 4.3 `复杂既有仓库`
@@ -129,7 +129,7 @@
 - 若缺少统一验证入口，或仓库主产物本身是共享 contract、shared skill 或 governance module，优先判为 `复杂既有仓库`
 - 任何共享契约、运行模型或高风险核心抽象变化，优先提升到更重路径
 - 任何多轮恢复成本明显升高或出现多个入口并行记录，优先从 `checkpoint-lite` 升级到标准恢复形态
-- 只有在缺口主要集中于治理入口、review 合同、条件化 spec 路径，且恢复痛点不明显时，才保持轻量路径
+- 只有在缺口主要集中于治理入口、review 合同、条件化 spec-review 路径，且恢复痛点不明显时，才保持轻量路径
 
 ## 6. 场景到默认装配映射
 

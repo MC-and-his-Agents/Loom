@@ -65,6 +65,8 @@ zero-friction adoption 固定按 `read -> judge -> write -> verify` 关闭。
 
 当 `adoption_intent = attach-only` 时，dry-run / write 输出必须同时列出 required carriers 与 `forbidden_authored_carriers`。默认禁止 `.loom/work-items/**`、`.loom/progress/**`、`.loom/status/current.md`、`.loom/reviews/**`、`.loom/specs/**`；verify 必须检查磁盘存在、`init-result` 声明、`planned_writes`、bootstrap manifest 与 write touched。发现任一 forbidden carrier 时必须 fail closed，并要求迁移到宿主 truth locator、删除 competing carrier，或显式升级到 `execution-control`。
 
+当 `adoption_intent = light-governance` 时，dry-run / write 必须保持 lightweight retrofit 的最小治理边界：允许 repo companion、bootstrap metadata、review guidance、轻量 review placeholder 与 PR 模板；不得生成、声明或保留 Loom-owned `.loom/work-items/**`、`.loom/progress/**`、`.loom/status/current.md` 或 `.loom/specs/**`。如果目标仓库需要这些执行控制载体，必须显式升级到 `execution-control`。
+
 ## 3. Decision Prompt Fields
 
 decision prompt 至少包含：

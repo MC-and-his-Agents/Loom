@@ -4336,6 +4336,17 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
             if pr_template:
                 (target / ".github" / "PULL_REQUEST_TEMPLATE.md").write_text("## Summary\n", encoding="utf-8")
 
+        def write_small_existing_repo(target: Path, *, pr_template: bool = False) -> None:
+            (target / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
+            (target / "src").mkdir(parents=True, exist_ok=True)
+            (target / "README.md").write_text("# Small Existing Repo\n", encoding="utf-8")
+            (target / "AGENTS.md").write_text("# Root Rules\n", encoding="utf-8")
+            (target / "src" / "main.py").write_text("print('ok')\n", encoding="utf-8")
+            (target / ".github" / "workflows" / "ci.yml").write_text("name: ci\n", encoding="utf-8")
+            (target / "Makefile").write_text("check:\n\t@echo ok\n", encoding="utf-8")
+            if pr_template:
+                (target / ".github" / "PULL_REQUEST_TEMPLATE.md").write_text("## Summary\n", encoding="utf-8")
+
         attach_only_forbidden_patterns = (
             ".loom/work-items/**",
             ".loom/progress/**",
@@ -4583,6 +4594,10 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
             intent = explicit_payload.get("adoption_intent")
             recommended = explicit_payload.get("recommended_adoption")
             profile = explicit_payload.get("scaffold_profile")
+            planned = explicit_payload.get("planned_writes")
+            planned_paths = {item.get("path") for item in planned if isinstance(item, dict)} if isinstance(planned, list) else set()
+            initial = explicit_payload.get("initial_artifacts")
+            initial_paths = {item.get("path") for item in initial if isinstance(item, dict)} if isinstance(initial, list) else set()
             if not isinstance(intent, dict) or intent.get("effective") != "execution-control":
                 failures.append(Failure("deep-existing-bootstrap", "explicit full-bootstrap sample must report `adoption_intent.effective = execution-control`"))
             if not isinstance(recommended, dict) or recommended.get("path") != "full-bootstrap":
@@ -4595,12 +4610,16 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                 ".loom/status/current.md",
                 ".loom/reviews/INIT-0001.json",
                 ".loom/specs/INIT-0001/spec.md",
+                ".loom/specs/INIT-0001/plan.md",
+                ".loom/specs/INIT-0001/implementation-contract.md",
             ):
                 if not (explicit_full_target / required).exists():
                     failures.append(Failure("deep-existing-bootstrap", f"`explicit execution-control bootstrap sample` must generate `{required}`"))
+                if required not in planned_paths or required not in initial_paths:
+                    failures.append(Failure("deep-existing-bootstrap", f"`explicit execution-control bootstrap sample` must declare `{required}` in planned_writes and initial_artifacts"))
 
         light_target = tmp_root / "light-governance"
-        write_repo(light_target, validation_entry=True, pr_template=False, workflow_doc=False)
+        write_small_existing_repo(light_target)
         light_payload, light_error = load_command_json(
             root,
             [
@@ -4620,23 +4639,75 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
         if light_error:
             failures.append(Failure("deep-existing-bootstrap", f"`light-governance bootstrap sample` failed: {light_error}"))
         else:
+            run = light_payload.get("run")
+            recommended = light_payload.get("recommended_adoption")
             profile = light_payload.get("scaffold_profile")
+            intentionally_absent = light_payload.get("intentionally_absent")
+            absent_paths = (
+                {item.get("path") for item in intentionally_absent if isinstance(item, dict)}
+                if isinstance(intentionally_absent, list)
+                else set()
+            )
+            if not isinstance(run, dict) or run.get("scenario_key") != "small-existing" or run.get("recovery_mode") != "checkpoint-lite":
+                failures.append(Failure("deep-existing-bootstrap", "light-governance sample must model small-existing checkpoint-lite adoption"))
+            if not isinstance(recommended, dict) or recommended.get("path") != "lightweight-retrofit":
+                failures.append(Failure("deep-existing-bootstrap", "light-governance sample must select `recommended_adoption.path = lightweight-retrofit`"))
             if not isinstance(profile, dict) or profile.get("name") != "light-governance":
                 failures.append(Failure("deep-existing-bootstrap", "light-governance sample must report `scaffold_profile.name = light-governance`"))
+            if not isinstance(profile, dict) or profile.get("writes_work_item_carriers") is not False:
+                failures.append(Failure("deep-existing-bootstrap", "light-governance sample must report `writes_work_item_carriers = false`"))
             if not isinstance(light_payload.get("upgrade_triggers"), list) or not light_payload["upgrade_triggers"]:
                 failures.append(Failure("deep-existing-bootstrap", "light-governance sample must report top-level upgrade_triggers"))
+            deferred_text = json.dumps(light_payload.get("deferred_capabilities", []), ensure_ascii=False)
+            if "spec" not in deferred_text or "execution-control" not in deferred_text:
+                failures.append(Failure("deep-existing-bootstrap", "light-governance sample must defer Loom-owned spec carriers to execution-control"))
             planned = light_payload.get("planned_writes")
             planned_paths = {item.get("path") for item in planned if isinstance(item, dict)} if isinstance(planned, list) else set()
-            for required in (".loom/reviews/INIT-0001.json", ".loom/specs/INIT-0001/spec.md", ".github/PULL_REQUEST_TEMPLATE.md"):
+            for required in (".loom/reviews/INIT-0001.json", ".loom/reviews/INIT-0001.spec.json", ".github/PULL_REQUEST_TEMPLATE.md"):
                 if required not in planned_paths or not (light_target / required).exists():
                     failures.append(Failure("deep-existing-bootstrap", f"`light-governance bootstrap sample` must generate `{required}`"))
+            for absent in (".loom/work-items/**", ".loom/progress/**", ".loom/status/current.md", ".loom/specs/**"):
+                if absent not in absent_paths:
+                    failures.append(Failure("deep-existing-bootstrap", f"`light-governance bootstrap sample` must mark `{absent}` intentionally absent"))
             for forbidden in (
                 ".loom/work-items/INIT-0001.md",
                 ".loom/progress/INIT-0001.md",
                 ".loom/status/current.md",
+                ".loom/specs/INIT-0001/spec.md",
+                ".loom/specs/INIT-0001/plan.md",
+                ".loom/specs/INIT-0001/implementation-contract.md",
             ):
                 if forbidden in planned_paths or (light_target / forbidden).exists():
                     failures.append(Failure("deep-existing-bootstrap", f"`light-governance bootstrap sample` must not generate `{forbidden}`"))
+            readme_text = (light_target / ".loom/README.md").read_text(encoding="utf-8") if (light_target / ".loom/README.md").exists() else ""
+            if ".loom/specs" in readme_text or "Spec suite" in readme_text:
+                failures.append(Failure("deep-existing-bootstrap", "`light-governance bootstrap sample` must not declare a spec suite in `.loom/README.md`"))
+            spec_review_text = (light_target / ".loom/reviews/INIT-0001.spec.json").read_text(encoding="utf-8") if (light_target / ".loom/reviews/INIT-0001.spec.json").exists() else ""
+            if "formal spec path" in spec_review_text:
+                failures.append(Failure("deep-existing-bootstrap", "`light-governance spec review placeholder` must not tell operators to consume a formal spec path"))
+            if (light_target / ".loom/bin/loom_init.py").exists():
+                poisoned_light_target = tmp_root / "light-governance-poison-specs"
+                shutil.copytree(light_target, poisoned_light_target)
+                (poisoned_light_target / ".loom/specs/INIT-0001").mkdir(parents=True, exist_ok=True)
+                (poisoned_light_target / ".loom/specs/INIT-0001/spec.md").write_text("# Unexpected Spec\n", encoding="utf-8")
+                poisoned_payload, poisoned_error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(poisoned_light_target / ".loom/bin/loom_init.py"),
+                        "verify",
+                        "--target",
+                        str(poisoned_light_target),
+                    ],
+                )
+                if poisoned_error:
+                    failures.append(Failure("deep-existing-bootstrap", f"`light-governance forbidden spec verify` failed: {poisoned_error}"))
+                else:
+                    errors_text = json.dumps(poisoned_payload.get("errors", []), ensure_ascii=False) if poisoned_payload else ""
+                    if poisoned_payload.get("ok") is not False:
+                        failures.append(Failure("deep-existing-bootstrap", "`light-governance forbidden spec verify` must fail closed"))
+                    if ".loom/specs/INIT-0001/spec.md" not in errors_text:
+                        failures.append(Failure("deep-existing-bootstrap", "`light-governance forbidden spec verify` must name the unexpected spec carrier"))
     return failures
 
 

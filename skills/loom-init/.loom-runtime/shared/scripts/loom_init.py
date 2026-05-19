@@ -1033,9 +1033,9 @@ def deferred_capabilities(scenario: str, adoption_path: str, profile: str) -> li
     if profile == "light-governance":
         return [
             {
-                "name": "loom-owned-work-item-progress-status",
-                "reason": "light-governance keeps first-round adoption to a companion, review/spec, and PR-template loop",
-                "upgrade_trigger": "the repo explicitly opts into execution-control or needs Loom-owned recovery/status carriers",
+                "name": "loom-owned-work-item-progress-status-spec",
+                "reason": "light-governance keeps first-round adoption to a companion, review guidance, and PR-template loop without Loom-owned execution carriers",
+                "upgrade_trigger": "the repo explicitly opts into execution-control or needs Loom-owned work item, recovery, status, or spec carriers",
             },
             {
                 "name": "host-gate-merge-closeout-control",
@@ -1162,13 +1162,6 @@ def profile_light_artifacts(target_root: Path) -> list[dict[str, str]]:
         [
             {"path": ".loom/reviews/INIT-0001.json", "kind": "review-entry", "source": "generated"},
             {"path": ".loom/reviews/INIT-0001.spec.json", "kind": "review-entry", "source": "generated"},
-            {"path": ".loom/specs/INIT-0001/spec.md", "kind": "spec", "source": "skills/shared/assets/templates/scaffold/spec.md"},
-            {"path": ".loom/specs/INIT-0001/plan.md", "kind": "plan", "source": "skills/shared/assets/templates/scaffold/plan.md"},
-            {
-                "path": ".loom/specs/INIT-0001/implementation-contract.md",
-                "kind": "implementation-contract",
-                "source": "skills/shared/assets/templates/scaffold/implementation-contract.md",
-            },
         ]
     )
     return artifacts
@@ -1181,6 +1174,13 @@ def profile_execution_artifacts(target_root: Path) -> list[dict[str, str]]:
             {"path": ".loom/work-items/INIT-0001.md", "kind": "work-item", "source": "generated"},
             {"path": ".loom/progress/INIT-0001.md", "kind": "progress", "source": "generated"},
             {"path": ".loom/status/current.md", "kind": "status-surface", "source": "generated"},
+            {"path": ".loom/specs/INIT-0001/spec.md", "kind": "spec", "source": "skills/shared/assets/templates/scaffold/spec.md"},
+            {"path": ".loom/specs/INIT-0001/plan.md", "kind": "plan", "source": "skills/shared/assets/templates/scaffold/plan.md"},
+            {
+                "path": ".loom/specs/INIT-0001/implementation-contract.md",
+                "kind": "implementation-contract",
+                "source": "skills/shared/assets/templates/scaffold/implementation-contract.md",
+            },
         ]
     )
     return artifacts
@@ -1242,6 +1242,23 @@ def initial_work_items(
             }
         ]
     artifacts = artifact_paths(initial_artifacts(target_root, install_pr_template, adoption_path, profile))
+    if profile == "light-governance":
+        return [
+            {
+                "id": WORK_ITEM_ID,
+                "goal": "Establish the first lightweight Loom governance loop for this repository",
+                "scope": "Create companion, review guidance, and PR template surfaces without Loom-owned execution carriers",
+                "execution_path": "adoption/light-governance",
+                "workspace_entry": ".",
+                "recovery_entry": "checkpoint-lite issue or PR notes",
+                "review_entry": ".loom/reviews/INIT-0001.json",
+                "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
+                "artifacts": artifacts,
+                "closing_condition": "The companion entry, review guidance, PR template, and bootstrap metadata are readable without generated work/progress/status/spec carriers",
+                "post_build_continuation": "Upgrade to execution-control only when the repo needs Loom-owned work item, recovery, status, or spec carriers",
+                "owner_for_checkpoint_lite": "repository owner or current lightweight adoption operator",
+            }
+        ]
     return [
         {
             "id": WORK_ITEM_ID,
@@ -1385,6 +1402,7 @@ def intentionally_absent_targets(adoption_path: str, profile: str) -> list[dict[
             {"path": ".loom/work-items/**", "reason": "light-governance does not author Loom work item truth"},
             {"path": ".loom/progress/**", "reason": "light-governance does not author Loom recovery truth"},
             {"path": ".loom/status/current.md", "reason": "light-governance does not author Loom status truth"},
+            {"path": ".loom/specs/**", "reason": "light-governance keeps formal Loom specs deferred until execution-control"},
         ]
     return []
 
@@ -1476,7 +1494,7 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
                 "observe-only": "read-only repository observation; no Loom adoption carriers are written",
                 "skill-install-only": "skill/runtime installation intent without repository governance adoption carriers",
                 "attach-only": "companion/read-surface attachment that preserves repo-owned execution truth",
-                "light-governance": "companion, review/spec, and PR-template loop without Loom-owned work item/progress/status carriers",
+                "light-governance": "companion, review guidance, and PR-template loop without Loom-owned work item/progress/status/spec carriers",
                 "execution-control": "Loom-owned work item, progress, review, status, and spec carriers",
                 "strong-governance": "execution-control surface prepared for host gates, required checks, merge, and closeout consumption",
             }[profile],
@@ -1539,7 +1557,7 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
                 ]
                 if attach_only
                 else [
-                    "admission checkpoint confirms the companion entry, review record, spec suite, and PR template are readable",
+                    "admission checkpoint confirms the companion entry, review guidance, bootstrap metadata, and PR template are readable",
                     "build checkpoint confirms generated light-governance surfaces are internally consistent",
                     "merge checkpoint remains repo-owned until the intent upgrades to execution-control or strong-governance",
                 ]
@@ -1553,7 +1571,7 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
             "clean_state": (
                 "all generated attach-only Loom artifacts are readable, verified, and do not introduce Loom-authored work/progress/status/review/spec truth carriers"
                 if attach_only
-                else "all generated light-governance artifacts are readable, verified, and do not introduce Loom-owned work/progress/status carriers"
+                else "all generated light-governance artifacts are readable, verified, and do not introduce Loom-owned work/progress/status/spec carriers"
                 if profile == "light-governance"
                 else "all generated Loom artifacts are readable, verified, and free of conflicting duplicates"
             ),
@@ -1566,7 +1584,7 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
                 if attach_only
                 else [
                     "the target repo has a readable Loom companion entry",
-                    "the review record, spec suite, and PR template exist",
+                    "the companion review guidance, lightweight review placeholders, and PR template exist",
                     "the bootstrap manifest and init-result are verifiable",
                 ]
                 if profile == "light-governance"
@@ -1736,7 +1754,7 @@ def render_loom_readme(result: dict[str, object]) -> str:
         path_lines = (
             "- Repo companion entry: `.loom/companion/README.md`\n"
             "- Review record: `.loom/reviews/INIT-0001.json`\n"
-            "- Spec suite: `.loom/specs/INIT-0001/`\n"
+            "- Spec-review guidance: `.loom/reviews/INIT-0001.spec.json`\n"
         )
     else:
         path_lines = (
@@ -1972,6 +1990,13 @@ def render_progress(result: dict[str, object]) -> str:
 
 def render_review_entry(result: dict[str, object]) -> str:
     item = result["initial_work_items"][0]
+    profile = result.get("scaffold_profile")
+    profile_name = str(profile.get("name")) if isinstance(profile, dict) else "execution-control"
+    validation_summary = (
+        "Bootstrap manifest exists; init-result JSON can be read mechanically; companion review guidance and PR template artifacts exist."
+        if profile_name == "light-governance"
+        else "Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist."
+    )
     payload = {
         "schema_version": "loom-review/v1",
         "item_id": item["id"],
@@ -1980,7 +2005,7 @@ def render_review_entry(result: dict[str, object]) -> str:
         "summary": "Bootstrap has not entered formal review yet.",
         "reviewer": "not yet assigned",
         "reviewed_head": "bootstrap-placeholder",
-        "reviewed_validation_summary": "Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist.",
+        "reviewed_validation_summary": validation_summary,
         "fallback_to": "admission",
         "blocking_issues": [
             "Formal review starts only after downstream work replaces the bootstrap placeholder item."
@@ -1994,6 +2019,23 @@ def render_review_entry(result: dict[str, object]) -> str:
 
 def render_spec_review_entry(result: dict[str, object]) -> str:
     item = result["initial_work_items"][0]
+    profile = result.get("scaffold_profile")
+    profile_name = str(profile.get("name")) if isinstance(profile, dict) else "execution-control"
+    validation_summary = (
+        "Bootstrap manifest exists; init-result JSON can be read mechanically; lightweight spec review is represented as review guidance until execution-control creates formal spec carriers."
+        if profile_name == "light-governance"
+        else "Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist."
+    )
+    blocking_issue = (
+        "Spec review remains guidance-only until the repo uses a repo-owned spec locator or upgrades to execution-control."
+        if profile_name == "light-governance"
+        else "Spec gate remains open until the formal spec path receives its own review record."
+    )
+    follow_up = (
+        "Keep spec review guidance tied to repo-owned locators, or upgrade to execution-control before creating formal Loom spec carriers."
+        if profile_name == "light-governance"
+        else "Record a spec_review decision before implementation review or merge-ready consumes the formal spec path."
+    )
     payload = {
         "schema_version": "loom-review/v1",
         "item_id": item["id"],
@@ -2002,14 +2044,10 @@ def render_spec_review_entry(result: dict[str, object]) -> str:
         "summary": "Formal spec review has not been completed yet.",
         "reviewer": "not yet assigned",
         "reviewed_head": "bootstrap-placeholder",
-        "reviewed_validation_summary": "Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist.",
+        "reviewed_validation_summary": validation_summary,
         "fallback_to": "admission",
-        "blocking_issues": [
-            "Spec gate remains open until the formal spec path receives its own review record."
-        ],
-        "follow_ups": [
-            "Record a spec_review decision before implementation review or merge-ready consumes the formal spec path."
-        ],
+        "blocking_issues": [blocking_issue],
+        "follow_ups": [follow_up],
     }
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
 
@@ -2138,6 +2176,12 @@ def scaffold_target(
     profile_name = str(profile.get("name")) if isinstance(profile, dict) else "execution-control"
     writes_light_loop = profile_name in {"light-governance", "execution-control", "strong-governance"}
     writes_work_item_carriers = profile_has_work_item_carriers(profile_name)
+    writes_formal_spec_suite = writes_work_item_carriers
+    release_work_items = (
+        [{"id": "INIT-0001", "locator": ".loom/work-items/INIT-0001.md", "delivery_status": "unmerged"}]
+        if writes_work_item_carriers
+        else []
+    )
     if profile_name == "attach-only":
         forbidden_errors = attach_only_forbidden_carrier_errors(target_root, result)
         if forbidden_errors:
@@ -2182,7 +2226,7 @@ def scaffold_target(
                 "included_scope": {
                     "phase": [{"id": "bootstrap-phase", "locator": ".loom/companion/checkpoints.md", "delivery_status": "planned"}],
                     "fr": [],
-                    "work_item": [{"id": "INIT-0001", "locator": ".loom/work-items/INIT-0001.md", "delivery_status": "unmerged"}],
+                    "work_item": release_work_items,
                     "implementation_pr": [],
                     "merge_commit": [],
                 },
@@ -2259,7 +2303,7 @@ def scaffold_target(
         if copy_file(source, destination, force=force):
             written += 1
             touched.append(str(destination.relative_to(target_root)))
-    if writes_light_loop:
+    if writes_formal_spec_suite:
         for source, destination in (
             (shared_asset(__file__, "templates/scaffold/spec.md"), target_root / ".loom/specs/INIT-0001/spec.md"),
             (shared_asset(__file__, "templates/scaffold/plan.md"), target_root / ".loom/specs/INIT-0001/plan.md"),
@@ -2420,9 +2464,33 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
                 for artifact in result.get("initial_artifacts", [])
                 if isinstance(artifact, dict) and isinstance(artifact.get("path"), str)
             }
-            for forbidden in (".loom/work-items/INIT-0001.md", ".loom/progress/INIT-0001.md", ".loom/status/current.md"):
-                if forbidden in declared_generated:
-                    errors.append(f"light-governance bootstrap must not declare execution-control carrier `{forbidden}`")
+            planned_generated = {
+                item.get("path")
+                for item in result.get("planned_writes", [])
+                if isinstance(item, dict) and isinstance(item.get("path"), str)
+            }
+            forbidden_patterns = (
+                ".loom/work-items/**",
+                ".loom/progress/**",
+                ".loom/status/current.md",
+                ".loom/specs/**",
+            )
+            for collection_name, paths in (("initial_artifacts", declared_generated), ("planned_writes", planned_generated)):
+                for path in paths:
+                    if not isinstance(path, str):
+                        continue
+                    if any(matches_forbidden_authored_carrier(path, pattern) for pattern in forbidden_patterns):
+                        errors.append(f"light-governance bootstrap must not declare execution-control carrier `{path}` in {collection_name}")
+            for path in (
+                ".loom/work-items/INIT-0001.md",
+                ".loom/progress/INIT-0001.md",
+                ".loom/status/current.md",
+                ".loom/specs/INIT-0001/spec.md",
+                ".loom/specs/INIT-0001/plan.md",
+                ".loom/specs/INIT-0001/implementation-contract.md",
+            ):
+                if (target_root / path).exists():
+                    errors.append(f"light-governance bootstrap must not leave execution-control carrier on disk: {path}")
 
     for relative in required_paths:
         if not (target_root / relative).exists():
