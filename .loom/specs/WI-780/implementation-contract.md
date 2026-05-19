@@ -5,6 +5,7 @@
 - Edit shared source under `src/skills/shared/scripts/` and `src/skills/shared/references/`.
 - Regenerate generated skills with `python3 tools/skills_surface.py generate`.
 - Refresh `examples/new-project` with the existing `tools/loom_init.py bootstrap` command.
+- Bump the installer package version when the generated skill/runtime payload behavior changes.
 
 ## Validation
 
@@ -13,6 +14,7 @@
 - `python3 tools/skills_surface.py check`
 - `make skills-check`
 - `make loom-check`
+- `node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main`
 
 ## Closeout Evidence
 
