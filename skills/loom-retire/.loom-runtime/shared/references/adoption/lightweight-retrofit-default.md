@@ -11,19 +11,20 @@
 - 已有清晰的工程边界文档，例如 `AGENTS.md`
 - 已有 CI 与基础测试
 - 已有统一的仓库级验证入口，而不是只有零散子模块脚本
-- 当前缺的是治理入口、review 合同或条件化 spec 路径
+- 当前缺的是治理入口、review 合同或条件化 spec-review 路径
 - 当前还没有明显的长任务恢复痛点
 - 当前主产物本身不是共享 contract、shared skill 或 governance module
 
 ## 2. 默认目标
 
-第一轮 retrofit 的目标不是装完整 Loom，而是先建立最小治理闭环。
+第一轮 retrofit 的目标不是装完整 Loom，也不是创建 Loom-owned execution truth，而是先建立最小治理闭环。
 
 默认先解决：
 
 - 改动如何进入实现
 - reviewer 如何判断改动
 - 哪些边界改动必须先说明再实现
+- 后续何时需要显式升级到 `execution-control`
 
 ## 3. 默认装配
 
@@ -33,7 +34,10 @@
 - `code_review`
 - `spec_review`
 - 最小 PR 模板
-- 条件化 `spec.md` / `plan.md`
+- repo companion 与 bootstrap metadata
+- review guidance / spec-review guidance
+
+本策略对应 `light-governance` scaffold profile。该 profile 可以暴露 review/spec-review 指引和轻量 review placeholder，但不生成 Loom-owned formal spec suite。
 
 ## 4. 默认接入方式
 
@@ -44,6 +48,7 @@
 - 在 `repo-interface.json` 中显式声明 `review_instruction_locators`；已有规则用 repo-owned locator，确无规则时才声明 `loom_default`
 - 不在第一轮重写整个根级规则体系
 - 不把轻量 retrofit 升级成 unattended strong adoption
+- 不在默认 `light-governance` 中生成 `.loom/work-items/**`、`.loom/progress/**`、`.loom/status/current.md` 或 `.loom/specs/**`
 
 轻量仓库可以从 Loom default review instruction 起步，但这个选择必须是显式 locator 合同，而不是自动猜测 `spec_review.md`、`code_review.md` 或任何单仓历史路径。
 
@@ -56,6 +61,9 @@
 - 状态面
 - profile 分层
 - 重 harness
+- formal spec suite
+
+如果目标仓库需要 Loom-owned `work item`、`progress`、`status` 或 `spec` carriers，必须把接入意图显式升级到 `execution-control`；此时才允许脚手架生成 `.loom/work-items/**`、`.loom/progress/**`、`.loom/status/current.md` 和 `.loom/specs/**`。
 
 ## 6. checkpoint-lite
 

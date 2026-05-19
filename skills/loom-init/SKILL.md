@@ -66,7 +66,7 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 
 `--intent` 用来表达采用意图，而不是仓库静态分类。未显式给出 intent 时，dry-run 仍会输出推荐路径、风险摘要和计划写入载体；如果实际写入会创建重执行控制面，必须先显式选择 `execution-control` 或 `strong-governance`。
 
-每个 intent 会收敛到一个 `scaffold_profile`。`observe-only` 与 `skill-install-only` 不写 adoption carriers；`attach-only` 只写 companion/read surfaces，并显式禁止 `.loom/work-items/**`、`.loom/progress/**`、`.loom/status/current.md`、`.loom/reviews/**`、`.loom/specs/**` 等 Loom-authored truth carriers；`light-governance` 写 companion、review/spec 与 PR 最小闭环但不写 Loom-owned work/progress/status；`execution-control` 与 `strong-governance` 才写 Loom-owned execution carriers。
+每个 intent 会收敛到一个 `scaffold_profile`。`observe-only` 与 `skill-install-only` 不写 adoption carriers；`attach-only` 只写 companion/read surfaces，并显式禁止 `.loom/work-items/**`、`.loom/progress/**`、`.loom/status/current.md`、`.loom/reviews/**`、`.loom/specs/**` 等 Loom-authored truth carriers；`light-governance` 写 companion、review guidance 与 PR 最小闭环但不写 Loom-owned work/progress/status/spec carriers；`execution-control` 与 `strong-governance` 才写 Loom-owned execution carriers。
 
 ## 1. 读取顺序
 
@@ -164,13 +164,15 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
   - `code_review`
   - `spec_review`
   - 最小 PR 模板
-  - 条件化 `spec.md` / `plan.md`
+  - repo companion 与 bootstrap metadata
+  - review guidance / spec-review guidance
 - 默认不装配：
   - 完整 recovery 模型
   - work item 合同
   - 状态面
   - profile 分层
   - 重 harness
+  - formal spec suite
 - 若需要轻量跨轮承接，默认使用 `checkpoint-lite`
 - 即使本轮不装配标准恢复或状态面，也必须写清：
   - issue / PR 中谁是恢复主入口
@@ -199,7 +201,7 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 - 保留 root rules
 - 保留 retained host actions
 - 保留 repo-native carriers
-- 第一轮不生成 Loom-owned `work-item` / `progress` / `status-surface` placeholder
+- 第一轮不生成 Loom-owned `work-item` / `progress` / `status-surface` / `spec` placeholder
 
 ## 4. 输出初始化结果
 
