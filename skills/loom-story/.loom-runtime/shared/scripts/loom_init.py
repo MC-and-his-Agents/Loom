@@ -28,7 +28,24 @@ GOVERNANCE_RUNTIME_SOURCE = "skills/shared/scripts/governance_surface.py"
 TOOL_VERSION = "1.3.0"
 CONTRACT_VERSION = "1.3.0"
 WORK_ITEM_ID = "INIT-0001"
-RUNTIME_GITIGNORE_LINES = (".loom/runtime/", ".loom/tmp/", ".loom/cache/")
+RUNTIME_GITIGNORE_LINES = (
+    ".loom/runtime/",
+    ".loom/tmp/",
+    ".loom/cache/",
+    ".loom/attempts/**/raw-logs/",
+    ".loom/attempts/**/scratch/",
+    ".loom/local/",
+)
+RUNTIME_SCRATCH_PREFIXES = (
+    ".loom/runtime/",
+    ".loom/tmp/",
+    ".loom/cache/",
+    ".loom/local/",
+)
+RUNTIME_SCRATCH_PATTERNS = (
+    ".loom/attempts/**/raw-logs/**",
+    ".loom/attempts/**/scratch/**",
+)
 BLANKET_LOOM_GITIGNORE_PATTERNS = {
     ".loom",
     ".loom/",
@@ -423,6 +440,183 @@ def gitignore_policy_payload(target_root: Path) -> dict[str, object]:
     }
 
 
+def git_command(target_root: Path, args: list[str]) -> subprocess.CompletedProcess[str] | None:
+    try:
+        return subprocess.run(
+            ["git", "-C", str(target_root), *args],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+
+
+def is_git_work_tree(target_root: Path) -> bool:
+    result = git_command(target_root, ["rev-parse", "--is-inside-work-tree"])
+    return result is not None and result.returncode == 0 and result.stdout.strip() == "true"
+
+
+def is_runtime_scratch_path(relative_path: str) -> bool:
+    normalized = relative_path.rstrip("/")
+    if any(normalized == prefix.rstrip("/") or normalized.startswith(prefix) for prefix in RUNTIME_SCRATCH_PREFIXES):
+        return True
+    if not normalized.startswith(".loom/attempts/"):
+        return False
+    parts = normalized.split("/")
+    return "raw-logs" in parts[3:] or "scratch" in parts[3:]
+
+
+def stable_carrier_capability(relative_path: str, owner: str | None = None) -> str:
+    if is_runtime_scratch_path(relative_path):
+        return "runtime-residue"
+    if relative_path.startswith(".loom/bootstrap/") or relative_path == ".loom/README.md":
+        return "bootstrap/root"
+    if relative_path.startswith(".loom/bin/"):
+        return "repo-local-runtime"
+    if relative_path.startswith(".loom/companion/"):
+        return "repo-companion"
+    if relative_path.startswith(".loom/shadow/"):
+        return "shadow-parity"
+    if relative_path.startswith((".loom/work-items/", ".loom/progress/", ".loom/reviews/", ".loom/status/", ".loom/specs/")):
+        return "execution-support"
+    if owner:
+        return owner
+    return "stable-carrier"
+
+
+def stable_carrier_entries(target_root: Path, result: dict[str, object]) -> list[dict[str, str]]:
+    entries: dict[str, dict[str, str]] = {}
+    scaffold_profile = result.get("scaffold_profile")
+    profile_name = str(scaffold_profile.get("name")) if isinstance(scaffold_profile, dict) else "unknown"
+
+    def add(raw_path: object, *, kind: object = None, source: str, metadata: dict[str, object] | None = None) -> None:
+        relative = normalize_relative_path(raw_path)
+        if relative is None:
+            return
+        if not relative.startswith(".loom/"):
+            return
+        owner = metadata.get("owner") if isinstance(metadata, dict) else None
+        owner_value = str(owner) if isinstance(owner, str) and owner else None
+        if relative not in entries:
+            entries[relative] = {
+                "path": relative,
+                "kind": str(kind) if isinstance(kind, str) and kind else "stable-carrier",
+                "source": source,
+                "profile": profile_name,
+                "capability": stable_carrier_capability(relative, owner_value),
+            }
+            if owner_value:
+                entries[relative]["owner"] = owner_value
+            if is_runtime_scratch_path(relative):
+                entries[relative]["invalid_reason"] = "unexpected_runtime_path"
+
+    required_carriers = result.get("required_carriers")
+    if isinstance(required_carriers, list) and required_carriers:
+        source_keys = ("required_carriers",)
+    else:
+        source_keys = ("initial_artifacts", "planned_writes")
+    for key in source_keys:
+        values = result.get(key)
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            if isinstance(value, dict):
+                add(value.get("path"), kind=value.get("kind"), source=key, metadata=value)
+
+    manifest = bootstrap_manifest(target_root)
+    artifacts = manifest.get("artifacts")
+    if isinstance(artifacts, list):
+        for artifact in artifacts:
+            if isinstance(artifact, dict):
+                add(artifact.get("path"), kind=artifact.get("kind"), source="manifest.artifacts", metadata=artifact)
+
+    add(".loom/bootstrap/init-result.json", kind="init-result", source="verify")
+    return [entries[path] for path in sorted(entries)]
+
+
+def stable_carrier_git_visibility(target_root: Path, result: dict[str, object]) -> dict[str, object]:
+    entries = stable_carrier_entries(target_root, result)
+    report: dict[str, object] = {
+        "schema_version": "loom-stable-carrier-git-visibility/v1",
+        "result": "pass",
+        "summary": "stable Loom carriers are present and not hidden by Git ignore rules.",
+        "work_tree": is_git_work_tree(target_root),
+        "checked": [],
+        "ignored": [],
+        "missing": [],
+        "untracked": [],
+        "unexpected_runtime_paths": [],
+        "runtime_exclusions": [*RUNTIME_SCRATCH_PREFIXES, *RUNTIME_SCRATCH_PATTERNS],
+        "blocking_errors": [],
+    }
+    if not entries:
+        report["summary"] = "no stable Loom carriers were declared for this adoption profile."
+        return report
+    if report["work_tree"] is not True:
+        report["result"] = "not_applicable"
+        report["summary"] = "target is not a Git work tree; stable carrier Git visibility cannot be checked."
+        return report
+
+    checked: list[dict[str, str]] = []
+    ignored: list[dict[str, str]] = []
+    missing: list[dict[str, str]] = []
+    untracked: list[dict[str, str]] = []
+    unexpected_runtime_paths: list[dict[str, str]] = []
+    blocking_errors: list[str] = []
+
+    for entry in entries:
+        relative = entry["path"]
+        status = "tracked"
+        remediation = "no action required"
+        path = target_root / relative
+        if entry.get("invalid_reason") == "unexpected_runtime_path":
+            status = "unexpected_runtime_path"
+            remediation = "remove this runtime scratch path from stable carrier declarations"
+            unexpected_runtime_paths.append({**entry, "reason": status, "remediation": remediation})
+            blocking_errors.append(
+                f"stable Loom carrier points at an unexpected runtime path: {relative}; stable carriers must not live in runtime scratch/cache/tmp/local paths"
+            )
+        elif not path.exists():
+            status = "missing"
+            remediation = "rerun bootstrap or restore the declared stable carrier"
+            missing.append({**entry, "reason": status, "remediation": remediation})
+            blocking_errors.append(f"stable Loom carrier is missing: {relative} ({entry['source']})")
+        else:
+            tracked = git_command(target_root, ["ls-files", "--cached", "--", relative])
+            tracked_paths = tracked.stdout.splitlines() if tracked is not None and tracked.returncode == 0 else []
+            if relative in tracked_paths:
+                status = "tracked"
+            else:
+                ignore = git_command(target_root, ["check-ignore", "-q", "--", relative])
+                if ignore is not None and ignore.returncode == 0:
+                    status = "ignored"
+                    remediation = "remove or narrow the ignore rule so this stable carrier remains Git-visible"
+                    ignored.append({**entry, "reason": status, "remediation": remediation})
+                    blocking_errors.append(
+                        f"stable Loom carrier is ignored by Git: {relative}; remove blanket or carrier-specific ignore rules"
+                    )
+                else:
+                    status = "untracked"
+                    remediation = f"run `git add {relative}` before treating the adoption as committed"
+                    untracked.append({**entry, "reason": status, "remediation": remediation})
+        checked.append({**entry, "status": status, "remediation": remediation})
+
+    report["checked"] = checked
+    report["ignored"] = ignored
+    report["missing"] = missing
+    report["untracked"] = untracked
+    report["unexpected_runtime_paths"] = unexpected_runtime_paths
+    report["blocking_errors"] = blocking_errors
+    if blocking_errors:
+        report["result"] = "block"
+        report["summary"] = "stable Loom carriers are missing, hidden by Git ignore rules, or declared under runtime scratch paths."
+    elif untracked:
+        report["result"] = "pass"
+        report["summary"] = "stable Loom carriers are Git-visible; some still need `git add` before commit."
+    return report
+
+
 def ensure_gitignore_has_runtime_ignores(target_root: Path, *, repair_gitignore: bool) -> bool:
     gitignore = target_root / ".gitignore"
     current = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
@@ -432,7 +626,7 @@ def ensure_gitignore_has_runtime_ignores(target_root: Path, *, repair_gitignore:
         raise RuntimeError(
             "blanket .loom gitignore would hide stable Loom carriers; "
             f"found {locations}. Remove the blanket ignore or rerun with --repair-gitignore "
-            "to replace it with .loom/runtime/, .loom/tmp/, and .loom/cache/."
+            "to replace it with runtime-only .loom ignores."
         )
     new_content = repaired_gitignore_content(current)
     if current == new_content:
@@ -2421,8 +2615,12 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
         if gitignore_policy.get("blanket_loom_ignore") is True:
             errors.append(
                 "blanket .loom gitignore hides stable Loom carriers; remove it or run bootstrap with "
-                "--repair-gitignore to keep only .loom/runtime/, .loom/tmp/, and .loom/cache/ ignored"
+                "--repair-gitignore to keep only runtime scratch/cache/tmp/local paths ignored"
             )
+        git_visibility = stable_carrier_git_visibility(target_root, result)
+        blocking_errors = git_visibility.get("blocking_errors")
+        if isinstance(blocking_errors, list):
+            errors.extend(str(error) for error in blocking_errors)
         initial_artifacts = result.get("initial_artifacts")
         if isinstance(initial_artifacts, list):
             for artifact in initial_artifacts:
@@ -2790,6 +2988,7 @@ def bootstrap(args: argparse.Namespace) -> int:
         if args.verify:
             errors = verify_target(target_root, output_path)
             result["verification"] = {"ok": not errors, "errors": errors}
+            result["verification"]["git_visibility"] = stable_carrier_git_visibility(target_root, result)
             if errors:
                 print(json.dumps(result, ensure_ascii=False, indent=2))
                 return 1
@@ -2810,12 +3009,26 @@ def verify(args: argparse.Namespace) -> int:
         return 2
     runtime_state = runtime_state_payload(target_root)
     errors = verify_target(target_root, output_path)
+    git_visibility: dict[str, object] | None = None
+    if output_path.exists():
+        try:
+            payload = read_json(output_path)
+        except json.JSONDecodeError:
+            payload = None
+        if isinstance(payload, dict):
+            git_visibility = stable_carrier_git_visibility(target_root, payload)
     if errors:
-        print(json.dumps({"ok": False, "errors": errors, "runtime_state": runtime_state}, ensure_ascii=False, indent=2))
+        response = {"ok": False, "errors": errors, "runtime_state": runtime_state}
+        if git_visibility is not None:
+            response["git_visibility"] = git_visibility
+        print(json.dumps(response, ensure_ascii=False, indent=2))
         return 1
+    response = {"ok": True, "target": str(target_root), "runtime_state": runtime_state}
+    if git_visibility is not None:
+        response["git_visibility"] = git_visibility
     print(
         json.dumps(
-            {"ok": True, "target": str(target_root), "runtime_state": runtime_state},
+            response,
             ensure_ascii=False,
             indent=2,
         )

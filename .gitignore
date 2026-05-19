@@ -83,6 +83,8 @@ ENV/
 
 # Go
 bin/
+!.loom/bin/
+!.loom/bin/**
 *.test
 *.out
 cover.out
@@ -99,4 +101,9 @@ plugins/loom/*
 packages/skills/
 packages/loom-installer/payload/
 .worktrees/
-.loom/runtime/attempts/
+.loom/runtime/
+.loom/tmp/
+.loom/cache/
+.loom/attempts/**/raw-logs/
+.loom/attempts/**/scratch/
+.loom/local/

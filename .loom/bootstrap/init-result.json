@@ -76,10 +76,31 @@
     "mode": "work-item + recovery-entry + derived status-surface",
     "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
     "entry_points": {
-      "current_item_id": "WI-781",
-      "work_item": ".loom/work-items/WI-781.md",
-      "recovery_entry": ".loom/progress/WI-781.md",
+      "current_item_id": "WI-782",
+      "work_item": ".loom/work-items/WI-782.md",
+      "recovery_entry": ".loom/progress/WI-782.md",
       "status_surface": ".loom/status/current.md"
+    }
+  },
+  "gitignore_policy": {
+    "path": ".gitignore",
+    "status": "ok",
+    "blanket_loom_ignore": false,
+    "blanket_entries": [],
+    "required_runtime_ignores": [
+      ".loom/runtime/",
+      ".loom/tmp/",
+      ".loom/cache/",
+      ".loom/attempts/**/raw-logs/",
+      ".loom/attempts/**/scratch/",
+      ".loom/local/"
+    ],
+    "missing_runtime_ignores": [],
+    "repair": {
+      "available": false,
+      "command": "python3 .loom/bin/loom_init.py bootstrap --target . --write --repair-gitignore",
+      "summary": "remove blanket .loom ignore and keep only runtime/cache scratch paths ignored",
+      "unified_diff": ""
     }
   },
   "initial_artifacts": [

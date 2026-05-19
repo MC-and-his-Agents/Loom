@@ -76,9 +76,11 @@
 - 具体路径
 - 该路径属于哪个 profile 或 capability
 - 当前失败原因：`missing`、`ignored`、`untracked` 或 `unexpected runtime path`
-- 建议动作：移除 blanket ignore、改成细粒度 ignore、显式升级 adoption intent，或删除 forbidden authored carrier
+- 建议动作：恢复缺失 carrier、移除或收窄 ignore、运行 `git add <path>`、显式升级 adoption intent，或删除 forbidden authored carrier
 
-运行态路径如 `.loom/runtime/`、`.loom/tmp/`、`.loom/cache/` 不得被误报为必须提交。
+`missing` 和 `ignored` 是阻断性错误。`untracked` 表示稳定 carrier 对 Git 可见但尚未进入 index；verify 必须输出需要 `git add` 的路径，但不得因此让新 bootstrap 的 write+verify 闭环天然失败。
+
+运行态路径如 `.loom/runtime/`、`.loom/tmp/`、`.loom/cache/`、`.loom/local/`、`.loom/attempts/**/raw-logs/`、`.loom/attempts/**/scratch/` 不得被误报为必须提交。`.loom/attempts/` 不能整体排除；若某个 attempt evidence 被声明为稳定 carrier，仍必须按稳定 schema 与 locator 进入 Git 可见性检查。
 
 ## 5. External runtime 迁移
 
