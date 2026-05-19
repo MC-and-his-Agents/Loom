@@ -12,10 +12,10 @@
 - Validation Entry: python3 -m py_compile src/skills/shared/scripts/loom_init.py src/skills/shared/scripts/loom_check.py; targeted gitignore fixture; python3 tools/skills_surface.py check; python3 tools/loom_check.py .; make skills-check; make loom-check
 - Closing Condition: #781 is implemented, validated, reviewed, merged, and issue state reflects the PR
 - Current Checkpoint: merge
-- Current Stop: #781 implementation, review records, targeted fixtures, generated surface refresh, carrier refresh, and full local validation are complete.
+- Current Stop: #781 implementation, review records, installer version bump, targeted fixtures, generated surface refresh, carrier refresh, and full local validation are complete.
 - Next Step: Commit, push, open PR, merge, and confirm issue #781 closes.
 - Blockers: None recorded.
-- Latest Validation Summary: py_compile -> OK; targeted `.loom/*` block, `/.loom/*` repair, stable Git-visible, runtime ignored, and verify drift fixture -> OK; python3 tools/skills_surface.py check -> OK; python3 tools/loom_check.py . -> OK (36 surfaces); make skills-check -> OK; make loom-check -> OK (36 surfaces); root shadow-parity -> pass; root adopt verify WI-781 -> pass; make check -> OK.
+- Latest Validation Summary: py_compile -> OK; targeted `.loom/*` block, `/.loom/*` repair, stable Git-visible, runtime ignored, and verify drift fixture -> OK; python3 tools/skills_surface.py check -> OK; python3 tools/loom_check.py . -> OK (36 surfaces); make skills-check -> OK; make loom-check -> OK (36 surfaces); root shadow-parity -> pass; root adopt verify WI-781 -> pass; make check -> OK; installer version bump prepared 0.1.115 -> 0.1.116.
 - Recovery Boundary: .loom/work-items/WI-781.md is the active static work item carrier.
 - Current Lane: work/781-gitignore-loom-carrier-visibility
 
