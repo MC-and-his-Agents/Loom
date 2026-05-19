@@ -1126,13 +1126,6 @@ def profile_common_artifacts() -> list[dict[str, str]]:
         {"path": ".loom/companion/review.md", "kind": "repo-companion-doc", "source": "generated"},
         {"path": ".loom/companion/merge-ready.md", "kind": "repo-companion-doc", "source": "generated"},
         {"path": ".loom/companion/closeout.md", "kind": "repo-companion-doc", "source": "generated"},
-        {"path": ".loom/companion/releases/changelog.md", "kind": "repo-release-surface", "source": "generated"},
-        {"path": ".loom/companion/releases/release-notes.md", "kind": "repo-release-surface", "source": "generated"},
-        {"path": ".loom/companion/releases/migration-notes.md", "kind": "repo-release-surface", "source": "generated"},
-        {"path": ".loom/companion/releases/rollback.md", "kind": "repo-release-surface", "source": "generated"},
-        {"path": ".loom/companion/releases/catalog.json", "kind": "repo-release-surface", "source": "generated"},
-        {"path": ".loom/companion/releases/current.json", "kind": "repo-release-surface", "source": "generated"},
-        {"path": ".loom/companion/releases/status.json", "kind": "repo-release-surface", "source": "generated"},
         {"path": ".loom/shadow/admission-loom.json", "kind": "shadow-parity-surface", "source": "generated"},
         {"path": ".loom/shadow/admission-repo.json", "kind": "shadow-parity-surface", "source": "generated"},
         {"path": ".loom/shadow/review-loom.json", "kind": "shadow-parity-surface", "source": "generated"},
@@ -1363,13 +1356,6 @@ def planned_write_targets(result: dict[str, object], adoption_path: str) -> list
         (".loom/companion/review.md", "repo-companion-doc"),
         (".loom/companion/merge-ready.md", "repo-companion-doc"),
         (".loom/companion/closeout.md", "repo-companion-doc"),
-        (".loom/companion/releases/changelog.md", "repo-release-surface"),
-        (".loom/companion/releases/release-notes.md", "repo-release-surface"),
-        (".loom/companion/releases/migration-notes.md", "repo-release-surface"),
-        (".loom/companion/releases/rollback.md", "repo-release-surface"),
-        (".loom/companion/releases/catalog.json", "repo-release-surface"),
-        (".loom/companion/releases/current.json", "repo-release-surface"),
-        (".loom/companion/releases/status.json", "repo-release-surface"),
         (".loom/shadow/admission-loom.json", "shadow-parity-surface"),
         (".loom/shadow/admission-repo.json", "shadow-parity-surface"),
         (".loom/shadow/review-loom.json", "shadow-parity-surface"),
@@ -1385,6 +1371,10 @@ def planned_write_targets(result: dict[str, object], adoption_path: str) -> list
 
 
 def intentionally_absent_targets(adoption_path: str, profile: str) -> list[dict[str, str]]:
+    release_target_absent = {
+        "path": ".loom/companion/releases/**",
+        "reason": "release target truth stays absent until the repo declares release target intent",
+    }
     if profile == "attach-only":
         return [
             {"path": ".loom/work-items/**", "reason": "attach-only preserves host-owned work item truth"},
@@ -1392,19 +1382,27 @@ def intentionally_absent_targets(adoption_path: str, profile: str) -> list[dict[
             {"path": ".loom/status/current.md", "reason": "attach-only does not author Loom status truth"},
             {"path": ".loom/reviews/**", "reason": "attach-only preserves host-owned review truth"},
             {"path": ".loom/specs/**", "reason": "attach-only does not author Loom execution specs"},
+            release_target_absent,
         ]
     if adoption_path == "defer":
-        return [{"path": "*", "reason": "observe-only intent is read-only"}]
+        return [
+            {"path": "*", "reason": "observe-only intent is read-only"},
+            release_target_absent,
+        ]
     if adoption_path == "skill-install-only":
-        return [{"path": ".loom/work-items/**", "reason": "skill install does not adopt execution governance"}]
+        return [
+            {"path": ".loom/work-items/**", "reason": "skill install does not adopt execution governance"},
+            release_target_absent,
+        ]
     if profile == "light-governance":
         return [
             {"path": ".loom/work-items/**", "reason": "light-governance does not author Loom work item truth"},
             {"path": ".loom/progress/**", "reason": "light-governance does not author Loom recovery truth"},
             {"path": ".loom/status/current.md", "reason": "light-governance does not author Loom status truth"},
             {"path": ".loom/specs/**", "reason": "light-governance keeps formal Loom specs deferred until execution-control"},
+            release_target_absent,
         ]
-    return []
+    return [release_target_absent]
 
 
 def risk_summary(adoption_path: str, intake: dict[str, object], planned: list[dict[str, object]]) -> dict[str, object]:
@@ -1870,12 +1868,6 @@ def repo_interface_payload(profile_name: str = "execution-control") -> dict[str,
         "dynamic_tool_locators": [],
         "policy_locators": [],
         "hook_locators": [],
-        "release_targets": {
-            "catalog_locator": ".loom/companion/releases/catalog.json",
-            "current_target_locator": ".loom/companion/releases/current.json",
-            "enforcement": "blocking",
-            "status_locator": ".loom/companion/releases/status.json",
-        },
     }
     if profile_name == "attach-only":
         payload["host_truth_locators"] = ATTACH_ONLY_HOST_TRUTH_LOCATORS
@@ -2177,11 +2169,6 @@ def scaffold_target(
     writes_light_loop = profile_name in {"light-governance", "execution-control", "strong-governance"}
     writes_work_item_carriers = profile_has_work_item_carriers(profile_name)
     writes_formal_spec_suite = writes_work_item_carriers
-    release_work_items = (
-        [{"id": "INIT-0001", "locator": ".loom/work-items/INIT-0001.md", "delivery_status": "unmerged"}]
-        if writes_work_item_carriers
-        else []
-    )
     if profile_name == "attach-only":
         forbidden_errors = attach_only_forbidden_carrier_errors(target_root, result)
         if forbidden_errors:
@@ -2201,59 +2188,6 @@ def scaffold_target(
         (target_root / ".loom/companion/review.md", render_companion_review(), "text"),
         (target_root / ".loom/companion/merge-ready.md", render_companion_merge_ready(), "text"),
         (target_root / ".loom/companion/closeout.md", render_companion_closeout(), "text"),
-        (target_root / ".loom/companion/releases/changelog.md", "# Changelog\n\n- Bootstrap release intake example.\n", "text"),
-        (target_root / ".loom/companion/releases/release-notes.md", "# Release Notes\n\n- Bootstrap release target is ready for Loom-derived status consumption.\n", "text"),
-        (target_root / ".loom/companion/releases/migration-notes.md", "# Migration Notes\n\n- not_applicable\n", "text"),
-        (target_root / ".loom/companion/releases/rollback.md", "# Rollback Basis\n\n- Revert the companion-owned release target declaration and rerun Loom checks.\n", "text"),
-        (
-            target_root / ".loom/companion/releases/catalog.json",
-            {
-                "schema_version": "loom-target-release-catalog/v1",
-                "current_release_id": "bootstrap-v0.1.0",
-                "releases": [{"release_id": "bootstrap-v0.1.0", "locator": ".loom/companion/releases/current.json"}],
-            },
-            "json",
-        ),
-        (
-            target_root / ".loom/companion/releases/current.json",
-            {
-                "schema_version": "loom-target-release/v1",
-                "release_id": "bootstrap-v0.1.0",
-                "display_name": "Bootstrap v0.1.0",
-                "target_branch": "main",
-                "release_goal": "Bootstrap the first executable Loom path for this repository.",
-                "status": "unreleased",
-                "included_scope": {
-                    "phase": [{"id": "bootstrap-phase", "locator": ".loom/companion/checkpoints.md", "delivery_status": "planned"}],
-                    "fr": [],
-                    "work_item": release_work_items,
-                    "implementation_pr": [],
-                    "merge_commit": [],
-                },
-                "evidence": {
-                    "changelog_locator": ".loom/companion/releases/changelog.md",
-                    "release_notes_locator": ".loom/companion/releases/release-notes.md",
-                    "migration_notes_locator": ".loom/companion/releases/migration-notes.md",
-                    "tag_or_artifact_locator": ".loom/companion/README.md",
-                    "rollback_basis_locator": ".loom/companion/releases/rollback.md",
-                },
-                "authority": {
-                    "owner": "repo-companion",
-                    "source_kind": "repo_owned_locator",
-                    "source_locator": ".loom/companion/releases/current.json",
-                },
-            },
-            "json",
-        ),
-        (
-            target_root / ".loom/companion/releases/status.json",
-            {
-                "schema_version": "loom-target-release-status/v1",
-                "result": "pass",
-                "summary": "repo-owned release status example is readable.",
-            },
-            "json",
-        ),
     ]
     if writes_light_loop:
         writes.extend(

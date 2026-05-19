@@ -135,41 +135,6 @@
         "owner": "repo-companion"
       },
       {
-        "path": ".loom/companion/releases/changelog.md",
-        "kind": "repo-release-surface",
-        "owner": "repo-companion"
-      },
-      {
-        "path": ".loom/companion/releases/release-notes.md",
-        "kind": "repo-release-surface",
-        "owner": "repo-companion"
-      },
-      {
-        "path": ".loom/companion/releases/migration-notes.md",
-        "kind": "repo-release-surface",
-        "owner": "repo-companion"
-      },
-      {
-        "path": ".loom/companion/releases/rollback.md",
-        "kind": "repo-release-surface",
-        "owner": "repo-companion"
-      },
-      {
-        "path": ".loom/companion/releases/catalog.json",
-        "kind": "repo-release-surface",
-        "owner": "repo-companion"
-      },
-      {
-        "path": ".loom/companion/releases/current.json",
-        "kind": "repo-release-surface",
-        "owner": "repo-companion"
-      },
-      {
-        "path": ".loom/companion/releases/status.json",
-        "kind": "repo-release-surface",
-        "owner": "repo-companion"
-      },
-      {
         "path": ".loom/shadow/admission-loom.json",
         "kind": "shadow-parity-surface",
         "owner": "repo-companion"
@@ -386,41 +351,6 @@
       "source": "generated"
     },
     {
-      "path": ".loom/companion/releases/changelog.md",
-      "kind": "repo-release-surface",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/companion/releases/release-notes.md",
-      "kind": "repo-release-surface",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/companion/releases/migration-notes.md",
-      "kind": "repo-release-surface",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/companion/releases/rollback.md",
-      "kind": "repo-release-surface",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/companion/releases/catalog.json",
-      "kind": "repo-release-surface",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/companion/releases/current.json",
-      "kind": "repo-release-surface",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/companion/releases/status.json",
-      "kind": "repo-release-surface",
-      "source": "generated"
-    },
-    {
       "path": ".loom/shadow/admission-loom.json",
       "kind": "shadow-parity-surface",
       "source": "generated"
@@ -469,7 +399,7 @@
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "7e804af8d4537d44cba1b90b42da6979ac2ac58516d8daab1931537cbfe2bfc3"
+      "sha256": "52de19c45ed4f0b3d5944a3eab192dee94d74e737a469598b806f230745c3d7b"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
@@ -481,13 +411,13 @@
       "path": ".loom/bin/governance_surface.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/governance_surface.py",
-      "sha256": "0883eae091112beb2516e486ca5b8a3bf514326731a1fdce486c41d716a40ebd"
+      "sha256": "317cf0dc5337ee7d93ce2e7458b0de79830e3e3420689a6f6d26c328ed8ab393"
     },
     {
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "2195a7a3a1ee63a71d558009964565c7d3e6053a0cab988c70e7a3055c1147ac"
+      "sha256": "11a4ca4a6f9f74bc0eced5e1726d91f528190aefa0479e7f92e43415b4df92ab"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -511,7 +441,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "008a3d09ccc474b42b84a23b0cd099932732ceac8c209f2433158d267ec79471"
+      "sha256": "f7675be87288a4e88c4fa35a40616577cfb186dae0c752b21cceb776eb609e1b"
     },
     {
       "path": ".loom/reviews/INIT-0001.json",
@@ -583,13 +513,6 @@
         ".loom/companion/review.md",
         ".loom/companion/merge-ready.md",
         ".loom/companion/closeout.md",
-        ".loom/companion/releases/changelog.md",
-        ".loom/companion/releases/release-notes.md",
-        ".loom/companion/releases/migration-notes.md",
-        ".loom/companion/releases/rollback.md",
-        ".loom/companion/releases/catalog.json",
-        ".loom/companion/releases/current.json",
-        ".loom/companion/releases/status.json",
         ".loom/shadow/admission-loom.json",
         ".loom/shadow/admission-repo.json",
         ".loom/shadow/review-loom.json",
@@ -848,104 +771,79 @@
         "source": "repo companion interface"
       },
       "release_targets": {
-        "availability": "present",
+        "availability": "absent",
         "catalog": {
-          "status": "present",
-          "locator": ".loom/companion/releases/catalog.json",
-          "source": "repo companion interface.release_targets.catalog_locator"
+          "status": "missing",
+          "locator": "unknown",
+          "source": "repo companion interface.release_targets"
         },
         "current_target": {
-          "status": "present",
-          "locator": ".loom/companion/releases/current.json",
-          "source": "repo companion interface.release_targets.current_target_locator"
+          "status": "missing",
+          "locator": "unknown",
+          "source": "repo companion interface.release_targets"
         },
         "status": {
-          "status": "present",
-          "locator": ".loom/companion/releases/status.json",
-          "source": "repo companion interface.release_targets.status_locator"
+          "status": "missing",
+          "locator": "unknown",
+          "source": "repo companion interface.release_targets"
         },
-        "enforcement": "blocking",
-        "summary": "target repository release/version surface is readable.",
+        "enforcement": "unknown",
+        "summary": "no target repository release/version surface is declared for this repository.",
         "missing_inputs": [],
         "target_release": {
           "schema_version": "loom-target-release-status/v1",
-          "result": "pass",
-          "summary": "target repository release/version surface is readable.",
-          "release_id": "bootstrap-v0.1.0",
-          "display_name": "Bootstrap v0.1.0",
-          "target_branch": "main",
-          "release_goal": "Bootstrap the first executable Loom path for this repository.",
-          "authored_status": "unreleased",
+          "result": "not_applicable",
+          "summary": "no target repository release/version surface is declared for this repository.",
+          "release_id": null,
+          "display_name": null,
+          "target_branch": null,
+          "release_goal": null,
+          "authored_status": null,
           "included_scope": {
-            "phase": [
-              {
-                "id": "bootstrap-phase",
-                "locator": ".loom/companion/checkpoints.md",
-                "delivery_status": "planned"
-              }
-            ],
+            "phase": [],
             "fr": [],
-            "work_item": [
-              {
-                "id": "INIT-0001",
-                "locator": ".loom/work-items/INIT-0001.md",
-                "delivery_status": "unmerged"
-              }
-            ],
+            "work_item": [],
             "implementation_pr": [],
             "merge_commit": []
           },
           "delivery_chain": {
             "merged": [],
-            "unmerged": [
-              {
-                "scope": "phase",
-                "id": "bootstrap-phase",
-                "locator": ".loom/companion/checkpoints.md",
-                "delivery_status": "planned"
-              },
-              {
-                "scope": "work_item",
-                "id": "INIT-0001",
-                "locator": ".loom/work-items/INIT-0001.md",
-                "delivery_status": "unmerged"
-              }
-            ],
+            "unmerged": [],
             "unreleased": [],
             "unreconciled": []
           },
           "release_evidence": {
             "changelog": {
-              "status": "present",
-              "locator": ".loom/companion/releases/changelog.md"
+              "status": "not_applicable",
+              "locator": null
             },
             "release_notes": {
-              "status": "present",
-              "locator": ".loom/companion/releases/release-notes.md"
+              "status": "not_applicable",
+              "locator": null
             },
             "migration_notes": {
-              "status": "present",
-              "locator": ".loom/companion/releases/migration-notes.md"
+              "status": "not_applicable",
+              "locator": null
             },
             "tag_or_artifact": {
-              "status": "present",
-              "locator": ".loom/companion/README.md"
+              "status": "not_applicable",
+              "locator": null
             },
             "rollback_basis": {
-              "status": "present",
-              "locator": ".loom/companion/releases/rollback.md"
+              "status": "not_applicable",
+              "locator": null
             }
           },
           "closeout_gaps": [],
           "rollback_readiness": {
-            "status": "ready",
-            "locator": ".loom/companion/releases/rollback.md"
+            "status": "not_applicable",
+            "locator": null
           },
           "provenance": {
             "source_layer": "repo_companion",
-            "source_locator": ".loom/companion/releases/current.json",
-            "status_locator": ".loom/companion/releases/status.json",
-            "enforcement": "blocking"
+            "source_locator": null,
+            "status_locator": null,
+            "enforcement": null
           },
           "missing_inputs": [],
           "fallback_to": null
@@ -1917,48 +1815,6 @@
       "requires_intent": null
     },
     {
-      "path": ".loom/companion/releases/changelog.md",
-      "kind": "repo-release-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/companion/releases/release-notes.md",
-      "kind": "repo-release-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/companion/releases/migration-notes.md",
-      "kind": "repo-release-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/companion/releases/rollback.md",
-      "kind": "repo-release-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/companion/releases/catalog.json",
-      "kind": "repo-release-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/companion/releases/current.json",
-      "kind": "repo-release-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/companion/releases/status.json",
-      "kind": "repo-release-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
       "path": ".loom/shadow/admission-loom.json",
       "kind": "shadow-parity-surface",
       "owner": "repo-companion",
@@ -2182,41 +2038,6 @@
       "owner": "repo-companion"
     },
     {
-      "path": ".loom/companion/releases/changelog.md",
-      "kind": "repo-release-surface",
-      "owner": "repo-companion"
-    },
-    {
-      "path": ".loom/companion/releases/release-notes.md",
-      "kind": "repo-release-surface",
-      "owner": "repo-companion"
-    },
-    {
-      "path": ".loom/companion/releases/migration-notes.md",
-      "kind": "repo-release-surface",
-      "owner": "repo-companion"
-    },
-    {
-      "path": ".loom/companion/releases/rollback.md",
-      "kind": "repo-release-surface",
-      "owner": "repo-companion"
-    },
-    {
-      "path": ".loom/companion/releases/catalog.json",
-      "kind": "repo-release-surface",
-      "owner": "repo-companion"
-    },
-    {
-      "path": ".loom/companion/releases/current.json",
-      "kind": "repo-release-surface",
-      "owner": "repo-companion"
-    },
-    {
-      "path": ".loom/companion/releases/status.json",
-      "kind": "repo-release-surface",
-      "owner": "repo-companion"
-    },
-    {
       "path": ".loom/shadow/admission-loom.json",
       "kind": "shadow-parity-surface",
       "owner": "repo-companion"
@@ -2347,7 +2168,12 @@
       "owner": "repo-owned"
     }
   ],
-  "intentionally_absent": [],
+  "intentionally_absent": [
+    {
+      "path": ".loom/companion/releases/**",
+      "reason": "release target truth stays absent until the repo declares release target intent"
+    }
+  ],
   "forbidden_authored_carriers": [],
   "upgrade_triggers": [
     {

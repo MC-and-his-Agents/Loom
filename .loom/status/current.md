@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-779
-- Goal: Align lightweight-retrofit docs, dry-run output, write behavior, and verify logic
-- Scope: Make small-existing light-governance avoid Loom-owned work item/progress/status/spec carriers while preserving execution-control full carriers in `src/skills/shared/scripts/loom_init.py`, `src/skills/shared/scripts/loom_check.py`, `src/skills/loom-init/`, `src/skills/shared/references/adoption/`, `docs/adoption/`, `skills/`, `examples/new-project/`, `packages/loom-installer/package.json`, `packages/loom-installer/package-lock.json`, `.loom/work-items/WI-779.md`, `.loom/progress/WI-779.md`, `.loom/progress/WI-784.md`, `.loom/reviews/WI-779.json`, `.loom/reviews/WI-779.spec.json`, `.loom/specs/WI-779/`, `.loom/status/current.md`, `.loom/bootstrap/init-result.json`, `.loom/shadow/merge-ready-loom.json`, and `.loom/shadow/closeout-loom.json`.
+- Item ID: WI-780
+- Goal: Stop default adoption from generating placeholder release target truth
+- Scope: Remove default bootstrap release target declarations and placeholder release files from loom_init/loom_flow scaffolds, docs, generated skills, examples/new-project, and loom_check fixtures while preserving explicit repo-owned release target support
 - Execution Path: adoption/bootstrap
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-779.md
-- Review Entry: .loom/reviews/WI-779.json
-- Validation Entry: python3 -m py_compile src/skills/shared/scripts/loom_init.py src/skills/shared/scripts/loom_check.py; targeted #779 adoption fixture; python3 tools/skills_surface.py check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main; make skills-check; make loom-check
-- Closing Condition: #779 is implemented, validated, reviewed, merged, and issue state reflects the PR
-- Current Checkpoint: merge checkpoint
-- Current Stop: #779 implementation, validation, spec review, general review, and installer version bump are recorded; preparing PR gate rerun after CI version-gate repair.
-- Next Step: Push branch update, run PR gate, wait for required checks, merge, and close #779.
+- Recovery Entry: .loom/progress/WI-780.md
+- Review Entry: .loom/reviews/WI-780.json
+- Validation Entry: python3 -m py_compile src/skills/shared/scripts/loom_init.py src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_check.py; targeted #780 release target fixture; python3 tools/skills_surface.py check; make skills-check; make loom-check
+- Closing Condition: #780 is implemented, validated, reviewed, merged, and issue state reflects the PR
+- Current Checkpoint: merge
+- Current Stop: #780 implementation, reviews, version bump, targeted fixtures, root adoption verify, shadow parity, and make loom-check are complete.
+- Next Step: Push branch update, rerun PR gate and required checks, merge PR #790, and confirm issue #780 closes.
 - Blockers: None recorded.
-- Latest Validation Summary: py_compile -> OK; targeted #779 adoption fixture -> OK; python3 tools/skills_surface.py check -> OK; make skills-check -> OK; make loom-check -> OK; installer version bump check -> OK (0.1.113 -> 0.1.114); spec review -> allow; general review -> allow.
-- Recovery Boundary: .loom/work-items/WI-779.md is the active static work item carrier.
-- Current Lane: work/779-lightweight-retrofit-alignment
+- Latest Validation Summary: py_compile -> OK; targeted #780 release target fixtures -> OK; example absent surface assertion -> OK; python3 tools/skills_surface.py check -> OK; make skills-check -> OK; root state-check -> pass; root adopt verify -> pass; root shadow-parity -> pass; make loom-check -> OK (36 surfaces); installer version bump check -> OK (0.1.114 -> 0.1.115).
+- Recovery Boundary: .loom/work-items/WI-780.md is the active static work item carrier.
+- Current Lane: work/780-stop-placeholder-release-target-truth
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-779.md
-- Dynamic Truth: .loom/progress/WI-779.md
+- Static Truth: .loom/work-items/WI-780.md
+- Dynamic Truth: .loom/progress/WI-780.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
