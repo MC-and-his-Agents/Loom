@@ -3,16 +3,17 @@
   "item_id": "WI-778",
   "decision": "allow",
   "kind": "general_review",
-  "summary": "The implementation routes adoption intents through explicit scaffold profiles, exposes scaffold_profile and upgrade_triggers in bootstrap output, keeps light-governance below Loom-owned work/progress/status carriers, preserves execution-control authored carriers, and refreshes generated skill/runtime surfaces from source.",
+  "summary": "The implementation routes adoption intents through explicit scaffold profiles, exposes scaffold_profile and upgrade_triggers in bootstrap output, keeps light-governance below Loom-owned work/progress/status carriers, preserves execution-control authored carriers, refreshes generated skill/runtime surfaces from source, and includes the required installer version bump plus terminal WI-775 carrier state for PR gate consumption.",
   "reviewer": "codex",
-  "reviewed_head": "04273a4c9080317cdb4f577c6fdc94c69e861a2e",
-  "reviewed_validation_summary": "py_compile -> OK; skills surface check -> OK; targeted scaffold profile fixtures -> OK; make skills-check -> OK; loom-init verify examples/new-project -> OK; loom-init verify root -> OK; closeout check root -> OK; carrier refresh root -> OK.",
+  "reviewed_head": "fe18ce09e68ca6e674e37eb5fc2359fdf3d8bf56",
+  "reviewed_validation_summary": "py_compile -> OK; skills surface check -> OK; make skills-check -> OK; adopt verify root -> OK; installer version bump check -> OK; host-binding validate main -> OK; make loom-check -> OK; carrier refresh root -> OK.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
   "follow_ups": [
     "Do not treat strong-governance concrete writes as final policy until later checkpoints distinguish stronger behavior.",
-    "Do not fold attach-only forbidden-carrier enforcement into this checkpoint; #784 owns that behavior."
+    "Do not fold attach-only forbidden-carrier enforcement into this checkpoint; #784 owns that behavior.",
+    "The first make loom-check attempt failed only on host-binding REST read, and the exact host-binding command then passed before the second full make loom-check passed."
   ],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-778.md",
