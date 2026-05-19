@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-780",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-780 spec matches the implemented release-target absence contract: default adoption keeps release truth absent, generated carriers are removed, absent surfaces verify as not_applicable, and explicit repo-owned release target support remains out of scope but preserved.",
+  "reviewer": "codex",
+  "reviewed_head": "e863fff4d0bc9c5bd386765475b56cf0f45e43c0",
+  "reviewed_validation_summary": "py_compile -> OK; targeted #780 release target fixture -> OK; python3 tools/skills_surface.py check -> OK; make skills-check -> OK; make loom-check currently blocked on WI/review/shadow bookkeeping, not release target behavior.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-780.md",
+    "recovery_entry": ".loom/progress/WI-780.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": "state-check pass; py_compile pass; targeted release-target fixtures pass; skills surface check pass; make skills-check pass",
+    "normalized_findings": null
+  }
+}
