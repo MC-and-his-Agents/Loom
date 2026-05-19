@@ -72,41 +72,6 @@
       "source": "generated"
     },
     {
-      "path": ".loom/companion/releases/changelog.md",
-      "kind": "repo-release-surface",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/companion/releases/release-notes.md",
-      "kind": "repo-release-surface",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/companion/releases/migration-notes.md",
-      "kind": "repo-release-surface",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/companion/releases/rollback.md",
-      "kind": "repo-release-surface",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/companion/releases/catalog.json",
-      "kind": "repo-release-surface",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/companion/releases/current.json",
-      "kind": "repo-release-surface",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/companion/releases/status.json",
-      "kind": "repo-release-surface",
-      "source": "generated"
-    },
-    {
       "path": ".loom/shadow/admission-loom.json",
       "kind": "shadow-parity-surface",
       "source": "generated"
@@ -155,7 +120,7 @@
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "7e804af8d4537d44cba1b90b42da6979ac2ac58516d8daab1931537cbfe2bfc3"
+      "sha256": "52de19c45ed4f0b3d5944a3eab192dee94d74e737a469598b806f230745c3d7b"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
@@ -167,13 +132,13 @@
       "path": ".loom/bin/governance_surface.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/governance_surface.py",
-      "sha256": "0883eae091112beb2516e486ca5b8a3bf514326731a1fdce486c41d716a40ebd"
+      "sha256": "317cf0dc5337ee7d93ce2e7458b0de79830e3e3420689a6f6d26c328ed8ab393"
     },
     {
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "2195a7a3a1ee63a71d558009964565c7d3e6053a0cab988c70e7a3055c1147ac"
+      "sha256": "11a4ca4a6f9f74bc0eced5e1726d91f528190aefa0479e7f92e43415b4df92ab"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -197,7 +162,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "008a3d09ccc474b42b84a23b0cd099932732ceac8c209f2433158d267ec79471"
+      "sha256": "f7675be87288a4e88c4fa35a40616577cfb186dae0c752b21cceb776eb609e1b"
     },
     {
       "path": ".loom/reviews/INIT-0001.json",

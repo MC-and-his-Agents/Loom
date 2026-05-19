@@ -143,13 +143,7 @@
   },
   "dynamic_tool_locators": [],
   "policy_locators": [],
-  "hook_locators": [],
-  "release_targets": {
-    "catalog_locator": ".loom/companion/releases/catalog.json",
-    "current_target_locator": ".loom/companion/releases/current.json",
-    "enforcement": "blocking",
-    "status_locator": ".loom/companion/releases/status.json"
-  }
+  "hook_locators": []
 }
 ```
 
@@ -375,6 +369,8 @@
 
 `release_targets` 用于声明目标仓库自己的 release / version 真相入口。
 
+默认 adoption 不生成或声明 `release_targets`。只有目标仓库已有明确的 release target truth，并且接入决策显式要求暴露这组 repo-owned / host-owned locator 时，才写入本 section。
+
 它回答的是：
 
 - 目标仓库 release target catalog 去哪里读
@@ -406,6 +402,7 @@
 稳定约束：
 
 - `catalog_locator` 与 `current_target_locator` 只允许使用仓内相对路径；绝对路径、越界或不可读路径必须 fail closed
+- 缺省状态必须视为 `availability: absent` / `target_release.result: not_applicable`，不得生成 `bootstrap-v0.1.0`、空 release 或示例 release truth
 - target release object 必须与 Loom distribution version authority 分离；不得把 installer version、plugin version、runtime version、schema version 或 `VERSION` 回写成 target release truth
 - target release object 可以消费 `Phase` / `FR` / `Work Item` / `PR` / `merge commit` locator，但不得让 target release 直接成为执行入口
 - `status_locator` 若缺失，Loom 仍应从 authored target release object 与 delivery chain 派生自己的 target release status summary

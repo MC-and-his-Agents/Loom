@@ -4354,6 +4354,15 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
             ".loom/reviews/**",
             ".loom/specs/**",
         )
+        default_release_paths = (
+            ".loom/companion/releases/changelog.md",
+            ".loom/companion/releases/release-notes.md",
+            ".loom/companion/releases/migration-notes.md",
+            ".loom/companion/releases/rollback.md",
+            ".loom/companion/releases/catalog.json",
+            ".loom/companion/releases/current.json",
+            ".loom/companion/releases/status.json",
+        )
 
         def matches_forbidden(path: str, pattern: str) -> bool:
             if pattern.endswith("/**"):
@@ -4368,6 +4377,50 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                 if matches_forbidden(path, pattern):
                     return pattern
             return None
+
+        def assert_no_default_release_target(target: Path, payload: dict[str, object], context: str) -> None:
+            planned = payload.get("planned_writes")
+            planned_paths = {item.get("path") for item in planned if isinstance(item, dict)} if isinstance(planned, list) else set()
+            initial = payload.get("initial_artifacts")
+            initial_paths = {item.get("path") for item in initial if isinstance(item, dict)} if isinstance(initial, list) else set()
+            absent = payload.get("intentionally_absent")
+            absent_paths = {item.get("path") for item in absent if isinstance(item, dict)} if isinstance(absent, list) else set()
+            serialized = json.dumps(payload, ensure_ascii=False)
+            for release_path in default_release_paths:
+                if release_path in planned_paths:
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` must not plan default release target `{release_path}`"))
+                if release_path in initial_paths:
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` must not declare default release target `{release_path}`"))
+                if (target / release_path).exists():
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` must not generate default release target `{release_path}`"))
+            if ".loom/companion/releases/**" not in absent_paths:
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` must mark release targets intentionally absent by default"))
+            if "bootstrap-v0.1.0" in serialized:
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` must not mention placeholder release id `bootstrap-v0.1.0`"))
+            repo_interface_path = target / ".loom/companion/repo-interface.json"
+            if repo_interface_path.exists():
+                repo_interface = json.loads(repo_interface_path.read_text(encoding="utf-8"))
+                if "release_targets" in repo_interface:
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` repo-interface must not declare release_targets without release target intent"))
+            surface = build_governance_surface(target)
+            repo_interface_surface = surface.get("repo_interface") if isinstance(surface, dict) else None
+            release_targets = repo_interface_surface.get("release_targets") if isinstance(repo_interface_surface, dict) else None
+            require_release_targets_surface_payload(
+                failures,
+                category="deep-existing-bootstrap",
+                context=f"`{context}` absent release targets",
+                payload=release_targets,
+            )
+            target_release = release_targets.get("target_release") if isinstance(release_targets, dict) else None
+            if not isinstance(release_targets, dict) or release_targets.get("availability") != "absent":
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` must report release_targets availability absent by default"))
+            if not isinstance(target_release, dict) or target_release.get("result") != "not_applicable":
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` must report target_release not_applicable when release targets are absent"))
+            if isinstance(release_targets, dict):
+                for surface_key in ("catalog", "current_target", "status"):
+                    surface_entry = release_targets.get(surface_key)
+                    if isinstance(surface_entry, dict) and surface_entry.get("status") == "present":
+                        failures.append(Failure("deep-existing-bootstrap", f"`{context}` must not report absent release target `{surface_key}` as present"))
 
         deep_target = tmp_root / "deep-existing"
         write_repo(deep_target, validation_entry=True, pr_template=True, workflow_doc=True)
@@ -4415,6 +4468,7 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                 failures.append(Failure("deep-existing-bootstrap", "`deep-existing dry-run` must report detected repository mode"))
             if not isinstance(write, dict) or write.get("enabled") is not False:
                 failures.append(Failure("deep-existing-bootstrap", "`deep-existing dry-run` must keep write.enabled = false"))
+            assert_no_default_release_target(deep_target, deep_dry_payload, "deep-existing dry-run")
 
         deep_payload, deep_error = load_command_json(
             root,
@@ -4474,6 +4528,7 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                 host_truth = repo_interface.get("host_truth_locators")
                 if not isinstance(host_truth, dict) or set(host_truth.keys()) != {"work_item", "project_status", "review", "closeout"}:
                     failures.append(Failure("deep-existing-bootstrap", "`deep-existing bootstrap` repo-interface must declare attach-only host truth locators"))
+            assert_no_default_release_target(deep_target, deep_payload, "deep-existing bootstrap")
 
         poisoned_files_target = tmp_root / "deep-existing-poison-files"
         if deep_target.exists() and (deep_target / ".loom/bin/loom_init.py").exists():
@@ -4617,6 +4672,7 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                     failures.append(Failure("deep-existing-bootstrap", f"`explicit execution-control bootstrap sample` must generate `{required}`"))
                 if required not in planned_paths or required not in initial_paths:
                     failures.append(Failure("deep-existing-bootstrap", f"`explicit execution-control bootstrap sample` must declare `{required}` in planned_writes and initial_artifacts"))
+            assert_no_default_release_target(explicit_full_target, explicit_payload, "explicit execution-control bootstrap sample")
 
         light_target = tmp_root / "light-governance"
         write_small_existing_repo(light_target)
@@ -4679,6 +4735,7 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
             ):
                 if forbidden in planned_paths or (light_target / forbidden).exists():
                     failures.append(Failure("deep-existing-bootstrap", f"`light-governance bootstrap sample` must not generate `{forbidden}`"))
+            assert_no_default_release_target(light_target, light_payload, "light-governance bootstrap sample")
             readme_text = (light_target / ".loom/README.md").read_text(encoding="utf-8") if (light_target / ".loom/README.md").exists() else ""
             if ".loom/specs" in readme_text or "Spec suite" in readme_text:
                 failures.append(Failure("deep-existing-bootstrap", "`light-governance bootstrap sample` must not declare a spec suite in `.loom/README.md`"))

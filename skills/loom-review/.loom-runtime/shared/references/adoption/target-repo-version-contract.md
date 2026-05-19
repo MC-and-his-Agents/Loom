@@ -63,7 +63,7 @@ Loom 读取 target release truth 后，应派生 `loom-target-release-status/v1`
 
 ## 4. `repo companion` 挂接方式
 
-目标仓库通过 `.loom/companion/repo-interface.json` `v2.release_targets` 挂接这一能力。
+目标仓库通过 `.loom/companion/repo-interface.json` `v2.release_targets` 挂接这一能力。默认 adoption 必须省略该 section；没有 release target intent 的仓库应被读取为 `release_targets.availability = absent` 与 `target_release.result = not_applicable`，而不是由 Loom 生成占位 release truth。
 
 最小字段：
 
@@ -78,6 +78,8 @@ Loom 读取 target release truth 后，应派生 `loom-target-release-status/v1`
 - `current_target_locator` 指向当前 active target release object
 - `status_locator` 若存在，只能是 repo-owned derived status，不替代 Loom 自己的状态面
 - `enforcement` 只允许 `blocking | advisory`
+
+Loom 不得为了满足 schema 而生成 `bootstrap-v0.1.0`、空 catalog、示例 current release 或示例 status。声明 `release_targets` 时，locator 指向的对象必须来自目标仓库明确选择的 repo-owned 或 host-owned release/version truth。
 
 ## 5. closeout 语义
 

@@ -67,6 +67,8 @@ zero-friction adoption 固定按 `read -> judge -> write -> verify` 关闭。
 
 当 `adoption_intent = light-governance` 时，dry-run / write 必须保持 lightweight retrofit 的最小治理边界：允许 repo companion、bootstrap metadata、review guidance、轻量 review placeholder 与 PR 模板；不得生成、声明或保留 Loom-owned `.loom/work-items/**`、`.loom/progress/**`、`.loom/status/current.md` 或 `.loom/specs/**`。如果目标仓库需要这些执行控制载体，必须显式升级到 `execution-control`。
 
+默认 adoption 不得生成 `.loom/companion/releases/**` 或在 repo interface 中声明 `release_targets`。没有显式 release target intent 时，release target surface 必须是 intentionally absent；verify 必须接受 `release_targets.availability = absent` 与 `target_release.result = not_applicable`。一旦声明 release target，locator 指向的对象必须是目标仓库自己的 repo-owned / host-owned truth，不能是 `bootstrap-v0.1.0` 或其他示例文本。
+
 ## 3. Decision Prompt Fields
 
 decision prompt 至少包含：
