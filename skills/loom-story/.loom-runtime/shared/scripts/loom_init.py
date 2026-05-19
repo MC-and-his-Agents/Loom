@@ -46,6 +46,55 @@ SCAFFOLD_PROFILES = (
     "execution-control",
     "strong-governance",
 )
+ATTACH_ONLY_FORBIDDEN_AUTHORED_CARRIERS = (
+    {
+        "path": ".loom/work-items/**",
+        "reason": "attach-only preserves host-owned work item truth",
+        "remediation": "migrate the item to a host truth locator, delete the competing Loom carrier, or rerun with --intent execution-control",
+    },
+    {
+        "path": ".loom/progress/**",
+        "reason": "attach-only preserves host-owned recovery/progress truth",
+        "remediation": "migrate recovery state to a host truth locator, delete the competing Loom carrier, or rerun with --intent execution-control",
+    },
+    {
+        "path": ".loom/status/current.md",
+        "reason": "attach-only preserves host-owned project status truth",
+        "remediation": "migrate status to a host truth locator, delete the competing Loom carrier, or rerun with --intent execution-control",
+    },
+    {
+        "path": ".loom/reviews/**",
+        "reason": "attach-only preserves host-owned PR review or guardian truth",
+        "remediation": "migrate review truth to a host truth locator, delete the competing Loom carrier, or rerun with --intent execution-control",
+    },
+    {
+        "path": ".loom/specs/**",
+        "reason": "attach-only does not author Loom spec truth unless the repo explicitly upgrades intent",
+        "remediation": "migrate spec truth to a host locator, delete the competing Loom carrier, or rerun with --intent execution-control",
+    },
+)
+ATTACH_ONLY_HOST_TRUTH_LOCATORS = {
+    "work_item": {
+        "host_surface": "github_issue",
+        "locator": "repo-owned issue tracker",
+        "mode": "host_truth_locator",
+    },
+    "project_status": {
+        "host_surface": "github_project",
+        "locator": "repo-owned project board or status system",
+        "mode": "host_truth_locator",
+    },
+    "review": {
+        "host_surface": "pull_request_review_or_guardian",
+        "locator": "repo-owned PR review, guardian, or review gate",
+        "mode": "host_truth_locator",
+    },
+    "closeout": {
+        "host_surface": "pull_request_metadata_and_issue_state",
+        "locator": "repo-owned PR metadata plus issue state",
+        "mode": "host_truth_locator",
+    },
+}
 
 RUNTIME_ARTIFACT_SOURCES = {
     ".loom/bin/loom_init.py": RUNTIME_SOURCE,
@@ -751,6 +800,160 @@ def profile_writes_artifacts(profile: str) -> bool:
     return profile not in {"observe-only", "skill-install-only"}
 
 
+def forbidden_authored_carriers(profile: str) -> list[dict[str, str]]:
+    if profile != "attach-only":
+        return []
+    return [dict(carrier) for carrier in ATTACH_ONLY_FORBIDDEN_AUTHORED_CARRIERS]
+
+
+def required_carriers_for_profile(artifacts: list[dict[str, str]], profile: str) -> list[dict[str, str]]:
+    if profile in {"observe-only", "skill-install-only"}:
+        return []
+    return [
+        {
+            "path": artifact["path"],
+            "kind": artifact["kind"],
+            "owner": write_owner_for_path(artifact["path"]),
+        }
+        for artifact in artifacts
+        if isinstance(artifact.get("path"), str) and isinstance(artifact.get("kind"), str)
+    ]
+
+
+def normalize_relative_path(raw_path: object) -> str | None:
+    if not isinstance(raw_path, str) or not raw_path:
+        return None
+    normalized = raw_path.replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    if normalized.startswith("/") or normalized.startswith("../") or "/../" in normalized:
+        return None
+    return normalized
+
+
+def matches_forbidden_authored_carrier(relative_path: str, pattern: str) -> bool:
+    if pattern.endswith("/**"):
+        prefix = pattern[:-3]
+        return relative_path == prefix or relative_path.startswith(prefix + "/")
+    return relative_path == pattern
+
+
+def forbidden_authored_carrier_for_path(relative_path: str) -> dict[str, str] | None:
+    for carrier in ATTACH_ONLY_FORBIDDEN_AUTHORED_CARRIERS:
+        pattern = carrier["path"]
+        if matches_forbidden_authored_carrier(relative_path, pattern):
+            return carrier
+    return None
+
+
+def collect_forbidden_authored_carrier_declarations(result: dict[str, object]) -> list[dict[str, str]]:
+    declarations: list[dict[str, str]] = []
+
+    def add(raw_path: object, source: str) -> None:
+        relative = normalize_relative_path(raw_path)
+        if relative is None:
+            return
+        carrier = forbidden_authored_carrier_for_path(relative)
+        if carrier is not None:
+            declarations.append({"path": relative, "pattern": carrier["path"], "source": source})
+
+    for key in ("initial_artifacts", "planned_writes"):
+        entries = result.get(key)
+        if isinstance(entries, list):
+            for entry in entries:
+                if isinstance(entry, dict):
+                    add(entry.get("path"), key)
+    work_items = result.get("initial_work_items")
+    if isinstance(work_items, list):
+        for work_item in work_items:
+            if not isinstance(work_item, dict):
+                continue
+            artifacts = work_item.get("artifacts")
+            if isinstance(artifacts, list):
+                for artifact in artifacts:
+                    add(artifact, "initial_work_items.artifacts")
+    write = result.get("write")
+    if isinstance(write, dict):
+        touched = write.get("touched")
+        if isinstance(touched, list):
+            for path in touched:
+                add(path, "write.touched")
+    return declarations
+
+
+def collect_forbidden_authored_carrier_files(target_root: Path) -> list[dict[str, str]]:
+    found: list[dict[str, str]] = []
+    for carrier in ATTACH_ONLY_FORBIDDEN_AUTHORED_CARRIERS:
+        pattern = carrier["path"]
+        if pattern.endswith("/**"):
+            prefix = pattern[:-3]
+            base = target_root / prefix
+            if not base.exists():
+                continue
+            if base.is_file():
+                found.append({"path": prefix, "pattern": pattern, "source": "filesystem"})
+                continue
+            for path in sorted(candidate for candidate in base.rglob("*") if candidate.is_file()):
+                found.append(
+                    {
+                        "path": path.relative_to(target_root).as_posix(),
+                        "pattern": pattern,
+                        "source": "filesystem",
+                    }
+                )
+            continue
+        exact = target_root / pattern
+        if exact.exists():
+            found.append({"path": pattern, "pattern": pattern, "source": "filesystem"})
+    return found
+
+
+def collect_forbidden_manifest_declarations(target_root: Path) -> list[dict[str, str]]:
+    manifest_path = target_root / ".loom/bootstrap/manifest.json"
+    if not manifest_path.exists():
+        return []
+    try:
+        manifest = read_json(manifest_path)
+    except json.JSONDecodeError:
+        return []
+    artifacts = manifest.get("artifacts")
+    declarations: list[dict[str, str]] = []
+    if not isinstance(artifacts, list):
+        return declarations
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        relative = normalize_relative_path(artifact.get("path"))
+        if relative is None:
+            continue
+        carrier = forbidden_authored_carrier_for_path(relative)
+        if carrier is not None:
+            declarations.append({"path": relative, "pattern": carrier["path"], "source": "manifest.artifacts"})
+    return declarations
+
+
+def attach_only_forbidden_carrier_errors(target_root: Path, result: dict[str, object]) -> list[str]:
+    findings = (
+        collect_forbidden_authored_carrier_declarations(result)
+        + collect_forbidden_manifest_declarations(target_root)
+        + collect_forbidden_authored_carrier_files(target_root)
+    )
+    errors: list[str] = []
+    seen: set[tuple[str, str, str]] = set()
+    for finding in findings:
+        key = (finding["source"], finding["path"], finding["pattern"])
+        if key in seen:
+            continue
+        seen.add(key)
+        errors.append(
+            "attach-only forbidden authored carrier detected in "
+            f"{finding['source']}: `{finding['path']}` matches `{finding['pattern']}`; "
+            "this would create a second truth chain. Migrate it to the host truth locator, delete it, "
+            "or explicitly rerun bootstrap with `--intent execution-control`."
+        )
+    return errors
+
+
 def adoption_intent_payload(adoption_path: str, intake: dict[str, object]) -> dict[str, object]:
     requested = str(intake.get("adoption_intent", UNSPECIFIED_ADOPTION_INTENT))
     source = str(intake.get("adoption_intent_source", "unspecified"))
@@ -1170,6 +1373,7 @@ def intentionally_absent_targets(adoption_path: str, profile: str) -> list[dict[
             {"path": ".loom/work-items/**", "reason": "attach-only preserves host-owned work item truth"},
             {"path": ".loom/progress/**", "reason": "attach-only preserves host-owned recovery truth"},
             {"path": ".loom/status/current.md", "reason": "attach-only does not author Loom status truth"},
+            {"path": ".loom/reviews/**", "reason": "attach-only preserves host-owned review truth"},
             {"path": ".loom/specs/**", "reason": "attach-only does not author Loom execution specs"},
         ]
     if adoption_path == "defer":
@@ -1235,6 +1439,7 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
         bootstrap_mode=True,
         scenario_override=scenario,
     )
+    initial_artifact_list = initial_artifacts(target_root, install_pr_template, adoption_path, profile)
     result = {
         "schema_version": "loom-init-output/v1",
         "generator": {
@@ -1322,7 +1527,7 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
                 },
             }
         ),
-        "initial_artifacts": initial_artifacts(target_root, install_pr_template, adoption_path, profile),
+        "initial_artifacts": initial_artifact_list,
         "initial_work_items": initial_work_items(scenario, target_root, adoption_path, install_pr_template, profile),
         "validation_and_closing": {
             "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
@@ -1346,7 +1551,7 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
                 ]
             ),
             "clean_state": (
-                "all generated attach-only Loom artifacts are readable, verified, and do not introduce Loom-owned recovery/status placeholders"
+                "all generated attach-only Loom artifacts are readable, verified, and do not introduce Loom-authored work/progress/status/review/spec truth carriers"
                 if attach_only
                 else "all generated light-governance artifacts are readable, verified, and do not introduce Loom-owned work/progress/status carriers"
                 if profile == "light-governance"
@@ -1356,7 +1561,7 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
                 [
                     "the target repo has a readable root rule entry and attached repo companion entry",
                     "the attach-only bootstrap metadata and repo-local validation path are verifiable",
-                    "the bootstrap manifest does not declare Loom-owned recovery/status carriers for this path",
+                    "the bootstrap manifest, init-result, planned writes, and filesystem do not expose forbidden Loom-authored truth carriers",
                 ]
                 if attach_only
                 else [
@@ -1386,7 +1591,13 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
     }
     result["adoption_intent"] = adoption_intent_payload(adoption_path, intake)
     result["planned_writes"] = planned
+    result["required_carriers"] = required_carriers_for_profile(initial_artifact_list, profile)
     result["intentionally_absent"] = intentionally_absent_targets(adoption_path, profile)
+    result["forbidden_authored_carriers"] = forbidden_authored_carriers(profile)
+    scaffold_profile = result.get("scaffold_profile")
+    if isinstance(scaffold_profile, dict):
+        scaffold_profile["required_carriers"] = result["required_carriers"]
+        scaffold_profile["forbidden_authored_carriers"] = result["forbidden_authored_carriers"]
     result["upgrade_triggers"] = upgrade_triggers(deferred if isinstance(deferred, list) else [], profile)
     result["risk_summary"] = risk_summary(adoption_path, intake, planned)
     return result
@@ -1626,8 +1837,8 @@ def companion_manifest_payload() -> dict[str, object]:
     }
 
 
-def repo_interface_payload() -> dict[str, object]:
-    return {
+def repo_interface_payload(profile_name: str = "execution-control") -> dict[str, object]:
+    payload: dict[str, object] = {
         "schema_version": "loom-repo-interface/v2",
         "companion_entry": ".loom/companion/README.md",
         "repo_specific_requirements": {"review": [], "merge_ready": [], "closeout": []},
@@ -1648,6 +1859,9 @@ def repo_interface_payload() -> dict[str, object]:
             "status_locator": ".loom/companion/releases/status.json",
         },
     }
+    if profile_name == "attach-only":
+        payload["host_truth_locators"] = ATTACH_ONLY_HOST_TRUTH_LOCATORS
+    return payload
 
 
 def repo_interop_payload() -> dict[str, object]:
@@ -1924,6 +2138,10 @@ def scaffold_target(
     profile_name = str(profile.get("name")) if isinstance(profile, dict) else "execution-control"
     writes_light_loop = profile_name in {"light-governance", "execution-control", "strong-governance"}
     writes_work_item_carriers = profile_has_work_item_carriers(profile_name)
+    if profile_name == "attach-only":
+        forbidden_errors = attach_only_forbidden_carrier_errors(target_root, result)
+        if forbidden_errors:
+            raise RuntimeError("; ".join(forbidden_errors))
 
     writes: list[tuple[Path, str | dict[str, object], str]] = [
         (target_root / ".loom/README.md", render_loom_readme(result), "text"),
@@ -1933,7 +2151,7 @@ def scaffold_target(
         (target_root / ".loom/bootstrap/capability-map.md", render_capability_map(result), "text"),
         (target_root / ".loom/companion/README.md", render_companion_readme(result), "text"),
         (target_root / ".loom/companion/manifest.json", companion_manifest_payload(), "json"),
-        (target_root / ".loom/companion/repo-interface.json", repo_interface_payload(), "json"),
+        (target_root / ".loom/companion/repo-interface.json", repo_interface_payload(profile_name), "json"),
         (target_root / ".loom/companion/interop.json", repo_interop_payload(), "json"),
         (target_root / ".loom/companion/checkpoints.md", render_companion_checkpoints(), "text"),
         (target_root / ".loom/companion/review.md", render_companion_review(), "text"),
@@ -2118,7 +2336,9 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
             "adoption_intent",
             "detected_repository_mode",
             "risk_summary",
+            "required_carriers",
             "planned_writes",
+            "forbidden_authored_carriers",
             "deferred_capabilities",
             "upgrade_triggers",
             "fact_chain",
@@ -2188,6 +2408,12 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
             for forbidden in (".loom/work-items/INIT-0001.md", ".loom/progress/INIT-0001.md", ".loom/status/current.md"):
                 if forbidden in declared_generated:
                     errors.append(f"deep-existing-repo bootstrap must not declare generated carrier `{forbidden}`")
+            forbidden_profile = result.get("forbidden_authored_carriers")
+            if not isinstance(forbidden_profile, list) or {
+                str(item.get("path")) for item in forbidden_profile if isinstance(item, dict)
+            } != {carrier["path"] for carrier in ATTACH_ONLY_FORBIDDEN_AUTHORED_CARRIERS}:
+                errors.append("attach-only init-result must declare the full `forbidden_authored_carriers` profile list")
+            errors.extend(attach_only_forbidden_carrier_errors(target_root, result))
         if profile_name == "light-governance":
             declared_generated = {
                 artifact.get("path")

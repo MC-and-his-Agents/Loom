@@ -1,0 +1,24 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-784",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "The implementation keeps #784 scoped to attach-only host truth protection: it exposes required and forbidden carriers in bootstrap output, declares locator-only host truth surfaces in repo-interface, blocks forbidden carrier declarations and filesystem state during attach-only verify/write, preserves execution-control authored carriers, updates the relevant adoption contracts, and regenerates the checked-in skill surfaces from source.",
+  "reviewer": "codex",
+  "reviewed_head": "d2cf8ae5c20ced3e8397b296dd271b61a2424bbe",
+  "reviewed_validation_summary": "py_compile -> OK; source attach-only dry-run/write/verify fixture -> OK; source poison verify fixture -> OK; skills surface check -> OK; generated attach-only dry-run/write/verify fixture -> OK; generated poison verify fixture -> OK; make skills-check -> OK; make loom-check -> OK.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "Do not handle placeholder release target truth until #780.",
+    "Do not handle blanket .loom gitignore or stable carrier Git visibility until #781/#782.",
+    "Continue the milestone with #779 after #784 is merged or explicitly blocked."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-784.md",
+    "recovery_entry": ".loom/progress/WI-784.md",
+    "status_surface": ".loom/status/current.md",
+    "spec_review": ".loom/reviews/WI-784.spec.json"
+  }
+}

@@ -155,7 +155,7 @@
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "dbb335ffe4e59d544276393ed9440507db1e5ed750d75370767c52448b6fd3d3"
+      "sha256": "07367e836e2c8540a20843e8c4893b113e2f2bb96fbf7dc3dc6302a839ccd05d"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
@@ -167,7 +167,7 @@
       "path": ".loom/bin/governance_surface.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/governance_surface.py",
-      "sha256": "bd4ba5a3dd0fa02fec634af94479e0290c1beaa8802002d93b60830192d4ae0e"
+      "sha256": "0883eae091112beb2516e486ca5b8a3bf514326731a1fdce486c41d716a40ebd"
     },
     {
       "path": ".loom/bin/loom_flow.py",
@@ -197,7 +197,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "e00a54e0381d01f4ec3ae3ea5ce2e50262e82676250e0cb8d3c50e25f3489422"
+      "sha256": "d6f7cec925a964fdab329d7b65ff41a4053b82bfa6fcf35f5f2ecb839eb0b33c"
     },
     {
       "path": ".loom/reviews/INIT-0001.json",

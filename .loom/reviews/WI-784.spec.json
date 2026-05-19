@@ -1,0 +1,22 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-784",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "The WI-784 spec is scoped to attach-only host truth protection: it requires an explicit forbidden carrier contract, dry-run visibility, fail-closed verify checks across declarations and filesystem state, host truth locators in repo-interface, and execution-control regression coverage while deferring later milestone issues.",
+  "reviewer": "codex",
+  "reviewed_head": "d2cf8ae5c20ced3e8397b296dd271b61a2424bbe",
+  "reviewed_validation_summary": "Spec reviewed before final carrier refresh; implementation validation is recorded in the general review.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "Continue with #779-#782 and #776-#777 only after #784 is merged or explicitly blocked."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-784.md",
+    "spec": ".loom/specs/WI-784/spec.md",
+    "plan": ".loom/specs/WI-784/plan.md",
+    "implementation_contract": ".loom/specs/WI-784/implementation-contract.md"
+  }
+}

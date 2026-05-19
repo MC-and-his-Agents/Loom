@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-778
-- Goal: Define scaffold profiles for adoption intents
-- Scope: Add a stable profile mapping for adoption intents and make dry-run, write, verify, initial artifacts, deferred capabilities, and upgrade triggers consume the same profile boundary
+- Item ID: WI-784
+- Goal: Protect attach-only adoption from competing Loom-authored truth carriers
+- Scope: Define attach-only forbidden authored carriers, declare host truth locators, and make bootstrap verify fail closed when forbidden carriers are generated, declared, planned, or already present
 - Execution Path: adoption/bootstrap
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-778.md
-- Review Entry: .loom/reviews/WI-778.json
-- Validation Entry: make skills-check; python3 tools/loom_check.py .
-- Closing Condition: #778 is implemented, validated, reviewed, merged, and issue state reflects the PR
-- Current Checkpoint: merge checkpoint
-- Current Stop: #778 implementation, installer version bump, WI-775 terminal carrier repair, local validation, and refreshed implementation review are ready for PR gate consumption.
-- Next Step: Push PR #787, wait for required checks, merge, close issue #778, then continue with #784.
+- Recovery Entry: .loom/progress/WI-784.md
+- Review Entry: .loom/reviews/WI-784.json
+- Validation Entry: python3 -m py_compile src/skills/shared/scripts/loom_init.py src/skills/shared/scripts/loom_check.py src/skills/shared/scripts/governance_surface.py; python3 tools/skills_surface.py check; make skills-check; make loom-check
+- Closing Condition: #784 is implemented, validated, reviewed, merged, and issue state reflects the PR
+- Current Checkpoint: build checkpoint
+- Current Stop: #784 implementation, generated skills surfaces, targeted attach-only fixtures, and loom-check have passed locally.
+- Next Step: Record implementation review, run adoption verify for WI-784, then prepare PR for issue #784.
 - Blockers: None recorded.
-- Latest Validation Summary: py_compile -> OK; skills surface check -> OK; make skills-check -> OK; adopt verify root -> OK; installer version bump check -> OK; host-binding validate main -> OK; make loom-check -> OK; carrier refresh root -> OK.
-- Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-778.md`.
-- Current Lane: PR #787
+- Latest Validation Summary: py_compile -> OK; source attach-only dry-run/write/verify fixture -> OK; source poison verify fixture -> OK; skills surface check -> OK; generated attach-only dry-run/write/verify fixture -> OK; generated poison verify fixture -> OK; make skills-check -> OK; make loom-check -> OK; adopt verify root -> OK.
+- Recovery Boundary: .loom/work-items/WI-784.md is the active static work item carrier.
+- Current Lane: work/784-attach-only-protection
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-778.md
-- Dynamic Truth: .loom/progress/WI-778.md
+- Static Truth: .loom/work-items/WI-784.md
+- Dynamic Truth: .loom/progress/WI-784.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

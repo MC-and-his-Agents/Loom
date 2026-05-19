@@ -162,6 +162,7 @@
 - `policy_locators`
 - `hook_locators`
 - `release_targets`
+- `host_truth_locators`
 
 稳定约束：
 
@@ -171,8 +172,9 @@
 - `policy_locators` 只在 `v2` 合法
 - `hook_locators` 只在 `v2` 合法
 - `release_targets` 只在 `v2` 合法
+- `host_truth_locators` 只在 `v2` 合法，且只能声明宿主事实源 locator，例如 GitHub Issue、GitHub Project、PR review / guardian、PR metadata 与 issue state
 - `v2` 不改变 `repo_specific_requirements` 与 `specialized_gates` 的既有纪律
-- `v2` 不把 repo runtime state、review summary、validation status 或 retained host action result 写入 `repo-interface.json`
+- `v2` 不把 repo runtime state、progress/current stop、review verdict、review summary、validation status、closeout result 或 retained host action result 写入 `repo-interface.json`
 
 ### 4.3 通用字段纪律
 
