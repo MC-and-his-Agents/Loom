@@ -179,6 +179,20 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
   - 哪个载体承接当前停点、下一步、阻断项与最近验证摘要
 - 只要缺少统一验证入口，或仓库主产物本身是共享 contract、shared skill 或 governance module，就不得继续套用这条轻量路径
 
+### 3.2.1 执行前既有仓库
+
+当仓库已有 `AGENTS.md`、`README.md`、`VISION.md`、`docs/**` 等文档事实源，但尚无代码、CI、测试或统一验证入口时，分类为 `pre-execution-existing`。
+
+该分类必须在输出中拆开说明：
+
+- 文档事实源成熟度
+- 执行面成熟度
+- 治理载体成熟度
+
+`pre-execution-existing` 不直接决定生成强度。默认仍保持 lightweight retrofit / light-governance；只有显式 `adoption_intent = execution-control | strong-governance` 时，才允许进入重执行控制面。
+
+产品或领域文档中的 `CONTRACT_MODEL.md`、`DOMAIN_MODEL.md` 不等同于工程共享 contract、runtime schema 或 shared governance module。
+
 ### 3.3 复杂既有仓库
 
 既有仓库只要不满足轻量条件，或已经出现明显恢复痛点、共享边界风险、现场混杂、review 过载、统一验证入口缺失中的任一高强度信号，就判为 `复杂既有仓库`。

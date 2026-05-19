@@ -9,6 +9,11 @@
   "shared_contract_or_high_risk_boundary": false,
   "purity_or_scope_signals": "clean",
   "merge_review_semantic_overload": false,
+  "maturity": {
+    "document_truth": "partial",
+    "execution_surface": "not_formed",
+    "governance_carriers": "loom_carriers_present"
+  },
   "notes": "autodetected by loom_init.py",
   "adoption_intent": "execution-control",
   "adoption_intent_source": "cli"

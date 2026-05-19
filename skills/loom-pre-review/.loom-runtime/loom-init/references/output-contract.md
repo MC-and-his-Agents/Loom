@@ -59,7 +59,7 @@
 
 至少说明：
 
-- `detected_repository_mode`：静态检测到的仓库模式和 scenario
+- `detected_repository_mode`：静态检测到的仓库模式、scenario 和 maturity summary；`pre-execution-existing` 表示已有文档事实源但执行面尚未成型
 - `risk_summary`：是否会写入重执行控制面、是否保护 repo-owned truth、是否需要显式 intent
 - `gitignore_policy`：目标 `.gitignore` 是否存在 blanket `.loom` ignore、运行态 ignore 是否齐备，以及可审查的 `--repair-gitignore` 修复方案
 - `required_carriers`：本 profile 必须落盘或保持可读的稳定载体

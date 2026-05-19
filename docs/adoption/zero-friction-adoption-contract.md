@@ -47,6 +47,13 @@ zero-friction adoption 固定按 `read -> judge -> write -> verify` 关闭。
 
 - `repository_mode`
   - `new | small-existing | complex-existing | unknown`
+- `scenario_key`
+  - 可包含 `pre-execution-existing`，表示已有 `AGENTS.md`、`README.md`、`VISION.md`、`docs/**` 等文档事实源，但代码、CI、测试或正式执行入口尚未成型
+  - `pre-execution-existing` 是既有仓库的 adoption classification，不把成熟治理重仓从 `complex-existing` 下的 deep-existing attach path 中拆出，也不直接决定生成强度
+- `maturity`
+  - `document_truth`：文档事实源成熟度
+  - `execution_surface`：代码、CI、测试或统一验证入口成熟度
+  - `governance_carriers`：治理载体成熟度
 - `adoption_path`
   - `minimal-bootstrap | lightweight-retrofit | recognize-and-attach | defer`
 - `adoption_intent`

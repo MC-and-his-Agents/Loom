@@ -121,6 +121,25 @@
 - 先做 `recognize-and-attach`
 - 不在第一轮直接写入 Loom-owned recovery/status carriers
 
+### 4.4 `执行前既有仓库`
+
+满足以下条件时，判为 `pre-execution-existing`：
+
+- 属于既有仓库
+- 已有 `AGENTS.md`、`README.md`、`VISION.md`、`docs/**` 等文档事实源
+- 尚未形成代码、CI、基础测试或统一验证入口
+- 治理载体仍停留在 root docs，尚无稳定 Loom 或 repo-native execution carriers
+
+该分类必须拆开报告：
+
+- 文档事实源成熟度
+- 执行面成熟度
+- 治理载体成熟度
+
+`pre-execution-existing` 不直接决定生成强度。默认仍走轻量治理接入；只有显式 `adoption_intent = execution-control | strong-governance` 时，才允许进入重执行控制面。
+
+产品或领域文档中的 `CONTRACT_MODEL.md`、`DOMAIN_MODEL.md` 不等同于工程共享 contract、runtime schema 或 shared governance module，不得仅因这些文件名把仓库提升为复杂执行风险。
+
 ## 5. 冲突处理规则
 
 当信号之间出现冲突时，按以下规则处理：

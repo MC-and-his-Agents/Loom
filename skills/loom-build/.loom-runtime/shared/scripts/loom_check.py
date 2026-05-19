@@ -4347,6 +4347,15 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
             if pr_template:
                 (target / ".github" / "PULL_REQUEST_TEMPLATE.md").write_text("## Summary\n", encoding="utf-8")
 
+        def write_pre_execution_existing_repo(target: Path) -> None:
+            (target / "docs").mkdir(parents=True, exist_ok=True)
+            (target / "README.md").write_text("# Docs First Repo\n", encoding="utf-8")
+            (target / "AGENTS.md").write_text("# Root Rules\n", encoding="utf-8")
+            (target / "VISION.md").write_text("# Product Vision\n", encoding="utf-8")
+            (target / "docs" / "architecture.md").write_text("# Architecture\n", encoding="utf-8")
+            (target / "docs" / "CONTRACT_MODEL.md").write_text("# Product Contract Model\n", encoding="utf-8")
+            (target / "docs" / "DOMAIN_MODEL.md").write_text("# Domain Model\n", encoding="utf-8")
+
         attach_only_forbidden_patterns = (
             ".loom/work-items/**",
             ".loom/progress/**",
@@ -4421,6 +4430,78 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                     surface_entry = release_targets.get(surface_key)
                     if isinstance(surface_entry, dict) and surface_entry.get("status") == "present":
                         failures.append(Failure("deep-existing-bootstrap", f"`{context}` must not report absent release target `{surface_key}` as present"))
+
+        pre_execution_target = tmp_root / "pre-execution-existing"
+        write_pre_execution_existing_repo(pre_execution_target)
+        pre_payload, pre_error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_init.py",
+                "bootstrap",
+                "--target",
+                str(pre_execution_target),
+            ],
+        )
+        if pre_error:
+            failures.append(Failure("pre-execution-existing", f"`pre-execution-existing dry-run` failed: {pre_error}"))
+        else:
+            run = pre_payload.get("run")
+            recommended = pre_payload.get("recommended_adoption")
+            profile = pre_payload.get("scaffold_profile")
+            detected = pre_payload.get("detected_repository_mode")
+            intake = pre_payload.get("intake")
+            maturity = intake.get("maturity") if isinstance(intake, dict) else None
+            risk = pre_payload.get("risk_summary")
+            if not isinstance(run, dict) or run.get("scenario_key") != "pre-execution-existing":
+                failures.append(Failure("pre-execution-existing", "docs-first dry-run must classify as `pre-execution-existing`"))
+            if not isinstance(recommended, dict) or recommended.get("path") == "full-bootstrap":
+                failures.append(Failure("pre-execution-existing", "docs-first dry-run must not default to `full-bootstrap`"))
+            if not isinstance(profile, dict) or profile.get("name") != "light-governance":
+                failures.append(Failure("pre-execution-existing", "docs-first dry-run must keep generation strength on `light-governance` without explicit intent"))
+            if not isinstance(risk, dict) or risk.get("requires_explicit_intent") is not False:
+                failures.append(Failure("pre-execution-existing", "docs-first classification must not require heavy execution intent unless heavy carriers are planned"))
+            if not isinstance(maturity, dict):
+                failures.append(Failure("pre-execution-existing", "docs-first dry-run must report structured maturity signals"))
+            else:
+                if maturity.get("document_truth") != "established":
+                    failures.append(Failure("pre-execution-existing", "docs-first dry-run must report established document truth"))
+                if maturity.get("execution_surface") != "not_formed":
+                    failures.append(Failure("pre-execution-existing", "docs-first dry-run must report execution surface as not formed"))
+                if maturity.get("governance_carriers") != "root_docs_only":
+                    failures.append(Failure("pre-execution-existing", "docs-first dry-run must report governance carriers as root-docs-only"))
+            if isinstance(intake, dict) and intake.get("shared_contract_or_high_risk_boundary") is not False:
+                failures.append(Failure("pre-execution-existing", "domain/product CONTRACT_MODEL and DOMAIN_MODEL docs must not imply shared runtime contract risk"))
+            detected_maturity = detected.get("maturity") if isinstance(detected, dict) else None
+            if not isinstance(detected, dict) or detected.get("scenario_key") != "pre-execution-existing" or detected_maturity != maturity:
+                failures.append(Failure("pre-execution-existing", "detected repository mode must carry the pre-execution scenario and maturity summary"))
+
+        pre_execution_control_target = tmp_root / "pre-execution-execution-control"
+        write_pre_execution_existing_repo(pre_execution_control_target)
+        pre_control_payload, pre_control_error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_init.py",
+                "bootstrap",
+                "--target",
+                str(pre_execution_control_target),
+                "--intent",
+                "execution-control",
+            ],
+        )
+        if pre_control_error:
+            failures.append(Failure("pre-execution-existing", f"`pre-execution execution-control dry-run` failed: {pre_control_error}"))
+        else:
+            run = pre_control_payload.get("run")
+            recommended = pre_control_payload.get("recommended_adoption")
+            profile = pre_control_payload.get("scaffold_profile")
+            if not isinstance(run, dict) or run.get("scenario_key") != "pre-execution-existing":
+                failures.append(Failure("pre-execution-existing", "explicit execution-control dry-run must preserve the pre-execution classification"))
+            if not isinstance(recommended, dict) or recommended.get("path") != "full-bootstrap":
+                failures.append(Failure("pre-execution-existing", "explicit execution-control dry-run may choose `full-bootstrap`"))
+            if not isinstance(profile, dict) or profile.get("name") != "execution-control":
+                failures.append(Failure("pre-execution-existing", "explicit execution-control dry-run must select the execution-control scaffold profile"))
 
         deep_target = tmp_root / "deep-existing"
         write_repo(deep_target, validation_entry=True, pr_template=True, workflow_doc=True)
