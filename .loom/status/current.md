@@ -11,11 +11,11 @@
 - Review Entry: .loom/reviews/WI-776.json
 - Validation Entry: docs-first dry-run fixture; targeted check_deep_existing_repo_bootstrap; python3 tools/skills_surface.py check; make skills-check; make loom-check
 - Closing Condition: #776 is implemented, validated, reviewed, merged, and issue state reflects the PR
-- Current Checkpoint: build
-- Current Stop: #776 implementation is in progress on work/776-pre-execution-existing-classification; intake/classification code, docs, generated skill surfaces, and demo runtime have been updated.
-- Next Step: Record spec/code review, run PR/merge gates, open PR for #776, and merge if host checks pass.
+- Current Checkpoint: merge
+- Current Stop: #776 implementation and review are complete on PR #814; local adoption verify, root verify, shadow parity, skills surface check, installer version bump check, and targeted fixtures pass. Host checks are running before controlled merge.
+- Next Step: Wait for PR #814 host checks, rerun pr-gate and controlled-merge checks against the final head, then squash merge and close out #776.
 - Blockers: None recorded
-- Latest Validation Summary: py_compile passed for changed runtime scripts; docs-first dry-run fixture passed for pre-execution-existing classification and explicit execution-control override; targeted check_deep_existing_repo_bootstrap passed including the new docs-first fixture; python3 tools/skills_surface.py check passed; make loom-demo-new-project passed; make skills-check passed; PYTHONDONTWRITEBYTECODE=1 make loom-check was rerun locally and hung for more than ten minutes inside tools/loom_check.py, then was terminated with no #776 targeted fixture failure observed.
+- Latest Validation Summary: py_compile passed for changed runtime scripts; docs-first dry-run fixture passed for pre-execution-existing classification and explicit execution-control override; targeted check_deep_existing_repo_bootstrap passed including the new docs-first fixture; python3 tools/skills_surface.py generate/check passed; make loom-demo-new-project passed; make skills-check passed; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed after bumping installer 0.1.117 -> 0.1.118; git diff --check passed; python3 tools/loom_init.py verify --target . passed; python3 .loom/bin/loom_flow.py shadow-parity --target . passed; python3 tools/loom_flow.py adopt verify --target . --item WI-776 passed after spec/code review records were added; PYTHONDONTWRITEBYTECODE=1 make loom-check was rerun locally and hung for more than ten minutes inside tools/loom_check.py, then was terminated with no #776 targeted fixture failure observed.
 - Recovery Boundary: .loom/work-items/WI-776.md is the active static work item carrier.
 - Current Lane: work/776-pre-execution-existing-classification
 
