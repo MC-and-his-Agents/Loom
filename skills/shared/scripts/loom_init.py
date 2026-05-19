@@ -1776,7 +1776,225 @@ def risk_summary(adoption_path: str, intake: dict[str, object], planned: list[di
     }
 
 
-def build_result(target_root: Path, scenario: str, intake: dict[str, object], install_pr_template: bool) -> dict[str, object]:
+def signal_default_adoption_intent(scenario: str, intake: dict[str, object]) -> str:
+    signal_intake = dict(intake)
+    signal_intake["adoption_intent"] = UNSPECIFIED_ADOPTION_INTENT
+    signal_intake["adoption_intent_source"] = "unspecified"
+    signal_path = recommended_adoption_path(scenario, signal_intake)
+    return effective_adoption_intent(signal_path, signal_intake)
+
+
+def reasonable_candidate_intents(scenario: str, intake: dict[str, object]) -> list[str]:
+    repository_type = str(intake.get("repository_type", "unknown"))
+    if repository_type != "existing":
+        return ["light-governance", "execution-control"]
+    if scenario == "complex-existing":
+        return ["attach-only", "light-governance", "execution-control"]
+    return ["light-governance", "execution-control"]
+
+
+def existing_governance_signal_entries(target_root: Path, intake: dict[str, object]) -> list[dict[str, str]]:
+    signals: list[dict[str, str]] = []
+    for relative, summary in (
+        ("AGENTS.md", "root agent rules are present"),
+        ("README.md", "repository overview is present"),
+        ("VISION.md", "vision or product direction is present"),
+        ("WORKFLOW.md", "workflow guidance is present"),
+        ("Makefile", "repository validation entry may be present"),
+        (".github/workflows", "GitHub workflow surface is present"),
+        ("docs", "documentation facts are present"),
+    ):
+        if (target_root / relative).exists():
+            signals.append({"summary": summary, "locator": relative})
+    if not signals:
+        signals.append({"summary": "no stable governance signals were detected", "locator": "not_applicable"})
+    maturity = intake.get("maturity")
+    if isinstance(maturity, dict):
+        signals.append(
+            {
+                "summary": (
+                    "maturity: document_truth={document_truth}, execution_surface={execution_surface}, "
+                    "governance_carriers={governance_carriers}"
+                ).format(
+                    document_truth=maturity.get("document_truth", "unknown"),
+                    execution_surface=maturity.get("execution_surface", "unknown"),
+                    governance_carriers=maturity.get("governance_carriers", "unknown"),
+                ),
+                "locator": ".loom/bootstrap/intake.snapshot.json",
+            }
+        )
+    return signals
+
+
+def candidate_intent_options(
+    target_root: Path,
+    scenario: str,
+    intake: dict[str, object],
+    install_pr_template: bool,
+    signal_default: str,
+) -> list[dict[str, object]]:
+    options: list[dict[str, object]] = []
+    for intent in reasonable_candidate_intents(scenario, intake):
+        option_intake = dict(intake)
+        option_intake["adoption_intent"] = intent
+        option_intake["adoption_intent_source"] = "decision_prompt"
+        path = recommended_adoption_path(scenario, option_intake)
+        profile = scaffold_profile_key(path, option_intake)
+        artifacts = initial_artifacts(target_root, install_pr_template, path, profile)
+        planned = planned_write_targets({"initial_artifacts": artifacts}, path)
+        heavy = any(isinstance(item.get("requires_intent"), str) for item in planned)
+        options.append(
+            {
+                "intent": intent,
+                "recommended_default": intent == signal_default,
+                "adoption_path": path,
+                "scaffold_profile": profile,
+                "risk": {
+                    "heavy_execution_control": heavy,
+                    "repo_owned_truth": "preserved" if uses_attach_only_path(path) else ("loom-authored execution carriers" if heavy else "light governance carriers"),
+                },
+                "write_targets": [item.get("path") for item in planned if isinstance(item, dict) and isinstance(item.get("path"), str)],
+                "verification_commands": ["python3 .loom/bin/loom_init.py verify --target ."],
+            }
+        )
+    return options
+
+
+def decision_prompt_payload(
+    target_root: Path,
+    scenario: str,
+    intake: dict[str, object],
+    result: dict[str, object],
+    *,
+    write_intent: str,
+    planned: list[dict[str, object]],
+) -> dict[str, object] | None:
+    requested = str(intake.get("adoption_intent", UNSPECIFIED_ADOPTION_INTENT))
+    source = str(intake.get("adoption_intent_source", "unspecified"))
+    signal_default = signal_default_adoption_intent(scenario, intake)
+    candidates = candidate_intent_options(target_root, scenario, intake, bool(result.get("install_pr_template", False)), signal_default)
+    candidate_intents = {str(item.get("intent")) for item in candidates}
+    heavy_planned = any(isinstance(item.get("requires_intent"), str) for item in planned)
+    repository_type = str(intake.get("repository_type", "unknown"))
+    divergent = requested != UNSPECIFIED_ADOPTION_INTENT and requested != signal_default
+    ambiguous = repository_type == "existing" and len(candidate_intents) > 1
+    needs_prompt = ambiguous or divergent or (requested == UNSPECIFIED_ADOPTION_INTENT and heavy_planned)
+    if not needs_prompt:
+        return None
+
+    validation_entry = intake.get("repository_level_validation_entry")
+    verification_commands = [
+        "python3 .loom/bin/loom_init.py verify --target .",
+        "python3 .loom/bin/loom_flow.py adopt verify --target .",
+    ]
+    planned_paths = [item.get("path") for item in planned if isinstance(item, dict) and isinstance(item.get("path"), str)]
+    prompt = {
+        "schema_version": "loom-adoption-decision-prompt/v1",
+        "target_repository": str(target_root),
+        "adoption_scope": {
+            "scenario_key": scenario,
+            "recommended_adoption_path": result.get("recommended_adoption", {}).get("path") if isinstance(result.get("recommended_adoption"), dict) else None,
+            "scaffold_profile": result.get("scaffold_profile", {}).get("name") if isinstance(result.get("scaffold_profile"), dict) else None,
+        },
+        "write_intent": write_intent,
+        "adoption_intent": {
+            "requested": requested,
+            "source": source,
+            "signal_default": signal_default,
+            "candidate_intents": sorted(candidate_intents),
+            "options": candidates,
+        },
+        "repository_mode_guess": {
+            "repository_type": repository_type,
+            "scenario_key": scenario,
+            "governance_surface_mode": result.get("governance_surface", {}).get("repository_mode") if isinstance(result.get("governance_surface"), dict) else "unknown",
+        },
+        "existing_governance_signals": existing_governance_signal_entries(target_root, intake),
+        "existing_validation_entry": {
+            "status": "present" if validation_entry else "missing",
+            "locator": str(validation_entry) if validation_entry else "not_applicable",
+        },
+        "companion_boundary_intent": {
+            "action": "generate_or_update" if any(str(path).startswith(".loom/companion/") for path in planned_paths) else "preserve",
+            "locator": ".loom/companion/README.md",
+        },
+        "interop_boundary_intent": {
+            "action": "generate_or_update" if ".loom/companion/interop.json" in planned_paths else "preserve",
+            "locator": ".loom/companion/interop.json",
+        },
+        "repo_owned_residue": [
+            {"summary": "root rules and repo-native validation remain repo-owned", "locator": "AGENTS.md"},
+            {"summary": "host actions and review systems are read through companion or interop when present", "locator": ".loom/companion/repo-interface.json"},
+        ],
+        "decision_reason": (
+            "explicit adoption intent diverges from the repository signal default"
+            if divergent
+            else "multiple adoption intents remain reasonable for the detected repository signals"
+            if ambiguous
+            else "heavy execution-control carriers require explicit intent before write"
+        ),
+        "write_targets": planned_paths,
+        "verification_commands": verification_commands,
+        "resume_after_adoption_intent": {
+            "writeback_targets": [".loom/bootstrap/intake.snapshot.json", ".loom/bootstrap/init-result.json"],
+            "command": "rerun loom-init bootstrap with --intent <selected-intent>",
+        },
+        "field_writeback_contract": [
+            {
+                "field": field,
+                "source_locator": "docs/adoption/zero-friction-adoption-contract.md#decision-prompt-fields",
+                "reasoning": "decision prompt fields are structured so adoption can record the operator decision without creating a second truth source",
+                "writeback_target": ".loom/bootstrap/init-result.json",
+                "verification_evidence": "python3 .loom/bin/loom_init.py verify --target .",
+            }
+            for field in (
+                "target_repository",
+                "adoption_scope",
+                "write_intent",
+                "adoption_intent",
+                "repository_mode_guess",
+                "existing_governance_signals",
+                "existing_validation_entry",
+                "companion_boundary_intent",
+                "interop_boundary_intent",
+                "repo_owned_residue",
+                "verification_commands",
+                "resume_after_adoption_intent",
+            )
+        ],
+    }
+    return prompt
+
+
+def adoption_decisions_from_prompt(prompt: dict[str, object]) -> dict[str, object]:
+    intent = prompt.get("adoption_intent")
+    requested = intent.get("requested") if isinstance(intent, dict) else UNSPECIFIED_ADOPTION_INTENT
+    return {
+        "schema_version": "loom-adoption-decisions/v1",
+        "target_maturity": "adoption-intent",
+        "summary": "Bootstrap decision prompt binds adoption intent selection to source locators, write targets, and verification evidence.",
+        "judgments": [
+            {
+                "id": "adoption_intent_selection",
+                "question": "Which adoption intent should this repository use for this bootstrap?",
+                "source_locator": "docs/adoption/zero-friction-adoption-contract.md#decision-prompt-fields",
+                "reasoning": str(prompt.get("decision_reason", "select an adoption intent before writing conflicting carriers")),
+                "write_targets": prompt.get("write_targets", []),
+                "verification_commands": prompt.get("verification_commands", []),
+                "status": "missing" if requested == UNSPECIFIED_ADOPTION_INTENT else "answered",
+            }
+        ],
+    }
+
+
+def build_result(
+    target_root: Path,
+    scenario: str,
+    intake: dict[str, object],
+    install_pr_template: bool,
+    *,
+    write_intent: str = "dry-run",
+) -> dict[str, object]:
     adoption_path = recommended_adoption_path(scenario, intake)
     profile = scaffold_profile_key(adoption_path, intake)
     attach_only = uses_attach_only_path(adoption_path)
@@ -1952,6 +2170,7 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
         "governance_surface": governance_surface,
         "lifecycle_expectations": workspace_lifecycle_expectations(governance_surface.get("workspace_profile")),
         "maturity_upgrade_path": init_maturity_upgrade_path(governance_surface),
+        "install_pr_template": install_pr_template,
     }
     planned = planned_write_targets(result, adoption_path)
     deferred = result["deferred_capabilities"]
@@ -1972,6 +2191,18 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
         scaffold_profile["forbidden_authored_carriers"] = result["forbidden_authored_carriers"]
     result["upgrade_triggers"] = upgrade_triggers(deferred if isinstance(deferred, list) else [], profile)
     result["risk_summary"] = risk_summary(adoption_path, intake, planned)
+    prompt = decision_prompt_payload(
+        target_root,
+        scenario,
+        intake,
+        result,
+        write_intent=write_intent,
+        planned=planned,
+    )
+    if prompt is not None:
+        result["decision_prompt"] = prompt
+        result["adoption_decisions"] = adoption_decisions_from_prompt(prompt)
+    result.pop("install_pr_template", None)
     return result
 
 
@@ -3008,7 +3239,13 @@ def bootstrap(args: argparse.Namespace) -> int:
         print(f"loom-init: {exc}", file=sys.stderr)
         return 2
     scenario = classify_scenario(intake, args.scenario)
-    result = build_result(target_root, scenario, intake, args.install_pr_template)
+    result = build_result(
+        target_root,
+        scenario,
+        intake,
+        args.install_pr_template,
+        write_intent="write" if args.write else "dry-run",
+    )
     try:
         output_path = resolve_output_path(target_root, args.output)
     except RuntimeError as exc:
