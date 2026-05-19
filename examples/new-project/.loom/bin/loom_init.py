@@ -468,6 +468,8 @@ def is_runtime_scratch_path(relative_path: str) -> bool:
 
 
 def stable_carrier_capability(relative_path: str, owner: str | None = None) -> str:
+    if is_runtime_scratch_path(relative_path):
+        return "runtime-residue"
     if relative_path.startswith(".loom/bootstrap/") or relative_path == ".loom/README.md":
         return "bootstrap/root"
     if relative_path.startswith(".loom/bin/"):
@@ -492,7 +494,7 @@ def stable_carrier_entries(target_root: Path, result: dict[str, object]) -> list
         relative = normalize_relative_path(raw_path)
         if relative is None:
             return
-        if not relative.startswith(".loom/") or is_runtime_scratch_path(relative):
+        if not relative.startswith(".loom/"):
             return
         owner = metadata.get("owner") if isinstance(metadata, dict) else None
         owner_value = str(owner) if isinstance(owner, str) and owner else None
@@ -506,6 +508,8 @@ def stable_carrier_entries(target_root: Path, result: dict[str, object]) -> list
             }
             if owner_value:
                 entries[relative]["owner"] = owner_value
+            if is_runtime_scratch_path(relative):
+                entries[relative]["invalid_reason"] = "unexpected_runtime_path"
 
     required_carriers = result.get("required_carriers")
     if isinstance(required_carriers, list) and required_carriers:
@@ -542,6 +546,7 @@ def stable_carrier_git_visibility(target_root: Path, result: dict[str, object]) 
         "ignored": [],
         "missing": [],
         "untracked": [],
+        "unexpected_runtime_paths": [],
         "runtime_exclusions": [*RUNTIME_SCRATCH_PREFIXES, *RUNTIME_SCRATCH_PATTERNS],
         "blocking_errors": [],
     }
@@ -557,6 +562,7 @@ def stable_carrier_git_visibility(target_root: Path, result: dict[str, object]) 
     ignored: list[dict[str, str]] = []
     missing: list[dict[str, str]] = []
     untracked: list[dict[str, str]] = []
+    unexpected_runtime_paths: list[dict[str, str]] = []
     blocking_errors: list[str] = []
 
     for entry in entries:
@@ -564,7 +570,14 @@ def stable_carrier_git_visibility(target_root: Path, result: dict[str, object]) 
         status = "tracked"
         remediation = "no action required"
         path = target_root / relative
-        if not path.exists():
+        if entry.get("invalid_reason") == "unexpected_runtime_path":
+            status = "unexpected_runtime_path"
+            remediation = "remove this runtime scratch path from stable carrier declarations"
+            unexpected_runtime_paths.append({**entry, "reason": status, "remediation": remediation})
+            blocking_errors.append(
+                f"stable Loom carrier points at an unexpected runtime path: {relative}; stable carriers must not live in runtime scratch/cache/tmp/local paths"
+            )
+        elif not path.exists():
             status = "missing"
             remediation = "rerun bootstrap or restore the declared stable carrier"
             missing.append({**entry, "reason": status, "remediation": remediation})
@@ -593,10 +606,11 @@ def stable_carrier_git_visibility(target_root: Path, result: dict[str, object]) 
     report["ignored"] = ignored
     report["missing"] = missing
     report["untracked"] = untracked
+    report["unexpected_runtime_paths"] = unexpected_runtime_paths
     report["blocking_errors"] = blocking_errors
     if blocking_errors:
         report["result"] = "block"
-        report["summary"] = "stable Loom carriers are missing or hidden by Git ignore rules."
+        report["summary"] = "stable Loom carriers are missing, hidden by Git ignore rules, or declared under runtime scratch paths."
     elif untracked:
         report["result"] = "pass"
         report["summary"] = "stable Loom carriers are Git-visible; some still need `git add` before commit."
@@ -612,7 +626,7 @@ def ensure_gitignore_has_runtime_ignores(target_root: Path, *, repair_gitignore:
         raise RuntimeError(
             "blanket .loom gitignore would hide stable Loom carriers; "
             f"found {locations}. Remove the blanket ignore or rerun with --repair-gitignore "
-            "to replace it with .loom/runtime/, .loom/tmp/, and .loom/cache/."
+            "to replace it with runtime-only .loom ignores."
         )
     new_content = repaired_gitignore_content(current)
     if current == new_content:
@@ -2601,7 +2615,7 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
         if gitignore_policy.get("blanket_loom_ignore") is True:
             errors.append(
                 "blanket .loom gitignore hides stable Loom carriers; remove it or run bootstrap with "
-                "--repair-gitignore to keep only .loom/runtime/, .loom/tmp/, and .loom/cache/ ignored"
+                "--repair-gitignore to keep only runtime scratch/cache/tmp/local paths ignored"
             )
         git_visibility = stable_carrier_git_visibility(target_root, result)
         blocking_errors = git_visibility.get("blocking_errors")

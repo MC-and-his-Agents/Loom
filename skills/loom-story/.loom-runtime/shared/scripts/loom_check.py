@@ -4823,6 +4823,40 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                         or ".loom/local/probe.json" in haystack
                     ):
                         failures.append(Failure("deep-existing-bootstrap", "`stable carrier untracked verify sample` must not report runtime scratch paths"))
+            runtime_declared_init_result = json.loads(init_result_path.read_text(encoding="utf-8"))
+            runtime_declared_carriers = runtime_declared_init_result.get("required_carriers")
+            if isinstance(runtime_declared_carriers, list):
+                runtime_declared_carriers.append(
+                    {
+                        "path": ".loom/runtime/probe.json",
+                        "kind": "runtime-probe",
+                        "owner": "loom-runtime",
+                    }
+                )
+                init_result_path.write_text(json.dumps(runtime_declared_init_result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                runtime_declared_payload, runtime_declared_error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        "tools/loom_init.py",
+                        "verify",
+                        "--target",
+                        str(gitignore_repair_target),
+                    ],
+                )
+                if runtime_declared_error:
+                    failures.append(Failure("deep-existing-bootstrap", f"`stable carrier runtime path verify sample` failed to return JSON: {runtime_declared_error}"))
+                else:
+                    runtime_declared_haystack = json.dumps(runtime_declared_payload, ensure_ascii=False)
+                    if (
+                        runtime_declared_payload.get("ok") is not False
+                        or "unexpected runtime path" not in runtime_declared_haystack
+                        or ".loom/runtime/probe.json" not in runtime_declared_haystack
+                    ):
+                        failures.append(Failure("deep-existing-bootstrap", "`stable carrier runtime path verify sample` must fail closed when runtime residue is declared as stable"))
+                if isinstance(required_carriers, list):
+                    init_result["required_carriers"] = required_carriers
+                    init_result_path.write_text(json.dumps(init_result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             run_command(root, ["git", "add", "."], cwd=gitignore_repair_target)
             tracked_payload, tracked_error = load_command_json(
                 root,
