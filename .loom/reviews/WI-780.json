@@ -3,10 +3,10 @@
   "item_id": "WI-780",
   "decision": "allow",
   "kind": "general_review",
-  "summary": "#780 implementation removes default placeholder release target truth, updates docs/source references/generated skills/examples, adds regression checks for absent release surfaces, and preserves explicit repo-owned release target support. No blockers found.",
+  "summary": "#780 implementation removes default placeholder release target truth, updates docs/source references/generated skills/examples, adds regression checks for absent release surfaces, and preserves explicit repo-owned release target support. Final validation passed; no blockers found.",
   "reviewer": "codex",
-  "reviewed_head": "cc4a2609e6dc120365e518b4bdd5bb19ec17178e",
-  "reviewed_validation_summary": "py_compile -> OK; targeted #780 release target fixture -> OK; python3 tools/skills_surface.py check -> OK; make skills-check -> OK; make loom-check currently blocked on WI/review/shadow bookkeeping, not release target behavior.",
+  "reviewed_head": "4065846c7246d2cce1d4afee84efcc6c4b98fce7",
+  "reviewed_validation_summary": "py_compile -> OK; targeted #780 release target fixtures -> OK; example absent surface assertion -> OK; python3 tools/skills_surface.py check -> OK; make skills-check -> OK; root state-check -> pass; root adopt verify -> pass; root shadow-parity -> pass; make loom-check -> OK (36 surfaces).",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -30,7 +30,7 @@
       }
     },
     "engine_adapter": null,
-    "engine_evidence": "Plato subagent local review found no blockers; py_compile pass; targeted release target fixtures pass; skills surface check pass; make skills-check pass; example absence assertion pass",
+    "engine_evidence": "Plato subagent local review found no blockers; py_compile pass; targeted release target fixtures pass; example absent surface assertion pass; skills surface check pass; make skills-check pass; root state-check pass; root adopt verify pass; root shadow-parity pass; make loom-check OK (36 surfaces)",
     "normalized_findings": null
   }
 }
