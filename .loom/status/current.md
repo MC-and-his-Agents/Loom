@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-776
-- Goal: Add a pre-execution existing repository classification for docs-first adoption
-- Scope: Extend Loom intake/classification so repositories with established document truth but no formed execution surface are classified separately from mature complex-existing repos, while keeping generation strength governed by adoption intent.
+- Item ID: WI-777
+- Goal: Emit decision prompts when repository signals and adoption intent diverge
+- Scope: Add a structured decision prompt for ambiguous adoption path choices, keep dry-run explanatory, and fail closed on --write when intent is missing and heavy execution-control carriers would be generated.
 - Execution Path: adoption/bootstrap
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-776.md
-- Review Entry: .loom/reviews/WI-776.json
-- Validation Entry: docs-first dry-run fixture; targeted check_deep_existing_repo_bootstrap; python3 tools/skills_surface.py check; make skills-check; make loom-check
-- Closing Condition: #776 is implemented, validated, reviewed, merged, and issue state reflects the PR
-- Current Checkpoint: merge
-- Current Stop: #776 implementation and review are complete on PR #814; local adoption verify, root verify, shadow parity, skills surface check, installer version bump check, and targeted fixtures pass. Host checks are running before controlled merge.
-- Next Step: Wait for PR #814 host checks, rerun pr-gate and controlled-merge checks against the final head, then squash merge and close out #776.
-- Blockers: None recorded
-- Latest Validation Summary: py_compile passed for changed runtime scripts; docs-first dry-run fixture passed for pre-execution-existing classification and explicit execution-control override; targeted check_deep_existing_repo_bootstrap passed including the new docs-first fixture; python3 tools/skills_surface.py generate/check passed; make loom-demo-new-project passed; make skills-check passed; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed after bumping installer 0.1.117 -> 0.1.118; git diff --check passed; python3 tools/loom_init.py verify --target . passed; python3 .loom/bin/loom_flow.py shadow-parity --target . passed; python3 tools/loom_flow.py adopt verify --target . --item WI-776 passed after spec/code review records were added; PYTHONDONTWRITEBYTECODE=1 make loom-check was rerun locally and hung for more than ten minutes inside tools/loom_check.py, then was terminated with no #776 targeted fixture failure observed.
-- Recovery Boundary: .loom/work-items/WI-776.md is the active static work item carrier.
-- Current Lane: work/776-pre-execution-existing-classification
+- Recovery Entry: .loom/progress/WI-777.md
+- Review Entry: .loom/reviews/WI-777.json
+- Validation Entry: targeted decision-prompt fixtures; python3 tools/skills_surface.py check; make loom-demo-new-project; make skills-check; make loom-check
+- Closing Condition: #777 is implemented, validated, reviewed, merged, and issue state reflects the PR
+- Current Checkpoint: build
+- Current Stop: #777 execution started on work/777-adoption-decision-prompt; work item and formal spec carriers are scaffolded.
+- Next Step: Inspect adoption intent/recommendation assembly, implement decision prompt and fail-closed write behavior, then add targeted fixtures.
+- Blockers: None recorded.
+- Latest Validation Summary: No validation recorded yet.
+- Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-777.md`.
+- Current Lane: work/777-adoption-decision-prompt
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-776.md
-- Dynamic Truth: .loom/progress/WI-776.md
+- Static Truth: .loom/work-items/WI-777.md
+- Dynamic Truth: .loom/progress/WI-777.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
