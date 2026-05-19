@@ -4738,7 +4738,14 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
             gitignore_lines = (gitignore_repair_target / ".gitignore").read_text(encoding="utf-8").splitlines()
             if any(pattern in gitignore_lines for pattern in (".loom/", ".loom/*", ".loom/**", "/.loom/", "/.loom/*", "/.loom/**")):
                 failures.append(Failure("deep-existing-bootstrap", "`blanket .loom gitignore repair sample` must remove blanket .loom ignore"))
-            for runtime_ignore in (".loom/runtime/", ".loom/tmp/", ".loom/cache/"):
+            for runtime_ignore in (
+                ".loom/runtime/",
+                ".loom/tmp/",
+                ".loom/cache/",
+                ".loom/attempts/**/raw-logs/",
+                ".loom/attempts/**/scratch/",
+                ".loom/local/",
+            ):
                 if runtime_ignore not in gitignore_lines:
                     failures.append(Failure("deep-existing-bootstrap", f"`blanket .loom gitignore repair sample` must keep runtime ignore `{runtime_ignore}`"))
             for stable in (
@@ -4760,6 +4767,102 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                 check = run_command(root, ["git", "check-ignore", "-q", runtime_path], cwd=gitignore_repair_target)
                 if check.returncode != 0:
                     failures.append(Failure("deep-existing-bootstrap", f"`blanket .loom gitignore repair sample` must ignore runtime scratch path: {runtime_path}"))
+            for runtime_path in (
+                ".loom/attempts/INIT-0001/raw-logs/probe.log",
+                ".loom/attempts/INIT-0001/scratch/probe.json",
+                ".loom/local/probe.json",
+            ):
+                probe = gitignore_repair_target / runtime_path
+                probe.parent.mkdir(parents=True, exist_ok=True)
+                probe.write_text("{}\n", encoding="utf-8")
+                check = run_command(root, ["git", "check-ignore", "-q", runtime_path], cwd=gitignore_repair_target)
+                if check.returncode != 0:
+                    failures.append(Failure("deep-existing-bootstrap", f"`blanket .loom gitignore repair sample` must ignore runtime residue path: {runtime_path}"))
+            attempt_evidence = gitignore_repair_target / ".loom/attempts/INIT-0001/evidence.json"
+            attempt_evidence.parent.mkdir(parents=True, exist_ok=True)
+            attempt_evidence.write_text("{}\n", encoding="utf-8")
+            init_result_path = gitignore_repair_target / ".loom/bootstrap/init-result.json"
+            init_result = json.loads(init_result_path.read_text(encoding="utf-8"))
+            required_carriers = init_result.get("required_carriers")
+            if isinstance(required_carriers, list):
+                required_carriers.append(
+                    {
+                        "path": ".loom/attempts/INIT-0001/evidence.json",
+                        "kind": "attempt-evidence",
+                        "owner": "loom",
+                    }
+                )
+                init_result_path.write_text(json.dumps(init_result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            untracked_payload, untracked_error = load_command_json(
+                root,
+                [
+                    "python3",
+                    "tools/loom_init.py",
+                    "verify",
+                    "--target",
+                    str(gitignore_repair_target),
+                ],
+            )
+            if untracked_error:
+                failures.append(Failure("deep-existing-bootstrap", f"`stable carrier untracked verify sample` failed to return JSON: {untracked_error}"))
+            else:
+                git_visibility = untracked_payload.get("git_visibility")
+                if untracked_payload.get("ok") is not True or not isinstance(git_visibility, dict):
+                    failures.append(Failure("deep-existing-bootstrap", "`stable carrier untracked verify sample` must pass with git visibility output"))
+                else:
+                    untracked = git_visibility.get("untracked")
+                    haystack = json.dumps(git_visibility, ensure_ascii=False)
+                    if not isinstance(untracked, list) or ".loom/bootstrap/init-result.json" not in haystack or ".loom/attempts/INIT-0001/evidence.json" not in haystack or "git add" not in haystack:
+                        failures.append(Failure("deep-existing-bootstrap", "`stable carrier untracked verify sample` must report carriers needing git add"))
+                    if (
+                        ".loom/runtime/probe.json" in haystack
+                        or ".loom/tmp/probe.json" in haystack
+                        or ".loom/cache/probe.json" in haystack
+                        or ".loom/attempts/INIT-0001/raw-logs/probe.log" in haystack
+                        or ".loom/attempts/INIT-0001/scratch/probe.json" in haystack
+                        or ".loom/local/probe.json" in haystack
+                    ):
+                        failures.append(Failure("deep-existing-bootstrap", "`stable carrier untracked verify sample` must not report runtime scratch paths"))
+            run_command(root, ["git", "add", "."], cwd=gitignore_repair_target)
+            tracked_payload, tracked_error = load_command_json(
+                root,
+                [
+                    "python3",
+                    "tools/loom_init.py",
+                    "verify",
+                    "--target",
+                    str(gitignore_repair_target),
+                ],
+            )
+            if tracked_error:
+                failures.append(Failure("deep-existing-bootstrap", f"`stable carrier tracked verify sample` failed: {tracked_error}"))
+            else:
+                git_visibility = tracked_payload.get("git_visibility")
+                if tracked_payload.get("ok") is not True or not isinstance(git_visibility, dict):
+                    failures.append(Failure("deep-existing-bootstrap", "`stable carrier tracked verify sample` must pass with git visibility output"))
+                elif git_visibility.get("ignored") or git_visibility.get("missing") or git_visibility.get("untracked"):
+                    failures.append(Failure("deep-existing-bootstrap", "`stable carrier tracked verify sample` must have no hidden, missing, or untracked stable carriers"))
+            run_command(root, ["git", "rm", "--cached", "--quiet", ".loom/bootstrap/init-result.json"], cwd=gitignore_repair_target)
+            (gitignore_repair_target / ".gitignore").write_text(
+                (gitignore_repair_target / ".gitignore").read_text(encoding="utf-8") + ".loom/bootstrap/*\n",
+                encoding="utf-8",
+            )
+            ignored_payload, ignored_error = load_command_json(
+                root,
+                [
+                    "python3",
+                    "tools/loom_init.py",
+                    "verify",
+                    "--target",
+                    str(gitignore_repair_target),
+                ],
+            )
+            if ignored_error:
+                failures.append(Failure("deep-existing-bootstrap", f"`stable carrier ignored verify sample` failed to return JSON: {ignored_error}"))
+            else:
+                ignored_haystack = json.dumps(ignored_payload, ensure_ascii=False)
+                if ignored_payload.get("ok") is not False or ".loom/bootstrap/init-result.json" not in ignored_haystack or "ignored by Git" not in ignored_haystack:
+                    failures.append(Failure("deep-existing-bootstrap", "`stable carrier ignored verify sample` must fail closed on a specific stable-carrier ignore rule"))
             (gitignore_repair_target / ".gitignore").write_text(
                 (gitignore_repair_target / ".gitignore").read_text(encoding="utf-8") + ".loom/\n",
                 encoding="utf-8",

@@ -399,7 +399,7 @@
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "abe4ed7650a4f335c5e55c3a1e24e6bcde51f5cce8d3db19209ec70f54a88456"
+      "sha256": "1de92a4b5785b5c08184f65aecd71f70401d79c845b9ddde4785314100e021ee"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
@@ -441,7 +441,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "f28363c21efdb63243ad34117b5f639693d46227bf5458a236fb2d09db2a1fef"
+      "sha256": "7c5fd61532a86cd369fcccc850abe21d12f6dee128571b88d8d70dc72ed1202b"
     },
     {
       "path": ".loom/reviews/INIT-0001.json",
@@ -613,7 +613,10 @@
     "required_runtime_ignores": [
       ".loom/runtime/",
       ".loom/tmp/",
-      ".loom/cache/"
+      ".loom/cache/",
+      ".loom/attempts/**/raw-logs/",
+      ".loom/attempts/**/scratch/",
+      ".loom/local/"
     ],
     "missing_runtime_ignores": [],
     "repair": {

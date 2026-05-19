@@ -1,3 +1,7 @@
 .loom/runtime/
 .loom/tmp/
 .loom/cache/
+
+.loom/attempts/**/raw-logs/
+.loom/attempts/**/scratch/
+.loom/local/

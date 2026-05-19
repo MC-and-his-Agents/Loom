@@ -69,9 +69,11 @@ When verify finds a stable carrier that is ignored, missing, or not visible, it 
 - the concrete path
 - the profile or capability that requires the path
 - the reason: `missing`, `ignored`, `untracked`, or `unexpected runtime path`
-- the suggested action: remove blanket ignore, switch to runtime-only ignores, explicitly upgrade adoption intent, or remove a forbidden authored carrier
+- the suggested action: restore the missing carrier, remove or narrow ignore rules, run `git add <path>`, explicitly upgrade adoption intent, or remove a forbidden authored carrier
 
-Runtime paths such as `.loom/runtime/`, `.loom/tmp/`, and `.loom/cache/` must not be reported as required Git-visible carriers.
+`missing` and `ignored` are blocking errors. `untracked` means the stable carrier is visible to Git but has not entered the index yet; verify must report the path that needs `git add`, but must not make a fresh bootstrap write+verify loop fail for that reason alone.
+
+Runtime paths such as `.loom/runtime/`, `.loom/tmp/`, `.loom/cache/`, `.loom/local/`, `.loom/attempts/**/raw-logs/`, and `.loom/attempts/**/scratch/` must not be reported as required Git-visible carriers. `.loom/attempts/` must not be excluded wholesale; versioned attempt evidence still needs a stable schema and locator before it can be treated as a stable carrier.
 
 ## External runtime migration
 
