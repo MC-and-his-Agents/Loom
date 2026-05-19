@@ -1,0 +1,49 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-779",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "The WI-779 spec matches the implemented lightweight-retrofit boundary: light-governance keeps formal execution carriers absent and verify-enforced, while execution-control retains full work/progress/status/spec carriers.",
+  "reviewer": "codex",
+  "reviewed_head": "ad45dc3aa4ddd8c8cb938063a816d54f7f5de361",
+  "reviewed_validation_summary": "py_compile -> OK; targeted #779 adoption fixture -> OK; python3 tools/skills_surface.py check -> OK; make skills-check -> OK; make loom-check -> OK; installer version bump check -> OK (no bump required).",
+  "fallback_to": null,
+  "findings": [
+    {
+      "id": "compat-follow-up-1",
+      "summary": "Continue with #780 for release target truth placeholder removal.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Projected from compatibility `follow_ups`."
+      }
+    }
+  ],
+  "blocking_issues": [],
+  "follow_ups": [
+    "Continue with #780 for release target truth placeholder removal."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-779.md",
+    "recovery_entry": ".loom/progress/WI-779.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": "loom/default-codex-exec",
+    "engine_evidence": "WI-779 spec files; Galileo subagent review; targeted local validation",
+    "normalized_findings": null
+  }
+}
