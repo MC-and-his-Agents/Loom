@@ -18,7 +18,7 @@
 - 本轮启用能力
 - 当前暂不启用能力与升级触发条件
 - `write_plan`
-  - dry-run / write 判定、write targets、intentionally absent targets 与 ownership
+  - dry-run / write 判定、write targets、intentionally absent targets、`.gitignore` repair policy 与 ownership
 - `generated_companion_boundary`
   - 生成或更新的 `repo companion` locator；不得承载运行态真相
 - `generated_interop_boundary`
@@ -27,7 +27,7 @@
 - 事实链入口
 - 验证入口
 - `verify_closure`
-  - `verify` 与 `fact-chain` 是否能复读落盘结果，缺口是什么
+  - `verify` 与 `fact-chain` 是否能复读落盘结果，稳定 `.loom` carriers 是否未被 blanket ignore 隐藏，缺口是什么
 - `resume_guidance`
   - adoption 后继续执行的入口、下一步或回退 checkpoint
 - 是否已经实际落盘

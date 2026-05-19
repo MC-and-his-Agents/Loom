@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-780
-- Goal: Stop default adoption from generating placeholder release target truth
-- Scope: Remove default bootstrap release target declarations and placeholder release files from loom_init/loom_flow scaffolds, docs, generated skills, examples/new-project, and loom_check fixtures while preserving explicit repo-owned release target support
+- Item ID: WI-781
+- Goal: Prevent adoption from silently hiding stable Loom carriers behind blanket `.loom` gitignore rules
+- Scope: Detect blanket `.loom` ignore patterns, fail closed by default, support explicit repair to runtime-only ignores, document the version-control policy, refresh generated skills and examples, and validate stable carrier Git visibility
 - Execution Path: adoption/bootstrap
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-780.md
-- Review Entry: .loom/reviews/WI-780.json
-- Validation Entry: python3 -m py_compile src/skills/shared/scripts/loom_init.py src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_check.py; targeted #780 release target fixture; python3 tools/skills_surface.py check; make skills-check; make loom-check
-- Closing Condition: #780 is implemented, validated, reviewed, merged, and issue state reflects the PR
+- Recovery Entry: .loom/progress/WI-781.md
+- Review Entry: .loom/reviews/WI-781.json
+- Validation Entry: python3 -m py_compile src/skills/shared/scripts/loom_init.py src/skills/shared/scripts/loom_check.py; targeted gitignore fixture; python3 tools/skills_surface.py check; python3 tools/loom_check.py .; make skills-check; make loom-check
+- Closing Condition: #781 is implemented, validated, reviewed, merged, and issue state reflects the PR
 - Current Checkpoint: merge
-- Current Stop: #780 implementation, reviews, version bump, targeted fixtures, root adoption verify, shadow parity, and make loom-check are complete.
-- Next Step: Push branch update, rerun PR gate and required checks, merge PR #790, and confirm issue #780 closes.
+- Current Stop: #781 implementation, review records, targeted fixtures, generated surface refresh, carrier refresh, and full local validation are complete.
+- Next Step: Commit, push, open PR, merge, and confirm issue #781 closes.
 - Blockers: None recorded.
-- Latest Validation Summary: py_compile -> OK; targeted #780 release target fixtures -> OK; example absent surface assertion -> OK; python3 tools/skills_surface.py check -> OK; make skills-check -> OK; root state-check -> pass; root adopt verify -> pass; root shadow-parity -> pass; make loom-check -> OK (36 surfaces); installer version bump check -> OK (0.1.114 -> 0.1.115).
-- Recovery Boundary: .loom/work-items/WI-780.md is the active static work item carrier.
-- Current Lane: work/780-stop-placeholder-release-target-truth
+- Latest Validation Summary: py_compile -> OK; targeted `.loom/*` block, `/.loom/*` repair, stable Git-visible, runtime ignored, and verify drift fixture -> OK; python3 tools/skills_surface.py check -> OK; python3 tools/loom_check.py . -> OK (36 surfaces); make skills-check -> OK; make loom-check -> OK (36 surfaces); root shadow-parity -> pass; root adopt verify WI-781 -> pass; make check -> OK.
+- Recovery Boundary: .loom/work-items/WI-781.md is the active static work item carrier.
+- Current Lane: work/781-gitignore-loom-carrier-visibility
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-780.md
-- Dynamic Truth: .loom/progress/WI-780.md
+- Static Truth: .loom/work-items/WI-781.md
+- Dynamic Truth: .loom/progress/WI-781.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

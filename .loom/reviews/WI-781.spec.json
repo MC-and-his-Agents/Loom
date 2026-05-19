@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-781",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-781 spec and implementation contract match the final gitignore safety behavior: fail closed on blanket `.loom` rules, repair to runtime/tmp/cache-only ignores, fail verify on later drift, and keep stable carriers Git-visible.",
+  "reviewer": "codex",
+  "reviewed_head": "5e43fa273a2ec2901d9647bbcf13410cf05e53c6",
+  "reviewed_validation_summary": "py_compile -> OK; targeted `.loom/*` block, `/.loom/*` repair, stable Git-visible, runtime ignored, and verify drift fixture -> OK; python3 tools/skills_surface.py check -> OK; python3 tools/loom_check.py . -> OK (36 surfaces); make skills-check -> OK; make loom-check -> OK (36 surfaces); root shadow-parity -> pass; root adopt verify WI-781 -> pass; make check -> OK.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-781.md",
+    "recovery_entry": ".loom/progress/WI-781.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": "Spec and implementation contract cover fail-closed, repair, verify drift, stable carrier visibility, and scratch ignore behavior.",
+    "normalized_findings": null
+  }
+}

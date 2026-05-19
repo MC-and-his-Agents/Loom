@@ -399,7 +399,7 @@
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "52de19c45ed4f0b3d5944a3eab192dee94d74e737a469598b806f230745c3d7b"
+      "sha256": "abe4ed7650a4f335c5e55c3a1e24e6bcde51f5cce8d3db19209ec70f54a88456"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
@@ -441,7 +441,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "f7675be87288a4e88c4fa35a40616577cfb186dae0c752b21cceb776eb609e1b"
+      "sha256": "f28363c21efdb63243ad34117b5f639693d46227bf5458a236fb2d09db2a1fef"
     },
     {
       "path": ".loom/reviews/INIT-0001.json",
@@ -603,6 +603,24 @@
         "status": "pass",
         "summary": "shared references and assets required by the installed runtime are present."
       }
+    }
+  },
+  "gitignore_policy": {
+    "path": ".gitignore",
+    "status": "ok",
+    "blanket_loom_ignore": false,
+    "blanket_entries": [],
+    "required_runtime_ignores": [
+      ".loom/runtime/",
+      ".loom/tmp/",
+      ".loom/cache/"
+    ],
+    "missing_runtime_ignores": [],
+    "repair": {
+      "available": false,
+      "command": "python3 .loom/bin/loom_init.py bootstrap --target . --write --repair-gitignore",
+      "summary": "remove blanket .loom ignore and keep only runtime/cache scratch paths ignored",
+      "unified_diff": ""
     }
   },
   "governance_surface": {

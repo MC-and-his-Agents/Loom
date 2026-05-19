@@ -61,6 +61,7 @@
 
 - `detected_repository_mode`：静态检测到的仓库模式和 scenario
 - `risk_summary`：是否会写入重执行控制面、是否保护 repo-owned truth、是否需要显式 intent
+- `gitignore_policy`：目标 `.gitignore` 是否存在 blanket `.loom` ignore、运行态 ignore 是否齐备，以及可审查的 `--repair-gitignore` 修复方案
 - `required_carriers`：本 profile 必须落盘或保持可读的稳定载体
 - `planned_writes`：dry-run / write 即将落盘的稳定载体集合
 - `forbidden_authored_carriers`：本 profile 明确禁止生成、声明或保留的 Loom-authored truth carrier
@@ -83,6 +84,7 @@
 - 事实链 carrier 如何定位
 - 统一事实链读取入口是什么
 - gate chain 的读取入口是什么
+- 稳定 `.loom` carrier 不得被 blanket `.loom` ignore 隐藏；若写入前发现该风险，必须 fail closed 或显式执行 `.gitignore` 修复
 - `governance_surface` 是什么，并至少稳定给出：
   - `repository_mode`
   - `loom_state`

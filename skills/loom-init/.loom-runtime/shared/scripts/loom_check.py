@@ -4674,6 +4674,113 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                     failures.append(Failure("deep-existing-bootstrap", f"`explicit execution-control bootstrap sample` must declare `{required}` in planned_writes and initial_artifacts"))
             assert_no_default_release_target(explicit_full_target, explicit_payload, "explicit execution-control bootstrap sample")
 
+        gitignore_block_target = tmp_root / "gitignore-block"
+        write_repo(gitignore_block_target, validation_entry=False, pr_template=False, workflow_doc=False)
+        run_command(root, ["git", "init"], cwd=gitignore_block_target)
+        (gitignore_block_target / ".gitignore").write_text(".loom/*\n", encoding="utf-8")
+        blocked_payload, blocked_error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_init.py",
+                "bootstrap",
+                "--target",
+                str(gitignore_block_target),
+                "--intent",
+                "execution-control",
+                "--write",
+                "--force",
+                "--verify",
+                "--install-pr-template",
+            ],
+        )
+        if blocked_error:
+            failures.append(Failure("deep-existing-bootstrap", f"`blanket .loom gitignore block sample` failed to return JSON: {blocked_error}"))
+        else:
+            if blocked_payload.get("result") != "block":
+                failures.append(Failure("deep-existing-bootstrap", "`blanket .loom gitignore block sample` must fail closed"))
+            policy = blocked_payload.get("gitignore_policy")
+            if not isinstance(policy, dict) or policy.get("blanket_loom_ignore") is not True:
+                failures.append(Failure("deep-existing-bootstrap", "`blanket .loom gitignore block sample` must report blanket_loom_ignore"))
+            repair = policy.get("repair") if isinstance(policy, dict) else None
+            if not isinstance(repair, dict) or "--repair-gitignore" not in str(repair.get("command")):
+                failures.append(Failure("deep-existing-bootstrap", "`blanket .loom gitignore block sample` must expose repair guidance"))
+            if (gitignore_block_target / ".loom/README.md").exists():
+                failures.append(Failure("deep-existing-bootstrap", "`blanket .loom gitignore block sample` must not write stable carriers before repair"))
+
+        gitignore_repair_target = tmp_root / "gitignore-repair"
+        write_repo(gitignore_repair_target, validation_entry=False, pr_template=False, workflow_doc=False)
+        run_command(root, ["git", "init"], cwd=gitignore_repair_target)
+        (gitignore_repair_target / ".gitignore").write_text("/.loom/*\n", encoding="utf-8")
+        repair_payload, repair_error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_init.py",
+                "bootstrap",
+                "--target",
+                str(gitignore_repair_target),
+                "--intent",
+                "execution-control",
+                "--write",
+                "--force",
+                "--verify",
+                "--repair-gitignore",
+                "--install-pr-template",
+            ],
+        )
+        if repair_error:
+            failures.append(Failure("deep-existing-bootstrap", f"`blanket .loom gitignore repair sample` failed: {repair_error}"))
+        else:
+            verification = repair_payload.get("verification")
+            if not isinstance(verification, dict) or verification.get("ok") is not True:
+                failures.append(Failure("deep-existing-bootstrap", "`blanket .loom gitignore repair sample` must verify successfully"))
+            gitignore_lines = (gitignore_repair_target / ".gitignore").read_text(encoding="utf-8").splitlines()
+            if any(pattern in gitignore_lines for pattern in (".loom/", ".loom/*", ".loom/**", "/.loom/", "/.loom/*", "/.loom/**")):
+                failures.append(Failure("deep-existing-bootstrap", "`blanket .loom gitignore repair sample` must remove blanket .loom ignore"))
+            for runtime_ignore in (".loom/runtime/", ".loom/tmp/", ".loom/cache/"):
+                if runtime_ignore not in gitignore_lines:
+                    failures.append(Failure("deep-existing-bootstrap", f"`blanket .loom gitignore repair sample` must keep runtime ignore `{runtime_ignore}`"))
+            for stable in (
+                ".loom/README.md",
+                ".loom/bootstrap/init-result.json",
+                ".loom/work-items/INIT-0001.md",
+                ".loom/progress/INIT-0001.md",
+                ".loom/status/current.md",
+                ".loom/reviews/INIT-0001.json",
+                ".loom/specs/INIT-0001/spec.md",
+            ):
+                check = run_command(root, ["git", "check-ignore", "-q", stable], cwd=gitignore_repair_target)
+                if check.returncode == 0:
+                    failures.append(Failure("deep-existing-bootstrap", f"`blanket .loom gitignore repair sample` must leave stable carrier Git-visible: {stable}"))
+            for runtime_path in (".loom/runtime/probe.json", ".loom/tmp/probe.json", ".loom/cache/probe.json"):
+                probe = gitignore_repair_target / runtime_path
+                probe.parent.mkdir(parents=True, exist_ok=True)
+                probe.write_text("{}\n", encoding="utf-8")
+                check = run_command(root, ["git", "check-ignore", "-q", runtime_path], cwd=gitignore_repair_target)
+                if check.returncode != 0:
+                    failures.append(Failure("deep-existing-bootstrap", f"`blanket .loom gitignore repair sample` must ignore runtime scratch path: {runtime_path}"))
+            (gitignore_repair_target / ".gitignore").write_text(
+                (gitignore_repair_target / ".gitignore").read_text(encoding="utf-8") + ".loom/\n",
+                encoding="utf-8",
+            )
+            verify_payload, verify_error = load_command_json(
+                root,
+                [
+                    "python3",
+                    "tools/loom_init.py",
+                    "verify",
+                    "--target",
+                    str(gitignore_repair_target),
+                ],
+            )
+            if verify_error:
+                failures.append(Failure("deep-existing-bootstrap", f"`blanket .loom gitignore verify sample` failed to return JSON: {verify_error}"))
+            else:
+                verify_haystack = json.dumps(verify_payload, ensure_ascii=False)
+                if verify_payload.get("ok") is not False or "blanket .loom gitignore" not in verify_haystack:
+                    failures.append(Failure("deep-existing-bootstrap", "`blanket .loom gitignore verify sample` must fail closed on later blanket ignore drift"))
+
         light_target = tmp_root / "light-governance"
         write_small_existing_repo(light_target)
         light_payload, light_error = load_command_json(
@@ -7933,11 +8040,46 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     failures.append(Failure("daily-execution-cli", f"`installed spec review record allow` failed: {error}"))
                 elif payload.get("result") != "pass":
                     failures.append(Failure("daily-execution-cli", "`installed spec review record allow` must pass"))
+                else:
+                    git_add = run_command(
+                        root,
+                        ["git", "add", ".loom/reviews/INIT-0001.spec.json"],
+                        cwd=positive_target,
+                    )
+                    if git_add.returncode != 0:
+                        detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
+                        failures.append(Failure("daily-execution-cli", f"`installed spec review carrier commit` add failed: {detail}"))
+                    else:
+                        git_commit = run_command(
+                            root,
+                            ["git", "commit", "-m", "author installed spec review carrier for #209"],
+                            cwd=positive_target,
+                        )
+                        if git_commit.returncode != 0:
+                            detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
+                            failures.append(Failure("daily-execution-cli", f"`installed spec review carrier commit` failed: {detail}"))
 
-                spec_plan_path = positive_target / ".loom/specs/INIT-0001/plan.md"
-                spec_plan_text = spec_plan_path.read_text(encoding="utf-8")
+                incomplete_spec_target = tmp_root / "incomplete-spec-review-target"
+                shutil.copytree(positive_target, incomplete_spec_target)
+                spec_plan_path = incomplete_spec_target / ".loom/specs/INIT-0001/plan.md"
                 spec_plan_path.unlink()
-                try:
+                incomplete_spec_setup_ok = False
+                git_add = run_command(root, ["git", "add", ".loom/specs/INIT-0001/plan.md"], cwd=incomplete_spec_target)
+                if git_add.returncode != 0:
+                    detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
+                    failures.append(Failure("daily-execution-cli", f"`installed incomplete spec review setup` add failed: {detail}"))
+                else:
+                    git_commit = run_command(
+                        root,
+                        ["git", "commit", "-m", "remove plan for incomplete spec fixture"],
+                        cwd=incomplete_spec_target,
+                    )
+                    if git_commit.returncode != 0:
+                        detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
+                        failures.append(Failure("daily-execution-cli", f"`installed incomplete spec review setup` commit failed: {detail}"))
+                    else:
+                        incomplete_spec_setup_ok = True
+                if incomplete_spec_setup_ok:
                     payload, error = load_command_json(
                         root,
                         [
@@ -7946,7 +8088,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                             "review",
                             "record",
                             "--target",
-                            str(positive_target),
+                            str(incomplete_spec_target),
                             "--item",
                             "INIT-0001",
                             "--review-file",
@@ -7967,8 +8109,6 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         failures.append(Failure("daily-execution-cli", "`installed incomplete spec review record` must block"))
                     elif not any("plan.md" in str(item) for item in payload.get("missing_inputs", [])):
                         failures.append(Failure("daily-execution-cli", "`installed incomplete spec review record` must name the missing plan.md"))
-                finally:
-                    spec_plan_path.write_text(spec_plan_text, encoding="utf-8")
 
                 payload, error = load_command_json(
                     root,
