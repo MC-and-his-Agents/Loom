@@ -3,9 +3,9 @@
   "item_id": "WI-779",
   "decision": "allow",
   "kind": "general_review",
-  "summary": "#779 aligns lightweight-retrofit behavior and docs: light-governance avoids Loom-owned work item/progress/status/spec carriers, verify fails closed on forbidden light carriers, execution-control still generates and declares full carriers, generated skill surfaces were refreshed from source, and Galileo's four consistency findings were fixed.",
+  "summary": "#779 aligns lightweight-retrofit behavior and docs: light-governance avoids Loom-owned work item/progress/status/spec carriers, verify fails closed on forbidden light carriers, execution-control still generates and declares full carriers, generated skill surfaces were refreshed from source, Galileo's four consistency findings were fixed, and the installer package version was bumped for the adoption behavior change.",
   "reviewer": "codex",
-  "reviewed_head": "fbf625700a1cd6dcb32a04af378e225a24cd0717",
+  "reviewed_head": "a12c8d7944911990b470e8b611b966d4537a4e33",
   "reviewed_validation_summary": "py_compile -> OK; targeted #779 adoption fixture -> OK; python3 tools/skills_surface.py check -> OK; make skills-check -> OK; make loom-check -> OK; installer version bump check -> OK (0.1.113 -> 0.1.114); spec review -> allow; general review -> allow.",
   "fallback_to": null,
   "findings": [
@@ -43,7 +43,7 @@
       }
     },
     "engine_adapter": "loom/default-codex-exec",
-    "engine_evidence": "Galileo subagent review; targeted local validation; make skills-check; make loom-check; installer version bump check; PR gate drift repair",
+    "engine_evidence": "Galileo subagent review; targeted local validation; make skills-check; make loom-check; installer version bump check; state-check; adopt verify; shadow-parity",
     "normalized_findings": null
   }
 }
