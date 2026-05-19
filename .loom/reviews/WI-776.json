@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-776",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-776 implementation adds the pre-execution-existing scenario for docs-first existing repos without creating a fourth repository_mode, preserves lightweight-retrofit/light-governance as the default generation strength, keeps explicit execution-control eligible for full-bootstrap, avoids treating root/docs CONTRACT_MODEL or DOMAIN_MODEL files as shared-risk by themselves, updates source and generated skill surfaces, and fixes the review finding where user-facing docs still described only three scenarios.",
+  "reviewer": "codex",
+  "reviewed_head": "d3723ba2e4b40014708a397eb924e908e80f0a5a",
+  "reviewed_validation_summary": "py_compile passed for changed runtime scripts; docs-first dry-run fixture passed for pre-execution-existing classification and explicit execution-control override; targeted check_deep_existing_repo_bootstrap passed including the new docs-first fixture; python3 tools/skills_surface.py check passed; make loom-demo-new-project passed; make skills-check passed; PYTHONDONTWRITEBYTECODE=1 make loom-check was rerun locally and hung for more than ten minutes inside tools/loom_check.py, then was terminated with no #776 targeted fixture failure observed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-776.md",
+    "recovery_entry": ".loom/progress/WI-776.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
