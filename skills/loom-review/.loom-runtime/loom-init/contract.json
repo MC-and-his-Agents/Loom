@@ -23,6 +23,7 @@
       "shared_contract_or_high_risk_boundary",
       "purity_or_scope_signals",
       "merge_review_semantic_overload",
+      "maturity",
       "adoption_intent"
     ]
   },

@@ -155,6 +155,18 @@ CODE_DIR_HINTS = (
     "pkg",
 )
 
+DOC_FACT_SOURCE_HINTS = (
+    "AGENTS.md",
+    "README.md",
+    "VISION.md",
+    "docs",
+)
+
+DOMAIN_FACT_MODEL_FILES = {
+    "contract_model.md",
+    "domain_model.md",
+}
+
 GENERATED_ROOT_ENTRY = (
     "# Loom Root Entry\n\n"
     "This repository was initialized with Loom bootstrap artifacts.\n\n"
@@ -271,7 +283,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     bootstrap.add_argument(
         "--scenario",
         default="auto",
-        choices=("auto", "new", "small-existing", "complex-existing"),
+        choices=("auto", "new", "pre-execution-existing", "small-existing", "complex-existing"),
         help="Override scenario detection",
     )
     bootstrap.add_argument("--intake", help="Optional intake JSON file")
@@ -822,6 +834,58 @@ def detect_primary_gap(root: Path, root_boundary_docs: str, validation_entry: bo
     return "execution-support"
 
 
+def has_code_surface(root: Path) -> bool:
+    return any((root / hint).exists() and not is_generated_path(root, root / hint) for hint in CODE_DIR_HINTS)
+
+
+def detect_document_truth_maturity(root: Path, root_boundary_docs: str) -> str:
+    present = [hint for hint in DOC_FACT_SOURCE_HINTS if file_exists(root, hint)]
+    if root_boundary_docs == "clear" and len(present) >= 2:
+        return "established"
+    if root_boundary_docs in {"clear", "partial"} or present:
+        return "partial"
+    return "absent"
+
+
+def detect_execution_surface_maturity(root: Path, ci_or_basic_tests: bool, validation_entry: bool) -> str:
+    has_code = has_code_surface(root)
+    if has_code and ci_or_basic_tests and validation_entry:
+        return "formed"
+    if has_code or ci_or_basic_tests or validation_entry:
+        return "partial"
+    return "not_formed"
+
+
+def detect_governance_carrier_maturity(root: Path, root_boundary_docs: str) -> str:
+    if any(file_exists(root, path) for path in (".loom/status/current.md", ".loom/work-items", ".loom/progress")):
+        return "loom_carriers_present"
+    if any(file_exists(root, path) for path in (".github/PULL_REQUEST_TEMPLATE.md", "WORKFLOW.md", "docs/WORKFLOW.md")):
+        return "repo_governance_present"
+    if root_boundary_docs in {"clear", "partial"}:
+        return "root_docs_only"
+    return "absent"
+
+
+def maturity_payload(root: Path, root_boundary_docs: str, ci_or_basic_tests: bool, validation_entry: bool) -> dict[str, str]:
+    return {
+        "document_truth": detect_document_truth_maturity(root, root_boundary_docs),
+        "execution_surface": detect_execution_surface_maturity(root, ci_or_basic_tests, validation_entry),
+        "governance_carriers": detect_governance_carrier_maturity(root, root_boundary_docs),
+    }
+
+
+def is_pre_execution_existing_intake(intake: dict[str, object]) -> bool:
+    maturity = intake.get("maturity")
+    if not isinstance(maturity, dict):
+        return False
+    return (
+        intake.get("repository_type") == "existing"
+        and maturity.get("document_truth") in {"partial", "established"}
+        and maturity.get("execution_surface") == "not_formed"
+        and maturity.get("governance_carriers") in {"root_docs_only", "absent"}
+    )
+
+
 def detect_recovery_pain(root: Path) -> bool:
     markers = (
         ".loom/progress",
@@ -849,6 +913,9 @@ def detect_shared_or_high_risk(root: Path) -> bool:
         if is_generated_path(root, path):
             continue
         lowered = path.name.lower()
+        relative_parts = path.relative_to(root).parts
+        if lowered in DOMAIN_FACT_MODEL_FILES and (len(relative_parts) == 1 or relative_parts[0] == "docs"):
+            continue
         if any(hint in lowered for hint in hints):
             return True
     return False
@@ -895,7 +962,7 @@ def detect_merge_review_overload(root: Path, validation_entry: bool) -> bool:
 def detect_repository_type(root: Path) -> str:
     meaningful_entries = count_meaningful_entries(root)
     has_readme = file_exists(root, "README.md")
-    has_code = any((root / hint).exists() and not is_generated_path(root, root / hint) for hint in CODE_DIR_HINTS)
+    has_code = has_code_surface(root)
     if meaningful_entries <= 2 and not has_readme and not has_code:
         return "new"
     return "existing"
@@ -936,18 +1003,20 @@ def load_or_detect_intake(root: Path, intake_path: str | None, cli_intent: str |
 
     repository_type = detect_repository_type(root)
     root_boundary_docs = detect_root_boundary(root)
+    ci_or_basic_tests = detect_ci_or_tests(root)
     validation_entry = detect_validation_entry(root)
     payload = {
         "schema_version": "loom-init-intake/v1",
         "repository_type": repository_type,
         "root_boundary_docs": root_boundary_docs,
-        "ci_or_basic_tests": detect_ci_or_tests(root),
+        "ci_or_basic_tests": ci_or_basic_tests,
         "repository_level_validation_entry": validation_entry,
         "primary_gap_category": detect_primary_gap(root, root_boundary_docs, validation_entry),
         "long_running_recovery_pain": detect_recovery_pain(root),
         "shared_contract_or_high_risk_boundary": detect_shared_or_high_risk(root),
         "purity_or_scope_signals": detect_purity(root),
         "merge_review_semantic_overload": detect_merge_review_overload(root, validation_entry),
+        "maturity": maturity_payload(root, root_boundary_docs, ci_or_basic_tests, validation_entry),
         "notes": "autodetected by loom_init.py",
     }
     return apply_adoption_intent(payload, cli_intent)
@@ -969,6 +1038,8 @@ def classify_scenario(intake: dict[str, object], override: str) -> str:
 
     if repository_type == "new":
         return "new"
+    if is_pre_execution_existing_intake(intake):
+        return "pre-execution-existing"
     if (
         root_boundary_docs == "clear"
         and ci_or_basic_tests
@@ -986,13 +1057,14 @@ def classify_scenario(intake: dict[str, object], override: str) -> str:
 def scenario_label(scenario: str) -> str:
     return {
         "new": "新项目",
+        "pre-execution-existing": "执行前既有仓库",
         "small-existing": "小型既有仓库",
         "complex-existing": "复杂既有仓库",
     }[scenario]
 
 
 def intensity_label(scenario: str, intake: dict[str, object]) -> str:
-    if scenario in {"new", "small-existing"}:
+    if scenario in {"new", "pre-execution-existing", "small-existing"}:
         return "轻量"
     if bool(intake["shared_contract_or_high_risk_boundary"]) or bool(intake["long_running_recovery_pain"]):
         return "强化"
@@ -1004,7 +1076,7 @@ def integration_mode(scenario: str) -> str:
 
 
 def recovery_mode(scenario: str) -> str:
-    return "checkpoint-lite" if scenario in {"new", "small-existing"} else "standard"
+    return "checkpoint-lite" if scenario in {"new", "pre-execution-existing", "small-existing"} else "standard"
 
 
 def recommended_adoption_path(scenario: str, intake: dict[str, object]) -> str:
@@ -1022,7 +1094,7 @@ def recommended_adoption_path(scenario: str, intake: dict[str, object]) -> str:
 
     if scenario == "new":
         return "minimal-bootstrap"
-    if scenario == "small-existing":
+    if scenario in {"pre-execution-existing", "small-existing"}:
         return "lightweight-retrofit"
     if (
         intake.get("repository_type") == "existing"
@@ -1273,10 +1345,10 @@ def rule_refs_for_capabilities(scenario: str, adoption_path: str) -> list[dict[s
                 ],
             }
         )
-    elif scenario == "small-existing":
+    elif scenario in {"pre-execution-existing", "small-existing"}:
         common.append(
             {
-                "name": "lightweight-retrofit",
+                "name": "pre-execution-existing" if scenario == "pre-execution-existing" else "lightweight-retrofit",
                 "rules": [
                     "skills/shared/references/adoption/lightweight-retrofit-default.md",
                     "skills/shared/references/adoption/routing-and-checkpoints.md",
@@ -1344,11 +1416,11 @@ def deferred_capabilities(scenario: str, adoption_path: str, profile: str) -> li
                 "upgrade_trigger": "multiple contributors or repeated merge reviews begin to consume the same facts",
             },
         ]
-    if scenario == "small-existing":
+    if scenario in {"pre-execution-existing", "small-existing"}:
         return [
             {
                 "name": "standard-recovery",
-                "reason": "the repo still fits checkpoint-lite for low-cost recovery",
+                "reason": "the repo still fits checkpoint-lite for low-cost recovery before execution-control intent is explicit",
                 "upgrade_trigger": "recovery spans multiple rounds or more than one status carrier starts competing",
             },
             {
@@ -1712,6 +1784,7 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
     has_work_item_carriers = profile_has_work_item_carriers(profile)
     main_problem = {
         "new": "the repository has no controlled Loom entry yet",
+        "pre-execution-existing": "the repo has established document truth but no formed execution surface yet",
         "small-existing": "the repo has a baseline but still lacks a stable Loom adoption entry and explicit first artifacts",
         "complex-existing": (
             "the repo already has a mature governance stack, so Loom must attach to the existing root rules and retained host actions"
@@ -1722,6 +1795,7 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
 
     reason = {
         "new": "the repo is still establishing its first baseline, so the bootstrap should create the smallest stable entry and first artifacts",
+        "pre-execution-existing": "the repo already has product or architecture facts, so Loom should preserve those facts and add only a lightweight governance loop until execution intent is explicit",
         "small-existing": "the repo already has a baseline, so Loom should enter through companion artifacts instead of rewriting the root",
         "complex-existing": (
             "the repo already has stable root rules and validation entry, so Loom should recognize and attach instead of materializing replacement recovery and status carriers"
@@ -1885,6 +1959,7 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
         "repository_type": intake.get("repository_type"),
         "scenario_key": scenario,
         "governance_surface_mode": governance_surface.get("repository_mode"),
+        "maturity": intake.get("maturity"),
     }
     result["adoption_intent"] = adoption_intent_payload(adoption_path, intake)
     result["planned_writes"] = planned

@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-776",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-776 spec and implementation contract match the conservative adoption boundary: docs/spec/architecture-first existing repositories get a pre-execution-existing scenario, generation strength stays governed by adoption intent, mature complex-existing governance is not promoted into a new repository mode, explicit execution-control remains available, and the user-facing skill/output docs now enumerate the fourth scenario.",
+  "reviewer": "codex",
+  "reviewed_head": "2dffd14c5f92531ef0778afc4efba0371b86a3ab",
+  "reviewed_validation_summary": "py_compile passed for changed runtime scripts; docs-first dry-run fixture passed for pre-execution-existing classification and explicit execution-control override; targeted check_deep_existing_repo_bootstrap passed including the new docs-first fixture; python3 tools/skills_surface.py check passed; make loom-demo-new-project passed; make skills-check passed; PYTHONDONTWRITEBYTECODE=1 make loom-check was rerun locally and hung for more than ten minutes inside tools/loom_check.py, then was terminated with no #776 targeted fixture failure observed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-776.md",
+    "recovery_entry": ".loom/progress/WI-776.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
