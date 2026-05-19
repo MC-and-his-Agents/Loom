@@ -13,8 +13,8 @@
 - Closing Condition: #782 is implemented, validated, reviewed, merged, and issue state reflects the PR
 - Current Checkpoint: build
 - Current Stop: #782 implementation and follow-up review fixes are committed on work/782-verify-stable-carriers-git-visible; review records and PR closeout remain.
-- Next Step: Record fresh code review, rerun adopt verify/root checks that are not blocked by the known loom-check shadow-parity hang, then push PR and merge #782.
-- Blockers: make loom-check hung after the demo bootstrap while running tools/loom_check.py repo-interop shadow-parity hash-drift fixture; targeted deep-existing bootstrap fixture, make skills-check, and demo bootstrap passed.
+- Next Step: Record fresh spec and code review records, run adopt verify, then push PR and merge #782 if host checks pass.
+- Blockers: No #782 implementation blockers recorded; full make loom-check hang is retained as a validation caveat in Latest Validation Summary.
 - Latest Validation Summary: py_compile passed for changed runtime scripts; python3 tools/skills_surface.py check passed; make loom-demo-new-project passed; make skills-check passed; targeted check_deep_existing_repo_bootstrap passed including runtime-as-stable fail-closed fixture; root loom_init verify and shadow-parity passed before the follow-up fix; make loom-check was attempted after the follow-up fix and hung in repo-interop shadow-parity hash-drift fixture, not in the #782 stable-carrier fixture.
 - Recovery Boundary: .loom/work-items/WI-782.md is the active static work item carrier.
 - Current Lane: work/782-verify-stable-carriers-git-visible
