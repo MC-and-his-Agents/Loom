@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import hashlib
 import json
 import os
@@ -27,6 +28,17 @@ GOVERNANCE_RUNTIME_SOURCE = "skills/shared/scripts/governance_surface.py"
 TOOL_VERSION = "1.3.0"
 CONTRACT_VERSION = "1.3.0"
 WORK_ITEM_ID = "INIT-0001"
+RUNTIME_GITIGNORE_LINES = (".loom/runtime/", ".loom/tmp/", ".loom/cache/")
+BLANKET_LOOM_GITIGNORE_PATTERNS = {
+    ".loom",
+    ".loom/",
+    ".loom/*",
+    ".loom/**",
+    "/.loom",
+    "/.loom/",
+    "/.loom/*",
+    "/.loom/**",
+}
 SHADOW_PARITY_SURFACES = ("admission", "review", "merge_ready", "closeout")
 ADOPTION_INTENTS = (
     "observe-only",
@@ -263,6 +275,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     bootstrap.add_argument("--verify", action="store_true", help="Verify written artifacts after scaffolding")
     bootstrap.add_argument("--force", action="store_true", help="Overwrite Loom-managed artifacts when needed")
     bootstrap.add_argument(
+        "--repair-gitignore",
+        action="store_true",
+        help="Replace a blanket .loom gitignore with runtime/cache-only .loom ignore rules during write",
+    )
+    bootstrap.add_argument(
         "--portable-output",
         action="store_true",
         help="Normalize machine-local paths and branch names in written bootstrap metadata",
@@ -339,18 +356,87 @@ def write_json(path: Path, payload: object, force: bool) -> bool:
     return write_text(path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n", force=force)
 
 
-def ensure_gitignore_has_loom(target_root: Path) -> bool:
+def active_gitignore_pattern(line: str) -> str | None:
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#") or stripped.startswith("!"):
+        return None
+    return stripped
+
+
+def blanket_loom_gitignore_entries(content: str) -> list[dict[str, object]]:
+    entries: list[dict[str, object]] = []
+    for index, line in enumerate(content.splitlines(), start=1):
+        pattern = active_gitignore_pattern(line)
+        if pattern in BLANKET_LOOM_GITIGNORE_PATTERNS:
+            entries.append({"line": index, "pattern": pattern})
+    return entries
+
+
+def repaired_gitignore_content(content: str) -> str:
+    kept_lines = [
+        line
+        for line in content.splitlines()
+        if active_gitignore_pattern(line) not in BLANKET_LOOM_GITIGNORE_PATTERNS
+    ]
+    existing_patterns = {
+        pattern
+        for line in kept_lines
+        if (pattern := active_gitignore_pattern(line)) is not None
+    }
+    missing_runtime_lines = [line for line in RUNTIME_GITIGNORE_LINES if line not in existing_patterns]
+    if missing_runtime_lines and kept_lines and kept_lines[-1].strip():
+        kept_lines.append("")
+    kept_lines.extend(missing_runtime_lines)
+    return "\n".join(kept_lines).rstrip() + "\n"
+
+
+def gitignore_policy_payload(target_root: Path) -> dict[str, object]:
     gitignore = target_root / ".gitignore"
-    desired_line = ".loom/"
-    if gitignore.exists():
-        current = gitignore.read_text(encoding="utf-8")
-        lines = current.splitlines()
-        if desired_line in lines:
-            return False
-        new_content = current if current.endswith("\n") or not current else current + "\n"
-        new_content += desired_line + "\n"
-    else:
-        new_content = desired_line + "\n"
+    current = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
+    blanket_entries = blanket_loom_gitignore_entries(current)
+    repaired = repaired_gitignore_content(current)
+    existing_patterns = {
+        pattern
+        for line in current.splitlines()
+        if (pattern := active_gitignore_pattern(line)) is not None
+    }
+    return {
+        "path": ".gitignore",
+        "status": "requires_repair" if blanket_entries else "ok",
+        "blanket_loom_ignore": bool(blanket_entries),
+        "blanket_entries": blanket_entries,
+        "required_runtime_ignores": list(RUNTIME_GITIGNORE_LINES),
+        "missing_runtime_ignores": [line for line in RUNTIME_GITIGNORE_LINES if line not in existing_patterns],
+        "repair": {
+            "available": bool(blanket_entries),
+            "command": "python3 .loom/bin/loom_init.py bootstrap --target . --write --repair-gitignore",
+            "summary": "remove blanket .loom ignore and keep only runtime/cache scratch paths ignored",
+            "unified_diff": "".join(
+                difflib.unified_diff(
+                    current.splitlines(keepends=True),
+                    repaired.splitlines(keepends=True),
+                    fromfile=".gitignore",
+                    tofile=".gitignore",
+                )
+            ),
+        },
+    }
+
+
+def ensure_gitignore_has_runtime_ignores(target_root: Path, *, repair_gitignore: bool) -> bool:
+    gitignore = target_root / ".gitignore"
+    current = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
+    blanket_entries = blanket_loom_gitignore_entries(current)
+    if blanket_entries and not repair_gitignore:
+        locations = ", ".join(f"line {entry['line']}: {entry['pattern']}" for entry in blanket_entries)
+        raise RuntimeError(
+            "blanket .loom gitignore would hide stable Loom carriers; "
+            f"found {locations}. Remove the blanket ignore or rerun with --repair-gitignore "
+            "to replace it with .loom/runtime/, .loom/tmp/, and .loom/cache/."
+        )
+    new_content = repaired_gitignore_content(current)
+    if current == new_content:
+        return False
     gitignore.write_text(new_content, encoding="utf-8")
     return True
 
@@ -1594,6 +1680,7 @@ def build_result(target_root: Path, scenario: str, intake: dict[str, object], in
             ),
         },
         "runtime_state": runtime_state_payload(target_root),
+        "gitignore_policy": gitignore_policy_payload(target_root),
         "governance_surface": governance_surface,
         "lifecycle_expectations": workspace_lifecycle_expectations(governance_surface.get("workspace_profile")),
         "maturity_upgrade_path": init_maturity_upgrade_path(governance_surface),
@@ -2161,6 +2248,7 @@ def scaffold_target(
     output_path: Path,
     force: bool,
     install_pr_template: bool,
+    repair_gitignore: bool,
 ) -> tuple[int, list[str]]:
     written = 0
     touched: list[str] = []
@@ -2173,6 +2261,10 @@ def scaffold_target(
         forbidden_errors = attach_only_forbidden_carrier_errors(target_root, result)
         if forbidden_errors:
             raise RuntimeError("; ".join(forbidden_errors))
+    if ensure_gitignore_has_runtime_ignores(target_root, repair_gitignore=repair_gitignore):
+        written += 1
+        touched.append(".gitignore")
+    result["gitignore_policy"] = gitignore_policy_payload(target_root)
 
     writes: list[tuple[Path, str | dict[str, object], str]] = [
         (target_root / ".loom/README.md", render_loom_readme(result), "text"),
@@ -2262,10 +2354,6 @@ def scaffold_target(
             written += 1
             touched.append(str(root_agents.relative_to(target_root)))
 
-    if ensure_gitignore_has_loom(target_root):
-        written += 1
-        touched.append(".gitignore")
-
     return written, touched
 
 
@@ -2323,11 +2411,18 @@ def verify_target(target_root: Path, output_path: Path) -> list[str]:
             "initial_artifacts",
             "initial_work_items",
             "runtime_state",
+            "gitignore_policy",
             "maturity_upgrade_path",
             "validation_and_closing",
         ):
             if key not in result:
                 errors.append(f"init-result is missing required section: {key}")
+        gitignore_policy = gitignore_policy_payload(target_root)
+        if gitignore_policy.get("blanket_loom_ignore") is True:
+            errors.append(
+                "blanket .loom gitignore hides stable Loom carriers; remove it or run bootstrap with "
+                "--repair-gitignore to keep only .loom/runtime/, .loom/tmp/, and .loom/cache/ ignored"
+            )
         initial_artifacts = result.get("initial_artifacts")
         if isinstance(initial_artifacts, list):
             for artifact in initial_artifacts:
@@ -2657,6 +2752,18 @@ def bootstrap(args: argparse.Namespace) -> int:
             result["write"] = {"enabled": False, "written_files": 0, "touched": []}
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 2
+        gitignore_policy = gitignore_policy_payload(target_root)
+        if gitignore_policy.get("blanket_loom_ignore") is True and not args.repair_gitignore:
+            result["gitignore_policy"] = gitignore_policy
+            result["result"] = "block"
+            result["summary"] = "bootstrap write would hide stable Loom carriers behind a blanket .loom gitignore."
+            result["missing_inputs"] = [
+                "remove blanket .loom gitignore or rerun bootstrap with --repair-gitignore",
+            ]
+            result["fallback_to"] = "gitignore_repair"
+            result["write"] = {"enabled": False, "written_files": 0, "touched": []}
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 2
         try:
             scaffold_result = portable_bootstrap_result(result, target_root) if args.portable_output else result
             written, touched = scaffold_target(
@@ -2665,6 +2772,7 @@ def bootstrap(args: argparse.Namespace) -> int:
                 output_path=output_path,
                 force=args.force,
                 install_pr_template=args.install_pr_template,
+                repair_gitignore=args.repair_gitignore,
             )
         except RuntimeError as exc:
             print(f"loom-init: {exc}", file=sys.stderr)

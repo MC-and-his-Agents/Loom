@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-781",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "#781 implementation blocks blanket `.loom` gitignore patterns by default, supports explicit repair to runtime/tmp/cache ignores, documents the stable carrier visibility policy, refreshes generated skills and examples from source, and adds regression coverage for block, repair, Git visibility, runtime scratch ignores, and standalone verify drift.",
+  "reviewer": "codex",
+  "reviewed_head": "1524e95640973d3e7c38b34014d27f18a0285818",
+  "reviewed_validation_summary": "py_compile -> OK; targeted `.loom/*` block, `/.loom/*` repair, stable Git-visible, runtime ignored, and verify drift fixture -> OK; python3 tools/skills_surface.py check -> OK; python3 tools/loom_check.py . -> OK (36 surfaces); make skills-check -> OK; make loom-check -> OK (36 surfaces); root shadow-parity -> pass; root adopt verify WI-781 -> pass; make check -> OK; installer version bump prepared 0.1.115 -> 0.1.116; WI-780 recovery carrier marked merged to clear workspace active-item conflict.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-781.md",
+    "recovery_entry": ".loom/progress/WI-781.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": "P1/P2 subagent findings addressed by adding .loom/* and /.loom/* detection plus standalone verify drift fixture; no remaining review blockers identified.",
+    "normalized_findings": null
+  }
+}
