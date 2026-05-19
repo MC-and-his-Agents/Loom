@@ -11,11 +11,11 @@
 - Review Entry: .loom/reviews/WI-782.json
 - Validation Entry: targeted stable carrier Git visibility fixture; python3 tools/skills_surface.py check; make skills-check; make loom-check
 - Closing Condition: #782 is implemented, validated, reviewed, merged, and issue state reflects the PR
-- Current Checkpoint: merge
-- Current Stop: #782 is ready for host PR and merge gates on work/782-verify-stable-carriers-git-visible; implementation, review, and focused validation evidence are recorded.
-- Next Step: Push the branch, open the #782 PR, wait for required host checks, run Loom PR/controlled-merge gates, then merge and close #782 if checks pass.
+- Current Checkpoint: merged
+- Current Stop: #782 completed: PR #813 merged into main at fd81394bc367e425c7c559e789bd8a5c16732e35, issue #782 closed, and parent #774 reconciled closed after #781/#782/#783 closed.
+- Next Step: Continue adoption/install safety milestone with #776 pre-execution existing repository classification.
 - Blockers: None recorded
-- Latest Validation Summary: py_compile passed for changed runtime scripts; python3 tools/skills_surface.py check and generate passed; make loom-demo-new-project passed; make skills-check passed; targeted check_deep_existing_repo_bootstrap passed including runtime-as-stable fail-closed fixture; adopt verify passed; root loom_init verify passed with stable carrier Git visibility evidence; root shadow-parity passed; PYTHONDONTWRITEBYTECODE=1 make loom-check was rerun on current head and hung for more than ten minutes inside tools/loom_check.py, then was terminated, with no #782 stable-carrier fixture failure observed.
+- Latest Validation Summary: #782 local focused validation passed; GitHub required checks for PR #813 passed, including py-compile, demo-bootstrap, repo-local-cli, loom-check, root-self-governance, gate, and loom-pr-merge-gate; pr-gate and controlled-merge passed; closeout check passed for issue #782, PR #813, merge commit fd81394bc367e425c7c559e789bd8a5c16732e35, main, and parent #774 reconciliation.
 - Recovery Boundary: .loom/work-items/WI-782.md is the active static work item carrier.
 - Current Lane: work/782-verify-stable-carriers-git-visible
 
