@@ -404,7 +404,7 @@
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "22a5f5451c38d21fd695f78defec75e3e0438f7a7c31b931929db3b44f919ea3"
+      "sha256": "b537c97e0b1cf4b93f59f8585a06147ac629255c554388288446598cda0f2d9d"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
@@ -446,7 +446,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "65cdb878c8678f59a655001e73482e1f4bf4aac8054df0a41af9b436c8bf42f0"
+      "sha256": "9beedc28a9932885b6165d3180b04f40590875755185ebd53f82ddf5eb5041a0"
     },
     {
       "path": ".loom/reviews/INIT-0001.json",
@@ -2219,6 +2219,364 @@
     "requires_explicit_intent": false,
     "missing_inputs": [],
     "fallback_to": null
+  },
+  "decision_prompt": {
+    "schema_version": "loom-adoption-decision-prompt/v1",
+    "target_repository": "${TARGET_ROOT}",
+    "adoption_scope": {
+      "scenario_key": "new",
+      "recommended_adoption_path": "full-bootstrap",
+      "scaffold_profile": "execution-control"
+    },
+    "write_intent": "write",
+    "adoption_intent": {
+      "requested": "execution-control",
+      "source": "cli",
+      "signal_default": "light-governance",
+      "candidate_intents": [
+        "execution-control",
+        "light-governance"
+      ],
+      "options": [
+        {
+          "intent": "light-governance",
+          "recommended_default": true,
+          "adoption_path": "minimal-bootstrap",
+          "scaffold_profile": "light-governance",
+          "risk": {
+            "heavy_execution_control": false,
+            "repo_owned_truth": "light governance carriers"
+          },
+          "write_targets": [
+            ".loom/README.md",
+            ".loom/bootstrap/intake.snapshot.json",
+            ".loom/bootstrap/init-result.json",
+            ".loom/bootstrap/manifest.json",
+            ".loom/bootstrap/capability-map.md",
+            ".loom/companion/README.md",
+            ".loom/companion/manifest.json",
+            ".loom/companion/repo-interface.json",
+            ".loom/companion/interop.json",
+            ".loom/companion/checkpoints.md",
+            ".loom/companion/review.md",
+            ".loom/companion/merge-ready.md",
+            ".loom/companion/closeout.md",
+            ".loom/shadow/admission-loom.json",
+            ".loom/shadow/admission-repo.json",
+            ".loom/shadow/review-loom.json",
+            ".loom/shadow/review-repo.json",
+            ".loom/shadow/merge-ready-loom.json",
+            ".loom/shadow/merge-ready-repo.json",
+            ".loom/shadow/closeout-loom.json",
+            ".loom/shadow/closeout-repo.json",
+            ".gitignore",
+            ".loom/bin/loom_init.py",
+            ".loom/bin/fact_chain_support.py",
+            ".loom/bin/governance_surface.py",
+            ".loom/bin/loom_flow.py",
+            ".loom/bin/loom_status.py",
+            ".loom/bin/runtime_paths.py",
+            ".loom/bin/runtime_state.py",
+            ".loom/bin/loom_check.py",
+            ".loom/reviews/INIT-0001.json",
+            ".loom/reviews/INIT-0001.spec.json",
+            ".github/PULL_REQUEST_TEMPLATE.md"
+          ],
+          "verification_commands": [
+            "python3 .loom/bin/loom_init.py verify --target ."
+          ]
+        },
+        {
+          "intent": "execution-control",
+          "recommended_default": false,
+          "adoption_path": "full-bootstrap",
+          "scaffold_profile": "execution-control",
+          "risk": {
+            "heavy_execution_control": true,
+            "repo_owned_truth": "loom-authored execution carriers"
+          },
+          "write_targets": [
+            ".loom/README.md",
+            ".loom/bootstrap/intake.snapshot.json",
+            ".loom/bootstrap/init-result.json",
+            ".loom/bootstrap/manifest.json",
+            ".loom/bootstrap/capability-map.md",
+            ".loom/companion/README.md",
+            ".loom/companion/manifest.json",
+            ".loom/companion/repo-interface.json",
+            ".loom/companion/interop.json",
+            ".loom/companion/checkpoints.md",
+            ".loom/companion/review.md",
+            ".loom/companion/merge-ready.md",
+            ".loom/companion/closeout.md",
+            ".loom/shadow/admission-loom.json",
+            ".loom/shadow/admission-repo.json",
+            ".loom/shadow/review-loom.json",
+            ".loom/shadow/review-repo.json",
+            ".loom/shadow/merge-ready-loom.json",
+            ".loom/shadow/merge-ready-repo.json",
+            ".loom/shadow/closeout-loom.json",
+            ".loom/shadow/closeout-repo.json",
+            ".gitignore",
+            ".loom/bin/loom_init.py",
+            ".loom/bin/fact_chain_support.py",
+            ".loom/bin/governance_surface.py",
+            ".loom/bin/loom_flow.py",
+            ".loom/bin/loom_status.py",
+            ".loom/bin/runtime_paths.py",
+            ".loom/bin/runtime_state.py",
+            ".loom/bin/loom_check.py",
+            ".loom/reviews/INIT-0001.json",
+            ".loom/reviews/INIT-0001.spec.json",
+            ".loom/work-items/INIT-0001.md",
+            ".loom/progress/INIT-0001.md",
+            ".loom/status/current.md",
+            ".loom/specs/INIT-0001/spec.md",
+            ".loom/specs/INIT-0001/plan.md",
+            ".loom/specs/INIT-0001/implementation-contract.md",
+            ".github/PULL_REQUEST_TEMPLATE.md"
+          ],
+          "verification_commands": [
+            "python3 .loom/bin/loom_init.py verify --target ."
+          ]
+        }
+      ]
+    },
+    "repository_mode_guess": {
+      "repository_type": "new",
+      "scenario_key": "new",
+      "governance_surface_mode": "new"
+    },
+    "existing_governance_signals": [
+      {
+        "summary": "root agent rules are present",
+        "locator": "AGENTS.md"
+      },
+      {
+        "summary": "maturity: document_truth=partial, execution_surface=not_formed, governance_carriers=loom_carriers_present",
+        "locator": ".loom/bootstrap/intake.snapshot.json"
+      }
+    ],
+    "existing_validation_entry": {
+      "status": "missing",
+      "locator": "not_applicable"
+    },
+    "companion_boundary_intent": {
+      "action": "generate_or_update",
+      "locator": ".loom/companion/README.md"
+    },
+    "interop_boundary_intent": {
+      "action": "generate_or_update",
+      "locator": ".loom/companion/interop.json"
+    },
+    "repo_owned_residue": [
+      {
+        "summary": "root rules and repo-native validation remain repo-owned",
+        "locator": "AGENTS.md"
+      },
+      {
+        "summary": "host actions and review systems are read through companion or interop when present",
+        "locator": ".loom/companion/repo-interface.json"
+      }
+    ],
+    "decision_reason": "explicit adoption intent diverges from the repository signal default",
+    "write_targets": [
+      ".loom/README.md",
+      ".loom/bootstrap/intake.snapshot.json",
+      ".loom/bootstrap/init-result.json",
+      ".loom/bootstrap/manifest.json",
+      ".loom/bootstrap/capability-map.md",
+      ".loom/companion/README.md",
+      ".loom/companion/manifest.json",
+      ".loom/companion/repo-interface.json",
+      ".loom/companion/interop.json",
+      ".loom/companion/checkpoints.md",
+      ".loom/companion/review.md",
+      ".loom/companion/merge-ready.md",
+      ".loom/companion/closeout.md",
+      ".loom/shadow/admission-loom.json",
+      ".loom/shadow/admission-repo.json",
+      ".loom/shadow/review-loom.json",
+      ".loom/shadow/review-repo.json",
+      ".loom/shadow/merge-ready-loom.json",
+      ".loom/shadow/merge-ready-repo.json",
+      ".loom/shadow/closeout-loom.json",
+      ".loom/shadow/closeout-repo.json",
+      ".gitignore",
+      ".loom/bin/loom_init.py",
+      ".loom/bin/fact_chain_support.py",
+      ".loom/bin/governance_surface.py",
+      ".loom/bin/loom_flow.py",
+      ".loom/bin/loom_status.py",
+      ".loom/bin/runtime_paths.py",
+      ".loom/bin/runtime_state.py",
+      ".loom/bin/loom_check.py",
+      ".loom/reviews/INIT-0001.json",
+      ".loom/reviews/INIT-0001.spec.json",
+      ".loom/work-items/INIT-0001.md",
+      ".loom/progress/INIT-0001.md",
+      ".loom/status/current.md",
+      ".loom/specs/INIT-0001/spec.md",
+      ".loom/specs/INIT-0001/plan.md",
+      ".loom/specs/INIT-0001/implementation-contract.md",
+      ".github/PULL_REQUEST_TEMPLATE.md"
+    ],
+    "verification_commands": [
+      "python3 .loom/bin/loom_init.py verify --target .",
+      "python3 .loom/bin/loom_flow.py adopt verify --target ."
+    ],
+    "resume_after_adoption_intent": {
+      "writeback_targets": [
+        ".loom/bootstrap/intake.snapshot.json",
+        ".loom/bootstrap/init-result.json"
+      ],
+      "command": "rerun loom-init bootstrap with --intent <selected-intent>"
+    },
+    "field_writeback_contract": [
+      {
+        "field": "target_repository",
+        "source_locator": "docs/adoption/zero-friction-adoption-contract.md#decision-prompt-fields",
+        "reasoning": "decision prompt fields are structured so adoption can record the operator decision without creating a second truth source",
+        "writeback_target": ".loom/bootstrap/init-result.json",
+        "verification_evidence": "python3 .loom/bin/loom_init.py verify --target ."
+      },
+      {
+        "field": "adoption_scope",
+        "source_locator": "docs/adoption/zero-friction-adoption-contract.md#decision-prompt-fields",
+        "reasoning": "decision prompt fields are structured so adoption can record the operator decision without creating a second truth source",
+        "writeback_target": ".loom/bootstrap/init-result.json",
+        "verification_evidence": "python3 .loom/bin/loom_init.py verify --target ."
+      },
+      {
+        "field": "write_intent",
+        "source_locator": "docs/adoption/zero-friction-adoption-contract.md#decision-prompt-fields",
+        "reasoning": "decision prompt fields are structured so adoption can record the operator decision without creating a second truth source",
+        "writeback_target": ".loom/bootstrap/init-result.json",
+        "verification_evidence": "python3 .loom/bin/loom_init.py verify --target ."
+      },
+      {
+        "field": "adoption_intent",
+        "source_locator": "docs/adoption/zero-friction-adoption-contract.md#decision-prompt-fields",
+        "reasoning": "decision prompt fields are structured so adoption can record the operator decision without creating a second truth source",
+        "writeback_target": ".loom/bootstrap/init-result.json",
+        "verification_evidence": "python3 .loom/bin/loom_init.py verify --target ."
+      },
+      {
+        "field": "repository_mode_guess",
+        "source_locator": "docs/adoption/zero-friction-adoption-contract.md#decision-prompt-fields",
+        "reasoning": "decision prompt fields are structured so adoption can record the operator decision without creating a second truth source",
+        "writeback_target": ".loom/bootstrap/init-result.json",
+        "verification_evidence": "python3 .loom/bin/loom_init.py verify --target ."
+      },
+      {
+        "field": "existing_governance_signals",
+        "source_locator": "docs/adoption/zero-friction-adoption-contract.md#decision-prompt-fields",
+        "reasoning": "decision prompt fields are structured so adoption can record the operator decision without creating a second truth source",
+        "writeback_target": ".loom/bootstrap/init-result.json",
+        "verification_evidence": "python3 .loom/bin/loom_init.py verify --target ."
+      },
+      {
+        "field": "existing_validation_entry",
+        "source_locator": "docs/adoption/zero-friction-adoption-contract.md#decision-prompt-fields",
+        "reasoning": "decision prompt fields are structured so adoption can record the operator decision without creating a second truth source",
+        "writeback_target": ".loom/bootstrap/init-result.json",
+        "verification_evidence": "python3 .loom/bin/loom_init.py verify --target ."
+      },
+      {
+        "field": "companion_boundary_intent",
+        "source_locator": "docs/adoption/zero-friction-adoption-contract.md#decision-prompt-fields",
+        "reasoning": "decision prompt fields are structured so adoption can record the operator decision without creating a second truth source",
+        "writeback_target": ".loom/bootstrap/init-result.json",
+        "verification_evidence": "python3 .loom/bin/loom_init.py verify --target ."
+      },
+      {
+        "field": "interop_boundary_intent",
+        "source_locator": "docs/adoption/zero-friction-adoption-contract.md#decision-prompt-fields",
+        "reasoning": "decision prompt fields are structured so adoption can record the operator decision without creating a second truth source",
+        "writeback_target": ".loom/bootstrap/init-result.json",
+        "verification_evidence": "python3 .loom/bin/loom_init.py verify --target ."
+      },
+      {
+        "field": "repo_owned_residue",
+        "source_locator": "docs/adoption/zero-friction-adoption-contract.md#decision-prompt-fields",
+        "reasoning": "decision prompt fields are structured so adoption can record the operator decision without creating a second truth source",
+        "writeback_target": ".loom/bootstrap/init-result.json",
+        "verification_evidence": "python3 .loom/bin/loom_init.py verify --target ."
+      },
+      {
+        "field": "verification_commands",
+        "source_locator": "docs/adoption/zero-friction-adoption-contract.md#decision-prompt-fields",
+        "reasoning": "decision prompt fields are structured so adoption can record the operator decision without creating a second truth source",
+        "writeback_target": ".loom/bootstrap/init-result.json",
+        "verification_evidence": "python3 .loom/bin/loom_init.py verify --target ."
+      },
+      {
+        "field": "resume_after_adoption_intent",
+        "source_locator": "docs/adoption/zero-friction-adoption-contract.md#decision-prompt-fields",
+        "reasoning": "decision prompt fields are structured so adoption can record the operator decision without creating a second truth source",
+        "writeback_target": ".loom/bootstrap/init-result.json",
+        "verification_evidence": "python3 .loom/bin/loom_init.py verify --target ."
+      }
+    ]
+  },
+  "adoption_decisions": {
+    "schema_version": "loom-adoption-decisions/v1",
+    "target_maturity": "adoption-intent",
+    "summary": "Bootstrap decision prompt binds adoption intent selection to source locators, write targets, and verification evidence.",
+    "judgments": [
+      {
+        "id": "adoption_intent_selection",
+        "question": "Which adoption intent should this repository use for this bootstrap?",
+        "source_locator": "docs/adoption/zero-friction-adoption-contract.md#decision-prompt-fields",
+        "reasoning": "explicit adoption intent diverges from the repository signal default",
+        "write_targets": [
+          ".loom/README.md",
+          ".loom/bootstrap/intake.snapshot.json",
+          ".loom/bootstrap/init-result.json",
+          ".loom/bootstrap/manifest.json",
+          ".loom/bootstrap/capability-map.md",
+          ".loom/companion/README.md",
+          ".loom/companion/manifest.json",
+          ".loom/companion/repo-interface.json",
+          ".loom/companion/interop.json",
+          ".loom/companion/checkpoints.md",
+          ".loom/companion/review.md",
+          ".loom/companion/merge-ready.md",
+          ".loom/companion/closeout.md",
+          ".loom/shadow/admission-loom.json",
+          ".loom/shadow/admission-repo.json",
+          ".loom/shadow/review-loom.json",
+          ".loom/shadow/review-repo.json",
+          ".loom/shadow/merge-ready-loom.json",
+          ".loom/shadow/merge-ready-repo.json",
+          ".loom/shadow/closeout-loom.json",
+          ".loom/shadow/closeout-repo.json",
+          ".gitignore",
+          ".loom/bin/loom_init.py",
+          ".loom/bin/fact_chain_support.py",
+          ".loom/bin/governance_surface.py",
+          ".loom/bin/loom_flow.py",
+          ".loom/bin/loom_status.py",
+          ".loom/bin/runtime_paths.py",
+          ".loom/bin/runtime_state.py",
+          ".loom/bin/loom_check.py",
+          ".loom/reviews/INIT-0001.json",
+          ".loom/reviews/INIT-0001.spec.json",
+          ".loom/work-items/INIT-0001.md",
+          ".loom/progress/INIT-0001.md",
+          ".loom/status/current.md",
+          ".loom/specs/INIT-0001/spec.md",
+          ".loom/specs/INIT-0001/plan.md",
+          ".loom/specs/INIT-0001/implementation-contract.md",
+          ".github/PULL_REQUEST_TEMPLATE.md"
+        ],
+        "verification_commands": [
+          "python3 .loom/bin/loom_init.py verify --target .",
+          "python3 .loom/bin/loom_flow.py adopt verify --target ."
+        ],
+        "status": "answered"
+      }
+    ]
   },
   "portable_output": {
     "enabled": true,

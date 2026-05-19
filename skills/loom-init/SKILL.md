@@ -68,6 +68,8 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 
 每个 intent 会收敛到一个 `scaffold_profile`。`observe-only` 与 `skill-install-only` 不写 adoption carriers；`attach-only` 只写 companion/read surfaces，并显式禁止 `.loom/work-items/**`、`.loom/progress/**`、`.loom/status/current.md`、`.loom/reviews/**`、`.loom/specs/**` 等 Loom-authored truth carriers；`light-governance` 写 companion、review guidance 与 PR 最小闭环但不写 Loom-owned work/progress/status/spec carriers；`execution-control` 与 `strong-governance` 才写 Loom-owned execution carriers。
 
+当静态仓库信号支持多个合理接入路径，或显式 intent 与信号默认值不同，bootstrap 输出必须包含 `decision_prompt` 与 `adoption_decisions`。prompt 必须说明仓库形态、候选 intent、信号推荐默认、风险差异、计划写入目标和验证入口；write 模式如果缺少必要 intent 且会创建重执行控制面，必须 fail closed，不得先落盘再要求补决策。
+
 ## 1. 读取顺序
 
 按以下顺序读取材料：

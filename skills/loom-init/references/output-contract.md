@@ -67,6 +67,8 @@
 - `planned_writes`：dry-run / write 即将落盘的稳定载体集合
 - `forbidden_authored_carriers`：本 profile 明确禁止生成、声明或保留的 Loom-authored truth carrier
 - `intentionally_absent`：因 attach-only、light-governance、observe-only 或 skill-install-only 而明确不生成的载体
+- `decision_prompt`：当仓库静态信号支持多个合理接入路径、显式 intent 与信号默认值分歧，或写入会创建重执行控制面但 intent 仍未指定时，必须输出的决策提示
+- `adoption_decisions`：与 `decision_prompt` 对应的可回写判断载体，必须包含 source locator、reasoning、write targets、verification commands 与 answered/missing/blocked 状态
 - 初始能力清单的承载位置
 - 首批 `Work Item` 或等价事项清单的承载位置
 - 恢复主入口是什么
@@ -133,7 +135,34 @@
 
 `Runtime Evidence` 的五个字段必须逐项给出 locator 或 `not_applicable`，不得留空；若使用 `not_applicable`，必须给出可复核原因。
 
-### 4.1 `runtime_state`
+### 4.1 `decision_prompt`
+
+`decision_prompt` 是 bootstrap 在 adoption intent 仍需判断时输出的结构化决策提示，不是第二套事实真相源。
+
+出现以下任一情况时必须输出：
+
+- 目标仓库是既有仓库，静态信号支持多个合理 intent，例如 `light-governance` 与 `execution-control`
+- 用户显式选择的 intent 与仓库信号默认 intent 不同
+- `--write` 会生成 Loom-authored `work-items`、`progress`、`status` 或 `specs` 等重执行控制面，但 intent 仍为 `unspecified`
+
+prompt 至少包含：
+
+- `target_repository`
+- `adoption_scope`
+- `write_intent`
+- `adoption_intent`
+- `repository_mode_guess`
+- `existing_governance_signals`
+- `existing_validation_entry`
+- `companion_boundary_intent`
+- `interop_boundary_intent`
+- `repo_owned_residue`
+- `verification_commands`
+- `resume_after_adoption_intent`
+
+每个字段都必须能写回为 source locator、reasoning、writeback target 与 verification evidence；`adoption_decisions` 必须用 `loom-adoption-decisions/v1` 记录对应判断。缺少必要 intent 的重执行控制面写入必须 fail closed，并把 `adoption_decisions.judgments[].status` 设为 `missing`。
+
+### 4.2 `runtime_state`
 
 初始化输出还必须显式给出当前 Loom 入口自己的 `runtime_state`，至少包含：
 
@@ -149,7 +178,7 @@
 这里的 `runtime_state` 只回答 Loom 入口自身处于什么安装/运行场景，不是 `governance_surface.loom_state` 的别名。
 `governance_surface.loom_state` 回答的是仓库 Loom 装配程度；`runtime_state` 回答的是当前入口能否被视为 installed runtime 并继续运行。
 
-### 4.2 `lifecycle_expectations`
+### 4.3 `lifecycle_expectations`
 
 初始化输出还必须给出 `lifecycle_expectations`，用于声明 workspace / worker lifecycle 的最小可执行合同：
 

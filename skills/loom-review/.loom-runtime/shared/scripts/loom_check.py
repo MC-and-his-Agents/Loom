@@ -4431,6 +4431,89 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                     if isinstance(surface_entry, dict) and surface_entry.get("status") == "present":
                         failures.append(Failure("deep-existing-bootstrap", f"`{context}` must not report absent release target `{surface_key}` as present"))
 
+        def assert_decision_prompt(
+            payload: dict[str, object],
+            context: str,
+            *,
+            expected_write_intent: str,
+            expected_signal_default: str,
+            required_candidates: set[str],
+            expected_requested: str | None = None,
+            reason_fragment: str | None = None,
+            expected_decision_status: str | None = None,
+        ) -> None:
+            prompt = payload.get("decision_prompt")
+            if not isinstance(prompt, dict):
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` must include decision_prompt"))
+                return
+            if prompt.get("schema_version") != "loom-adoption-decision-prompt/v1":
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt schema_version must be loom-adoption-decision-prompt/v1"))
+            for field in (
+                "target_repository",
+                "adoption_scope",
+                "write_intent",
+                "adoption_intent",
+                "repository_mode_guess",
+                "existing_governance_signals",
+                "existing_validation_entry",
+                "companion_boundary_intent",
+                "interop_boundary_intent",
+                "repo_owned_residue",
+                "verification_commands",
+                "resume_after_adoption_intent",
+            ):
+                if field not in prompt:
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt missing `{field}`"))
+            if prompt.get("write_intent") != expected_write_intent:
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt write_intent must be `{expected_write_intent}`"))
+            intent = prompt.get("adoption_intent")
+            if not isinstance(intent, dict):
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt adoption_intent must be an object"))
+            else:
+                if expected_requested is not None and intent.get("requested") != expected_requested:
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt requested intent must be `{expected_requested}`"))
+                if intent.get("signal_default") != expected_signal_default:
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt signal_default must be `{expected_signal_default}`"))
+                candidates = set(intent.get("candidate_intents")) if isinstance(intent.get("candidate_intents"), list) else set()
+                if not required_candidates.issubset(candidates):
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt candidate_intents missing {sorted(required_candidates - candidates)}"))
+                options = intent.get("options")
+                if not isinstance(options, list) or not options:
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt must include candidate options"))
+                elif not any(isinstance(option, dict) and option.get("intent") == expected_signal_default and option.get("recommended_default") is True for option in options):
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt must mark the signal default candidate"))
+            signals = prompt.get("existing_governance_signals")
+            if not isinstance(signals, list) or not signals or not all(isinstance(item, dict) and item.get("summary") and item.get("locator") for item in signals):
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt must include governance signal summaries and locators"))
+            verification_commands = prompt.get("verification_commands")
+            if not isinstance(verification_commands, list) or "python3 .loom/bin/loom_init.py verify --target ." not in verification_commands:
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt must include verify entry"))
+            writeback = prompt.get("field_writeback_contract")
+            if not isinstance(writeback, list) or not writeback:
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt must include field writeback contract"))
+            else:
+                for entry in writeback:
+                    if not isinstance(entry, dict):
+                        failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt writeback entries must be objects"))
+                        continue
+                    for field in ("field", "source_locator", "reasoning", "writeback_target", "verification_evidence"):
+                        if not isinstance(entry.get(field), str) or not entry.get(field):
+                            failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt writeback entry missing `{field}`"))
+            if reason_fragment and reason_fragment not in str(prompt.get("decision_reason", "")):
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt reason must mention `{reason_fragment}`"))
+            decisions = payload.get("adoption_decisions")
+            require_adoption_decisions_payload(
+                failures,
+                category="deep-existing-bootstrap",
+                context=f"`{context}` adoption_decisions",
+                payload=decisions,
+            )
+            if expected_decision_status and isinstance(decisions, dict):
+                judgments = decisions.get("judgments")
+                first = judgments[0] if isinstance(judgments, list) and judgments and isinstance(judgments[0], dict) else {}
+                if first.get("status") != expected_decision_status:
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` adoption decision status must be `{expected_decision_status}`"))
+
         pre_execution_target = tmp_root / "pre-execution-existing"
         write_pre_execution_existing_repo(pre_execution_target)
         pre_payload, pre_error = load_command_json(
@@ -4475,6 +4558,16 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
             detected_maturity = detected.get("maturity") if isinstance(detected, dict) else None
             if not isinstance(detected, dict) or detected.get("scenario_key") != "pre-execution-existing" or detected_maturity != maturity:
                 failures.append(Failure("pre-execution-existing", "detected repository mode must carry the pre-execution scenario and maturity summary"))
+            assert_decision_prompt(
+                pre_payload,
+                "pre-execution-existing dry-run",
+                expected_write_intent="dry-run",
+                expected_signal_default="light-governance",
+                required_candidates={"light-governance", "execution-control"},
+                expected_requested="unspecified",
+                reason_fragment="multiple adoption intents",
+                expected_decision_status="missing",
+            )
 
         pre_execution_control_target = tmp_root / "pre-execution-execution-control"
         write_pre_execution_existing_repo(pre_execution_control_target)
@@ -4502,6 +4595,16 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                 failures.append(Failure("pre-execution-existing", "explicit execution-control dry-run may choose `full-bootstrap`"))
             if not isinstance(profile, dict) or profile.get("name") != "execution-control":
                 failures.append(Failure("pre-execution-existing", "explicit execution-control dry-run must select the execution-control scaffold profile"))
+            assert_decision_prompt(
+                pre_control_payload,
+                "pre-execution execution-control dry-run",
+                expected_write_intent="dry-run",
+                expected_signal_default="light-governance",
+                required_candidates={"light-governance", "execution-control"},
+                expected_requested="execution-control",
+                reason_fragment="diverges",
+                expected_decision_status="answered",
+            )
 
         deep_target = tmp_root / "deep-existing"
         write_repo(deep_target, validation_entry=True, pr_template=True, workflow_doc=True)
@@ -4698,6 +4801,15 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
             risk = full_payload.get("risk_summary")
             if not isinstance(risk, dict) or risk.get("requires_explicit_intent") is not True:
                 failures.append(Failure("deep-existing-bootstrap", "ambiguous full-bootstrap write must report `risk_summary.requires_explicit_intent = true`"))
+            assert_decision_prompt(
+                full_payload,
+                "full-bootstrap ambiguous intent sample",
+                expected_write_intent="write",
+                expected_signal_default="execution-control",
+                required_candidates={"attach-only", "execution-control"},
+                expected_requested="unspecified",
+                expected_decision_status="missing",
+            )
             for required in (
                 ".loom/work-items/INIT-0001.md",
                 ".loom/progress/INIT-0001.md",
