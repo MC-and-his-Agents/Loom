@@ -4478,10 +4478,13 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
         else:
             intent = explicit_payload.get("adoption_intent")
             recommended = explicit_payload.get("recommended_adoption")
+            profile = explicit_payload.get("scaffold_profile")
             if not isinstance(intent, dict) or intent.get("effective") != "execution-control":
                 failures.append(Failure("deep-existing-bootstrap", "explicit full-bootstrap sample must report `adoption_intent.effective = execution-control`"))
             if not isinstance(recommended, dict) or recommended.get("path") != "full-bootstrap":
                 failures.append(Failure("deep-existing-bootstrap", "explicit execution-control sample must select `recommended_adoption.path = full-bootstrap`"))
+            if not isinstance(profile, dict) or profile.get("name") != "execution-control":
+                failures.append(Failure("deep-existing-bootstrap", "explicit execution-control sample must report `scaffold_profile.name = execution-control`"))
             for required in (
                 ".loom/work-items/INIT-0001.md",
                 ".loom/progress/INIT-0001.md",
@@ -4489,6 +4492,45 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
             ):
                 if not (explicit_full_target / required).exists():
                     failures.append(Failure("deep-existing-bootstrap", f"`explicit execution-control bootstrap sample` must generate `{required}`"))
+
+        light_target = tmp_root / "light-governance"
+        write_repo(light_target, validation_entry=True, pr_template=False, workflow_doc=False)
+        light_payload, light_error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_init.py",
+                "bootstrap",
+                "--target",
+                str(light_target),
+                "--intent",
+                "light-governance",
+                "--write",
+                "--force",
+                "--verify",
+                "--install-pr-template",
+            ],
+        )
+        if light_error:
+            failures.append(Failure("deep-existing-bootstrap", f"`light-governance bootstrap sample` failed: {light_error}"))
+        else:
+            profile = light_payload.get("scaffold_profile")
+            if not isinstance(profile, dict) or profile.get("name") != "light-governance":
+                failures.append(Failure("deep-existing-bootstrap", "light-governance sample must report `scaffold_profile.name = light-governance`"))
+            if not isinstance(light_payload.get("upgrade_triggers"), list) or not light_payload["upgrade_triggers"]:
+                failures.append(Failure("deep-existing-bootstrap", "light-governance sample must report top-level upgrade_triggers"))
+            planned = light_payload.get("planned_writes")
+            planned_paths = {item.get("path") for item in planned if isinstance(item, dict)} if isinstance(planned, list) else set()
+            for required in (".loom/reviews/INIT-0001.json", ".loom/specs/INIT-0001/spec.md", ".github/PULL_REQUEST_TEMPLATE.md"):
+                if required not in planned_paths or not (light_target / required).exists():
+                    failures.append(Failure("deep-existing-bootstrap", f"`light-governance bootstrap sample` must generate `{required}`"))
+            for forbidden in (
+                ".loom/work-items/INIT-0001.md",
+                ".loom/progress/INIT-0001.md",
+                ".loom/status/current.md",
+            ):
+                if forbidden in planned_paths or (light_target / forbidden).exists():
+                    failures.append(Failure("deep-existing-bootstrap", f"`light-governance bootstrap sample` must not generate `{forbidden}`"))
     return failures
 
 

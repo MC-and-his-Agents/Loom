@@ -32,10 +32,130 @@
       "source": "generated"
     },
     {
+      "path": ".loom/companion/README.md",
+      "kind": "repo-companion-entry",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/manifest.json",
+      "kind": "repo-companion-manifest",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/repo-interface.json",
+      "kind": "repo-companion-interface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/interop.json",
+      "kind": "repo-interop-contract",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/checkpoints.md",
+      "kind": "repo-companion-doc",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/review.md",
+      "kind": "repo-companion-doc",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/merge-ready.md",
+      "kind": "repo-companion-doc",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/closeout.md",
+      "kind": "repo-companion-doc",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/releases/changelog.md",
+      "kind": "repo-release-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/releases/release-notes.md",
+      "kind": "repo-release-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/releases/migration-notes.md",
+      "kind": "repo-release-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/releases/rollback.md",
+      "kind": "repo-release-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/releases/catalog.json",
+      "kind": "repo-release-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/releases/current.json",
+      "kind": "repo-release-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/companion/releases/status.json",
+      "kind": "repo-release-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/shadow/admission-loom.json",
+      "kind": "shadow-parity-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/shadow/admission-repo.json",
+      "kind": "shadow-parity-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/shadow/review-loom.json",
+      "kind": "shadow-parity-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/shadow/review-repo.json",
+      "kind": "shadow-parity-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/shadow/merge-ready-loom.json",
+      "kind": "shadow-parity-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/shadow/merge-ready-repo.json",
+      "kind": "shadow-parity-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/shadow/closeout-loom.json",
+      "kind": "shadow-parity-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/shadow/closeout-repo.json",
+      "kind": "shadow-parity-surface",
+      "source": "generated"
+    },
+    {
+      "path": ".gitignore",
+      "kind": "gitignore",
+      "source": "generated"
+    },
+    {
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "5e334dd723f06f9313579c18ba2dd790bf5021dea69d508335238cef80696b61"
+      "sha256": "dbb335ffe4e59d544276393ed9440507db1e5ed750d75370767c52448b6fd3d3"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
@@ -77,22 +197,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "5c64e6c4ff5c409449a4cf247c7fa5aaf0fac5ca054c9c466bb66ad6be2c4513"
-    },
-    {
-      "path": "AGENTS.md",
-      "kind": "root-entry",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/work-items/INIT-0001.md",
-      "kind": "work-item",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/progress/INIT-0001.md",
-      "kind": "progress",
-      "source": "generated"
+      "sha256": "e00a54e0381d01f4ec3ae3ea5ce2e50262e82676250e0cb8d3c50e25f3489422"
     },
     {
       "path": ".loom/reviews/INIT-0001.json",
@@ -102,11 +207,6 @@
     {
       "path": ".loom/reviews/INIT-0001.spec.json",
       "kind": "review-entry",
-      "source": "generated"
-    },
-    {
-      "path": ".loom/status/current.md",
-      "kind": "status-surface",
       "source": "generated"
     },
     {
@@ -123,6 +223,21 @@
       "path": ".loom/specs/INIT-0001/implementation-contract.md",
       "kind": "implementation-contract",
       "source": "skills/shared/assets/templates/scaffold/implementation-contract.md"
+    },
+    {
+      "path": ".loom/work-items/INIT-0001.md",
+      "kind": "work-item",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/progress/INIT-0001.md",
+      "kind": "progress",
+      "source": "generated"
+    },
+    {
+      "path": ".loom/status/current.md",
+      "kind": "status-surface",
+      "source": "generated"
     },
     {
       "path": ".github/PULL_REQUEST_TEMPLATE.md",

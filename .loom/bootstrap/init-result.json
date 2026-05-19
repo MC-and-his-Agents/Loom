@@ -76,9 +76,9 @@
     "mode": "work-item + recovery-entry + derived status-surface",
     "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
     "entry_points": {
-      "current_item_id": "WI-775",
-      "work_item": ".loom/work-items/WI-775.md",
-      "recovery_entry": ".loom/progress/WI-775.md",
+      "current_item_id": "WI-778",
+      "work_item": ".loom/work-items/WI-778.md",
+      "recovery_entry": ".loom/progress/WI-778.md",
       "status_surface": ".loom/status/current.md"
     }
   },
@@ -1410,5 +1410,18 @@
     "requires_explicit_intent": false,
     "missing_inputs": [],
     "fallback_to": null
-  }
+  },
+  "scaffold_profile": {
+    "name": "execution-control",
+    "writes_artifacts": true,
+    "writes_work_item_carriers": true,
+    "description": "Loom-owned work item, progress, review, status, and spec carriers"
+  },
+  "upgrade_triggers": [
+    {
+      "from_profile": "execution-control",
+      "capability": "host-specific-skill-regression-matrix",
+      "trigger": "a host adapter or marketplace package is added"
+    }
+  ]
 }

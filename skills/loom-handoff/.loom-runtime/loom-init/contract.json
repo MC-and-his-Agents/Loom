@@ -31,11 +31,13 @@
     "required_sections": [
       "project_judgment",
       "recommended_adoption",
+      "scaffold_profile",
       "adoption_intent",
       "detected_repository_mode",
       "risk_summary",
       "planned_writes",
       "deferred_capabilities",
+      "upgrade_triggers",
       "fact_chain",
       "initial_artifacts",
       "initial_work_items",

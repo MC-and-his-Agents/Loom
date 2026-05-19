@@ -1,0 +1,23 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-778",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "The WI-778 spec is sufficient for this checkpoint: it defines a stable scaffold profile boundary for adoption intents, aligns dry-run/write/verify output around that profile, and explicitly defers attach-only hardening, release placeholder removal, gitignore repair, Git visibility checks, pre-execution classification, and decision prompts to their ordered issues.",
+  "reviewer": "codex",
+  "reviewed_head": "04273a4c9080317cdb4f577c6fdc94c69e861a2e",
+  "reviewed_validation_summary": "py_compile -> OK; skills surface check -> OK; targeted scaffold profile fixtures -> OK; make skills-check -> OK; loom-init verify examples/new-project -> OK; loom-init verify root -> OK; closeout check root -> OK; carrier refresh root -> OK.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "Continue with #784 for attach-only host truth protection and forbidden authored carrier checks.",
+    "Continue with #779-#782 for lightweight docs alignment, release placeholder default, blanket .loom gitignore handling, and stable carrier Git visibility."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-778.md",
+    "spec": ".loom/specs/WI-778/spec.md",
+    "plan": ".loom/specs/WI-778/plan.md",
+    "implementation_contract": ".loom/specs/WI-778/implementation-contract.md"
+  }
+}
