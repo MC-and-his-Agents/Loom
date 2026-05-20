@@ -214,6 +214,11 @@
       "path": ".loom/specs/INIT-0001/implementation-contract.md",
       "kind": "implementation-contract",
       "source": "skills/shared/assets/templates/scaffold/implementation-contract.md"
+    },
+    {
+      "path": ".github/PULL_REQUEST_TEMPLATE.md",
+      "kind": "pr-template",
+      "source": "skills/shared/assets/github/PULL_REQUEST_TEMPLATE.md"
     }
   ]
 }

@@ -1,6 +1,6 @@
 {
   "schema_version": "loom-init-intake/v1",
-  "repository_type": "existing",
+  "repository_type": "new",
   "root_boundary_docs": "missing",
   "ci_or_basic_tests": true,
   "repository_level_validation_entry": true,

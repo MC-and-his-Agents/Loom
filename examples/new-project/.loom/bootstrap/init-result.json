@@ -15,7 +15,7 @@
   },
   "intake": {
     "schema_version": "loom-init-intake/v1",
-    "repository_type": "existing",
+    "repository_type": "new",
     "root_boundary_docs": "missing",
     "ci_or_basic_tests": true,
     "repository_level_validation_entry": true,
@@ -273,6 +273,11 @@
         "path": ".loom/specs/INIT-0001/implementation-contract.md",
         "kind": "implementation-contract",
         "owner": "loom"
+      },
+      {
+        "path": ".github/PULL_REQUEST_TEMPLATE.md",
+        "kind": "pr-template",
+        "owner": "repo-owned"
       }
     ],
     "forbidden_authored_carriers": []
@@ -503,6 +508,11 @@
       "path": ".loom/specs/INIT-0001/implementation-contract.md",
       "kind": "implementation-contract",
       "source": "skills/shared/assets/templates/scaffold/implementation-contract.md"
+    },
+    {
+      "path": ".github/PULL_REQUEST_TEMPLATE.md",
+      "kind": "pr-template",
+      "source": "skills/shared/assets/github/PULL_REQUEST_TEMPLATE.md"
     }
   ],
   "initial_work_items": [
@@ -555,7 +565,8 @@
         ".loom/stories/_template.md",
         ".loom/specs/INIT-0001/spec.md",
         ".loom/specs/INIT-0001/plan.md",
-        ".loom/specs/INIT-0001/implementation-contract.md"
+        ".loom/specs/INIT-0001/implementation-contract.md",
+        ".github/PULL_REQUEST_TEMPLATE.md"
       ],
       "closing_condition": "The generated entry, work item, recovery entry, and templates are readable and verified",
       "post_build_continuation": "Promote the first real downstream issue after the bootstrap artifacts are accepted",
@@ -1765,7 +1776,7 @@
     }
   },
   "detected_repository_mode": {
-    "repository_type": "existing",
+    "repository_type": "new",
     "scenario_key": "new",
     "governance_surface_mode": "new",
     "maturity": {
@@ -2020,6 +2031,12 @@
       "kind": "implementation-contract",
       "owner": "loom",
       "requires_intent": "execution-control"
+    },
+    {
+      "path": ".github/PULL_REQUEST_TEMPLATE.md",
+      "kind": "pr-template",
+      "owner": "repo-owned",
+      "requires_intent": null
     }
   ],
   "required_carriers": [
@@ -2222,6 +2239,11 @@
       "path": ".loom/specs/INIT-0001/implementation-contract.md",
       "kind": "implementation-contract",
       "owner": "loom"
+    },
+    {
+      "path": ".github/PULL_REQUEST_TEMPLATE.md",
+      "kind": "pr-template",
+      "owner": "repo-owned"
     }
   ],
   "intentionally_absent": [
@@ -2305,7 +2327,8 @@
             ".loom/bin/loom_check.py",
             ".loom/bin/loom_story_carriers.py",
             ".loom/reviews/INIT-0001.json",
-            ".loom/reviews/INIT-0001.spec.json"
+            ".loom/reviews/INIT-0001.spec.json",
+            ".github/PULL_REQUEST_TEMPLATE.md"
           ],
           "verification_commands": [
             "python3 .loom/bin/loom_init.py verify --target ."
@@ -2360,7 +2383,8 @@
             ".loom/stories/_template.md",
             ".loom/specs/INIT-0001/spec.md",
             ".loom/specs/INIT-0001/plan.md",
-            ".loom/specs/INIT-0001/implementation-contract.md"
+            ".loom/specs/INIT-0001/implementation-contract.md",
+            ".github/PULL_REQUEST_TEMPLATE.md"
           ],
           "verification_commands": [
             "python3 .loom/bin/loom_init.py verify --target ."
@@ -2369,7 +2393,7 @@
       ]
     },
     "repository_mode_guess": {
-      "repository_type": "existing",
+      "repository_type": "new",
       "scenario_key": "new",
       "governance_surface_mode": "new"
     },
@@ -2450,7 +2474,8 @@
       ".loom/stories/_template.md",
       ".loom/specs/INIT-0001/spec.md",
       ".loom/specs/INIT-0001/plan.md",
-      ".loom/specs/INIT-0001/implementation-contract.md"
+      ".loom/specs/INIT-0001/implementation-contract.md",
+      ".github/PULL_REQUEST_TEMPLATE.md"
     ],
     "verification_commands": [
       "python3 .loom/bin/loom_init.py verify --target .",
@@ -2600,7 +2625,8 @@
           ".loom/stories/_template.md",
           ".loom/specs/INIT-0001/spec.md",
           ".loom/specs/INIT-0001/plan.md",
-          ".loom/specs/INIT-0001/implementation-contract.md"
+          ".loom/specs/INIT-0001/implementation-contract.md",
+          ".github/PULL_REQUEST_TEMPLATE.md"
         ],
         "verification_commands": [
           "python3 .loom/bin/loom_init.py verify --target .",
