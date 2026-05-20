@@ -1,39 +1,36 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-816",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "5f608489fd095669fea00d582bf7481eb0921e8f",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-816 implementation review is approved for the HotCP runtime hygiene batch. The implementation keeps the change scoped to closeout gate precedence, Python runtime cache hygiene, installed-runtime drift detection, generated skill/runtime surfaces, and .loom/stories story carrier scaffold/checker support. Local validation passed for diff hygiene, version bump, skills surface, installer tests, example adopted repo loom-check, closeout gate provenance, and Python cache purity; root loom_check will be rerun after review and shadow carrier refresh.",
+  "reviewer": "codex",
+  "reviewed_head": "f0fab96fe613705b09a79670e174377244892a4f",
+  "reviewed_validation_summary": "git diff --check passed; installer version bump check passed for 0.1.119 -> 0.1.120; python3 tools/skills_surface.py check passed; npm --prefix packages/loom-installer test passed 21/21; make -C examples/new-project loom-check passed; closeout check passed with gate.source repo_declared_make_target; Python cache find scan returned no .pyc/__pycache__ residue; root loom_check currently requires WI-816 reviews and shadow refresh before final pass.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-816.md",
+    "recovery_entry": ".loom/progress/WI-816.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
 }
