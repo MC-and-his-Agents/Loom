@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-827",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-827 spec suite is approved for the middle capability aggregation batch. The spec, plan, and implementation contract keep scope limited to prerequisite dependency/intake/profile recovery plus host binding, Project drift, goal execution, advanced Governance Lint, hardcoding guard, PR gate binding, merge-ready, and closeout evidence, while preserving Loom core boundaries and host-native control-plane semantics.",
+  "reviewer": "codex",
+  "reviewed_head": "970cf2f366ff7f24878f1c7230cc6be804b2cbb5",
+  "reviewed_validation_summary": "PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/*.py skills/shared/scripts/*.py passed; python3 tools/skills_surface.py check passed; python3 tools/version_surface_check.py passed; git diff --check passed; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed with 0.1.121 -> 0.1.122.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-827.md",
+    "recovery_entry": ".loom/progress/WI-827.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
