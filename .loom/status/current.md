@@ -11,9 +11,9 @@
 - Review Entry: .loom/reviews/WI-816.json
 - Validation Entry: git diff --check; python3 tools/skills_surface.py check; npm --prefix packages/loom-installer test; make -C examples/new-project loom-check; python3 tools/loom_flow.py closeout check --target examples/new-project --owner owner --repo repo; python3 tools/loom_check.py /Users/mc/dev/Loom
 - Closing Condition: #816/#817/#818 runtime hygiene 完成信号成立，PR gate 与 repo checks 通过，issue/PR 状态写回。
-- Current Checkpoint: build
-- Current Stop: #816/#817/#818 implementation, generated surfaces, installer version bump, WI-816 spec suite, and local validation are complete on work/816-818-runtime-hygiene.
-- Next Step: Record spec and implementation reviews, push PR #834, wait for required checks, then merge and close out issues.
+- Current Checkpoint: merge
+- Current Stop: #816/#817/#818 implementation, validations, spec review, and implementation review are complete on work/816-818-runtime-hygiene.
+- Next Step: Push PR #834, wait for required checks, merge, then close out #816/#817/#818 and synchronize local main.
 - Blockers: None recorded.
 - Latest Validation Summary: git diff --check passed; installer version bump check passed for 0.1.119 -> 0.1.120; python3 tools/skills_surface.py check passed; npm --prefix packages/loom-installer test passed 21/21; make -C examples/new-project loom-check passed; closeout check passed with gate.source repo_declared_make_target; Python cache find scan returned no .pyc/__pycache__ residue; root loom_check currently requires WI-816 reviews and shadow refresh before final pass.
 - Recovery Boundary: .loom/work-items/WI-816.md is the active static work item carrier for #816/#817/#818 runtime hygiene closeout.
