@@ -6,7 +6,7 @@
   "summary": "WI-816 spec suite is approved for the HotCP runtime hygiene batch. It keeps the scope limited to repo-declared closeout gate precedence, Python runtime cache hygiene, installer drift detection, and .loom/stories story carrier scaffold/checker behavior. The non-goals explicitly avoid adopted-repo fixture leakage, story/work-item role conflation, and unrelated governance redesign.",
   "reviewer": "codex",
   "reviewed_head": "cc16cbeab66160d4212d50547720d6613b06a852",
-  "reviewed_validation_summary": "git diff --check passed; installer version bump check passed for 0.1.119 -> 0.1.120; python3 tools/skills_surface.py check passed; npm --prefix packages/loom-installer test passed 21/21; make -C examples/new-project loom-check passed; closeout check passed with gate.source repo_declared_make_target; python3 tools/loom_flow.py checkpoint merge --target . --item WI-816 passed; python3 tools/loom_flow.py adopt verify --target . --item WI-816 passed; python3 tools/loom_check.py /Users/mc/dev/Loom passed with checked 36 surfaces; Python cache find scan returned no .pyc/__pycache__ residue.",
+  "reviewed_validation_summary": "git diff --check passed; installer version bump check passed for 0.1.119 -> 0.1.120; python3 tools/skills_surface.py check passed; npm --prefix packages/loom-installer test passed 21/21; make -C examples/new-project loom-check passed; closeout check passed with gate.source repo_declared_make_target; Python cache find scan returned no .pyc/__pycache__ residue; root loom_check currently requires WI-816 reviews and shadow refresh before final pass.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
