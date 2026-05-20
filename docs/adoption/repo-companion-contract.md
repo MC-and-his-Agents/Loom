@@ -169,6 +169,7 @@
 - `host_truth_locators` 只在 `v2` 合法，且只能声明宿主事实源 locator，例如 GitHub Issue、GitHub Project、PR review / guardian、PR metadata 与 issue state
 - `v2` 不改变 `repo_specific_requirements` 与 `specialized_gates` 的既有纪律
 - `v2` 不把 repo runtime state、progress/current stop、review verdict、review summary、validation status、closeout result 或 retained host action result 写入 `repo-interface.json`
+- 默认治理 scaffold 与缺失 review instruction 的处理策略见 [../methodology/templates/default-governance-scaffold-policy.md](../methodology/templates/default-governance-scaffold-policy.md)
 
 ### 4.3 通用字段纪律
 
@@ -223,6 +224,7 @@
 
 - 成熟既有仓库和 deep-existing attach path 必须优先声明 repo-owned locator，不得让 Loom 猜测文件名
 - lightweight / new repository 可以显式使用 `loom_default`，但仍必须把选择写进 `repo-interface.json`
+- 缺失 `code_review.md` / `spec_review.md` 时，默认 action 是声明 `loom_default`，不是自动创建 repo-owned review instruction 文件
 - 不得把 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 路径硬编码成 Loom 默认查找路径
 - repo-owned instruction 应说明该仓库如何检查 behavior evidence、test evidence 与 fresh verification evidence
 - `review_instruction_locators` 只定位 review instruction，不承载 review verdict、review summary、finding disposition、validation status 或 retained host action result
@@ -572,3 +574,24 @@ agent-assisted adoption 的读、判断、回写与验证闭环由 [zero-frictio
 - 只能作为从属合同
 - 只能消费本文件已经冻结的边界
 - 不得反向扩张为 Loom 全局 issue-model 或 parent/sub-issue 默认规则
+
+## 7. repo-specific lint 边界
+
+repo-specific lint 规则属于 repo companion 的仓库级声明边界，不属于 Loom core 默认规则。
+
+repo companion 可以声明目标仓库自己的 lint / operating rule 入口，但只能表达：
+
+- lint 规则从哪里读
+- 该规则属于哪个 owner
+- 缺失或失败时按 blocking、optional 还是 advisory 消费
+- 结果由哪个 Loom surface 消费
+- 声明不可消费时回到哪个 Loom surface 或人工路径
+
+稳定约束：
+
+- Loom core 不得硬编码 repo-specific lint 名称、路径、CI job、guardian 名称或仓库架构规则
+- repo-specific lint result 只能作为 [governance-lint-taxonomy.md](../methodology/harness/governance-lint-taxonomy.md) 定义的 derived evidence 被消费
+- required repo-specific lint locator 缺失或不可读时，只能在声明的 owning surface 下 fail closed
+- optional / advisory repo-specific lint 缺失或不可读只进入 advisory evidence，不污染 core pass/fail
+- repo-specific lint 不得承载 Work Item、recovery 进度、review verdict、validation status、merge verdict、closeout result 或 retained host action result
+- 若 repo-specific lint 发现 core 边界被破坏，应映射到 core lint failure，例如 `companion_boundary_bypass` 或 `core_hardcoding_leak`

@@ -4,6 +4,7 @@
 
 完整执行顺序见 [execution-chain.md](./execution-chain.md)。
 `Work Item` 的 GitHub 默认语义见 [../governance/github-delivery-funnel.md](../governance/github-delivery-funnel.md)。
+`Work Item goal` 的字段、派生 `/goal` 合同与校验失败分类见 [../governance/goal-schema.md](../governance/goal-schema.md)。
 
 ## 1. 目标
 
@@ -56,6 +57,8 @@
 - 关闭条件
 
 一个 `Work Item` 只承接一个清晰执行目标，不得混装多个无关事项。
+
+若该事项进入 `/goal` 驱动的执行会话，主 `/goal` 必须从同一 `Work Item goal` 派生。`/goal` 只绑定当前执行上下文，不替代 `Work Item` 本身，也不得回写 review、merge 或 closeout 结论。
 
 ## 4. enforcement 规则
 
@@ -116,6 +119,8 @@ Loom 不冻结文件名，但要求这些入口从第一轮开始即可被机械
 ## 7. 事实链约束
 
 - `Work Item` 只承接静态执行真相
+- `Work Item goal` 只承接本次执行目标、范围、验证与停点条件
+- `/goal` 与 delegated goal 是从 `Work Item goal` 派生的 execution contract，不是新的治理真相源
 - checkpoint、停点、下一步、阻断项属于恢复主入口
 - `Work Item` 可以 authored locator，不得 authored review 或 closeout 结论本身
 - 统一状态控制面展示的 `item` 字段必须从 `Work Item` 派生

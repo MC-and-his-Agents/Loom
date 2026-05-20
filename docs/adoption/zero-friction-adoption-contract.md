@@ -11,6 +11,7 @@ zero-friction adoption 的目标是让 agent 能从 Loom 输出独立完成一�
 - 读取目标仓库已有根规则、验证入口、治理载体与宿主控制面
 - 判断本轮采用路径、启用能力、暂不启用能力与升级触发条件
 - 在用户要求落盘时生成 repo-local companion / interop 入口
+- 按默认治理 scaffold 策略处理缺失的 `AGENTS.md`、`WORKFLOW.md`、review instruction、vision 与 roadmap surface
 - 用 verify / fact-chain / resume guidance 关闭本轮 adoption
 
 稳定边界：
@@ -19,6 +20,7 @@ zero-friction adoption 的目标是让 agent 能从 Loom 输出独立完成一�
 - 不要求 fully unattended one-command strong adoption
 - 不把 `repo companion` 或 `repo interop` 写成第二套运行态真相
 - 不让 generated files 接管 branch、PR、worktree、merge、ruleset 或 host action 的底层实现
+- 不让默认 scaffold 伪造 repo-owned product truth、planning truth 或 repo-specific review rule
 - repo-owned residue 继续由目标仓库持有；Loom 只提供结构、locator、合同、生成与验证语义
 
 ## 2. 固定生命周期
@@ -65,6 +67,8 @@ zero-friction adoption 固定按 `read -> judge -> write -> verify` 关闭。
 - `source_locators`
 - `write_targets`
 - `validation_commands`
+- `missing_scaffold_surfaces`
+  - 每项必须包含 `surface`、`proposed_action`、`authority_boundary` 与 source locator 或缺口说明；action 语义见 [../methodology/templates/default-governance-scaffold-policy.md](../methodology/templates/default-governance-scaffold-policy.md)
 
 当判断需要 repo-specific 信息时，Loom 输出必须给出固定 decision prompt，而不是让执行者自由猜测。
 
@@ -98,6 +102,8 @@ decision prompt 至少包含：
   - 本轮是否生成或更新 `repo interop`，以及目标 locator
 - `repo_owned_residue`
   - 本轮保留在目标仓库 ownership 下的规则、carrier 或 host action
+- `default_scaffold_decisions`
+  - 缺失 `AGENTS.md`、`WORKFLOW.md`、`code_review.md`、`spec_review.md`、`VISION.md`、`ROADMAP.md` / `docs/roadmap/*` 时的 `generate | declare_loom_default | intentionally_absent | requires_user_authored_truth | require_user_input` 决策
 - `verification_commands`
 - `resume_after_adoption_intent`
 
@@ -158,6 +164,7 @@ generated `repo interop` 只能生成或更新以下内容：
 
 - 新增文件可被 Loom 入口定位
 - 未生成的 companion / interop surface 被显式记录为 intentionally absent
+- 未生成的默认 scaffold surface 被显式记录为 intentionally absent、requires user authored truth、loom default locator 或 repo-declared locator
 - repo-owned residue 保留在原 ownership
 - 没有新增平行事实链或平行状态面
 - 稳定 `.loom` carrier 遵守 [.loom surfaces 版本控制策略](./loom-surfaces-version-control.md)，不能被 blanket `.loom/` ignore 隐藏
@@ -169,6 +176,9 @@ generated `repo interop` 只能生成或更新以下内容：
 - generated companion locators 存在，或被标记为 intentionally absent
 - generated interop locators 存在，或被标记为 intentionally absent
 - companion / interop 边界未承载运行态真相、host action result 或 closeout result
+- 默认 scaffold 未承载 review verdict、closeout result、runtime state、产品完成事实或 roadmap 完成事实
+- `loom_default` review instruction locator 没有被伪装成 repo-owned review rule
+- vision / roadmap 缺失没有被猜测为默认 repo-owned locator
 - repo-specific 判断都有 source locator、reasoning、writeback target 与 verification evidence
 - 稳定 `.loom` carrier 对 Git 可见；`.loom/runtime`、`.loom/tmp`、`.loom/cache` 等运行态残留不被误报为必须提交
 - `fact-chain` 能复读 adoption 结果
@@ -204,5 +214,7 @@ adoption 完成后，`loom-resume` 不消费 adoption 输出作为新的事实�
   - GitHub profile 的 advisory / blocking / rollback gate rollout 合同
 - [loom-surfaces-version-control.md](./loom-surfaces-version-control.md)
   - 冻结稳定 `.loom` carrier 与运行态 scratch 的 Git 可见性边界
+- [../methodology/templates/default-governance-scaffold-policy.md](../methodology/templates/default-governance-scaffold-policy.md)
+  - 冻结默认治理 scaffold、review locator、vision / roadmap 缺失语义与 verify 边界
 
 本合同只定义 adoption 闭环，不复制这些合同的 schema 或 gate 规则。

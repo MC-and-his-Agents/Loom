@@ -63,8 +63,21 @@ Loom 当前至少要求以下纯度：
   - `mode: constrained | unconstrained`
   - `declared_paths`
   - `out_of_scope_changes`
+- `active_workspace_diagnostics`
+  - `item_id`
+  - `workspace_entry`
+  - `checkpoint`
+  - `binding_locator`
+  - `classification: stale_carrier | shared_workspace_conflict | unknown`
+  - `recommended_remediation`
 
 当 `scope_assessment.mode` 为 `constrained` 且出现 `out_of_scope_changes` 时，应视为范围越界阻断信号。
+
+active carrier 判定规则：
+
+- `stale_carrier` 表示同一 `workspace_entry` 下的其他 carrier 已处于 terminal checkpoint；它只进入 `report_only`，不得阻断当前 Work Item
+- `shared_workspace_conflict` 表示同一 `workspace_entry` 下仍有另一个非 terminal carrier；它必须 fail closed
+- `unknown` 表示候选 carrier 缺失、不可读或无法证明是否 terminal；它必须 fail closed，并给出修复 locator
 
 `python3 tools/loom_flow.py state-check --target <repo> [--item <id>]` 会复用同一纯度结果，并额外检查活跃状态与 checkpoint 完整性。
 

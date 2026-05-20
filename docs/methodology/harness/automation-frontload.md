@@ -17,6 +17,8 @@ merge checkpoint 只消费这些结果，不把它们扩写成第一次高质量
 
 本文统一把 repo-local 自动化与验证入口写成 `loom ...`。这组命令是 repo-local `loom CLI` 的次级操作面，主要服务 CI、自动化、调试和宿主编排；用户首层入口仍是 plugin 安装后的 `loom-init` 与各场景 skill。
 
+Governance lint / operating lint 的 taxonomy 与证据边界见 [governance-lint-taxonomy.md](./governance-lint-taxonomy.md)。自动化前置只消费 lint result 作为 derived evidence；它不得把 lint 输出写成第二份 authored truth，也不得把 repo-specific lint 规则硬编码进 Loom core。
+
 ## 2. 通用 core 检查矩阵
 
 | 检查类别 | 检查对象 | 失败含义 | 非目标 | 是否阻断 merge checkpoint |
@@ -32,6 +34,7 @@ merge checkpoint 只消费这些结果，不把它们扩写成第一次高质量
 | workspace lifecycle 入口存在性 | `create`、`locate`、`cleanup`、`retire` 与 `purity-check` 是否可调用 | 现场治理不可机械执行，恢复与交接风险升高 | 不替代现场治理策略设计 | 是 |
 | 基础状态一致性 | checkpoint、下一步、阻断项、验证摘要是否相互对齐 | 当前状态不可读，恢复与放行会消费到冲突事实 | 不判断事项目标本身是否值得做 | 是 |
 | 事实链唯一性 | 静态真相、动态真相与派生读面是否各守边界 | 仓库出现并行记账或事实链断裂 | 不替代 reviewer 的方案判断 | 是 |
+| Governance lint result | `fact_chain_broken`、`approval_bypass`、`companion_boundary_bypass`、`host_binding_drift`、`evidence_stale`、`core_hardcoding_leak` 等 derived lint result | 可机械判断的治理前置已经破坏，或 repo-specific lint 按 companion 声明需要阻断 | 不实现具体检查器；不定义 repo-specific 架构规则内容 | 按 lint strength 与 owning surface 判断 |
 
 这里的“执行支撑”包括初始化入口、恢复入口、验证入口、运行入口、checkpoint 入口以及 workspace lifecycle 入口等被正式规则要求的机械支撑。
 
@@ -47,11 +50,13 @@ merge checkpoint 只消费这些结果，不把它们扩写成第一次高质量
 | `scope_overflow` | 变更明显超出当前事项范围或单目标边界 | 阻断 | 回到范围收敛与分流 |
 | `runtime_evidence_gap` | 运行时证据字段缺失或 `present/not_applicable` 冲突 | 阻断 | 回到验证入口补证据 |
 | `workspace_residue` | Loom-owned 残留未清理、无关改动未分流 | 视严重度阻断 | 回到 cleanup/purity-check |
+| `governance_lint_failure` | core lint result 为 `blocking`，或 repo-specific lint 在当前 surface 声明为 blocking | 按 owning surface 阻断 | 回到 lint result 的 `fallback_to` |
 
 非目标保持不变：
 
 - 不把 reviewer 的方案判断改写成脚本硬编码结论
 - 不把宿主特定流程细节上移为 Loom 默认前置
+- 不把 repo-specific lint 名称、路径、CI job 或 guardian 规则写进 Loom core 检查矩阵
 
 ## 3. `skills` 触发与行为回归的稳定边界
 
@@ -97,6 +102,7 @@ Loom 仓库当前通过以下入口承接最小 core 前置检查：
 - 范围越界与 workspace residue 的 purity 预检
 - 运行时证据五字段可读性与 `not_applicable` 判定
 - workspace lifecycle / purity-check 入口存在性
+- governance lint result 的 strength、provenance、HEAD / scope / reviewed head / evidence freshness 绑定
 
 GitHub Actions 工作流会复用同一入口，而不是维护第二套命令。
 

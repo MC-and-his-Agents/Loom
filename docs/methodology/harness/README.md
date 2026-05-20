@@ -35,6 +35,8 @@
   - 定义统一状态控制面的字段语义、`runtime_state` / `runtime_evidence` 边界、运行时证据与 closeout 展示
 - [governance-failure-taxonomy.md](./governance-failure-taxonomy.md)
   - 定义 `stale` / `drift` / `gate_failure` 的统一 taxonomy
+- [governance-lint-taxonomy.md](./governance-lint-taxonomy.md)
+  - 定义 Governance Lint / Operating Lint 的 result strength、core lint kind、repo-specific 边界与 derived-evidence 消费纪律
 - [execution-chain.md](./execution-chain.md)
   - 定义从初始化产物到 merge checkpoint 放行的最小执行链路
 - [gate-chain.md](./gate-chain.md)

@@ -5,6 +5,7 @@
 前序消费链见 [gate-chain.md](./gate-chain.md)。
 受控合并合同见 [controlled-merge.md](./controlled-merge.md)。
 PR-specific host enforcement bridge 见 [pr-merge-gate.md](./pr-merge-gate.md)。
+Governance lint taxonomy 见 [governance-lint-taxonomy.md](./governance-lint-taxonomy.md)。
 
 ## 1. 能力定位
 
@@ -34,6 +35,7 @@ PR-specific host enforcement bridge 见 [pr-merge-gate.md](./pr-merge-gate.md)�
 - fresh verification evidence 的 `head_sha` / 范围 / 恢复摘要绑定
 - 运行时证据或 `not_applicable`
 - `budget_risk` 摘要
+- governance lint result 摘要
 - 风险与回滚边界
 - 未决阻断项
 
@@ -59,6 +61,8 @@ PR-specific host enforcement bridge 见 [pr-merge-gate.md](./pr-merge-gate.md)�
 - review record 中存在未处理的 `block` finding、未闭合的 accepted disposition，或无后续承接的 deferred disposition
 - repeated blocker / root-cause escalation 尚未回到前序 gate 处理
   - 回到 review record / 前序 gate / ownership 分配修正点
+- core governance lint 存在 blocking result，且映射到当前 `merge-ready` 必需前置
+- repo-specific lint 在 repo companion 中声明为 `merge_ready` blocking，且 result 仍为 fresh blocking
 
 ## 4. 唯一允许结果
 
@@ -105,6 +109,14 @@ PR-specific host enforcement bridge 见 [pr-merge-gate.md](./pr-merge-gate.md)�
 - 不得把 advisory budget 加入 `missing_inputs`
 - 不得因为 budget-only 风险把 `result` 从 `pass` 改成 `block` 或 `fallback`
 
+Governance lint 在 `merge-ready` 中的消费纪律：
+
+- `approval_bypass`、`host_binding_drift`、`evidence_stale`、`fact_chain_broken` 可阻断 `merge-ready`
+- `core_hardcoding_leak` 和 `companion_boundary_bypass` 若影响当前放行输入，也必须阻断并回到对应边界修复
+- advisory lint result 必须进入摘要，但不得单独把结果改为 `block` 或 `fallback`
+- repo-specific lint 只有在 repo companion 声明 `surface: merge_ready` 且 enforcement 为 `blocking` 或 requirement 为 `required` 时才能阻断
+- lint result 缺少 provenance、`HEAD`、scope、reviewed head 或 evidence freshness 绑定时，不得被当作 fresh verification evidence
+
 ## 6. 与 `controlled merge` 的边界
 
 `merge-ready` 负责确认 Loom 自身前序链是否完整。
@@ -127,3 +139,4 @@ PR-specific host enforcement bridge 见 [pr-merge-gate.md](./pr-merge-gate.md)�
 - 不把 `merge-ready` 写成宿主按钮说明
 - 不让当前层绕过前序 gate 缺口
 - 不把旧验证、未绑定当前 `HEAD` 的测试结果或未整合的 subagent 输出当作 fresh verification evidence
+- 不把 repo-specific lint 规则、guardian 名称、CI job 名或仓库目录名硬编码成 Loom core merge-ready 条件
