@@ -6,10 +6,13 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
+
+sys.dont_write_bytecode = True
 
 from runtime_paths import installed_skill_script
 

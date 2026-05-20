@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
+
+sys.dont_write_bytecode = True
 
 from governance_surface import (
     build_governance_surface,

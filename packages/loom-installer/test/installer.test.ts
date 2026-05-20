@@ -317,6 +317,50 @@ test('verify-upgrade fails closed when installed payload drifts from recorded me
   assert.equal(verify.rollback_path, join(repoRoot, 'plugins', 'loom'));
 });
 
+test('verify-upgrade fails closed on installed Python cache residue', () => {
+  const base = fixtureRoot();
+  const envSource = prepareEnv(base);
+  mkdirSync(envSource.CODEX_HOME!, { recursive: true });
+  const repoRoot = join(base, 'repo');
+  mkdirSync(repoRoot, { recursive: true });
+
+  runInstaller(
+    {
+      mode: 'plugin',
+      options: {
+        host: 'codex',
+        target: repoRoot,
+        force: false,
+        json: false,
+      },
+    },
+    envSource,
+    packageRoot(),
+  );
+  const cacheDir = join(repoRoot, 'plugins', 'loom', 'skills', 'shared', 'scripts', '__pycache__');
+  mkdirSync(cacheDir, { recursive: true });
+  writeFileSync(join(cacheDir, 'loom_check.cpython-314.pyc'), 'cache');
+
+  const verify = runInstaller(
+    {
+      operation: 'verify-upgrade',
+      mode: 'plugin',
+      options: {
+        host: 'codex',
+        target: repoRoot,
+        force: false,
+        json: false,
+      },
+    },
+    envSource,
+    packageRoot(),
+  );
+
+  assert.equal(verify.status, 'blocked');
+  assert.equal(verify.installed_status?.upgrade_eligibility, 'drift');
+  assert.equal(verify.drift?.includes(join('plugins', 'loom', 'skills', 'shared', 'scripts', '__pycache__')), true);
+});
+
 test('verify-upgrade fails closed when installed version metadata is missing', () => {
   const base = fixtureRoot();
   const envSource = prepareEnv(base);

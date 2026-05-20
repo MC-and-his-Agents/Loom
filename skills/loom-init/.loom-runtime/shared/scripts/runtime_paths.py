@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
+
+sys.dont_write_bytecode = True
 
 
 def caller_path(caller_file: str) -> Path:

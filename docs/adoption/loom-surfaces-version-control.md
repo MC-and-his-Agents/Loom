@@ -65,6 +65,8 @@
 .loom/attempts/**/raw-logs/
 .loom/attempts/**/scratch/
 .loom/local/
+.loom/bin/**/__pycache__/
+.loom/bin/**/*.py[cod]
 ```
 
 如果目标仓库已经存在 blanket `.loom/` ignore，bootstrap 和 verify 必须 fail closed。dry-run / blocked write 必须输出可审查的 ignore 修复方案；显式选择自动修复时，只能把 blanket ignore 收敛为 `.loom/runtime/`、`.loom/tmp/`、`.loom/cache/` 等运行态路径。不要用 `git add -f .loom` 粗粒度绕过，因为这会同时掩盖稳定载体和运行态残留的边界。

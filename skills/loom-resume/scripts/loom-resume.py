@@ -6,6 +6,8 @@ import runpy
 import sys
 from pathlib import Path
 
+os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+sys.dont_write_bytecode = True
 SCRIPT_PATH = Path(__file__).resolve()
 PACKAGE_ROOT = SCRIPT_PATH.parents[1]
 RUNTIME_ROOT = PACKAGE_ROOT / ".loom-runtime"

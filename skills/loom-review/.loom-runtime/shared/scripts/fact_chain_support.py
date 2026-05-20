@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
+
+sys.dont_write_bytecode = True
 
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.*?)(?:\s+#+\s*)?$")
 KEY_VALUE_BULLET_RE = re.compile(r"^- ([^:]+):\s*(.+?)\s*$")

@@ -19,6 +19,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+sys.dont_write_bytecode = True
+
 from fact_chain_support import (
     STATUS_FIELDS,
     STATUS_SOURCE_FIELDS,
@@ -812,6 +814,7 @@ def story_flow_payload(
         "contract": {
             "story_intake": "docs/methodology/governance/story-intake.md",
             "story_template": "docs/methodology/templates/scaffold/user-story.md",
+            "story_carrier_locator": ".loom/stories/<item-id>.md",
             "spec_suite": "docs/methodology/templates/spec-suite.md",
         },
     }
@@ -4104,14 +4107,39 @@ def run_git(root: Path, args: list[str]) -> subprocess.CompletedProcess[str] | N
 
 
 def run_process(args: list[str], cwd: Path, *, timeout_seconds: float | None = None) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    for key in ("LOOM_SOURCE_REPO_ROOT", "LOOM_INSTALLED_SKILLS_ROOT", "LOOM_RUNTIME_SCENE"):
+        env.pop(key, None)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     return subprocess.run(
         args,
         cwd=cwd,
         check=False,
         capture_output=True,
         text=True,
+        env=env,
         timeout=timeout_seconds,
     )
+
+
+def has_make_target(makefile_path: Path, target: str) -> bool:
+    if not makefile_path.exists():
+        return False
+    try:
+        text = makefile_path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    target_pattern = re.compile(rf"^(?:[^\s:#=]+(?:\s+[^\s:#=]+)*\s+)?{re.escape(target)}\s*:(?:\s|$)", re.MULTILINE)
+    return bool(target_pattern.search(text))
+
+
+def closeout_gate_command(target_root: Path) -> tuple[list[str], str]:
+    if has_make_target(target_root / "Makefile", "loom-check"):
+        return ["make", "loom-check"], "repo_declared_make_target"
+    repo_gate = target_root / ".loom/bin/loom_check.py"
+    if repo_gate.exists():
+        return ["python3", ".loom/bin/loom_check.py", "."], "repo_local_loom_check"
+    return ["python3", str(shared_script(__file__, "loom_check.py")), str(target_root)], "shared_loom_check"
 
 
 def git_branch(root: Path) -> str | None:
@@ -12085,17 +12113,15 @@ def closeout_payload(
     closeout_findings: list[dict[str, Any]] = []
     gate: dict[str, Any] = {"skipped": skip_gate}
     if not skip_gate:
-        repo_gate = target_root / ".loom/bin/loom_check.py"
-        if repo_gate.exists():
-            gate_command = ["python3", ".loom/bin/loom_check.py", "."]
-        else:
-            gate_command = ["python3", str(shared_script(__file__, "loom_check.py")), str(target_root)]
+        gate_command, gate_source = closeout_gate_command(target_root)
         gate_result = run_process(gate_command, target_root)
+        gate["source"] = gate_source
         gate["command"] = " ".join(gate_command)
         gate["exit_code"] = gate_result.returncode
         gate["stdout"] = gate_result.stdout.strip()
+        gate["stderr"] = gate_result.stderr.strip()
         if gate_result.returncode != 0:
-            missing_inputs.append("loom_check")
+            missing_inputs.append(f"loom_check:{gate_source}")
 
     reconciliation_payload: dict[str, Any] | None = None
     closeout_fallback: str | None = None

@@ -15,10 +15,10 @@
   },
   "intake": {
     "schema_version": "loom-init-intake/v1",
-    "repository_type": "new",
+    "repository_type": "existing",
     "root_boundary_docs": "missing",
-    "ci_or_basic_tests": false,
-    "repository_level_validation_entry": false,
+    "ci_or_basic_tests": true,
+    "repository_level_validation_entry": true,
     "primary_gap_category": "governance",
     "long_running_recovery_pain": false,
     "shared_contract_or_high_risk_boundary": false,
@@ -26,7 +26,7 @@
     "merge_review_semantic_overload": false,
     "maturity": {
       "document_truth": "partial",
-      "execution_surface": "not_formed",
+      "execution_surface": "partial",
       "governance_carriers": "loom_carriers_present"
     },
     "notes": "autodetected by loom_init.py",
@@ -225,6 +225,11 @@
         "owner": "loom-runtime"
       },
       {
+        "path": ".loom/bin/loom_story_carriers.py",
+        "kind": "loom-tool",
+        "owner": "loom-runtime"
+      },
+      {
         "path": ".loom/reviews/INIT-0001.json",
         "kind": "review-entry",
         "owner": "loom"
@@ -250,6 +255,11 @@
         "owner": "loom"
       },
       {
+        "path": ".loom/stories/_template.md",
+        "kind": "story-carrier-template",
+        "owner": "loom"
+      },
+      {
         "path": ".loom/specs/INIT-0001/spec.md",
         "kind": "spec",
         "owner": "loom"
@@ -263,11 +273,6 @@
         "path": ".loom/specs/INIT-0001/implementation-contract.md",
         "kind": "implementation-contract",
         "owner": "loom"
-      },
-      {
-        "path": ".github/PULL_REQUEST_TEMPLATE.md",
-        "kind": "pr-template",
-        "owner": "repo-owned"
       }
     ],
     "forbidden_authored_carriers": []
@@ -404,49 +409,55 @@
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "b537c97e0b1cf4b93f59f8585a06147ac629255c554388288446598cda0f2d9d"
+      "sha256": "9fa1e3460dcac9aaa05383ee830597d7b164c18e5095ed836201b9eb056f54d4"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/fact_chain_support.py",
-      "sha256": "fa1305b6e68173d5e37dd83569718221707588d317c79c24a189e9279580c45c"
+      "sha256": "2c26b384467486ea0ea430fddc5eb71ddb7319e43f68c48d69a41137bbb4ae0a"
     },
     {
       "path": ".loom/bin/governance_surface.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/governance_surface.py",
-      "sha256": "317cf0dc5337ee7d93ce2e7458b0de79830e3e3420689a6f6d26c328ed8ab393"
+      "sha256": "57f25ab448fb67934a5a0886adf26e7a640f3c00255d26711d1e3931c40834c5"
     },
     {
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "11a4ca4a6f9f74bc0eced5e1726d91f528190aefa0479e7f92e43415b4df92ab"
+      "sha256": "6a31653d1f22a19cc02e91594d24d2deeb5520c67602b48615b3341cec289615"
     },
     {
       "path": ".loom/bin/loom_status.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_status.py",
-      "sha256": "31bbe5965183bf9458fccde49230a0f8d918b319088937b322c0c04a68edb948"
+      "sha256": "46991b73c7ae37c013c768a125fb7d2ab8a39d202f64ac94c4b3a721a60ddfec"
     },
     {
       "path": ".loom/bin/runtime_paths.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/runtime_paths.py",
-      "sha256": "2e2701f2ca131482cabf1efd00d1c58790bec807f5ef1203d7332256892653f5"
+      "sha256": "5cab170a11a0c4e32cb80ddb3455cc9bde2a0e35ec590fc6f4f425e96f12049e"
     },
     {
       "path": ".loom/bin/runtime_state.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/runtime_state.py",
-      "sha256": "049d7bc65bb1cdd25359ccf93b9b43ff2b02bd899309d2a92a317147bda7dcc4"
+      "sha256": "dc4898d72e4ca0e41a2e7ac11a234256065bc5b4e8eb57961e95d4ee26ef9e06"
     },
     {
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "9beedc28a9932885b6165d3180b04f40590875755185ebd53f82ddf5eb5041a0"
+      "sha256": "d9e1819ab408ea24a7fe1c6c6de106734ebb6000845e00529ea52487080db999"
+    },
+    {
+      "path": ".loom/bin/loom_story_carriers.py",
+      "kind": "loom-tool",
+      "source": "skills/shared/scripts/loom_story_carriers.py",
+      "sha256": "ef41d403624ce8d68daba2363b52a775cec14014fa9b73837aab65c7cc94447a"
     },
     {
       "path": ".loom/reviews/INIT-0001.json",
@@ -474,6 +485,11 @@
       "source": "generated"
     },
     {
+      "path": ".loom/stories/_template.md",
+      "kind": "story-carrier-template",
+      "source": "skills/shared/assets/templates/scaffold/user-story.md"
+    },
+    {
       "path": ".loom/specs/INIT-0001/spec.md",
       "kind": "spec",
       "source": "skills/shared/assets/templates/scaffold/spec.md"
@@ -487,11 +503,6 @@
       "path": ".loom/specs/INIT-0001/implementation-contract.md",
       "kind": "implementation-contract",
       "source": "skills/shared/assets/templates/scaffold/implementation-contract.md"
-    },
-    {
-      "path": ".github/PULL_REQUEST_TEMPLATE.md",
-      "kind": "pr-template",
-      "source": "skills/shared/assets/github/PULL_REQUEST_TEMPLATE.md"
     }
   ],
   "initial_work_items": [
@@ -535,15 +546,16 @@
         ".loom/bin/runtime_paths.py",
         ".loom/bin/runtime_state.py",
         ".loom/bin/loom_check.py",
+        ".loom/bin/loom_story_carriers.py",
         ".loom/reviews/INIT-0001.json",
         ".loom/reviews/INIT-0001.spec.json",
         ".loom/work-items/INIT-0001.md",
         ".loom/progress/INIT-0001.md",
         ".loom/status/current.md",
+        ".loom/stories/_template.md",
         ".loom/specs/INIT-0001/spec.md",
         ".loom/specs/INIT-0001/plan.md",
-        ".loom/specs/INIT-0001/implementation-contract.md",
-        ".github/PULL_REQUEST_TEMPLATE.md"
+        ".loom/specs/INIT-0001/implementation-contract.md"
       ],
       "closing_condition": "The generated entry, work item, recovery entry, and templates are readable and verified",
       "post_build_continuation": "Promote the first real downstream issue after the bootstrap artifacts are accepted",
@@ -621,7 +633,9 @@
       ".loom/cache/",
       ".loom/attempts/**/raw-logs/",
       ".loom/attempts/**/scratch/",
-      ".loom/local/"
+      ".loom/local/",
+      ".loom/bin/**/__pycache__/",
+      ".loom/bin/**/*.py[cod]"
     ],
     "missing_runtime_ignores": [],
     "repair": {
@@ -1751,12 +1765,12 @@
     }
   },
   "detected_repository_mode": {
-    "repository_type": "new",
+    "repository_type": "existing",
     "scenario_key": "new",
     "governance_surface_mode": "new",
     "maturity": {
       "document_truth": "partial",
-      "execution_surface": "not_formed",
+      "execution_surface": "partial",
       "governance_carriers": "loom_carriers_present"
     }
   },
@@ -1948,6 +1962,12 @@
       "requires_intent": null
     },
     {
+      "path": ".loom/bin/loom_story_carriers.py",
+      "kind": "loom-tool",
+      "owner": "loom-runtime",
+      "requires_intent": null
+    },
+    {
       "path": ".loom/reviews/INIT-0001.json",
       "kind": "review-entry",
       "owner": "loom",
@@ -1978,6 +1998,12 @@
       "requires_intent": "execution-control"
     },
     {
+      "path": ".loom/stories/_template.md",
+      "kind": "story-carrier-template",
+      "owner": "loom",
+      "requires_intent": "execution-control"
+    },
+    {
       "path": ".loom/specs/INIT-0001/spec.md",
       "kind": "spec",
       "owner": "loom",
@@ -1994,12 +2020,6 @@
       "kind": "implementation-contract",
       "owner": "loom",
       "requires_intent": "execution-control"
-    },
-    {
-      "path": ".github/PULL_REQUEST_TEMPLATE.md",
-      "kind": "pr-template",
-      "owner": "repo-owned",
-      "requires_intent": null
     }
   ],
   "required_carriers": [
@@ -2154,6 +2174,11 @@
       "owner": "loom-runtime"
     },
     {
+      "path": ".loom/bin/loom_story_carriers.py",
+      "kind": "loom-tool",
+      "owner": "loom-runtime"
+    },
+    {
       "path": ".loom/reviews/INIT-0001.json",
       "kind": "review-entry",
       "owner": "loom"
@@ -2179,6 +2204,11 @@
       "owner": "loom"
     },
     {
+      "path": ".loom/stories/_template.md",
+      "kind": "story-carrier-template",
+      "owner": "loom"
+    },
+    {
       "path": ".loom/specs/INIT-0001/spec.md",
       "kind": "spec",
       "owner": "loom"
@@ -2192,11 +2222,6 @@
       "path": ".loom/specs/INIT-0001/implementation-contract.md",
       "kind": "implementation-contract",
       "owner": "loom"
-    },
-    {
-      "path": ".github/PULL_REQUEST_TEMPLATE.md",
-      "kind": "pr-template",
-      "owner": "repo-owned"
     }
   ],
   "intentionally_absent": [
@@ -2278,9 +2303,9 @@
             ".loom/bin/runtime_paths.py",
             ".loom/bin/runtime_state.py",
             ".loom/bin/loom_check.py",
+            ".loom/bin/loom_story_carriers.py",
             ".loom/reviews/INIT-0001.json",
-            ".loom/reviews/INIT-0001.spec.json",
-            ".github/PULL_REQUEST_TEMPLATE.md"
+            ".loom/reviews/INIT-0001.spec.json"
           ],
           "verification_commands": [
             "python3 .loom/bin/loom_init.py verify --target ."
@@ -2326,15 +2351,16 @@
             ".loom/bin/runtime_paths.py",
             ".loom/bin/runtime_state.py",
             ".loom/bin/loom_check.py",
+            ".loom/bin/loom_story_carriers.py",
             ".loom/reviews/INIT-0001.json",
             ".loom/reviews/INIT-0001.spec.json",
             ".loom/work-items/INIT-0001.md",
             ".loom/progress/INIT-0001.md",
             ".loom/status/current.md",
+            ".loom/stories/_template.md",
             ".loom/specs/INIT-0001/spec.md",
             ".loom/specs/INIT-0001/plan.md",
-            ".loom/specs/INIT-0001/implementation-contract.md",
-            ".github/PULL_REQUEST_TEMPLATE.md"
+            ".loom/specs/INIT-0001/implementation-contract.md"
           ],
           "verification_commands": [
             "python3 .loom/bin/loom_init.py verify --target ."
@@ -2343,7 +2369,7 @@
       ]
     },
     "repository_mode_guess": {
-      "repository_type": "new",
+      "repository_type": "existing",
       "scenario_key": "new",
       "governance_surface_mode": "new"
     },
@@ -2353,13 +2379,17 @@
         "locator": "AGENTS.md"
       },
       {
-        "summary": "maturity: document_truth=partial, execution_surface=not_formed, governance_carriers=loom_carriers_present",
+        "summary": "repository validation entry may be present",
+        "locator": "Makefile"
+      },
+      {
+        "summary": "maturity: document_truth=partial, execution_surface=partial, governance_carriers=loom_carriers_present",
         "locator": ".loom/bootstrap/intake.snapshot.json"
       }
     ],
     "existing_validation_entry": {
-      "status": "missing",
-      "locator": "not_applicable"
+      "status": "present",
+      "locator": "True"
     },
     "companion_boundary_intent": {
       "action": "generate_or_update",
@@ -2411,15 +2441,16 @@
       ".loom/bin/runtime_paths.py",
       ".loom/bin/runtime_state.py",
       ".loom/bin/loom_check.py",
+      ".loom/bin/loom_story_carriers.py",
       ".loom/reviews/INIT-0001.json",
       ".loom/reviews/INIT-0001.spec.json",
       ".loom/work-items/INIT-0001.md",
       ".loom/progress/INIT-0001.md",
       ".loom/status/current.md",
+      ".loom/stories/_template.md",
       ".loom/specs/INIT-0001/spec.md",
       ".loom/specs/INIT-0001/plan.md",
-      ".loom/specs/INIT-0001/implementation-contract.md",
-      ".github/PULL_REQUEST_TEMPLATE.md"
+      ".loom/specs/INIT-0001/implementation-contract.md"
     ],
     "verification_commands": [
       "python3 .loom/bin/loom_init.py verify --target .",
@@ -2560,15 +2591,16 @@
           ".loom/bin/runtime_paths.py",
           ".loom/bin/runtime_state.py",
           ".loom/bin/loom_check.py",
+          ".loom/bin/loom_story_carriers.py",
           ".loom/reviews/INIT-0001.json",
           ".loom/reviews/INIT-0001.spec.json",
           ".loom/work-items/INIT-0001.md",
           ".loom/progress/INIT-0001.md",
           ".loom/status/current.md",
+          ".loom/stories/_template.md",
           ".loom/specs/INIT-0001/spec.md",
           ".loom/specs/INIT-0001/plan.md",
-          ".loom/specs/INIT-0001/implementation-contract.md",
-          ".github/PULL_REQUEST_TEMPLATE.md"
+          ".loom/specs/INIT-0001/implementation-contract.md"
         ],
         "verification_commands": [
           "python3 .loom/bin/loom_init.py verify --target .",

@@ -58,6 +58,14 @@ closeout gate 用来回答两件事：
 
 `closeout` 不把 drift 或控制面缺口伪装成顶层 `fallback` 结果。
 
+`closeout check` 的本地 gate 读取顺序必须保留来源：
+
+1. 有 repo-declared `Makefile` `loom-check` target 时，先执行 `make loom-check`，来源标记为 `repo_declared_make_target`。
+2. 只有缺少该 target 时，才回退到 `.loom/bin/loom_check.py`，来源标记为 `repo_local_loom_check`。
+3. 只有缺少 repo-local runtime gate 时，才回退到 shared runtime `loom_check.py`，来源标记为 `shared_loom_check`。
+
+Adopted product repo 的 closeout 不得因为缺少 Loom source repo self-fixture（例如 `examples/new-project`）而绕过 repo 声明的正式 gate。
+
 `closeout check` 内部消费 `reconciliation audit` 时，阻断纪律如下：
 
 - `pass`：允许继续读取 merge / main / project 等 closeout 事实
