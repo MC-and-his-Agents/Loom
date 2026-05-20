@@ -11,6 +11,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_ROOT = REPO_ROOT / "skills"
 
+os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+sys.dont_write_bytecode = True
 os.environ.setdefault("LOOM_INSTALLED_SKILLS_ROOT", str(SKILLS_ROOT))
 os.environ.setdefault("LOOM_SOURCE_REPO_ROOT", str(REPO_ROOT))
 os.environ["LOOM_RUNTIME_SCENE"] = "repo-local-demo"

@@ -17,6 +17,7 @@
     "shared/scripts/loom_flow.py",
     "shared/scripts/loom_status.py",
     "shared/scripts/loom_check.py",
+    "shared/scripts/loom_story_carriers.py",
     "shared/assets/review/loom-review-result-schema.json",
     "shared/assets/templates/scaffold/spec.md",
     "shared/assets/templates/scaffold/plan.md",

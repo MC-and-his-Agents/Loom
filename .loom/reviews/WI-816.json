@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-816",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-816 implementation review is approved for the HotCP runtime hygiene batch. The implementation keeps the change scoped to closeout gate precedence, Python runtime cache hygiene, installed-runtime drift detection, generated skill/runtime surfaces, .loom/stories story carrier scaffold/checker support, and the demo scenario binding needed for root make loom-check to consume the intended new-project fixture. Local validation passed for diff hygiene, version bump, skills surface, installer tests, example adopted repo loom-check, closeout gate provenance, root make loom-check, merge checkpoint, adoption verification, root loom_check, and Python cache purity.",
+  "reviewer": "codex",
+  "reviewed_head": "830e35a89ae37e5c7e174a6c18acdcda17ce78e2",
+  "reviewed_validation_summary": "git diff --check passed; installer version bump check passed for 0.1.119 -> 0.1.120; python3 tools/skills_surface.py check passed; npm --prefix packages/loom-installer test passed 21/21; make -C examples/new-project loom-check passed; closeout check passed with gate.source repo_declared_make_target; make loom-check passed with checked 36 surfaces after fixing the demo scenario binding; python3 tools/loom_flow.py checkpoint merge --target . --item WI-816 passed; python3 tools/loom_flow.py adopt verify --target . --item WI-816 passed; python3 tools/loom_check.py /Users/mc/dev/Loom passed with checked 36 surfaces; Python cache find scan returned no .pyc/__pycache__ residue.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-816.md",
+    "recovery_entry": ".loom/progress/WI-816.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

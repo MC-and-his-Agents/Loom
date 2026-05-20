@@ -14,6 +14,8 @@ import sys
 from functools import lru_cache
 from pathlib import Path
 
+sys.dont_write_bytecode = True
+
 from fact_chain_support import inspect_fact_chain
 from governance_surface import build_governance_surface, workspace_lifecycle_expectations
 from runtime_paths import registry_path, shared_asset
@@ -23,6 +25,7 @@ RUNTIME_SOURCE = "skills/shared/scripts/loom_init.py"
 FLOW_RUNTIME_SOURCE = "skills/shared/scripts/loom_flow.py"
 STATUS_RUNTIME_SOURCE = "skills/shared/scripts/loom_status.py"
 CHECK_RUNTIME_SOURCE = "skills/shared/scripts/loom_check.py"
+STORY_CARRIERS_RUNTIME_SOURCE = "skills/shared/scripts/loom_story_carriers.py"
 FACT_CHAIN_RUNTIME_SOURCE = "skills/shared/scripts/fact_chain_support.py"
 GOVERNANCE_RUNTIME_SOURCE = "skills/shared/scripts/governance_surface.py"
 TOOL_VERSION = "1.3.0"
@@ -35,6 +38,8 @@ RUNTIME_GITIGNORE_LINES = (
     ".loom/attempts/**/raw-logs/",
     ".loom/attempts/**/scratch/",
     ".loom/local/",
+    ".loom/bin/**/__pycache__/",
+    ".loom/bin/**/*.py[cod]",
 )
 RUNTIME_SCRATCH_PREFIXES = (
     ".loom/runtime/",
@@ -134,6 +139,7 @@ RUNTIME_ARTIFACT_SOURCES = {
     ".loom/bin/runtime_paths.py": "skills/shared/scripts/runtime_paths.py",
     ".loom/bin/runtime_state.py": "skills/shared/scripts/runtime_state.py",
     ".loom/bin/loom_check.py": CHECK_RUNTIME_SOURCE,
+    ".loom/bin/loom_story_carriers.py": STORY_CARRIERS_RUNTIME_SOURCE,
 }
 
 ROOT_BOUNDARY_FILES = (
@@ -490,7 +496,7 @@ def stable_carrier_capability(relative_path: str, owner: str | None = None) -> s
         return "repo-companion"
     if relative_path.startswith(".loom/shadow/"):
         return "shadow-parity"
-    if relative_path.startswith((".loom/work-items/", ".loom/progress/", ".loom/reviews/", ".loom/status/", ".loom/specs/")):
+    if relative_path.startswith((".loom/work-items/", ".loom/progress/", ".loom/reviews/", ".loom/status/", ".loom/specs/", ".loom/stories/")):
         return "execution-support"
     if owner:
         return owner
@@ -1495,6 +1501,7 @@ def profile_common_artifacts() -> list[dict[str, str]]:
         runtime_artifact(".loom/bin/runtime_paths.py", "loom-tool-support", "skills/shared/scripts/runtime_paths.py"),
         runtime_artifact(".loom/bin/runtime_state.py", "loom-tool-support", "skills/shared/scripts/runtime_state.py"),
         runtime_artifact(".loom/bin/loom_check.py", "loom-tool", CHECK_RUNTIME_SOURCE),
+        runtime_artifact(".loom/bin/loom_story_carriers.py", "loom-tool", STORY_CARRIERS_RUNTIME_SOURCE),
     ]
     return artifacts
 
@@ -1519,6 +1526,7 @@ def profile_execution_artifacts(target_root: Path) -> list[dict[str, str]]:
             {"path": ".loom/work-items/INIT-0001.md", "kind": "work-item", "source": "generated"},
             {"path": ".loom/progress/INIT-0001.md", "kind": "progress", "source": "generated"},
             {"path": ".loom/status/current.md", "kind": "status-surface", "source": "generated"},
+            {"path": ".loom/stories/_template.md", "kind": "story-carrier-template", "source": "skills/shared/assets/templates/scaffold/user-story.md"},
             {"path": ".loom/specs/INIT-0001/spec.md", "kind": "spec", "source": "skills/shared/assets/templates/scaffold/spec.md"},
             {"path": ".loom/specs/INIT-0001/plan.md", "kind": "plan", "source": "skills/shared/assets/templates/scaffold/plan.md"},
             {
@@ -1554,6 +1562,7 @@ def attach_only_artifact_paths(target_root: Path, install_pr_template: bool) -> 
         ".loom/bin/runtime_paths.py",
         ".loom/bin/runtime_state.py",
         ".loom/bin/loom_check.py",
+        ".loom/bin/loom_story_carriers.py",
     ]
     if install_pr_template or not (target_root / ".github/PULL_REQUEST_TEMPLATE.md").exists():
         artifacts.append(".github/PULL_REQUEST_TEMPLATE.md")
@@ -1639,6 +1648,8 @@ def initial_artifacts(target_root: Path, install_pr_template: bool, adoption_pat
                 "source": "skills/shared/assets/github/PULL_REQUEST_TEMPLATE.md",
             }
         )
+    if not (target_root / "Makefile").exists():
+        artifacts.append({"path": "Makefile", "kind": "repo-local-gate", "source": "generated"})
     return artifacts
 
 
@@ -1671,7 +1682,7 @@ def append_planned_write(
             "requires_intent": (
                 "execution-control"
                 if is_heavy_execution_path(adoption_path)
-                and path.startswith((".loom/work-items/", ".loom/progress/", ".loom/status/", ".loom/specs/"))
+                and path.startswith((".loom/work-items/", ".loom/progress/", ".loom/status/", ".loom/specs/", ".loom/stories/"))
                 else None
             ),
         }
@@ -1734,6 +1745,7 @@ def intentionally_absent_targets(adoption_path: str, profile: str) -> list[dict[
             {"path": ".loom/status/current.md", "reason": "attach-only does not author Loom status truth"},
             {"path": ".loom/reviews/**", "reason": "attach-only preserves host-owned review truth"},
             {"path": ".loom/specs/**", "reason": "attach-only does not author Loom execution specs"},
+            {"path": ".loom/stories/**", "reason": "attach-only does not author Loom story carriers"},
             release_target_absent,
         ]
     if adoption_path == "defer":
@@ -1752,6 +1764,7 @@ def intentionally_absent_targets(adoption_path: str, profile: str) -> list[dict[
             {"path": ".loom/progress/**", "reason": "light-governance does not author Loom recovery truth"},
             {"path": ".loom/status/current.md", "reason": "light-governance does not author Loom status truth"},
             {"path": ".loom/specs/**", "reason": "light-governance keeps formal Loom specs deferred until execution-control"},
+            {"path": ".loom/stories/**", "reason": "light-governance keeps story carriers deferred until execution-control"},
             release_target_absent,
         ]
     return [release_target_absent]
@@ -2544,6 +2557,17 @@ def render_work_item(result: dict[str, object]) -> str:
     )
 
 
+def render_makefile() -> str:
+    return (
+        ".PHONY: loom-check loom-story-carriers-check loom-verify\n\n"
+        "loom-check: loom-verify loom-story-carriers-check\n\n"
+        "loom-verify:\n"
+        "\tpython3 .loom/bin/loom_init.py verify --target .\n\n"
+        "loom-story-carriers-check:\n"
+        "\tpython3 .loom/bin/loom_story_carriers.py .\n"
+    )
+
+
 def render_progress(result: dict[str, object]) -> str:
     checkpoint = "admission checkpoint" if result["run"]["scenario_key"] != "complex-existing" else "build checkpoint"
     return (
@@ -2720,6 +2744,7 @@ def runtime_artifact(path: str, kind: str, source: str) -> dict[str, str]:
         ".loom/bin/runtime_paths.py": Path(__file__).with_name("runtime_paths.py"),
         ".loom/bin/runtime_state.py": Path(__file__).with_name("runtime_state.py"),
         ".loom/bin/loom_check.py": Path(__file__).with_name("loom_check.py"),
+        ".loom/bin/loom_story_carriers.py": Path(__file__).with_name("loom_story_carriers.py"),
     }
     source_path = runtime_sources[path]
     return {
@@ -2803,6 +2828,12 @@ def scaffold_target(
             written += 1
             touched.append(str(path.relative_to(target_root)))
 
+    makefile_target = target_root / "Makefile"
+    if not makefile_target.exists():
+        if write_text(makefile_target, render_makefile(), force=force):
+            written += 1
+            touched.append("Makefile")
+
     for surface in SHADOW_PARITY_SURFACES:
         value = "done" if surface == "closeout" else "pass"
         for side in ("loom", "repo"):
@@ -2825,6 +2856,7 @@ def scaffold_target(
         (Path(__file__).with_name("runtime_paths.py"), target_root / ".loom/bin/runtime_paths.py"),
         (Path(__file__).with_name("runtime_state.py"), target_root / ".loom/bin/runtime_state.py"),
         (Path(__file__).with_name("loom_check.py"), target_root / ".loom/bin/loom_check.py"),
+        (Path(__file__).with_name("loom_story_carriers.py"), target_root / ".loom/bin/loom_story_carriers.py"),
     ):
         if copy_file(source, destination, force=force):
             written += 1
@@ -2837,6 +2869,7 @@ def scaffold_target(
                 shared_asset(__file__, "templates/scaffold/implementation-contract.md"),
                 target_root / ".loom/specs/INIT-0001/implementation-contract.md",
             ),
+            (shared_asset(__file__, "templates/scaffold/user-story.md"), target_root / ".loom/stories/_template.md"),
         ):
             if copy_file(source, destination, force=force):
                 written += 1

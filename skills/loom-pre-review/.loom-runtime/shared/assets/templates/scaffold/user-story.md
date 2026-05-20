@@ -4,6 +4,8 @@
 
 ## User Story
 
+- Schema marker: loom-user-story/v1
+
 - Actor:
 - Capability:
 - Outcome:
@@ -48,6 +50,8 @@ Then
 
 ## Story Readiness
 
+- Schema marker: loom-story-readiness/v1
+
 - Decision: ready | needs-shaping | blocked | not-applicable
 - Rationale:
 - Story locator:
@@ -55,6 +59,8 @@ Then
 - Bypass rationale, if not applicable:
 
 ## Delivery Consumption Boundary
+
+- Schema marker: loom-story-delivery-mapping/v1
 
 - Intended Work Item or FR:
 - Spec entry expectation:

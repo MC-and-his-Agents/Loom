@@ -16,6 +16,8 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
+sys.dont_write_bytecode = True
+
 from fact_chain_support import inspect_fact_chain
 import governance_surface as governance_surface_module
 import loom_flow as loom_flow_module
@@ -246,6 +248,8 @@ DEMO_ASSETS = (
     "examples/new-project/.loom/bin/loom_flow.py",
     "examples/new-project/.loom/bin/loom_status.py",
     "examples/new-project/.loom/bin/loom_check.py",
+    "examples/new-project/.loom/bin/loom_story_carriers.py",
+    "examples/new-project/.loom/stories/_template.md",
     "examples/new-project/.loom/specs/INIT-0001/spec.md",
     "examples/new-project/.loom/specs/INIT-0001/plan.md",
     "examples/new-project/.loom/specs/INIT-0001/implementation-contract.md",
@@ -557,6 +561,7 @@ def run_command(
     command_env = os.environ.copy()
     for key in ("LOOM_SOURCE_REPO_ROOT", "LOOM_INSTALLED_SKILLS_ROOT", "LOOM_RUNTIME_SCENE"):
         command_env.pop(key, None)
+    command_env["PYTHONDONTWRITEBYTECODE"] = "1"
     if env:
         command_env.update(env)
     return subprocess.run(
@@ -4860,6 +4865,7 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                 ".loom/specs/INIT-0001/spec.md",
                 ".loom/specs/INIT-0001/plan.md",
                 ".loom/specs/INIT-0001/implementation-contract.md",
+                ".loom/stories/_template.md",
             ):
                 if not (explicit_full_target / required).exists():
                     failures.append(Failure("deep-existing-bootstrap", f"`explicit execution-control bootstrap sample` must generate `{required}`"))
@@ -4938,6 +4944,8 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                 ".loom/attempts/**/raw-logs/",
                 ".loom/attempts/**/scratch/",
                 ".loom/local/",
+                ".loom/bin/**/__pycache__/",
+                ".loom/bin/**/*.py[cod]",
             ):
                 if runtime_ignore not in gitignore_lines:
                     failures.append(Failure("deep-existing-bootstrap", f"`blanket .loom gitignore repair sample` must keep runtime ignore `{runtime_ignore}`"))
@@ -5159,7 +5167,7 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
             for required in (".loom/reviews/INIT-0001.json", ".loom/reviews/INIT-0001.spec.json", ".github/PULL_REQUEST_TEMPLATE.md"):
                 if required not in planned_paths or not (light_target / required).exists():
                     failures.append(Failure("deep-existing-bootstrap", f"`light-governance bootstrap sample` must generate `{required}`"))
-            for absent in (".loom/work-items/**", ".loom/progress/**", ".loom/status/current.md", ".loom/specs/**"):
+            for absent in (".loom/work-items/**", ".loom/progress/**", ".loom/status/current.md", ".loom/specs/**", ".loom/stories/**"):
                 if absent not in absent_paths:
                     failures.append(Failure("deep-existing-bootstrap", f"`light-governance bootstrap sample` must mark `{absent}` intentionally absent"))
             for forbidden in (
@@ -5169,6 +5177,7 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                 ".loom/specs/INIT-0001/spec.md",
                 ".loom/specs/INIT-0001/plan.md",
                 ".loom/specs/INIT-0001/implementation-contract.md",
+                ".loom/stories/_template.md",
             ):
                 if forbidden in planned_paths or (light_target / forbidden).exists():
                     failures.append(Failure("deep-existing-bootstrap", f"`light-governance bootstrap sample` must not generate `{forbidden}`"))
@@ -12874,8 +12883,53 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
         original_issue_payload = loom_flow_module.github_issue_payload
         original_reconciliation_audit = loom_flow_module.reconciliation_audit_payload
         original_contains = loom_flow_module.contains_merged_commit
+        original_run_process = loom_flow_module.run_process
         seen_target_branches: list[str] = []
         try:
+            repo_declared_gate_target = base / "repo-declared-closeout-gate"
+            repo_declared_gate_target.mkdir()
+            (repo_declared_gate_target / "Makefile").write_text("loom-check:\n\t@echo repo gate\n", encoding="utf-8")
+            gate_command, gate_source = loom_flow_module.closeout_gate_command(repo_declared_gate_target)
+            if gate_command != ["make", "loom-check"] or gate_source != "repo_declared_make_target":
+                failures.append(Failure("adversarial-adoption", "closeout gate must prefer repo-declared `make loom-check`"))
+
+            repo_local_gate_target = base / "repo-local-closeout-gate"
+            (repo_local_gate_target / ".loom/bin").mkdir(parents=True)
+            (repo_local_gate_target / ".loom/bin/loom_check.py").write_text("print('repo local')\n", encoding="utf-8")
+            gate_command, gate_source = loom_flow_module.closeout_gate_command(repo_local_gate_target)
+            if gate_command != ["python3", ".loom/bin/loom_check.py", "."] or gate_source != "repo_local_loom_check":
+                failures.append(Failure("adversarial-adoption", "closeout gate must fall back to repo-local `.loom/bin/loom_check.py`"))
+
+            shared_gate_target = base / "shared-closeout-gate"
+            shared_gate_target.mkdir()
+            gate_command, gate_source = loom_flow_module.closeout_gate_command(shared_gate_target)
+            if gate_source != "shared_loom_check" or "loom_check.py" not in " ".join(gate_command):
+                failures.append(Failure("adversarial-adoption", "closeout gate must expose shared loom_check fallback source"))
+
+            class FakeGateResult:
+                returncode = 0
+                stdout = "repo gate\n"
+                stderr = ""
+
+            loom_flow_module.run_process = lambda *_args, **_kwargs: FakeGateResult()
+            payload, closeout_errors = loom_flow_module.closeout_payload(
+                target_root=repo_declared_gate_target,
+                phase_number=None,
+                fr_number=None,
+                issue_number=None,
+                pr_number=None,
+                project_number=None,
+                branch_name=None,
+                owner="owner",
+                repo_name="repo",
+                skip_gate=False,
+            )
+            if closeout_errors:
+                failures.append(Failure("adversarial-adoption", f"repo-declared closeout gate fixture failed: {closeout_errors}"))
+            elif payload.get("gate", {}).get("source") != "repo_declared_make_target":
+                failures.append(Failure("adversarial-adoption", "closeout payload must report repo-declared gate source"))
+            loom_flow_module.run_process = original_run_process
+
             loom_flow_module.github_pr_payload = lambda *_args, **_kwargs: (
                 {
                     "state": "MERGED",
@@ -12955,6 +13009,7 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             loom_flow_module.github_issue_payload = original_issue_payload
             loom_flow_module.reconciliation_audit_payload = original_reconciliation_audit
             loom_flow_module.contains_merged_commit = original_contains
+            loom_flow_module.run_process = original_run_process
 
         rollover_target = base / "active-rollover"
         shutil.copytree(baseline, rollover_target)
@@ -16329,6 +16384,60 @@ def check_story_intake_contract(root: Path) -> list[Failure]:
             context="flow story contract summary",
             payload=payload,
         )
+        contract = payload.get("contract")
+        if not isinstance(contract, dict) or contract.get("story_carrier_locator") != ".loom/stories/<item-id>.md":
+            failures.append(Failure(category, "flow story contract must expose `.loom/stories/<item-id>.md` as the story carrier locator"))
+
+    with tempfile.TemporaryDirectory(prefix="loom-check-story-carriers-") as tmp:
+        target = Path(tmp) / "target"
+        (target / ".loom/stories").mkdir(parents=True)
+        (target / ".loom/work-items").mkdir(parents=True)
+        (target / ".loom/stories/_template.md").write_text("template\n", encoding="utf-8")
+        work_item_text = (
+            "# WI-100\n\n"
+            "## Static Facts\n\n"
+            "- Item ID: WI-100\n"
+            "- Goal: validate story carrier\n"
+            "- Scope: story carrier fixture\n"
+            "- Execution Path: test\n"
+            "- Workspace Entry: .\n"
+            "- Recovery Entry: .loom/progress/WI-100.md\n"
+            "- Review Entry: .loom/reviews/WI-100.json\n"
+            "- Validation Entry: python3 .loom/bin/loom_story_carriers.py .\n"
+            "- Closing Condition: story carrier validates\n\n"
+            "## Associated Artifacts\n\n"
+            "- `.loom/stories/WI-100.md`\n"
+        )
+        (target / ".loom/work-items/WI-100.md").write_text(work_item_text, encoding="utf-8")
+        story_text = (
+            "# WI-100 Story\n\n"
+            "- Schema marker: loom-user-story/v1\n"
+            "- Actor: Release shepherd\n"
+            "- Capability: validate story carrier support\n"
+            "- Outcome: story carrier can be consumed by runtime checks\n"
+            "- Business value: avoids losing story readiness evidence\n\n"
+            "## Story Readiness\n\n"
+            "- Schema marker: loom-story-readiness/v1\n"
+            "- Decision: ready\n"
+            "- Rationale: concrete enough for fixture validation\n\n"
+            "## Delivery Consumption Boundary\n\n"
+            "- Schema marker: loom-story-delivery-mapping/v1\n"
+            "- Intended Work Item or FR: WI-100\n"
+        )
+        (target / ".loom/stories/WI-100.md").write_text(story_text, encoding="utf-8")
+        payload, error = load_command_json(root, ["python3", "src/skills/shared/scripts/loom_story_carriers.py", str(target)])
+        if error:
+            failures.append(Failure(category, f"story carrier pass fixture failed: {error}"))
+        elif payload.get("result") != "pass":
+            failures.append(Failure(category, "valid story carrier fixture must pass"))
+
+        unregistered = target / ".loom/stories/WI-101.md"
+        unregistered.write_text(story_text.replace("WI-100", "WI-101"), encoding="utf-8")
+        payload, error = load_command_json(root, ["python3", "src/skills/shared/scripts/loom_story_carriers.py", str(target)])
+        if error:
+            failures.append(Failure(category, f"story carrier missing registration fixture failed to return JSON: {error}"))
+        elif payload.get("result") != "block" or not any("matching work item is missing" in str(item) for item in payload.get("missing_inputs", [])):
+            failures.append(Failure(category, "missing story work item fixture must fail closed"))
 
     return failures
 

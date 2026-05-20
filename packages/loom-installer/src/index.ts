@@ -1,5 +1,6 @@
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import {
   Host,
   CliOptions,
@@ -360,6 +361,7 @@ function compareInstalledPayload(input: {
 }): string[] {
   const prefix = `${sourcePrefix(input.mode, input.manifest, input.skill)}/`;
   const changed: string[] = [];
+  const installed = installedRoot(input.targetRoot, input.host, input.mode, input.skill);
   for (const file of input.manifest.files) {
     if (!file.path.startsWith(prefix)) {
       continue;
@@ -371,7 +373,36 @@ function compareInstalledPayload(input: {
       changed.push(targetRelative);
     }
   }
+  for (const cachePath of collectPythonCacheArtifacts(installed, input.targetRoot)) {
+    changed.push(cachePath);
+  }
   return changed.sort();
+}
+
+function collectPythonCacheArtifacts(root: string, targetRoot: string): string[] {
+  if (!existsSync(root)) {
+    return [];
+  }
+  const found: string[] = [];
+  const visit = (directory: string): void => {
+    for (const entry of readdirSync(directory)) {
+      const path = join(directory, entry);
+      const stat = statSync(path);
+      if (stat.isDirectory()) {
+        if (entry === '__pycache__') {
+          found.push(relative(targetRoot, path));
+          continue;
+        }
+        visit(path);
+        continue;
+      }
+      if (entry.endsWith('.pyc') || entry.endsWith('.pyo') || entry.endsWith('.pyd')) {
+        found.push(relative(targetRoot, path));
+      }
+    }
+  };
+  visit(root);
+  return found;
 }
 
 function statusFailureResult(input: {

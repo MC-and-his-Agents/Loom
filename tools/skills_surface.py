@@ -101,6 +101,8 @@ def write_wrapper(skill_id: str, target: Path) -> None:
                 "import sys",
                 "from pathlib import Path",
                 "",
+                'os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")',
+                "sys.dont_write_bytecode = True",
                 "SCRIPT_PATH = Path(__file__).resolve()",
                 "PACKAGE_ROOT = SCRIPT_PATH.parents[1]",
                 f'RUNTIME_ROOT = PACKAGE_ROOT / "{PRIVATE_RUNTIME_DIR}"',
@@ -311,6 +313,16 @@ def compare_trees(expected: Path, actual: Path) -> list[str]:
     return errors
 
 
+def python_cache_artifacts(root: Path) -> list[str]:
+    if not root.exists():
+        return []
+    return sorted(
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*")
+        if "__pycache__" in path.parts or path.suffix in {".pyc", ".pyo", ".pyd"}
+    )
+
+
 def iter_text_files(root: Path) -> list[Path]:
     return [path for path in root.rglob("*") if path.is_file() and path.suffix in TEXT_SUFFIXES]
 
@@ -419,6 +431,9 @@ def verify_surface(root: Path = TARGET_ROOT, *, run_launchers: bool = True) -> l
 
 
 def check_surface() -> None:
+    cache_artifacts = python_cache_artifacts(TARGET_ROOT)
+    if cache_artifacts:
+        raise RuntimeError("skills surface contains Python cache artifacts:\n" + "\n".join(cache_artifacts[:80]))
     with tempfile.TemporaryDirectory(prefix="loom-skills-check-") as tmp:
         expected = Path(tmp) / "skills"
         generate_surface(SOURCE_ROOT, expected)

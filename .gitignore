@@ -85,6 +85,8 @@ ENV/
 bin/
 !.loom/bin/
 !.loom/bin/**
+!examples/new-project/.loom/bin/
+!examples/new-project/.loom/bin/**
 *.test
 *.out
 cover.out

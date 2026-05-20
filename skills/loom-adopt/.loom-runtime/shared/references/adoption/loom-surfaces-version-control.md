@@ -58,6 +58,8 @@ Ignore only runtime paths:
 .loom/attempts/**/raw-logs/
 .loom/attempts/**/scratch/
 .loom/local/
+.loom/bin/**/__pycache__/
+.loom/bin/**/*.py[cod]
 ```
 
 Bootstrap and verify must fail closed when a target repository already has a blanket `.loom/` ignore. Dry-run or blocked write output must provide a reviewable ignore repair, and explicit auto-repair may only narrow the blanket rule to runtime/cache scratch paths such as `.loom/runtime/`, `.loom/tmp/`, and `.loom/cache/`. Do not use `git add -f .loom` as the normal answer because it hides the stable-carrier/runtime-residue boundary.
