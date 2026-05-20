@@ -12,9 +12,9 @@
 - Validation Entry: py_compile; skills_surface check; host_binding inspect; resume/status smoke; host_adapter_check; version_surface_check; git diff --check; loom_check; pr-gate check; CI checks
 - Closing Condition: PR #856 绑定 WI-827，host binding/dependency/Project drift/goal/governance lint hardcoding guard 全部验证通过，PR checks 绿并尽力 controlled merge；若 host 阻断则记录 owner、证据与恢复状态。
 - Current Checkpoint: merge
-- Current Stop: PR #856 implementation is committed; WI-827 carrier is now active, installer package version is bumped for generated skill payload changes, and local validation is being refreshed before PR gate recheck.
-- Next Step: Record current-head reviews, update PR body with Loom Work Item: WI-827, run pr-gate locally, commit, push, wait for CI, then perform controlled merge and closeout if permitted.
-- Blockers: External CI was previously blocked by installer version and stale WI-819 PR gate binding; both are being repaired in this branch.
+- Current Stop: PR #856 carrier and installer gate repairs are committed; WI-827 owns the active PR lane and WI-819 is terminal after PR #855 merge.
+- Next Step: Record current-head spec and implementation reviews, update PR body with Loom Work Item: WI-827, run pr-gate locally, push, wait for CI, then perform controlled merge and closeout if permitted.
+- Blockers: None recorded.
 - Latest Validation Summary: PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/*.py skills/shared/scripts/*.py passed; python3 tools/skills_surface.py check passed; python3 tools/version_surface_check.py passed; git diff --check passed; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed with 0.1.121 -> 0.1.122.
 - Recovery Boundary: Current batch covers prerequisite recovery and middle aggregation for #827/#829/#830/#848/#795/#796/#798/#799/#801/#802/#803/#822/#823/#824/#825/#849/#850; parent evidence for #797/#800/#820 is closeout work.
 - Current Lane: PR #856 on branch work/827-850-middle-capability-aggregation
