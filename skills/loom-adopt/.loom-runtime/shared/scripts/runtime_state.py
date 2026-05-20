@@ -286,7 +286,11 @@ def _validate_referenced_resources(skills_root: Path) -> tuple[dict[str, Any], l
         "shared/references/harness/controlled-merge.md",
         "shared/references/harness/pr-merge-gate.md",
         "shared/references/harness/governance-failure-taxonomy.md",
+        "shared/references/harness/governance-lint-taxonomy.md",
+        "shared/references/harness/host-binding-inspector.md",
+        "shared/references/harness/native-dependency-contract.md",
         "shared/references/governance/governance-maturity-model.md",
+        "shared/references/governance/goal-schema.md",
         "shared/references/adoption/github-profile-upgrade.md",
     )
     for relative in required_resources:

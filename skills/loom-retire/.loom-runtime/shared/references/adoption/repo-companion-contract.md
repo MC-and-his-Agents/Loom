@@ -21,7 +21,7 @@
 与之并行但单独分离的 companion-owned 读面：
 
 - retained host action result / repo-native carrier / shadow parity 的只读入口
-  - 由 [repo-interop-contract.md](../adoption/repo-interop-contract.md) 承接
+  - 由 [repo-interop-contract.md](./repo-interop-contract.md) 承接
 
 它不承接以下 authored truth：
 
@@ -46,6 +46,7 @@
 
 - `repo companion` 不得把 repo-specific 规则伪装成 Loom core 默认规则
 - `repo companion` 不得改写 retained host actions 的 ownership
+- GitHub native dependency 与 host binding inspector 属于 host/control-plane mirror；`repo-interface.json` 最多声明 repo-authored dependency truth locator，不承载 native edge 或 inspector result 作为 authored truth
 - retained host actions 继续以 [host-action-contract.md](../harness/host-action-contract.md) 与 [closeout-gate.md](../harness/closeout-gate.md) 为唯一主落点
 
 ## 3. `.loom/companion/manifest.json`
@@ -143,11 +144,12 @@
   },
   "dynamic_tool_locators": [],
   "policy_locators": [],
-  "hook_locators": []
+  "hook_locators": [],
+  "advanced_lint_locators": []
 }
 ```
 
-`v2` 在 `v1` 之上新增七个可选顶层 section：
+`v2` 在 `v1` 之上新增可选顶层 section：
 
 - `review_instruction_locators`
 - `metadata_contract`
@@ -155,6 +157,7 @@
 - `dynamic_tool_locators`
 - `policy_locators`
 - `hook_locators`
+- `advanced_lint_locators`
 - `release_targets`
 - `host_truth_locators`
 
@@ -165,10 +168,12 @@
 - `dynamic_tool_locators` 只在 `v2` 合法
 - `policy_locators` 只在 `v2` 合法
 - `hook_locators` 只在 `v2` 合法
+- `advanced_lint_locators` 只在 `v2` 合法
 - `release_targets` 只在 `v2` 合法
 - `host_truth_locators` 只在 `v2` 合法，且只能声明宿主事实源 locator，例如 GitHub Issue、GitHub Project、PR review / guardian、PR metadata 与 issue state
 - `v2` 不改变 `repo_specific_requirements` 与 `specialized_gates` 的既有纪律
 - `v2` 不把 repo runtime state、progress/current stop、review verdict、review summary、validation status、closeout result 或 retained host action result 写入 `repo-interface.json`
+- 默认治理 scaffold 与缺失 review instruction 的处理策略见仓库文档 `docs/methodology/templates/default-governance-scaffold-policy.md`
 
 ### 4.3 通用字段纪律
 
@@ -223,6 +228,7 @@
 
 - 成熟既有仓库和 deep-existing attach path 必须优先声明 repo-owned locator，不得让 Loom 猜测文件名
 - lightweight / new repository 可以显式使用 `loom_default`，但仍必须把选择写进 `repo-interface.json`
+- 缺失 `code_review.md` / `spec_review.md` 时，默认 action 是声明 `loom_default`，不是自动创建 repo-owned review instruction 文件
 - 不得把 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 路径硬编码成 Loom 默认查找路径
 - repo-owned instruction 应说明该仓库如何检查 behavior evidence、test evidence 与 fresh verification evidence
 - `review_instruction_locators` 只定位 review instruction，不承载 review verdict、review summary、finding disposition、validation status 或 retained host action result
@@ -343,6 +349,7 @@
 - `owner`
 - `requirement`
 - `fallback_to`
+- `safety`
 
 其中：
 
@@ -353,14 +360,60 @@
 - `owner` 只允许 `repo | repo-companion | host | host-adapter | platform | external-tool`
 - `requirement` 只允许 `required | optional | advisory`
 - `fallback_to` 只描述声明不可消费时的 Loom 回退面或人工路径，不描述宿主执行动作
+- `safety` 固定声明 `path_containment`、`truth_boundary`、`cleanup_scope`、`host_trust` 与 `permission_risk`
 
 稳定约束：
 
 - `hook_locators` 只承接 declaration-time locator，不承接 runtime state、execution result、authored progress、review verdict、validation status、host action result 或 closeout basis
+- required hook 缺少 `safety`、`host_trust: untrusted`、`permission_risk: unknown` 或 cleanup scope 越界时必须 fail closed
 - host adapter 可以从 `hook_locators` 生成 Codex / Claude Code native hook config，但 generated config 不替代 Loom locator contract
 - host-native hook output 只有经过 adapter 映射后才能成为 runtime evidence
 - cleanup hook 始终受 [workspace-lifecycle.md](../harness/workspace-lifecycle.md) 约束；Codex cleanup 不能作为 required native hook
 - lifecycle 与宿主事件映射见 [hook-locator-contract.md](../harness/hook-locator-contract.md)
+
+### 4.7.1 `advanced_lint_locators`
+
+`advanced_lint_locators` 用于声明 repo-owned architecture / boundary lint 的只读入口。
+
+它回答的是：
+
+- Loom 应去哪里读取 repo-specific architecture / boundary lint result
+- 该 lint 的真实 owner 是谁
+- 缺失时按 required、optional 还是 advisory 处理
+- 结果属于哪个 Loom surface
+
+它不回答：
+
+- Loom core 应采用哪个 repo-specific 架构规则
+- guardian、CI 或 review engine 应如何执行
+- review、validation、merge-ready 或 closeout 已经得出什么最终结论
+
+`advanced_lint_locators[*]` 固定字段：
+
+- `id`
+- `summary`
+- `lint_type`
+- `locator`
+- `owner`
+- `requirement`
+- `surface`
+- `fallback_to`
+- `result_envelope_schema`
+
+其中：
+
+- `lint_type` 只允许 `architecture_boundary | bounded_context | legacy_access | host_state_access | companion_boundary`
+- `locator` 必须是仓内相对路径；required locator 缺失或不可读必须 fail closed
+- `owner` 只允许 `repo | repo-companion | host | host-adapter | platform | external-tool`
+- `requirement` 只允许 `required | optional | advisory`
+- `surface` 只允许 `admission | pre_review | review | build | merge_ready | closeout`
+- `result_envelope_schema` 固定为 `loom-governance-lint-result/v1`
+
+稳定约束：
+
+- `advanced_lint_locators` 只定位 lint result envelope，不承载 lint verdict 本身之外的运行态
+- locator payload 不得承载 `runtime_state`、`review_verdict`、`validation_status`、`merge_result`、`closeout_result`、`guardian_verdict`、`host_action_result` 或 `final_verdict`
+- repo-specific architecture rule name 不得被提升为 Loom core taxonomy；Loom core 只消费 result envelope、provenance、freshness 与 surface enforcement
 
 ### 4.8 `release_targets`
 
@@ -497,7 +550,7 @@
 - `shadow parity` compare surface 的 locator
 - external-runtime locator、runtime version、fallback runtime 或 de-vendor rollback mode
 
-这些入口固定属于 [repo-interop-contract.md](../adoption/repo-interop-contract.md)。
+这些入口固定属于 [repo-interop-contract.md](./repo-interop-contract.md)。
 external-runtime 迁移路径固定属于 [external-runtime-companion-contract.md](./external-runtime-companion-contract.md)。
 
 明确禁止事项：
@@ -569,3 +622,24 @@ agent-assisted adoption 的读、判断、回写与验证闭环由 [zero-frictio
 - 只能作为从属合同
 - 只能消费本文件已经冻结的边界
 - 不得反向扩张为 Loom 全局 issue-model 或 parent/sub-issue 默认规则
+
+## 7. repo-specific lint 边界
+
+repo-specific lint 规则属于 repo companion 的仓库级声明边界，不属于 Loom core 默认规则。
+
+repo companion 可以声明目标仓库自己的 lint / operating rule 入口，但只能表达：
+
+- lint 规则从哪里读
+- 该规则属于哪个 owner
+- 缺失或失败时按 blocking、optional 还是 advisory 消费
+- 结果由哪个 Loom surface 消费
+- 声明不可消费时回到哪个 Loom surface 或人工路径
+
+稳定约束：
+
+- Loom core 不得硬编码 repo-specific lint 名称、路径、CI job、guardian 名称或仓库架构规则
+- repo-specific lint result 只能作为 [governance-lint-taxonomy.md](../harness/governance-lint-taxonomy.md) 定义的 derived evidence 被消费
+- required repo-specific lint locator 缺失或不可读时，只能在声明的 owning surface 下 fail closed
+- optional / advisory repo-specific lint 缺失或不可读只进入 advisory evidence，不污染 core pass/fail
+- repo-specific lint 不得承载 Work Item、recovery 进度、review verdict、validation status、merge verdict、closeout result 或 retained host action result
+- 若 repo-specific lint 发现 core 边界被破坏，应映射到 core lint failure，例如 `companion_boundary_bypass` 或 `core_hardcoding_leak`

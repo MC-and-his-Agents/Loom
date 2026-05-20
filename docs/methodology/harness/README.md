@@ -60,6 +60,10 @@
   - 定义 Loom 与宿主 branch / PR / git worktree 生命周期的边界
 - [host-issue-binding.md](./host-issue-binding.md)
   - 定义 `Work Item` 与 branch / PR / head / merge commit 的绑定链
+- [host-binding-inspector.md](./host-binding-inspector.md)
+  - 定义 host binding inspector 的只读绑定链、Project item 与 dependency graph 输出合同
+- [native-dependency-contract.md](./native-dependency-contract.md)
+  - 定义 GitHub native issue dependency 作为 host mirror 的读取、drift 与 gate 消费边界
 - [controlled-merge.md](./controlled-merge.md)
   - 定义 GitHub merge control plane 的默认消费与 merge 后交接
 - [pr-merge-gate.md](./pr-merge-gate.md)

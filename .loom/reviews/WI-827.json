@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-827",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-827 middle capability aggregation implementation is approved for merge readiness. The batch connects host binding inspection, native dependency graph, Project drift status and merge-ready consumption, /goal derive/validate/bootstrap/closeout evidence, advanced Governance Lint declaration, and Loom core hardcoding guard while preserving host-native boundaries. The follow-up commits also bind PR #856 to WI-827, terminate merged WI-819 as historical evidence, and bump the installer package version for generated skill payload changes.",
+  "reviewer": "codex",
+  "reviewed_head": "bc9725e1b3e64d5bb7c9a0701693f50ce143bc6f",
+  "reviewed_validation_summary": "PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/*.py skills/shared/scripts/*.py passed; python3 tools/skills_surface.py check passed; python3 tools/version_surface_check.py passed; git diff --check passed; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed with 0.1.121 -> 0.1.122.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-827.md",
+    "recovery_entry": ".loom/progress/WI-827.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

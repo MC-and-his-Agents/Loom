@@ -31,12 +31,16 @@ closeout gate 用来回答两件事：
 - issue 状态
 - PR 是否已 merged
 - 事项对应实现是否已达到 `absorbed`
+- `host-binding inspect` 的 `binding_chain` 与 `dependency_graph`
 - merged PR 是否已进入 `origin/main`
 - project 中对应 issue 的状态
 - merge-ready 消费过的 behavior evidence / test evidence 摘要
 - 主干包含合并结果后仍可回链的 fresh verification evidence
+- 可选 `/goal completion` evidence；调用方提供时只作为一致性输入消费，不作为完成真相源
 
 若这些事实不一致，结果必须返回 `block`。
+
+native dependency unreadable、stale edge、open blocker 或 host binding inspector conflict 都必须按 [host-binding-inspector.md](./host-binding-inspector.md) 与 [native-dependency-contract.md](./native-dependency-contract.md) 暴露为 closeout finding；blocking profile 下不得把这些 gap 折叠成普通 issue closed/open 判断。
 
 若仓库声明了目标仓库 `release / version`，`closeout check` 还必须至少能区分：
 
@@ -81,6 +85,14 @@ closeout 消费 behavior/test evidence 的语义如下：
 - 若证据只覆盖 merge 前 `HEAD`，必须能通过 PR / merge commit / main 包含关系证明该证据仍覆盖当前主干结果
 - 若 closeout 发现主干、issue、project 或 evidence locator 无法互相回链，必须返回 `block`
 - 若 subagent 输出没有被整合到 review record、验证摘要或 merge-ready basis，closeout 不得把它作为 `absorbed` 或 `closed_out` 依据
+- 若提供 `/goal completion` evidence，closeout 必须校验它的 Work Item 与 `head_sha` 仍绑定当前 closeout 上下文；mismatch 返回 `block`，valid 也只表示该 evidence 可消费，不表示 closeout 已完成
+
+closeout truth 与 workspace retire 必须分层：
+
+- 版本化 closeout truth 必须在 merge 前通过 review / merge-ready / closeout basis 进入可审查载体
+- merge 后 `closeout check|sync` 只消费 PR、merge commit、target branch、issue、Project 与 repo-authored artifacts 的一致性
+- `workspace retire` 只做 local cleanup / runtime evidence，不写 `.loom/progress/**` 或 `.loom/status/current.md`
+- post-merge retire 不得制造新的需要再开 PR 合入 main 的 carrier diff
 
 这里的 `absorbed` 只表示 host merge 后可证明的实现吸收结论，不等于 `closed_out`。
 因此，`closeout check` 至少要能区分：

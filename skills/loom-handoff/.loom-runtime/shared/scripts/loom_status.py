@@ -21,6 +21,7 @@ from loom_flow import (
     detect_github_repo,
     emit,
     fact_chain_error_contract,
+    goal_execution_contract,
     github_issue_payload,
     github_pr_payload,
     implementation_review_status_payload,
@@ -28,6 +29,7 @@ from loom_flow import (
     latest_execution_attempt_payload,
     latest_retry_evidence_payload,
     load_context,
+    project_drift_payload,
     report_blocking_failures,
     report_blocking_messages,
     report_provenance,
@@ -35,6 +37,7 @@ from loom_flow import (
     report_recovery_readiness,
     runtime_state_payload,
     spec_review_gate_payload,
+    validate_goal_execution_contract,
 )
 
 
@@ -520,6 +523,23 @@ def main(argv: list[str]) -> int:
         owner=args.owner,
         repo_name=args.repo_name,
     )
+    project_drift = project_drift_payload(
+        target_root=target_root,
+        owner=args.owner,
+        repo_name=args.repo_name,
+        issue_number=args.issue,
+        pr_number=args.pr,
+        project_number=args.project,
+        mode="advisory",
+    )
+    goal_contract = goal_execution_contract(context)
+    goal_readiness = validate_goal_execution_contract(
+        goal_contract,
+        context,
+        issue_number=args.issue,
+        pr_number=args.pr,
+        branch_name=args.branch,
+    )
     control_status = governance_control_status(
         governance_surface=governance_surface,
         spec_review=spec_review,
@@ -608,6 +628,9 @@ def main(argv: list[str]) -> int:
             "policy_readiness": policy_readiness,
             "execution_budget": execution_budget,
             "execution_budget_risk": execution_budget_risk,
+            "goal_execution_contract": goal_contract,
+            "goal_readiness": goal_readiness,
+            "project_drift": project_drift,
             "blocking_failures": report_blocking_failures(context["report"]),
             "item": {
                 "id": context["item_id"],

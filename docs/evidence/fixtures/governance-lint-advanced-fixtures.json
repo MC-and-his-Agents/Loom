@@ -1,0 +1,32 @@
+{
+  "schema_version": "loom-governance-lint-advanced-fixtures/v1",
+  "purpose": "Exercise declaration-time boundaries for advanced architecture and boundary lint.",
+  "valid_declaration": {
+    "id": "repo-layer-boundary",
+    "summary": "Read a repo-owned layer boundary lint result without copying the rule into Loom core.",
+    "lint_type": "architecture_boundary",
+    "locator": ".loom/companion/lint/layer-boundary.json",
+    "owner": "repo",
+    "requirement": "required",
+    "surface": "merge_ready",
+    "fallback_to": "manual_repair",
+    "result_envelope_schema": "loom-governance-lint-result/v1"
+  },
+  "blocked_declarations": [
+    {
+      "kind": "unsafe_locator",
+      "locator": "../private/lint.json",
+      "expected_result": "block"
+    },
+    {
+      "kind": "wrong_schema",
+      "result_envelope_schema": "repo-private-verdict/v1",
+      "expected_result": "block"
+    },
+    {
+      "kind": "loom_owned_repo_rule",
+      "owner": "loom",
+      "expected_result": "block"
+    }
+  ]
+}

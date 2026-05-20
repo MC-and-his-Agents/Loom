@@ -6,11 +6,12 @@
 
 ## 1. 目标与边界
 
-`.loom/companion/interop.json` 用于声明三类只读入口：
+`.loom/companion/interop.json` 用于声明四类只读入口：
 
 - retained host action result 的读取入口
 - repo-native carrier / evidence / truth 的读取入口
 - `shadow mode` parity compare 的读取入口
+- external orchestrator 读面 locator
 
 它不承接：
 
@@ -30,6 +31,10 @@ dynamic tool availability locator 属于 [repo-companion-contract.md](./repo-com
 approval / sandbox policy read locator 属于 [repo-companion-contract.md](./repo-companion-contract.md) 的 `policy_locators`，因为它定位的是 policy 声明入口，不是权限请求结果、sandbox mutation 或 retained host action result。
 
 `interop.json` 中声明的入口在 fact-chain 中只能被消费为 host/control-plane mirror、retained result、repo-native carrier locator 或 locator provenance。它不得成为新的 Loom-authored truth，也不得覆盖 `Work Item`、恢复主入口、review record、merge checkpoint 或 closeout basis。
+
+`interop.json` 以及其中任意 entry 都不得嵌套 repo companion / runtime truth 字段，例如 `dynamic_tool_locators`、`policy_locators`、`review_instruction_locators`、`blocking_owner`、`override_decision`、`final_verdict`、`runtime_state`、`review_verdict`、`validation_status` 或 `closeout_result`。这些字段必须留在对应权威合同中；若出现在 `interop.json`，消费方必须 fail closed。
+
+GitHub native dependency 与 host binding inspector 的读取结果属于 host/control-plane mirror 或 derived read surface。`interop.json` 不保存 native dependency edge、binding inspection result 或 Project drift 作为 repo-native truth；需要声明 repo-authored dependency truth 时，应通过 repo companion locator 指向 repo-owned authority。
 
 ## 2. `.loom/companion/interop.json`
 
@@ -71,6 +76,7 @@ approval / sandbox policy read locator 属于 [repo-companion-contract.md](./rep
 - `host_adapters` 必须存在，可为空数组
 - `repo_native_carriers` 必须存在，可为空数组
 - `shadow_surfaces` 必须同时声明 `admission`、`review`、`merge_ready`、`closeout`
+- `external_orchestrators` 可存在；缺省等价于空数组，以保持既有 `loom-repo-interop/v1` 读面兼容
 
 ## 3. `host_adapters`
 
@@ -273,7 +279,70 @@ blocking 模式只改变消费结果，不改变 `shadow_surfaces` schema：
 - 不在 `interop.json` 中声明 blocking owner、override decision 或 final verdict
 - 不要求 `shadow parity` 代替 review、merge-ready 或 closeout 的正式 authority-of-truth
 
-## 6. 与其他合同的关系
+## 6. `external_orchestrators`
+
+`external_orchestrators[*]` 固定字段：
+
+- `id`
+- `summary`
+- `surfaces`
+- `operations`
+- `locator`
+- `owner`
+- `requirement`
+- `fallback_to`
+
+其中：
+
+- `surfaces` 必须是非空数组
+- `surfaces[*]` 只允许 `admission | pre_review | review | build | merge_ready | closeout`
+- `operations` 必须是非空数组
+- `operations[*]` 只允许 `work_item_read | workspace_attach | recovery_writeback | status_read | gate_read`
+- `locator` 只描述 Loom 如何读取外部 orchestrator 的 retained read evidence，不描述如何调度任务
+- `owner` 只允许 `repo | repo-companion | host | host-adapter | platform | external-tool`
+- `requirement` 只允许 `required | optional | advisory`
+- `fallback_to` 只描述声明不可消费时回到哪个 Loom surface 或人工路径
+
+外部 orchestrator read evidence 只能作为 retained result 或 locator provenance 消费。
+它不得替代 `Work Item`、恢复主入口、status control plane、review record、
+merge checkpoint 或 closeout basis。
+
+外部 orchestrator locator payload 不得承载：
+
+- scheduler state
+- attempt ownership
+- authored progress
+- `next_step`
+- `blockers`
+- `latest_validation_summary`
+- status truth
+- gate verdict
+- review verdict
+- validation summary
+- host action result
+- closeout basis
+
+若 required external orchestrator locator 缺失、越界、不可读，或 payload 包含这些
+forbidden authored fields，消费方必须 fail closed。optional / advisory 缺口只能进入
+profile-local advisory evidence，不得污染 `orchestration-core`。
+
+`workspace_attach` 声明只表示外部 orchestrator 可消费 Loom `workspace attach`
+语义；它不授权创建、删除或接管 branch、PR、git worktree、目录或 worker lifecycle。
+
+`recovery_writeback` 声明只表示外部 orchestrator 可通过 Loom recovery writeback
+入口写恢复主入口。它不授权直接写 status、gate、review、validation、host action 或
+closeout authored fields。
+
+`status_read` 与 `gate_read` 声明只表示外部 orchestrator 可消费 Loom
+`status control plane v2` 与既有 gate chain 的派生读面。它们必须复用
+`loom-governance-status/v2` 字段、provenance 与 gate vocabulary，不得声明新的
+status schema、scheduler-owned verdict 或第二 gate truth。
+
+status / gate 读取失败时，`fallback_to` 只能指向 Loom checkpoint、gate 前置修复、
+`admission` 或 `binding_repair`。它不得指向 scheduler 私有 action、retry queue、
+tracker state 或 orchestrator-owned decision。
+
+## 7. 与其他合同的关系
 
 - `repo-interface.json`
   - 承接 repo-specific rules、requirements、typed gates、metadata/context contract
@@ -285,6 +354,8 @@ blocking 模式只改变消费结果，不改变 `shadow_surfaces` schema：
   - 承接从 vendored `.loom/bin` 到 versioned external Loom runtime 的迁移路径
 - [host-action-contract.md](../harness/host-action-contract.md)
   - 承接宿主动作 ownership、结果语义与 fallback discipline
+- [external-orchestrator-interop.md](../harness/external-orchestrator-interop.md)
+  - 承接外部 orchestrator 的 Work Item 读取、workspace attach、recovery writeback 与 status/gate 消费边界
 
 纪律重申：
 
@@ -295,11 +366,12 @@ blocking 模式只改变消费结果，不改变 `shadow_surfaces` schema：
 - 不让 `interop.json` 承载 dynamic tool availability locator；这些 locator 必须通过 `repo-interface.json` 的 `dynamic_tool_locators` 声明
 - 不让 `interop.json` 承载 approval / sandbox policy read locator；这些 locator 必须通过 `repo-interface.json` 的 `policy_locators` 声明
 - 不让 `interop.json` 承载 external-runtime locator、runtime version、rollback mode 或 runtime provenance
+- 不让 `interop.json` 承载 external orchestrator scheduler state、attempt ownership、status truth 或 gate truth
 - 不让 Loom 因为读取了 interop contract，就接管宿主底层实现
 - 不让 `interop.json` 定义 blocking owner、override path 或 final merge authority
 - 不让 zero-friction adoption 把 validation-only shadow parity 自动升级成 blocking gate
 
-## 7. 与 external-runtime / de-vendor migration 的边界
+## 8. 与 external-runtime / de-vendor migration 的边界
 
 external-runtime 迁移只改变 Loom runtime 的执行来源，不改变 interop 读取的 repo-native truth。
 

@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-819
-- Goal: 冻结 Loom 共享治理底座语义，覆盖默认治理模板、goal schema、Governance Lint taxonomy、closeout / retire 边界与 active workspace purity 判别。
-- Scope: #819/#821/#845/#853/#854 的主落点文档、skills shared references、runtime scripts、fixtures、tests、PR gate 与 closeout 证据。
-- Execution Path: harness/shared-foundation
+- Item ID: WI-827
+- Goal: 完成 Loom 中层能力聚合批次及其前置恢复链，接通 intake、dependency、host binding、Project drift、/goal 与 Governance Lint advanced，并把 PR #856 推进到 merge-ready / merge / closeout。
+- Scope: #827/#829/#830/#848/#795/#796/#798/#799/#801/#802/#803/#822/#823/#824/#825/#849/#850 的 docs、skills shared references、runtime scripts、fixtures、tests、installer version surface、PR gate carrier 和 closeout evidence；父项 #797/#800/#820 写入进度与验证证据。
+- Execution Path: harness/middle-capability-aggregation
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-819.md
-- Review Entry: .loom/reviews/WI-819.json
-- Validation Entry: git diff --check; py_compile; skills_surface check; host_adapter_check; version_surface_check; state-check; purity-check; closeout check; runtime-parity validate; loom_check
-- Closing Condition: #819/#821/#845/#853/#854 的共享底座语义落入唯一主落点，runtime 与 generated skills surface 同步，PR #855 checks 通过并完成 merge / closeout。
+- Recovery Entry: .loom/progress/WI-827.md
+- Review Entry: .loom/reviews/WI-827.json
+- Validation Entry: py_compile; skills_surface check; host_binding inspect; resume/status smoke; host_adapter_check; version_surface_check; git diff --check; loom_check; pr-gate check; CI checks
+- Closing Condition: PR #856 绑定 WI-827，host binding/dependency/Project drift/goal/governance lint hardcoding guard 全部验证通过，PR checks 绿并尽力 controlled merge；若 host 阻断则记录 owner、证据与恢复状态。
 - Current Checkpoint: merge
-- Current Stop: Shared foundation implementation is committed and PR #855 is open; local validation passed and CI merge gate is being rebound from the retired WI-816 carrier to WI-819.
-- Next Step: Wait for PR #855 checks, perform controlled merge if permitted, then reconcile #819/#821/#845/#853/#854 issue and Project state.
+- Current Stop: PR #856 carrier and installer gate repairs are committed; WI-827 owns the active PR lane and WI-819 is terminal after PR #855 merge.
+- Next Step: Record current-head spec and implementation reviews, update PR body with Loom Work Item: WI-827, run pr-gate locally, push, wait for CI, then perform controlled merge and closeout if permitted.
 - Blockers: None recorded.
-- Latest Validation Summary: git diff --check passed; PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom_init.py tools/loom_flow.py tools/loom_check.py tools/loom_status.py skills/shared/scripts/*.py skills/loom-init/scripts/*.py skills/loom-adopt/scripts/*.py skills/loom-resume/scripts/*.py skills/loom-pre-review/scripts/*.py skills/loom-review/scripts/*.py skills/loom-handoff/scripts/*.py skills/loom-retire/scripts/*.py skills/loom-merge-ready/scripts/*.py passed; python3 tools/skills_surface.py check passed; python3 tools/host_adapter_check.py passed; python3 tools/version_surface_check.py passed; state-check, purity-check, closeout check, and runtime-parity smoke passed for examples/new-project; python3 tools/loom_check.py passed with checked 36 surfaces; CodeGraph index synced and up to date.
-- Recovery Boundary: Current batch covers #819/#821/#845/#853/#854 only; follow-up governance expansion remains outside this Work Item.
-- Current Lane: PR #855 on branch work/819-821-845-853-854-shared-foundation
+- Latest Validation Summary: PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/*.py skills/shared/scripts/*.py passed; python3 tools/skills_surface.py check passed; python3 tools/version_surface_check.py passed; git diff --check passed; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed with 0.1.121 -> 0.1.122.
+- Recovery Boundary: Current batch covers prerequisite recovery and middle aggregation for #827/#829/#830/#848/#795/#796/#798/#799/#801/#802/#803/#822/#823/#824/#825/#849/#850; parent evidence for #797/#800/#820 is closeout work.
+- Current Lane: PR #856 on branch work/827-850-middle-capability-aggregation
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-819.md
-- Dynamic Truth: .loom/progress/WI-819.md
+- Static Truth: .loom/work-items/WI-827.md
+- Dynamic Truth: .loom/progress/WI-827.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

@@ -34,6 +34,7 @@
 
 状态面只能把第 2、3 层作为 mirror / evidence / locator provenance 消费，不能把它们提升为第 1 层。
 第 4 层是本次状态面的输出 / 展示层，不是生成当前状态面时可反读的输入。旧状态面最多用于 stale-surface 检测，不能作为当前 `pass | block` 的来源。
+Governance lint result 也只能作为 derived evidence 被第 4 层展示和映射，不得成为第 1 层 authored truth，也不得把 repo-specific lint 规则硬编码为 Loom core。
 
 ## 2. 统一读取对象
 
@@ -48,7 +49,11 @@
 - `controlled_merge`
 - `closeout`
 - 活跃 failures taxonomy
+- governance lint result
 - host binding
+- host binding inspection chain
+- native dependency graph / Project drift
+- `/goal` execution readiness
 - GitHub control plane signals
 - 目标仓库 `release / version` 目标面，若仓库已声明
 
@@ -139,7 +144,74 @@
 - `merge_commit_sha`
 - `target_branch`
 
-### 3.6.1 `target_release`
+当 host-backed profile 可读时，状态面必须能内联或引用
+[host-binding-inspector.md](./host-binding-inspector.md) 的 `loom-host-binding-inspection/v1`：
+
+- `binding_chain`
+  - `fr`
+  - `work_item`
+  - `branch`
+  - `pr`
+  - `merge_commit`
+  - `project_item`
+- `dependency_graph`
+  - 固定使用 `loom-host-dependency-graph/v1`
+  - 至少暴露 `source_issue`、`blocking_issue`、`blocker_state`、`host_mirror_status` 与 provenance
+
+该读面是 host/control-plane mirror，不替代 Work Item、review record、merge checkpoint 或 closeout basis。
+
+### 3.6.1 `project_drift`
+
+当调用方提供 Project number 或 host profile 要求读取 Project 时，状态面必须展示派生 `project_drift`：
+
+- `schema_version`: `loom-project-drift/v1`
+- `mode`: `advisory | blocking`
+- `project`
+- `dependency_drift`
+- `findings`
+- `provenance`
+
+稳定 drift kind：
+
+- `project_missing_item`
+- `project_status_mismatch`
+- `project_unreadable`
+- `project_stale_mirror`
+- `missing_native_edge`
+- `unexpected_native_edge`
+- `stale_native_edge`
+- `open_blocker_executable_conflict`
+
+`resume` 与 `pre-review` 默认 advisory 暴露 Project / dependency drift。`merge-ready` 可以按 profile 或显式参数把同一读面提升为 blocking；提升点必须保留 `mode` 与 `fallback_to`，不能把 advisory 输出静默改写为阻断。
+
+### 3.6.2 `goal_execution_contract`
+
+`resume` 与 repo-local `loom_status` 必须能展示从 Work Item 派生的 `/goal` execution contract：
+
+- `schema_version`: `loom-goal-execution-contract/v1`
+- `objective`
+- `source_issue`
+- `work_item`
+- `scope`
+- `branch`
+- `formal_worktree`
+- `pr`
+- `head_sha`
+- `expected_validation`
+- `stop_conditions`
+- `return_path`
+
+同一输出必须包含 `goal_readiness`：
+
+- `schema_version`: `loom-goal-readiness/v1`
+- `result`
+- `missing_inputs`
+- `failure_classifications`
+- `fallback_to`
+
+`goal_readiness` 只校验 `/goal`、issue、worktree、branch、PR、head SHA 与 validation locator 是否一致。它不得成为新的 governance truth，也不得覆盖 Work Item 或 closeout basis。
+
+### 3.6.3 `target_release`
 
 当仓库通过 `repo companion` 声明目标仓库 `release / version` 目标面时，状态面必须展示派生 `target_release`：
 
@@ -240,6 +312,31 @@
 - `stale`
 - `drift`
 - `gate_failures`
+
+### 3.8.1 `governance_lint`
+
+状态面可以展示 Governance Lint / Operating Lint 的派生结果：
+
+- `schema_version`: `loom-governance-lint-status/v1`
+- `result_summary`
+- `blocking_results`
+- `advisory_results`
+- `repo_specific_results`
+- `not_applicable_results`
+- `mapped_failures`
+- `provenance`
+
+每条 result 必须保留 [governance-lint-taxonomy.md](./governance-lint-taxonomy.md) 定义的最小绑定：
+
+- `item_id`
+- `head_sha`
+- `scope`
+- `reviewed_head_sha`
+- `pr_ref`
+- `evidence_freshness`
+
+`governance_lint` 只消费 lint result envelope。它不得 authored recovery state、review verdict、validation summary、merge verdict 或 closeout result。
+repo-specific lint 只能按 repo companion 声明的 locator、enforcement / requirement 与 owning surface 展示，不得把 repo-specific rule name 提升为 Loom core taxonomy。
 
 ### 3.9 `event_evidence`
 
