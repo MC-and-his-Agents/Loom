@@ -49,7 +49,35 @@ Core governance lint 固定以下 failure kind：
 
 这些 kind 可以映射到 [governance-failure-taxonomy.md](./governance-failure-taxonomy.md) 的 `stale` / `drift` / `gate_failure`，但不替代该顶层 gate taxonomy。lint 输出必须同时保留 lint kind 与映射后的 gate failure category。
 
-## 4. repo-specific lint 边界
+## 4. Advanced architecture / boundary lint surface
+
+repo companion 可以通过 `advanced_lint_locators` 声明 architecture / boundary lint 的只读入口。该 surface 用于暴露成熟仓库已有的边界检查，不把检查内容提升为 Loom core 默认规则。
+
+`advanced_lint_locators[*]` 固定字段：
+
+- `id`
+- `summary`
+- `lint_type`
+- `locator`
+- `owner`
+- `requirement`
+- `surface`
+- `fallback_to`
+- `result_envelope_schema`
+
+`lint_type` 只允许：
+
+- `architecture_boundary`
+- `bounded_context`
+- `legacy_access`
+- `host_state_access`
+- `companion_boundary`
+
+`result_envelope_schema` 固定为 `loom-governance-lint-result/v1`。locator 指向的结果仍按本文件的最小 result envelope 消费，不能 author runtime state、review verdict、validation summary、merge verdict 或 closeout result。
+
+Loom core hardcoding guard 是 `core_hardcoding_leak` 的内建检查面。它只阻止 repo-specific guardian、review path、final verdict、blocking owner 或 override decision 被写成 Loom core 默认；反例 fixture 与禁止性说明可以存在，但必须留在 evidence / fixture / validation 或明确的禁止语义中。
+
+## 5. repo-specific lint 边界
 
 repo-specific lint 只能通过 [repo-companion-contract.md](../../adoption/repo-companion-contract.md) 声明 locator、owner、enforcement 与 owning surface。
 
@@ -63,7 +91,7 @@ repo-specific lint 只能通过 [repo-companion-contract.md](../../adoption/repo
 
 若 repo-specific lint 暴露出 core 边界破坏，例如把 review verdict 写进 companion manifest，应同时产生 core `companion_boundary_bypass`。
 
-## 5. 最小 result envelope
+## 6. 最小 result envelope
 
 每条 lint result 至少包含：
 
@@ -100,9 +128,9 @@ repo-specific lint 只能通过 [repo-companion-contract.md](../../adoption/repo
 
 影响放行的 result 必须绑定当前 `item_id`、当前 `HEAD`、当前范围，以及适用时的 `reviewed_head_sha` / `pr_ref`。缺少这些绑定时，result 自身不可被当作 fresh evidence；若 owning surface 必需该检查，应 fail closed。
 
-## 6. Surface 消费语义
+## 7. Surface 消费语义
 
-### 6.1 pre-review
+### 7.1 pre-review
 
 pre-review 可以阻断：
 
@@ -116,7 +144,7 @@ pre-review 只能 advisory 展示：
 - optional / advisory repo-specific lint
 - 不影响当前 review 输入完整性的 lint risk
 
-### 6.2 merge-ready
+### 7.2 merge-ready
 
 merge-ready 可以阻断：
 
@@ -128,7 +156,7 @@ merge-ready 可以阻断：
 
 merge-ready 不得因为 advisory-only lint result 改变结果。advisory 结果必须进入摘要，供 reviewer、controlled merge 或 closeout 消费。
 
-### 6.3 closeout
+### 7.3 closeout
 
 closeout 可以阻断：
 
@@ -138,7 +166,7 @@ closeout 可以阻断：
 - `companion_boundary_bypass`
 - repo companion 声明为 closeout blocking 的 repo-specific lint
 
-## 7. 非目标
+## 8. 非目标
 
 - 不实现具体检查器
 - 不新增顶层命令

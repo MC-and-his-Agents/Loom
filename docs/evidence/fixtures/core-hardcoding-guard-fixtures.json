@@ -1,0 +1,28 @@
+{
+  "schema_version": "loom-core-hardcoding-guard-fixtures/v1",
+  "purpose": "Document allowed and blocked examples for preventing repo-specific rules from becoming Loom core defaults.",
+  "allowed_contexts": [
+    "docs/evidence/** source samples",
+    "docs/evidence/fixtures/** negative fixtures",
+    "docs/evidence/validations/** validation records",
+    "examples/** demo repositories",
+    "prohibition text that explicitly says Loom must not guess or hardcode repo-specific paths"
+  ],
+  "blocked_examples": [
+    {
+      "kind": "repo_specific_guardian_default",
+      "example": "Load host/guardian-review.json as the default Loom review verdict.",
+      "expected_result": "core_hardcoding_leak"
+    },
+    {
+      "kind": "repo_specific_review_path_default",
+      "example": "Open spec_review.md by default when the repo has no review_instruction_locators.",
+      "expected_result": "core_hardcoding_leak"
+    },
+    {
+      "kind": "repo_specific_final_verdict",
+      "example": "Store final_verdict in repo-interface.json.",
+      "expected_result": "companion_boundary_bypass"
+    }
+  ]
+}

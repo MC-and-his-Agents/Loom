@@ -94,7 +94,9 @@ CORE_DOCS = (
     "docs/methodology/harness/host-action-contract.md",
     "docs/methodology/harness/host-api-budget.md",
     "docs/methodology/harness/host-lifecycle-boundary.md",
+    "docs/methodology/harness/host-binding-inspector.md",
     "docs/methodology/harness/reconciliation-audit.md",
+    "docs/methodology/harness/native-dependency-contract.md",
     "docs/methodology/harness/recovery-model.md",
     "docs/methodology/harness/review-execution.md",
     "docs/methodology/harness/status-surface.md",
@@ -5361,6 +5363,21 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             {"pass", "block"},
         ),
         (
+            "host-binding-inspect",
+            ["python3", "tools/loom_flow.py", "host-binding", "inspect", "--target", ".", "--owner", "MC-and-his-Agents", "--repo", "Loom", "--branch", "main"],
+            {"pass", "block"},
+        ),
+        (
+            "goal-derive",
+            ["python3", "tools/loom_flow.py", "goal", "derive", "--target", "examples/new-project", "--item", "INIT-0001"],
+            {"pass", "block"},
+        ),
+        (
+            "goal-validate",
+            ["python3", "tools/loom_flow.py", "goal", "validate", "--target", "examples/new-project", "--item", "INIT-0001"],
+            {"pass", "block"},
+        ),
+        (
             "governance-profile-status",
             ["python3", "tools/loom_flow.py", "governance-profile", "status", "--target", "examples/new-project"],
             {"pass"},
@@ -5588,6 +5605,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             execution_budget_risk = payload.get("execution_budget_risk")
             execution_failure = payload.get("execution_failure")
             retry_evidence = payload.get("retry_evidence")
+            if not isinstance(payload.get("goal_execution_contract"), dict):
+                failures.append(Failure("daily-execution-cli", "`loom_status` must include goal_execution_contract"))
+            if not isinstance(payload.get("goal_readiness"), dict):
+                failures.append(Failure("daily-execution-cli", "`loom_status` must include goal_readiness"))
+            if not isinstance(payload.get("project_drift"), dict):
+                failures.append(Failure("daily-execution-cli", "`loom_status` must include project_drift"))
             if not isinstance(execution_budget, dict):
                 failures.append(Failure("daily-execution-cli", "`loom_status` must include `execution_budget`"))
             else:
@@ -5806,6 +5829,25 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(Failure("daily-execution-cli", "`host-binding validate --branch main` must pass unless the host read is unavailable"))
             if (not isinstance(branch, dict) or branch.get("status") != "present") and not host_unavailable:
                 failures.append(Failure("daily-execution-cli", "`host-binding validate --branch main` must read the branch via REST"))
+        if label == "host-binding-inspect":
+            if payload.get("command") != "host-binding" or payload.get("operation") != "inspect":
+                failures.append(Failure("daily-execution-cli", "`host-binding inspect` must report command/operation"))
+            if payload.get("schema_version") != loom_flow_module.HOST_BINDING_INSPECTOR_SCHEMA:
+                failures.append(Failure("daily-execution-cli", "`host-binding inspect` must report inspection schema v1"))
+            if not isinstance(payload.get("binding_chain"), dict):
+                failures.append(Failure("daily-execution-cli", "`host-binding inspect` must include binding_chain"))
+            if not isinstance(payload.get("dependency_graph"), dict):
+                failures.append(Failure("daily-execution-cli", "`host-binding inspect` must include dependency_graph"))
+        if label in {"goal-derive", "goal-validate"}:
+            if payload.get("command") != "goal":
+                failures.append(Failure("daily-execution-cli", f"`{label}` must report command goal"))
+            if not isinstance(payload.get("goal_execution_contract"), dict):
+                failures.append(Failure("daily-execution-cli", f"`{label}` must include goal_execution_contract"))
+            else:
+                if payload["goal_execution_contract"].get("schema_version") != loom_flow_module.GOAL_EXECUTION_CONTRACT_SCHEMA:
+                    failures.append(Failure("daily-execution-cli", f"`{label}` goal contract must report schema v1"))
+            if not isinstance(payload.get("goal_readiness"), dict):
+                failures.append(Failure("daily-execution-cli", f"`{label}` must include goal_readiness"))
         if label in {"governance-profile-status", "governance-profile-upgrade-plan"}:
             if payload.get("command") != "governance-profile":
                 failures.append(Failure("daily-execution-cli", f"`{label}` must report `command: governance-profile`"))
@@ -5969,11 +6011,11 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(Failure("daily-execution-cli", "`flow resume` must include `steps`"))
                 continue
             step_names = [step.get("name") for step in steps if isinstance(step, dict)]
-            if step_names != ["runtime-state", "fact-chain", "state-check", "workspace-locate"]:
+            if step_names != ["runtime-state", "fact-chain", "state-check", "workspace-locate", "goal-bootstrap"]:
                 failures.append(
                     Failure(
                         "daily-execution-cli",
-                        "`flow resume` must run runtime-state, fact-chain, state-check, and workspace-locate in order",
+                        "`flow resume` must run runtime-state, fact-chain, state-check, workspace-locate, and goal-bootstrap in order",
                     )
                 )
             recovery = payload.get("recovery")
@@ -16599,6 +16641,76 @@ def check_story_intake_contract(root: Path) -> list[Failure]:
     return failures
 
 
+def hardcoding_guard_line_allowed(line: str) -> bool:
+    lowered = line.lower()
+    allow_terms = (
+        "不得",
+        "不能",
+        "禁止",
+        "不把",
+        "不让",
+        "not ",
+        "never",
+        "must not",
+        "do not",
+        "without",
+        "instead of",
+        "rather than",
+        "example",
+        "fixture",
+        "反例",
+        "样本",
+        "locator",
+        "core_hardcoding_leak",
+    )
+    return any(term in lowered for term in allow_terms)
+
+
+def check_core_hardcoding_guard(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    scanned_roots = [
+        root / "docs" / "methodology",
+        root / "docs" / "adoption",
+        root / "src" / "skills" / "shared",
+        root / "tools",
+    ]
+    forbidden_patterns = {
+        "repo_specific_guardian_default": re.compile(r"(?i)(guardian|guardian-review|host/guardian-review\\.json).*(default|默认|must|should)"),
+        "repo_specific_review_path_default": re.compile(r"(?i)(spec_review\\.md|code_review\\.md).*(default|默认|lookup|read|open|load)"),
+        "repo_specific_final_verdict": re.compile(r"(?i)(final_verdict|override_decision|blocking_owner).*(repo-interface|interop|companion)"),
+    }
+    allowed_path_parts = {"evidence", "fixtures", "validations", "examples"}
+    for scan_root in scanned_roots:
+        if not scan_root.exists():
+            continue
+        for path in scan_root.rglob("*"):
+            if not path.is_file() or path.suffix not in {".md", ".py", ".json"}:
+                continue
+            if any(part in allowed_path_parts for part in path.parts):
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            for line_number, line in enumerate(text.splitlines(), start=1):
+                if "re.compile" in line or "forbidden_patterns" in line:
+                    continue
+                if hardcoding_guard_line_allowed(line):
+                    continue
+                for kind, pattern in forbidden_patterns.items():
+                    if pattern.search(line):
+                        failures.append(
+                            Failure(
+                                "core-hardcoding-guard",
+                                f"{path.relative_to(root)}:{line_number} leaks repo-specific default `{kind}`",
+                            )
+                        )
+    fixture_path = root / "docs" / "evidence" / "fixtures" / "core-hardcoding-guard-fixtures.json"
+    if not fixture_path.exists():
+        failures.append(Failure("core-hardcoding-guard", "missing `docs/evidence/fixtures/core-hardcoding-guard-fixtures.json`"))
+    return failures
+
+
 def is_within(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
@@ -16661,6 +16773,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_execution_attempt_contract(root))
     failures.extend(check_build_execution_contract(root))
     failures.extend(check_story_intake_contract(root))
+    failures.extend(check_core_hardcoding_guard(root))
     failures.extend(check_markdown_links(root))
     return failures
 

@@ -32,6 +32,10 @@ approval / sandbox policy read locator 属于 [repo-companion-contract.md](./rep
 
 `interop.json` 中声明的入口在 fact-chain 中只能被消费为 host/control-plane mirror、retained result、repo-native carrier locator 或 locator provenance。它不得成为新的 Loom-authored truth，也不得覆盖 `Work Item`、恢复主入口、review record、merge checkpoint 或 closeout basis。
 
+`interop.json` 以及其中任意 entry 都不得嵌套 repo companion / runtime truth 字段，例如 `dynamic_tool_locators`、`policy_locators`、`review_instruction_locators`、`blocking_owner`、`override_decision`、`final_verdict`、`runtime_state`、`review_verdict`、`validation_status` 或 `closeout_result`。这些字段必须留在对应权威合同中；若出现在 `interop.json`，消费方必须 fail closed。
+
+GitHub native dependency 与 host binding inspector 的读取结果属于 host/control-plane mirror 或 derived read surface。`interop.json` 不保存 native dependency edge、binding inspection result 或 Project drift 作为 repo-native truth；需要声明 repo-authored dependency truth 时，应通过 repo companion locator 指向 repo-owned authority。
+
 ## 2. `.loom/companion/interop.json`
 
 当前稳定 schema：

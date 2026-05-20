@@ -357,6 +357,21 @@ REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {
     "hook_locators",
     "release_targets",
     "host_truth_locators",
+    "advanced_lint_locators",
+}
+ADVANCED_LINT_TYPES = {"architecture_boundary", "bounded_context", "legacy_access", "host_state_access", "companion_boundary"}
+ADVANCED_LINT_RESULT_SCHEMA = "loom-governance-lint-result/v1"
+FORBIDDEN_COMPANION_TRUTH_FIELDS = {
+    "runtime_state",
+    "review_verdict",
+    "review_decision",
+    "validation_status",
+    "merge_ready",
+    "merge_result",
+    "closeout_result",
+    "guardian_verdict",
+    "host_action_result",
+    "final_verdict",
 }
 DECLARED_LOCATOR_REQUIREMENTS = {"required", "optional", "advisory"}
 DECLARED_LOCATOR_OWNERS = {"repo", "repo-companion", "host", "host-adapter", "platform", "external-tool"}
@@ -1068,7 +1083,52 @@ def validate_metadata_contract(
                 missing_inputs.append(locator_boundary_error(field.get(locator_field), label=f"{field_prefix} `{locator_field}`"))
             elif not target.exists():
                 missing_inputs.append(f"{field_prefix} `{locator_field}` points to missing path `{locator}`")
+        field_id = str(field.get("id") or "").lower()
+        for forbidden in FORBIDDEN_COMPANION_TRUTH_FIELDS:
+            if forbidden in field_id:
+                missing_inputs.append(f"{field_prefix} must not declare authored truth field `{forbidden}`")
     return missing_inputs
+
+
+def validate_advanced_lint_locator(
+    *,
+    root: Path,
+    entry: object,
+    index: int,
+) -> tuple[list[str], list[str]]:
+    prefix = f"advanced_lint_locators[{index}]"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"], []
+    missing_inputs: list[str] = []
+    missing_optional: list[str] = []
+    for field in ("id", "summary", "lint_type", "locator", "owner", "requirement", "surface", "fallback_to", "result_envelope_schema"):
+        value = entry.get(field)
+        if not isinstance(value, str) or not value.strip():
+            missing_inputs.append(f"{prefix} missing `{field}`")
+    if entry.get("lint_type") not in ADVANCED_LINT_TYPES:
+        missing_inputs.append(f"{prefix} lint_type must stay within the advanced architecture/boundary lint vocabulary")
+    if entry.get("owner") not in DECLARED_LOCATOR_OWNERS:
+        missing_inputs.append(f"{prefix} owner must be repo/host/platform-owned, not Loom core")
+    requirement = entry.get("requirement")
+    if requirement not in DECLARED_LOCATOR_REQUIREMENTS:
+        missing_inputs.append(f"{prefix} requirement must be `required`, `optional`, or `advisory`")
+    if entry.get("surface") not in REPO_INTERFACE_GATE_TYPES:
+        missing_inputs.append(f"{prefix} surface must be a known Loom gate surface")
+    if entry.get("result_envelope_schema") != ADVANCED_LINT_RESULT_SCHEMA:
+        missing_inputs.append(f"{prefix} result_envelope_schema must be `{ADVANCED_LINT_RESULT_SCHEMA}`")
+    locator, target = resolve_locator(root, entry.get("locator"))
+    locator_error: str | None = None
+    locator_error_is_optional = requirement in {"optional", "advisory"}
+    if locator is None or target is None:
+        locator_error = locator_boundary_error(entry.get("locator"), label=f"{prefix} locator")
+    elif not target.exists():
+        locator_error = f"{prefix} locator points to missing path `{locator}`"
+    if locator_error:
+        if locator_error_is_optional:
+            missing_optional.append(locator_error)
+        else:
+            missing_inputs.append(locator_error)
+    return missing_inputs, missing_optional
 
 
 def validate_context_schema(
@@ -1118,6 +1178,21 @@ def validate_dynamic_tool_locator(
     prefix = f"dynamic_tool_locators[{index}]"
     if not isinstance(entry, dict):
         return [f"{prefix} must be an object"], []
+    forbidden_keys = {
+        "dynamic_tool_locators",
+        "policy_locators",
+        "review_instruction_locators",
+        "blocking_owner",
+        "override_decision",
+        "final_verdict",
+        "runtime_state",
+        "review_verdict",
+        "validation_status",
+        "closeout_result",
+    }
+    present_forbidden = sorted(set(entry) & forbidden_keys)
+    if present_forbidden:
+        return [f"{prefix} must not carry repo companion/runtime truth fields: {', '.join(present_forbidden)}"], []
     entry_id = entry.get("id")
     locator_label = f"{prefix} `{entry_id}` locator" if isinstance(entry_id, str) and entry_id.strip() else f"{prefix} locator"
     blocking: list[str] = []
@@ -2171,6 +2246,7 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
         "dynamic_tool_locators": carrier_entry("missing", "unknown", "repo companion interface"),
         "policy_locators": carrier_entry("missing", "unknown", "repo companion interface"),
         "hook_locators": carrier_entry("missing", "unknown", "repo companion interface"),
+        "advanced_lint_locators": carrier_entry("missing", "unknown", "repo companion interface"),
         "release_targets": empty_release_targets_surface(),
         "tool_availability": empty_tool_availability(),
         "policy_readiness": empty_policy_readiness(),
@@ -2372,6 +2448,24 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
                         ".loom/companion/repo-interface.json",
                         "repo companion interface",
                     )
+                advanced_lint_locators = interface_payload.get("advanced_lint_locators")
+                if advanced_lint_locators is not None:
+                    repo_interface_surface["advanced_lint_locators"] = carrier_entry(
+                        "present",
+                        ".loom/companion/repo-interface.json",
+                        "repo companion interface",
+                    )
+                    if not isinstance(advanced_lint_locators, list):
+                        missing_inputs.append("advanced_lint_locators must be a list")
+                    else:
+                        for index, entry in enumerate(advanced_lint_locators):
+                            blocking, optional = validate_advanced_lint_locator(
+                                root=root,
+                                entry=entry,
+                                index=index,
+                            )
+                            missing_inputs.extend(blocking)
+                            missing_optional.extend(optional)
                 release_targets = interface_payload.get("release_targets")
                 if release_targets is not None:
                     blocking_inputs = validate_release_targets(root=root, entry=release_targets)
