@@ -314,8 +314,9 @@ def workspace_lifecycle_expectations(workspace_profile: dict[str, object] | None
                 "deletes_non_loom_owned": False,
             },
             "retire": {
-                "semantics": "write Current Checkpoint to retired while preserving the recovery entry",
+                "semantics": "record local-only retire evidence without writing versioned recovery or status carriers",
                 "deletes_workspace_directory": False,
+                "writes_versioned_carriers": False,
             },
             "execution_boundary": {
                 "run": "read/event surface only",

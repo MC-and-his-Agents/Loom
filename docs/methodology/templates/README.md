@@ -20,8 +20,12 @@
   - `EXT-0008` `EXT-0028`
 - [release-closeout-template.md](./release-closeout-template.md)
   - `#693`
+- [default-governance-scaffold-policy.md](./default-governance-scaffold-policy.md)
+  - `#819`
 
 当前目录中的核心文件，应优先表达最小模板约束，而不是只描述候选想法。
+
+默认治理 scaffold 的主落点是 [default-governance-scaffold-policy.md](./default-governance-scaffold-policy.md)。其他 adoption / companion 文档只能引用它定义的 action 与 locator 边界，不得各自复制一套默认模板 truth。
 
 除规则文件外，当前还提供可直接投放的最小实体模板：
 

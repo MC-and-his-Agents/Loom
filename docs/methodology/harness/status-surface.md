@@ -4,6 +4,7 @@
 
 统一对象组见 [status-surface-contract.md](./status-surface-contract.md)。
 失败分类见 [governance-failure-taxonomy.md](./governance-failure-taxonomy.md)。
+Governance lint taxonomy 见 [governance-lint-taxonomy.md](./governance-lint-taxonomy.md)。
 
 ## 1. 能力定位
 
@@ -52,6 +53,10 @@
   - 作为 evidence provenance 或 gate 前置结果派生
 - `taxonomy`
   - 从统一失败分类派生
+- `governance_lint`
+  - 从 Governance Lint / Operating Lint result 派生
+  - 只展示 lint result 的 strength、kind、mapped failure、provenance、bindings 与 freshness
+  - 不 authored 新状态，不把 repo-specific lint 规则提升为 Loom core
 
 禁止手工维护第二套 authored 状态摘要。
 
@@ -112,6 +117,7 @@ Approval / sandbox policy 也只能派生读取：
 - fresh verification evidence 的 `head_sha` / 范围 / 摘要绑定
 - dynamic tool availability 与 failure summary
 - approval / sandbox policy 与 risk summary
+- governance lint result 摘要，包括 blocking / advisory / repo-specific / not_applicable 分组
 - execution budget 报告（`status` 为 `not_applicable`/`unavailable` 时不阻断）
 - execution budget risk 摘要（`highest_risk = high` 时可提示 merge / review 风险，但不阻断）
 - 最近 execution failure 分类（`stall` / `timeout` / `retry_exhaustion` 只作为风险输入）
@@ -209,6 +215,30 @@ Approval / sandbox policy 也只能派生读取：
 - `ledger_conflict`
 
 这些结论必须来自 fact-chain 对 recovery 主入口的解析。若 ledger 缺失、stale、绑定到第二 locator，或 authored recovery forbidden fields，状态面和 `loom_status` 都必须输出 blocking / stale 结论，而不是用状态面内容覆盖 recovery。
+
+## 5.1 Governance Lint 派生展示
+
+状态面可以展示 `governance_lint` 字段组，但只能消费 [governance-lint-taxonomy.md](./governance-lint-taxonomy.md) 定义的 result envelope。
+
+最小展示字段：
+
+- `result_summary`
+- `blocking_results`
+- `advisory_results`
+- `repo_specific_results`
+- `not_applicable_results`
+- `mapped_failures`
+- `provenance`
+
+状态面消费纪律：
+
+- core blocking lint result 必须映射到 `stale` / `drift` / `gate_failure` 后再影响总结果
+- advisory lint result 只能作为 review / merge-ready / closeout 风险输入
+- repo-specific lint result 只能按 repo companion 声明的 owning surface 与 enforcement / requirement 消费
+- `not_applicable` 必须保留理由与来源，不能用字段缺失代替
+- 缺少 `item_id`、`head_sha`、scope、reviewed head 或 evidence freshness 绑定的 blocking lint result 不得被当作 fresh evidence；若当前 surface 需要该 lint，应 fail closed
+
+`governance_lint` 不得反写 Work Item、recovery、review record、merge checkpoint 或 closeout basis。
 
 ## 6. Latest Execution Attempt
 

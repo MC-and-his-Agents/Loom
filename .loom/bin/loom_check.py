@@ -16,6 +16,8 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
+sys.dont_write_bytecode = True
+
 from fact_chain_support import inspect_fact_chain
 import governance_surface as governance_surface_module
 import loom_flow as loom_flow_module
@@ -73,6 +75,7 @@ CORE_DOCS = (
     "docs/methodology/governance/state-machine.md",
     "docs/methodology/governance/truth-and-sync-boundary.md",
     "docs/methodology/governance/host-object-taxonomy.md",
+    "docs/methodology/governance/goal-schema.md",
     "docs/methodology/harness/work-item-contract.md",
     "docs/methodology/harness/item-context-contract.md",
     "docs/methodology/harness/fact-chain-contract.md",
@@ -102,7 +105,9 @@ CORE_DOCS = (
     "docs/methodology/harness/controlled-merge.md",
     "docs/methodology/harness/pr-merge-gate.md",
     "docs/methodology/harness/governance-failure-taxonomy.md",
+    "docs/methodology/harness/governance-lint-taxonomy.md",
     "docs/methodology/harness/workspace-and-purity.md",
+    "docs/methodology/templates/default-governance-scaffold-policy.md",
     "docs/methodology/templates/spec-suite.md",
     "docs/methodology/templates/spec-template.md",
     "docs/methodology/templates/implementation-contract-template.md",
@@ -219,6 +224,7 @@ AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT = (
     "docs/methodology/harness/status-surface.md",
     "docs/methodology/harness/automation-frontload.md",
     "docs/methodology/harness/merge-checkpoint.md",
+    "docs/methodology/harness/governance-lint-taxonomy.md",
     "docs/methodology/harness/workspace-and-purity.md",
 )
 
@@ -246,6 +252,8 @@ DEMO_ASSETS = (
     "examples/new-project/.loom/bin/loom_flow.py",
     "examples/new-project/.loom/bin/loom_status.py",
     "examples/new-project/.loom/bin/loom_check.py",
+    "examples/new-project/.loom/bin/loom_story_carriers.py",
+    "examples/new-project/.loom/stories/_template.md",
     "examples/new-project/.loom/specs/INIT-0001/spec.md",
     "examples/new-project/.loom/specs/INIT-0001/plan.md",
     "examples/new-project/.loom/specs/INIT-0001/implementation-contract.md",
@@ -349,6 +357,73 @@ def check_required_paths(root: Path, category: str, paths: tuple[str, ...]) -> l
     for relative_path in paths:
         if not (root / relative_path).exists():
             failures.append(Failure(category, f"missing `{relative_path}`"))
+    return failures
+
+
+def check_shared_foundation_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    required_terms = {
+        "docs/methodology/templates/default-governance-scaffold-policy.md": (
+            "generate",
+            "declare_loom_default",
+            "intentionally_absent",
+            "require_user_input",
+            "VISION.md",
+            "ROADMAP.md",
+        ),
+        "docs/methodology/governance/goal-schema.md": (
+            "Project goal",
+            "Phase goal",
+            "FR goal",
+            "Work Item goal",
+            "/goal",
+            "delegated goal",
+            "source issue",
+            "head SHA",
+        ),
+        "docs/methodology/harness/governance-lint-taxonomy.md": (
+            "blocking",
+            "advisory",
+            "repo_specific",
+            "not_applicable",
+            "fact_chain_broken",
+            "approval_bypass",
+            "companion_boundary_bypass",
+            "host_binding_drift",
+            "evidence_stale",
+            "core_hardcoding_leak",
+            "derived evidence",
+        ),
+    }
+    for relative_path, terms in required_terms.items():
+        path = root / relative_path
+        if not path.exists():
+            failures.append(Failure("shared-foundation-contract", f"missing `{relative_path}`"))
+            continue
+        text = path.read_text(encoding="utf-8")
+        for term in terms:
+            if term not in text:
+                failures.append(Failure("shared-foundation-contract", f"`{relative_path}` must mention `{term}`"))
+
+    cross_links = {
+        "docs/methodology/harness/work-item-contract.md": "goal-schema.md",
+        "docs/methodology/harness/subagent-driven-execution.md": "goal-schema.md",
+        "docs/methodology/harness/automation-frontload.md": "governance-lint-taxonomy.md",
+        "docs/methodology/harness/status-surface.md": "governance-lint-taxonomy.md",
+        "docs/methodology/harness/merge-checkpoint.md": "governance-lint-taxonomy.md",
+        "docs/adoption/repo-companion-contract.md": "governance-lint-taxonomy.md",
+        "docs/methodology/harness/workspace-lifecycle.md": "local_only",
+        "docs/methodology/harness/closeout-gate.md": "workspace retire",
+        "docs/methodology/harness/workspace-and-purity.md": "active_workspace_diagnostics",
+        "src/skills/loom-retire/references/output-contract.md": "versioned_carrier_updates",
+    }
+    for relative_path, term in cross_links.items():
+        path = root / relative_path
+        if not path.exists():
+            failures.append(Failure("shared-foundation-contract", f"missing `{relative_path}`"))
+            continue
+        if term not in path.read_text(encoding="utf-8"):
+            failures.append(Failure("shared-foundation-contract", f"`{relative_path}` must reference `{term}`"))
     return failures
 
 
@@ -557,6 +632,7 @@ def run_command(
     command_env = os.environ.copy()
     for key in ("LOOM_SOURCE_REPO_ROOT", "LOOM_INSTALLED_SKILLS_ROOT", "LOOM_RUNTIME_SCENE"):
         command_env.pop(key, None)
+    command_env["PYTHONDONTWRITEBYTECODE"] = "1"
     if env:
         command_env.update(env)
     return subprocess.run(
@@ -4336,8 +4412,324 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
             if pr_template:
                 (target / ".github" / "PULL_REQUEST_TEMPLATE.md").write_text("## Summary\n", encoding="utf-8")
 
+        def write_small_existing_repo(target: Path, *, pr_template: bool = False) -> None:
+            (target / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
+            (target / "src").mkdir(parents=True, exist_ok=True)
+            (target / "README.md").write_text("# Small Existing Repo\n", encoding="utf-8")
+            (target / "AGENTS.md").write_text("# Root Rules\n", encoding="utf-8")
+            (target / "src" / "main.py").write_text("print('ok')\n", encoding="utf-8")
+            (target / ".github" / "workflows" / "ci.yml").write_text("name: ci\n", encoding="utf-8")
+            (target / "Makefile").write_text("check:\n\t@echo ok\n", encoding="utf-8")
+            if pr_template:
+                (target / ".github" / "PULL_REQUEST_TEMPLATE.md").write_text("## Summary\n", encoding="utf-8")
+
+        def write_pre_execution_existing_repo(target: Path) -> None:
+            (target / "docs").mkdir(parents=True, exist_ok=True)
+            (target / "README.md").write_text("# Docs First Repo\n", encoding="utf-8")
+            (target / "AGENTS.md").write_text("# Root Rules\n", encoding="utf-8")
+            (target / "VISION.md").write_text("# Product Vision\n", encoding="utf-8")
+            (target / "docs" / "architecture.md").write_text("# Architecture\n", encoding="utf-8")
+            (target / "docs" / "CONTRACT_MODEL.md").write_text("# Product Contract Model\n", encoding="utf-8")
+            (target / "docs" / "DOMAIN_MODEL.md").write_text("# Domain Model\n", encoding="utf-8")
+
+        attach_only_forbidden_patterns = (
+            ".loom/work-items/**",
+            ".loom/progress/**",
+            ".loom/status/current.md",
+            ".loom/reviews/**",
+            ".loom/specs/**",
+        )
+        default_release_paths = (
+            ".loom/companion/releases/changelog.md",
+            ".loom/companion/releases/release-notes.md",
+            ".loom/companion/releases/migration-notes.md",
+            ".loom/companion/releases/rollback.md",
+            ".loom/companion/releases/catalog.json",
+            ".loom/companion/releases/current.json",
+            ".loom/companion/releases/status.json",
+        )
+
+        def matches_forbidden(path: str, pattern: str) -> bool:
+            if pattern.endswith("/**"):
+                prefix = pattern[:-3]
+                return path == prefix or path.startswith(prefix + "/")
+            return path == pattern
+
+        def forbidden_match(path: object) -> str | None:
+            if not isinstance(path, str):
+                return None
+            for pattern in attach_only_forbidden_patterns:
+                if matches_forbidden(path, pattern):
+                    return pattern
+            return None
+
+        def assert_no_default_release_target(target: Path, payload: dict[str, object], context: str) -> None:
+            planned = payload.get("planned_writes")
+            planned_paths = {item.get("path") for item in planned if isinstance(item, dict)} if isinstance(planned, list) else set()
+            initial = payload.get("initial_artifacts")
+            initial_paths = {item.get("path") for item in initial if isinstance(item, dict)} if isinstance(initial, list) else set()
+            absent = payload.get("intentionally_absent")
+            absent_paths = {item.get("path") for item in absent if isinstance(item, dict)} if isinstance(absent, list) else set()
+            serialized = json.dumps(payload, ensure_ascii=False)
+            for release_path in default_release_paths:
+                if release_path in planned_paths:
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` must not plan default release target `{release_path}`"))
+                if release_path in initial_paths:
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` must not declare default release target `{release_path}`"))
+                if (target / release_path).exists():
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` must not generate default release target `{release_path}`"))
+            if ".loom/companion/releases/**" not in absent_paths:
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` must mark release targets intentionally absent by default"))
+            if "bootstrap-v0.1.0" in serialized:
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` must not mention placeholder release id `bootstrap-v0.1.0`"))
+            repo_interface_path = target / ".loom/companion/repo-interface.json"
+            if repo_interface_path.exists():
+                repo_interface = json.loads(repo_interface_path.read_text(encoding="utf-8"))
+                if "release_targets" in repo_interface:
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` repo-interface must not declare release_targets without release target intent"))
+            surface = build_governance_surface(target)
+            repo_interface_surface = surface.get("repo_interface") if isinstance(surface, dict) else None
+            release_targets = repo_interface_surface.get("release_targets") if isinstance(repo_interface_surface, dict) else None
+            require_release_targets_surface_payload(
+                failures,
+                category="deep-existing-bootstrap",
+                context=f"`{context}` absent release targets",
+                payload=release_targets,
+            )
+            target_release = release_targets.get("target_release") if isinstance(release_targets, dict) else None
+            if not isinstance(release_targets, dict) or release_targets.get("availability") != "absent":
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` must report release_targets availability absent by default"))
+            if not isinstance(target_release, dict) or target_release.get("result") != "not_applicable":
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` must report target_release not_applicable when release targets are absent"))
+            if isinstance(release_targets, dict):
+                for surface_key in ("catalog", "current_target", "status"):
+                    surface_entry = release_targets.get(surface_key)
+                    if isinstance(surface_entry, dict) and surface_entry.get("status") == "present":
+                        failures.append(Failure("deep-existing-bootstrap", f"`{context}` must not report absent release target `{surface_key}` as present"))
+
+        def assert_decision_prompt(
+            payload: dict[str, object],
+            context: str,
+            *,
+            expected_write_intent: str,
+            expected_signal_default: str,
+            required_candidates: set[str],
+            expected_requested: str | None = None,
+            reason_fragment: str | None = None,
+            expected_decision_status: str | None = None,
+        ) -> None:
+            prompt = payload.get("decision_prompt")
+            if not isinstance(prompt, dict):
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` must include decision_prompt"))
+                return
+            if prompt.get("schema_version") != "loom-adoption-decision-prompt/v1":
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt schema_version must be loom-adoption-decision-prompt/v1"))
+            for field in (
+                "target_repository",
+                "adoption_scope",
+                "write_intent",
+                "adoption_intent",
+                "repository_mode_guess",
+                "existing_governance_signals",
+                "existing_validation_entry",
+                "companion_boundary_intent",
+                "interop_boundary_intent",
+                "repo_owned_residue",
+                "verification_commands",
+                "resume_after_adoption_intent",
+            ):
+                if field not in prompt:
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt missing `{field}`"))
+            if prompt.get("write_intent") != expected_write_intent:
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt write_intent must be `{expected_write_intent}`"))
+            intent = prompt.get("adoption_intent")
+            if not isinstance(intent, dict):
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt adoption_intent must be an object"))
+            else:
+                if expected_requested is not None and intent.get("requested") != expected_requested:
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt requested intent must be `{expected_requested}`"))
+                if intent.get("signal_default") != expected_signal_default:
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt signal_default must be `{expected_signal_default}`"))
+                candidates = set(intent.get("candidate_intents")) if isinstance(intent.get("candidate_intents"), list) else set()
+                if not required_candidates.issubset(candidates):
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt candidate_intents missing {sorted(required_candidates - candidates)}"))
+                options = intent.get("options")
+                if not isinstance(options, list) or not options:
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt must include candidate options"))
+                elif not any(isinstance(option, dict) and option.get("intent") == expected_signal_default and option.get("recommended_default") is True for option in options):
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt must mark the signal default candidate"))
+            signals = prompt.get("existing_governance_signals")
+            if not isinstance(signals, list) or not signals or not all(isinstance(item, dict) and item.get("summary") and item.get("locator") for item in signals):
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt must include governance signal summaries and locators"))
+            verification_commands = prompt.get("verification_commands")
+            if not isinstance(verification_commands, list) or "python3 .loom/bin/loom_init.py verify --target ." not in verification_commands:
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt must include verify entry"))
+            writeback = prompt.get("field_writeback_contract")
+            if not isinstance(writeback, list) or not writeback:
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt must include field writeback contract"))
+            else:
+                for entry in writeback:
+                    if not isinstance(entry, dict):
+                        failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt writeback entries must be objects"))
+                        continue
+                    for field in ("field", "source_locator", "reasoning", "writeback_target", "verification_evidence"):
+                        if not isinstance(entry.get(field), str) or not entry.get(field):
+                            failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt writeback entry missing `{field}`"))
+            if reason_fragment and reason_fragment not in str(prompt.get("decision_reason", "")):
+                failures.append(Failure("deep-existing-bootstrap", f"`{context}` decision_prompt reason must mention `{reason_fragment}`"))
+            decisions = payload.get("adoption_decisions")
+            require_adoption_decisions_payload(
+                failures,
+                category="deep-existing-bootstrap",
+                context=f"`{context}` adoption_decisions",
+                payload=decisions,
+            )
+            if expected_decision_status and isinstance(decisions, dict):
+                judgments = decisions.get("judgments")
+                first = judgments[0] if isinstance(judgments, list) and judgments and isinstance(judgments[0], dict) else {}
+                if first.get("status") != expected_decision_status:
+                    failures.append(Failure("deep-existing-bootstrap", f"`{context}` adoption decision status must be `{expected_decision_status}`"))
+
+        pre_execution_target = tmp_root / "pre-execution-existing"
+        write_pre_execution_existing_repo(pre_execution_target)
+        pre_payload, pre_error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_init.py",
+                "bootstrap",
+                "--target",
+                str(pre_execution_target),
+            ],
+        )
+        if pre_error:
+            failures.append(Failure("pre-execution-existing", f"`pre-execution-existing dry-run` failed: {pre_error}"))
+        else:
+            run = pre_payload.get("run")
+            recommended = pre_payload.get("recommended_adoption")
+            profile = pre_payload.get("scaffold_profile")
+            detected = pre_payload.get("detected_repository_mode")
+            intake = pre_payload.get("intake")
+            maturity = intake.get("maturity") if isinstance(intake, dict) else None
+            risk = pre_payload.get("risk_summary")
+            if not isinstance(run, dict) or run.get("scenario_key") != "pre-execution-existing":
+                failures.append(Failure("pre-execution-existing", "docs-first dry-run must classify as `pre-execution-existing`"))
+            if not isinstance(recommended, dict) or recommended.get("path") == "full-bootstrap":
+                failures.append(Failure("pre-execution-existing", "docs-first dry-run must not default to `full-bootstrap`"))
+            if not isinstance(profile, dict) or profile.get("name") != "light-governance":
+                failures.append(Failure("pre-execution-existing", "docs-first dry-run must keep generation strength on `light-governance` without explicit intent"))
+            if not isinstance(risk, dict) or risk.get("requires_explicit_intent") is not False:
+                failures.append(Failure("pre-execution-existing", "docs-first classification must not require heavy execution intent unless heavy carriers are planned"))
+            if not isinstance(maturity, dict):
+                failures.append(Failure("pre-execution-existing", "docs-first dry-run must report structured maturity signals"))
+            else:
+                if maturity.get("document_truth") != "established":
+                    failures.append(Failure("pre-execution-existing", "docs-first dry-run must report established document truth"))
+                if maturity.get("execution_surface") != "not_formed":
+                    failures.append(Failure("pre-execution-existing", "docs-first dry-run must report execution surface as not formed"))
+                if maturity.get("governance_carriers") != "root_docs_only":
+                    failures.append(Failure("pre-execution-existing", "docs-first dry-run must report governance carriers as root-docs-only"))
+            if isinstance(intake, dict) and intake.get("shared_contract_or_high_risk_boundary") is not False:
+                failures.append(Failure("pre-execution-existing", "domain/product CONTRACT_MODEL and DOMAIN_MODEL docs must not imply shared runtime contract risk"))
+            detected_maturity = detected.get("maturity") if isinstance(detected, dict) else None
+            if not isinstance(detected, dict) or detected.get("scenario_key") != "pre-execution-existing" or detected_maturity != maturity:
+                failures.append(Failure("pre-execution-existing", "detected repository mode must carry the pre-execution scenario and maturity summary"))
+            assert_decision_prompt(
+                pre_payload,
+                "pre-execution-existing dry-run",
+                expected_write_intent="dry-run",
+                expected_signal_default="light-governance",
+                required_candidates={"light-governance", "execution-control"},
+                expected_requested="unspecified",
+                reason_fragment="multiple adoption intents",
+                expected_decision_status="missing",
+            )
+
+        pre_execution_control_target = tmp_root / "pre-execution-execution-control"
+        write_pre_execution_existing_repo(pre_execution_control_target)
+        pre_control_payload, pre_control_error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_init.py",
+                "bootstrap",
+                "--target",
+                str(pre_execution_control_target),
+                "--intent",
+                "execution-control",
+            ],
+        )
+        if pre_control_error:
+            failures.append(Failure("pre-execution-existing", f"`pre-execution execution-control dry-run` failed: {pre_control_error}"))
+        else:
+            run = pre_control_payload.get("run")
+            recommended = pre_control_payload.get("recommended_adoption")
+            profile = pre_control_payload.get("scaffold_profile")
+            if not isinstance(run, dict) or run.get("scenario_key") != "pre-execution-existing":
+                failures.append(Failure("pre-execution-existing", "explicit execution-control dry-run must preserve the pre-execution classification"))
+            if not isinstance(recommended, dict) or recommended.get("path") != "full-bootstrap":
+                failures.append(Failure("pre-execution-existing", "explicit execution-control dry-run may choose `full-bootstrap`"))
+            if not isinstance(profile, dict) or profile.get("name") != "execution-control":
+                failures.append(Failure("pre-execution-existing", "explicit execution-control dry-run must select the execution-control scaffold profile"))
+            assert_decision_prompt(
+                pre_control_payload,
+                "pre-execution execution-control dry-run",
+                expected_write_intent="dry-run",
+                expected_signal_default="light-governance",
+                required_candidates={"light-governance", "execution-control"},
+                expected_requested="execution-control",
+                reason_fragment="diverges",
+                expected_decision_status="answered",
+            )
+
         deep_target = tmp_root / "deep-existing"
         write_repo(deep_target, validation_entry=True, pr_template=True, workflow_doc=True)
+        deep_dry_payload, deep_dry_error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_init.py",
+                "bootstrap",
+                "--target",
+                str(deep_target),
+                "--intent",
+                "attach-only",
+            ],
+        )
+        if deep_dry_error:
+            failures.append(Failure("deep-existing-bootstrap", f"`deep-existing dry-run` failed: {deep_dry_error}"))
+        else:
+            intent = deep_dry_payload.get("adoption_intent")
+            risk = deep_dry_payload.get("risk_summary")
+            planned = deep_dry_payload.get("planned_writes")
+            required = deep_dry_payload.get("required_carriers")
+            forbidden = deep_dry_payload.get("forbidden_authored_carriers")
+            detected = deep_dry_payload.get("detected_repository_mode")
+            write = deep_dry_payload.get("write")
+            if not isinstance(intent, dict) or intent.get("effective") != "attach-only":
+                failures.append(Failure("deep-existing-bootstrap", "`deep-existing dry-run` must report `adoption_intent.effective = attach-only`"))
+            if not isinstance(risk, dict) or risk.get("repo_owned_truth_risk") != "preserved":
+                failures.append(Failure("deep-existing-bootstrap", "`deep-existing dry-run` must report preserved repo-owned truth risk"))
+            if not isinstance(planned, list) or not planned:
+                failures.append(Failure("deep-existing-bootstrap", "`deep-existing dry-run` must report planned write targets"))
+            else:
+                for item in planned:
+                    if isinstance(item, dict):
+                        pattern = forbidden_match(item.get("path"))
+                        if pattern:
+                            failures.append(Failure("deep-existing-bootstrap", f"`deep-existing dry-run` planned write must not match forbidden carrier `{pattern}`"))
+            if not isinstance(required, list) or not required:
+                failures.append(Failure("deep-existing-bootstrap", "`deep-existing dry-run` must report required carriers"))
+            if not isinstance(forbidden, list) or {
+                item.get("path") for item in forbidden if isinstance(item, dict)
+            } != set(attach_only_forbidden_patterns):
+                failures.append(Failure("deep-existing-bootstrap", "`deep-existing dry-run` must report the full attach-only forbidden carrier list"))
+            if not isinstance(detected, dict) or detected.get("scenario_key") != "complex-existing":
+                failures.append(Failure("deep-existing-bootstrap", "`deep-existing dry-run` must report detected repository mode"))
+            if not isinstance(write, dict) or write.get("enabled") is not False:
+                failures.append(Failure("deep-existing-bootstrap", "`deep-existing dry-run` must keep write.enabled = false"))
+            assert_no_default_release_target(deep_target, deep_dry_payload, "deep-existing dry-run")
+
         deep_payload, deep_error = load_command_json(
             root,
             [
@@ -4346,6 +4738,8 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                 "bootstrap",
                 "--target",
                 str(deep_target),
+                "--intent",
+                "attach-only",
                 "--write",
                 "--force",
                 "--verify",
@@ -4358,6 +4752,7 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
             recommended = deep_payload.get("recommended_adoption")
             verification = deep_payload.get("verification")
             governance_surface = deep_payload.get("governance_surface")
+            repo_interface_path = deep_target / ".loom/companion/repo-interface.json"
             if not isinstance(recommended, dict) or recommended.get("path") != "deep-existing-repo":
                 failures.append(Failure("deep-existing-bootstrap", "`deep-existing bootstrap` must select `recommended_adoption.path = deep-existing-repo`"))
             run = deep_payload.get("run")
@@ -4380,12 +4775,80 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
                 ".loom/work-items/INIT-0001.md",
                 ".loom/progress/INIT-0001.md",
                 ".loom/status/current.md",
+                ".loom/reviews/INIT-0001.json",
+                ".loom/specs/INIT-0001/spec.md",
             ):
                 if (deep_target / forbidden).exists():
                     failures.append(Failure("deep-existing-bootstrap", f"`deep-existing bootstrap` must not generate `{forbidden}`"))
             fact_chain = deep_payload.get("fact_chain")
             if not isinstance(fact_chain, dict) or fact_chain.get("mode") != "repo-native attach-only":
                 failures.append(Failure("deep-existing-bootstrap", "`deep-existing bootstrap` must keep `fact_chain.mode = repo-native attach-only`"))
+            if repo_interface_path.exists():
+                repo_interface = json.loads(repo_interface_path.read_text(encoding="utf-8"))
+                host_truth = repo_interface.get("host_truth_locators")
+                if not isinstance(host_truth, dict) or set(host_truth.keys()) != {"work_item", "project_status", "review", "closeout"}:
+                    failures.append(Failure("deep-existing-bootstrap", "`deep-existing bootstrap` repo-interface must declare attach-only host truth locators"))
+            assert_no_default_release_target(deep_target, deep_payload, "deep-existing bootstrap")
+
+        poisoned_files_target = tmp_root / "deep-existing-poison-files"
+        if deep_target.exists() and (deep_target / ".loom/bin/loom_init.py").exists():
+            shutil.copytree(deep_target, poisoned_files_target)
+            (poisoned_files_target / ".loom/reviews").mkdir(parents=True, exist_ok=True)
+            (poisoned_files_target / ".loom/specs/EXISTING").mkdir(parents=True, exist_ok=True)
+            (poisoned_files_target / ".loom/reviews/EXISTING.json").write_text("{}", encoding="utf-8")
+            (poisoned_files_target / ".loom/specs/EXISTING/spec.md").write_text("# Existing Spec\n", encoding="utf-8")
+            poisoned_payload, poisoned_error = load_command_json(
+                root,
+                [
+                    "python3",
+                    str(poisoned_files_target / ".loom/bin/loom_init.py"),
+                    "verify",
+                    "--target",
+                    str(poisoned_files_target),
+                ],
+            )
+            if poisoned_error:
+                failures.append(Failure("deep-existing-bootstrap", f"`attach-only forbidden file verify` failed: {poisoned_error}"))
+            else:
+                errors_text = json.dumps(poisoned_payload.get("errors", []), ensure_ascii=False) if poisoned_payload else ""
+                if poisoned_payload.get("ok") is not False:
+                    failures.append(Failure("deep-existing-bootstrap", "`attach-only forbidden file verify` must fail closed"))
+                if "forbidden authored carrier" not in errors_text or "second truth chain" not in errors_text:
+                    failures.append(Failure("deep-existing-bootstrap", "`attach-only forbidden file verify` must explain the second truth-chain risk"))
+
+        poisoned_decl_target = tmp_root / "deep-existing-poison-declarations"
+        if deep_target.exists() and (deep_target / ".loom/bin/loom_init.py").exists():
+            shutil.copytree(deep_target, poisoned_decl_target)
+            init_result_path = poisoned_decl_target / ".loom/bootstrap/init-result.json"
+            manifest_path = poisoned_decl_target / ".loom/bootstrap/manifest.json"
+            init_result = json.loads(init_result_path.read_text(encoding="utf-8"))
+            init_result.setdefault("planned_writes", []).append(
+                {"path": ".loom/work-items/POISON.md", "kind": "work-item", "owner": "loom"}
+            )
+            init_result_path.write_text(json.dumps(init_result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest.setdefault("artifacts", []).append(
+                {"path": ".loom/progress/POISON.md", "kind": "progress", "source": "generated"}
+            )
+            manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            poisoned_payload, poisoned_error = load_command_json(
+                root,
+                [
+                    "python3",
+                    str(poisoned_decl_target / ".loom/bin/loom_init.py"),
+                    "verify",
+                    "--target",
+                    str(poisoned_decl_target),
+                ],
+            )
+            if poisoned_error:
+                failures.append(Failure("deep-existing-bootstrap", f"`attach-only forbidden declaration verify` failed: {poisoned_error}"))
+            else:
+                errors_text = json.dumps(poisoned_payload.get("errors", []), ensure_ascii=False) if poisoned_payload else ""
+                if poisoned_payload.get("ok") is not False:
+                    failures.append(Failure("deep-existing-bootstrap", "`attach-only forbidden declaration verify` must fail closed"))
+                if "planned_writes" not in errors_text or "manifest.artifacts" not in errors_text:
+                    failures.append(Failure("deep-existing-bootstrap", "`attach-only forbidden declaration verify` must name poisoned declaration sources"))
 
         full_target = tmp_root / "full-bootstrap"
         write_repo(full_target, validation_entry=False, pr_template=False, workflow_doc=False)
@@ -4404,18 +4867,421 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
             ],
         )
         if full_error:
-            failures.append(Failure("deep-existing-bootstrap", f"`full-bootstrap fallback sample` failed: {full_error}"))
+            failures.append(Failure("deep-existing-bootstrap", f"`full-bootstrap ambiguous intent sample` failed: {full_error}"))
         else:
             recommended = full_payload.get("recommended_adoption")
             if not isinstance(recommended, dict) or recommended.get("path") != "full-bootstrap":
                 failures.append(Failure("deep-existing-bootstrap", "complex existing sample without overload must keep `recommended_adoption.path = full-bootstrap`"))
+            if full_payload.get("result") != "block":
+                failures.append(Failure("deep-existing-bootstrap", "complex existing full-bootstrap write must block when adoption intent is unspecified"))
+            risk = full_payload.get("risk_summary")
+            if not isinstance(risk, dict) or risk.get("requires_explicit_intent") is not True:
+                failures.append(Failure("deep-existing-bootstrap", "ambiguous full-bootstrap write must report `risk_summary.requires_explicit_intent = true`"))
+            assert_decision_prompt(
+                full_payload,
+                "full-bootstrap ambiguous intent sample",
+                expected_write_intent="write",
+                expected_signal_default="execution-control",
+                required_candidates={"attach-only", "execution-control"},
+                expected_requested="unspecified",
+                expected_decision_status="missing",
+            )
             for required in (
                 ".loom/work-items/INIT-0001.md",
                 ".loom/progress/INIT-0001.md",
                 ".loom/status/current.md",
             ):
-                if not (full_target / required).exists():
-                    failures.append(Failure("deep-existing-bootstrap", f"`full-bootstrap fallback sample` must generate `{required}`"))
+                if (full_target / required).exists():
+                    failures.append(Failure("deep-existing-bootstrap", f"`full-bootstrap ambiguous intent sample` must not generate `{required}` before explicit intent"))
+
+        explicit_full_target = tmp_root / "full-bootstrap-explicit"
+        write_repo(explicit_full_target, validation_entry=False, pr_template=False, workflow_doc=False)
+        explicit_payload, explicit_error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_init.py",
+                "bootstrap",
+                "--target",
+                str(explicit_full_target),
+                "--intent",
+                "execution-control",
+                "--write",
+                "--force",
+                "--verify",
+                "--install-pr-template",
+            ],
+        )
+        if explicit_error:
+            failures.append(Failure("deep-existing-bootstrap", f"`explicit execution-control bootstrap sample` failed: {explicit_error}"))
+        else:
+            intent = explicit_payload.get("adoption_intent")
+            recommended = explicit_payload.get("recommended_adoption")
+            profile = explicit_payload.get("scaffold_profile")
+            planned = explicit_payload.get("planned_writes")
+            planned_paths = {item.get("path") for item in planned if isinstance(item, dict)} if isinstance(planned, list) else set()
+            initial = explicit_payload.get("initial_artifacts")
+            initial_paths = {item.get("path") for item in initial if isinstance(item, dict)} if isinstance(initial, list) else set()
+            if not isinstance(intent, dict) or intent.get("effective") != "execution-control":
+                failures.append(Failure("deep-existing-bootstrap", "explicit full-bootstrap sample must report `adoption_intent.effective = execution-control`"))
+            if not isinstance(recommended, dict) or recommended.get("path") != "full-bootstrap":
+                failures.append(Failure("deep-existing-bootstrap", "explicit execution-control sample must select `recommended_adoption.path = full-bootstrap`"))
+            if not isinstance(profile, dict) or profile.get("name") != "execution-control":
+                failures.append(Failure("deep-existing-bootstrap", "explicit execution-control sample must report `scaffold_profile.name = execution-control`"))
+            for required in (
+                ".loom/work-items/INIT-0001.md",
+                ".loom/progress/INIT-0001.md",
+                ".loom/status/current.md",
+                ".loom/reviews/INIT-0001.json",
+                ".loom/specs/INIT-0001/spec.md",
+                ".loom/specs/INIT-0001/plan.md",
+                ".loom/specs/INIT-0001/implementation-contract.md",
+                ".loom/stories/_template.md",
+            ):
+                if not (explicit_full_target / required).exists():
+                    failures.append(Failure("deep-existing-bootstrap", f"`explicit execution-control bootstrap sample` must generate `{required}`"))
+                if required not in planned_paths or required not in initial_paths:
+                    failures.append(Failure("deep-existing-bootstrap", f"`explicit execution-control bootstrap sample` must declare `{required}` in planned_writes and initial_artifacts"))
+            assert_no_default_release_target(explicit_full_target, explicit_payload, "explicit execution-control bootstrap sample")
+
+        gitignore_block_target = tmp_root / "gitignore-block"
+        write_repo(gitignore_block_target, validation_entry=False, pr_template=False, workflow_doc=False)
+        run_command(root, ["git", "init"], cwd=gitignore_block_target)
+        (gitignore_block_target / ".gitignore").write_text(".loom/*\n", encoding="utf-8")
+        blocked_payload, blocked_error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_init.py",
+                "bootstrap",
+                "--target",
+                str(gitignore_block_target),
+                "--intent",
+                "execution-control",
+                "--write",
+                "--force",
+                "--verify",
+                "--install-pr-template",
+            ],
+        )
+        if blocked_error:
+            failures.append(Failure("deep-existing-bootstrap", f"`blanket .loom gitignore block sample` failed to return JSON: {blocked_error}"))
+        else:
+            if blocked_payload.get("result") != "block":
+                failures.append(Failure("deep-existing-bootstrap", "`blanket .loom gitignore block sample` must fail closed"))
+            policy = blocked_payload.get("gitignore_policy")
+            if not isinstance(policy, dict) or policy.get("blanket_loom_ignore") is not True:
+                failures.append(Failure("deep-existing-bootstrap", "`blanket .loom gitignore block sample` must report blanket_loom_ignore"))
+            repair = policy.get("repair") if isinstance(policy, dict) else None
+            if not isinstance(repair, dict) or "--repair-gitignore" not in str(repair.get("command")):
+                failures.append(Failure("deep-existing-bootstrap", "`blanket .loom gitignore block sample` must expose repair guidance"))
+            if (gitignore_block_target / ".loom/README.md").exists():
+                failures.append(Failure("deep-existing-bootstrap", "`blanket .loom gitignore block sample` must not write stable carriers before repair"))
+
+        gitignore_repair_target = tmp_root / "gitignore-repair"
+        write_repo(gitignore_repair_target, validation_entry=False, pr_template=False, workflow_doc=False)
+        run_command(root, ["git", "init"], cwd=gitignore_repair_target)
+        (gitignore_repair_target / ".gitignore").write_text("/.loom/*\n", encoding="utf-8")
+        repair_payload, repair_error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_init.py",
+                "bootstrap",
+                "--target",
+                str(gitignore_repair_target),
+                "--intent",
+                "execution-control",
+                "--write",
+                "--force",
+                "--verify",
+                "--repair-gitignore",
+                "--install-pr-template",
+            ],
+        )
+        if repair_error:
+            failures.append(Failure("deep-existing-bootstrap", f"`blanket .loom gitignore repair sample` failed: {repair_error}"))
+        else:
+            verification = repair_payload.get("verification")
+            if not isinstance(verification, dict) or verification.get("ok") is not True:
+                failures.append(Failure("deep-existing-bootstrap", "`blanket .loom gitignore repair sample` must verify successfully"))
+            gitignore_lines = (gitignore_repair_target / ".gitignore").read_text(encoding="utf-8").splitlines()
+            if any(pattern in gitignore_lines for pattern in (".loom/", ".loom/*", ".loom/**", "/.loom/", "/.loom/*", "/.loom/**")):
+                failures.append(Failure("deep-existing-bootstrap", "`blanket .loom gitignore repair sample` must remove blanket .loom ignore"))
+            for runtime_ignore in (
+                ".loom/runtime/",
+                ".loom/tmp/",
+                ".loom/cache/",
+                ".loom/attempts/**/raw-logs/",
+                ".loom/attempts/**/scratch/",
+                ".loom/local/",
+                ".loom/bin/**/__pycache__/",
+                ".loom/bin/**/*.py[cod]",
+            ):
+                if runtime_ignore not in gitignore_lines:
+                    failures.append(Failure("deep-existing-bootstrap", f"`blanket .loom gitignore repair sample` must keep runtime ignore `{runtime_ignore}`"))
+            for stable in (
+                ".loom/README.md",
+                ".loom/bootstrap/init-result.json",
+                ".loom/work-items/INIT-0001.md",
+                ".loom/progress/INIT-0001.md",
+                ".loom/status/current.md",
+                ".loom/reviews/INIT-0001.json",
+                ".loom/specs/INIT-0001/spec.md",
+            ):
+                check = run_command(root, ["git", "check-ignore", "-q", stable], cwd=gitignore_repair_target)
+                if check.returncode == 0:
+                    failures.append(Failure("deep-existing-bootstrap", f"`blanket .loom gitignore repair sample` must leave stable carrier Git-visible: {stable}"))
+            for runtime_path in (".loom/runtime/probe.json", ".loom/tmp/probe.json", ".loom/cache/probe.json"):
+                probe = gitignore_repair_target / runtime_path
+                probe.parent.mkdir(parents=True, exist_ok=True)
+                probe.write_text("{}\n", encoding="utf-8")
+                check = run_command(root, ["git", "check-ignore", "-q", runtime_path], cwd=gitignore_repair_target)
+                if check.returncode != 0:
+                    failures.append(Failure("deep-existing-bootstrap", f"`blanket .loom gitignore repair sample` must ignore runtime scratch path: {runtime_path}"))
+            for runtime_path in (
+                ".loom/attempts/INIT-0001/raw-logs/probe.log",
+                ".loom/attempts/INIT-0001/scratch/probe.json",
+                ".loom/local/probe.json",
+            ):
+                probe = gitignore_repair_target / runtime_path
+                probe.parent.mkdir(parents=True, exist_ok=True)
+                probe.write_text("{}\n", encoding="utf-8")
+                check = run_command(root, ["git", "check-ignore", "-q", runtime_path], cwd=gitignore_repair_target)
+                if check.returncode != 0:
+                    failures.append(Failure("deep-existing-bootstrap", f"`blanket .loom gitignore repair sample` must ignore runtime residue path: {runtime_path}"))
+            attempt_evidence = gitignore_repair_target / ".loom/attempts/INIT-0001/evidence.json"
+            attempt_evidence.parent.mkdir(parents=True, exist_ok=True)
+            attempt_evidence.write_text("{}\n", encoding="utf-8")
+            init_result_path = gitignore_repair_target / ".loom/bootstrap/init-result.json"
+            init_result = json.loads(init_result_path.read_text(encoding="utf-8"))
+            required_carriers = init_result.get("required_carriers")
+            if isinstance(required_carriers, list):
+                required_carriers.append(
+                    {
+                        "path": ".loom/attempts/INIT-0001/evidence.json",
+                        "kind": "attempt-evidence",
+                        "owner": "loom",
+                    }
+                )
+                init_result_path.write_text(json.dumps(init_result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            untracked_payload, untracked_error = load_command_json(
+                root,
+                [
+                    "python3",
+                    "tools/loom_init.py",
+                    "verify",
+                    "--target",
+                    str(gitignore_repair_target),
+                ],
+            )
+            if untracked_error:
+                failures.append(Failure("deep-existing-bootstrap", f"`stable carrier untracked verify sample` failed to return JSON: {untracked_error}"))
+            else:
+                git_visibility = untracked_payload.get("git_visibility")
+                if untracked_payload.get("ok") is not True or not isinstance(git_visibility, dict):
+                    failures.append(Failure("deep-existing-bootstrap", "`stable carrier untracked verify sample` must pass with git visibility output"))
+                else:
+                    untracked = git_visibility.get("untracked")
+                    haystack = json.dumps(git_visibility, ensure_ascii=False)
+                    if not isinstance(untracked, list) or ".loom/bootstrap/init-result.json" not in haystack or ".loom/attempts/INIT-0001/evidence.json" not in haystack or "git add" not in haystack:
+                        failures.append(Failure("deep-existing-bootstrap", "`stable carrier untracked verify sample` must report carriers needing git add"))
+                    if (
+                        ".loom/runtime/probe.json" in haystack
+                        or ".loom/tmp/probe.json" in haystack
+                        or ".loom/cache/probe.json" in haystack
+                        or ".loom/attempts/INIT-0001/raw-logs/probe.log" in haystack
+                        or ".loom/attempts/INIT-0001/scratch/probe.json" in haystack
+                        or ".loom/local/probe.json" in haystack
+                    ):
+                        failures.append(Failure("deep-existing-bootstrap", "`stable carrier untracked verify sample` must not report runtime scratch paths"))
+            runtime_declared_init_result = json.loads(init_result_path.read_text(encoding="utf-8"))
+            runtime_declared_carriers = runtime_declared_init_result.get("required_carriers")
+            if isinstance(runtime_declared_carriers, list):
+                runtime_declared_carriers.append(
+                    {
+                        "path": ".loom/runtime/probe.json",
+                        "kind": "runtime-probe",
+                        "owner": "loom-runtime",
+                    }
+                )
+                init_result_path.write_text(json.dumps(runtime_declared_init_result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                runtime_declared_payload, runtime_declared_error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        "tools/loom_init.py",
+                        "verify",
+                        "--target",
+                        str(gitignore_repair_target),
+                    ],
+                )
+                if runtime_declared_error:
+                    failures.append(Failure("deep-existing-bootstrap", f"`stable carrier runtime path verify sample` failed to return JSON: {runtime_declared_error}"))
+                else:
+                    runtime_declared_haystack = json.dumps(runtime_declared_payload, ensure_ascii=False)
+                    if (
+                        runtime_declared_payload.get("ok") is not False
+                        or "unexpected runtime path" not in runtime_declared_haystack
+                        or ".loom/runtime/probe.json" not in runtime_declared_haystack
+                    ):
+                        failures.append(Failure("deep-existing-bootstrap", "`stable carrier runtime path verify sample` must fail closed when runtime residue is declared as stable"))
+                if isinstance(required_carriers, list):
+                    init_result["required_carriers"] = required_carriers
+                    init_result_path.write_text(json.dumps(init_result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            run_command(root, ["git", "add", "."], cwd=gitignore_repair_target)
+            tracked_payload, tracked_error = load_command_json(
+                root,
+                [
+                    "python3",
+                    "tools/loom_init.py",
+                    "verify",
+                    "--target",
+                    str(gitignore_repair_target),
+                ],
+            )
+            if tracked_error:
+                failures.append(Failure("deep-existing-bootstrap", f"`stable carrier tracked verify sample` failed: {tracked_error}"))
+            else:
+                git_visibility = tracked_payload.get("git_visibility")
+                if tracked_payload.get("ok") is not True or not isinstance(git_visibility, dict):
+                    failures.append(Failure("deep-existing-bootstrap", "`stable carrier tracked verify sample` must pass with git visibility output"))
+                elif git_visibility.get("ignored") or git_visibility.get("missing") or git_visibility.get("untracked"):
+                    failures.append(Failure("deep-existing-bootstrap", "`stable carrier tracked verify sample` must have no hidden, missing, or untracked stable carriers"))
+            run_command(root, ["git", "rm", "--cached", "--quiet", ".loom/bootstrap/init-result.json"], cwd=gitignore_repair_target)
+            (gitignore_repair_target / ".gitignore").write_text(
+                (gitignore_repair_target / ".gitignore").read_text(encoding="utf-8") + ".loom/bootstrap/*\n",
+                encoding="utf-8",
+            )
+            ignored_payload, ignored_error = load_command_json(
+                root,
+                [
+                    "python3",
+                    "tools/loom_init.py",
+                    "verify",
+                    "--target",
+                    str(gitignore_repair_target),
+                ],
+            )
+            if ignored_error:
+                failures.append(Failure("deep-existing-bootstrap", f"`stable carrier ignored verify sample` failed to return JSON: {ignored_error}"))
+            else:
+                ignored_haystack = json.dumps(ignored_payload, ensure_ascii=False)
+                if ignored_payload.get("ok") is not False or ".loom/bootstrap/init-result.json" not in ignored_haystack or "ignored by Git" not in ignored_haystack:
+                    failures.append(Failure("deep-existing-bootstrap", "`stable carrier ignored verify sample` must fail closed on a specific stable-carrier ignore rule"))
+            (gitignore_repair_target / ".gitignore").write_text(
+                (gitignore_repair_target / ".gitignore").read_text(encoding="utf-8") + ".loom/\n",
+                encoding="utf-8",
+            )
+            verify_payload, verify_error = load_command_json(
+                root,
+                [
+                    "python3",
+                    "tools/loom_init.py",
+                    "verify",
+                    "--target",
+                    str(gitignore_repair_target),
+                ],
+            )
+            if verify_error:
+                failures.append(Failure("deep-existing-bootstrap", f"`blanket .loom gitignore verify sample` failed to return JSON: {verify_error}"))
+            else:
+                verify_haystack = json.dumps(verify_payload, ensure_ascii=False)
+                if verify_payload.get("ok") is not False or "blanket .loom gitignore" not in verify_haystack:
+                    failures.append(Failure("deep-existing-bootstrap", "`blanket .loom gitignore verify sample` must fail closed on later blanket ignore drift"))
+
+        light_target = tmp_root / "light-governance"
+        write_small_existing_repo(light_target)
+        light_payload, light_error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_init.py",
+                "bootstrap",
+                "--target",
+                str(light_target),
+                "--intent",
+                "light-governance",
+                "--write",
+                "--force",
+                "--verify",
+                "--install-pr-template",
+            ],
+        )
+        if light_error:
+            failures.append(Failure("deep-existing-bootstrap", f"`light-governance bootstrap sample` failed: {light_error}"))
+        else:
+            run = light_payload.get("run")
+            recommended = light_payload.get("recommended_adoption")
+            profile = light_payload.get("scaffold_profile")
+            intentionally_absent = light_payload.get("intentionally_absent")
+            absent_paths = (
+                {item.get("path") for item in intentionally_absent if isinstance(item, dict)}
+                if isinstance(intentionally_absent, list)
+                else set()
+            )
+            if not isinstance(run, dict) or run.get("scenario_key") != "small-existing" or run.get("recovery_mode") != "checkpoint-lite":
+                failures.append(Failure("deep-existing-bootstrap", "light-governance sample must model small-existing checkpoint-lite adoption"))
+            if not isinstance(recommended, dict) or recommended.get("path") != "lightweight-retrofit":
+                failures.append(Failure("deep-existing-bootstrap", "light-governance sample must select `recommended_adoption.path = lightweight-retrofit`"))
+            if not isinstance(profile, dict) or profile.get("name") != "light-governance":
+                failures.append(Failure("deep-existing-bootstrap", "light-governance sample must report `scaffold_profile.name = light-governance`"))
+            if not isinstance(profile, dict) or profile.get("writes_work_item_carriers") is not False:
+                failures.append(Failure("deep-existing-bootstrap", "light-governance sample must report `writes_work_item_carriers = false`"))
+            if not isinstance(light_payload.get("upgrade_triggers"), list) or not light_payload["upgrade_triggers"]:
+                failures.append(Failure("deep-existing-bootstrap", "light-governance sample must report top-level upgrade_triggers"))
+            deferred_text = json.dumps(light_payload.get("deferred_capabilities", []), ensure_ascii=False)
+            if "spec" not in deferred_text or "execution-control" not in deferred_text:
+                failures.append(Failure("deep-existing-bootstrap", "light-governance sample must defer Loom-owned spec carriers to execution-control"))
+            planned = light_payload.get("planned_writes")
+            planned_paths = {item.get("path") for item in planned if isinstance(item, dict)} if isinstance(planned, list) else set()
+            for required in (".loom/reviews/INIT-0001.json", ".loom/reviews/INIT-0001.spec.json", ".github/PULL_REQUEST_TEMPLATE.md"):
+                if required not in planned_paths or not (light_target / required).exists():
+                    failures.append(Failure("deep-existing-bootstrap", f"`light-governance bootstrap sample` must generate `{required}`"))
+            for absent in (".loom/work-items/**", ".loom/progress/**", ".loom/status/current.md", ".loom/specs/**", ".loom/stories/**"):
+                if absent not in absent_paths:
+                    failures.append(Failure("deep-existing-bootstrap", f"`light-governance bootstrap sample` must mark `{absent}` intentionally absent"))
+            for forbidden in (
+                ".loom/work-items/INIT-0001.md",
+                ".loom/progress/INIT-0001.md",
+                ".loom/status/current.md",
+                ".loom/specs/INIT-0001/spec.md",
+                ".loom/specs/INIT-0001/plan.md",
+                ".loom/specs/INIT-0001/implementation-contract.md",
+                ".loom/stories/_template.md",
+            ):
+                if forbidden in planned_paths or (light_target / forbidden).exists():
+                    failures.append(Failure("deep-existing-bootstrap", f"`light-governance bootstrap sample` must not generate `{forbidden}`"))
+            assert_no_default_release_target(light_target, light_payload, "light-governance bootstrap sample")
+            readme_text = (light_target / ".loom/README.md").read_text(encoding="utf-8") if (light_target / ".loom/README.md").exists() else ""
+            if ".loom/specs" in readme_text or "Spec suite" in readme_text:
+                failures.append(Failure("deep-existing-bootstrap", "`light-governance bootstrap sample` must not declare a spec suite in `.loom/README.md`"))
+            spec_review_text = (light_target / ".loom/reviews/INIT-0001.spec.json").read_text(encoding="utf-8") if (light_target / ".loom/reviews/INIT-0001.spec.json").exists() else ""
+            if "formal spec path" in spec_review_text:
+                failures.append(Failure("deep-existing-bootstrap", "`light-governance spec review placeholder` must not tell operators to consume a formal spec path"))
+            if (light_target / ".loom/bin/loom_init.py").exists():
+                poisoned_light_target = tmp_root / "light-governance-poison-specs"
+                shutil.copytree(light_target, poisoned_light_target)
+                (poisoned_light_target / ".loom/specs/INIT-0001").mkdir(parents=True, exist_ok=True)
+                (poisoned_light_target / ".loom/specs/INIT-0001/spec.md").write_text("# Unexpected Spec\n", encoding="utf-8")
+                poisoned_payload, poisoned_error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(poisoned_light_target / ".loom/bin/loom_init.py"),
+                        "verify",
+                        "--target",
+                        str(poisoned_light_target),
+                    ],
+                )
+                if poisoned_error:
+                    failures.append(Failure("deep-existing-bootstrap", f"`light-governance forbidden spec verify` failed: {poisoned_error}"))
+                else:
+                    errors_text = json.dumps(poisoned_payload.get("errors", []), ensure_ascii=False) if poisoned_payload else ""
+                    if poisoned_payload.get("ok") is not False:
+                        failures.append(Failure("deep-existing-bootstrap", "`light-governance forbidden spec verify` must fail closed"))
+                    if ".loom/specs/INIT-0001/spec.md" not in errors_text:
+                        failures.append(Failure("deep-existing-bootstrap", "`light-governance forbidden spec verify` must name the unexpected spec carrier"))
     return failures
 
 
@@ -5671,6 +6537,8 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     "bootstrap",
                     "--target",
                     ".",
+                    "--intent",
+                    "execution-control",
                     "--write",
                     "--force",
                     "--verify",
@@ -6542,7 +7410,10 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         if progress_path.read_text(encoding="utf-8") != progress_before_handoff:
             failures.append(Failure("daily-execution-cli", "`flow handoff` must not rewrite the recovery entry"))
 
+        status_path = lifecycle_target / ".loom/status/current.md"
         for operation in ("create", "attach", "cleanup", "retire"):
+            progress_before_operation = progress_path.read_text(encoding="utf-8")
+            status_before_operation = status_path.read_text(encoding="utf-8")
             payload, error = load_command_json(
                 root,
                 [
@@ -6574,6 +7445,15 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             )
             if operation == "cleanup" and residue.exists():
                 failures.append(Failure("daily-execution-cli", "`workspace cleanup` must remove marked Loom-owned residue"))
+            if operation == "retire":
+                if payload.get("retire_scope") != "local_only":
+                    failures.append(Failure("daily-execution-cli", "`workspace retire` must report local-only retire scope"))
+                if payload.get("versioned_carrier_updates") != []:
+                    failures.append(Failure("daily-execution-cli", "`workspace retire` must not report versioned carrier updates"))
+                if progress_path.read_text(encoding="utf-8") != progress_before_operation:
+                    failures.append(Failure("daily-execution-cli", "`workspace retire` must not rewrite the recovery entry"))
+                if status_path.read_text(encoding="utf-8") != status_before_operation:
+                    failures.append(Failure("daily-execution-cli", "`workspace retire` must not rewrite the status surface"))
 
         locate_payload, error = load_command_json(
             root,
@@ -6590,13 +7470,11 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         )
         if error:
             failures.append(Failure("daily-execution-cli", f"`workspace locate` after retire failed: {error}"))
-        elif (
-            not isinstance(locate_payload.get("checkpoint"), dict)
-            or locate_payload["checkpoint"].get("normalized") != "retired"
-        ):
-            failures.append(Failure("daily-execution-cli", "`workspace retire` must leave the copied sample in `retired` state"))
+        elif locate_payload.get("retire_scope") == "local_only":
+            failures.append(Failure("daily-execution-cli", "`workspace locate` must not treat local-only retire evidence as versioned checkpoint truth"))
         progress_after_retire = progress_path.read_text(encoding="utf-8")
         for stable_line in (
+            "- Current Checkpoint: admission checkpoint",
             "- Current Stop:",
             "- Next Step:",
             "- Blockers:",
@@ -6605,6 +7483,82 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         ):
             if stable_line not in progress_after_retire:
                 failures.append(Failure("daily-execution-cli", f"`workspace retire` must preserve recovery field `{stable_line}`"))
+
+    with tempfile.TemporaryDirectory(prefix="loom-check-active-carrier-") as tmp:
+        active_target = Path(tmp) / "new-project"
+        shutil.copytree(example_target, active_target)
+        source_work_item = active_target / ".loom/work-items/INIT-0001.md"
+        source_recovery = active_target / ".loom/progress/INIT-0001.md"
+        stale_item = active_target / ".loom/work-items/STALE-0002.md"
+        stale_recovery = active_target / ".loom/progress/STALE-0002.md"
+        stale_item.write_text(
+            source_work_item.read_text(encoding="utf-8")
+            .replace("INIT-0001", "STALE-0002")
+            .replace(".loom/progress/STALE-0002.md", ".loom/progress/STALE-0002.md"),
+            encoding="utf-8",
+        )
+        stale_recovery.write_text(
+            source_recovery.read_text(encoding="utf-8")
+            .replace("INIT-0001", "STALE-0002")
+            .replace("- Current Checkpoint: admission checkpoint", "- Current Checkpoint: retired"),
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "purity-check", "--target", str(active_target), "--item", "INIT-0001"],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`purity-check` stale active carrier fixture failed: {error}"))
+        elif payload.get("result") != "pass":
+            failures.append(Failure("daily-execution-cli", "terminal stale active carrier must not block current item purity"))
+        else:
+            diagnostics = payload.get("purity", {}).get("active_workspace_diagnostics", [])
+            if not any(isinstance(entry, dict) and entry.get("classification") == "stale_carrier" for entry in diagnostics):
+                failures.append(Failure("daily-execution-cli", "`purity-check` must expose stale active carrier diagnostics"))
+
+        malformed_item = active_target / ".loom/work-items/MALFORMED-0003.md"
+        malformed_item.write_text(
+            "# Broken Work Item\n\n- Item ID: MALFORMED-0003\n",
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "purity-check", "--target", str(active_target), "--item", "INIT-0001"],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`purity-check` malformed unrelated carrier fixture failed: {error}"))
+        elif payload.get("result") != "pass":
+            failures.append(Failure("daily-execution-cli", "malformed unrelated active carrier must not block current item purity"))
+        else:
+            diagnostics = payload.get("purity", {}).get("active_workspace_diagnostics", [])
+            unknown_entries = [
+                entry
+                for entry in diagnostics
+                if isinstance(entry, dict)
+                and entry.get("work_item_locator") == ".loom/work-items/MALFORMED-0003.md"
+            ]
+            if not unknown_entries:
+                failures.append(Failure("daily-execution-cli", "`purity-check` must expose malformed unrelated carrier diagnostics"))
+            elif any(entry.get("blocking") for entry in unknown_entries):
+                failures.append(Failure("daily-execution-cli", "malformed unrelated carrier diagnostics must be report-only"))
+
+        active_recovery = active_target / ".loom/progress/STALE-0002.md"
+        active_recovery.write_text(
+            active_recovery.read_text(encoding="utf-8").replace("- Current Checkpoint: retired", "- Current Checkpoint: build"),
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "state-check", "--target", str(active_target), "--item", "INIT-0001"],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`state-check` shared workspace fixture failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "shared active workspace conflict must block state-check"))
+        else:
+            diagnostics = payload.get("checks", {}).get("active_workspace_diagnostics", [])
+            if not any(isinstance(entry, dict) and entry.get("classification") == "shared_workspace_conflict" for entry in diagnostics):
+                failures.append(Failure("daily-execution-cli", "`state-check` must expose shared workspace conflict diagnostics"))
 
     with tempfile.TemporaryDirectory(prefix="loom-check-missing-workspace-") as tmp:
         missing_workspace_target = Path(tmp) / "new-project"
@@ -7246,6 +8200,8 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         "bootstrap",
                         "--target",
                         str(target),
+                        "--intent",
+                        "execution-control",
                         "--write",
                         "--force",
                         "--verify",
@@ -7580,11 +8536,46 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     failures.append(Failure("daily-execution-cli", f"`installed spec review record allow` failed: {error}"))
                 elif payload.get("result") != "pass":
                     failures.append(Failure("daily-execution-cli", "`installed spec review record allow` must pass"))
+                else:
+                    git_add = run_command(
+                        root,
+                        ["git", "add", ".loom/reviews/INIT-0001.spec.json"],
+                        cwd=positive_target,
+                    )
+                    if git_add.returncode != 0:
+                        detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
+                        failures.append(Failure("daily-execution-cli", f"`installed spec review carrier commit` add failed: {detail}"))
+                    else:
+                        git_commit = run_command(
+                            root,
+                            ["git", "commit", "-m", "author installed spec review carrier for #209"],
+                            cwd=positive_target,
+                        )
+                        if git_commit.returncode != 0:
+                            detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
+                            failures.append(Failure("daily-execution-cli", f"`installed spec review carrier commit` failed: {detail}"))
 
-                spec_plan_path = positive_target / ".loom/specs/INIT-0001/plan.md"
-                spec_plan_text = spec_plan_path.read_text(encoding="utf-8")
+                incomplete_spec_target = tmp_root / "incomplete-spec-review-target"
+                shutil.copytree(positive_target, incomplete_spec_target)
+                spec_plan_path = incomplete_spec_target / ".loom/specs/INIT-0001/plan.md"
                 spec_plan_path.unlink()
-                try:
+                incomplete_spec_setup_ok = False
+                git_add = run_command(root, ["git", "add", ".loom/specs/INIT-0001/plan.md"], cwd=incomplete_spec_target)
+                if git_add.returncode != 0:
+                    detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
+                    failures.append(Failure("daily-execution-cli", f"`installed incomplete spec review setup` add failed: {detail}"))
+                else:
+                    git_commit = run_command(
+                        root,
+                        ["git", "commit", "-m", "remove plan for incomplete spec fixture"],
+                        cwd=incomplete_spec_target,
+                    )
+                    if git_commit.returncode != 0:
+                        detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
+                        failures.append(Failure("daily-execution-cli", f"`installed incomplete spec review setup` commit failed: {detail}"))
+                    else:
+                        incomplete_spec_setup_ok = True
+                if incomplete_spec_setup_ok:
                     payload, error = load_command_json(
                         root,
                         [
@@ -7593,7 +8584,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                             "review",
                             "record",
                             "--target",
-                            str(positive_target),
+                            str(incomplete_spec_target),
                             "--item",
                             "INIT-0001",
                             "--review-file",
@@ -7614,8 +8605,6 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         failures.append(Failure("daily-execution-cli", "`installed incomplete spec review record` must block"))
                     elif not any("plan.md" in str(item) for item in payload.get("missing_inputs", [])):
                         failures.append(Failure("daily-execution-cli", "`installed incomplete spec review record` must name the missing plan.md"))
-                finally:
-                    spec_plan_path.write_text(spec_plan_text, encoding="utf-8")
 
                 payload, error = load_command_json(
                     root,
@@ -12051,8 +13040,53 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
         original_issue_payload = loom_flow_module.github_issue_payload
         original_reconciliation_audit = loom_flow_module.reconciliation_audit_payload
         original_contains = loom_flow_module.contains_merged_commit
+        original_run_process = loom_flow_module.run_process
         seen_target_branches: list[str] = []
         try:
+            repo_declared_gate_target = base / "repo-declared-closeout-gate"
+            repo_declared_gate_target.mkdir()
+            (repo_declared_gate_target / "Makefile").write_text("loom-check:\n\t@echo repo gate\n", encoding="utf-8")
+            gate_command, gate_source = loom_flow_module.closeout_gate_command(repo_declared_gate_target)
+            if gate_command != ["make", "loom-check"] or gate_source != "repo_declared_make_target":
+                failures.append(Failure("adversarial-adoption", "closeout gate must prefer repo-declared `make loom-check`"))
+
+            repo_local_gate_target = base / "repo-local-closeout-gate"
+            (repo_local_gate_target / ".loom/bin").mkdir(parents=True)
+            (repo_local_gate_target / ".loom/bin/loom_check.py").write_text("print('repo local')\n", encoding="utf-8")
+            gate_command, gate_source = loom_flow_module.closeout_gate_command(repo_local_gate_target)
+            if gate_command != ["python3", ".loom/bin/loom_check.py", "."] or gate_source != "repo_local_loom_check":
+                failures.append(Failure("adversarial-adoption", "closeout gate must fall back to repo-local `.loom/bin/loom_check.py`"))
+
+            shared_gate_target = base / "shared-closeout-gate"
+            shared_gate_target.mkdir()
+            gate_command, gate_source = loom_flow_module.closeout_gate_command(shared_gate_target)
+            if gate_source != "shared_loom_check" or "loom_check.py" not in " ".join(gate_command):
+                failures.append(Failure("adversarial-adoption", "closeout gate must expose shared loom_check fallback source"))
+
+            class FakeGateResult:
+                returncode = 0
+                stdout = "repo gate\n"
+                stderr = ""
+
+            loom_flow_module.run_process = lambda *_args, **_kwargs: FakeGateResult()
+            payload, closeout_errors = loom_flow_module.closeout_payload(
+                target_root=repo_declared_gate_target,
+                phase_number=None,
+                fr_number=None,
+                issue_number=None,
+                pr_number=None,
+                project_number=None,
+                branch_name=None,
+                owner="owner",
+                repo_name="repo",
+                skip_gate=False,
+            )
+            if closeout_errors:
+                failures.append(Failure("adversarial-adoption", f"repo-declared closeout gate fixture failed: {closeout_errors}"))
+            elif payload.get("gate", {}).get("source") != "repo_declared_make_target":
+                failures.append(Failure("adversarial-adoption", "closeout payload must report repo-declared gate source"))
+            loom_flow_module.run_process = original_run_process
+
             loom_flow_module.github_pr_payload = lambda *_args, **_kwargs: (
                 {
                     "state": "MERGED",
@@ -12132,6 +13166,7 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             loom_flow_module.github_issue_payload = original_issue_payload
             loom_flow_module.reconciliation_audit_payload = original_reconciliation_audit
             loom_flow_module.contains_merged_commit = original_contains
+            loom_flow_module.run_process = original_run_process
 
         rollover_target = base / "active-rollover"
         shutil.copytree(baseline, rollover_target)
@@ -15506,6 +16541,60 @@ def check_story_intake_contract(root: Path) -> list[Failure]:
             context="flow story contract summary",
             payload=payload,
         )
+        contract = payload.get("contract")
+        if not isinstance(contract, dict) or contract.get("story_carrier_locator") != ".loom/stories/<item-id>.md":
+            failures.append(Failure(category, "flow story contract must expose `.loom/stories/<item-id>.md` as the story carrier locator"))
+
+    with tempfile.TemporaryDirectory(prefix="loom-check-story-carriers-") as tmp:
+        target = Path(tmp) / "target"
+        (target / ".loom/stories").mkdir(parents=True)
+        (target / ".loom/work-items").mkdir(parents=True)
+        (target / ".loom/stories/_template.md").write_text("template\n", encoding="utf-8")
+        work_item_text = (
+            "# WI-100\n\n"
+            "## Static Facts\n\n"
+            "- Item ID: WI-100\n"
+            "- Goal: validate story carrier\n"
+            "- Scope: story carrier fixture\n"
+            "- Execution Path: test\n"
+            "- Workspace Entry: .\n"
+            "- Recovery Entry: .loom/progress/WI-100.md\n"
+            "- Review Entry: .loom/reviews/WI-100.json\n"
+            "- Validation Entry: python3 .loom/bin/loom_story_carriers.py .\n"
+            "- Closing Condition: story carrier validates\n\n"
+            "## Associated Artifacts\n\n"
+            "- `.loom/stories/WI-100.md`\n"
+        )
+        (target / ".loom/work-items/WI-100.md").write_text(work_item_text, encoding="utf-8")
+        story_text = (
+            "# WI-100 Story\n\n"
+            "- Schema marker: loom-user-story/v1\n"
+            "- Actor: Release shepherd\n"
+            "- Capability: validate story carrier support\n"
+            "- Outcome: story carrier can be consumed by runtime checks\n"
+            "- Business value: avoids losing story readiness evidence\n\n"
+            "## Story Readiness\n\n"
+            "- Schema marker: loom-story-readiness/v1\n"
+            "- Decision: ready\n"
+            "- Rationale: concrete enough for fixture validation\n\n"
+            "## Delivery Consumption Boundary\n\n"
+            "- Schema marker: loom-story-delivery-mapping/v1\n"
+            "- Intended Work Item or FR: WI-100\n"
+        )
+        (target / ".loom/stories/WI-100.md").write_text(story_text, encoding="utf-8")
+        payload, error = load_command_json(root, ["python3", "src/skills/shared/scripts/loom_story_carriers.py", str(target)])
+        if error:
+            failures.append(Failure(category, f"story carrier pass fixture failed: {error}"))
+        elif payload.get("result") != "pass":
+            failures.append(Failure(category, "valid story carrier fixture must pass"))
+
+        unregistered = target / ".loom/stories/WI-101.md"
+        unregistered.write_text(story_text.replace("WI-100", "WI-101"), encoding="utf-8")
+        payload, error = load_command_json(root, ["python3", "src/skills/shared/scripts/loom_story_carriers.py", str(target)])
+        if error:
+            failures.append(Failure(category, f"story carrier missing registration fixture failed to return JSON: {error}"))
+        elif payload.get("result") != "block" or not any("matching work item is missing" in str(item) for item in payload.get("missing_inputs", [])):
+            failures.append(Failure(category, "missing story work item fixture must fail closed"))
 
     return failures
 
@@ -15524,6 +16613,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_required_paths(root, "top-level-files", TOP_LEVEL_FILES))
     failures.extend(check_required_paths(root, "area-readmes", AREA_READMES))
     failures.extend(check_required_paths(root, "core-docs", CORE_DOCS))
+    failures.extend(check_shared_foundation_contract(root))
     failures.extend(
         check_required_paths(root, "automation-frontload-templates", AUTOMATION_FRONTLOAD_TEMPLATES)
     )

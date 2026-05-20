@@ -1,0 +1,34 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-819",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-819 shared foundation implementation is approved for merge readiness. The batch has canonical truth sources for #819/#821/#845, separates versioned closeout truth from post-merge local retire for #853, classifies stale active carriers separately from real shared workspace conflicts for #854, keeps generated skills and repo-local runtime surfaces aligned, and bumps the installer package version for distribution payload changes.",
+  "reviewer": "codex",
+  "reviewed_head": "ec9899771f745282c4ffb73a66c8ea755bd3976c",
+  "reviewed_validation_summary": "git diff --check passed; PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom_init.py tools/loom_flow.py tools/loom_check.py tools/loom_status.py skills/shared/scripts/*.py skills/loom-init/scripts/*.py skills/loom-adopt/scripts/*.py skills/loom-resume/scripts/*.py skills/loom-pre-review/scripts/*.py skills/loom-review/scripts/*.py skills/loom-handoff/scripts/*.py skills/loom-retire/scripts/*.py skills/loom-merge-ready/scripts/*.py passed; python3 tools/skills_surface.py check passed; python3 tools/host_adapter_check.py passed; python3 tools/version_surface_check.py passed; state-check, purity-check, closeout check, and runtime-parity smoke passed for examples/new-project; python3 tools/loom_check.py passed with checked 36 surfaces; CodeGraph index synced and up to date.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-819.md",
+    "recovery_entry": ".loom/progress/WI-819.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "spec_review": ".loom/reviews/WI-819.spec.json",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    }
+  }
+}

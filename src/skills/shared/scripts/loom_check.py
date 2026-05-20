@@ -75,6 +75,7 @@ CORE_DOCS = (
     "docs/methodology/governance/state-machine.md",
     "docs/methodology/governance/truth-and-sync-boundary.md",
     "docs/methodology/governance/host-object-taxonomy.md",
+    "docs/methodology/governance/goal-schema.md",
     "docs/methodology/harness/work-item-contract.md",
     "docs/methodology/harness/item-context-contract.md",
     "docs/methodology/harness/fact-chain-contract.md",
@@ -104,7 +105,9 @@ CORE_DOCS = (
     "docs/methodology/harness/controlled-merge.md",
     "docs/methodology/harness/pr-merge-gate.md",
     "docs/methodology/harness/governance-failure-taxonomy.md",
+    "docs/methodology/harness/governance-lint-taxonomy.md",
     "docs/methodology/harness/workspace-and-purity.md",
+    "docs/methodology/templates/default-governance-scaffold-policy.md",
     "docs/methodology/templates/spec-suite.md",
     "docs/methodology/templates/spec-template.md",
     "docs/methodology/templates/implementation-contract-template.md",
@@ -221,6 +224,7 @@ AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT = (
     "docs/methodology/harness/status-surface.md",
     "docs/methodology/harness/automation-frontload.md",
     "docs/methodology/harness/merge-checkpoint.md",
+    "docs/methodology/harness/governance-lint-taxonomy.md",
     "docs/methodology/harness/workspace-and-purity.md",
 )
 
@@ -353,6 +357,73 @@ def check_required_paths(root: Path, category: str, paths: tuple[str, ...]) -> l
     for relative_path in paths:
         if not (root / relative_path).exists():
             failures.append(Failure(category, f"missing `{relative_path}`"))
+    return failures
+
+
+def check_shared_foundation_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    required_terms = {
+        "docs/methodology/templates/default-governance-scaffold-policy.md": (
+            "generate",
+            "declare_loom_default",
+            "intentionally_absent",
+            "require_user_input",
+            "VISION.md",
+            "ROADMAP.md",
+        ),
+        "docs/methodology/governance/goal-schema.md": (
+            "Project goal",
+            "Phase goal",
+            "FR goal",
+            "Work Item goal",
+            "/goal",
+            "delegated goal",
+            "source issue",
+            "head SHA",
+        ),
+        "docs/methodology/harness/governance-lint-taxonomy.md": (
+            "blocking",
+            "advisory",
+            "repo_specific",
+            "not_applicable",
+            "fact_chain_broken",
+            "approval_bypass",
+            "companion_boundary_bypass",
+            "host_binding_drift",
+            "evidence_stale",
+            "core_hardcoding_leak",
+            "derived evidence",
+        ),
+    }
+    for relative_path, terms in required_terms.items():
+        path = root / relative_path
+        if not path.exists():
+            failures.append(Failure("shared-foundation-contract", f"missing `{relative_path}`"))
+            continue
+        text = path.read_text(encoding="utf-8")
+        for term in terms:
+            if term not in text:
+                failures.append(Failure("shared-foundation-contract", f"`{relative_path}` must mention `{term}`"))
+
+    cross_links = {
+        "docs/methodology/harness/work-item-contract.md": "goal-schema.md",
+        "docs/methodology/harness/subagent-driven-execution.md": "goal-schema.md",
+        "docs/methodology/harness/automation-frontload.md": "governance-lint-taxonomy.md",
+        "docs/methodology/harness/status-surface.md": "governance-lint-taxonomy.md",
+        "docs/methodology/harness/merge-checkpoint.md": "governance-lint-taxonomy.md",
+        "docs/adoption/repo-companion-contract.md": "governance-lint-taxonomy.md",
+        "docs/methodology/harness/workspace-lifecycle.md": "local_only",
+        "docs/methodology/harness/closeout-gate.md": "workspace retire",
+        "docs/methodology/harness/workspace-and-purity.md": "active_workspace_diagnostics",
+        "src/skills/loom-retire/references/output-contract.md": "versioned_carrier_updates",
+    }
+    for relative_path, term in cross_links.items():
+        path = root / relative_path
+        if not path.exists():
+            failures.append(Failure("shared-foundation-contract", f"missing `{relative_path}`"))
+            continue
+        if term not in path.read_text(encoding="utf-8"):
+            failures.append(Failure("shared-foundation-contract", f"`{relative_path}` must reference `{term}`"))
     return failures
 
 
@@ -7339,7 +7410,10 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         if progress_path.read_text(encoding="utf-8") != progress_before_handoff:
             failures.append(Failure("daily-execution-cli", "`flow handoff` must not rewrite the recovery entry"))
 
+        status_path = lifecycle_target / ".loom/status/current.md"
         for operation in ("create", "attach", "cleanup", "retire"):
+            progress_before_operation = progress_path.read_text(encoding="utf-8")
+            status_before_operation = status_path.read_text(encoding="utf-8")
             payload, error = load_command_json(
                 root,
                 [
@@ -7371,6 +7445,15 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             )
             if operation == "cleanup" and residue.exists():
                 failures.append(Failure("daily-execution-cli", "`workspace cleanup` must remove marked Loom-owned residue"))
+            if operation == "retire":
+                if payload.get("retire_scope") != "local_only":
+                    failures.append(Failure("daily-execution-cli", "`workspace retire` must report local-only retire scope"))
+                if payload.get("versioned_carrier_updates") != []:
+                    failures.append(Failure("daily-execution-cli", "`workspace retire` must not report versioned carrier updates"))
+                if progress_path.read_text(encoding="utf-8") != progress_before_operation:
+                    failures.append(Failure("daily-execution-cli", "`workspace retire` must not rewrite the recovery entry"))
+                if status_path.read_text(encoding="utf-8") != status_before_operation:
+                    failures.append(Failure("daily-execution-cli", "`workspace retire` must not rewrite the status surface"))
 
         locate_payload, error = load_command_json(
             root,
@@ -7387,13 +7470,11 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         )
         if error:
             failures.append(Failure("daily-execution-cli", f"`workspace locate` after retire failed: {error}"))
-        elif (
-            not isinstance(locate_payload.get("checkpoint"), dict)
-            or locate_payload["checkpoint"].get("normalized") != "retired"
-        ):
-            failures.append(Failure("daily-execution-cli", "`workspace retire` must leave the copied sample in `retired` state"))
+        elif locate_payload.get("retire_scope") == "local_only":
+            failures.append(Failure("daily-execution-cli", "`workspace locate` must not treat local-only retire evidence as versioned checkpoint truth"))
         progress_after_retire = progress_path.read_text(encoding="utf-8")
         for stable_line in (
+            "- Current Checkpoint: admission checkpoint",
             "- Current Stop:",
             "- Next Step:",
             "- Blockers:",
@@ -7402,6 +7483,82 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         ):
             if stable_line not in progress_after_retire:
                 failures.append(Failure("daily-execution-cli", f"`workspace retire` must preserve recovery field `{stable_line}`"))
+
+    with tempfile.TemporaryDirectory(prefix="loom-check-active-carrier-") as tmp:
+        active_target = Path(tmp) / "new-project"
+        shutil.copytree(example_target, active_target)
+        source_work_item = active_target / ".loom/work-items/INIT-0001.md"
+        source_recovery = active_target / ".loom/progress/INIT-0001.md"
+        stale_item = active_target / ".loom/work-items/STALE-0002.md"
+        stale_recovery = active_target / ".loom/progress/STALE-0002.md"
+        stale_item.write_text(
+            source_work_item.read_text(encoding="utf-8")
+            .replace("INIT-0001", "STALE-0002")
+            .replace(".loom/progress/STALE-0002.md", ".loom/progress/STALE-0002.md"),
+            encoding="utf-8",
+        )
+        stale_recovery.write_text(
+            source_recovery.read_text(encoding="utf-8")
+            .replace("INIT-0001", "STALE-0002")
+            .replace("- Current Checkpoint: admission checkpoint", "- Current Checkpoint: retired"),
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "purity-check", "--target", str(active_target), "--item", "INIT-0001"],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`purity-check` stale active carrier fixture failed: {error}"))
+        elif payload.get("result") != "pass":
+            failures.append(Failure("daily-execution-cli", "terminal stale active carrier must not block current item purity"))
+        else:
+            diagnostics = payload.get("purity", {}).get("active_workspace_diagnostics", [])
+            if not any(isinstance(entry, dict) and entry.get("classification") == "stale_carrier" for entry in diagnostics):
+                failures.append(Failure("daily-execution-cli", "`purity-check` must expose stale active carrier diagnostics"))
+
+        malformed_item = active_target / ".loom/work-items/MALFORMED-0003.md"
+        malformed_item.write_text(
+            "# Broken Work Item\n\n- Item ID: MALFORMED-0003\n",
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "purity-check", "--target", str(active_target), "--item", "INIT-0001"],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`purity-check` malformed unrelated carrier fixture failed: {error}"))
+        elif payload.get("result") != "pass":
+            failures.append(Failure("daily-execution-cli", "malformed unrelated active carrier must not block current item purity"))
+        else:
+            diagnostics = payload.get("purity", {}).get("active_workspace_diagnostics", [])
+            unknown_entries = [
+                entry
+                for entry in diagnostics
+                if isinstance(entry, dict)
+                and entry.get("work_item_locator") == ".loom/work-items/MALFORMED-0003.md"
+            ]
+            if not unknown_entries:
+                failures.append(Failure("daily-execution-cli", "`purity-check` must expose malformed unrelated carrier diagnostics"))
+            elif any(entry.get("blocking") for entry in unknown_entries):
+                failures.append(Failure("daily-execution-cli", "malformed unrelated carrier diagnostics must be report-only"))
+
+        active_recovery = active_target / ".loom/progress/STALE-0002.md"
+        active_recovery.write_text(
+            active_recovery.read_text(encoding="utf-8").replace("- Current Checkpoint: retired", "- Current Checkpoint: build"),
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "state-check", "--target", str(active_target), "--item", "INIT-0001"],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`state-check` shared workspace fixture failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "shared active workspace conflict must block state-check"))
+        else:
+            diagnostics = payload.get("checks", {}).get("active_workspace_diagnostics", [])
+            if not any(isinstance(entry, dict) and entry.get("classification") == "shared_workspace_conflict" for entry in diagnostics):
+                failures.append(Failure("daily-execution-cli", "`state-check` must expose shared workspace conflict diagnostics"))
 
     with tempfile.TemporaryDirectory(prefix="loom-check-missing-workspace-") as tmp:
         missing_workspace_target = Path(tmp) / "new-project"
@@ -16456,6 +16613,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_required_paths(root, "top-level-files", TOP_LEVEL_FILES))
     failures.extend(check_required_paths(root, "area-readmes", AREA_READMES))
     failures.extend(check_required_paths(root, "core-docs", CORE_DOCS))
+    failures.extend(check_shared_foundation_contract(root))
     failures.extend(
         check_required_paths(root, "automation-frontload-templates", AUTOMATION_FRONTLOAD_TEMPLATES)
     )

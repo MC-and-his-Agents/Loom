@@ -19,6 +19,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+sys.dont_write_bytecode = True
+
 from fact_chain_support import (
     STATUS_FIELDS,
     STATUS_SOURCE_FIELDS,
@@ -812,6 +814,7 @@ def story_flow_payload(
         "contract": {
             "story_intake": "docs/methodology/governance/story-intake.md",
             "story_template": "docs/methodology/templates/scaffold/user-story.md",
+            "story_carrier_locator": ".loom/stories/<item-id>.md",
             "spec_suite": "docs/methodology/templates/spec-suite.md",
         },
     }
@@ -3172,12 +3175,6 @@ def default_repo_interface() -> dict[str, Any]:
         "dynamic_tool_locators": [],
         "policy_locators": [],
         "hook_locators": [],
-        "release_targets": {
-            "catalog_locator": ".loom/companion/releases/catalog.json",
-            "current_target_locator": ".loom/companion/releases/current.json",
-            "enforcement": "blocking",
-            "status_locator": ".loom/companion/releases/status.json",
-        },
     }
 
 
@@ -3237,10 +3234,6 @@ def companion_text_payloads() -> dict[str, str]:
         ".loom/companion/merge-ready.md": "# Companion Merge-Ready Surface\n",
         ".loom/companion/closeout.md": "# Companion Closeout Surface\n",
         ".loom/companion/checkpoints.md": "# Companion Checkpoints\n",
-        ".loom/companion/releases/changelog.md": "# Changelog\n\n- Bootstrap release intake example.\n",
-        ".loom/companion/releases/release-notes.md": "# Release Notes\n\n- Bootstrap release target is ready for Loom-derived status consumption.\n",
-        ".loom/companion/releases/migration-notes.md": "# Migration Notes\n\n- not_applicable\n",
-        ".loom/companion/releases/rollback.md": "# Rollback Basis\n\n- Revert the companion-owned release target declaration and rerun Loom checks.\n",
     }
 
 
@@ -3249,48 +3242,6 @@ def companion_json_payloads() -> dict[str, dict[str, Any]]:
         ".loom/companion/manifest.json": default_companion_manifest(),
         ".loom/companion/repo-interface.json": default_repo_interface(),
         ".loom/companion/interop.json": default_repo_interop(),
-        ".loom/companion/releases/catalog.json": {
-            "schema_version": "loom-target-release-catalog/v1",
-            "current_release_id": "bootstrap-v0.1.0",
-            "releases": [
-                {
-                    "release_id": "bootstrap-v0.1.0",
-                    "locator": ".loom/companion/releases/current.json",
-                }
-            ],
-        },
-        ".loom/companion/releases/current.json": {
-            "schema_version": "loom-target-release/v1",
-            "release_id": "bootstrap-v0.1.0",
-            "display_name": "Bootstrap v0.1.0",
-            "target_branch": "main",
-            "release_goal": "Bootstrap the first executable Loom path for this repository.",
-            "status": "unreleased",
-            "included_scope": {
-                "phase": [{"id": "bootstrap-phase", "locator": ".loom/companion/checkpoints.md", "delivery_status": "planned"}],
-                "fr": [],
-                "work_item": [{"id": "INIT-0001", "locator": ".loom/work-items/INIT-0001.md", "delivery_status": "unmerged"}],
-                "implementation_pr": [],
-                "merge_commit": [],
-            },
-            "evidence": {
-                "changelog_locator": ".loom/companion/releases/changelog.md",
-                "release_notes_locator": ".loom/companion/releases/release-notes.md",
-                "migration_notes_locator": ".loom/companion/releases/migration-notes.md",
-                "tag_or_artifact_locator": ".loom/companion/README.md",
-                "rollback_basis_locator": ".loom/companion/releases/rollback.md",
-            },
-            "authority": {
-                "owner": "repo-companion",
-                "source_kind": "repo_owned_locator",
-                "source_locator": ".loom/companion/releases/current.json",
-            },
-        },
-        ".loom/companion/releases/status.json": {
-            "schema_version": "loom-target-release-status/v1",
-            "result": "pass",
-            "summary": "repo-owned release status example is readable.",
-        },
     }
 
 
@@ -4156,14 +4107,39 @@ def run_git(root: Path, args: list[str]) -> subprocess.CompletedProcess[str] | N
 
 
 def run_process(args: list[str], cwd: Path, *, timeout_seconds: float | None = None) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    for key in ("LOOM_SOURCE_REPO_ROOT", "LOOM_INSTALLED_SKILLS_ROOT", "LOOM_RUNTIME_SCENE"):
+        env.pop(key, None)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     return subprocess.run(
         args,
         cwd=cwd,
         check=False,
         capture_output=True,
         text=True,
+        env=env,
         timeout=timeout_seconds,
     )
+
+
+def has_make_target(makefile_path: Path, target: str) -> bool:
+    if not makefile_path.exists():
+        return False
+    try:
+        text = makefile_path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    target_pattern = re.compile(rf"^(?:[^\s:#=]+(?:\s+[^\s:#=]+)*\s+)?{re.escape(target)}\s*:(?:\s|$)", re.MULTILINE)
+    return bool(target_pattern.search(text))
+
+
+def closeout_gate_command(target_root: Path) -> tuple[list[str], str]:
+    if has_make_target(target_root / "Makefile", "loom-check"):
+        return ["make", "loom-check"], "repo_declared_make_target"
+    repo_gate = target_root / ".loom/bin/loom_check.py"
+    if repo_gate.exists():
+        return ["python3", ".loom/bin/loom_check.py", "."], "repo_local_loom_check"
+    return ["python3", str(shared_script(__file__, "loom_check.py")), str(target_root)], "shared_loom_check"
 
 
 def git_branch(root: Path) -> str | None:
@@ -6884,46 +6860,104 @@ def generated_companion_consumption_payload(
     }
 
 
-def active_workspace_conflicts(target_root: Path, item_id: str, workspace_entry: str) -> list[str]:
+def active_workspace_diagnostics(target_root: Path, item_id: str, workspace_entry: str) -> list[dict[str, Any]]:
     work_items_dir = target_root / ".loom/work-items"
     if not work_items_dir.exists():
         return []
 
-    conflicts: list[str] = []
+    diagnostics: list[dict[str, Any]] = []
     for candidate in sorted(work_items_dir.glob("*.md")):
+        work_item_locator = relative_to_root(candidate, target_root)
+        diagnostic: dict[str, Any] = {
+            "item_id": None,
+            "workspace_entry": workspace_entry,
+            "work_item_locator": work_item_locator,
+            "binding_locator": work_item_locator,
+            "checkpoint": None,
+            "freshness": "unknown",
+            "classification": "unknown",
+            "blocking": False,
+            "recommended_remediation": (
+                "repair the candidate Work Item carrier through its own issue flow; it is not treated as a current workspace conflict until its workspace binding is readable."
+            ),
+        }
         try:
             parsed_item, errors = parse_work_item(candidate, target_root)
         except OSError:
+            if candidate.stem == item_id:
+                diagnostic["item_id"] = item_id
+                diagnostic["blocking"] = True
+                diagnostic["recommended_remediation"] = "repair the current Work Item carrier before continuing the current workspace gate."
+            diagnostics.append(diagnostic)
             continue
         if errors:
+            if candidate.stem == item_id:
+                diagnostic["item_id"] = item_id
+                diagnostic["blocking"] = True
+                diagnostic["recommended_remediation"] = "repair the current Work Item carrier before continuing the current workspace gate."
+            diagnostics.append(diagnostic)
             continue
         other_item_id = str(parsed_item["item_id"])
+        diagnostic["item_id"] = other_item_id
+        diagnostic["workspace_entry"] = str(parsed_item["workspace_entry"])
         if other_item_id == item_id:
             continue
         if str(parsed_item["workspace_entry"]) != workspace_entry:
             continue
         recovery_rel = str(parsed_item["recovery_entry"])
+        diagnostic["binding_locator"] = recovery_rel
+        diagnostic["blocking"] = True
+        diagnostic["recommended_remediation"] = "repair this same-workspace carrier before continuing the current workspace gate."
         recovery_path, recovery_errors = resolve_repo_relative_path(
             target_root,
             recovery_rel,
             label="work item recovery entry locator",
         )
         if recovery_errors or recovery_path is None:
-            conflicts.append(other_item_id)
+            diagnostic["freshness"] = "unreadable"
+            diagnostics.append(diagnostic)
             continue
         if not recovery_path.exists():
-            conflicts.append(other_item_id)
+            diagnostic["freshness"] = "missing"
+            diagnostics.append(diagnostic)
             continue
         try:
             recovery_data, recovery_errors = parse_recovery_entry(recovery_path, target_root)
         except OSError:
-            conflicts.append(other_item_id)
+            diagnostic["freshness"] = "unreadable"
+            diagnostics.append(diagnostic)
             continue
         if recovery_errors:
-            conflicts.append(other_item_id)
+            diagnostic["freshness"] = "unreadable"
+            diagnostics.append(diagnostic)
             continue
-        if normalize_checkpoint(recovery_data["current_checkpoint"]) not in TERMINAL_CHECKPOINTS:
-            conflicts.append(other_item_id)
+        checkpoint = normalize_checkpoint(recovery_data["current_checkpoint"])
+        diagnostic["checkpoint"] = checkpoint
+        if checkpoint in TERMINAL_CHECKPOINTS:
+            diagnostic["freshness"] = "terminal"
+            diagnostic["classification"] = "stale_carrier"
+            diagnostic["blocking"] = False
+            diagnostic["recommended_remediation"] = (
+                "leave this unrelated terminal carrier out of the current Work Item; audit or retire it through its own issue flow if it still appears active."
+            )
+        else:
+            diagnostic["freshness"] = "active"
+            diagnostic["classification"] = "shared_workspace_conflict"
+            diagnostic["blocking"] = True
+            diagnostic["recommended_remediation"] = (
+                "move one active item to its own branch/worktree or close its own recovery path before continuing."
+            )
+        diagnostics.append(diagnostic)
+    return diagnostics
+
+
+def active_workspace_conflicts(target_root: Path, item_id: str, workspace_entry: str) -> list[str]:
+    conflicts: list[str] = []
+    for diagnostic in active_workspace_diagnostics(target_root, item_id, workspace_entry):
+        if not diagnostic.get("blocking"):
+            continue
+        other_item_id = diagnostic.get("item_id")
+        conflicts.append(str(other_item_id) if other_item_id else str(diagnostic.get("work_item_locator", "unknown")))
     return conflicts
 
 
@@ -8462,10 +8496,18 @@ def purity_report_from_context(context: dict[str, Any], fact_chain_errors: list[
             preview = ", ".join(sorted(out_of_scope_changes)[:5])
             hard_failures.append(f"scope overflow detected: {preview}")
 
-    conflicts = active_workspace_conflicts(target_root, item_id, workspace_entry)
+    active_diagnostics = active_workspace_diagnostics(target_root, item_id, workspace_entry)
+    conflicts = [entry for entry in active_diagnostics if entry.get("blocking")]
+    stale_carriers = [entry for entry in active_diagnostics if entry.get("classification") == "stale_carrier"]
     if conflicts:
         hard_failures.append(
-            "workspace is bound to multiple active work items: " + ", ".join(sorted(conflicts))
+            "workspace is bound to multiple active work items: "
+            + ", ".join(sorted(str(entry.get("item_id") or entry.get("work_item_locator")) for entry in conflicts))
+        )
+    for carrier in stale_carriers:
+        report_only.append(
+            "stale active carrier is unrelated to the current item and does not block this workspace: "
+            + str(carrier.get("item_id") or carrier.get("work_item_locator"))
         )
 
     branch = git_branch(target_root)
@@ -8486,6 +8528,7 @@ def purity_report_from_context(context: dict[str, Any], fact_chain_errors: list[
             "declared_paths": scope_paths,
             "out_of_scope_changes": sorted(out_of_scope_changes),
         },
+        "active_workspace_diagnostics": active_diagnostics,
         "hard_failures": hard_failures,
         "report_only": report_only,
     }
@@ -8906,6 +8949,7 @@ def handle_workspace(args: argparse.Namespace) -> int:
         cleanup_payload["retained_paths"] = unsafe_temp_paths
         return emit_workspace(cleanup_payload)
 
+    removed: list[str] = []
     for temp_path in temp_paths:
         relative = relative_to_root(temp_path, target_root)
         tracked = git_tracked_files(target_root, relative)
@@ -8916,32 +8960,18 @@ def handle_workspace(args: argparse.Namespace) -> int:
             return emit_workspace(cleanup_payload)
         if temp_path.is_dir():
             shutil.rmtree(temp_path)
+            removed.append(relative)
         else:
             temp_path.unlink()
+            removed.append(relative)
 
-    update_markdown_bullet(context["recovery_path"], "Current Checkpoint", "retired")
-    if context["status_path"].exists():
-        update_markdown_bullet(context["status_path"], "Current Checkpoint", "retired")
-
-    refreshed, refresh_errors = load_context(target_root, args.output, args.item)
-    if refresh_errors:
-        return emit(
-            {
-                "command": "workspace",
-                "operation": "retire",
-                "result": "block",
-                "summary": "retire wrote `retired`, but the fact chain no longer reads cleanly.",
-                "missing_inputs": [f"fact-chain: {message}" for message in refresh_errors],
-                "fallback_to": "admission",
-                "runtime_state": runtime_state,
-            }
-        )
-
-    payload = base_workspace_payload(refreshed, "retire")
+    payload = base_workspace_payload(context, "retire")
     payload["result"] = "pass"
-    payload["summary"] = "workspace was retired by updating the recovery entry checkpoint to `retired`."
+    payload["summary"] = "workspace retire completed local cleanup without writing versioned recovery or status carriers."
     payload["retired"] = True
-    payload["removed_paths"] = [path for path in owned_dirty if any(path == root or path.startswith(f"{root}/") for root in OWNED_TEMP_ROOTS)]
+    payload["retire_scope"] = "local_only"
+    payload["versioned_carrier_updates"] = []
+    payload["removed_paths"] = removed
     return emit_workspace(payload)
 
 
@@ -9265,10 +9295,16 @@ def state_check_payload(context: dict[str, Any]) -> dict[str, Any]:
     if current_checkpoint in TERMINAL_CHECKPOINTS:
         active_state_failures.append(f"current checkpoint is terminal: `{current_checkpoint}`")
 
-    active_conflicts = active_workspace_conflicts(context["target_root"], context["item_id"], context["workspace_entry"])
+    active_diagnostics = purity.get("active_workspace_diagnostics", [])
+    active_conflicts = [
+        entry
+        for entry in active_diagnostics
+        if isinstance(entry, dict) and entry.get("blocking")
+    ]
     if active_conflicts:
         active_state_failures.append(
-            "workspace is shared by multiple active items: " + ", ".join(sorted(active_conflicts))
+            "workspace is shared by multiple active items: "
+            + ", ".join(sorted(str(entry.get("item_id") or entry.get("work_item_locator")) for entry in active_conflicts))
         )
 
     known_checkpoints = {"admission", "build", "merge", "retired"} | TERMINAL_CHECKPOINTS
@@ -9319,6 +9355,7 @@ def state_check_payload(context: dict[str, Any]) -> dict[str, Any]:
             "active_state_failures": active_state_failures,
             "checkpoint_failures": checkpoint_failures,
             "scope_failures": scope_failures,
+            "active_workspace_diagnostics": active_diagnostics,
         },
         "purity": purity,
         "result": result,
@@ -12137,17 +12174,15 @@ def closeout_payload(
     closeout_findings: list[dict[str, Any]] = []
     gate: dict[str, Any] = {"skipped": skip_gate}
     if not skip_gate:
-        repo_gate = target_root / ".loom/bin/loom_check.py"
-        if repo_gate.exists():
-            gate_command = ["python3", ".loom/bin/loom_check.py", "."]
-        else:
-            gate_command = ["python3", str(shared_script(__file__, "loom_check.py")), str(target_root)]
+        gate_command, gate_source = closeout_gate_command(target_root)
         gate_result = run_process(gate_command, target_root)
+        gate["source"] = gate_source
         gate["command"] = " ".join(gate_command)
         gate["exit_code"] = gate_result.returncode
         gate["stdout"] = gate_result.stdout.strip()
+        gate["stderr"] = gate_result.stderr.strip()
         if gate_result.returncode != 0:
-            missing_inputs.append("loom_check")
+            missing_inputs.append(f"loom_check:{gate_source}")
 
     reconciliation_payload: dict[str, Any] | None = None
     closeout_fallback: str | None = None

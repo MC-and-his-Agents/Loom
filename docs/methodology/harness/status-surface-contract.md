@@ -34,6 +34,7 @@
 
 状态面只能把第 2、3 层作为 mirror / evidence / locator provenance 消费，不能把它们提升为第 1 层。
 第 4 层是本次状态面的输出 / 展示层，不是生成当前状态面时可反读的输入。旧状态面最多用于 stale-surface 检测，不能作为当前 `pass | block` 的来源。
+Governance lint result 也只能作为 derived evidence 被第 4 层展示和映射，不得成为第 1 层 authored truth，也不得把 repo-specific lint 规则硬编码为 Loom core。
 
 ## 2. 统一读取对象
 
@@ -48,6 +49,7 @@
 - `controlled_merge`
 - `closeout`
 - 活跃 failures taxonomy
+- governance lint result
 - host binding
 - GitHub control plane signals
 - 目标仓库 `release / version` 目标面，若仓库已声明
@@ -240,6 +242,31 @@
 - `stale`
 - `drift`
 - `gate_failures`
+
+### 3.8.1 `governance_lint`
+
+状态面可以展示 Governance Lint / Operating Lint 的派生结果：
+
+- `schema_version`: `loom-governance-lint-status/v1`
+- `result_summary`
+- `blocking_results`
+- `advisory_results`
+- `repo_specific_results`
+- `not_applicable_results`
+- `mapped_failures`
+- `provenance`
+
+每条 result 必须保留 [governance-lint-taxonomy.md](./governance-lint-taxonomy.md) 定义的最小绑定：
+
+- `item_id`
+- `head_sha`
+- `scope`
+- `reviewed_head_sha`
+- `pr_ref`
+- `evidence_freshness`
+
+`governance_lint` 只消费 lint result envelope。它不得 authored recovery state、review verdict、validation summary、merge verdict 或 closeout result。
+repo-specific lint 只能按 repo companion 声明的 locator、enforcement / requirement 与 owning surface 展示，不得把 repo-specific rule name 提升为 Loom core taxonomy。
 
 ### 3.9 `event_evidence`
 

@@ -33,3 +33,7 @@
   - `#158`
 - [host-object-taxonomy.md](./host-object-taxonomy.md)
   - `#153`
+- [goal-schema.md](./goal-schema.md)
+  - `#821`
+
+`Project / Phase / FR / Work Item / /goal / delegated goal` 的字段、缺失语义与校验失败分类以 [goal-schema.md](./goal-schema.md) 为主落点。其他执行、subagent 或 adoption 文档只引用该 schema，不再各自定义第二套 goal truth。

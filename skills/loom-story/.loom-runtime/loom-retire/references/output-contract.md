@@ -11,7 +11,10 @@
 - `workspace retire` 的结果
 - `lifecycle_expectations`
   - cleanup 只能删除显式 Loom-owned 临时残留
-  - retire 只把 recovery entry 的 checkpoint 置为 `retired`
+  - retire 只产出 local cleanup / runtime evidence，不写版本化 recovery 或 status carrier
   - `remove` 不属于 Loom core，现场目录删除仍由宿主拥有
-- 最终 checkpoint，固定以 `retired` 为终态
+- `retire_scope`
+  - 固定为 `local_only`
+- `versioned_carrier_updates`
+  - post-merge retire 固定为空数组
 - 现场策略说明：不自动丢弃用户改动，不默认删除目录

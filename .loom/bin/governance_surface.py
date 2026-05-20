@@ -6,10 +6,13 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
+
+sys.dont_write_bytecode = True
 
 from runtime_paths import installed_skill_script
 
@@ -311,8 +314,9 @@ def workspace_lifecycle_expectations(workspace_profile: dict[str, object] | None
                 "deletes_non_loom_owned": False,
             },
             "retire": {
-                "semantics": "write Current Checkpoint to retired while preserving the recovery entry",
+                "semantics": "record local-only retire evidence without writing versioned recovery or status carriers",
                 "deletes_workspace_directory": False,
+                "writes_versioned_carriers": False,
             },
             "execution_boundary": {
                 "run": "read/event surface only",
@@ -352,6 +356,7 @@ REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {
     "policy_locators",
     "hook_locators",
     "release_targets",
+    "host_truth_locators",
 }
 DECLARED_LOCATOR_REQUIREMENTS = {"required", "optional", "advisory"}
 DECLARED_LOCATOR_OWNERS = {"repo", "repo-companion", "host", "host-adapter", "platform", "external-tool"}
@@ -2227,9 +2232,6 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
     repo_interface_surface["specialized_gates"] = manifest_repo_interface.copy()
     repo_interface_surface["dynamic_tool_locators"] = manifest_repo_interface.copy()
     repo_interface_surface["policy_locators"] = manifest_repo_interface.copy()
-    repo_interface_surface["release_targets"]["catalog"] = manifest_repo_interface.copy()
-    repo_interface_surface["release_targets"]["current_target"] = manifest_repo_interface.copy()
-    repo_interface_surface["release_targets"]["status"] = manifest_repo_interface.copy()
     if manifest_repo_interface_error:
         missing_inputs.append(manifest_repo_interface_error)
 

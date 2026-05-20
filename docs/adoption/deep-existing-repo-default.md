@@ -45,10 +45,13 @@
 - 只追加 Loom-owned attach metadata 与 companion 入口
 - 在 `repo-interface.json` 的 `review_instruction_locators` 中声明 spec review 与 implementation review 的 repo-owned instruction locator
 - 按 [zero-friction-adoption-contract.md](./zero-friction-adoption-contract.md) 生成或更新 companion / interop locator，并用 verify 证明边界没有漂移
+- 按 [default-governance-scaffold-policy.md](../methodology/templates/default-governance-scaffold-policy.md) 把缺失的 review instruction、vision 与 roadmap surface 记录为 repo-owned locator、`loom_default` 或 intentionally absent，而不是猜测路径
 
 换句话说，Loom 这一步接管的是入口与读面，不是宿主动作底层实现。
 
 成熟既有仓库不得让 Loom 猜测 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 文件名。缺失、不可读或越界的 review instruction locator 必须在进入正式 review 前 fail closed。
+
+成熟既有仓库也不得让 Loom 猜测 `VISION.md`、`ROADMAP.md` 或 `docs/roadmap/*`。缺失 product / planning truth 时，attach-only verify 应读取为 intentionally absent 或 requires user authored truth，除非目标仓库显式声明 locator。
 
 ## 5. 默认不装配
 

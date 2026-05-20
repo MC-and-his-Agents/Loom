@@ -36,7 +36,7 @@ Loom 当前日常执行 CLI 至少提供以下入口：
 | `resume`（由恢复模型承接） | `locate` 输出 + recovery 主入口 | 下一步执行上下文 | `block` | 回到 recovery 回写修复 |
 | `handoff`（由恢复模型承接） | `locate` 输出 + recovery 主入口 + ledger | 最小交接字段与 locator set | `block` | 回到 recovery / ledger 修复 |
 | `cleanup` | Loom-owned 残留路径、现场纯度 | 仅 Loom 残留被清理 | `block` | 回到人工分流与纯度修复 |
-| `retire` | `cleanup` 结果 + recovery 主入口 | `current_checkpoint: retired` | `block` / `fallback` | 回到 `cleanup` 或 recovery 回写 |
+| `retire` | `cleanup` 结果 + recovery 主入口 | local-only retire evidence | `block` / `fallback` | 回到 `cleanup` 或 closeout truth 修复 |
 | `execution-boundary` | worker backend 读面、run/stop 事件 | 边界观察结果 | `block` | 回到宿主 adapter / worker evidence 修复 |
 
 说明：
@@ -183,19 +183,24 @@ Loom 当前日常执行 CLI 至少提供以下入口：
 `workspace retire` 的顺序固定为：
 
 1. 先执行 cleanup 语义
-2. 再将恢复主入口中的 `Current Checkpoint` 回写为 `retired`
-3. 同步回写状态面中的派生 `Current Checkpoint`
+2. 输出 local-only retire evidence
+3. 保持 `.loom/progress/**` 与 `.loom/status/current.md` 这类版本化 carrier 不变
 
 它不默认删除现场目录。
+它不证明事项已经 `closed_out`，也不追加 merge 后必须再合入 main 的 carrier diff。
+
+版本化 closeout truth 必须在 merge 前通过 closeout / review 路径进入可审查载体，并在 merge 后由 closeout check / sync 消费。
+post-merge retire 只能说明当前本地现场不再继续执行。
 
 ### 6.2 成功语义
 
 `retire` 成功后，至少应满足：
 
 - 当前事项仍可被事实链读到
-- 恢复主入口的 `Current Checkpoint` 为 `retired`
-- 状态面与恢复主入口一致
-- 后续 `locate` 不会再把该现场误判为活跃执行现场
+- `retire_scope` 为 `local_only`
+- `versioned_carrier_updates` 为空
+- cleanup 只删除带 `.loom-owned` marker 的 Loom 临时残留
+- 后续 `locate` 仍从版本化 fact chain 读取当前 checkpoint，而不是把 local-only retire evidence 当 authored truth
 
 ## 7. Purity Check
 

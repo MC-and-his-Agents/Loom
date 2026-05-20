@@ -82,6 +82,13 @@ closeout 消费 behavior/test evidence 的语义如下：
 - 若 closeout 发现主干、issue、project 或 evidence locator 无法互相回链，必须返回 `block`
 - 若 subagent 输出没有被整合到 review record、验证摘要或 merge-ready basis，closeout 不得把它作为 `absorbed` 或 `closed_out` 依据
 
+closeout truth 与 workspace retire 必须分层：
+
+- 版本化 closeout truth 必须在 merge 前通过 review / merge-ready / closeout basis 进入可审查载体
+- merge 后 `closeout check|sync` 只消费 PR、merge commit、target branch、issue、Project 与 repo-authored artifacts 的一致性
+- `workspace retire` 只做 local cleanup / runtime evidence，不写 `.loom/progress/**` 或 `.loom/status/current.md`
+- post-merge retire 不得制造新的需要再开 PR 合入 main 的 carrier diff
+
 这里的 `absorbed` 只表示 host merge 后可证明的实现吸收结论，不等于 `closed_out`。
 因此，`closeout check` 至少要能区分：
 
