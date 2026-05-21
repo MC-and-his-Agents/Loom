@@ -8061,7 +8061,7 @@ def jsonrpc_read_until_review_text(
                 continue
             if turn_id and params.get("turnId") not in {turn_id, None}:
                 continue
-            return None, notifications, ["Codex App review completed without exitedReviewMode.review"]
+            return None, notifications, []
 
 
 def jsonrpc_read_until_normalized_review(
@@ -8189,6 +8189,17 @@ def run_codex_app_live_review(
                 metadata["resumed_thread_cwd"] = thread.get("cwd")
                 metadata["resumed_thread_source"] = thread.get("source")
                 metadata["resumed_thread_cli_version"] = thread.get("cliVersion")
+                resumed_cwd = non_empty_str(thread.get("cwd"))
+                if resumed_cwd:
+                    try:
+                        resumed_cwd_path = Path(resumed_cwd).expanduser().resolve()
+                        expected_cwd_path = Path(thread_cwd).expanduser().resolve()
+                    except OSError as exc:
+                        return None, metadata, [f"Codex App resumed thread cwd proof could not be resolved: {exc}"]
+                    if resumed_cwd_path != expected_cwd_path:
+                        return None, metadata, [
+                            f"Codex App resumed thread cwd `{resumed_cwd_path}` does not match expected review cwd `{expected_cwd_path}`"
+                        ]
 
         jsonrpc_send_request(
             process.stdin,
@@ -8223,6 +8234,23 @@ def run_codex_app_live_review(
             if completion_errors:
                 return None, metadata, completion_errors
         if not isinstance(review_text, str) or not review_text.strip():
+            jsonrpc_send_request(
+                process.stdin,
+                request_id=4,
+                method="thread/read",
+                params={
+                    "threadId": metadata.get("review_thread_id") or thread_id,
+                    "includeTurns": True,
+                },
+            )
+            thread_response, thread_notifications, thread_errors = jsonrpc_read_response(process.stdout, request_id=4)
+            review_notifications.extend(thread_notifications)
+            if thread_errors:
+                return None, metadata, thread_errors
+            if isinstance(thread_response, dict) and isinstance(thread_response.get("error"), dict):
+                return None, metadata, [f"Codex App thread/read failed: {thread_response['error']}"]
+            review_text = find_exited_review_text(thread_response)
+        if not isinstance(review_text, str) or not review_text.strip():
             return None, metadata, ["Codex App review/start did not return exitedReviewMode.review"]
 
         parsed_review, parsed_errors = normalize_authoritative_codex_app_review_text(review_text, relative="app-server review/start output")
@@ -8232,7 +8260,7 @@ def run_codex_app_live_review(
 
         jsonrpc_send_request(
             process.stdin,
-            request_id=4,
+            request_id=5,
             method="turn/start",
             params={
                 "threadId": metadata.get("review_thread_id") or thread_id,
@@ -8250,7 +8278,7 @@ def run_codex_app_live_review(
                 "outputSchema": load_json_file(review_engine_schema_path()),
             },
         )
-        turn_response, turn_notifications, turn_errors = jsonrpc_read_response(process.stdout, request_id=4)
+        turn_response, turn_notifications, turn_errors = jsonrpc_read_response(process.stdout, request_id=5)
         if turn_errors:
             return review_text, metadata, turn_errors
         if isinstance(turn_response, dict) and isinstance(turn_response.get("error"), dict):
