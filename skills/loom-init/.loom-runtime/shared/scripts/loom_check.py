@@ -324,6 +324,7 @@ RETRY_EVIDENCE_FIXTURE_SCHEMA = "loom-retry-evidence-fixtures/v1"
 EXTERNAL_ORCHESTRATOR_FIXTURE_SCHEMA = "loom-external-orchestrator-interop-fixtures/v1"
 EXTERNAL_ORCHESTRATOR_CONFORMANCE_FIXTURE_SCHEMA = "loom-external-orchestrator-conformance-fixtures/v1"
 SAFE_SYNC_PLAN_FIXTURE_SCHEMA = "loom-safe-sync-plan-fixtures/v1"
+GITHUB_PROFILE_MATURITY_FIXTURE_SCHEMA = "loom-github-profile-maturity-fixtures/v1"
 EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA = "loom-external-orchestrator-conformance/v1"
 EXTERNAL_ORCHESTRATOR_FORBIDDEN_FIELDS = {
     "scheduler_state",
@@ -1199,6 +1200,12 @@ def require_governance_control_plane(
             failures.append(Failure(category, f"{context}.maturity schema_version must be `loom-governance-maturity/v1`"))
         if maturity.get("current") not in {"unadopted", "light", "standard", "strong"}:
             failures.append(Failure(category, f"{context}.maturity current must stay within the stable levels"))
+        require_github_profile_maturity_judgment_payload(
+            failures,
+            category=category,
+            context=f"{context}.maturity.judgment",
+            payload=maturity.get("judgment"),
+        )
         levels = maturity.get("levels")
         if not isinstance(levels, dict) or set(levels) != {"light", "standard", "strong"}:
             failures.append(Failure(category, f"{context}.maturity levels must define light, standard, and strong"))
@@ -1314,6 +1321,56 @@ def require_adoption_gate_rollout_payload(
             failures.append(Failure(category, f"{context} rollback must switch back to advisory"))
         if not isinstance(rollback.get("recommended_action"), str) or not rollback.get("recommended_action"):
             failures.append(Failure(category, f"{context} rollback must include recommended_action"))
+
+
+def require_github_profile_maturity_judgment_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("schema_version") != "loom-github-profile-maturity-judgment/v1":
+        failures.append(Failure(category, f"{context} schema_version must be `loom-github-profile-maturity-judgment/v1`"))
+    if payload.get("judgment") not in {"unadopted", "light", "standard", "strong", "blocked"}:
+        failures.append(Failure(category, f"{context} judgment must stay within the stable set"))
+    if payload.get("current") not in {"unadopted", "light", "standard", "strong"}:
+        failures.append(Failure(category, f"{context} current must stay within the stable maturity levels"))
+    if not isinstance(payload.get("blocked"), bool):
+        failures.append(Failure(category, f"{context} blocked must be boolean"))
+    blockers = payload.get("blockers")
+    if not isinstance(blockers, list):
+        failures.append(Failure(category, f"{context} blockers must be a list"))
+    elif payload.get("judgment") == "blocked" and not blockers:
+        failures.append(Failure(category, f"{context} blocked judgment must include blockers"))
+    elif payload.get("judgment") != "blocked" and blockers:
+        failures.append(Failure(category, f"{context} non-blocked judgment must not include blockers"))
+    for blocker in blockers if isinstance(blockers, list) else []:
+        if not isinstance(blocker, dict):
+            failures.append(Failure(category, f"{context} blockers must be objects"))
+            continue
+        for field in ("id", "reason", "source_locator", "fallback_to"):
+            if not isinstance(blocker.get(field), str) or not blocker.get(field):
+                failures.append(Failure(category, f"{context} blocker must include `{field}`"))
+        if blocker.get("fallback_to") not in {"admission", "github-profile-binding"}:
+            failures.append(Failure(category, f"{context} blocker fallback_to must be stable"))
+    evidence = payload.get("evidence")
+    if not isinstance(evidence, list) or not evidence:
+        failures.append(Failure(category, f"{context} evidence must be a non-empty list"))
+    else:
+        ids = {entry.get("id") for entry in evidence if isinstance(entry, dict)}
+        if "work_item" not in ids or "github_api_snapshot" not in ids:
+            failures.append(Failure(category, f"{context} evidence must include Work Item and GitHub API locators"))
+        for entry in evidence:
+            if not isinstance(entry, dict):
+                failures.append(Failure(category, f"{context} evidence entries must be objects"))
+                continue
+            for field in ("id", "status", "locator", "authority"):
+                if not isinstance(entry.get(field), str) or not entry.get(field):
+                    failures.append(Failure(category, f"{context} evidence entries must include `{field}`"))
 
 
 def require_locator_entry(
@@ -12906,9 +12963,21 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
         current_head = prepare_strong_target(baseline)
         if current_head is None:
             return failures
+        baseline_template = base / "baseline-template"
+
+        def restore_baseline() -> bool:
+            if baseline.exists():
+                return True
+            if not baseline_template.exists():
+                failures.append(Failure("adversarial-adoption", "baseline template disappeared before adversarial samples could run"))
+                return False
+            shutil.copytree(baseline_template, baseline)
+            return True
+
         install_fresh_reviews(baseline, current_head)
         run_command(root, ["git", "add", "-f", ".loom/reviews"], cwd=baseline, timeout_seconds=30)
         run_command(root, ["git", "commit", "-m", "refresh reviews to current head"], cwd=baseline, timeout_seconds=30)
+        shutil.copytree(baseline, baseline_template)
 
         status_payload, error = load_command_json(
             root,
@@ -13036,6 +13105,8 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             failures.append(Failure("adversarial-adoption", "work-item create must block recovery locators that escape the target root"))
 
         poisoned_work_item_target = base / "work-item-update-poisoned-locator"
+        if not restore_baseline():
+            return failures
         shutil.copytree(baseline, poisoned_work_item_target)
         poisoned_work_item_path = poisoned_work_item_target / ".loom/work-items/INIT-0001.md"
         poisoned_work_item_text = poisoned_work_item_path.read_text(encoding="utf-8").replace(
@@ -17043,6 +17114,75 @@ def check_safe_sync_plan_fixture_contract(root: Path) -> list[Failure]:
     return failures
 
 
+def check_github_profile_maturity_fixture_contract(root: Path) -> list[Failure]:
+    category = "github-profile-maturity-fixtures"
+    failures: list[Failure] = []
+    fixture_path = root / "docs" / "evidence" / "fixtures" / "github-profile-maturity-fixtures.json"
+    try:
+        fixture_payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return [Failure(category, "missing `docs/evidence/fixtures/github-profile-maturity-fixtures.json`")]
+    except json.JSONDecodeError as exc:
+        return [Failure(category, f"`github-profile-maturity-fixtures.json` is invalid JSON: {exc}")]
+    if fixture_payload.get("schema_version") != GITHUB_PROFILE_MATURITY_FIXTURE_SCHEMA:
+        failures.append(Failure(category, f"`github-profile-maturity-fixtures.json` schema_version must be `{GITHUB_PROFILE_MATURITY_FIXTURE_SCHEMA}`"))
+    fixtures = fixture_payload.get("fixtures")
+    if not isinstance(fixtures, list) or not fixtures:
+        failures.append(Failure(category, "`github-profile-maturity-fixtures.json` must expose non-empty fixtures"))
+        return failures
+    required_cases = {"light", "standard", "strong", "blocked"}
+    seen_cases: set[str] = set()
+    for index, fixture in enumerate(fixtures):
+        if not isinstance(fixture, dict):
+            failures.append(Failure(category, f"fixture #{index + 1} must be an object"))
+            continue
+        name = fixture.get("name")
+        if isinstance(name, str):
+            seen_cases.add(name)
+        inputs = fixture.get("inputs")
+        expected = fixture.get("expected")
+        if not isinstance(inputs, dict) or not isinstance(expected, dict):
+            failures.append(Failure(category, f"`{name or index}` must include inputs and expected objects"))
+            continue
+        try:
+            maturity = governance_surface_module.maturity_status(
+                repository_mode=str(inputs.get("repository_mode", "existing")),
+                carrier_summary=inputs.get("carrier_summary") if isinstance(inputs.get("carrier_summary"), dict) else {},
+                repo_interface=inputs.get("repo_interface") if isinstance(inputs.get("repo_interface"), dict) else {},
+                repo_interop=inputs.get("repo_interop") if isinstance(inputs.get("repo_interop"), dict) else {},
+                github_control_plane=inputs.get("github_control_plane") if isinstance(inputs.get("github_control_plane"), dict) else {},
+                host_binding=inputs.get("host_binding") if isinstance(inputs.get("host_binding"), dict) else {},
+            )
+        except Exception as exc:  # pragma: no cover - reported as fixture failure
+            failures.append(Failure(category, f"`{name or index}` raised during maturity detection: {exc}"))
+            continue
+        if maturity.get("schema_version") != "loom-governance-maturity/v1":
+            failures.append(Failure(category, f"`{name or index}` maturity schema_version must be stable"))
+        if maturity.get("current") != expected.get("current"):
+            failures.append(Failure(category, f"`{name or index}` expected current `{expected.get('current')}` but got `{maturity.get('current')}`"))
+        judgment = maturity.get("judgment")
+        require_github_profile_maturity_judgment_payload(
+            failures,
+            category=category,
+            context=f"`{name or index}`.judgment",
+            payload=judgment,
+        )
+        actual_judgment = judgment.get("judgment") if isinstance(judgment, dict) else None
+        if actual_judgment != expected.get("judgment"):
+            failures.append(Failure(category, f"`{name or index}` expected judgment `{expected.get('judgment')}` but got `{actual_judgment}`"))
+        expected_missing = expected.get("missing_by_level")
+        actual_missing = maturity.get("missing_by_level")
+        if isinstance(expected_missing, dict):
+            for level, fields in expected_missing.items():
+                actual_fields = actual_missing.get(level) if isinstance(actual_missing, dict) else None
+                if actual_fields != fields:
+                    failures.append(Failure(category, f"`{name or index}` expected missing_by_level.{level} {fields}, got {actual_fields}"))
+    missing_cases = sorted(required_cases - seen_cases)
+    if missing_cases:
+        failures.append(Failure(category, "GitHub profile maturity fixtures missing required cases: " + ", ".join(missing_cases)))
+    return failures
+
+
 def is_within(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
@@ -17108,12 +17248,13 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_story_intake_contract(root))
     failures.extend(check_core_hardcoding_guard(root))
     failures.extend(check_safe_sync_plan_fixture_contract(root))
+    failures.extend(check_github_profile_maturity_fixture_contract(root))
     failures.extend(check_markdown_links(root))
     return failures
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 37
+    categories_checked = 38
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")

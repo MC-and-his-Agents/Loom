@@ -735,6 +735,108 @@ def adoption_gate_rollout_status(*, maturity_current: str) -> dict[str, Any]:
     }
 
 
+def maturity_judgment_payload(
+    *,
+    current: str,
+    carrier_summary: dict[str, dict[str, str]],
+    github_control_plane: dict[str, Any],
+    host_binding: dict[str, Any],
+) -> dict[str, Any]:
+    evidence: list[dict[str, str]] = []
+    for key in ("work_item", "recovery", "status_surface", "review", "spec_path", "plan_path"):
+        row = carrier_summary.get(key, {})
+        evidence.append(
+            {
+                "id": key,
+                "status": str(row.get("status", "missing")),
+                "locator": str(row.get("locator", "unknown")),
+                "authority": "loom fact chain",
+            }
+        )
+
+    api_snapshot = github_control_plane.get("api_snapshot")
+    api_errors: list[str] = []
+    if isinstance(api_snapshot, dict):
+        raw_errors = api_snapshot.get("errors")
+        if isinstance(raw_errors, list):
+            api_errors = [str(error) for error in raw_errors if str(error)]
+        evidence.append(
+            {
+                "id": "github_api_snapshot",
+                "status": str(api_snapshot.get("verification_status", "unverified")),
+                "locator": "github_control_plane.api_snapshot",
+                "authority": "github",
+            }
+        )
+
+    host_enforcement = github_control_plane.get("host_enforcement")
+    if isinstance(host_enforcement, dict):
+        evidence.append(
+            {
+                "id": "host_enforcement",
+                "status": str(host_enforcement.get("verification_status", "unverified")),
+                "locator": "github_control_plane.host_enforcement",
+                "authority": "github",
+            }
+        )
+
+    required_objects = host_binding.get("required_objects")
+    if isinstance(required_objects, dict):
+        for key in ("branch", "worktree", "implementation_pr", "merge_commit", "closeout"):
+            row = required_objects.get(key)
+            if isinstance(row, dict):
+                evidence.append(
+                    {
+                        "id": f"host_binding.{key}",
+                        "status": str(row.get("status", "unknown")),
+                        "locator": str(row.get("locator", "unknown")),
+                        "authority": str(row.get("authority", "host")),
+                    }
+                )
+
+    blockers: list[dict[str, str]] = []
+    critical_carriers = [
+        entry["id"]
+        for entry in evidence
+        if entry["authority"] == "loom fact chain"
+        and entry["id"] in {"work_item", "recovery", "status_surface", "review"}
+        and entry["status"] != "present"
+    ]
+    if current == "unadopted" and critical_carriers:
+        blockers.append(
+            {
+                "id": "critical_carriers_unreadable",
+                "reason": "required light maturity carriers are missing or unreadable",
+                "source_locator": ", ".join(sorted(critical_carriers)),
+                "fallback_to": "admission",
+            }
+        )
+    if api_errors:
+        blockers.append(
+            {
+                "id": "github_host_signals_unreadable",
+                "reason": "GitHub host signals could not be read reliably",
+                "source_locator": "github_control_plane.api_snapshot.errors",
+                "fallback_to": "github-profile-binding",
+            }
+        )
+
+    judgment = "blocked" if blockers else current
+    return {
+        "schema_version": "loom-github-profile-maturity-judgment/v1",
+        "judgment": judgment,
+        "current": current,
+        "blocked": bool(blockers),
+        "blockers": blockers,
+        "evidence": evidence,
+        "summary": (
+            "GitHub profile maturity is blocked by unreadable or conflicting required signals."
+            if blockers
+            else f"GitHub profile maturity judgment is `{current}`."
+        ),
+    }
+
+
 def run_process(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(args, cwd=cwd, check=False, capture_output=True, text=True, timeout=15)
@@ -3284,6 +3386,12 @@ def maturity_status(
     return {
         "schema_version": "loom-governance-maturity/v1",
         "current": current,
+        "judgment": maturity_judgment_payload(
+            current=current,
+            carrier_summary=carrier_summary,
+            github_control_plane=github_control_plane,
+            host_binding=host_binding,
+        ),
         "achieved": achieved,
         "next": next_level,
         "levels": MATURITY_LEVELS,

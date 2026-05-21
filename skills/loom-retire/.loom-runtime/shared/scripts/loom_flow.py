@@ -696,6 +696,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     governance_profile.add_argument("operation", choices=("status", "upgrade-plan", "upgrade", "binding"))
     governance_profile.add_argument("--target", required=True, help="Target repository root")
+    governance_profile.add_argument("--host", choices=("github",), default="github", help="Host profile to evaluate")
     governance_profile.add_argument("--to", choices=("standard", "strong"), help="Target maturity for governance-profile upgrade")
     governance_profile.add_argument("--dry-run", action="store_true", default=True, help="Preview upgrade actions without writing files; this is the default")
     governance_profile.add_argument("--apply", dest="dry_run", action="store_false", help="Apply Loom-owned scaffold writes")
@@ -11142,7 +11143,7 @@ def host_lifecycle_payload(context: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def governance_profile_payload(target_root: Path, operation: str) -> dict[str, Any]:
+def governance_profile_payload(target_root: Path, operation: str, *, host: str = "github") -> dict[str, Any]:
     governance_surface = build_governance_surface(target_root)
     control_plane = governance_surface.get("governance_control_plane")
     maturity = control_plane.get("maturity") if isinstance(control_plane, dict) else None
@@ -11150,6 +11151,7 @@ def governance_profile_payload(target_root: Path, operation: str) -> dict[str, A
         return {
             "command": "governance-profile",
             "operation": operation,
+            "host": host,
             "result": "block",
             "summary": "governance profile maturity could not be read from the unified control plane.",
             "missing_inputs": ["governance_control_plane.maturity"],
@@ -11208,6 +11210,7 @@ def governance_profile_payload(target_root: Path, operation: str) -> dict[str, A
     return {
         "command": "governance-profile",
         "operation": operation,
+        "host": host,
         "result": result,
         "summary": summary,
         "missing_inputs": missing_inputs,
@@ -11282,17 +11285,19 @@ def governance_profile_upgrade_payload(
     target_level: str | None,
     dry_run: bool,
     force: bool,
+    host: str = "github",
 ) -> dict[str, Any]:
     if target_level is None:
         return {
             "command": "governance-profile",
             "operation": "upgrade",
+            "host": host,
             "result": "block",
             "summary": "governance profile upgrade requires `--to standard` or `--to strong`.",
             "missing_inputs": ["to"],
             "fallback_to": "adoption",
         }
-    base = governance_profile_payload(target_root, "upgrade-plan")
+    base = governance_profile_payload(target_root, "upgrade-plan", host=host)
     maturity = base.get("maturity") if isinstance(base.get("maturity"), dict) else {}
     workspace_profile = base.get("workspace_profile")
     gate_starter = base.get("gate_starter")
@@ -11318,6 +11323,7 @@ def governance_profile_upgrade_payload(
     return {
         "command": "governance-profile",
         "operation": "upgrade",
+        "host": host,
         "schema_version": "loom-governance-upgrade/v1",
         "result": result,
         "summary": (
@@ -11632,6 +11638,7 @@ def handle_governance_profile(args: argparse.Namespace) -> int:
                 target_level=args.to,
                 dry_run=args.dry_run,
                 force=args.force,
+                host=args.host,
             )
         )
     if args.operation == "binding":
@@ -11649,7 +11656,7 @@ def handle_governance_profile(args: argparse.Namespace) -> int:
                 dry_run=args.dry_run,
             )
         )
-    return emit(governance_profile_payload(target_root, args.operation))
+    return emit(governance_profile_payload(target_root, args.operation, host=args.host))
 
 
 def handle_host_lifecycle(args: argparse.Namespace) -> int:
