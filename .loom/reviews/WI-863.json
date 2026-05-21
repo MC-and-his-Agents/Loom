@@ -3,14 +3,29 @@
   "item_id": "WI-863",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-863 formal review passes: the changes correctly make complete Codex App host proof override CI/CODEX_CI headless fallback, preserve safe fallback with missing-proof diagnostics, add focused fixture coverage and prompt evidence snapshots, and keep raw App output bounded as runtime evidence while normalized findings feed the single review-record path.",
+  "summary": "WI-863 formal review allows the current worktree: verified Codex App host proof now wins over CI/CODEX_CI fallback, incomplete proof preserves safe fallback with missing-proof diagnostics, focused fixtures cover the intended adapter behavior, prompt guidance includes focused evidence for host-limited reviewers, and raw App output remains bounded as runtime evidence feeding normalized review-record input.",
   "reviewer": "loom/codex-app-review",
-  "reviewed_head": "b42fd122ef941d3de57818ec76cc5170bfa2eca3",
-  "reviewed_validation_summary": "py_compile passed for src/generated shared scripts; skills_surface check passed; embedded App JSON probe passed; root shadow-parity and adopt verify passed; version surface check passed; installer version bump check passed; tools/loom_check.py passed with 36 surfaces and loom-check-* temp dirs cleaned; live Codex App review run passed on head b42fd122 via thread 019e4af4-5eb2-7432-bd36-8d8facc33ab1 cwd /Users/mc/dev/Loom-863-codex-app-review-host-proof using App CLI 0.131.0-alpha.9; review record input decision=allow.",
+  "reviewed_head": "4ad44ca689f592d48fd24640ec00dcaa7c2e1a7c",
+  "reviewed_validation_summary": "Prompt guidance now tells formal reviewers not to block solely on a stale prior review record while review run is generating replacement evidence. Verified with PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile for shared loom_flow/loom_check scripts, python3 tools/skills_surface.py check, git diff --check, and PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py -> OK, checked 36 surfaces. Post-commit focused self-check passed py_compile, skills_surface check after pycache cleanup, version surface check, and fact-chain; a post-commit full loom_check rerun was discarded because pre-existing concurrent loom_check processes polluted the run, then all loom-check-* temp dirs were cleaned.",
   "fallback_to": null,
-  "findings": [],
+  "findings": [
+    {
+      "code_location": null,
+      "details": "Current authored review record still references b42fd122, while this formal review is being produced for 4ad44ca. Per WI-863 prompt/rubric changes, that stale record is historical input only during replacement evidence generation; no unresolved finding, validation drift, or uncovered semantic diff was identified from the current change snapshot.",
+      "disposition": {
+        "status": "accepted",
+        "summary": "Non-blocking historical-input condition; this replacement review output can be used to refresh the single review record."
+      },
+      "id": "wi-863-stale-prior-record-nonblocking",
+      "rebuttal": null,
+      "severity": "warn",
+      "summary": "Prior review record is stale but not a blocker for this replacement review run."
+    }
+  ],
   "blocking_issues": [],
-  "follow_ups": [],
+  "follow_ups": [
+    "Prior review record is stale but not a blocker for this replacement review run."
+  ],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-863.md",
     "recovery_entry": ".loom/progress/WI-863.md",
@@ -30,7 +45,7 @@
       }
     },
     "engine_adapter": "loom/codex-app-review",
-    "engine_evidence": ".loom/runtime/review/WI-863/b42fd122ef941d3de57818ec76cc5170bfa2eca3/engine-result.json",
-    "normalized_findings": ".loom/runtime/review/WI-863/b42fd122ef941d3de57818ec76cc5170bfa2eca3/normalized-findings.json"
+    "engine_evidence": ".loom/runtime/review/WI-863/4ad44ca689f592d48fd24640ec00dcaa7c2e1a7c/engine-result.json",
+    "normalized_findings": ".loom/runtime/review/WI-863/4ad44ca689f592d48fd24640ec00dcaa7c2e1a7c/normalized-findings.json"
   }
 }

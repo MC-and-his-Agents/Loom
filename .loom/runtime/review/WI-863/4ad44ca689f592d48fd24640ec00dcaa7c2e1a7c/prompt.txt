@@ -1,0 +1,1400 @@
+你是 Loom 默认 formal reviewer。
+请基于当前仓库工作树做正式语义审查，并只输出符合 schema 的 JSON 结果。
+优先阅读当前事项直接相关的文件与差异，不要做整仓广播式探索。
+若宿主工具不可用或 outputSchema 限制工具调用，请使用本 prompt 中的 Change Evidence Snapshot 与 Runtime Evidence 形成结论，不要仅因未运行工具而 fallback。
+
+Loom 审查边界：
+- 你负责 reviewer rubric：判断方向、边界、语义正确性、风险与验证充分性。
+- 你不是 merge gate；不要输出 safe_to_merge、guardian verdict 或宿主按钮决策。
+- 你的输出只是 review evidence；最终正式真相会被回写到单一 review record。
+- 若阻断项成立，decision 设为 `block`；若当前输入不足以形成正式结论，decision 设为 `fallback`。
+
+当前事项：
+- Item ID: WI-863
+- Goal: Fix Codex App main-thread review host proof discovery and prove App review E2E for #863/#864.
+- Scope: Codex App review host proof discovery, adapter selection, missing-proof diagnostics, focused fixtures, live review evidence, review record, and merge-ready/review gate consumption.
+- Execution Path: issue-scoped branch work/863-codex-app-review-host-proof in independent worktree /Users/mc/dev/Loom-863-codex-app-review-host-proof
+- Workspace Entry: ./
+- Workspace Path: .
+- Review Record Path: .loom/reviews/WI-863.json
+- Latest Validation Summary: Prompt guidance now tells formal reviewers not to block solely on a stale prior review record while review run is generating replacement evidence. Verified with PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile for shared loom_flow/loom_check scripts, python3 tools/skills_surface.py check, git diff --check, and PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py -> OK, checked 36 surfaces. Post-commit focused self-check passed py_compile, skills_surface check after pycache cleanup, version surface check, and fact-chain; a post-commit full loom_check rerun was discarded because pre-existing concurrent loom_check processes polluted the run, then all loom-check-* temp dirs were cleaned.
+
+Build Checkpoint：
+- Result: pass
+- Summary: build checkpoint can be consumed from the current Loom fact chain.
+
+Runtime Evidence Entrypoints：
+- run_entry: not_applicable
+- logs_entry: not_applicable
+- diagnostics_entry: not_applicable
+- verification_entry: python3 .loom/bin/loom_init.py verify --target .
+- lane_entry: not_applicable
+
+优先审查这些路径：
+- `.`
+
+Recent Review Context Pack：
+- Schema: loom-review-context-pack/v1
+- History Available: True
+- Budget Risk: none (status=not_applicable, enforcement=advisory)
+- Budget Risk Summary: execution budget is not_applicable; budget risk remains advisory and non-blocking
+- Repeated Blocker Signal: absent (advisory)
+Recent Findings:
+- block: Implementation review record is stale relative to the current worktree head. (disposition=accepted, source=.loom/runtime/review/WI-863/5be3db4b6ccd7fd878ea15d6b05b44102ee295f1/normalized-findings.json)
+- block: Formal review could not be completed because the inspection step was not executed. (disposition=deferred, source=.loom/runtime/review/WI-863/b5d9f3be7acf1e9043c940a58fea786910006b95/normalized-findings.json)
+Repeated Blocker Candidates:
+- absent: no repeated blocker candidate detected.
+- 请将发现分类为 new、unresolved 或 repeated/root-cause candidate；不要在没有证据时把 repeat 自动升级成 hard gate。
+- 若既有 review record 的 reviewed_head 落后于当前 HEAD，请只把它当作历史输入；本次 review run 正在生成替代 evidence，不能仅因既有 record stale 而 block，除非存在未解决 finding、验证漂移或当前差异本身未被审查覆盖。
+
+Change Evidence Snapshot：
+- Base: e71f662e284c4c9b4b743ab50ed9e4e6ba9208de
+- Head: 4ad44ca689f592d48fd24640ec00dcaa7c2e1a7c
+- Changed Paths:
+- .loom/bootstrap/init-result.json
+- .loom/progress/WI-863.md
+- .loom/reviews/WI-863.json
+- .loom/reviews/WI-863.spec.json
+- .loom/runtime/review/WI-863/b42fd122ef941d3de57818ec76cc5170bfa2eca3/context-pack.json
+- .loom/runtime/review/WI-863/b42fd122ef941d3de57818ec76cc5170bfa2eca3/engine-metadata.json
+- .loom/runtime/review/WI-863/b42fd122ef941d3de57818ec76cc5170bfa2eca3/engine-result.json
+- .loom/runtime/review/WI-863/b42fd122ef941d3de57818ec76cc5170bfa2eca3/normalized-findings.json
+- .loom/runtime/review/WI-863/b42fd122ef941d3de57818ec76cc5170bfa2eca3/prompt.txt
+- .loom/shadow/closeout-loom.json
+- .loom/shadow/merge-ready-loom.json
+- .loom/specs/WI-863/implementation-contract.md
+- .loom/specs/WI-863/plan.md
+- .loom/specs/WI-863/spec.md
+- .loom/status/current.md
+- .loom/work-items/WI-863.md
+- docs/methodology/harness/review-execution.md
+- skills/loom-adopt/.loom-runtime/loom-review/SKILL.md
+- skills/loom-adopt/.loom-runtime/loom-spec-review/SKILL.md
+- skills/loom-adopt/.loom-runtime/shared/references/harness/review-execution.md
+- skills/loom-adopt/.loom-runtime/shared/scripts/loom_check.py
+- skills/loom-adopt/.loom-runtime/shared/scripts/loom_flow.py
+- skills/loom-build/.loom-runtime/loom-review/SKILL.md
+- skills/loom-build/.loom-runtime/loom-spec-review/SKILL.md
+- skills/loom-build/.loom-runtime/shared/references/harness/review-execution.md
+- skills/loom-build/.loom-runtime/shared/scripts/loom_check.py
+- skills/loom-build/.loom-runtime/shared/scripts/loom_flow.py
+- skills/loom-handoff/.loom-runtime/loom-review/SKILL.md
+- skills/loom-handoff/.loom-runtime/loom-spec-review/SKILL.md
+- skills/loom-handoff/.loom-runtime/shared/references/harness/review-execution.md
+- skills/loom-handoff/.loom-runtime/shared/scripts/loom_check.py
+- skills/loom-handoff/.loom-runtime/shared/scripts/loom_flow.py
+- skills/loom-init/.loom-runtime/loom-review/SKILL.md
+- skills/loom-init/.loom-runtime/loom-spec-review/SKILL.md
+- skills/loom-init/.loom-runtime/shared/references/harness/review-execution.md
+- skills/loom-init/.loom-runtime/shared/scripts/loom_check.py
+- skills/loom-init/.loom-runtime/shared/scripts/loom_flow.py
+- skills/loom-merge-ready/.loom-runtime/loom-review/SKILL.md
+- skills/loom-merge-ready/.loom-runtime/loom-spec-review/SKILL.md
+- skills/loom-merge-ready/.loom-runtime/shared/references/harness/review-execution.md
+- skills/loom-merge-ready/.loom-runtime/shared/scripts/loom_check.py
+- skills/loom-merge-ready/.loom-runtime/shared/scripts/loom_flow.py
+- skills/loom-pre-review/.loom-runtime/loom-review/SKILL.md
+- skills/loom-pre-review/.loom-runtime/loom-spec-review/SKILL.md
+- skills/loom-pre-review/.loom-runtime/shared/references/harness/review-execution.md
+- skills/loom-pre-review/.loom-runtime/shared/scripts/loom_check.py
+- skills/loom-pre-review/.loom-runtime/shared/scripts/loom_flow.py
+- skills/loom-resume/.loom-runtime/loom-review/SKILL.md
+- skills/loom-resume/.loom-runtime/loom-spec-review/SKILL.md
+- skills/loom-resume/.loom-runtime/shared/references/harness/review-execution.md
+- skills/loom-resume/.loom-runtime/shared/scripts/loom_check.py
+- skills/loom-resume/.loom-runtime/shared/scripts/loom_flow.py
+- skills/loom-retire/.loom-runtime/loom-review/SKILL.md
+- skills/loom-retire/.loom-runtime/loom-spec-review/SKILL.md
+- skills/loom-retire/.loom-runtime/shared/references/harness/review-execution.md
+- skills/loom-retire/.loom-runtime/shared/scripts/loom_check.py
+- skills/loom-retire/.loom-runtime/shared/scripts/loom_flow.py
+- skills/loom-review/.loom-runtime/loom-review/SKILL.md
+- skills/loom-review/.loom-runtime/loom-spec-review/SKILL.md
+- skills/loom-review/.loom-runtime/shared/references/harness/review-execution.md
+- skills/loom-review/.loom-runtime/shared/scripts/loom_check.py
+- skills/loom-review/.loom-runtime/shared/scripts/loom_flow.py
+- skills/loom-review/SKILL.md
+- skills/loom-spec-review/.loom-runtime/loom-review/SKILL.md
+- skills/loom-spec-review/.loom-runtime/loom-spec-review/SKILL.md
+- skills/loom-spec-review/.loom-runtime/shared/references/harness/review-execution.md
+- skills/loom-spec-review/.loom-runtime/shared/scripts/loom_check.py
+- skills/loom-spec-review/.loom-runtime/shared/scripts/loom_flow.py
+- skills/loom-spec-review/SKILL.md
+- skills/loom-story/.loom-runtime/loom-review/SKILL.md
+- skills/loom-story/.loom-runtime/loom-spec-review/SKILL.md
+- skills/loom-story/.loom-runtime/shared/references/harness/review-execution.md
+- skills/loom-story/.loom-runtime/shared/scripts/loom_check.py
+- skills/loom-story/.loom-runtime/shared/scripts/loom_flow.py
+- skills/shared/references/harness/review-execution.md
+- skills/shared/scripts/loom_check.py
+- skills/shared/scripts/loom_flow.py
+- src/skills/loom-review/SKILL.md
+- src/skills/loom-spec-review/SKILL.md
+- src/skills/shared/references/harness/review-execution.md
+- ... (2 more paths omitted)
+- Diff Stat:
+```text
+.loom/bootstrap/init-result.json                   |    6 +-
+ .loom/progress/WI-863.md                           |   21 +
+ .loom/reviews/WI-863.json                          |   36 +
+ .loom/reviews/WI-863.spec.json                     |   36 +
+ .../context-pack.json                              |   73 +
+ .../engine-metadata.json                           |   68 +
+ .../engine-result.json                             |    5 +
+ .../normalized-findings.json                       |    3 +
+ .../prompt.txt                                     | 1405 ++++++++++++++++++++
+ .loom/shadow/closeout-loom.json                    |    2 +-
+ .loom/shadow/merge-ready-loom.json                 |    2 +-
+ .loom/specs/WI-863/implementation-contract.md      |   29 +
+ .loom/specs/WI-863/plan.md                         |   28 +
+ .loom/specs/WI-863/spec.md                         |   25 +
+ .loom/status/current.md                            |   36 +-
+ .loom/work-items/WI-863.md                         |   25 +
+ docs/methodology/harness/review-execution.md       |    6 +-
+ .../loom-adopt/.loom-runtime/loom-review/SKILL.md  |    2 +-
+ .../.loom-runtime/loom-spec-review/SKILL.md        |    2 +-
+ .../shared/references/harness/review-execution.md  |    2 +
+ .../.loom-runtime/shared/scripts/loom_check.py     |  105 +-
+ .../.loom-runtime/shared/scripts/loom_flow.py      |  649 ++++++++-
+ .../loom-build/.loom-runtime/loom-review/SKILL.md  |    2 +-
+ .../.loom-runtime/loom-spec-review/SKILL.md        |    2 +-
+ .../shared/references/harness/review-execution.md  |    2 +
+ .../.loom-runtime/shared/scripts/loom_check.py     |  105 +-
+ .../.loom-runtime/shared/scripts/loom_flow.py      |  649 ++++++++-
+ .../.loom-runtime/loom-review/SKILL.md             |    2 +-
+ .../.loom-runtime/loom-spec-review/SKILL.md        |    2 +-
+ .../shared/references/harness/review-execution.md  |    2 +
+ .../.loom-runtime/shared/scripts/loom_check.py     |  105 +-
+ .../.loom-runtime/shared/scripts/loom_flow.py      |  649 ++++++++-
+ .../loom-init/.loom-runtime/loom-review/SKILL.md   |    2 +-
+ .../.loom-runtime/loom-spec-review/SKILL.md        |    2 +-
+ .../shared/references/harness/review-execution.md  |    2 +
+ .../.loom-runtime/shared/scripts/loom_check.py     |  105 +-
+ .../.loom-runtime/shared/scripts/loom_flow.py      |  649 ++++++++-
+ .../.loom-runtime/loom-review/SKILL.md             |    2 +-
+ .../.loom-runtime/loom-spec-review/SKILL.md        |    2 +-
+ .../shared/references/harness/review-execution.md  |    2 +
+ .../.loom-runtime/shared/scripts/loom_check.py     |  105 +-
+ .../.loom-runtime/shared/scripts/loom_flow.py      |  649 ++++++++-
+ .../.loom-runtime/loom-review/SKILL.md             |    2 +-
+ .../.loom-runtime/loom-spec-review/SKILL.md        |    2 +-
+ .../shared/references/harness/review-execution.md  |    2 +
+ .../.loom-runtime/shared/scripts/loom_check.py     |  105 +-
+ .../.loom-runtime/shared/scripts/loom_flow.py      |  649 ++++++++-
+ .../loom-resume/.loom-runtime/loom-review/SKILL.md |    2 +-
+ .../.loom-runtime/loom-spec-review/SKILL.md        |    2 +-
+ .../shared/references/harness/review-execution.md  |    2 +
+ .../.loom-runtime/shared/scripts/loom_check.py     |  105 +-
+ .../.loom-runtime/shared/scripts/loom_flow.py      |  649 ++++++++-
+ .../loom-retire/.loom-runtime/loom-review/SKILL.md |    2 +-
+ .../.loom-runtime/loom-spec-review/SKILL.md        |    2 +-
+ .../shared/references/harness/review-execution.md  |    2 +
+ .../.loom-runtime/shared/scripts/loom_check.py     |  105 +-
+ .../.loom-runtime/shared/scripts/loom_flow.py      |  649 ++++++++-
+ .../loom-review/.loom-runtime/loom-review/SKILL.md |    2 +-
+ .../.loom-runtime/loom-spec-review/SKILL.md        |    2 +-
+ .../shared/references/harness/review-execution.md  |    2 +
+ .../.loom-runtime/shared/scripts/loom_check.py     |  105 +-
+ .../.loom-runtime/shared/scripts/loom_flow.py      |  649 ++++++++-
+ skills/loom-review/SKILL.md                        |    2 +-
+ .../.loom-runtime/loom-review/SKILL.md             |    2 +-
+ .../.loom-runtime/loom-spec-review/SKILL.md        |    2 +-
+ .../shared/references/harness/review-execution.md  |    2 +
+ .../.loom-runtime/shared/scripts/loom_check.py     |  105 +-
+ .../.loom-runtime/shared/scripts/loom_flow.py      |  649 ++++++++-
+ skills/loom-spec-review/SKILL.md                   |    2 +-
+ .../loom-story/.loom-runtime/loom-review/SKILL.md  |    2 +-
+ .../.loom-runtime/loom-spec-review/SKILL.md        |    2 +-
+ .../shared/references/harness/review-execution.md  |    2 +
+ .../.loom-runtime/shared/scripts/loom_check.py     |  105 +-
+ .../.loom-runtime/shared/scripts/loom_flow.py      |  649 ++++++++-
+ .../shared/references/harness/review-execution.md  |    2 +
+ skills/shared/scripts/loom_check.py                |  105 +-
+ skills/shared/scripts/loom_flow.py                 |  649 ++++++++-
+ src/skills/loom-review/SKILL.md                    |    2 +-
+ src/skills/loom-spec-review/SKILL.md               |    2 +-
+ .../shared/references/harness/review-execution.md  |    2 +
+ src/skills/shared/scripts/loom_check.py            |  105 +-
+ src/skills/shared/scripts/loom_flow.py             |  649 ++++++++-
+ 82 files changed, 10999 insertions(+), 687 deletions(-)
+```
+- Focused Diff Excerpt:
+```diff
+diff --git a/.loom/bootstrap/init-result.json b/.loom/bootstrap/init-result.json
+index faf6bc0..c40df24 100644
+--- a/.loom/bootstrap/init-result.json
++++ b/.loom/bootstrap/init-result.json
+@@ -67,27 +67,27 @@
+   },
+   "deferred_capabilities": [
+     {
+       "name": "host-specific-skill-regression-matrix",
+       "reason": "Loom core should not absorb a full host test matrix",
+       "upgrade_trigger": "a host adapter or marketplace package is added"
+     }
+   ],
+   "fact_chain": {
+     "mode": "work-item + recovery-entry + derived status-surface",
+     "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
+     "entry_points": {
+-      "current_item_id": "WI-857",
+-      "work_item": ".loom/work-items/WI-857.md",
+-      "recovery_entry": ".loom/progress/WI-857.md",
++      "current_item_id": "WI-863",
++      "work_item": ".loom/work-items/WI-863.md",
++      "recovery_entry": ".loom/progress/WI-863.md",
+       "status_surface": ".loom/status/current.md"
+     }
+   },
+   "gitignore_policy": {
+     "path": ".gitignore",
+     "status": "ok",
+     "blanket_loom_ignore": false,
+     "blanket_entries": [],
+     "required_runtime_ignores": [
+       ".loom/runtime/",
+       ".loom/tmp/",
+       ".loom/cache/",
+diff --git a/.loom/progress/WI-863.md b/.loom/progress/WI-863.md
+new file mode 100644
+index 0000000..986fe86
+--- /dev/null
++++ b/.loom/progress/WI-863.md
+@@ -0,0 +1,21 @@
++# WI-863 Progress
++
++## Dynamic Facts
++
++- Item ID: WI-863
++- Current Checkpoint: merge
++- Current Stop: Fixed review prompt guidance so stale prior review records are treated as historical input during replacement review runs; local focused checks and full loom_check have passed.
++- Next Step: Commit and push the prompt/fixture/doc repair, rerun final self-check on the committed head, then run a renewed Codex App host review with default app adapter proof and record/gate consumption.
++- Blockers: None
++- Latest Validation Summary: Prompt guidance now tells formal reviewers not to block solely on a stale prior review record while review run is generating replacement evidence. Verified with PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile for shared loom_flow/loom_check scripts, python3 tools/skills_surface.py check, git diff --check, and PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py -> OK, checked 36 surfaces. Post-commit focused self-check passed py_compile, skills_surface check after pycache cleanup, version surface check, and fact-chain; a post-commit full loom_check rerun was discarded because pre-existing concurrent loom_check processes polluted the run, then all loom-check-* temp dirs were cleaned.
++- Recovery Boundary: Scope remains #863/#864 review host proof discovery, adapter selection, diagnostic, fixture, live review evidence, review record, and merge-ready/review gate consumption.
++- Current Lane: review-run-evidence
++
++## Execution Ledger
++
++- Ledger Binding: recovery_entry
++- Plan Locator: not_applicable
++- Acceptance Locator: not_applicable
++- Validation Evidence Locator: not_applicable
++- Handoff Notes Locator: not_applicable
++- Evidence Freshness: not_applicable
+diff --git a/.loom/reviews/WI-863.json b/.loom/reviews/WI-863.json
+new file mode 100644
+index 0000000..f0a1496
+--- /dev/null
++++ b/.loom/reviews/WI-863.json
+@@ -0,0 +1,36 @@
++{
++  "schema_version": "loom-review/v1",
++  "item_id": "WI-863",
++  "decision": "allow",
++  "kind": "code_review",
++  "summary": "WI-863 formal review passes: the changes correctly make complete Codex App host proof override CI/CODEX_CI headless fallback, preserve safe fallback with missing-proof diagnostics, add focused fixture coverage and prompt evidence snapshots, and keep raw App output bounded as runtime evidence while normalized findings feed the single review-record path.",
++  "reviewer": "loom/codex-app-review",
++  "reviewed_head": "b42fd122ef941d3de57818ec76cc5170bfa2eca3",
++  "reviewed_validation_summary": "py_compile passed for src/generated shared scripts; skills_surface check passed; embedded App JSON probe passed; root shadow-parity and adopt verify passed; version surface check passed; installer version bump check passed; tools/loom_check.py passed with 36 surfaces and loom-check-* temp dirs cleaned; live Codex App review run passed on head b42fd122 via thread 019e4af4-5eb2-7432-bd36-8d8facc33ab1 cwd /Users/mc/dev/Loom-863-codex-app-review-host-proof using App CLI 0.131.0-alpha.9; review record input decision=allow.",
++  "fallback_to": null,
++  "findings": [],
++  "blocking_issues": [],
++  "follow_ups": [],
++  "consumed_inputs": {
++    "work_item": ".loom/work-items/WI-863.md",
++    "recovery_entry": ".loom/progress/WI-863.md",
++    "status_surface": ".loom/status/current.md",
++    "build_checkpoint": "pass",
++    "budget_risk": {
++      "schema_version": "loom-execution-budget-risk/v1",
++      "status": "not_applicable",
++      "enforcement": "advisory",
++      "highest_risk": "none",
++      "risk_dimensions": [],
++      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
++      "budget_summary": "execution budget is not collected for this invocation.",
++      "adapter_evidence_locator": "",
++      "provenance": {
++        "source": "github_host"
++      }
++    },
++    "engine_adapter": "loom/codex-app-review",
++    "engine_evidence": ".loom/runtime/review/WI-863/b42fd122ef941d3de57818ec76cc5170bfa2eca3/engine-result.json",
++    "normalized_findings": ".loom/runtime/review/WI-863/b42fd122ef941d3de57818ec76cc5170bfa2eca3/normalized-findings.json"
++  }
++}
+diff --git a/.loom/reviews/WI-863.spec.json b/.loom/reviews/WI-863.spec.json
+new file mode 100644
+index 0000000..c3fd7bc
+--- /dev/null
++++ b/.loom/reviews/WI-863.spec.json
+@@ -0,0 +1,36 @@
++{
++  "schema_version": "loom-review/v1",
++  "item_id": "WI-863",
++  "decision": "allow",
++  "kind": "spec_review",
++  "summary": "Spec review allows WI-863: scope is limited to Codex App host proof discovery, diagnostics, fixtures, live review evidence, review record, and gate consumption; non-goals preserve #746 boundaries and exec fallback.",
++  "reviewer": "codex-main",
++  "reviewed_head": "e9f28e99a21190fc95f0cb56c4a2148d23e13de4",
++  "reviewed_validation_summary": "py_compile passed for src/generated shared scripts; skills_surface check passed; focused selection probe confirmed CODEX_CI plus valid proof selects loom/codex-app-review; tools/loom_check.py passed: OK, checked 36 surfaces; loom-check-* temp fixtures cleaned after run.",
++  "fallback_to": null,
++  "findings": [],
++  "blocking_issues": [],
++  "follow_ups": [],
++  "consumed_inputs": {
++    "work_item": ".loom/work-items/WI-863.md",
++    "recovery_entry": ".loom/progress/WI-863.md",
++    "status_surface": ".loom/status/current.md",
++    "build_checkpoint": "pass",
++    "budget_risk": {
++      "schema_version": "loom-execution-budget-risk/v1",
++      "status": "not_applicable",
++      "enforcement": "advisory",
++      "highest_risk": "none",
++      "risk_dimensions": [],
++      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
++      "budget_summary": "execution budget is not collected for this invocation.",
++      "adapter_evidence_locator": "",
++      "provenance": {
++        "source": "github_host"
++      }
++    },
++    "engine_adapter": null,
++    "engine_evidence": null,
++    "normalized_findings": null
++  }
++}
+diff --git a/.loom/specs/WI-863/implementation-contract.md b/.loom/specs/WI-863/implementation-contract.md
+new file mode 100644
+index 0000000..9147bb4
+--- /dev/null
++++ b/.loom/specs/WI-863/implementation-contract.md
+@@ -0,0 +1,29 @@
++# WI-863 Implementation Contract
++
++## Allowed Change Surface
++
++- `src/skills/shared/scripts/loom_flow.py`
++- `src/skills/shared/scripts/loom_check.py`
++- `src/skills/loom-review/SKILL.md`
++- `src/skills/loom-spec-review/SKILL.md`
++- Generated `skills/**` surfaces derived from `src/skills`
++- `docs/methodology/harness/review-execution.md`
++- Loom Work Item, progress, spec, review, status, and runtime evidence carriers for `WI-863`
++
++## Required Properties
++
++- Verified Codex App host proof must be evaluated before treating `CI` or `CODEX_CI` as headless fallback.
++- Complete App proof must select `loom/codex-app-review` with `selection_source = codex-app-host-default`.
++- Incomplete proof must preserve safe fallback and expose missing proof diagnostics.
++- App proof discovery must remain bounded and must not repeatedly scan broad host state during fixtures.
++- Authoritative App raw output must be stored only as runtime evidence.
++- `review record` and merge-ready/review gate must consume normalized `review_record_input` and the single authored review record.
++
++## Exit Criteria
++
++- Local validation passes.
++- Live Codex App review proof is recorded.
++- PR gates pass.
++- Controlled merge completes.
++- `main` is synchronized.
++- #863 and #864 are closed with evidence.
+diff --git a/.loom/specs/WI-863/plan.md b/.loom/specs/WI-863/plan.md
+new file mode 100644
+index 0000000..29ae962
+--- /dev/null
++++ b/.loom/specs/WI-863/plan.md
+@@ -0,0 +1,28 @@
++# WI-863 Plan
++
++## Steps
++
++1. Read #746, #750, #770, #751, #771, #863, #864, review execution docs, review skills, `loom_flow.py`, and `loom_check.py`.
++2. Create an issue-scoped independent worktree and bind `WI-863` fact-chain carriers to it.
++3. Update Codex App host proof discovery so complete proof wins over `CODEX_CI=1`.
++4. Add missing-proof diagnostics to adapter selection metadata.
++5. Add focused fixtures for `CODEX_CI=1` with valid App proof and for missing proof fallback.
++6. Regenerate checked-in skills surfaces from `src/skills`.
++7. Validate with py_compile, skills surface check, focused selection probe, and `loom_check`.
++8. Run live Codex App review proof in the real host context.
++9. Author the single review record from normalized review output and prove merge-ready or review gate consumption.
++10. Push PR, pass gates, perform controlled merge, sync main, and close #863/#864 with evidence.
++
++## Validation
++
++- `python3 -m py_compile src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_check.py skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_check.py`
++- `python3 tools/skills_surface.py check`
++- focused selection probe for `CODEX_CI=1` plus valid App proof
++- `python3 tools/loom_check.py`
++- live Codex App `review run`
++- `review record`
++- `flow merge-ready` or PR semantic review gate
++
++## Cleanup
++
++Remove this turn's `loom-check-*` temporary directories after each `loom_check` run so validation fixtures do not exhaust the system temporary volume.
+diff --git a/.loom/specs/WI-863/spec.md b/.loom/specs/WI-863/spec.md
+new file mode 100644
+index 0000000..e63c33a
+--- /dev/null
++++ b/.loom/specs/WI-863/spec.md
+@@ -0,0 +1,25 @@
++# WI-863 Spec
++
++## Outcome
++
++Codex App main-thread review runs can discover or report Codex App host proof consistently, even when the environment carries `CODEX_CI=1`.
++
++When app-server endpoint, thread id, thread cwd, target root, and reviewed head are bound, `review run` selects `loom/codex-app-review` by default. When proof is incomplete, the fallback remains `loom/default-codex-exec` and the output names the missing proof.
++
++## Acceptance
++
++- `CODEX_CI=1` does not force headless fallback when valid Codex App host proof is present.
++- Missing or partial host proof produces a structured diagnostic naming absent locators.
++- App adapter metadata records selected adapter, selection source, fallback reason, proof sources, discovery evidence, thread/target binding, and reviewed head.
++- Existing headless and unavailable app-server fallback behavior remains intact.
++- A focused fixture proves `CODEX_CI=1` plus valid thread proof still selects `loom/codex-app-review`.
++- A focused fixture proves missing proof still falls back and exposes missing-proof diagnostics.
++- A live Codex App host-context review proof reaches `review run -> normalized evidence -> review record -> merge-ready or review gate consumption`.
++- Raw Codex App review output remains runtime evidence only and does not become authored review truth.
++
++## Non Goals
++
++- Do not reopen the #746 adapter migration scope.
++- Do not remove `loom/default-codex-exec`.
++- Do not make App raw review output a second authored truth source.
++- Do not expand Loom into a multi-engine marketplace.
+diff --git a/.loom/status/current.md b/.loom/status/current.md
+index 6944892..45b5ede 100644
+--- a/.loom/status/current.md
++++ b/.loom/status/current.md
+@@ -1,35 +1,35 @@
+ # Current Status
+ 
+ ## Derived Fact Chain View
+ 
+-- Item ID: WI-857
+-- Goal: 修复 Loom 自身 py_compile 验证留下 __pycache__ 工作区残留的问题。
+-- Scope: 统一 Loom 源仓库 py_compile 验证入口；更新 CI、Makefile、PR validation recipe、loom_check fixture 和 generated skills surface；保留 #817 adopted repo installed runtime cache guard。
+-- Execution Path: harness/pycompile-cache-hygiene
+-- Workspace Entry: .
+-- Recovery Entry: .loom/progress/WI-857.md
+-- Review Entry: .loom/reviews/WI-857.json
+-- Validation Entry: make py-compile; targeted Python cache find scan; python3 tools/skills_surface.py check; python3 tools/version_surface_check.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py; git diff --check; installer version bump check; PR checks.
+-- Closing Condition: #857 修复合并到 main，PR checks 通过，closeout check 通过，#857 closed 且 Project #4 为 Done，工作区无 Python bytecode/cache 残留。
+-- Current Checkpoint: merge-ready
+-- Current Stop: Local validation passed on head b56ee756442c4956ebdc44fa23bfea4e5336a400; PR push and merge-ready gate are next.
+-- Next Step: Push branch, open/update PR, run merge-ready gate, wait for checks, then merge and close out #857.
+-- Blockers: None recorded.
+-- Latest Validation Summary: git diff --check passed; python3 tools/skills_surface.py check passed; python3 tools/version_surface_check.py passed; python3 tools/host_adapter_check.py passed; make py-compile passed with py_compile_clean OK for 34 files; cache scan after make py-compile returned no __pycache__, .pyc, .pyo, or .pyd artifacts; installer version bump check passed with 0.1.122 -> 0.1.123; python3 tools/loom_check.py passed with 36 surfaces; make check passed with 36 surfaces; final cache scan returned no __pycache__, .pyc, .pyo, or .pyd artifacts.
+-- Recovery Boundary: Only #857 py_compile cache hygiene is in scope; #817 installed runtime `.loom/bin` cache guard remains existing behavior and must not be regressed.
+-- Current Lane: branch work/857-pycompile-cache-hygiene in formal worktree /Users/mc/dev/Loom-work-857-pycompile-cache-hygiene
++- Item ID: WI-863
++- Goal: Fix Codex App main-thread review host proof discovery and prove App review E2E for #863/#864.
++- Scope: Codex App review host proof discovery, adapter selection, missing-proof diagnostics, focused fixtures, live review evidence, review record, and merge-ready/review gate consumption.
++- Execution Path: issue-scoped branch work/863-codex-app-review-host-proof in independent worktree /Users/mc/dev/Loom-863-codex-app-review-host-proof
++- Workspace Entry: ./
++- Recovery Entry: .loom/progress/WI-863.md
++- Review Entry: .loom/reviews/WI-863.json
++- Validation Entry: py_compile; skills_surface check; loom_check; live Codex App review run; review record; merge-ready/review gate
++- Closing Condition: #863/#864 evidence accepted, PR gates pass, controlled merge completes, main syncs, and issue closeout records proof.
++- Current Checkpoint: merge
++- Current Stop: Fixed review prompt guidance so stale prior review records are treated as historical input during replacement review runs; local focused checks and full loom_check have passed.
++- Next Step: Commit and push the prompt/fixture/doc repair, rerun final self-check on the committed head, then run a renewed Codex App host review with default app adapter proof and record/gate consumption.
++- Blockers: None
++- Latest Validation Summary: Prompt guidance now tells formal reviewers not to block solely on a stale prior review record while review run is generating replacement evidence. Verified with PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile for shared loom_flow/loom_check scripts, python3 tools/skills_surface.py check, git diff --check, and PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py -> OK, checked 36 surfaces. Post-commit focused self-check passed py_compile, skills_surface check after pycache cleanup, version surface check, and fact-chain; a post-commit full loom_check rerun was discarded because pre-existing concurrent loom_check processes polluted the run, then all loom-check-* temp dirs were cleaned.
++- Recovery Boundary: Scope remains #863/#864 review host proof discovery, adapter selection, diagnostic, fixture, live review evidence, review record, and merge-ready/review gate consumption.
++- Current Lane: review-run-evidence
+ 
+ ## Runtime Evidence
+ 
+ - Run Entry: not_applicable
+ - Logs Entry: not_applicable
+ - Diagnostics Entry: not_applicable
+ - Verification Entry: python3 .loom/bin/loom_init.py verify --target .
+ - Lane Entry: not_applicable
+ 
+ ## Sources
+ 
+-- Static Truth: .loom/work-items/WI-857.md
+-- Dynamic Truth: .loom/progress/WI-857.md
++- Static Truth: .loom/work-items/WI-863.md
++- Dynamic Truth: .loom/progress/WI-863.md
+ - Locator Truth: .loom/bootstrap/init-result.json
+ - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
+diff --git a/.loom/work-items/WI-863.md b/.loom/work-items/WI-863.md
+new file mode 100644
+index 0000000..500c486
+--- /dev/null
++++ b/.loom/work-items/WI-863.md
+@@ -0,0 +1,25 @@
++# WI-863
++
++## Static Facts
++
++- Item ID: WI-863
++- Goal: Fix Codex App main-thread review host proof discovery and prove App review E2E for #863/#864.
++- Scope: Codex App review host proof discovery, adapter selection, missing-proof diagnostics, focused fixtures, live review evidence, review record, and merge-ready/review gate consumption.
++- Execution Path: issue-scoped branch work/863-codex-app-review-host-proof in independent worktree /Users/mc/dev/Loom-863-codex-app-review-host-proof
++- Workspace Entry: ./
++- Recovery Entry: .loom/progress/WI-863.md
++- Review Entry: .loom/reviews/WI-863.json
++- Validation Entry: py_compile; skills_surface check; loom_check; live Codex App review run; review record; merge-ready/review gate
++- Closing Condition: #863/#864 evidence accepted, PR gates pass, controlled merge completes, main syncs, and issue closeout records proof.
++
++## Associated Artifacts
++
++- `.loom/work-items/WI-863.md`
++- `.loom/progress/WI-863.md`
++- `.loom/reviews/WI-863.json`
++- `.loom/status/current.md`
++- `docs/methodology/harness/review-execution.md`
++- `src/skills/shared/scripts/loom_flow.py`
++- `src/skills/shared/scripts/loom_check.py`
++- `src/skills/loom-review/SKILL.md`
++- `src/skills/loom-spec-review/SKILL.md`
+diff --git a/docs/methodology/harness/review-execution.md b/docs/methodology/harness/review-execution.md
+index 2711e52..4d300c5 100644
+--- a/docs/methodology/harness/review-execution.md
++++ b/docs/methodology/harness/review-execution.md
+@@ -44,40 +44,42 @@ Loom 把 review 分成三层：
+ 
+ 其中：
+ 
+ - `flow review` 固定保持只读，不触发 engine，也不产生副作用
+ - `review run` 只负责选择安全的 authoritative adapter、落盘 evidence、生成 normalized findings，并显式 fail-closed
+ - `review record` 仍只写入单一 `review_entry` 指向的 JSON
+ - 结构化审查结论可通过 `--findings-file <path>` 写入同一 review record
+ - `--blocking-issue` / `--follow-up` 只保留兼容 authored 入口，不得与 `--findings-file` 混用
+ 
+ 默认 engine 按宿主 proof 选择：
+ 
+ - 已验证 Codex App host context 默认选择 `loom/codex-app-review`，不启动嵌套 `codex exec`
+-- `CI` / `CODEX_CI`、headless、host proof 缺失或 app-server unavailable 时 fallback 到 `loom/default-codex-exec`，能力来源仍是 `codex exec --output-schema`
++- `CI` / `CODEX_CI` 只在缺少完整 Codex App host proof 时表示 headless fallback；若 app-server/session locator、thread id 与 thread cwd proof 已验证，真实 Codex App 主线程仍默认选择 `loom/codex-app-review`
++- headless、host proof 缺失或 app-server unavailable 时 fallback 到 `loom/default-codex-exec`，能力来源仍是 `codex exec --output-schema`
+ - 显式 `--engine-adapter` 优先级最高，继续保留 Stage 2 authoritative opt-in / fallback 调试入口
+ 
+ 若 engine 不可用、schema 漂移、runtime 冲突或运行后改动了 tracked repo 内容，`review run` 必须返回 `block`，并指向 manual review 继续写回同一 `review record`；不得把这类失败伪装成 checkpoint fallback。
+ 
+ Codex App review adapter 有三种入口：
+ 
+ - verified host default：不传 `--engine-adapter`，但必须能证明 app-server/session locator、thread id、thread cwd、target root 与 reviewed head 绑定一致
+ - explicit authoritative：显式选择 `review run --engine-adapter loom/codex-app-review`，用于调试或非默认宿主
+ - shadow comparison：显式选择 `review run --shadow-engine-adapter loom/codex-app-review`
+ - shadow evidence 只能写入 `.loom/runtime/review/<item>/<head>/shadow/<adapter>/`
+ - shadow 输出可以包含 raw review、normalized findings、metadata 与 parity diff
+ - shadow 输出不得 author `review_entry`，不得替代 `review_record_input.engine_adapter`
+ - shadow unavailable / failure 不得阻断 default review run，也不得被 merge-ready 直接消费
+ - authoritative Codex App path 必须提供 app-server/session locator、thread id、thread cwd proof；live app-server unavailable 时默认 fallback 到 `loom/default-codex-exec`
+ - thread cwd proof 必须等于 target root；cwd / target / reviewed head 绑定冲突或 schema proof 失败时必须 fail closed
++- host proof discovery 必须记录 proof 来源与缺失项；只有部分 proof 时输出 missing-proof diagnostic，说明缺哪个 locator、当前 fallback 原因与 discovery locator，不得仅用 `CODEX_CI=1` 遮蔽真实 App 主线程 proof
+ - authoritative Codex App raw output 只作为 runtime evidence 保留；只有归一化后的 `review_record_input` 可被 `review record` 写入单一 authored truth
+ - authoritative Codex App runtime files 使用与默认 engine 相同的 `.loom/runtime/review/<item>/<head>/engine-result.json`、`normalized-findings.json`、`engine-metadata.json` 和 `context-pack.json` 边界，保证历史 review context pack 可以继续读取 prior findings
+ - `engine_metadata` 必须记录 selected adapter、selection source、fallback reason、thread/target binding summary、reviewed head 与 evidence locators
+ 
+ 成熟既有仓库可以通过 repo companion 的 `review_instruction_locators` 声明 spec review 与 implementation review 的 repo-owned instruction 入口。正式 review 必须先消费这些 locator；缺失、不可读或越界时 fail closed，不得猜测 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 路径。
+ 
+ ### 2.1 Review engine profile contract
+ 
+ `review run` 在调用 Codex-backed reviewer 或 Codex App authoritative adapter 前必须解析稳定 profile，不得继承本机 `~/.codex/config.toml` 的默认 model 或 reasoning effort。
+ 
+ Resolved profile 的 schema 为 `loom-review-engine-profile/v1`，至少包含：
+ 
+@@ -137,24 +139,26 @@ Context pack 至少包含：
+ - 缺失或 unavailable budget 只说明预算读面不可用
+ - 不得因为 budget risk 单独改变 review `decision`
+ 
+ `repeated_blocker_signal` 的 schema 为 `loom-repeated-blocker-signal/v1`。它在 v0.8.0 中只作为 advisory evidence：
+ 
+ - `result = present` 表示至少两个 block finding 共享 repeat key
+ - `result = absent` 表示当前可用历史中未发现重复 blocker
+ - `enforcement = advisory` 表示本批不把重复 blocker 自动升级成 merge gate blocker
+ - `candidates[]` 必须列出 repeat key、count、source locators、summary 和 recommended action
+ 
+ Prompt 必须消费 context pack，并要求 reviewer 将 finding 分类为 `new`、`unresolved` 或 `repeated/root-cause candidate`。历史不可用时，context pack 仍必须存在并标明 `history_available = false`，不得猜测历史结论。
+ 
++当 `review run` 正在生成替代 review evidence 时，既有 review record 的 `reviewed_head` 可能落后于当前 `HEAD`。这种 stale record 只能作为历史输入，不能单独构成当前 review blocker；只有未解决 finding、验证漂移或当前差异本身未被本轮审查覆盖时，reviewer 才应阻断。
++
+ ## 3. review record 最小字段
+ 
+ review record 至少应包含：
+ 
+ - `item_id`
+ - `kind`
+ - `reviewed_head`
+ - `reviewed_validation_summary`
+ - `decision`
+ - `summary`
+ - `reviewer`
+ - `fallback_to`
+diff --git a/skills/loom-review/SKILL.md b/skills/loom-review/SKILL.md
+index 2c26b20..07e73dd 100644
+--- a/skills/loom-review/SKILL.md
++++ b/skills/loom-review/SKILL.md
+@@ -35,25 +35,25 @@ description: 负责正式 review 执行层。Use when Codex needs to run semanti
+ - `loom flow review --target <repo> [--item <id>]`
+ - `loom review run --target <repo> [--item <id>]`
+ - `loom review record --target <repo> [--item <id>] --decision <allow|block|fallback> --kind <general_review|code_review|spec_review> --summary <text> --reviewer <id>`
+ 
+ 补充约束：
+ 
+ - 若需要写入结构化 findings / disposition，使用 `--findings-file <path>`
+ - `--blocking-issue` / `--follow-up` 仅保留兼容 authored 入口，不得与 `--findings-file` 混用
+ - 无论通过哪种入口，最终都只允许写回单一 `review_entry` 指向的 review record
+ 
+ 这个 skill 先用 `flow review` 读取正式 review 的机械基线，再用 `review run` 选择安全的 authoritative adapter 并生成 Loom-normalized findings，最后用 `review record` 把审查结论写成可消费载体。
+ 
+-已验证 Codex App host context 中，默认 `review run` 使用 `loom/codex-app-review`，并必须证明 app-server/session locator、thread id、cwd proof、target root 与 reviewed head 绑定一致；该路径不得启动嵌套 `codex exec`。`CI` / `CODEX_CI`、headless、host proof 缺失或 app-server unavailable 时 fallback 到 `loom/default-codex-exec` + `codex exec --output-schema`。proof 冲突、cwd / target / head 不匹配或 schema normalization 失败时必须 fail closed 并回到 manual review 写同一 review record。
++已验证 Codex App host context 中，默认 `review run` 使用 `loom/codex-app-review`，并必须证明 app-server/session locator、thread id、cwd proof、target root 与 reviewed head 绑定一致；该路径不得启动嵌套 `codex exec`。`CI` / `CODEX_CI` 只在缺少完整 App host proof 时表示 headless fallback；真实 Codex App 主线程即使带有 `CODEX_CI=1`，只要 proof 齐全仍默认选择 `loom/codex-app-review`。headless、host proof 缺失或 app-server unavailable 时 fallback 到 `loom/default-codex-exec` + `codex exec --output-schema`，并输出缺失 locator diagnostic。proof 冲突、cwd / target / head 不匹配或 schema normalization 失败时必须 fail closed 并回到 manual review 写同一 review record。
+ 
+ 安装态或 repo-local 开发态可以把这些 `loom ...` 动作映射到底层 `scripts/...` 或共享 runtime carrier；但 `loom-review` 自身的场景合同、进入时机和输出责任保持不变。
+ 
+ ## 3. 固定编排
+ 
+ `loom-review` 固定按以下顺序编排：
+ 
+ 1. 运行 `flow review`，确认当前事项是否具备进入正式审查的最小条件
+ 2. 若 `flow review` 非 `pass`，直接返回 `block` 或 `fallback`，不伪造审查结论
+ 3. 运行 `review run`，在 verified Codex App host default、显式 authoritative adapter 或 headless fallback 中选择安全路径，并把 raw output 收敛为 Loom evidence 与 normalized findings
+ 4. 若 `review run` fail-closed，显式回到 manual review 写回同一 `review record`
+ 5. 用 `review record` 写入正式 review 结论，让 `merge gate` 可机械消费
+diff --git a/skills/loom-spec-review/SKILL.md b/skills/loom-spec-review/SKILL.md
+index 2e1bc1e..b64b86c 100644
+--- a/skills/loom-spec-review/SKILL.md
++++ b/skills/loom-spec-review/SKILL.md
+@@ -37,25 +37,25 @@ description: 负责 formal spec review 执行层。Use when Codex needs to revie
+ 补充约束：
+ 
+ - formal spec 路径不存在时，`flow spec-review` 必须 fail-closed
+ - spec review 只写回单一 spec review record，不替代 implementation review record
+ - `reviewed_head` 与 stale 语义必须显式暴露，供后续 gate 消费
+ 
+ ## 3. 固定编排
+ 
+ `loom-spec-review` 固定按以下顺序编排：
+ 
+ 1. 运行 `flow spec-review`，确认 formal spec 路径、build checkpoint 与 runtime 读面齐全
+ 2. 若 `flow spec-review` 非 `pass`，直接返回 `block` 或 `fallback`
+-3. 运行 `review run`，在 verified Codex App host default、显式 authoritative adapter 或 headless fallback 中选择安全路径，生成 Loom-normalized spec findings
++3. 运行 `review run`，在 verified Codex App host default、显式 authoritative adapter 或 headless fallback 中选择安全路径，生成 Loom-normalized spec findings；`CI` / `CODEX_CI` 不得遮蔽已验证的真实 Codex App host proof，proof 不足时必须输出缺失 locator diagnostic
+ 4. 若 `review run` fail-closed，回到 manual review 写回同一 spec review record
+ 5. 用 `review record` 写入 `kind = spec_review` 的正式结论
+ 
+ 这个 skill 不做以下事情：
+ 
+ - 不替代 implementation review
+ - 不替代 merge-ready 放行判断
+ - 不直接执行 merge 或平台动作
+ - 不回写 recovery entry、status control plane 或其他 authored 真相载体
+ - 不把 Codex App raw review output 直接升级成 spec review authored truth；verified host default 与显式 Codex App path 都必须经同一 normalized `review_record_input` 与 spec review record 边界
+ 
+ ## 4. 输出要求
+diff --git a/skills/shared/scripts/loom_check.py b/skills/shared/scripts/loom_check.py
+index ef59a97..e429ee8 100644
+--- a/skills/shared/scripts/loom_check.py
++++ b/skills/shared/scripts/loom_check.py
+@@ -20,24 +20,25 @@ sys.dont_write_bytecode = True
+ 
+ from fact_chain_support import inspect_fact_chain
+ import governance_surface as governance_surface_module
+ import loom_flow as loom_flow_module
+ import loom_status as loom_status_module
+ import runtime_state as runtime_state_module
+ from governance_surface import build_governance_surface
+ from loom_flow import allowed_post_review_carrier_paths, repo_specific_requirements_payload, review_head_binding
+ from runtime_paths import repo_local_root
+ 
+ DEFAULT_COMMAND_TIMEOUT_SECONDS = 30.0
+ ADOPT_VERIFY_TIMEOUT_SECONDS = 120.0
++BOOTSTRAP_TIMEOUT_SECONDS = 120.0
+ 
+ TOP_LEVEL_DIRS = (
+     "docs",
+     "examples",
+     "packages",
+     "plugins",
+     "skills",
+     "tools",
+ )
+ 
+ TOP_LEVEL_FILES = (
+     "AGENTS.md",
+@@ -644,29 +645,44 @@ def run_command(
+         check=False,
+         capture_output=True,
+         text=True,
+         env=command_env,
+         timeout=timeout_seconds,
+     )
+ 
+ 
+ def command_timeout_seconds(args: list[str], requested_timeout_seconds: float | None) -> float:
+     if requested_timeout_seconds is not None:
+         return requested_timeout_seconds
+     normalized = [str(part) for part in args]
++    if "bootstrap" in normalized:
++        return BOOTSTRAP_TIMEOUT_SECONDS
+     if "adopt" in normalized and "verify" in normalized:
+         return ADOPT_VERIFY_TIMEOUT_SECONDS
+     return DEFAULT_COMMAND_TIMEOUT_SECONDS
+ 
+ 
++def check_command_timeout_budget() -> list[Failure]:
++    failures: list[Failure] = []
++    if command_timeout_seconds(["python3", "tools/loom_init.py", "bootstrap", "--target", "."], None) != BOOTSTRAP_TIMEOUT_SECONDS:
++        failures.append(Failure("command-timeout-budget", "bootstrap commands must use the extended loom_check timeout budget"))
++    if command_timeout_seconds(["python3", "tools/loom_flow.py", "adopt", "verify"], None) != ADOPT_VERIFY_TIMEOUT_SECONDS:
++        failures.append(Failure("command-timeout-budget", "adopt verify commands must keep the extended loom_check timeout budget"))
++    if command_timeout_seconds(["python3", "tools/loom_flow.py", "flow", "resume"], None) != DEFAULT_COMMAND_TIMEOUT_SECONDS:
++        failures.append(Failure("command-timeout-budget", "ordinary commands must keep the default loom_check timeout budget"))
++    if command_timeout_seconds(["python3", "tools/loom_init.py", "bootstrap"], 5.0) != 5.0:
++        failures.append(Failure("command-timeout-budget", "explicit command timeout overrides must be honored"))
++    return failures
++
++
+ def host_executable(name: str) -> str:
+     """Resolve a host executable while avoiding shims that depend on HOME."""
+     found = shutil.which(name)
+     if found and "/mise/shims/" not in found:
+         return found
+     for directory in os.environ.get("PATH", "").split(os.pathsep):
+         if not directory or "/mise/shims" in directory:
+             continue
+         candidate = Path(directory) / name
+         if candidate.exists() and os.access(candidate, os.X_OK):
+             return str(candidate)
+     return found or name
+@@ -6685,26 +6701,31 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
+                 evidence = payload.get("engine", {}).get("evidence") if isinstance(payload.get("engine"), dict) else None
+                 context_pack_path = evidence.get("context_pack") if isinstance(evidence, dict) else None
+                 prompt_path = evidence.get("prompt") if isinstance(evidence, dict) else None
+                 if not isinstance(context_pack_path, str) or not (review_target / context_pack_path).exists():
+                     failures.append(Failure("daily-execution-cli", "`review run` positive chain must write context pack evidence"))
+                 else:
+                     context_pack = json.loads((review_target / context_pack_path).read_text(encoding="utf-8"))
+                     if context_pack.get("schema_version") != "loom-review-context-pack/v1":
+                         failures.append(Failure("daily-execution-cli", "`review run` context pack must use the stable schema"))
+                     if not isinstance(context_pack.get("repeated_blocker_signal"), dict):
+                         failures.append(Failure("daily-execution-cli", "`review run` context pack must include repeated blocker signal"))
+                 prompt_file = (review_target / prompt_path) if isinstance(prompt_path, str) else None
+-                if prompt_file is None or not prompt_file.exists() or "Recent Review Context Pack" not in prompt_file.read_text(encoding="utf-8"):
++                prompt_text = prompt_file.read_text(encoding="utf-8") if prompt_file is not None and prompt_file.exists() else ""
++                if not prompt_text or "Recent Review Context Pack" not in prompt_text:
+                     failures.append(Failure("daily-execution-cli", "`review run` prompt must include recent review context pack guidance"))
++                if "Change Evidence Snapshot" not in prompt_text or "Focused Diff Excerpt" not in prompt_text:
++                    failures.append(Failure("daily-execution-cli", "`review run` prompt must include focused change evidence for host-limited reviewers"))
++                if "不能仅因既有 record stale 而 block" not in prompt_text:
++                    failures.append(Failure("daily-execution-cli", "`review run` prompt must treat stale prior review records as historical input during replacement review runs"))
+                 profile_probe = json.loads(json.dumps(payload))
+                 if isinstance(profile_probe.get("engine"), dict):
+                     profile_probe["engine"].pop("profile", None)
+                 profile_probe_failures: list[Failure] = []
+                 require_review_run_payload(
+                     profile_probe_failures,
+                     category="daily-execution-cli",
+                     context="`review run` missing profile probe",
+                     payload=profile_probe,
+                     expected_result={"pass"},
+                 )
+                 if not any("engine profile" in failure.detail for failure in profile_probe_failures):
+@@ -6809,24 +6830,50 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
+                 category="daily-execution-cli",
+                 context="`review run` shadow unavailable",
+                 payload=payload,
+                 expected_result={"pass"},
+             )
+             shadow_engine = payload.get("shadow_engine") if isinstance(payload, dict) and isinstance(payload.get("shadow_engine"), dict) else {}
+             if shadow_engine.get("result") != "unavailable":
+                 failures.append(Failure("daily-execution-cli", "`review run` shadow unavailable must not block the default review path"))
+             review_record_input = payload.get("review_record_input") if isinstance(payload, dict) and isinstance(payload.get("review_record_input"), dict) else {}
+             if review_record_input.get("engine_adapter") != "loom/default-codex-exec":
+                 failures.append(Failure("daily-execution-cli", "`review run` shadow unavailable must preserve the default review record input"))
+ 
++        app_embedded_result = {
++            "decision": "allow",
++            "summary": "Codex App turn/start embedded a structured review result in an app-server text field.",
++            "findings": [
++                {
++                    "id": "codex-app-embedded-json-warn-1",
++                    "summary": "Codex App embedded JSON was recovered from a notification string.",
++                    "severity": "warn",
++                    "rebuttal": None,
++                    "disposition": {
++                        "status": "accepted",
++                        "summary": "Only schema-valid structured review output is accepted from string fields.",
++                    },
++                    "details": "Fixture mirrors app-server agent_message.message / output_text.text wrapping.",
++                    "code_location": None,
++                }
++            ],
++        }
++        app_embedded_notification = {
++            "method": "agent_message",
++            "params": {"message": json.dumps(app_embedded_result, ensure_ascii=False)},
++        }
++        app_embedded_normalized = loom_flow_module.find_normalized_review_payload(app_embedded_notification)
++        if not isinstance(app_embedded_normalized, dict) or app_embedded_normalized.get("decision") != "allow":
++            failures.append(Failure("daily-execution-cli", "`review run` must recover schema-valid Codex App results embedded in app-server text fields"))
++
+         app_default_target = Path(tmp) / "review-run-codex-app-default"
+         prepare_review_target(app_default_target, "review run Codex App host default")
+         app_default_raw = app_default_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
+         app_default_raw.parent.mkdir(parents=True, exist_ok=True)
+         app_default_raw.write_text(
+             json.dumps(
+                 {
+                     "decision": "allow",
+                     "summary": "Codex App default reviewer found the item ready.",
+                     "findings": [
+                         {
+                             "id": "codex-app-default-warn-1",
+@@ -6898,66 +6945,103 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
+                         "merge-ready",
+                         "--target",
+                         str(app_default_target),
+                         "--item",
+                         "INIT-0001",
+                     ],
+                 )
+                 if merge_error:
+                     failures.append(Failure("daily-execution-cli", f"`merge-ready before authored default app review record` failed: {merge_error}"))
+                 elif merge_payload.get("result") == "pass":
+                     failures.append(Failure("daily-execution-cli", "`merge-ready` must not consume default Codex App raw evidence before review record is authored"))
+ 
+-        app_ci_fallback_target = Path(tmp) / "review-run-codex-app-ci-fallback"
+-        prepare_review_target(app_ci_fallback_target, "review run Codex App CI fallback")
+-        app_ci_raw = app_ci_fallback_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
++        app_ci_default_target = Path(tmp) / "review-run-codex-app-ci-default"
++        prepare_review_target(app_ci_default_target, "review run Codex App CI host default")
++        app_ci_raw = app_ci_default_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
+         app_ci_raw.parent.mkdir(parents=True, exist_ok=True)
+         app_ci_raw.write_text(app_default_raw.read_text(encoding="utf-8"), encoding="utf-8")
+-        write_fake_codex(fake_bin / "codex", mode="success")
++        write_fake_codex(fake_bin / "codex", mode="fail_if_called")
+         payload, error = load_command_json(
+             root,
+             [
+                 "python3",
+                 "tools/loom_flow.py",
+                 "review",
+                 "run",
+                 "--target",
+-                str(app_ci_fallback_target),
++                str(app_ci_default_target),
+                 "--item",
+                 "INIT-0001",
+                 "--codex-app-review-app-server",
+                 "stdio://stage3-ci-proof",
+                 "--codex-app-review-thread-id",
+                 "thread-stage3-ci-proof",
+                 "--codex-app-review-cwd",
+-                str(app_ci_fallback_target),
++                str(app_ci_default_target),
+                 "--codex-app-review-raw-file",
+                 ".loom/runtime/tmp/codex-app-review-normalized.json",
+             ],
+             env=prepend_path_env(fake_bin, {"CODEX_CI": "1"}),
+         )
+         if error:
+-            failures.append(Failure("daily-execution-cli", f"`review run` Codex App CI fallback failed: {error}"))
++            failures.append(Failure("daily-execution-cli", f"`review run` Codex App CI host default failed: {error}"))
++        else:
++            require_review_run_payload(
++                failures,
++                category="daily-execution-cli",
++                context="`review run` Codex App CI host default",
++                payload=payload,
++                expected_result={"pass"},
++            )
++            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
++            metadata = payload.get("engine_metadata") if isinstance(payload, dict) and isinstance(payload.get("engine_metadata"), dict) else {}
++            if engine.get("adapter") != "loom/codex-app-review" or metadata.get("selection_source") != "codex-app-host-default":
++                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI host default must prefer valid app proof over CODEX_CI"))
++            if metadata.get("ci_env_present") is not True:
++                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI host default must record that CI env was present"))
++
++        app_ci_fallback_target = Path(tmp) / "review-run-codex-app-ci-missing-proof-fallback"
++        prepare_review_target(app_ci_fallback_target, "review run Codex App CI missing proof fallback")
++        write_fake_codex(fake_bin / "codex", mode="success")
++        payload, error = load_command_json(
++            root,
++            [
++                "python3",
++                "tools/loom_flow.py",
++                "review",
++                "run",
++                "--target",
++                str(app_ci_fallback_target),
++                "--item",
++                "INIT-0001",
++            ],
++            env=prepend_path_env(fake_bin, {"CODEX_CI": "1"}),
++        )
++        if error:
++            failures.append(Failure("daily-execution-cli", f"`review run` Codex App CI missing proof fallback failed: {error}"))
+         else:
+             require_review_run_payload(
+                 failures,
+                 category="daily-execution-cli",
+-                context="`review run` Codex App CI fallback",
++                context="`review run` Codex App CI missing proof fallback",
+                 payload=payload,
+                 expected_result={"pass"},
+             )
+             engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
+             metadata = payload.get("engine_metadata") if isinstance(payload, dict) and isinstance(payload.get("engine_metadata"), dict) else {}
++            missing_host_proof = metadata.get("missing_host_proof") if isinstance(metadata.get("missing_host_proof"), list) else []
+             if engine.get("adapter") != "loom/default-codex-exec" or metadata.get("fallback_reason") != "ci-or-codex-ci":
+-                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI fallback must keep the default codex exec adapter"))
++                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI missing proof fallback must keep the default codex exec adapter"))
++            if not missing_host_proof:
++                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI missing proof fallback must expose missing host proof diagnostics"))
+ 
+         app_unavailable_fallback_target = Path(tmp) / "review-run-codex-app-unavailable-fallback"
+         prepare_review_target(app_unavailable_fallback_target, "review run Codex App unavailable fallback")
+         write_fake_codex(fake_bin / "codex", mode="success")
+         payload, error = load_command_json(
+             root,
+             [
+                 "python3",
+                 "tools/loom_flow.py",
+                 "review",
+                 "run",
+                 "--target",
+@@ -16782,24 +16866,25 @@ def is_within(path: Path, root: Path) -> bool:
+         path.relative_to(root)
+         return True
+     except ValueError:
+         return False
+ 
+ 
+ def collect_failures(root: Path) -> list[Failure]:
+     failures: list[Failure] = []
+     failures.extend(check_required_paths(root, "top-level-dirs", TOP_LEVEL_DIRS))
+     failures.extend(check_required_paths(root, "top-level-files", TOP_LEVEL_FILES))
+     failures.extend(check_required_paths(root, "area-readmes", AREA_READMES))
+     failures.extend(check_required_paths(root, "core-docs", CORE_DOCS))
++    failures.extend(check_command_timeout_budget())
+     failures.extend(check_shared_foundation_contract(root))
+     failures.extend(
+         check_required_paths(root, "automation-frontload-templates", AUTOMATION_FRONTLOAD_TEMPLATES)
+     )
+     failures.extend(check_required_paths(root, "automation-frontload-skills", AUTOMATION_FRONTLOAD_SKILLS))
+     failures.extend(
+         check_required_paths(
+             root,
+             "automation-frontload-execution-support",
+             AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT,
+         )
+     )
+diff --git a/skills/shared/scripts/loom_flow.py b/skills/shared/scripts/loom_flow.py
+index d87a1e0..4afc69c 100644
+--- a/skills/shared/scripts/loom_flow.py
++++ b/skills/shared/scripts/loom_flow.py
+@@ -3,24 +3,25 @@
+ 
+ from __future__ import annotations
+ 
+ import argparse
+ import hashlib
+ import json
+ import os
+ import re
+ import shlex
+ import shutil
+ import subprocess
+ import sys
++import tempfile
+ from datetime import datetime, timezone
+ from pathlib import Path
+ from typing import Any
+ from urllib.error import HTTPError, URLError
+ from urllib.parse import quote
+ from urllib.request import Request, urlopen
+ 
+ sys.dont_write_bytecode = True
+ 
+ from fact_chain_support import (
+     STATUS_FIELDS,
+     STATUS_SOURCE_FIELDS,
+@@ -134,29 +135,50 @@ REVIEW_KINDS = {"general_review", "code_review", "spec_review"}
+ REVIEW_FINDING_SEVERITIES = {"warn", "block"}
+ REVIEW_FINDING_DISPOSITION_STATUSES = {"accepted", "rejected", "deferred"}
+ DEFAULT_REVIEW_ENGINE = "codex"
+ DEFAULT_REVIEW_ADAPTER = "loom/default-codex-exec"
+ CODEX_APP_REVIEW_ADAPTER = "loom/codex-app-review"
+ CODEX_APP_REVIEW_ENGINE = "codex-app-review"
+ CODEX_APP_REVIEW_SHADOW_ADAPTER = CODEX_APP_REVIEW_ADAPTER
+ AUTHORITATIVE_REVIEW_ADAPTERS = {DEFAULT_REVIEW_ADAPTER, CODEX_APP_REVIEW_ADAPTER}
+ SHADOW_REVIEW_ADAPTERS = {CODEX_APP_REVIEW_SHADOW_ADAPTER}
+ CODEX_APP_REVIEW_ENDPOINT_ENV = "LOOM_CODEX_APP_REVIEW_ENDPOINT"
+ CODEX_APP_REVIEW_THREAD_ID_ENV = "LOOM_CODEX_APP_REVIEW_THREAD_ID"
+ CODEX_APP_REVIEW_CWD_ENV = "LOOM_CODEX_APP_REVIEW_CWD"
++CODEX_APP_REVIEW_SESSION_FILE_ENV = "LOOM_CODEX_APP_REVIEW_SESSION_FILE"
+ CODEX_THREAD_ID_ENV = "CODEX_THREAD_ID"
++CODEX_SESSION_ID_ENV = "CODEX_SESSION_ID"
++CODEX_APP_REVIEW_NEW_THREAD_IDS = {"new", "new-thread", "start"}
+ DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS: int | None = None
+ REVIEW_ENGINE_PROFILE_SCHEMA = "loom-review-engine-profile/v1"
+ REVIEW_ENGINE_PROFILE_IDS = {"default", "high-risk", "spec-review", "repeated-blocker"}
+ REVIEW_ENGINE_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
++REVIEW_PROMPT_DIFF_MAX_CHARS = 60_000
++REVIEW_PROMPT_DIFF_PATHS = (
++    ".loom/bootstrap/init-result.json",
++    ".loom/progress",
++    ".loom/reviews",
++    ".loom/specs",
++    ".loom/status/current.md",
++    ".loom/work-items",
++    "docs/methodology/harness/review-execution.md",
++    "src/skills/loom-review/SKILL.md",
++    "src/skills/loom-spec-review/SKILL.md",
++    "src/skills/shared/scripts/loom_check.py",
++    "src/skills/shared/scripts/loom_flow.py",
++    "skills/loom-review/SKILL.md",
++    "skills/loom-spec-review/SKILL.md",
++    "skills/shared/scripts/loom_check.py",
++    "skills/shared/scripts/loom_flow.py",
++)
+ PR_MERGE_GATE_SCHEMA = "loom-pr-merge-gate/v1"
+ CONTROLLED_MERGE_SCHEMA = "loom-controlled-merge/v1"
+ PR_MERGE_GATE_CHECK_NAME = "loom-pr-merge-gate"
+ LIVE_SMOKE_SCHEMA = "loom-live-smoke/v1"
+ HOST_ADAPTER_LIVE_DRIFT_SCHEMA = "loom-host-adapter-live-drift/v1"
+ DYNAMIC_TOOL_LIVE_AVAILABILITY_SCHEMA = "loom-dynamic-tool-live-availability/v1"
+ HOOK_ENVELOPE_SCHEMA = "loom-hook-envelope/v1"
+ HOOK_ENVELOPE_LIVE_CHECK_SCHEMA = "loom-hook-envelope-check/v1"
+ HOOKS_EXTENSION_PROFILE_SCHEMA = "loom-hooks-extension-profile/v1"
+ EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA = "loom-external-orchestrator-conformance/v1"
+ LIVE_SMOKE_RETRY_FALLBACK = "live-smoke-retry-or-record-unavailable"
+ LIVE_SMOKE_REPLAY_FALLBACK = "record-prior-evidence"
+@@ -7609,54 +7631,279 @@ def normalize_authoritative_codex_app_review_text(raw_text: str, *, relative: st
+     except json.JSONDecodeError as exc:
+         return None, [f"Codex App authoritative review output `{relative}` must be normalized JSON: {exc}"]
+     normalized, errors = normalize_engine_review_result(parsed, relative=relative)
+     if errors or normalized is None:
+         return None, errors
+     return normalized, []
+ 
+ 
+ def codex_app_endpoint_socket_path(app_server: str | None) -> Path | None:
+     endpoint = non_empty_str(app_server)
+     if endpoint is None:
+         return None
++    if endpoint == "stdio://":
++        return None
+     if endpoint.startswith("unix://"):
+         path_text = endpoint.removeprefix("unix://")
+     elif endpoint.startswith("/"):
+         path_text = endpoint
+     else:
+         return None
+     if not path_text:
+         return None
+     return Path(path_text).expanduser()
+ 
+ 
++def codex_app_endpoint_is_stdio(app_server: str | None) -> bool:
++    return non_empty_str(app_server) == "stdio://"
++
++
++def codex_app_review_requests_new_thread(thread_id: str | None) -> bool:
++    value = non_empty_str(thread_id)
++    return value.lower() in CODEX_APP_REVIEW_NEW_THREAD_IDS if value else False
++
++
+ def codex_app_endpoint_is_live_capable(app_server: str | None) -> bool:
++    if codex_app_endpoint_is_stdio(app_server):
++        return True
+     socket_path = codex_app_endpoint_socket_path(app_server)
+     return socket_path is not None and socket_path.exists()
+ 
+ 
+-def codex_app_review_bindings_from_args_env(args: argparse.Namespace) -> dict[str, str | None]:
+-    app_server = non_empty_str(args.codex_app_review_app_server) or non_empty_str(os.environ.get(CODEX_APP_REVIEW_ENDPOINT_ENV))
+-    thread_id = (
+-        non_empty_str(args.codex_app_review_thread_id)
+-        or non_empty_str(os.environ.get(CODEX_APP_REVIEW_THREAD_ID_ENV))
+-        or (non_empty_str(os.environ.get(CODEX_THREAD_ID_ENV)) if app_server else None)
++def default_codex_app_control_socket() -> Path | None:
++    candidates: list[Path] = []
++    home = Path.home()
++    candidates.append(home / ".codex/app-server-control/app-server-control.sock")
++    try:
++        uid = os.getuid()
++    except AttributeError:
++        uid = None
++    if uid is not None:
++        candidates.append(Path(tempfile.gettempdir()) / "codex-ipc" / f"ipc-{uid}.sock")
++    for candidate in candidates:
++        if candidate.exists():
++            return candidate
++    return None
++
++
++def discover_codex_app_endpoint() -> tuple[str | None, dict[str, Any]]:
++    socket_path = default_codex_app_control_socket()
++    if socket_path is None:
++        return None, {
++            "source": "default-control-socket",
++            "result": "missing",
++            "searched": [
++                str(Path.home() / ".codex/app-server-control/app-server-control.sock"),
++                str(Path(tempfile.gettempdir()) / "codex-ipc" / f"ipc-{os.getuid()}.sock")
++                if hasattr(os, "getuid")
++                else None,
++            ],
++        }
++    return f"unix://{socket_path}", {
++        "source": "default-control-socket",
++        "result": "found",
++        "locator": str(socket_path),
++    }
++
++
++def load_codex_session_meta(path: Path) -> dict[str, Any] | None:
++    try:
++        with path.open(encoding="utf-8") as handle:
++            for line in handle:
++                try:
++                    entry = json.loads(line)
++                except json.JSONDecodeError:
++                    continue
++                if entry.get("type") != "session_meta":
++                    continue
++                payload = entry.get("payload")
++                return payload if isinstance(payload, dict) else None
++    except OSError:
++        return None
++    return None
++
++
++def codex_session_file_for_id(session_id: str, *, updated_at: str | None = None) -> Path | None:
++    sessions_root = Path.home() / ".codex/sessions"
++    if not sessions_root.exists():
++        return None
++    pattern = f"rollout-*{session_id}.jsonl"
++    search_roots: list[Path] = []
++    timestamp = non_empty_str(updated_at)
++    if timestamp:
++        date_match = re.match(r"^(\d{4})-(\d{2})-(\d{2})", timestamp)
++        if date_match:
++            year, month, day = date_match.groups()
++            dated_root = sessions_root / year / month / day
++            if dated_root.exists():
++                search_roots.append(dated_root)
++    if not search_roots:
++        search_roots.append(sessions_root)
++    try:
++        matches: list[Path] = []
++        for search_root in search_roots:
++            matches.extend(search_root.rglob(pattern))
++        matches = sorted(matches, key=lambda path: path.stat().st_mtime, reverse=True)
++    except OSError:
++        return None
++    return matches[0] if matches else None
++
++
++def discover_codex_app_session_meta(target_root: Path) -> tuple[dict[str, str | None], dict[str, Any]]:
++    session_file_text = non_empty_str(os.environ.get(CODEX_APP_REVIEW_SESSION_FILE_ENV))
++    session_id = non_empty_str(os.environ.get(CODEX_SESSION_ID_ENV)) or non_empty_str(os.environ.get(CODEX_THREAD_ID_ENV))
++    candidates: list[Path] = []
++    if session_file_text:
++        candidates.append(Path(session_file_text).expanduser())
++    if session_id:
++        session_path = codex_session_file_for_id(session_id)
++        if session_path is not None:
++            candidates.append(session_path)
++
++    index_path = Path.home() / ".codex/session_index.jsonl"
++    if not candidates and index_path.exists():
++        try:
++            lines = index_path.read_text(encoding="utf-8").splitlines()[-20:]
++        except OSError:
++            lines = []
++        for line in reversed(lines):
++            try:
++                entry = json.loads(line)
++            except json.JSONDecodeError:
++                continue
++            indexed_id = non_empty_str(entry.get("id") if isinstance(entry, dict) else None)
++            if not indexed_id:
++                continue
++            updated_at = non_empty_str(entry.get("updated_at")) if isinstance(entry, dict) else None
++            session_path = codex_session_file_for_id(indexed_id, updated_at=updated_at)
++            if session_path is not None:
++                candidates.append(session_path)
++
++    seen: set[Path] = set()
++    inspected: list[str] = []
++    for candidate in candidates:
++        try:
++            resolved = candidate.resolve()
++        except OSError:
++            resolved = candidate
++        if resolved in seen:
++            continue
++        seen.add(resolved)
++        inspected.append(str(resolved))
++        meta = load_codex_session_meta(resolved)
++        if not isinstance(meta, dict):
++            continue
++        cwd = non_empty_str(meta.get("cwd"))
++        thread_id = non_empty_str(meta.get("id"))
++        originator = non_empty_str(meta.get("originator"))
++        if not cwd or not thread_id:
++            continue
++        try:
++            cwd_path = Path(cwd).expanduser().resolve()
++        except OSError:
++            continue
++        if cwd_path != target_root:
++            continue
++        return (
++            {"thread_id": thread_id, "thread_cwd": str(cwd_path)},
++            {
++                "source": "codex-session-meta",
++                "result": "found",
++                "session_file": str(resolved),
++                "originator": originator,
++            },
++        )
++    return (
++        {"thread_id": None, "thread_cwd": None},
++        {
++            "source": "codex-session-meta",
++            "result": "missing",
++            "inspected": inspected[:10],
++            "target_root": str(target_root),
++        },
+     )
+-    thread_cwd = non_empty_str(args.codex_app_review_cwd) or non_empty_str(os.environ.get(CODEX_APP_REVIEW_CWD_ENV))
++
++
++def codex_app_missing_host_proof(bindings: dict[str, Any]) -> list[str]:
++    missing: list[str] = []
++    if not non_empty_str(bindings.get("app_server")):
++        missing.append("app-server endpoint locator")
++    if not non_empty_str(bindings.get("thread_id")):
++        missing.append("thread id")
++    if not non_empty_str(bindings.get("thread_cwd")):
++        missing.append("thread cwd proof")
++    return missing
++
++
++def codex_app_review_bindings_from_args_env(args: argparse.Namespace, target_root: Path) -> dict[str, Any]:
++    proof_sources: dict[str, str] = {}
++    discovery: dict[str, Any] = {}
++
++    app_server = non_empty_str(args.codex_app_review_app_server)
++    if app_server:
++        proof_sources["app_server"] = "cli"
++    if not app_server:
++        app_server = non_empty_str(os.environ.get(CODEX_APP_REVIEW_ENDPOINT_ENV))
++        if app_server:
++            proof_sources["app_server"] = CODEX_APP_REVIEW_ENDPOINT_ENV
++    if not app_server:
++        app_server, endpoint_discovery = discover_codex_app_endpoint()
++        discovery["app_server"] = endpoint_discovery
++        if app_server:
++            proof_sources["app_server"] = "default-control-socket"
++
++    thread_id = non_empty_str(args.codex_app_review_thread_id)
++    if thread_id:
++        proof_sources["thread_id"] = "cli"
++    if not thread_id:
++        thread_id = non_empty_str(os.environ.get(CODEX_APP_REVIEW_THREAD_ID_ENV))
++        if thread_id:
++            proof_sources["thread_id"] = CODEX_APP_REVIEW_THREAD_ID_ENV
++    if not thread_id and app_server:
++        thread_id = non_empty_str(os.environ.get(CODEX_THREAD_ID_ENV)) or non_empty_str(os.environ.get(CODEX_SESSION_ID_ENV))
++        if thread_id:
++            proof_sources["thread_id"] = f"{CODEX_THREAD_ID_ENV}/{CODEX_SESSION_ID_ENV}"
++
++    thread_cwd = non_empty_str(args.codex_app_review_cwd)
++    if thread_cwd:
++        proof_sources["thread_cwd"] = "cli"
++    if not thread_cwd:
++        thread_cwd = non_empty_str(os.environ.get(CODEX_APP_REVIEW_CWD_ENV))
++        if thread_cwd:
++            proof_sources["thread_cwd"] = CODEX_APP_REVIEW_CWD_ENV
++
++    if (not thread_id or not thread_cwd) and app_server:
++        session_bindings, session_discovery = discover_codex_app_session_meta(target_root)
++        discovery["session_meta"] = session_discovery
++        if not thread_id and session_bindings.get("thread_id"):
++            thread_id = session_bindings["thread_id"]
++            proof_sources["thread_id"] = "codex-session-meta"
++        if not thread_cwd and session_bindings.get("thread_cwd"):
++            thread_cwd = session_bindings["thread_cwd"]
++            proof_sources["thread_cwd"] = "codex-session-meta"
++
+     raw_file = non_empty_str(args.codex_app_review_raw_file)
++    if raw_file:
++        proof_sources["raw_file"] = "cli"
++    missing_host_proof = codex_app_missing_host_proof(
++        {"app_server": app_server, "thread_id": thread_id, "thread_cwd": thread_cwd}
++    )
+     return {
+         "app_server": app_server,
+         "thread_id": thread_id,
+         "thread_cwd": thread_cwd,
+         "raw_file": raw_file,
++        "proof_sources": proof_sources,
++        "host_discovery": discovery,
++        "missing_host_proof": missing_host_proof,
+     }
+ 
+ 
+ def codex_app_binding_summary(
+     target_root: Path,
+     *,
+     app_server: str | None,
+     thread_id: str | None,
+     thread_cwd: str | None,
+     reviewed_head: str,
+     raw_file: str | None,
+ ) -> dict[str, Any]:
+@@ -7686,145 +7933,246 @@ def codex_app_binding_summary(
+         "reviewed_head": reviewed_head,
+         "raw_source": raw_source,
+         "live_endpoint_capable": codex_app_endpoint_is_live_capable(app_server),
+     }
+ 
+ 
+ def select_review_adapter(
+     args: argparse.Namespace,
+     target_root: Path,
+     *,
+     reviewed_head: str,
+ ) -> dict[str, Any]:
+-    bindings = codex_app_review_bindings_from_args_env(args)
++    bindings = codex_app_review_bindings_from_args_env(args, target_root)
++    binding_values = {
++        "app_server": bindings.get("app_server"),
++        "thread_id": bindings.get("thread_id"),
++        "thread_cwd": bindings.get("thread_cwd"),
++        "raw_file": bindings.get("raw_file"),
++    }
+     explicit_adapter = non_empty_str(args.engine_adapter)
+     if explicit_adapter:
+         return {
+             "adapter": explicit_adapter,
+             "selection_source": "explicit-cli
+
+[diff excerpt truncated at 60000 characters]
+```
+
+Findings 写作要求：
+- 每条 finding 必须包含 `id`、`summary`、`severity`、`rebuttal`、`disposition`。
+- `severity` 只允许 `warn` 或 `block`。
+- `disposition.status` 只允许 `accepted`、`rejected`、`deferred`。
+- 若没有阻断项但仍有后续动作，可输出 `warn` findings。
+
+Decision 规则：
+- `allow`: 当前事项已通过 formal review。
+- `block`: 存在明确阻断项。
+- `fallback`: 当前输入不足或需要先回到前序 checkpoint 再继续。

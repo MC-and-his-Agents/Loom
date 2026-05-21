@@ -1,0 +1,16 @@
+{
+  "findings": [
+    {
+      "code_location": null,
+      "details": "Current authored review record still references b42fd122, while this formal review is being produced for 4ad44ca. Per WI-863 prompt/rubric changes, that stale record is historical input only during replacement evidence generation; no unresolved finding, validation drift, or uncovered semantic diff was identified from the current change snapshot.",
+      "disposition": {
+        "status": "accepted",
+        "summary": "Non-blocking historical-input condition; this replacement review output can be used to refresh the single review record."
+      },
+      "id": "wi-863-stale-prior-record-nonblocking",
+      "rebuttal": null,
+      "severity": "warn",
+      "summary": "Prior review record is stale but not a blocker for this replacement review run."
+    }
+  ]
+}
