@@ -12,10 +12,10 @@
 - Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py
 - Closing Condition: PR merge 后 closeout 消费 #847 issue、PR、merge commit、Project #4 状态，并解除 #851 的 #847 blocker。
 - Current Checkpoint: merge-ready
-- Current Stop: WI-847 implementation and authored reviews are complete; py_compile_clean, skills_surface check, version bump check, git diff --check, fact-chain, and full tools/loom_check.py passed. Implementation review binds to head 0eae2874bf46f892eaa80aa2f73b50f4a5bdf4bb after carrier-only spec review and WI-811 terminal sync.
+- Current Stop: WI-847 implementation and authored reviews are complete; py_compile_clean, skills_surface check, version bump check, git diff --check, fact-chain, and full tools/loom_check.py passed. Implementation review binds to head dee989d2e76b8908a1898274d7590d60045cd577 after carrier-only spec review, WI-811 terminal sync, and installer version bump.
 - Next Step: Run checkpoint merge, push branch, open PR for #847, wait for checks, then controlled merge and closeout if branch protection allows.
 - Blockers: None recorded.
-- Latest Validation Summary: py_compile_clean passed for source/generated loom_flow.py and loom_check.py; skills_surface check passed; version bump check reported no installer behavior changes; git diff --check passed; fact-chain for WI-847 passed; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py passed with checked 38 surfaces.
+- Latest Validation Summary: py_compile_clean passed for source/generated loom_flow.py and loom_check.py; skills_surface check passed; version bump check passed for 0.1.128 -> 0.1.129; git diff --check passed; fact-chain for WI-847 passed; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py passed with checked 38 surfaces.
 - Recovery Boundary: Only #847 approval bypass governance lint behavior, pr-gate approval boundary output, installed runtime regression fixtures, generated skills surface, WI-847 carriers, and pr-merge-gate documentation are in scope.
 - Current Lane: branch work/847-review-approval-bypass-lint in formal worktree /Users/mc/dev/Loom-work-847-review-approval-bypass-lint, bound to issue #847 and parent #844; baseline origin/main@04e3e6b89cf162636d47a552c665d516c0da5d0d.
 
