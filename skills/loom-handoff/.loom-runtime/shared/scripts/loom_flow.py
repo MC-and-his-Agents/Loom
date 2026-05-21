@@ -8119,6 +8119,17 @@ def find_normalized_review_payload(payload: Any) -> dict[str, Any] | None:
     normalized, errors = normalize_engine_review_result(payload, relative="app-server turn/start output")
     if normalized is not None and not errors:
         return normalized
+    if isinstance(payload, str):
+        text = payload.strip()
+        if not text or not text.startswith("{"):
+            return None
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            return None
+        if parsed is payload:
+            return None
+        return find_normalized_review_payload(parsed)
     if isinstance(payload, dict):
         for value in payload.values():
             found = find_normalized_review_payload(value)

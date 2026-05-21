@@ -6818,6 +6818,32 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             if review_record_input.get("engine_adapter") != "loom/default-codex-exec":
                 failures.append(Failure("daily-execution-cli", "`review run` shadow unavailable must preserve the default review record input"))
 
+        app_embedded_result = {
+            "decision": "allow",
+            "summary": "Codex App turn/start embedded a structured review result in an app-server text field.",
+            "findings": [
+                {
+                    "id": "codex-app-embedded-json-warn-1",
+                    "summary": "Codex App embedded JSON was recovered from a notification string.",
+                    "severity": "warn",
+                    "rebuttal": None,
+                    "disposition": {
+                        "status": "accepted",
+                        "summary": "Only schema-valid structured review output is accepted from string fields.",
+                    },
+                    "details": "Fixture mirrors app-server agent_message.message / output_text.text wrapping.",
+                    "code_location": None,
+                }
+            ],
+        }
+        app_embedded_notification = {
+            "method": "agent_message",
+            "params": {"message": json.dumps(app_embedded_result, ensure_ascii=False)},
+        }
+        app_embedded_normalized = loom_flow_module.find_normalized_review_payload(app_embedded_notification)
+        if not isinstance(app_embedded_normalized, dict) or app_embedded_normalized.get("decision") != "allow":
+            failures.append(Failure("daily-execution-cli", "`review run` must recover schema-valid Codex App results embedded in app-server text fields"))
+
         app_default_target = Path(tmp) / "review-run-codex-app-default"
         prepare_review_target(app_default_target, "review run Codex App host default")
         app_default_raw = app_default_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
