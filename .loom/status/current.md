@@ -6,7 +6,7 @@
 - Goal: 实现 GitHub profile maturity detector，读取仓库现有 GitHub 与 Loom 信号并输出 `light | standard | strong | blocked` 判断。
 - Scope: 更新 GitHub profile upgrade adoption contract、governance profile runtime、loom_check fixture contract、generated skills surface 和 demo runtime；仅覆盖 #809 detector 与 maturity judgment，不写文件、不修改 GitHub、不启用 blocking gate。
 - Execution Path: adoption/github-profile-maturity-detector
-- Workspace Entry: /Users/mc/dev/Loom-work-809-github-profile-maturity-detector
+- Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-809.md
 - Review Entry: .loom/reviews/WI-809.json
 - Validation Entry: python3 tools/skills_surface.py check; python3 tools/version_surface_check.py; python3 tools/host_adapter_check.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py; github profile maturity fixture smoke; governance-profile status/upgrade-plan/upgrade smoke; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py; PR checks.
