@@ -1,13 +1,13 @@
 ---
 name: loom-story
-description: Turn product context, vision, roadmap, host issues, notes, or discussion summaries into a Loom-consumable User Story and separate Story Readiness result before formal spec / plan work.
+description: Turn product context, vision, roadmap, host issues, notes, or discussion summaries into a Loom-consumable User Story, Story Readiness, and business semantic confirmation point before formal spec / plan work.
 ---
 
 # Loom Story
 
 `loom-story` 承接 story-to-delivery intake 场景。
 
-它把产品上下文收束为 User Story 与 Story Readiness，但不替代 `Work Item`、`spec.md`、`plan.md`、review、merge-ready 或 closeout。
+它把产品上下文收束为 User Story、Story Readiness 与 Story Business Confirmation，但不替代 `Work Item`、`spec.md`、`plan.md`、review、merge-ready 或 closeout。
 
 ## 1. 使用时机
 
@@ -15,6 +15,7 @@ description: Turn product context, vision, roadmap, host issues, notes, or discu
 
 - 将 vision、roadmap、notes、host issue 或讨论内容整理成 User Story
 - 判断 story 是否足够进入 formal spec / plan
+- 需要用户轻量确认 story 的业务语义，或根据用户修订意见回到 story shaping
 - 需要把 story acceptance scenarios 映射到后续 `spec.md` / `plan.md`
 - 需要检查 actor specificity 或 scenario coverage
 
@@ -30,7 +31,7 @@ description: Turn product context, vision, roadmap, host issues, notes, or discu
 
 ## 3. 输出职责
 
-执行者必须在实际 shaping 输出中保持三类分离结果：
+执行者必须在实际 shaping 输出中保持四类分离结果：
 
 - User Story
   - actor
@@ -38,12 +39,18 @@ description: Turn product context, vision, roadmap, host issues, notes, or discu
   - outcome
   - business value
   - acceptance scenarios
+  - out of scope
   - provenance / context locators
 - Story Readiness
   - decision: `ready | needs-shaping | blocked | not-applicable`
   - rationale
   - missing inputs
   - spec / plan entry expectation
+- Story Business Confirmation
+  - decision: `pending | confirmed | revision-requested | not-applicable`
+  - confirmation scope: actor、capability、outcome、business value、acceptance scenarios、out of scope
+  - revision request 或 bypass rationale
+  - confirmation source
 
 User Story 主体不得包含 delivery handoff、spec locator、plan locator、recovery state、review findings、PR summary、merge-ready 或 closeout state。
 
@@ -54,9 +61,12 @@ User Story 主体不得包含 delivery handoff、spec locator、plan locator、r
 - actor 是否具体，避免在已有具体角色时写成模糊 `User`
 - outcome 是否可观察
 - business value 是否说明进入交付链的理由
+- out of scope 是否足够清楚，避免后续 spec / plan 默认扩大范围
 - happy path 是否存在
 - negative path、edge case、alternative path、security/permission、environment/interruption 是否按风险覆盖或标记 `not_applicable`
 - story 是否过大，需要拆成多个 Work Item 或 FR
+- 若 story 涉及业务语义，是否已经请求用户确认；用户直接说「确认」即可记录 `confirmed`
+- 若用户给出修订意见，必须回到 story shaping，不得直接进入 spec / plan
 
 ## 5. Delivery Boundary
 
@@ -64,6 +74,7 @@ User Story 主体不得包含 delivery handoff、spec locator、plan locator、r
 
 - `spec.md` 消费 story scenarios 形成 behavior contract
 - `plan.md` 将 scenarios 映射到 tests、checks、manual validation 或 `not_applicable` evidence
+- `pending` 或 `revision-requested` 的 Story Business Confirmation 阻止进入 formal spec / plan；`not-applicable` 必须说明纯治理、维护、格式或链接类 bypass rationale
 - `Work Item` 仍是唯一执行入口
 
 输入信号与输出合同见：

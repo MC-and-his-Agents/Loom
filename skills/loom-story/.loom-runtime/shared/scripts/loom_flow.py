@@ -671,7 +671,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     reconciliation.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
     reconciliation.add_argument("--comment", help="Optional closeout comment for issue sync")
     reconciliation.add_argument("--comment-file", help="Read closeout comment body from a file")
-    reconciliation.add_argument("--dry-run", action="store_true", help="Preview reconciliation sync actions without writing GitHub state")
+    reconciliation.add_argument("--dry-run", action="store_true", default=True, help="Preview reconciliation sync actions without writing GitHub state; this is the default")
+    reconciliation.add_argument("--apply", dest="dry_run", action="store_false", help="Apply the audited safe sync plan to GitHub control-plane state")
 
     shadow = subparsers.add_parser("shadow-parity", help="Compare Loom and repo-native parity surfaces without changing merge gates")
     shadow.add_argument("--target", required=True, help="Target repository root")
@@ -820,7 +821,7 @@ def story_flow_payload(
             {
                 "name": "story-contract",
                 "result": "pass",
-                "summary": "User Story and Story Readiness contracts are separated from delivery state.",
+                "summary": "User Story, Story Readiness, and Story Business Confirmation contracts are separated from delivery state.",
                 "missing_inputs": [],
                 "fallback_to": None,
             }
@@ -838,6 +839,7 @@ def story_flow_payload(
                 "outcome",
                 "business_value",
                 "acceptance_scenarios",
+                "out_of_scope",
                 "provenance",
             ],
             "forbidden_fields": [
@@ -873,10 +875,34 @@ def story_flow_payload(
             ],
             "authority_boundary": "readiness judges entry into spec / plan, not product strategy correctness.",
         },
+        "business_confirmation_contract": {
+            "schema_version": "loom-story-business-confirmation/v1",
+            "decisions": ["pending", "confirmed", "revision-requested", "not-applicable"],
+            "required_fields": [
+                "decision",
+                "confirmation_scope",
+                "confirmation_source",
+                "revision_request",
+                "bypass_rationale",
+            ],
+            "confirmation_scope": [
+                "actor",
+                "capability",
+                "outcome",
+                "business_value",
+                "acceptance_scenarios",
+                "out_of_scope",
+            ],
+            "user_fast_path": "plain `确认` records confirmed when the visible story is the confirmation subject",
+            "revision_rule": "revision-requested returns to story shaping before spec / plan consumption",
+            "not_applicable_rule": "pure governance, maintenance, formatting, link repair, or carrier-only changes may bypass with rationale",
+            "authority_boundary": "confirmation covers business semantics only, not technical solution, test strategy, review quality, or code quality.",
+        },
         "delivery_consumption_contract": {
             "execution_entry": "Work Item",
-            "spec_consumes": "story scenario id / locator as behavior contract input",
-            "plan_consumes": "story scenario id mapped to tests, checks, manual validation, or not_applicable evidence",
+            "spec_consumes": "confirmed or not_applicable story scenario id / locator as behavior contract input",
+            "plan_consumes": "confirmed or not_applicable story scenario id mapped to tests, checks, manual validation, or not_applicable evidence",
+            "blocks_on_confirmation": ["pending", "revision-requested"],
             "forbidden": "story must not author recovery, review, PR, merge-ready, or closeout state",
         },
         "contract": {
@@ -12850,52 +12876,181 @@ def reconciliation_audit_payload(
     )
 
 
-def reconciliation_sync_plan(audit_payload: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    plan: list[dict[str, Any]] = []
+def reconciliation_action_source(finding: dict[str, Any], index: int) -> dict[str, Any]:
+    return {
+        "index": index,
+        "kind": finding.get("kind"),
+        "severity": finding.get("severity"),
+        "subject": finding.get("subject"),
+        "evidence": finding.get("evidence") if isinstance(finding.get("evidence"), dict) else {},
+        "proof_locator": f"audit.findings[{index}].evidence",
+    }
+
+
+def reconciliation_planned_action(
+    *,
+    action: str,
+    finding: dict[str, Any],
+    finding_index: int,
+    subject: object,
+    write_target: dict[str, Any],
+    rollback_note: str,
+    **extra: Any,
+) -> dict[str, Any]:
+    return {
+        "kind": finding.get("kind"),
+        "subject": subject,
+        "action": action,
+        "source_finding": reconciliation_action_source(finding, finding_index),
+        "proof_locator": f"audit.findings[{finding_index}].evidence",
+        "write_target": write_target,
+        "rollback_note": rollback_note,
+        **extra,
+    }
+
+
+def reconciliation_skipped_action(
+    *,
+    action: str,
+    finding: dict[str, Any],
+    finding_index: int,
+    subject: object,
+    reason: str,
+    manual: bool = False,
+    **extra: Any,
+) -> dict[str, Any]:
+    return {
+        "kind": finding.get("kind"),
+        "subject": subject,
+        "action": action,
+        "reason": reason,
+        "source_finding": reconciliation_action_source(finding, finding_index),
+        "proof_locator": f"audit.findings[{finding_index}].evidence",
+        "manual": manual,
+        **extra,
+    }
+
+
+def reconciliation_sync_plan(audit_payload: dict[str, Any], *, include_closeout_comment: bool = False) -> dict[str, Any]:
+    planned_actions: list[dict[str, Any]] = []
     skipped_actions: list[dict[str, Any]] = []
+    manual_actions: list[dict[str, Any]] = []
     findings = audit_payload.get("findings")
+    proof = {
+        "audit_result": audit_payload.get("result"),
+        "audit_operation": audit_payload.get("operation"),
+        "finding_count": len(findings) if isinstance(findings, list) else 0,
+        "planned_action_count": 0,
+        "skipped_action_count": 0,
+        "manual_action_count": 0,
+    }
     if not isinstance(findings, list):
-        return plan, skipped_actions
-    for finding in findings:
+        return {
+            "schema_version": "loom-safe-sync-plan/v1",
+            "result": "block",
+            "planned_actions": planned_actions,
+            "skipped_actions": skipped_actions,
+            "manual_actions": [
+                {
+                    "action": "manual_reconciliation",
+                    "reason": "audit payload does not expose findings as a list",
+                    "manual": True,
+                }
+            ],
+            "proof": proof,
+        }
+    for index, finding in enumerate(findings):
         if not isinstance(finding, dict):
             continue
         severity = finding.get("severity")
         kind = finding.get("kind")
         subject = finding.get("subject")
         evidence = finding.get("evidence")
+        if severity == "block":
+            manual_actions.append(
+                reconciliation_skipped_action(
+                    action="manual_reconciliation",
+                    finding=finding,
+                    finding_index=index,
+                    subject=subject,
+                    reason="block findings must be resolved manually before reconciliation sync can write host state",
+                    manual=True,
+                )
+            )
+            continue
+        if severity == "warn":
+            skipped_actions.append(
+                reconciliation_skipped_action(
+                    action="none",
+                    finding=finding,
+                    finding_index=index,
+                    subject=subject,
+                    reason="warn findings are retained as evidence and do not trigger host writes",
+                )
+            )
+            continue
         if severity != "fix-needed":
             continue
         if kind in {"merged_but_open", "absorbed_but_open"}:
-            plan.append(
-                {
-                    "kind": kind,
-                    "subject": subject,
-                    "action": "close_issue",
-                    "issue_number": audit_payload.get("issue", {}).get("number"),
-                }
+            issue_number = audit_payload.get("issue", {}).get("number")
+            if not isinstance(issue_number, int):
+                skipped_actions.append(
+                    reconciliation_skipped_action(
+                        action="close_issue",
+                        finding=finding,
+                        finding_index=index,
+                        subject=subject,
+                        reason="cannot close issue because audit proof is missing issue.number",
+                    )
+                )
+                continue
+            if include_closeout_comment:
+                planned_actions.append(
+                    reconciliation_planned_action(
+                        action="add_closeout_comment",
+                        finding=finding,
+                        finding_index=index,
+                        subject=subject,
+                        write_target={"host": "github", "type": "issue_comment", "issue_number": issue_number},
+                        rollback_note="delete the closeout comment from the GitHub issue if the sync is reverted.",
+                        issue_number=issue_number,
+                    )
+                )
+            planned_actions.append(
+                reconciliation_planned_action(
+                    action="close_issue",
+                    finding=finding,
+                    finding_index=index,
+                    subject=subject,
+                    write_target={"host": "github", "type": "issue", "issue_number": issue_number, "field": "state"},
+                    rollback_note="reopen the GitHub issue if the closeout basis is later invalidated.",
+                    issue_number=issue_number,
+                )
             )
             continue
         if kind == "project_drift":
             project = audit_payload.get("project")
             if not isinstance(project, dict):
                 skipped_actions.append(
-                    {
-                        "kind": kind,
-                        "subject": subject,
-                        "action": "set_project_status",
-                        "reason": "project_drift is missing project context",
-                    }
+                    reconciliation_skipped_action(
+                        action="set_project_done",
+                        finding=finding,
+                        finding_index=index,
+                        subject=subject,
+                        reason="project_drift is missing project context",
+                    )
                 )
                 continue
             drifts = evidence.get("drifts") if isinstance(evidence, dict) else None
             if not isinstance(drifts, list):
                 skipped_actions.append(
-                    {
-                        "kind": kind,
-                        "subject": subject,
-                        "action": "set_project_status",
-                        "reason": "project_drift is missing drift details",
-                    }
+                    reconciliation_skipped_action(
+                        action="set_project_done",
+                        finding=finding,
+                        finding_index=index,
+                        subject=subject,
+                        reason="project_drift is missing drift details",
+                    )
                 )
                 continue
             for drift in drifts:
@@ -12905,13 +13060,15 @@ def reconciliation_sync_plan(audit_payload: dict[str, Any]) -> tuple[list[dict[s
                 reason = str(drift.get("reason", ""))
                 expected_done = drift.get("expected_done")
                 if expected_done is not True:
-                    skipped_actions.append(
-                        {
-                            "kind": kind,
-                            "subject": drift_subject,
-                            "action": "set_project_status",
-                            "reason": f"requires manual reconciliation: {reason}",
-                        }
+                    manual_actions.append(
+                        reconciliation_skipped_action(
+                            action="set_project_done",
+                            finding=finding,
+                            finding_index=index,
+                            subject=drift_subject,
+                            reason=f"requires manual reconciliation: {reason}",
+                            manual=True,
+                        )
                     )
                     continue
                 item_key = None
@@ -12922,12 +13079,13 @@ def reconciliation_sync_plan(audit_payload: dict[str, Any]) -> tuple[list[dict[s
                 item = project.get(item_key) if item_key else None
                 if not isinstance(item, dict):
                     skipped_actions.append(
-                        {
-                            "kind": kind,
-                            "subject": drift_subject,
-                            "action": "set_project_status",
-                            "reason": "cannot be synced because the project item is missing",
-                        }
+                        reconciliation_skipped_action(
+                            action="set_project_done",
+                            finding=finding,
+                            finding_index=index,
+                            subject=drift_subject,
+                            reason="cannot be synced because the project item is missing",
+                        )
                     )
                     continue
                 item_id = item.get("id")
@@ -12936,25 +13094,36 @@ def reconciliation_sync_plan(audit_payload: dict[str, Any]) -> tuple[list[dict[s
                 done_option_id = project.get("done_option_id")
                 if not all(isinstance(value, str) and value for value in (item_id, project_id, status_field_id, done_option_id)):
                     skipped_actions.append(
-                        {
-                            "kind": kind,
-                            "subject": drift_subject,
-                            "action": "set_project_status",
-                            "reason": "is missing project status identifiers",
-                        }
+                        reconciliation_skipped_action(
+                            action="set_project_done",
+                            finding=finding,
+                            finding_index=index,
+                            subject=drift_subject,
+                            reason="is missing project status identifiers",
+                        )
                     )
                     continue
-                plan.append(
-                    {
-                        "kind": kind,
-                        "subject": drift_subject,
-                        "action": "set_project_done",
-                        "project_number": project.get("number"),
-                        "project_id": project_id,
-                        "item_id": item_id,
-                        "status_field_id": status_field_id,
-                        "done_option_id": done_option_id,
-                    }
+                planned_actions.append(
+                    reconciliation_planned_action(
+                        action="set_project_done",
+                        finding=finding,
+                        finding_index=index,
+                        subject=drift_subject,
+                        write_target={
+                            "host": "github",
+                            "type": "project_item",
+                            "project_number": project.get("number"),
+                            "item_id": item_id,
+                            "field": "Status",
+                            "value": "Done",
+                        },
+                        rollback_note="set the Project item Status back to its prior value if the closeout basis is invalidated.",
+                        project_number=project.get("number"),
+                        project_id=project_id,
+                        item_id=item_id,
+                        status_field_id=status_field_id,
+                        done_option_id=done_option_id,
+                    )
                 )
             continue
         if kind == "parent_drift":
@@ -12962,32 +13131,49 @@ def reconciliation_sync_plan(audit_payload: dict[str, Any]) -> tuple[list[dict[s
             parent_number = parent.get("number") if isinstance(parent, dict) else None
             if parent_number is None:
                 skipped_actions.append(
-                    {
-                        "kind": kind,
-                        "subject": subject,
-                        "action": "close_issue",
-                        "reason": "parent_drift is missing parent issue context",
-                    }
+                    reconciliation_skipped_action(
+                        action="close_issue",
+                        finding=finding,
+                        finding_index=index,
+                        subject=subject,
+                        reason="parent_drift is missing parent issue context",
+                    )
                 )
                 continue
-            plan.append(
-                {
-                    "kind": kind,
-                    "subject": subject,
-                    "action": "close_issue",
-                    "issue_number": parent_number,
-                }
+            planned_actions.append(
+                reconciliation_planned_action(
+                    action="close_issue",
+                    finding=finding,
+                    finding_index=index,
+                    subject=subject,
+                    write_target={"host": "github", "type": "issue", "issue_number": parent_number, "field": "state"},
+                    rollback_note="reopen the parent issue if a child gap is later found unresolved.",
+                    issue_number=parent_number,
+                )
             )
             continue
-        skipped_actions.append(
-            {
-                "kind": kind,
-                "subject": subject,
-                "action": "unsupported",
-                "reason": f"unsupported reconciliation finding `{kind}`",
-            }
+        manual_actions.append(
+            reconciliation_skipped_action(
+                action="manual_reconciliation",
+                finding=finding,
+                finding_index=index,
+                subject=subject,
+                reason=f"unsupported reconciliation finding `{kind}`",
+                manual=True,
+            )
         )
-    return plan, skipped_actions
+    proof["planned_action_count"] = len(planned_actions)
+    proof["skipped_action_count"] = len(skipped_actions)
+    proof["manual_action_count"] = len(manual_actions)
+    result = "block" if manual_actions or skipped_actions else "pass"
+    return {
+        "schema_version": "loom-safe-sync-plan/v1",
+        "result": result,
+        "planned_actions": planned_actions,
+        "skipped_actions": skipped_actions,
+        "manual_actions": manual_actions,
+        "proof": proof,
+    }
 
 
 def closeout_reconciliation_result(
@@ -14103,19 +14289,28 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
         return emit(payload)
 
     if payload.get("result") == "block":
+        sync_plan = reconciliation_sync_plan(payload, include_closeout_comment=bool(comment_body))
         return emit(
             {
                 **payload,
                 "operation": "sync",
                 "summary": "reconciliation sync stopped because audit returned block findings or missing inputs.",
+                "sync_plan": sync_plan,
                 "applied_actions": [],
-                "skipped_actions": [],
+                "skipped_actions": sync_plan["skipped_actions"],
+                "manual_actions": sync_plan["manual_actions"],
                 "remaining_findings": list(payload.get("findings", [])),
+                "audit": payload,
+                "refreshed_audit": payload,
+                "dry_run": args.dry_run,
                 "runtime_state": runtime_state,
             }
         )
 
-    applied_actions, skipped_actions = reconciliation_sync_plan(payload)
+    sync_plan = reconciliation_sync_plan(payload, include_closeout_comment=bool(comment_body))
+    planned_actions = sync_plan["planned_actions"]
+    skipped_actions = list(sync_plan["skipped_actions"])
+    manual_actions = list(sync_plan["manual_actions"])
     remaining_findings = [
         finding
         for finding in payload.get("findings", [])
@@ -14124,11 +14319,11 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
     sync_missing: list[str] = []
 
     if args.dry_run:
-        dry_run_actions = [{**action, "dry_run": True} for action in applied_actions]
+        dry_run_actions = [{**action, "dry_run": True} for action in planned_actions]
         has_unresolved_fix_needed = any(
             isinstance(finding, dict) and finding.get("severity") == "fix-needed"
             for finding in payload.get("findings", [])
-        ) and bool(skipped_actions)
+        ) and (bool(skipped_actions) or bool(manual_actions))
         return emit(
             {
                 **payload,
@@ -14139,9 +14334,14 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
                     if not has_unresolved_fix_needed
                     else "reconciliation sync dry-run found fix-needed drift that still requires manual reconciliation."
                 ),
-                "applied_actions": dry_run_actions,
+                "sync_plan": {**sync_plan, "planned_actions": dry_run_actions},
+                "applied_actions": [],
+                "planned_actions": dry_run_actions,
                 "skipped_actions": skipped_actions,
+                "manual_actions": manual_actions,
                 "remaining_findings": list(payload.get("findings", [])),
+                "audit": payload,
+                "refreshed_audit": payload,
                 "dry_run": True,
                 "fallback_to": None if not has_unresolved_fix_needed else "manual-reconciliation",
                 "runtime_state": runtime_state,
@@ -14149,47 +14349,58 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
         )
 
     executed_actions: list[dict[str, Any]] = []
-    for action in applied_actions:
+    for action in planned_actions:
         step_kind = action.get("action")
         subject = action.get("subject")
+        if not isinstance(action.get("source_finding"), dict) or not isinstance(action.get("write_target"), dict) or not isinstance(action.get("proof_locator"), str):
+            sync_missing.append(f"{subject} is missing safe sync proof for `{step_kind}`")
+            skipped_actions.append(
+                {
+                    **action,
+                    "reason": "missing safe sync proof, write target, or source finding",
+                }
+            )
+            continue
+        if step_kind == "add_closeout_comment":
+            issue_number = action.get("issue_number")
+            if not isinstance(issue_number, int):
+                sync_missing.append(f"{subject} is missing an issue number for closeout comment sync")
+                skipped_actions.append(
+                    {
+                        **action,
+                        "reason": "missing issue number for closeout comment sync",
+                    }
+                )
+                continue
+            if not comment_body:
+                sync_missing.append(f"{subject} has an add_closeout_comment plan action without comment body")
+                skipped_actions.append({**action, "reason": "missing closeout comment body"})
+                continue
+            comment_result = run_process(
+                [
+                    "gh",
+                    "issue",
+                    "comment",
+                    str(issue_number),
+                    "--repo",
+                    f"{owner}/{repo_name}",
+                    "--body",
+                    comment_body,
+                ],
+                target_root,
+            )
+            if comment_result.returncode != 0:
+                sync_missing.append(comment_result.stderr.strip() or f"failed to comment on issue #{issue_number}")
+                skipped_actions.append({**action, "reason": f"failed to comment on issue #{issue_number}"})
+                continue
+            executed_actions.append(action)
+            continue
         if step_kind == "close_issue":
             issue_number = action.get("issue_number")
             if not isinstance(issue_number, int):
                 sync_missing.append(f"{subject} is missing an issue number for reconciliation sync")
-                skipped_actions.append(
-                    {
-                        "kind": action.get("kind"),
-                        "subject": subject,
-                        "action": step_kind,
-                        "reason": "missing issue number for reconciliation sync",
-                    }
-                )
+                skipped_actions.append({**action, "reason": "missing issue number for reconciliation sync"})
                 continue
-            if comment_body and issue_number == args.issue:
-                comment_result = run_process(
-                    [
-                        "gh",
-                        "issue",
-                        "comment",
-                        str(issue_number),
-                        "--repo",
-                        f"{owner}/{repo_name}",
-                        "--body",
-                        comment_body,
-                    ],
-                    target_root,
-                )
-                if comment_result.returncode != 0:
-                    sync_missing.append(comment_result.stderr.strip() or f"failed to comment on issue #{issue_number}")
-                    skipped_actions.append(
-                        {
-                            "kind": action.get("kind"),
-                            "subject": subject,
-                            "action": step_kind,
-                            "reason": f"failed to comment on issue #{issue_number}",
-                        }
-                    )
-                    continue
             close_result = run_process(
                 ["gh", "issue", "close", str(issue_number), "--repo", f"{owner}/{repo_name}"],
                 target_root,
@@ -14198,9 +14409,7 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
                 sync_missing.append(close_result.stderr.strip() or f"failed to close issue #{issue_number}")
                 skipped_actions.append(
                     {
-                        "kind": action.get("kind"),
-                        "subject": subject,
-                        "action": step_kind,
+                        **action,
                         "reason": close_result.stderr.strip() or f"failed to close issue #{issue_number}",
                     }
                 )
@@ -14219,9 +14428,7 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
                 sync_missing.extend(step_errors)
                 skipped_actions.append(
                     {
-                        "kind": action.get("kind"),
-                        "subject": subject,
-                        "action": step_kind,
+                        **action,
                         "reason": "; ".join(step_errors),
                     }
                 )
@@ -14231,9 +14438,7 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
         sync_missing.append(f"{subject} uses unsupported sync action `{step_kind}`")
         skipped_actions.append(
             {
-                "kind": action.get("kind"),
-                "subject": subject,
-                "action": step_kind,
+                **action,
                 "reason": f"unsupported sync action `{step_kind}`",
             }
         )
@@ -14271,10 +14476,14 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
             "summary": summary,
             "missing_inputs": list(dict.fromkeys(sync_missing + list(refreshed_payload.get("missing_inputs", [])))),
             "fallback_to": fallback_to,
+            "sync_plan": sync_plan,
             "applied_actions": executed_actions,
             "skipped_actions": skipped_actions,
+            "manual_actions": manual_actions,
             "remaining_findings": remaining_findings,
             "audit": payload,
+            "refreshed_audit": refreshed_payload,
+            "dry_run": False,
             "runtime_state": runtime_state,
         }
     )

@@ -48,6 +48,7 @@
 - 当前执行路径
 - 上位 requirement / `FR`
 - 上游 User Story locator，若当前事项由 story intake 形成
+- Story Business Confirmation locator 或 `not_applicable` rationale，若当前事项由 story intake 形成
 - 关联工件
 - 工作现场入口
 - 恢复主入口
@@ -98,7 +99,7 @@
 
 - `FR` 已存在
 - formal spec 已绑定到 `FR`
-- 若存在 User Story，formal spec 只消费 story locator 与 acceptance scenario 映射
+- 若存在 User Story，formal spec 只消费 story locator、Story Business Confirmation locator 与 acceptance scenario 映射；`pending` 或 `revision-requested` 不能进入 formal spec
 - 当前 `Work Item` 只通过关联关系消费该 formal spec
 - `spec_review` 未通过前不得进入 implementation PR
 

@@ -217,6 +217,7 @@ SKILL_SIGNAL_RULES: dict[str, tuple[str, ...]] = {
         "user story",
         "story readiness",
         "story shaping",
+        "story business confirmation",
         "story-to-delivery",
         "product context",
         "acceptance scenarios",
@@ -224,6 +225,9 @@ SKILL_SIGNAL_RULES: dict[str, tuple[str, ...]] = {
         "scenario coverage",
         "用户故事",
         "故事准入",
+        "业务语义确认",
+        "确认 story",
+        "修订 story",
         "产品上下文",
     ),
     "loom-pre-review": (

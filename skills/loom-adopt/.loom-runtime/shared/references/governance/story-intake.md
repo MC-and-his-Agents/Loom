@@ -2,7 +2,7 @@
 
 本文件定义 Loom 的 Story-to-Delivery Intake 合同。
 
-它承接 `#649`，把 vision、roadmap、host issue、notes 或多轮产品讨论收束为可被正式交付链消费的 User Story 与 Story Readiness 结果。
+它承接 `#649`，把 vision、roadmap、host issue、notes 或多轮产品讨论收束为可被正式交付链消费的 User Story、Story Readiness 与 Story Business Confirmation 结果。
 
 ## 1. 边界
 
@@ -15,6 +15,7 @@ User Story 是上游 product-value artifact，不是执行状态载体。
 - 成功后什么结果变成可观察事实
 - 为什么这个结果有业务或项目价值
 - 哪些业务可读 acceptance scenarios 描述目标行为
+- 哪些范围明确不做
 - 这些判断来自哪些 context locators
 
 它不得 authored 或复制：
@@ -43,6 +44,8 @@ User Story 至少包含：
   - 该结果为什么值得进入交付链
 - `acceptance_scenarios`
   - business-readable GWT 场景，不是测试脚本或实现步骤
+- `out_of_scope`
+  - 当前 story 明确不承接的业务范围、能力边界或验收边界
 - `provenance`
   - vision、roadmap、issue、notes 或 discussion summary 的 locators
 
@@ -101,7 +104,35 @@ Readiness 至少检查：
 - unresolved blockers
 - story size
 
-## 5. 到 Delivery Funnel 的消费关系
+## 5. Story Business Confirmation
+
+Story Business Confirmation 是独立确认点，不写回 User Story 主体，也不替代 `spec review`、implementation review、测试策略或代码质量判断。
+
+稳定 schema 名为 `loom-story-business-confirmation/v1`。它只确认 story 表达的业务语义是否符合用户意图。确认范围固定为：
+
+- actor
+- capability
+- outcome
+- business value
+- acceptance scenarios
+- out of scope / non-goals
+
+允许结果：
+
+- `pending`
+  - story 已准备给用户确认，但用户尚未确认或修订
+- `confirmed`
+  - 用户已确认业务语义；用户直接回复「确认」即可表达该结果
+- `revision-requested`
+  - 用户给出修订意见；流程必须回到 Story 修订，不得直接进入 `spec.md` / `plan.md`
+- `not-applicable`
+  - 当前事项不涉及业务语义确认，例如纯治理、维护、格式、链接修复或载体整理；必须给出 bypass rationale
+
+执行者向用户请求确认时，只能要求确认上述业务语义，不要求用户判断技术方案、实现细节、测试策略、review 质量或代码质量。
+
+若确认结果为 `pending` 或 `revision-requested`，后续 formal spec / plan shaping 必须等待 story 修订或确认完成。若结果为 `not-applicable`，后续工件只消费 bypass rationale，不制造无意义的人为确认负担。
+
+## 6. 到 Delivery Funnel 的消费关系
 
 Story 不能直接进入 implementation。进入正式交付仍以 `Work Item` 为唯一执行入口。
 
@@ -109,16 +140,18 @@ Story 不能直接进入 implementation。进入正式交付仍以 `Work Item` �
 
 1. Product context 形成 User Story。
 2. Story Readiness 判断是否可进入 formal spec / plan。
-3. `spec.md` 消费 story scenarios，形成可观察 behavior contract。
-4. `plan.md` 把 accepted scenarios 映射到 tests、checks、manual validation 或 `not_applicable` evidence。
-5. review、merge-ready 与 closeout 消费 spec / plan / evidence 的结果，不反向改写 User Story。
+3. 对涉及业务语义的事项，Story Business Confirmation 等待用户确认；用户给出修订意见时回到 Story 修订。
+4. `spec.md` 消费已确认或明确 `not-applicable` 的 story scenarios，形成可观察 behavior contract。
+5. `plan.md` 把 accepted scenarios 映射到 tests、checks、manual validation 或 `not_applicable` evidence。
+6. review、merge-ready 与 closeout 消费 spec / plan / evidence 的结果，不反向改写 User Story。
 
 若 story 被后续 delivery artifacts 吸收，后续工件只记录 locator 或 scenario id 映射，不复制 story 为第二事实源。
 
-## 6. 非目标
+## 7. 非目标
 
 - 不替代 Jira、Linear、Notion 或其他产品管理系统
 - 不建立 Loom-owned product database
 - 不裁决产品目标是否正确
 - 不要求所有小事项都先完成敏捷 story 仪式
 - 不把 story readiness 提升为无关实现变更的 merge gate
+- 不把业务语义确认扩大成技术方案、测试策略或代码质量评审

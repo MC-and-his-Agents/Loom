@@ -217,7 +217,7 @@ GitHub issue、GitHub Project、PR 与 Project item 只是 host control mirror�
 - Phase issue 可以承载或定位 Phase goal
 - FR issue 可以承载或定位 FR goal
 - Work Item issue 可以承载或定位 Work Item goal
-- story carrier 可以为 FR / Work Item 提供 acceptance scenario locator
+- story carrier 可以为 FR / Work Item 提供 acceptance scenario locator 与 Story Business Confirmation locator
 - PR 可以作为 Work Item 的 implementation mirror，但不能反推替代 Work Item
 - `/goal` 与 delegated goal 只能派生自上游 goal，不反向改写上游 truth
 
@@ -253,6 +253,6 @@ goal 校验必须区分：
 - [github-delivery-funnel.md](./github-delivery-funnel.md)
   - 承接 GitHub profile 下 Project / Phase / FR / Work Item / PR 的默认对象关系
 - [story-intake.md](./story-intake.md)
-  - 承接 story carrier 与 acceptance scenario locator
+  - 承接 story carrier、acceptance scenario locator 与 Story Business Confirmation
 
 本文件只定义 goal 语义 schema，不定义具体宿主 API、Project 字段或 Work Item 文件格式。

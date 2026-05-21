@@ -1,0 +1,156 @@
+{
+  "schema_version": "loom-safe-sync-plan-fixtures/v1",
+  "fixtures": [
+    {
+      "name": "block-finding-stops-writes",
+      "include_closeout_comment": true,
+      "audit_payload": {
+        "command": "reconciliation",
+        "operation": "audit",
+        "result": "block",
+        "issue": {
+          "number": 805
+        },
+        "findings": [
+          {
+            "category": "drift",
+            "kind": "host_signal_drift",
+            "severity": "block",
+            "subject": "github control plane",
+            "evidence": {
+              "missing_inputs": [
+                "project status field"
+              ]
+            },
+            "recommended_action": "restore readable host signals before syncing.",
+            "fallback_to": "manual-reconciliation"
+          }
+        ]
+      },
+      "expected": {
+        "result": "block",
+        "planned_actions": [],
+        "manual_actions": [
+          "manual_reconciliation"
+        ],
+        "skipped_actions": []
+      }
+    },
+    {
+      "name": "missing-proof-skips-close-issue",
+      "include_closeout_comment": false,
+      "audit_payload": {
+        "command": "reconciliation",
+        "operation": "audit",
+        "result": "fix-needed",
+        "issue": {},
+        "findings": [
+          {
+            "category": "drift",
+            "kind": "merged_but_open",
+            "severity": "fix-needed",
+            "subject": "issue #805",
+            "evidence": {
+              "pr_state": "MERGED",
+              "merge_commit_in_main": true
+            },
+            "recommended_action": "close the merged issue.",
+            "fallback_to": "reconciliation-sync"
+          }
+        ]
+      },
+      "expected": {
+        "result": "block",
+        "planned_actions": [],
+        "manual_actions": [],
+        "skipped_actions": [
+          "close_issue"
+        ]
+      }
+    },
+    {
+      "name": "close-issue-with-comment-plan",
+      "include_closeout_comment": true,
+      "audit_payload": {
+        "command": "reconciliation",
+        "operation": "audit",
+        "result": "fix-needed",
+        "issue": {
+          "number": 805
+        },
+        "findings": [
+          {
+            "category": "drift",
+            "kind": "merged_but_open",
+            "severity": "fix-needed",
+            "subject": "issue #805",
+            "evidence": {
+              "issue_state": "OPEN",
+              "pr_state": "MERGED",
+              "merge_commit": "abc123",
+              "merge_commit_in_main": true
+            },
+            "recommended_action": "close the merged issue.",
+            "fallback_to": "reconciliation-sync"
+          }
+        ]
+      },
+      "expected": {
+        "result": "pass",
+        "planned_actions": [
+          "add_closeout_comment",
+          "close_issue"
+        ],
+        "manual_actions": [],
+        "skipped_actions": []
+      }
+    },
+    {
+      "name": "set-project-done-plan",
+      "include_closeout_comment": false,
+      "audit_payload": {
+        "command": "reconciliation",
+        "operation": "audit",
+        "result": "fix-needed",
+        "project": {
+          "number": 4,
+          "project_id": "PVT_kw",
+          "status_field_id": "PVTSSF_status",
+          "done_option_id": "done",
+          "issue_item": {
+            "id": "PVTI_issue",
+            "status": "Todo"
+          }
+        },
+        "findings": [
+          {
+            "category": "drift",
+            "kind": "project_drift",
+            "severity": "fix-needed",
+            "subject": "project 4",
+            "evidence": {
+              "drifts": [
+                {
+                  "subject": "issue #805",
+                  "reason": "issue project status is not Done",
+                  "expected_done": true,
+                  "actual_status": "Todo"
+                }
+              ]
+            },
+            "recommended_action": "align the project items.",
+            "fallback_to": "reconciliation-sync"
+          }
+        ]
+      },
+      "expected": {
+        "result": "pass",
+        "planned_actions": [
+          "set_project_done"
+        ],
+        "manual_actions": [],
+        "skipped_actions": []
+      }
+    }
+  ]
+}

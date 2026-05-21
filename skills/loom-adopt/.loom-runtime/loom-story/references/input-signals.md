@@ -5,6 +5,9 @@
 - 将 vision / roadmap / notes / discussion 整理成 User Story
 - story shaping
 - story readiness
+- story business confirmation
+- 用户确认 story 业务语义
+- 用户对 story 给出修订意见
 - actor specificity
 - scenario coverage
 - story acceptance scenarios 到 `spec.md` / `plan.md` 的映射

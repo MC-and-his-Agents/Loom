@@ -110,13 +110,17 @@ closeout truth 与 workspace retire 必须分层：
 - 先消费同范围的 `reconciliation audit` 结果，再生成可执行 sync 计划
 - 在条件满足时关闭 issue
 - 在 project 中把对应 item 状态设为 `Done`
+- 可选写入 closeout comment，但该写入必须作为 `add_closeout_comment` plan action 独立出现
 
 约束：
 
 - 若 `reconciliation audit` 出现任一 `block` finding，`sync` 必须直接返回 `block`，且不做任何写入
 - `sync` 只允许对 `fix-needed` finding 做机械修复；`warn` 仅保留提示，不触发写入
 - `--dry-run` 只输出基于 audit 的计划，不修改 GitHub 控制面
+- `--dry-run` 是默认行为；只有显式 `--apply` 才允许执行写入
 - `--comment-file` 与 `--comment` 二选一，只为当前 issue closeout comment 提供正文来源
+- 输出必须保留 `audit`、`sync_plan`、`applied_actions`、`skipped_actions`、`manual_actions`、`refreshed_audit` 与 `remaining_findings`
+- sync 后的 closeout 判断只能消费 `refreshed_audit`；不得只相信写入命令成功
 
 `closeout sync` 仍保持 closeout 控制面对齐入口，但不得绕过已显式暴露的 reconciliation 结果。
 

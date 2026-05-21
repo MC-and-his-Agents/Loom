@@ -1,6 +1,6 @@
 # Story Intake
 
-本模板包含三个分离产物。`User Story` 是产品价值主体；`Story Readiness` 和 `Delivery Consumption Boundary` 是 intake 输出，不属于 User Story 主体。
+本模板包含四个分离产物。`User Story` 是产品价值主体；`Story Readiness`、`Story Business Confirmation` 和 `Delivery Consumption Boundary` 是 intake 输出，不属于 User Story 主体。
 
 ## User Story
 
@@ -10,6 +10,7 @@
 - Capability:
 - Outcome:
 - Business value:
+- Out of scope:
 
 ## Product Context
 
@@ -58,6 +59,17 @@ Then
 - Missing inputs:
 - Bypass rationale, if not applicable:
 
+## Story Business Confirmation
+
+- Schema marker: loom-story-business-confirmation/v1
+
+- Decision: pending | confirmed | revision-requested | not-applicable
+- Confirmed by:
+- Confirmation source:
+- Revision request:
+- Bypass rationale, if not applicable:
+- Confirmation scope: actor, capability, outcome, business value, acceptance scenarios, out of scope.
+
 ## Delivery Consumption Boundary
 
 - Schema marker: loom-story-delivery-mapping/v1
@@ -65,4 +77,5 @@ Then
 - Intended Work Item or FR:
 - Spec entry expectation:
 - Plan entry expectation:
+- Story confirmation requirement: confirmed | not_applicable
 - Story fields must not carry delivery handoff, recovery state, review findings, PR summary, merge-ready, or closeout state.
