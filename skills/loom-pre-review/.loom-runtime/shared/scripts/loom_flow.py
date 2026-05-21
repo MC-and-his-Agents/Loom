@@ -147,6 +147,7 @@ CODEX_APP_REVIEW_CWD_ENV = "LOOM_CODEX_APP_REVIEW_CWD"
 CODEX_APP_REVIEW_SESSION_FILE_ENV = "LOOM_CODEX_APP_REVIEW_SESSION_FILE"
 CODEX_THREAD_ID_ENV = "CODEX_THREAD_ID"
 CODEX_SESSION_ID_ENV = "CODEX_SESSION_ID"
+CODEX_APP_REVIEW_NEW_THREAD_IDS = {"new", "new-thread", "start"}
 DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS: int | None = None
 REVIEW_ENGINE_PROFILE_SCHEMA = "loom-review-engine-profile/v1"
 REVIEW_ENGINE_PROFILE_IDS = {"default", "high-risk", "spec-review", "repeated-blocker"}
@@ -7638,6 +7639,11 @@ def codex_app_endpoint_is_stdio(app_server: str | None) -> bool:
     return non_empty_str(app_server) == "stdio://"
 
 
+def codex_app_review_requests_new_thread(thread_id: str | None) -> bool:
+    value = non_empty_str(thread_id)
+    return value.lower() in CODEX_APP_REVIEW_NEW_THREAD_IDS if value else False
+
+
 def codex_app_endpoint_is_live_capable(app_server: str | None) -> bool:
     if codex_app_endpoint_is_stdio(app_server):
         return True
@@ -8168,38 +8174,67 @@ def run_codex_app_live_review(
             return None, metadata, [f"Codex App initialize failed: {initialize_response['error']}"]
         jsonrpc_send_notification(process.stdin, method="initialized")
 
-        jsonrpc_send_request(
-            process.stdin,
-            request_id=2,
-            method="thread/resume",
-            params={
-                "threadId": thread_id,
-                "cwd": thread_cwd,
-            },
-        )
-        resume_response, _, resume_errors = jsonrpc_read_response(process.stdout, request_id=2)
-        if resume_errors:
-            return None, metadata, resume_errors
-        if isinstance(resume_response, dict) and isinstance(resume_response.get("error"), dict):
-            return None, metadata, [f"Codex App thread/resume failed: {resume_response['error']}"]
-        resume_result = resume_response.get("result") if isinstance(resume_response, dict) else None
-        if isinstance(resume_result, dict):
-            thread = resume_result.get("thread")
+        if codex_app_review_requests_new_thread(thread_id):
+            jsonrpc_send_request(
+                process.stdin,
+                request_id=2,
+                method="thread/start",
+                params={
+                    "cwd": thread_cwd,
+                    "approvalPolicy": "never",
+                    "sandbox": "danger-full-access",
+                    "baseInstructions": "Loom Codex App review host proof thread.",
+                    "ephemeral": False,
+                },
+            )
+            start_response, _, start_errors = jsonrpc_read_response(process.stdout, request_id=2)
+            if start_errors:
+                return None, metadata, start_errors
+            if isinstance(start_response, dict) and isinstance(start_response.get("error"), dict):
+                return None, metadata, [f"Codex App thread/start failed: {start_response['error']}"]
+            start_result = start_response.get("result") if isinstance(start_response, dict) else None
+            thread = start_result.get("thread") if isinstance(start_result, dict) else None
+            if not isinstance(thread, dict) or not non_empty_str(thread.get("id")):
+                return None, metadata, ["Codex App thread/start did not return a thread id"]
+            thread_id = str(thread["id"])
+            metadata["started_thread_id"] = thread_id
+            metadata["started_thread_cwd"] = thread.get("cwd")
+            metadata["started_thread_source"] = thread.get("source")
+            metadata["started_thread_cli_version"] = thread.get("cliVersion")
+            resumed_cwd = non_empty_str(thread.get("cwd"))
+        else:
+            jsonrpc_send_request(
+                process.stdin,
+                request_id=2,
+                method="thread/resume",
+                params={
+                    "threadId": thread_id,
+                    "cwd": thread_cwd,
+                },
+            )
+            resume_response, _, resume_errors = jsonrpc_read_response(process.stdout, request_id=2)
+            if resume_errors:
+                return None, metadata, resume_errors
+            if isinstance(resume_response, dict) and isinstance(resume_response.get("error"), dict):
+                return None, metadata, [f"Codex App thread/resume failed: {resume_response['error']}"]
+            resume_result = resume_response.get("result") if isinstance(resume_response, dict) else None
+            thread = resume_result.get("thread") if isinstance(resume_result, dict) else None
             if isinstance(thread, dict):
                 metadata["resumed_thread_cwd"] = thread.get("cwd")
                 metadata["resumed_thread_source"] = thread.get("source")
                 metadata["resumed_thread_cli_version"] = thread.get("cliVersion")
-                resumed_cwd = non_empty_str(thread.get("cwd"))
-                if resumed_cwd:
-                    try:
-                        resumed_cwd_path = Path(resumed_cwd).expanduser().resolve()
-                        expected_cwd_path = Path(thread_cwd).expanduser().resolve()
-                    except OSError as exc:
-                        return None, metadata, [f"Codex App resumed thread cwd proof could not be resolved: {exc}"]
-                    if resumed_cwd_path != expected_cwd_path:
-                        return None, metadata, [
-                            f"Codex App resumed thread cwd `{resumed_cwd_path}` does not match expected review cwd `{expected_cwd_path}`"
-                        ]
+            resumed_cwd = non_empty_str(thread.get("cwd")) if isinstance(thread, dict) else None
+        if resumed_cwd:
+            try:
+                resumed_cwd_path = Path(resumed_cwd).expanduser().resolve()
+                expected_cwd_path = Path(thread_cwd).expanduser().resolve()
+            except OSError as exc:
+                return None, metadata, [f"Codex App thread cwd proof could not be resolved: {exc}"]
+            if resumed_cwd_path != expected_cwd_path:
+                return None, metadata, [
+                    f"Codex App thread cwd `{resumed_cwd_path}` does not match expected review cwd `{expected_cwd_path}`"
+                ]
+        metadata["effective_thread_id"] = thread_id
 
         jsonrpc_send_request(
             process.stdin,
@@ -8718,6 +8753,9 @@ def run_codex_app_review_authoritative_adapter(
 
     raw_path.write_text(raw_text, encoding="utf-8")
     write_json_file(findings_path, {"findings": normalized["findings"]})
+    effective_thread_id = (
+        non_empty_str(live_metadata.get("effective_thread_id")) if live_metadata else None
+    ) or thread_id
     metadata = {
         "schema_version": "loom-review-engine-metadata/v1",
         "engine": CODEX_APP_REVIEW_ENGINE,
@@ -8732,13 +8770,13 @@ def run_codex_app_review_authoritative_adapter(
         "kind": review_kind,
         "validation_summary": context["latest_validation_summary"],
         "app_server": app_server,
-        "thread_id": thread_id,
+        "thread_id": effective_thread_id,
         "thread_cwd": cwd_relative,
         "raw_source": source_relative,
         "raw_result": relative_to_root(raw_path, context["target_root"]),
         "normalized_findings": relative_to_root(findings_path, context["target_root"]),
         "metadata": relative_to_root(metadata_path, context["target_root"]),
-        "review_thread_id": live_metadata.get("review_thread_id") if live_metadata else (thread_id if source_path is not None else None),
+        "review_thread_id": live_metadata.get("review_thread_id") if live_metadata else (effective_thread_id if source_path is not None else None),
         **({"live_review": {key: value for key, value in live_metadata.items() if key != "normalized"}} if live_metadata else {}),
         "authority_boundary": "normalized review_record_input only; raw Codex App output remains runtime evidence",
     }
