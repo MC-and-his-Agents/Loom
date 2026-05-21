@@ -1,39 +1,36 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-805",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "8ab21fe1ffbaee700567a4986307d1e194a58609",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Safe sync implementation is approved for PR #878 merge readiness. The branch provides loom-safe-sync-plan/v1, dry-run-by-default reconciliation sync, explicit --apply host writes, proof-backed planned/skipped/manual action separation, safe sync fixtures, loom_check contract coverage, generated runtime synchronization, installer version bump, WI-805 fact-chain/spec/review carriers, and a fix for fake codex temporary directory creation discovered during final loom_check validation. Local validation passes, including make loom-check with 37 surfaces. No blocking findings remain.",
+  "reviewer": "codex",
+  "reviewed_head": "6a6a7296f13aeb1d27adaad5e6d82be523821b48",
+  "reviewed_validation_summary": "python3 tools/skills_surface.py check passed; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py targeted safe sync and loom_check runtime files passed; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed with 0.1.124 -> 0.1.125; python3 tools/version_surface_check.py passed; python3 tools/host_adapter_check.py passed; safe sync fixture contract passed with safe_sync_fixture_failures 0; reconciliation sync dry-run smoke returned pass True loom-safe-sync-plan/v1 0 0; governance-profile status reported strong; adopt verify passed; shadow parity passed; no __pycache__ or pyc artifacts found; PYTHONDONTWRITEBYTECODE=1 make loom-check passed with 37 surfaces.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-805.md",
+    "recovery_entry": ".loom/progress/WI-805.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
 }
