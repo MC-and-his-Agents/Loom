@@ -46,7 +46,7 @@ description: 负责 formal spec review 执行层。Use when Codex needs to revie
 
 1. 运行 `flow spec-review`，确认 formal spec 路径、build checkpoint 与 runtime 读面齐全
 2. 若 `flow spec-review` 非 `pass`，直接返回 `block` 或 `fallback`
-3. 运行 `review run`，在 verified Codex App host default、显式 authoritative adapter 或 headless fallback 中选择安全路径，生成 Loom-normalized spec findings
+3. 运行 `review run`，在 verified Codex App host default、显式 authoritative adapter 或 headless fallback 中选择安全路径，生成 Loom-normalized spec findings；`CI` / `CODEX_CI` 不得遮蔽已验证的真实 Codex App host proof，proof 不足时必须输出缺失 locator diagnostic
 4. 若 `review run` fail-closed，回到 manual review 写回同一 spec review record
 5. 用 `review record` 写入 `kind = spec_review` 的正式结论
 

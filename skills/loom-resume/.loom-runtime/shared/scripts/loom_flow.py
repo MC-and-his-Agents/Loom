@@ -12,6 +12,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -143,7 +144,9 @@ SHADOW_REVIEW_ADAPTERS = {CODEX_APP_REVIEW_SHADOW_ADAPTER}
 CODEX_APP_REVIEW_ENDPOINT_ENV = "LOOM_CODEX_APP_REVIEW_ENDPOINT"
 CODEX_APP_REVIEW_THREAD_ID_ENV = "LOOM_CODEX_APP_REVIEW_THREAD_ID"
 CODEX_APP_REVIEW_CWD_ENV = "LOOM_CODEX_APP_REVIEW_CWD"
+CODEX_APP_REVIEW_SESSION_FILE_ENV = "LOOM_CODEX_APP_REVIEW_SESSION_FILE"
 CODEX_THREAD_ID_ENV = "CODEX_THREAD_ID"
+CODEX_SESSION_ID_ENV = "CODEX_SESSION_ID"
 DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS: int | None = None
 REVIEW_ENGINE_PROFILE_SCHEMA = "loom-review-engine-profile/v1"
 REVIEW_ENGINE_PROFILE_IDS = {"default", "high-risk", "spec-review", "repeated-blocker"}
@@ -7634,20 +7637,232 @@ def codex_app_endpoint_is_live_capable(app_server: str | None) -> bool:
     return socket_path is not None and socket_path.exists()
 
 
-def codex_app_review_bindings_from_args_env(args: argparse.Namespace) -> dict[str, str | None]:
-    app_server = non_empty_str(args.codex_app_review_app_server) or non_empty_str(os.environ.get(CODEX_APP_REVIEW_ENDPOINT_ENV))
-    thread_id = (
-        non_empty_str(args.codex_app_review_thread_id)
-        or non_empty_str(os.environ.get(CODEX_APP_REVIEW_THREAD_ID_ENV))
-        or (non_empty_str(os.environ.get(CODEX_THREAD_ID_ENV)) if app_server else None)
+def default_codex_app_control_socket() -> Path | None:
+    candidates: list[Path] = []
+    home = Path.home()
+    candidates.append(home / ".codex/app-server-control/app-server-control.sock")
+    try:
+        uid = os.getuid()
+    except AttributeError:
+        uid = None
+    if uid is not None:
+        candidates.append(Path(tempfile.gettempdir()) / "codex-ipc" / f"ipc-{uid}.sock")
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def discover_codex_app_endpoint() -> tuple[str | None, dict[str, Any]]:
+    socket_path = default_codex_app_control_socket()
+    if socket_path is None:
+        return None, {
+            "source": "default-control-socket",
+            "result": "missing",
+            "searched": [
+                str(Path.home() / ".codex/app-server-control/app-server-control.sock"),
+                str(Path(tempfile.gettempdir()) / "codex-ipc" / f"ipc-{os.getuid()}.sock")
+                if hasattr(os, "getuid")
+                else None,
+            ],
+        }
+    return f"unix://{socket_path}", {
+        "source": "default-control-socket",
+        "result": "found",
+        "locator": str(socket_path),
+    }
+
+
+def load_codex_session_meta(path: Path) -> dict[str, Any] | None:
+    try:
+        with path.open(encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if entry.get("type") != "session_meta":
+                    continue
+                payload = entry.get("payload")
+                return payload if isinstance(payload, dict) else None
+    except OSError:
+        return None
+    return None
+
+
+def codex_session_file_for_id(session_id: str, *, updated_at: str | None = None) -> Path | None:
+    sessions_root = Path.home() / ".codex/sessions"
+    if not sessions_root.exists():
+        return None
+    pattern = f"rollout-*{session_id}.jsonl"
+    search_roots: list[Path] = []
+    timestamp = non_empty_str(updated_at)
+    if timestamp:
+        date_match = re.match(r"^(\d{4})-(\d{2})-(\d{2})", timestamp)
+        if date_match:
+            year, month, day = date_match.groups()
+            dated_root = sessions_root / year / month / day
+            if dated_root.exists():
+                search_roots.append(dated_root)
+    if not search_roots:
+        search_roots.append(sessions_root)
+    try:
+        matches: list[Path] = []
+        for search_root in search_roots:
+            matches.extend(search_root.rglob(pattern))
+        matches = sorted(matches, key=lambda path: path.stat().st_mtime, reverse=True)
+    except OSError:
+        return None
+    return matches[0] if matches else None
+
+
+def discover_codex_app_session_meta(target_root: Path) -> tuple[dict[str, str | None], dict[str, Any]]:
+    session_file_text = non_empty_str(os.environ.get(CODEX_APP_REVIEW_SESSION_FILE_ENV))
+    session_id = non_empty_str(os.environ.get(CODEX_SESSION_ID_ENV)) or non_empty_str(os.environ.get(CODEX_THREAD_ID_ENV))
+    candidates: list[Path] = []
+    if session_file_text:
+        candidates.append(Path(session_file_text).expanduser())
+    if session_id:
+        session_path = codex_session_file_for_id(session_id)
+        if session_path is not None:
+            candidates.append(session_path)
+
+    index_path = Path.home() / ".codex/session_index.jsonl"
+    if not candidates and index_path.exists():
+        try:
+            lines = index_path.read_text(encoding="utf-8").splitlines()[-20:]
+        except OSError:
+            lines = []
+        for line in reversed(lines):
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            indexed_id = non_empty_str(entry.get("id") if isinstance(entry, dict) else None)
+            if not indexed_id:
+                continue
+            updated_at = non_empty_str(entry.get("updated_at")) if isinstance(entry, dict) else None
+            session_path = codex_session_file_for_id(indexed_id, updated_at=updated_at)
+            if session_path is not None:
+                candidates.append(session_path)
+
+    seen: set[Path] = set()
+    inspected: list[str] = []
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            resolved = candidate
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        inspected.append(str(resolved))
+        meta = load_codex_session_meta(resolved)
+        if not isinstance(meta, dict):
+            continue
+        cwd = non_empty_str(meta.get("cwd"))
+        thread_id = non_empty_str(meta.get("id"))
+        originator = non_empty_str(meta.get("originator"))
+        if not cwd or not thread_id:
+            continue
+        try:
+            cwd_path = Path(cwd).expanduser().resolve()
+        except OSError:
+            continue
+        if cwd_path != target_root:
+            continue
+        return (
+            {"thread_id": thread_id, "thread_cwd": str(cwd_path)},
+            {
+                "source": "codex-session-meta",
+                "result": "found",
+                "session_file": str(resolved),
+                "originator": originator,
+            },
+        )
+    return (
+        {"thread_id": None, "thread_cwd": None},
+        {
+            "source": "codex-session-meta",
+            "result": "missing",
+            "inspected": inspected[:10],
+            "target_root": str(target_root),
+        },
     )
-    thread_cwd = non_empty_str(args.codex_app_review_cwd) or non_empty_str(os.environ.get(CODEX_APP_REVIEW_CWD_ENV))
+
+
+def codex_app_missing_host_proof(bindings: dict[str, Any]) -> list[str]:
+    missing: list[str] = []
+    if not non_empty_str(bindings.get("app_server")):
+        missing.append("app-server endpoint locator")
+    if not non_empty_str(bindings.get("thread_id")):
+        missing.append("thread id")
+    if not non_empty_str(bindings.get("thread_cwd")):
+        missing.append("thread cwd proof")
+    return missing
+
+
+def codex_app_review_bindings_from_args_env(args: argparse.Namespace, target_root: Path) -> dict[str, Any]:
+    proof_sources: dict[str, str] = {}
+    discovery: dict[str, Any] = {}
+
+    app_server = non_empty_str(args.codex_app_review_app_server)
+    if app_server:
+        proof_sources["app_server"] = "cli"
+    if not app_server:
+        app_server = non_empty_str(os.environ.get(CODEX_APP_REVIEW_ENDPOINT_ENV))
+        if app_server:
+            proof_sources["app_server"] = CODEX_APP_REVIEW_ENDPOINT_ENV
+    if not app_server:
+        app_server, endpoint_discovery = discover_codex_app_endpoint()
+        discovery["app_server"] = endpoint_discovery
+        if app_server:
+            proof_sources["app_server"] = "default-control-socket"
+
+    thread_id = non_empty_str(args.codex_app_review_thread_id)
+    if thread_id:
+        proof_sources["thread_id"] = "cli"
+    if not thread_id:
+        thread_id = non_empty_str(os.environ.get(CODEX_APP_REVIEW_THREAD_ID_ENV))
+        if thread_id:
+            proof_sources["thread_id"] = CODEX_APP_REVIEW_THREAD_ID_ENV
+    if not thread_id and app_server:
+        thread_id = non_empty_str(os.environ.get(CODEX_THREAD_ID_ENV)) or non_empty_str(os.environ.get(CODEX_SESSION_ID_ENV))
+        if thread_id:
+            proof_sources["thread_id"] = f"{CODEX_THREAD_ID_ENV}/{CODEX_SESSION_ID_ENV}"
+
+    thread_cwd = non_empty_str(args.codex_app_review_cwd)
+    if thread_cwd:
+        proof_sources["thread_cwd"] = "cli"
+    if not thread_cwd:
+        thread_cwd = non_empty_str(os.environ.get(CODEX_APP_REVIEW_CWD_ENV))
+        if thread_cwd:
+            proof_sources["thread_cwd"] = CODEX_APP_REVIEW_CWD_ENV
+
+    if (not thread_id or not thread_cwd) and app_server:
+        session_bindings, session_discovery = discover_codex_app_session_meta(target_root)
+        discovery["session_meta"] = session_discovery
+        if not thread_id and session_bindings.get("thread_id"):
+            thread_id = session_bindings["thread_id"]
+            proof_sources["thread_id"] = "codex-session-meta"
+        if not thread_cwd and session_bindings.get("thread_cwd"):
+            thread_cwd = session_bindings["thread_cwd"]
+            proof_sources["thread_cwd"] = "codex-session-meta"
+
     raw_file = non_empty_str(args.codex_app_review_raw_file)
+    if raw_file:
+        proof_sources["raw_file"] = "cli"
+    missing_host_proof = codex_app_missing_host_proof(
+        {"app_server": app_server, "thread_id": thread_id, "thread_cwd": thread_cwd}
+    )
     return {
         "app_server": app_server,
         "thread_id": thread_id,
         "thread_cwd": thread_cwd,
         "raw_file": raw_file,
+        "proof_sources": proof_sources,
+        "host_discovery": discovery,
+        "missing_host_proof": missing_host_proof,
     }
 
 
@@ -7695,7 +7910,13 @@ def select_review_adapter(
     *,
     reviewed_head: str,
 ) -> dict[str, Any]:
-    bindings = codex_app_review_bindings_from_args_env(args)
+    bindings = codex_app_review_bindings_from_args_env(args, target_root)
+    binding_values = {
+        "app_server": bindings.get("app_server"),
+        "thread_id": bindings.get("thread_id"),
+        "thread_cwd": bindings.get("thread_cwd"),
+        "raw_file": bindings.get("raw_file"),
+    }
     explicit_adapter = non_empty_str(args.engine_adapter)
     if explicit_adapter:
         return {
@@ -7703,44 +7924,54 @@ def select_review_adapter(
             "selection_source": "explicit-cli",
             "fallback_reason": None,
             **bindings,
-            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **bindings),
-        }
-
-    if truthy_env("CI") or truthy_env("CODEX_CI"):
-        return {
-            "adapter": DEFAULT_REVIEW_ADAPTER,
-            "selection_source": "headless-fallback",
-            "fallback_reason": "ci-or-codex-ci",
-            **bindings,
-            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **bindings),
+            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **binding_values),
         }
 
     app_server = bindings["app_server"]
     thread_id = bindings["thread_id"]
     thread_cwd = bindings["thread_cwd"]
     raw_file = bindings["raw_file"]
-    if not app_server or not thread_id or not thread_cwd:
+    missing_host_proof = codex_app_missing_host_proof(bindings)
+    ci_env_present = truthy_env("CI") or truthy_env("CODEX_CI")
+    if not missing_host_proof:
+        if not raw_file and not codex_app_endpoint_is_live_capable(app_server):
+            return {
+                "adapter": DEFAULT_REVIEW_ADAPTER,
+                "selection_source": "host-proof-fallback",
+                "fallback_reason": "app-server-unavailable",
+                **bindings,
+                "ci_env_present": ci_env_present,
+                "missing_host_proof": ["live app-server endpoint or raw review file"],
+                "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **binding_values),
+            }
+        return {
+            "adapter": CODEX_APP_REVIEW_ADAPTER,
+            "selection_source": "codex-app-host-default",
+            "fallback_reason": None,
+            **bindings,
+            "ci_env_present": ci_env_present,
+            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **binding_values),
+        }
+
+    if ci_env_present:
         return {
             "adapter": DEFAULT_REVIEW_ADAPTER,
-            "selection_source": "host-proof-fallback",
-            "fallback_reason": "missing-codex-app-host-proof",
+            "selection_source": "headless-fallback",
+            "fallback_reason": "ci-or-codex-ci",
             **bindings,
-            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **bindings),
+            "ci_env_present": True,
+            "missing_host_proof": missing_host_proof,
+            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **binding_values),
         }
-    if not raw_file and not codex_app_endpoint_is_live_capable(app_server):
-        return {
-            "adapter": DEFAULT_REVIEW_ADAPTER,
-            "selection_source": "host-proof-fallback",
-            "fallback_reason": "app-server-unavailable",
-            **bindings,
-            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **bindings),
-        }
+
     return {
-        "adapter": CODEX_APP_REVIEW_ADAPTER,
-        "selection_source": "codex-app-host-default",
-        "fallback_reason": None,
+        "adapter": DEFAULT_REVIEW_ADAPTER,
+        "selection_source": "host-proof-fallback",
+        "fallback_reason": "missing-codex-app-host-proof",
         **bindings,
-        "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **bindings),
+        "ci_env_present": False,
+        "missing_host_proof": missing_host_proof,
+        "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **binding_values),
     }
 
 
@@ -7757,6 +7988,12 @@ def review_adapter_selection_metadata(selection: dict[str, Any], *, reviewed_hea
         else None,
         "reviewed_head": reviewed_head,
         "thread_target_binding": selection.get("binding_summary"),
+        "proof_sources": selection.get("proof_sources") if isinstance(selection.get("proof_sources"), dict) else {},
+        "host_discovery": selection.get("host_discovery") if isinstance(selection.get("host_discovery"), dict) else {},
+        "missing_host_proof": selection.get("missing_host_proof")
+        if isinstance(selection.get("missing_host_proof"), list)
+        else [],
+        "ci_env_present": bool(selection.get("ci_env_present")),
     }
 
 

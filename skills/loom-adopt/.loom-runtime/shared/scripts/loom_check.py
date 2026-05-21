@@ -6907,11 +6907,53 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 elif merge_payload.get("result") == "pass":
                     failures.append(Failure("daily-execution-cli", "`merge-ready` must not consume default Codex App raw evidence before review record is authored"))
 
-        app_ci_fallback_target = Path(tmp) / "review-run-codex-app-ci-fallback"
-        prepare_review_target(app_ci_fallback_target, "review run Codex App CI fallback")
-        app_ci_raw = app_ci_fallback_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
+        app_ci_default_target = Path(tmp) / "review-run-codex-app-ci-default"
+        prepare_review_target(app_ci_default_target, "review run Codex App CI host default")
+        app_ci_raw = app_ci_default_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
         app_ci_raw.parent.mkdir(parents=True, exist_ok=True)
         app_ci_raw.write_text(app_default_raw.read_text(encoding="utf-8"), encoding="utf-8")
+        write_fake_codex(fake_bin / "codex", mode="fail_if_called")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(app_ci_default_target),
+                "--item",
+                "INIT-0001",
+                "--codex-app-review-app-server",
+                "stdio://stage3-ci-proof",
+                "--codex-app-review-thread-id",
+                "thread-stage3-ci-proof",
+                "--codex-app-review-cwd",
+                str(app_ci_default_target),
+                "--codex-app-review-raw-file",
+                ".loom/runtime/tmp/codex-app-review-normalized.json",
+            ],
+            env=prepend_path_env(fake_bin, {"CODEX_CI": "1"}),
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` Codex App CI host default failed: {error}"))
+        else:
+            require_review_run_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`review run` Codex App CI host default",
+                payload=payload,
+                expected_result={"pass"},
+            )
+            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
+            metadata = payload.get("engine_metadata") if isinstance(payload, dict) and isinstance(payload.get("engine_metadata"), dict) else {}
+            if engine.get("adapter") != "loom/codex-app-review" or metadata.get("selection_source") != "codex-app-host-default":
+                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI host default must prefer valid app proof over CODEX_CI"))
+            if metadata.get("ci_env_present") is not True:
+                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI host default must record that CI env was present"))
+
+        app_ci_fallback_target = Path(tmp) / "review-run-codex-app-ci-missing-proof-fallback"
+        prepare_review_target(app_ci_fallback_target, "review run Codex App CI missing proof fallback")
         write_fake_codex(fake_bin / "codex", mode="success")
         payload, error = load_command_json(
             root,
@@ -6924,31 +6966,26 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 str(app_ci_fallback_target),
                 "--item",
                 "INIT-0001",
-                "--codex-app-review-app-server",
-                "stdio://stage3-ci-proof",
-                "--codex-app-review-thread-id",
-                "thread-stage3-ci-proof",
-                "--codex-app-review-cwd",
-                str(app_ci_fallback_target),
-                "--codex-app-review-raw-file",
-                ".loom/runtime/tmp/codex-app-review-normalized.json",
             ],
             env=prepend_path_env(fake_bin, {"CODEX_CI": "1"}),
         )
         if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` Codex App CI fallback failed: {error}"))
+            failures.append(Failure("daily-execution-cli", f"`review run` Codex App CI missing proof fallback failed: {error}"))
         else:
             require_review_run_payload(
                 failures,
                 category="daily-execution-cli",
-                context="`review run` Codex App CI fallback",
+                context="`review run` Codex App CI missing proof fallback",
                 payload=payload,
                 expected_result={"pass"},
             )
             engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
             metadata = payload.get("engine_metadata") if isinstance(payload, dict) and isinstance(payload.get("engine_metadata"), dict) else {}
+            missing_host_proof = metadata.get("missing_host_proof") if isinstance(metadata.get("missing_host_proof"), list) else []
             if engine.get("adapter") != "loom/default-codex-exec" or metadata.get("fallback_reason") != "ci-or-codex-ci":
-                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI fallback must keep the default codex exec adapter"))
+                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI missing proof fallback must keep the default codex exec adapter"))
+            if not missing_host_proof:
+                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI missing proof fallback must expose missing host proof diagnostics"))
 
         app_unavailable_fallback_target = Path(tmp) / "review-run-codex-app-unavailable-fallback"
         prepare_review_target(app_unavailable_fallback_target, "review run Codex App unavailable fallback")
