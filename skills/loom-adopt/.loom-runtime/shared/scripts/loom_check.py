@@ -1295,6 +1295,10 @@ def require_adoption_gate_rollout_payload(
         failures.append(Failure(category, f"{context} current_mode must stay within advisory/blocking/rollback"))
     if payload.get("recommended_mode") not in {"advisory", "blocking", "rollback"}:
         failures.append(Failure(category, f"{context} recommended_mode must stay within advisory/blocking/rollback"))
+    if payload.get("target_mode") != payload.get("recommended_mode"):
+        failures.append(Failure(category, f"{context} target_mode must match recommended_mode"))
+    if payload.get("current_mode") == "advisory" and payload.get("current_mode_source") != "default":
+        failures.append(Failure(category, f"{context} advisory current_mode must declare default source"))
     if not isinstance(payload.get("blocking_allowed"), bool):
         failures.append(Failure(category, f"{context} blocking_allowed must be boolean"))
     modes = payload.get("allowed_modes")
@@ -1324,8 +1328,22 @@ def require_adoption_gate_rollout_payload(
                 failures.append(Failure(category, f"{context} blocking precondition status must be stable"))
             if entry.get("layer") not in {"core", "github-profile", "repo-owned-residue"}:
                 failures.append(Failure(category, f"{context} blocking precondition layer must be stable"))
+            evidence_locator = entry.get("evidence_locator")
+            version_controlled = entry.get("version_controlled")
+            if entry.get("status") == "pass":
+                if not isinstance(evidence_locator, str) or not evidence_locator:
+                    failures.append(Failure(category, f"{context} passing blocking preconditions must include version-controlled evidence_locator"))
+                if version_controlled is not True:
+                    failures.append(Failure(category, f"{context} passing blocking preconditions must be version_controlled"))
+            if entry.get("status") != "pass" and version_controlled is True:
+                failures.append(Failure(category, f"{context} missing/blocking preconditions must not claim version_controlled evidence"))
             if not isinstance(entry.get("recommended_action"), str) or not entry.get("recommended_action"):
                 failures.append(Failure(category, f"{context} blocking preconditions must include recommended_action"))
+        all_passed = all(isinstance(entry, dict) and entry.get("status") == "pass" for entry in preconditions)
+        if payload.get("blocking_allowed") is not all_passed:
+            failures.append(Failure(category, f"{context} blocking_allowed must match blocking precondition status"))
+        if not all_passed and payload.get("recommended_mode") == "blocking":
+            failures.append(Failure(category, f"{context} must not recommend blocking when any precondition is missing"))
     rollback = payload.get("rollback")
     if not isinstance(rollback, dict):
         failures.append(Failure(category, f"{context} rollback must be an object"))
@@ -1334,6 +1352,28 @@ def require_adoption_gate_rollout_payload(
             failures.append(Failure(category, f"{context} rollback must switch back to advisory"))
         if not isinstance(rollback.get("recommended_action"), str) or not rollback.get("recommended_action"):
             failures.append(Failure(category, f"{context} rollback must include recommended_action"))
+        conditions = rollback.get("conditions")
+        if not isinstance(conditions, list) or not conditions:
+            failures.append(Failure(category, f"{context} rollback must include structured drift conditions"))
+        else:
+            condition_ids = {entry.get("id") for entry in conditions if isinstance(entry, dict)}
+            required_conditions = {
+                "runtime_drift",
+                "evidence_drift",
+                "host_binding_drift",
+                "review_head_drift",
+                "metadata_parsing_drift",
+            }
+            if not required_conditions.issubset(condition_ids):
+                failures.append(Failure(category, f"{context} rollback conditions must cover runtime, evidence, host binding, review head, and metadata parsing drift"))
+            for entry in conditions:
+                if not isinstance(entry, dict):
+                    failures.append(Failure(category, f"{context} rollback conditions must be objects"))
+                    continue
+                if not isinstance(entry.get("signal"), str) or not entry.get("signal"):
+                    failures.append(Failure(category, f"{context} rollback conditions must include signal"))
+                if not isinstance(entry.get("recommended_action"), str) or not entry.get("recommended_action"):
+                    failures.append(Failure(category, f"{context} rollback conditions must include recommended_action"))
 
 
 def require_github_profile_maturity_judgment_payload(

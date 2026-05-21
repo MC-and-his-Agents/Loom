@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-811",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-811 implementation is approved for merge readiness: gate_rollout exposes advisory default/current/recommended/target modes, blocks blocking rollout until all preconditions have version-controlled evidence, and provides structured rollback drift coverage for runtime, evidence, host binding, review head, and metadata parsing. Validator, docs, shared references, generated skills surface, installer version bump, reviews, adopt verify, shadow parity, checkpoint merge, loom_check, and make loom-check are aligned.",
+  "reviewer": "codex",
+  "reviewed_head": "46468d0a988f57b1f3cf374baead8855c50c16d7",
+  "reviewed_validation_summary": "governance-profile status/upgrade-plan/upgrade --dry-run returned advisory default/current/recommended/target modes with blocking_allowed=false until adversarial adoption evidence exists; py_compile_clean, skills_surface check, version_surface_check, node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main, git diff --check, fact-chain, adopt verify, shadow-parity, checkpoint merge, PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py, and make loom-check all passed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-811.md",
+    "recovery_entry": ".loom/progress/WI-811.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

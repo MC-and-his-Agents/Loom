@@ -698,32 +698,42 @@ ADOPTION_GATE_ROLLOUT_MODES = {
 
 
 def adoption_gate_rollout_status(*, maturity_current: str) -> dict[str, Any]:
+    strong_maturity_passed = maturity_current == "strong"
     blocking_preconditions = [
         {
             "id": "strong_maturity",
-            "status": "pass" if maturity_current == "strong" else "missing",
+            "status": "pass" if strong_maturity_passed else "missing",
             "layer": "github-profile",
+            "evidence_locator": ".loom/companion/interop.json" if strong_maturity_passed else None,
+            "version_controlled": strong_maturity_passed,
             "recommended_action": "upgrade the repository to strong maturity before enabling blocking gates",
         },
         {
             "id": "adversarial_adoption_checks",
             "status": "missing",
             "layer": "core",
+            "evidence_locator": None,
+            "version_controlled": False,
             "recommended_action": "run the Loom-owned strong-governance adversarial adoption fixture and record the validation evidence",
         },
         {
             "id": "rollback_switch",
             "status": "pass",
             "layer": "core",
+            "evidence_locator": "docs/adoption/github-profile-upgrade.md",
+            "version_controlled": True,
             "recommended_action": "keep rollback available by switching gate mode back to advisory and rerunning governance-profile status",
         },
     ]
     blocking_allowed = all(entry["status"] == "pass" for entry in blocking_preconditions)
+    target_mode = "blocking" if blocking_allowed else "advisory"
     return {
         "schema_version": "loom-adoption-gate-rollout/v1",
         "default_mode": "advisory",
         "current_mode": "advisory",
-        "recommended_mode": "blocking" if blocking_allowed else "advisory",
+        "current_mode_source": "default",
+        "recommended_mode": target_mode,
+        "target_mode": target_mode,
         "allowed_modes": ADOPTION_GATE_ROLLOUT_MODES,
         "blocking_allowed": blocking_allowed,
         "blocking_preconditions": blocking_preconditions,
@@ -731,6 +741,33 @@ def adoption_gate_rollout_status(*, maturity_current: str) -> dict[str, Any]:
             "mode": "rollback",
             "switch_to": "advisory",
             "recommended_action": "disable blocking consumption, preserve evidence, repair drift, then rerun adversarial adoption checks before re-enabling blocking",
+            "conditions": [
+                {
+                    "id": "runtime_drift",
+                    "signal": "runtime-state or runtime parity fails for the installed Loom runtime",
+                    "recommended_action": "restore the last known-good runtime or rebootstrap before consuming blocking gates again",
+                },
+                {
+                    "id": "evidence_drift",
+                    "signal": "version-controlled evidence locators are missing, stale, or no longer match the generated profile plan",
+                    "recommended_action": "repair evidence carriers and rerun adversarial adoption checks before re-enabling blocking",
+                },
+                {
+                    "id": "host_binding_drift",
+                    "signal": "GitHub issue, PR, branch, project, merge commit, or branch-protection bindings no longer match the recorded profile state",
+                    "recommended_action": "return to advisory and reconcile host bindings before consuming gate results as blocking",
+                },
+                {
+                    "id": "review_head_drift",
+                    "signal": "spec or implementation review records no longer bind to the expected review head",
+                    "recommended_action": "refresh review records against the current head and repeat the gate rollout check",
+                },
+                {
+                    "id": "metadata_parsing_drift",
+                    "signal": "Work Item, Project, PR, or companion metadata cannot be parsed into the expected Loom contracts",
+                    "recommended_action": "repair metadata parsing or carrier format before restoring blocking consumption",
+                },
+            ],
         },
     }
 

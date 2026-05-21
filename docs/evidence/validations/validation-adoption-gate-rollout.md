@@ -20,6 +20,7 @@
 - `default_mode: advisory`
 - `current_mode`
 - `recommended_mode`
+- `target_mode`
 - `allowed_modes`
 - `blocking_allowed`
 - `blocking_preconditions`
@@ -35,11 +36,11 @@
 - `adversarial_adoption_checks`
 - `rollback_switch`
 
-新下游仓库默认仍是 `advisory`。只有 adversarial adoption checks 有版本控制内证据后，profile 才允许显式启用 blocking。
+新下游仓库默认仍是 `advisory`。只有所有 blocking 前置条件都有版本控制内证据后，profile 才允许显式启用 blocking。
 
 ## Rollback rule
 
-`rollback` 必须切回 `advisory`，并保留 evidence。rollback 的目标不是删除 Loom，而是在 runtime、evidence、host binding、review head 或 metadata parsing 漂移时暂停 blocking 消费。
+`rollback` 必须切回 `advisory`，并保留 evidence。rollback 的目标不是删除 Loom，而是在 runtime、evidence、host binding、review head 或 metadata parsing 漂移时暂停 blocking 消费。`rollback.conditions` 必须逐项列出这些漂移信号和恢复动作。
 
 ## Validation commands
 
@@ -52,4 +53,4 @@ python3 tools/loom_check.py .
 
 ## Result
 
-`loom_check` 现在验证 `gate_rollout` 的 schema、三态模式、blocking 前置条件、rollback switch 和 upgrade 输出一致性。
+`loom_check` 现在验证 `gate_rollout` 的 schema、三态模式、blocking 前置条件、版本控制证据、rollback switch、五类 rollback 漂移条件和 upgrade 输出一致性。
