@@ -81,9 +81,21 @@ Required payload fields:
 - `work_item`
 - `review_approval`
 - `merge_checkpoint`
+- `governance_lint`
 - `host_enforcement`
 - `approval_boundary`
 - `failure_taxonomy`
+
+`governance_lint` exposes the approval-boundary lint result as derived evidence. It must not author a review verdict or replace `work_item.review_entry`; it only explains why raw review output, shadow evidence, PR body text, CI success, or GitHub review comments did not satisfy semantic approval.
+
+`approval_boundary` must explicitly keep every non-authored evidence source false for approval truth:
+
+- `raw_review_evidence_satisfies_approval`
+- `shadow_evidence_satisfies_approval`
+- `runtime_review_evidence_satisfies_approval`
+- `pr_body_summary_satisfies_approval`
+- `ci_success_satisfies_approval`
+- `github_review_comments_satisfy_approval`
 
 ## 5. Failure Taxonomy
 

@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-847",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-847 spec is approved for authored review approval bypass lint. Scope is limited to derived governance_lint approval-boundary output, implementation review kind enforcement, installed runtime negative fixtures, generated skills surface, and PR merge gate documentation; it excludes review schema changes, semantic review execution, and repo-specific lint rules.",
+  "reviewer": "codex",
+  "reviewed_head": "a9fee7cf7e9c500c15a05a5e965ef2cdffe2bddc",
+  "reviewed_validation_summary": "Spec suite defines approval-boundary outcomes, non-goals, evidence plan, rollback, owned files, and fail-closed behavior for raw-only and spec_review bypass cases.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-847.md",
+    "recovery_entry": ".loom/progress/WI-847.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
