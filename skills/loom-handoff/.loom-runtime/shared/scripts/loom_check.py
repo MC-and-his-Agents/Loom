@@ -12964,7 +12964,6 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
         if current_head is None:
             return failures
         baseline_template = base / "baseline-template"
-        shutil.copytree(baseline, baseline_template)
 
         def restore_baseline() -> bool:
             if baseline.exists():
@@ -12978,6 +12977,7 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
         install_fresh_reviews(baseline, current_head)
         run_command(root, ["git", "add", "-f", ".loom/reviews"], cwd=baseline, timeout_seconds=30)
         run_command(root, ["git", "commit", "-m", "refresh reviews to current head"], cwd=baseline, timeout_seconds=30)
+        shutil.copytree(baseline, baseline_template)
 
         status_payload, error = load_command_json(
             root,
