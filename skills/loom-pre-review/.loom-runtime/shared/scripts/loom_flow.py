@@ -7621,6 +7621,8 @@ def codex_app_endpoint_socket_path(app_server: str | None) -> Path | None:
     endpoint = non_empty_str(app_server)
     if endpoint is None:
         return None
+    if endpoint == "stdio://":
+        return None
     if endpoint.startswith("unix://"):
         path_text = endpoint.removeprefix("unix://")
     elif endpoint.startswith("/"):
@@ -7632,7 +7634,13 @@ def codex_app_endpoint_socket_path(app_server: str | None) -> Path | None:
     return Path(path_text).expanduser()
 
 
+def codex_app_endpoint_is_stdio(app_server: str | None) -> bool:
+    return non_empty_str(app_server) == "stdio://"
+
+
 def codex_app_endpoint_is_live_capable(app_server: str | None) -> bool:
+    if codex_app_endpoint_is_stdio(app_server):
+        return True
     socket_path = codex_app_endpoint_socket_path(app_server)
     return socket_path is not None and socket_path.exists()
 
@@ -7998,7 +8006,15 @@ def review_adapter_selection_metadata(selection: dict[str, Any], *, reviewed_hea
 
 
 def jsonrpc_send_request(stdin: Any, *, request_id: int, method: str, params: dict[str, Any]) -> None:
-    stdin.write(json.dumps({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}) + "\n")
+    stdin.write(json.dumps({"id": request_id, "method": method, "params": params}) + "\n")
+    stdin.flush()
+
+
+def jsonrpc_send_notification(stdin: Any, *, method: str, params: dict[str, Any] | None = None) -> None:
+    payload: dict[str, Any] = {"method": method}
+    if params is not None:
+        payload["params"] = params
+    stdin.write(json.dumps(payload) + "\n")
     stdin.flush()
 
 
@@ -8017,6 +8033,64 @@ def jsonrpc_read_response(stdout: Any, *, request_id: int) -> tuple[dict[str, An
         if payload.get("id") == request_id:
             return payload, notifications, []
         notifications.append(payload)
+
+
+def jsonrpc_read_until_review_text(
+    stdout: Any,
+    *,
+    turn_id: str | None,
+) -> tuple[str | None, list[dict[str, Any]], list[str]]:
+    notifications: list[dict[str, Any]] = []
+    while True:
+        line = stdout.readline()
+        if not line:
+            return None, notifications, ["app-server closed before Codex App review completed"]
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        notifications.append(payload)
+        review_text = find_exited_review_text(payload)
+        if isinstance(review_text, str) and review_text.strip():
+            return review_text, notifications, []
+        if payload.get("method") == "turn/completed":
+            params = payload.get("params")
+            if not isinstance(params, dict):
+                continue
+            if turn_id and params.get("turnId") not in {turn_id, None}:
+                continue
+            return None, notifications, ["Codex App review completed without exitedReviewMode.review"]
+
+
+def jsonrpc_read_until_normalized_review(
+    stdout: Any,
+    *,
+    turn_id: str | None,
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]], list[str]]:
+    notifications: list[dict[str, Any]] = []
+    while True:
+        line = stdout.readline()
+        if not line:
+            return None, notifications, ["app-server closed before Codex App normalization completed"]
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        notifications.append(payload)
+        normalized = find_normalized_review_payload(payload)
+        if normalized is not None:
+            return normalized, notifications, []
+        if payload.get("method") == "turn/completed":
+            params = payload.get("params")
+            if not isinstance(params, dict):
+                continue
+            if turn_id and params.get("turnId") not in {turn_id, None}:
+                continue
+            return None, notifications, ["Codex App turn/start did not return a Loom review result"]
 
 
 def find_exited_review_text(payload: Any) -> str | None:
@@ -8053,6 +8127,8 @@ def find_normalized_review_payload(payload: Any) -> dict[str, Any] | None:
 
 
 def app_server_proxy_command(app_server: str) -> list[str] | None:
+    if codex_app_endpoint_is_stdio(app_server):
+        return ["codex", "app-server", "--listen", "stdio://"]
     socket_path = codex_app_endpoint_socket_path(app_server)
     if socket_path is None:
         return None
@@ -8090,10 +8166,33 @@ def run_codex_app_live_review(
             return None, metadata, initialize_errors
         if isinstance(initialize_response, dict) and isinstance(initialize_response.get("error"), dict):
             return None, metadata, [f"Codex App initialize failed: {initialize_response['error']}"]
+        jsonrpc_send_notification(process.stdin, method="initialized")
 
         jsonrpc_send_request(
             process.stdin,
             request_id=2,
+            method="thread/resume",
+            params={
+                "threadId": thread_id,
+                "cwd": thread_cwd,
+            },
+        )
+        resume_response, _, resume_errors = jsonrpc_read_response(process.stdout, request_id=2)
+        if resume_errors:
+            return None, metadata, resume_errors
+        if isinstance(resume_response, dict) and isinstance(resume_response.get("error"), dict):
+            return None, metadata, [f"Codex App thread/resume failed: {resume_response['error']}"]
+        resume_result = resume_response.get("result") if isinstance(resume_response, dict) else None
+        if isinstance(resume_result, dict):
+            thread = resume_result.get("thread")
+            if isinstance(thread, dict):
+                metadata["resumed_thread_cwd"] = thread.get("cwd")
+                metadata["resumed_thread_source"] = thread.get("source")
+                metadata["resumed_thread_cli_version"] = thread.get("cliVersion")
+
+        jsonrpc_send_request(
+            process.stdin,
+            request_id=3,
             method="review/start",
             params={
                 "threadId": thread_id,
@@ -8101,15 +8200,28 @@ def run_codex_app_live_review(
                 "target": {"type": "commit", "sha": reviewed_head},
             },
         )
-        review_response, review_notifications, review_errors = jsonrpc_read_response(process.stdout, request_id=2)
+        review_response, review_notifications, review_errors = jsonrpc_read_response(process.stdout, request_id=3)
         if review_errors:
             return None, metadata, review_errors
         if isinstance(review_response, dict) and isinstance(review_response.get("error"), dict):
             return None, metadata, [f"Codex App review/start failed: {review_response['error']}"]
         result = review_response.get("result") if isinstance(review_response, dict) else None
+        review_turn_id: str | None = None
         if isinstance(result, dict):
             metadata["review_thread_id"] = result.get("reviewThreadId")
+            turn = result.get("turn")
+            if isinstance(turn, dict):
+                review_turn_id = non_empty_str(turn.get("id"))
+                metadata["review_turn_id"] = review_turn_id
         review_text = find_exited_review_text(result) or find_exited_review_text(review_notifications)
+        if not isinstance(review_text, str) or not review_text.strip():
+            review_text, completion_notifications, completion_errors = jsonrpc_read_until_review_text(
+                process.stdout,
+                turn_id=review_turn_id,
+            )
+            review_notifications.extend(completion_notifications)
+            if completion_errors:
+                return None, metadata, completion_errors
         if not isinstance(review_text, str) or not review_text.strip():
             return None, metadata, ["Codex App review/start did not return exitedReviewMode.review"]
 
@@ -8120,7 +8232,7 @@ def run_codex_app_live_review(
 
         jsonrpc_send_request(
             process.stdin,
-            request_id=3,
+            request_id=4,
             method="turn/start",
             params={
                 "threadId": metadata.get("review_thread_id") or thread_id,
@@ -8138,14 +8250,29 @@ def run_codex_app_live_review(
                 "outputSchema": load_json_file(review_engine_schema_path()),
             },
         )
-        turn_response, turn_notifications, turn_errors = jsonrpc_read_response(process.stdout, request_id=3)
+        turn_response, turn_notifications, turn_errors = jsonrpc_read_response(process.stdout, request_id=4)
         if turn_errors:
             return review_text, metadata, turn_errors
         if isinstance(turn_response, dict) and isinstance(turn_response.get("error"), dict):
             return review_text, metadata, [f"Codex App turn/start normalization failed: {turn_response['error']}"]
-        normalized = find_normalized_review_payload(turn_response.get("result") if isinstance(turn_response, dict) else None)
+        turn_result = turn_response.get("result") if isinstance(turn_response, dict) else None
+        normalization_turn_id: str | None = None
+        if isinstance(turn_result, dict):
+            turn = turn_result.get("turn")
+            if isinstance(turn, dict):
+                normalization_turn_id = non_empty_str(turn.get("id"))
+                metadata["normalization_turn_id"] = normalization_turn_id
+        normalized = find_normalized_review_payload(turn_result)
         if normalized is None:
             normalized = find_normalized_review_payload(turn_notifications)
+        if normalized is None:
+            normalized, normalization_notifications, normalization_wait_errors = jsonrpc_read_until_normalized_review(
+                process.stdout,
+                turn_id=normalization_turn_id,
+            )
+            turn_notifications.extend(normalization_notifications)
+            if normalization_wait_errors:
+                return review_text, metadata, normalization_wait_errors
         if normalized is None:
             return review_text, metadata, ["Codex App turn/start did not return a Loom review result"]
         metadata["normalization_source"] = "turn-start-output-schema"
