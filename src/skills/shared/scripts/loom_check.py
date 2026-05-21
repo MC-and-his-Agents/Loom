@@ -9069,9 +9069,23 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     approval_boundary = pr_gate_payload.get("approval_boundary")
                     if not isinstance(approval_boundary, dict) or approval_boundary.get("raw_review_evidence_satisfies_approval") is not False:
                         failures.append(Failure("daily-execution-cli", "`installed pr-gate` must reject raw review evidence as approval truth"))
+                    elif any(
+                        approval_boundary.get(field) is not False
+                        for field in (
+                            "shadow_evidence_satisfies_approval",
+                            "runtime_review_evidence_satisfies_approval",
+                            "pr_body_summary_satisfies_approval",
+                            "ci_success_satisfies_approval",
+                            "github_review_comments_satisfy_approval",
+                        )
+                    ):
+                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` must reject shadow/runtime/PR body/CI/GitHub review evidence as approval truth"))
                     review_approval = pr_gate_payload.get("review_approval")
                     if not isinstance(review_approval, dict) or review_approval.get("decision") != "allow":
                         failures.append(Failure("daily-execution-cli", "`installed pr-gate` must read the authored allow review record"))
+                    governance_lint = pr_gate_payload.get("governance_lint")
+                    if not isinstance(governance_lint, dict) or governance_lint.get("result") != "pass":
+                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` must expose passing approval-boundary governance lint for fresh authored review approval"))
 
                 protection_fixture = write_json_fixture(
                     positive_target,
@@ -9288,6 +9302,10 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         failures.append(Failure("daily-execution-cli", f"`installed pr-gate` raw evidence bypass failed: {error}"))
                     elif raw_only_payload.get("result") != "block" or "raw_evidence_bypass" not in taxonomy:
                         failures.append(Failure("daily-execution-cli", "`installed pr-gate` must block raw-evidence-only approval bypass"))
+                    else:
+                        governance_lint = raw_only_payload.get("governance_lint")
+                        if not isinstance(governance_lint, dict) or governance_lint.get("result") != "block":
+                            failures.append(Failure("daily-execution-cli", "`installed pr-gate` raw-only case must expose blocking approval-boundary governance lint"))
 
                 block_decision_target = tmp_root / "pr-gate-block-decision"
                 shutil.copytree(positive_target, block_decision_target)
@@ -9329,6 +9347,53 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         failures.append(Failure("daily-execution-cli", f"`installed pr-gate` block decision failed: {error}"))
                     elif block_decision_payload.get("result") != "block" or "review_not_approved" not in taxonomy:
                         failures.append(Failure("daily-execution-cli", "`installed pr-gate` must block non-allow authored review decisions"))
+
+                spec_review_target = tmp_root / "pr-gate-spec-review-kind"
+                shutil.copytree(positive_target, spec_review_target)
+                spec_review_path = spec_review_target / ".loom/reviews/INIT-0001.json"
+                try:
+                    spec_review_record = json.loads(spec_review_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    spec_review_record = {}
+                if isinstance(spec_review_record, dict):
+                    spec_review_record["kind"] = "spec_review"
+                    spec_review_record["summary"] = "A spec review cannot satisfy implementation approval."
+                    spec_review_path.write_text(json.dumps(spec_review_record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                git_add = run_command(root, ["git", "add", "-f", ".loom/reviews/INIT-0001.json"], cwd=spec_review_target)
+                git_commit = run_command(root, ["git", "commit", "-m", "author spec review kind fixture"], cwd=spec_review_target)
+                if git_add.returncode != 0 or git_commit.returncode != 0:
+                    detail = git_add.stderr.strip() or git_add.stdout.strip() or git_commit.stderr.strip() or git_commit.stdout.strip() or "git fixture setup failed"
+                    failures.append(Failure("daily-execution-cli", f"`installed pr-gate` spec review kind fixture setup failed: {detail}"))
+                else:
+                    spec_review_pr_fixture = pr_gate_fixture(spec_review_target, number=6)
+                    spec_review_payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                            "pr-gate",
+                            "check",
+                            "--target",
+                            str(spec_review_target),
+                            "--item",
+                            "INIT-0001",
+                            "--pr",
+                            "6",
+                            "--pr-payload-file",
+                            spec_review_pr_fixture,
+                        ],
+                    )
+                    taxonomy = spec_review_payload.get("failure_taxonomy") if isinstance(spec_review_payload, dict) else []
+                    review_approval = spec_review_payload.get("review_approval") if isinstance(spec_review_payload, dict) else {}
+                    governance_lint = spec_review_payload.get("governance_lint") if isinstance(spec_review_payload, dict) else {}
+                    if error:
+                        failures.append(Failure("daily-execution-cli", f"`installed pr-gate` spec review kind failed: {error}"))
+                    elif spec_review_payload.get("result") != "block" or "review_not_approved" not in taxonomy:
+                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` must block spec_review records from satisfying implementation approval"))
+                    elif not isinstance(review_approval, dict) or review_approval.get("status") == "approved":
+                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` must not mark spec_review records as implementation approval"))
+                    elif not isinstance(governance_lint, dict) or governance_lint.get("result") != "block":
+                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` spec_review case must expose blocking approval-boundary governance lint"))
 
                 payload, error = load_command_json(
                     root,

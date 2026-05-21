@@ -96,6 +96,7 @@ GOAL_EXECUTION_CONTRACT_SCHEMA = "loom-goal-execution-contract/v1"
 GOAL_READINESS_SCHEMA = "loom-goal-readiness/v1"
 GOAL_COMPLETION_SCHEMA = "loom-goal-completion/v1"
 GOVERNANCE_LINT_RESULT_SCHEMA = "loom-governance-lint-result/v1"
+GOVERNANCE_LINT_STATUS_SCHEMA = "loom-governance-lint-status/v1"
 
 PROJECT_DRIFT_KINDS = {
     "project_missing_item",
@@ -131,6 +132,7 @@ WORK_ITEM_FIELD_LABELS = {
 
 REVIEW_DECISIONS = {"allow", "block", "fallback"}
 REVIEW_KINDS = {"general_review", "code_review", "spec_review"}
+IMPLEMENTATION_REVIEW_KINDS = {"general_review", "code_review"}
 REVIEW_FINDING_SEVERITIES = {"warn", "block"}
 REVIEW_FINDING_DISPOSITION_STATUSES = {"accepted", "rejected", "deferred"}
 DEFAULT_REVIEW_ENGINE = "codex"
@@ -9054,6 +9056,14 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
                 result = "block"
         else:
             decision = review_record["decision"]
+            review_kind = review_record.get("kind")
+            if review_kind not in IMPLEMENTATION_REVIEW_KINDS:
+                missing_inputs.append(
+                    "implementation review kind must be general_review or code_review; "
+                    f"`{review_kind}` cannot satisfy implementation approval"
+                )
+                if result == "pass":
+                    result = "block"
             if review_record.get("reviewed_validation_summary") != context["latest_validation_summary"]:
                 missing_inputs.append("review artifact does not match the latest validation summary")
                 if result == "pass":
@@ -10631,6 +10641,8 @@ def pr_gate_failure_taxonomy(missing_inputs: list[str], gate_result: str) -> lis
             categories.add("review_missing")
         if "schema_version" in lowered or "invalid review" in lowered:
             categories.add("review_schema_invalid")
+        if "implementation review kind" in lowered or "cannot satisfy implementation approval" in lowered:
+            categories.add("review_not_approved")
         if "decision is blocking" in lowered or "decision is fallback" in lowered or "not approved" in lowered:
             categories.add("review_not_approved")
         if "stale" in lowered or "implementation drift" in lowered:
@@ -10648,6 +10660,104 @@ def pr_gate_failure_taxonomy(missing_inputs: list[str], gate_result: str) -> lis
     if gate_result == "fallback":
         categories.add("prior_gate_fallback")
     return sorted(categories)
+
+
+def approval_boundary_payload(*, raw_evidence_present: bool) -> dict[str, Any]:
+    return {
+        "authored_truth": "work_item.review_entry",
+        "raw_review_evidence_satisfies_approval": False,
+        "shadow_evidence_satisfies_approval": False,
+        "runtime_review_evidence_satisfies_approval": False,
+        "pr_body_summary_satisfies_approval": False,
+        "ci_success_satisfies_approval": False,
+        "github_review_comments_satisfy_approval": False,
+        "raw_evidence_present": raw_evidence_present,
+        "required_authored_review_kinds": sorted(IMPLEMENTATION_REVIEW_KINDS),
+    }
+
+
+def approval_boundary_lint_status(
+    *,
+    context: dict[str, Any],
+    pr_head: str | None,
+    review_approval: dict[str, Any],
+    raw_evidence_present: bool,
+    failure_taxonomy: list[str],
+) -> dict[str, Any]:
+    blocking_results: list[dict[str, Any]] = []
+    not_applicable_results: list[dict[str, Any]] = []
+    status = review_approval.get("status")
+    review_kind = review_approval.get("kind")
+    reviewed_head = review_approval.get("reviewed_head")
+    base_result = {
+        "schema_version": GOVERNANCE_LINT_RESULT_SCHEMA,
+        "id": "authored_review_approval_boundary",
+        "kind": "approval_bypass",
+        "surface": "merge_ready",
+        "subject": "work_item.review_entry",
+        "mapped_failure": {
+            "category": "gate_failure",
+            "kind": "approval_bypass",
+        },
+        "provenance": {
+            "source_layer": "authored_truth",
+            "source_owner": "loom",
+            "source_locator": context.get("review_entry"),
+            "source_binding": "work_item.review_entry",
+            "freshness": "fresh" if status == "approved" else "missing" if status == "missing" else "stale",
+        },
+        "bindings": {
+            "item_id": context.get("item_id"),
+            "head_sha": pr_head,
+            "scope": context.get("scope"),
+            "reviewed_head_sha": reviewed_head,
+            "pr_ref": None,
+        },
+        "fallback_to": "review record / approval gate",
+    }
+    if status == "approved":
+        not_applicable_results.append(
+            {
+                **base_result,
+                "strength": "not_applicable",
+                "summary": "Authored implementation review approval is present; raw, shadow, PR body, CI, and GitHub review evidence remain evidence-only.",
+                "evidence_freshness": "fresh",
+            }
+        )
+    else:
+        reasons = []
+        if raw_evidence_present:
+            reasons.append("raw or runtime review evidence is present")
+        if review_kind and review_kind not in IMPLEMENTATION_REVIEW_KINDS:
+            reasons.append(f"review kind `{review_kind}` is not an implementation approval kind")
+        if "raw_evidence_bypass" in failure_taxonomy:
+            reasons.append("raw evidence cannot satisfy semantic approval")
+        if not reasons:
+            reasons.append("fresh authored implementation review approval is absent")
+        blocking_results.append(
+            {
+                **base_result,
+                "strength": "blocking",
+                "summary": "; ".join(reasons),
+                "evidence_freshness": "missing" if status == "missing" else "stale",
+            }
+        )
+    return {
+        "schema_version": GOVERNANCE_LINT_STATUS_SCHEMA,
+        "surface": "merge_ready",
+        "result": "block" if blocking_results else "pass",
+        "result_summary": (
+            "approval bypass lint blocks merge-ready because authored implementation review approval is absent or invalid."
+            if blocking_results
+            else "approval bypass lint found no raw/shadow/PR/CI/GitHub evidence promoted to semantic approval."
+        ),
+        "blocking_results": blocking_results,
+        "advisory_results": [],
+        "repo_specific_results": [],
+        "not_applicable_results": not_applicable_results,
+        "mapped_failures": [entry["mapped_failure"] for entry in blocking_results],
+        "provenance": [entry["provenance"] for entry in [*blocking_results, *not_applicable_results]],
+    }
 
 
 def pr_gate_payload(
@@ -10751,15 +10861,25 @@ def pr_gate_payload(
                 "status": "missing",
                 "path": review_path,
                 "decision": None,
+                "kind": None,
                 "reviewed_head": None,
                 "head_binding": None,
                 "missing_inputs": review_errors or [f"missing review artifact: {review_path}"],
             }
         else:
+            review_kind = review_record.get("kind")
+            approval_status = (
+                "approved"
+                if review_record.get("decision") == "allow"
+                and not review_errors
+                and review_kind in IMPLEMENTATION_REVIEW_KINDS
+                else "not_approved"
+            )
             review_approval = {
-                "status": "approved" if review_record.get("decision") == "allow" and not review_errors else "not_approved",
+                "status": approval_status,
                 "path": review_path,
                 "decision": review_record.get("decision"),
+                "kind": review_kind,
                 "reviewed_head": review_record.get("reviewed_head"),
                 "reviewed_validation_summary": review_record.get("reviewed_validation_summary"),
                 "head_binding": review_record.get("head_binding"),
@@ -10801,6 +10921,29 @@ def pr_gate_payload(
     failure_taxonomy = pr_gate_failure_taxonomy(missing_inputs, result)
     if raw_evidence_present and review_approval.get("status") != "approved" and "raw_evidence_bypass" not in failure_taxonomy:
         failure_taxonomy.append("raw_evidence_bypass")
+    approval_boundary = approval_boundary_payload(raw_evidence_present=raw_evidence_present)
+    governance_lint = (
+        approval_boundary_lint_status(
+            context=context,
+            pr_head=pr_head,
+            review_approval=review_approval,
+            raw_evidence_present=raw_evidence_present,
+            failure_taxonomy=sorted(failure_taxonomy),
+        )
+        if context
+        else {
+            "schema_version": GOVERNANCE_LINT_STATUS_SCHEMA,
+            "surface": "merge_ready",
+            "result": "block",
+            "result_summary": "approval bypass lint cannot run until the Work Item fact chain is readable.",
+            "blocking_results": [],
+            "advisory_results": [],
+            "repo_specific_results": [],
+            "not_applicable_results": [],
+            "mapped_failures": [],
+            "provenance": [],
+        }
+    )
     return {
         "command": "pr-gate",
         "operation": "check",
@@ -10831,18 +10974,13 @@ def pr_gate_payload(
         },
         "review_approval": review_approval,
         "merge_checkpoint": merge_checkpoint,
+        "governance_lint": governance_lint,
         "host_enforcement": {
             "stable_check_name": PR_MERGE_GATE_CHECK_NAME,
             "status": "not_checked",
             "reason": "pr-gate check proves PR-local semantic approval; controlled-merge checks host required status.",
         },
-        "approval_boundary": {
-            "authored_truth": "work_item.review_entry",
-            "raw_review_evidence_satisfies_approval": False,
-            "shadow_evidence_satisfies_approval": False,
-            "ci_success_satisfies_approval": False,
-            "raw_evidence_present": raw_evidence_present,
-        },
+        "approval_boundary": approval_boundary,
         "failure_taxonomy": sorted(failure_taxonomy),
         "steps": steps,
         "inferences": inferences,
