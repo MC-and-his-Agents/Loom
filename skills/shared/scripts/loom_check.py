@@ -182,6 +182,7 @@ CORE_DOCS = (
     "packages/loom-installer/test/installer.test.ts",
     "tools/loom_init.py",
     "tools/loom_flow.py",
+    "tools/py_compile_clean.py",
 )
 
 AUTOMATION_FRONTLOAD_TEMPLATES = (
@@ -10030,6 +10031,71 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
     return failures
 
 
+PY_COMPILE_CACHE_HYGIENE_TARGETS = (
+    "tools/loom_init.py",
+    "tools/loom_flow.py",
+    "tools/loom_check.py",
+    "tools/loom_status.py",
+    "tools/py_compile_clean.py",
+    "skills/shared/scripts/*.py",
+    "src/skills/shared/scripts/*.py",
+)
+
+
+def python_cache_artifacts(root: Path) -> set[str]:
+    artifacts: set[str] = set()
+    ignored_dirs = {".git", ".codegraph", "node_modules"}
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [dirname for dirname in dirnames if dirname not in ignored_dirs]
+        current = Path(dirpath)
+        if current.name == "__pycache__":
+            artifacts.add(current.relative_to(root).as_posix())
+            dirnames[:] = []
+            continue
+        for filename in filenames:
+            path = current / filename
+            if path.suffix in {".pyc", ".pyo", ".pyd"}:
+                artifacts.add(path.relative_to(root).as_posix())
+    return artifacts
+
+
+def check_py_compile_cache_hygiene(root: Path) -> list[Failure]:
+    category = "py-compile-cache-hygiene"
+    failures: list[Failure] = []
+    wrapper = root / "tools/py_compile_clean.py"
+    if not wrapper.exists():
+        return failures
+
+    workflow = root / ".github/workflows/loom-check.yml"
+    if workflow.exists() and "python3 -m py_compile" in workflow.read_text(encoding="utf-8"):
+        failures.append(Failure(category, "`loom-check.yml` must use `make py-compile`, not bare `python3 -m py_compile`"))
+
+    pr_template = root / ".github/PULL_REQUEST_TEMPLATE.md"
+    if pr_template.exists():
+        template_text = pr_template.read_text(encoding="utf-8")
+        if "tools/py_compile_clean.py" not in template_text:
+            failures.append(Failure(category, "PR template must direct Python compile validation through the cache-clean wrapper"))
+
+    before = python_cache_artifacts(root)
+    result = run_command(
+        root,
+        ["python3", "tools/py_compile_clean.py", *PY_COMPILE_CACHE_HYGIENE_TARGETS],
+        timeout_seconds=120,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "py_compile_clean failed without output"
+        failures.append(Failure(category, f"`tools/py_compile_clean.py` failed: {detail}"))
+        return failures
+
+    after = python_cache_artifacts(root)
+    created = sorted(after - before)
+    if created:
+        preview = ", ".join(created[:8])
+        suffix = "" if len(created) <= 8 else f", ... (+{len(created) - 8} more)"
+        failures.append(Failure(category, f"`tools/py_compile_clean.py` must not create repository Python cache artifacts: {preview}{suffix}"))
+    return failures
+
+
 def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
     failures: list[Failure] = []
     example_target = root / "examples/new-project"
@@ -16746,6 +16812,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_root_self_adoption_carrier(root))
     failures.extend(check_deep_existing_repo_bootstrap(root))
     failures.extend(check_daily_execution_cli(root))
+    failures.extend(check_py_compile_cache_hygiene(root))
     failures.extend(check_repo_companion_interface_contracts(root))
     failures.extend(check_repo_interop_contracts(root))
     failures.extend(check_external_orchestrator_interop_fixture_contract(root))

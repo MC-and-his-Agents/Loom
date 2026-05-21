@@ -64,18 +64,7 @@
 
 ```bash
 python3 tools/loom_check.py
-python3 -m py_compile \
-  tools/loom.py \
-  tools/loom_init.py \
-  tools/loom_flow.py \
-  tools/loom_status.py \
-  skills/shared/scripts/loom_init.py \
-  skills/shared/scripts/loom_flow.py \
-  skills/shared/scripts/loom_status.py \
-  skills/shared/scripts/loom_check.py \
-  skills/shared/scripts/runtime_state.py \
-  skills/shared/scripts/governance_surface.py \
-  skills/loom-spec-review/scripts/loom-spec-review.py
+make py-compile
 npm --prefix packages/loom-installer test
 npm --prefix packages/loom-installer run check:payload
 cd packages/loom-installer && npm pack --dry-run

@@ -88,6 +88,26 @@ RUNTIME_EVIDENCE_FIELDS = (
     "lane_entry",
 )
 
+HOST_BINDING_INSPECTOR_SCHEMA = "loom-host-binding-inspection/v1"
+HOST_BINDING_CHAIN_SCHEMA = "loom-host-binding-chain/v1"
+HOST_DEPENDENCY_GRAPH_SCHEMA = "loom-host-dependency-graph/v1"
+PROJECT_DRIFT_SCHEMA = "loom-project-drift/v1"
+GOAL_EXECUTION_CONTRACT_SCHEMA = "loom-goal-execution-contract/v1"
+GOAL_READINESS_SCHEMA = "loom-goal-readiness/v1"
+GOAL_COMPLETION_SCHEMA = "loom-goal-completion/v1"
+GOVERNANCE_LINT_RESULT_SCHEMA = "loom-governance-lint-result/v1"
+
+PROJECT_DRIFT_KINDS = {
+    "project_missing_item",
+    "project_status_mismatch",
+    "project_unreadable",
+    "project_stale_mirror",
+    "missing_native_edge",
+    "unexpected_native_edge",
+    "stale_native_edge",
+    "open_blocker_executable_conflict",
+}
+
 RECOVERY_FIELD_LABELS = {
     "current_checkpoint": "Current Checkpoint",
     "current_stop": "Current Stop",
@@ -417,16 +437,34 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     carrier.add_argument("--dry-run", action="store_true", default=True, help="Preview refresh actions without writing files; this is the default")
     carrier.add_argument("--write", dest="dry_run", action="store_false", help="Write Loom-owned carrier metadata refreshes")
 
-    host_binding = subparsers.add_parser("host-binding", help="Validate host issue, PR, branch, and SHA bindings")
-    host_binding.add_argument("operation", choices=("validate",))
+    host_binding = subparsers.add_parser("host-binding", help="Validate or inspect host issue, PR, branch, SHA, Project, and dependency bindings")
+    host_binding.add_argument("operation", choices=("validate", "inspect"))
     host_binding.add_argument("--target", required=True, help="Target repository root")
     host_binding.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
     host_binding.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    host_binding.add_argument("--phase", type=int, help="GitHub Phase issue number")
+    host_binding.add_argument("--fr", type=int, help="GitHub FR issue number")
     host_binding.add_argument("--issue", type=int, help="GitHub Work Item issue number")
     host_binding.add_argument("--pr", type=int, help="GitHub implementation PR number")
+    host_binding.add_argument("--project", type=int, help="GitHub Project number")
     host_binding.add_argument("--branch", help="GitHub branch name")
     host_binding.add_argument("--head-sha", help="Implementation head SHA to validate")
     host_binding.add_argument("--base-sha", help="Base SHA used for diff validation")
+
+    goal = subparsers.add_parser("goal", help="Derive or validate Loom /goal execution contracts")
+    goal.add_argument("operation", choices=("derive", "validate"))
+    goal.add_argument("--target", required=True, help="Target repository root")
+    goal.add_argument("--item", help="Expected current item id")
+    goal.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+    goal.add_argument("--goal-file", help="Optional repo-relative goal execution contract JSON")
+    goal.add_argument("--issue", type=int, help="Expected source issue number")
+    goal.add_argument("--pr", type=int, help="Expected PR number")
+    goal.add_argument("--branch", help="Expected branch name")
+    goal.add_argument("--head-sha", help="Expected head SHA")
 
     pr_gate = subparsers.add_parser("pr-gate", help="Evaluate PR-specific semantic approval before host merge")
     pr_gate.add_argument("operation", choices=("check",))
@@ -592,6 +630,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     closeout.add_argument("--phase", type=int, help="GitHub Phase issue number")
     closeout.add_argument("--fr", type=int, help="GitHub FR issue number")
     closeout.add_argument("--branch", help="GitHub branch name bound to the work item")
+    closeout.add_argument("--goal-completion", help="Optional repo-relative /goal completion evidence JSON")
     closeout.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
     closeout.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
     closeout.add_argument("--comment", help="Optional closeout comment for issue sync")
@@ -718,6 +757,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Init-result path relative to the target root",
     )
     flow.add_argument("--build-evidence", help="Optional build evidence JSON path relative to the target root")
+    flow.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
+    flow.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    flow.add_argument("--issue", type=int, help="GitHub Work Item issue number for host status reads")
+    flow.add_argument("--pr", type=int, help="GitHub implementation PR number for host status reads")
+    flow.add_argument("--project", type=int, help="GitHub Project number for Project drift reads")
+    flow.add_argument("--branch", help="GitHub branch name for host binding reads")
+    flow.add_argument("--project-drift-mode", choices=("advisory", "blocking"), default="advisory")
 
     return parser.parse_args(argv)
 
@@ -4868,6 +4914,26 @@ def gh_rest_json(root: Path, path: str) -> tuple[dict[str, Any] | None, list[str
     return None, errors + [f"public REST fallback: {message}" for message in fallback_errors]
 
 
+def gh_rest_list(root: Path, path: str) -> tuple[list[dict[str, Any]], list[str]]:
+    raw_payload, errors = gh_json(root, ["api", path])
+    if raw_payload is not None:
+        return [], [f"gh api {path} returned an object where a list was expected"]
+    result = run_process(["gh", "api", path], root, timeout_seconds=20)
+    if result.returncode == 0:
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            return [], [f"invalid JSON from gh api {path}: {exc.msg}"]
+        if not isinstance(payload, list):
+            return [], [f"gh api {path} did not return a list"]
+        return [entry for entry in payload if isinstance(entry, dict)], []
+    fallback_payload, fallback_errors = github_public_rest_list(path)
+    if fallback_payload:
+        return fallback_payload, []
+    detail = result.stderr.strip() or result.stdout.strip() or "gh api failed"
+    return [], [detail, *[f"public REST fallback: {message}" for message in fallback_errors]]
+
+
 def github_public_rest_json(path: str) -> tuple[dict[str, Any] | None, list[str]]:
     url = f"https://api.github.com/{path.lstrip('/')}"
     headers = {
@@ -4992,6 +5058,218 @@ def github_branch_payload(root: Path, owner: str, repo_name: str, branch_name: s
         "protected": bool(payload.get("protected")),
         "commit": {"sha": commit.get("sha")} if isinstance(commit.get("sha"), str) else None,
     }, []
+
+
+def normalize_dependency_issue(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": payload.get("node_id") or payload.get("id"),
+        "number": payload.get("number"),
+        "state": github_issue_state(payload.get("state")),
+        "title": payload.get("title"),
+        "url": payload.get("html_url") or payload.get("url"),
+    }
+
+
+def github_issue_dependencies_payload(root: Path, owner: str, repo_name: str, issue_number: int) -> dict[str, Any]:
+    checks: list[dict[str, Any]] = []
+    all_edges: list[dict[str, Any]] = []
+    unsupported = False
+    permission_denied = False
+    for direction, endpoint in (
+        ("blocked_by", "blocked_by"),
+        ("blocking", "blocking"),
+    ):
+        path = f"repos/{owner}/{repo_name}/issues/{issue_number}/dependencies/{endpoint}"
+        issues, errors = gh_rest_list(root, path)
+        status = "present"
+        if errors:
+            status = "unreadable"
+            text = " ".join(errors).lower()
+            unsupported = unsupported or any(token in text for token in ("404", "410", "not found", "gone"))
+            permission_denied = permission_denied or any(token in text for token in ("403", "permission", "resource not accessible"))
+        checks.append(
+            {
+                "direction": direction,
+                "endpoint": path,
+                "status": status,
+                "errors": errors,
+                "provenance": {
+                    "source_layer": "host_control_mirror",
+                    "source_owner": "github",
+                    "source_locator": path,
+                    "freshness": "fresh" if status == "present" else "unreadable",
+                },
+            }
+        )
+        for issue in issues:
+            normalized = normalize_dependency_issue(issue)
+            number = normalized.get("number")
+            if not isinstance(number, int):
+                continue
+            all_edges.append(
+                {
+                    "source_issue": issue_number if direction == "blocked_by" else number,
+                    "blocking_issue": number if direction == "blocked_by" else issue_number,
+                    "direction": direction,
+                    "blocker_state": str(normalized.get("state") or "UNKNOWN").lower(),
+                    "source_of_truth": "github_native_edge",
+                    "host_mirror_status": "matched",
+                    "native": "present",
+                    "issue": normalized,
+                    "provenance": checks[-1]["provenance"],
+                }
+            )
+    availability = "present"
+    if unsupported:
+        availability = "unsupported"
+    elif permission_denied:
+        availability = "permission_denied"
+    elif any(check["status"] == "unreadable" for check in checks):
+        availability = "unreadable"
+    return {
+        "availability": availability,
+        "checks": checks,
+        "native_edges": all_edges,
+    }
+
+
+def parse_authored_dependency_edges(issue_body: Any, issue_number: int | None) -> list[dict[str, Any]]:
+    if not isinstance(issue_body, str) or issue_number is None:
+        return []
+    edges: list[dict[str, Any]] = []
+    seen: set[tuple[int, int, str]] = set()
+    patterns = (
+        ("blocked_by", r"(?im)(?:blocked\s+by|blocked_by|depends\s+on|dependency|依赖|前置)[^\n#]*(?:#)(\d+)"),
+        ("blocking", r"(?im)(?:blocks|blocking|阻塞)[^\n#]*(?:#)(\d+)"),
+    )
+    for relation, pattern in patterns:
+        for match in re.finditer(pattern, issue_body):
+            other = int(match.group(1))
+            source = issue_number if relation == "blocked_by" else other
+            blocker = other if relation == "blocked_by" else issue_number
+            key = (source, blocker, relation)
+            if key in seen or source == blocker:
+                continue
+            seen.add(key)
+            edges.append(
+                {
+                    "source_issue": source,
+                    "blocking_issue": blocker,
+                    "direction": relation,
+                    "blocker_state": "unknown",
+                    "source_of_truth": "issue_body_dependency_section",
+                    "host_mirror_status": "requires_native_compare",
+                    "native": "unknown",
+                    "provenance": {
+                        "source_layer": "authored_truth",
+                        "source_owner": "github_issue_body",
+                        "source_locator": f"issue #{issue_number}",
+                        "freshness": "fresh",
+                    },
+                }
+            )
+    return edges
+
+
+def dependency_edge_key(edge: dict[str, Any]) -> tuple[int | None, int | None]:
+    source = edge.get("source_issue")
+    blocker = edge.get("blocking_issue")
+    return (source if isinstance(source, int) else None, blocker if isinstance(blocker, int) else None)
+
+
+def dependency_graph_payload(
+    *,
+    issue_number: int | None,
+    issue_payload: dict[str, Any] | None,
+    native_dependency_payload: dict[str, Any] | None,
+) -> dict[str, Any]:
+    authored_edges = parse_authored_dependency_edges(issue_payload.get("body") if isinstance(issue_payload, dict) else None, issue_number)
+    native_edges = (
+        list(native_dependency_payload.get("native_edges", []))
+        if isinstance(native_dependency_payload, dict)
+        else []
+    )
+    native_by_key = {dependency_edge_key(edge): edge for edge in native_edges}
+    authored_by_key = {dependency_edge_key(edge): edge for edge in authored_edges}
+    findings: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
+
+    availability = (
+        native_dependency_payload.get("availability")
+        if isinstance(native_dependency_payload, dict)
+        else "not_requested"
+    )
+    for edge in authored_edges:
+        key = dependency_edge_key(edge)
+        native = native_by_key.get(key)
+        merged = dict(edge)
+        if native is None:
+            merged["host_mirror_status"] = "missing_native_edge" if availability == "present" else availability
+            merged["native"] = "missing" if availability == "present" else availability
+            findings.append(
+                {
+                    "category": "drift",
+                    "kind": "missing_native_edge",
+                    "severity": "fix-needed" if availability == "present" else "warn",
+                    "subject": f"dependency edge {key[0]} blocked by {key[1]}",
+                    "evidence": {"edge": merged, "native_availability": availability},
+                    "fallback_to": "manual-reconciliation",
+                }
+            )
+        else:
+            merged = {**native, "source_of_truth": edge.get("source_of_truth"), "host_mirror_status": "matched"}
+        edges.append(merged)
+
+    for edge in native_edges:
+        key = dependency_edge_key(edge)
+        if key not in authored_by_key:
+            unexpected = {**edge, "host_mirror_status": "unexpected_native_edge"}
+            edges.append(unexpected)
+            findings.append(
+                {
+                    "category": "drift",
+                    "kind": "unexpected_native_edge",
+                    "severity": "fix-needed",
+                    "subject": f"dependency edge {key[0]} blocked by {key[1]}",
+                    "evidence": {"edge": unexpected},
+                    "fallback_to": "manual-reconciliation",
+                }
+            )
+        if edge.get("direction") == "blocked_by" and edge.get("blocker_state") == "open":
+            findings.append(
+                {
+                    "category": "gate_failure",
+                    "kind": "open_blocker_executable_conflict",
+                    "severity": "block",
+                    "subject": f"issue #{issue_number} blocked by #{edge.get('blocking_issue')}",
+                    "evidence": {"edge": edge},
+                    "fallback_to": "manual-reconciliation",
+                }
+            )
+    if availability in {"unsupported", "permission_denied", "unreadable"}:
+        findings.append(
+            {
+                "category": "drift",
+                "kind": "native_dependency_unreadable",
+                "severity": "warn",
+                "subject": f"issue #{issue_number} dependency graph",
+                "evidence": {"availability": availability},
+                "fallback_to": "manual-reconciliation",
+            }
+        )
+    return {
+        "schema_version": HOST_DEPENDENCY_GRAPH_SCHEMA,
+        "source_issue": {
+            "number": issue_number,
+            "state": issue_payload.get("state") if isinstance(issue_payload, dict) else None,
+        },
+        "availability": availability,
+        "edges": edges,
+        "native_edges": native_edges,
+        "authored_edges": authored_edges,
+        "findings": findings,
+        "checks": native_dependency_payload.get("checks", []) if isinstance(native_dependency_payload, dict) else [],
+    }
 
 
 def gh_json_list(root: Path, args: list[str], key: str) -> tuple[list[dict[str, Any]], list[str]]:
@@ -6860,46 +7138,104 @@ def generated_companion_consumption_payload(
     }
 
 
-def active_workspace_conflicts(target_root: Path, item_id: str, workspace_entry: str) -> list[str]:
+def active_workspace_diagnostics(target_root: Path, item_id: str, workspace_entry: str) -> list[dict[str, Any]]:
     work_items_dir = target_root / ".loom/work-items"
     if not work_items_dir.exists():
         return []
 
-    conflicts: list[str] = []
+    diagnostics: list[dict[str, Any]] = []
     for candidate in sorted(work_items_dir.glob("*.md")):
+        work_item_locator = relative_to_root(candidate, target_root)
+        diagnostic: dict[str, Any] = {
+            "item_id": None,
+            "workspace_entry": workspace_entry,
+            "work_item_locator": work_item_locator,
+            "binding_locator": work_item_locator,
+            "checkpoint": None,
+            "freshness": "unknown",
+            "classification": "unknown",
+            "blocking": False,
+            "recommended_remediation": (
+                "repair the candidate Work Item carrier through its own issue flow; it is not treated as a current workspace conflict until its workspace binding is readable."
+            ),
+        }
         try:
             parsed_item, errors = parse_work_item(candidate, target_root)
         except OSError:
+            if candidate.stem == item_id:
+                diagnostic["item_id"] = item_id
+                diagnostic["blocking"] = True
+                diagnostic["recommended_remediation"] = "repair the current Work Item carrier before continuing the current workspace gate."
+            diagnostics.append(diagnostic)
             continue
         if errors:
+            if candidate.stem == item_id:
+                diagnostic["item_id"] = item_id
+                diagnostic["blocking"] = True
+                diagnostic["recommended_remediation"] = "repair the current Work Item carrier before continuing the current workspace gate."
+            diagnostics.append(diagnostic)
             continue
         other_item_id = str(parsed_item["item_id"])
+        diagnostic["item_id"] = other_item_id
+        diagnostic["workspace_entry"] = str(parsed_item["workspace_entry"])
         if other_item_id == item_id:
             continue
         if str(parsed_item["workspace_entry"]) != workspace_entry:
             continue
         recovery_rel = str(parsed_item["recovery_entry"])
+        diagnostic["binding_locator"] = recovery_rel
+        diagnostic["blocking"] = True
+        diagnostic["recommended_remediation"] = "repair this same-workspace carrier before continuing the current workspace gate."
         recovery_path, recovery_errors = resolve_repo_relative_path(
             target_root,
             recovery_rel,
             label="work item recovery entry locator",
         )
         if recovery_errors or recovery_path is None:
-            conflicts.append(other_item_id)
+            diagnostic["freshness"] = "unreadable"
+            diagnostics.append(diagnostic)
             continue
         if not recovery_path.exists():
-            conflicts.append(other_item_id)
+            diagnostic["freshness"] = "missing"
+            diagnostics.append(diagnostic)
             continue
         try:
             recovery_data, recovery_errors = parse_recovery_entry(recovery_path, target_root)
         except OSError:
-            conflicts.append(other_item_id)
+            diagnostic["freshness"] = "unreadable"
+            diagnostics.append(diagnostic)
             continue
         if recovery_errors:
-            conflicts.append(other_item_id)
+            diagnostic["freshness"] = "unreadable"
+            diagnostics.append(diagnostic)
             continue
-        if normalize_checkpoint(recovery_data["current_checkpoint"]) not in TERMINAL_CHECKPOINTS:
-            conflicts.append(other_item_id)
+        checkpoint = normalize_checkpoint(recovery_data["current_checkpoint"])
+        diagnostic["checkpoint"] = checkpoint
+        if checkpoint in TERMINAL_CHECKPOINTS:
+            diagnostic["freshness"] = "terminal"
+            diagnostic["classification"] = "stale_carrier"
+            diagnostic["blocking"] = False
+            diagnostic["recommended_remediation"] = (
+                "leave this unrelated terminal carrier out of the current Work Item; audit or retire it through its own issue flow if it still appears active."
+            )
+        else:
+            diagnostic["freshness"] = "active"
+            diagnostic["classification"] = "shared_workspace_conflict"
+            diagnostic["blocking"] = True
+            diagnostic["recommended_remediation"] = (
+                "move one active item to its own branch/worktree or close its own recovery path before continuing."
+            )
+        diagnostics.append(diagnostic)
+    return diagnostics
+
+
+def active_workspace_conflicts(target_root: Path, item_id: str, workspace_entry: str) -> list[str]:
+    conflicts: list[str] = []
+    for diagnostic in active_workspace_diagnostics(target_root, item_id, workspace_entry):
+        if not diagnostic.get("blocking"):
+            continue
+        other_item_id = diagnostic.get("item_id")
+        conflicts.append(str(other_item_id) if other_item_id else str(diagnostic.get("work_item_locator", "unknown")))
     return conflicts
 
 
@@ -8438,10 +8774,18 @@ def purity_report_from_context(context: dict[str, Any], fact_chain_errors: list[
             preview = ", ".join(sorted(out_of_scope_changes)[:5])
             hard_failures.append(f"scope overflow detected: {preview}")
 
-    conflicts = active_workspace_conflicts(target_root, item_id, workspace_entry)
+    active_diagnostics = active_workspace_diagnostics(target_root, item_id, workspace_entry)
+    conflicts = [entry for entry in active_diagnostics if entry.get("blocking")]
+    stale_carriers = [entry for entry in active_diagnostics if entry.get("classification") == "stale_carrier"]
     if conflicts:
         hard_failures.append(
-            "workspace is bound to multiple active work items: " + ", ".join(sorted(conflicts))
+            "workspace is bound to multiple active work items: "
+            + ", ".join(sorted(str(entry.get("item_id") or entry.get("work_item_locator")) for entry in conflicts))
+        )
+    for carrier in stale_carriers:
+        report_only.append(
+            "stale active carrier is unrelated to the current item and does not block this workspace: "
+            + str(carrier.get("item_id") or carrier.get("work_item_locator"))
         )
 
     branch = git_branch(target_root)
@@ -8462,6 +8806,7 @@ def purity_report_from_context(context: dict[str, Any], fact_chain_errors: list[
             "declared_paths": scope_paths,
             "out_of_scope_changes": sorted(out_of_scope_changes),
         },
+        "active_workspace_diagnostics": active_diagnostics,
         "hard_failures": hard_failures,
         "report_only": report_only,
     }
@@ -8882,6 +9227,7 @@ def handle_workspace(args: argparse.Namespace) -> int:
         cleanup_payload["retained_paths"] = unsafe_temp_paths
         return emit_workspace(cleanup_payload)
 
+    removed: list[str] = []
     for temp_path in temp_paths:
         relative = relative_to_root(temp_path, target_root)
         tracked = git_tracked_files(target_root, relative)
@@ -8892,32 +9238,18 @@ def handle_workspace(args: argparse.Namespace) -> int:
             return emit_workspace(cleanup_payload)
         if temp_path.is_dir():
             shutil.rmtree(temp_path)
+            removed.append(relative)
         else:
             temp_path.unlink()
+            removed.append(relative)
 
-    update_markdown_bullet(context["recovery_path"], "Current Checkpoint", "retired")
-    if context["status_path"].exists():
-        update_markdown_bullet(context["status_path"], "Current Checkpoint", "retired")
-
-    refreshed, refresh_errors = load_context(target_root, args.output, args.item)
-    if refresh_errors:
-        return emit(
-            {
-                "command": "workspace",
-                "operation": "retire",
-                "result": "block",
-                "summary": "retire wrote `retired`, but the fact chain no longer reads cleanly.",
-                "missing_inputs": [f"fact-chain: {message}" for message in refresh_errors],
-                "fallback_to": "admission",
-                "runtime_state": runtime_state,
-            }
-        )
-
-    payload = base_workspace_payload(refreshed, "retire")
+    payload = base_workspace_payload(context, "retire")
     payload["result"] = "pass"
-    payload["summary"] = "workspace was retired by updating the recovery entry checkpoint to `retired`."
+    payload["summary"] = "workspace retire completed local cleanup without writing versioned recovery or status carriers."
     payload["retired"] = True
-    payload["removed_paths"] = [path for path in owned_dirty if any(path == root or path.startswith(f"{root}/") for root in OWNED_TEMP_ROOTS)]
+    payload["retire_scope"] = "local_only"
+    payload["versioned_carrier_updates"] = []
+    payload["removed_paths"] = removed
     return emit_workspace(payload)
 
 
@@ -9241,10 +9573,16 @@ def state_check_payload(context: dict[str, Any]) -> dict[str, Any]:
     if current_checkpoint in TERMINAL_CHECKPOINTS:
         active_state_failures.append(f"current checkpoint is terminal: `{current_checkpoint}`")
 
-    active_conflicts = active_workspace_conflicts(context["target_root"], context["item_id"], context["workspace_entry"])
+    active_diagnostics = purity.get("active_workspace_diagnostics", [])
+    active_conflicts = [
+        entry
+        for entry in active_diagnostics
+        if isinstance(entry, dict) and entry.get("blocking")
+    ]
     if active_conflicts:
         active_state_failures.append(
-            "workspace is shared by multiple active items: " + ", ".join(sorted(active_conflicts))
+            "workspace is shared by multiple active items: "
+            + ", ".join(sorted(str(entry.get("item_id") or entry.get("work_item_locator")) for entry in active_conflicts))
         )
 
     known_checkpoints = {"admission", "build", "merge", "retired"} | TERMINAL_CHECKPOINTS
@@ -9295,6 +9633,7 @@ def state_check_payload(context: dict[str, Any]) -> dict[str, Any]:
             "active_state_failures": active_state_failures,
             "checkpoint_failures": checkpoint_failures,
             "scope_failures": scope_failures,
+            "active_workspace_diagnostics": active_diagnostics,
         },
         "purity": purity,
         "result": result,
@@ -9836,8 +10175,245 @@ def host_binding_validate_payload(
     }
 
 
+def binding_node(
+    *,
+    role: str,
+    locator: str | None,
+    freshness: str,
+    source_layer: str,
+    source_owner: str,
+    value: dict[str, Any] | None = None,
+    errors: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "role": role,
+        "locator": locator,
+        "freshness": freshness,
+        "value": value,
+        "errors": list(errors or []),
+        "provenance": [
+            {
+                "source_layer": source_layer,
+                "source_owner": source_owner,
+                "source_locator": locator,
+                "freshness": freshness,
+            }
+        ],
+    }
+
+
+def host_binding_inspection_payload(
+    *,
+    target_root: Path,
+    owner: str | None,
+    repo_name: str | None,
+    phase_number: int | None,
+    fr_number: int | None,
+    issue_number: int | None,
+    pr_number: int | None,
+    project_number: int | None,
+    branch_name: str | None,
+    head_sha: str | None,
+    base_sha: str | None,
+) -> dict[str, Any]:
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    owner = owner or detected_owner
+    repo_name = repo_name or detected_repo
+    missing_inputs: list[str] = []
+    findings: list[dict[str, Any]] = []
+    if not owner or not repo_name:
+        missing_inputs.append("owner/repo")
+
+    binding_payload = github_binding_payload(
+        target_root=target_root,
+        owner=owner,
+        repo_name=repo_name,
+        phase_number=phase_number,
+        fr_number=fr_number,
+        issue_number=issue_number,
+        pr_number=pr_number,
+        branch_name=branch_name,
+        sync=False,
+        dry_run=True,
+        require_complete_chain=False,
+    )
+    binding = binding_payload.get("binding") if isinstance(binding_payload.get("binding"), dict) else {}
+    objects = binding.get("objects") if isinstance(binding, dict) else {}
+    if not isinstance(objects, dict):
+        objects = {}
+
+    issue_payload: dict[str, Any] | None = None
+    issue_errors: list[str] = []
+    if owner and repo_name and issue_number is not None:
+        issue_payload, issue_errors = github_issue_payload(target_root, owner, repo_name, issue_number)
+        missing_inputs.extend(f"work_item: {message}" for message in issue_errors)
+
+    native_dependencies = (
+        github_issue_dependencies_payload(target_root, owner, repo_name, issue_number)
+        if owner and repo_name and issue_number is not None
+        else {"availability": "not_requested", "checks": [], "native_edges": []}
+    )
+    dependency_graph = dependency_graph_payload(
+        issue_number=issue_number,
+        issue_payload=issue_payload,
+        native_dependency_payload=native_dependencies,
+    )
+    findings.extend(dependency_graph.get("findings", []))
+
+    project_item: dict[str, Any] | None = None
+    project_errors: list[str] = []
+    if project_number is not None and owner:
+        project_context, project_errors = project_status_context(target_root, owner, project_number)
+        if not project_errors:
+            project_item = find_project_item(project_context["items"], issue_number, "issue") if issue_number is not None else None
+        else:
+            missing_inputs.extend(f"project: {message}" for message in project_errors)
+
+    def object_node(role: str, fallback_locator: str | None = None) -> dict[str, Any]:
+        value = objects.get(role)
+        if isinstance(value, dict):
+            status = value.get("status")
+            errors = value.get("errors") if isinstance(value.get("errors"), list) else []
+            freshness = "fresh" if status in {"present", "host-managed", "profile-defined"} else "missing"
+            if errors:
+                freshness = "unreadable"
+            locator = (
+                str(value.get("url"))
+                if isinstance(value.get("url"), str)
+                else str(value.get("name"))
+                if isinstance(value.get("name"), str)
+                else fallback_locator
+            )
+            return binding_node(
+                role=role,
+                locator=locator,
+                freshness=freshness,
+                source_layer="host_control_mirror",
+                source_owner="github",
+                value=value,
+                errors=[str(error) for error in errors],
+            )
+        return binding_node(
+            role=role,
+            locator=fallback_locator,
+            freshness="missing",
+            source_layer="host_control_mirror",
+            source_owner="github",
+            value=None,
+        )
+
+    nodes = {
+        "phase": object_node("phase", f"issue #{phase_number}" if phase_number else None),
+        "fr": object_node("fr", f"issue #{fr_number}" if fr_number else None),
+        "work_item": object_node("work_item", f"issue #{issue_number}" if issue_number else None),
+        "branch": object_node("branch", branch_name),
+        "target_branch": object_node("target_branch", branch_name),
+        "implementation_pr": object_node("implementation_pr", f"PR #{pr_number}" if pr_number else None),
+        "pr": object_node("implementation_pr", f"PR #{pr_number}" if pr_number else None),
+        "merge_commit": object_node("merge_commit"),
+        "project_item": binding_node(
+            role="project_item",
+            locator=f"Project #{project_number}" if project_number is not None else None,
+            freshness="fresh" if project_item is not None else ("unreadable" if project_errors else "missing"),
+            source_layer="host_control_mirror",
+            source_owner="github_project",
+            value=project_item,
+            errors=project_errors,
+        ),
+    }
+    if head_sha:
+        branch_head = nodes["branch"].get("value", {}).get("head_sha") if isinstance(nodes["branch"].get("value"), dict) else None
+        if branch_head and branch_head != head_sha:
+            nodes["branch"]["freshness"] = "conflict"
+            findings.append(
+                {
+                    "category": "drift",
+                    "kind": "conflicting_binding",
+                    "severity": "block",
+                    "subject": "branch head SHA",
+                    "evidence": {"expected_head_sha": head_sha, "branch_head_sha": branch_head},
+                    "fallback_to": "github-profile-binding",
+                }
+            )
+    for role, node in nodes.items():
+        freshness = node.get("freshness")
+        if freshness in {"missing", "unreadable", "conflict"} and role in {"work_item", "branch", "pr", "project_item"}:
+            kind = "unreadable_host_signal" if freshness == "unreadable" else "conflicting_binding" if freshness == "conflict" else "missing_binding"
+            findings.append(
+                {
+                    "category": "drift" if kind != "missing_binding" else "gate_failure",
+                    "kind": kind,
+                    "severity": "block" if role in {"work_item", "pr"} else "warn",
+                    "subject": role,
+                    "evidence": {"node": node},
+                    "fallback_to": "github-profile-binding",
+                }
+            )
+    binding_findings = binding.get("findings") if isinstance(binding, dict) else []
+    if isinstance(binding_findings, list):
+        findings.extend(finding for finding in binding_findings if isinstance(finding, dict))
+
+    blocking_findings = [finding for finding in findings if finding.get("severity") == "block"]
+    result = "pass" if not missing_inputs and not blocking_findings else "block"
+    return {
+        "command": "host-binding",
+        "operation": "inspect",
+        "schema_version": HOST_BINDING_INSPECTOR_SCHEMA,
+        "result": result,
+        "summary": (
+            "host binding inspector found a consumable binding chain."
+            if result == "pass"
+            else "host binding inspector found missing, stale, unreadable, or conflicting host signals."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": None if result == "pass" else "github-profile-binding",
+        "repository": {"owner": owner, "name": repo_name},
+        "inputs": {
+            "phase": phase_number,
+            "fr": fr_number,
+            "issue": issue_number,
+            "pr": pr_number,
+            "project": project_number,
+            "branch": branch_name,
+            "head_sha": head_sha,
+            "base_sha": base_sha,
+        },
+        "binding_chain": {
+            "schema_version": HOST_BINDING_CHAIN_SCHEMA,
+            "nodes": nodes,
+            "edges": binding.get("chain", []) if isinstance(binding, dict) else [],
+        },
+        "dependency_graph": dependency_graph,
+        "provenance": [
+            {
+                "source_layer": "host_control_mirror",
+                "source_owner": "github",
+                "source_locator": f"{owner}/{repo_name}" if owner and repo_name else None,
+                "freshness": "fresh" if not missing_inputs else "unreadable",
+            }
+        ],
+        "findings": findings,
+    }
+
+
 def handle_host_binding(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
+    if args.operation == "inspect":
+        return emit(
+            host_binding_inspection_payload(
+                target_root=target_root,
+                owner=args.owner,
+                repo_name=args.repo_name,
+                phase_number=args.phase,
+                fr_number=args.fr,
+                issue_number=args.issue,
+                pr_number=args.pr,
+                project_number=args.project,
+                branch_name=args.branch,
+                head_sha=args.head_sha,
+                base_sha=args.base_sha,
+            )
+        )
     return emit(
         host_binding_validate_payload(
             target_root=target_root,
@@ -9848,6 +10424,23 @@ def handle_host_binding(args: argparse.Namespace) -> int:
             branch_name=args.branch,
             head_sha=args.head_sha,
             base_sha=args.base_sha,
+        )
+    )
+
+
+def handle_goal(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    return emit(
+        goal_payload(
+            target_root=target_root,
+            output_relative=args.output,
+            expected_item=args.item,
+            operation=args.operation,
+            goal_file=args.goal_file,
+            issue_number=args.issue,
+            pr_number=args.pr,
+            branch_name=args.branch,
+            head_sha=args.head_sha,
         )
     )
 
@@ -12072,6 +12665,335 @@ def runtime_parity_payload(
     }
 
 
+def project_drift_payload(
+    *,
+    target_root: Path,
+    owner: str | None,
+    repo_name: str | None,
+    issue_number: int | None,
+    pr_number: int | None,
+    project_number: int | None,
+    mode: str = "advisory",
+) -> dict[str, Any]:
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    owner = owner or detected_owner
+    repo_name = repo_name or detected_repo
+    missing_inputs: list[str] = []
+    findings: list[dict[str, Any]] = []
+    project_payload: dict[str, Any] | None = None
+    issue_payload: dict[str, Any] | None = None
+    pr_payload: dict[str, Any] | None = None
+    dependency_graph: dict[str, Any] | None = None
+
+    if project_number is None:
+        return {
+            "schema_version": PROJECT_DRIFT_SCHEMA,
+            "result": "pass",
+            "mode": mode,
+            "summary": "Project drift read is not applicable because no Project number was provided.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "project": None,
+            "dependency_drift": None,
+            "findings": [],
+            "provenance": [],
+        }
+    if not owner or not repo_name:
+        missing_inputs.append("owner/repo")
+    if owner and repo_name and issue_number is not None:
+        issue_payload, issue_errors = github_issue_payload(target_root, owner, repo_name, issue_number)
+        missing_inputs.extend(f"issue: {message}" for message in issue_errors)
+        native_dependencies = github_issue_dependencies_payload(target_root, owner, repo_name, issue_number)
+        dependency_graph = dependency_graph_payload(
+            issue_number=issue_number,
+            issue_payload=issue_payload,
+            native_dependency_payload=native_dependencies,
+        )
+        for finding in dependency_graph.get("findings", []):
+            if not isinstance(finding, dict):
+                continue
+            kind = str(finding.get("kind"))
+            if kind in {"missing_native_edge", "unexpected_native_edge"}:
+                findings.append({**finding, "drift_kind": kind})
+            if kind == "open_blocker_executable_conflict":
+                findings.append({**finding, "drift_kind": "open_blocker_executable_conflict"})
+    if owner and repo_name and pr_number is not None:
+        pr_payload, pr_errors = github_pr_payload(target_root, owner, repo_name, pr_number)
+        missing_inputs.extend(f"pr: {message}" for message in pr_errors)
+    if owner:
+        project_context, project_errors = project_status_context(target_root, owner, project_number)
+        if project_errors:
+            findings.append(
+                {
+                    "category": "drift",
+                    "kind": "project_unreadable",
+                    "drift_kind": "project_unreadable",
+                    "severity": "block" if mode == "blocking" else "warn",
+                    "subject": f"Project #{project_number}",
+                    "evidence": {"errors": project_errors},
+                    "fallback_to": "manual-reconciliation",
+                }
+            )
+        else:
+            items = project_context["items"]
+            issue_item = find_project_item(items, issue_number, "issue") if issue_number is not None else None
+            pr_item = find_project_item(items, pr_number, "pr") if pr_number is not None else None
+            project_payload = {
+                "number": project_number,
+                "project_id": project_context["project_id"],
+                "status_field_id": project_context["status_field_id"],
+                "done_option_id": project_context["done_option_id"],
+                "issue_item": issue_item,
+                "pr_item": pr_item,
+            }
+            if issue_number is not None and issue_item is None:
+                findings.append(
+                    {
+                        "category": "drift",
+                        "kind": "project_missing_item",
+                        "drift_kind": "project_missing_item",
+                        "severity": "block" if mode == "blocking" else "warn",
+                        "subject": f"issue #{issue_number}",
+                        "evidence": {"project": project_number},
+                        "fallback_to": "manual-reconciliation",
+                    }
+                )
+            for label, item, payload in (("issue", issue_item, issue_payload), ("pr", pr_item, pr_payload)):
+                if item is None:
+                    continue
+                status = item.get("status")
+                expected_done = False
+                subject_number = None
+                if isinstance(payload, dict):
+                    subject_number = payload.get("number")
+                    if label == "issue":
+                        expected_done = payload.get("state") == "CLOSED"
+                    if label == "pr":
+                        expected_done = payload.get("state") == "MERGED"
+                if expected_done and status != "Done":
+                    findings.append(
+                        {
+                            "category": "drift",
+                            "kind": "project_status_mismatch",
+                            "drift_kind": "project_status_mismatch",
+                            "severity": "block" if mode == "blocking" else "warn",
+                            "subject": f"{label} #{subject_number or 'unknown'}",
+                            "evidence": {"expected_status": "Done", "actual_status": status},
+                            "fallback_to": "manual-reconciliation",
+                        }
+                    )
+                if not expected_done and status == "Done":
+                    findings.append(
+                        {
+                            "category": "drift",
+                            "kind": "project_stale_mirror",
+                            "drift_kind": "project_stale_mirror",
+                            "severity": "block" if mode == "blocking" else "warn",
+                            "subject": f"{label} #{subject_number or 'unknown'}",
+                            "evidence": {"expected_done": False, "actual_status": status},
+                            "fallback_to": "manual-reconciliation",
+                        }
+                    )
+    blocking = [finding for finding in findings if finding.get("severity") == "block"]
+    result = "block" if blocking or missing_inputs else "pass"
+    return {
+        "schema_version": PROJECT_DRIFT_SCHEMA,
+        "result": result,
+        "mode": mode,
+        "summary": (
+            "Project drift read found no blocking Project or dependency drift."
+            if result == "pass"
+            else "Project drift read found Project or dependency drift that must be reconciled."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": None if result == "pass" else "manual-reconciliation",
+        "project": project_payload,
+        "dependency_drift": dependency_graph,
+        "findings": findings,
+        "provenance": [
+            {
+                "source_layer": "host_control_mirror",
+                "source_owner": "github_project",
+                "source_locator": f"Project #{project_number}",
+                "freshness": "fresh" if not missing_inputs else "unreadable",
+            }
+        ],
+    }
+
+
+def goal_execution_contract(context: dict[str, Any]) -> dict[str, Any]:
+    current_branch = run_git(context["target_root"], ["branch", "--show-current"])
+    branch = current_branch.stdout.strip() if current_branch is not None and current_branch.returncode == 0 else None
+    head_sha = git_head_sha(context["target_root"])
+    return {
+        "schema_version": GOAL_EXECUTION_CONTRACT_SCHEMA,
+        "objective": context["goal"],
+        "source_issue": None,
+        "work_item": {
+            "id": context["item_id"],
+            "locator": str(context["report"]["fact_chain"]["entry_points"]["work_item"]),
+        },
+        "scope": [context["scope"]],
+        "non_goals": [],
+        "source_locators": [
+            str(context["report"]["fact_chain"]["entry_points"]["work_item"]),
+            str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"]),
+        ],
+        "branch": branch,
+        "formal_worktree": context["workspace_entry"],
+        "pr": None,
+        "head_sha": head_sha,
+        "expected_validation": [context["validation_entry"]],
+        "stop_conditions": [context["closing_condition"]],
+        "return_path": "flow resume -> review -> merge-ready -> closeout",
+        "derived_from": "work_item_goal",
+        "derivation_source": str(context["report"]["fact_chain"]["entry_points"]["work_item"]),
+    }
+
+
+def validate_goal_execution_contract(
+    contract: dict[str, Any],
+    context: dict[str, Any],
+    *,
+    issue_number: int | None = None,
+    pr_number: int | None = None,
+    branch_name: str | None = None,
+    head_sha: str | None = None,
+) -> dict[str, Any]:
+    failures: list[dict[str, Any]] = []
+    if contract.get("schema_version") != GOAL_EXECUTION_CONTRACT_SCHEMA:
+        failures.append({"class": "missing", "field": "schema_version", "expected": GOAL_EXECUTION_CONTRACT_SCHEMA})
+    work_item = contract.get("work_item")
+    if not isinstance(work_item, dict) or work_item.get("id") != context["item_id"]:
+        failures.append({"class": "scope_mismatch", "field": "work_item", "expected": context["item_id"], "actual": work_item})
+    if issue_number is not None and contract.get("source_issue") not in {issue_number, f"#{issue_number}", f"issue #{issue_number}"}:
+        failures.append({"class": "scope_mismatch", "field": "source_issue", "expected": issue_number, "actual": contract.get("source_issue")})
+    current_branch = run_git(context["target_root"], ["branch", "--show-current"])
+    actual_branch = current_branch.stdout.strip() if current_branch is not None and current_branch.returncode == 0 else None
+    expected_branch = branch_name or actual_branch
+    if expected_branch and contract.get("branch") not in {expected_branch, None}:
+        failures.append({"class": "unbound_workspace", "field": "branch", "expected": expected_branch, "actual": contract.get("branch")})
+    expected_head = head_sha or git_head_sha(context["target_root"])
+    if expected_head and contract.get("head_sha") not in {expected_head, None}:
+        failures.append({"class": "stale", "field": "head_sha", "expected": expected_head, "actual": contract.get("head_sha")})
+    if pr_number is not None and contract.get("pr") not in {pr_number, f"#{pr_number}", f"PR #{pr_number}", None}:
+        failures.append({"class": "scope_mismatch", "field": "pr", "expected": pr_number, "actual": contract.get("pr")})
+    validation = contract.get("expected_validation")
+    if not isinstance(validation, list) or not validation:
+        failures.append({"class": "unverifiable_validation", "field": "expected_validation"})
+    source_locators = contract.get("source_locators")
+    if not isinstance(source_locators, list) or not source_locators:
+        failures.append({"class": "missing", "field": "source_locators"})
+    result = "pass" if not failures else "block"
+    return {
+        "schema_version": GOAL_READINESS_SCHEMA,
+        "result": result,
+        "summary": "goal execution contract is aligned with the current work item." if result == "pass" else "goal execution contract is missing, stale, or mismatched.",
+        "missing_inputs": [f"{failure['class']}:{failure['field']}" for failure in failures],
+        "fallback_to": None if result == "pass" else "admission",
+        "failure_classifications": failures,
+    }
+
+
+def goal_payload(
+    *,
+    target_root: Path,
+    output_relative: str,
+    expected_item: str | None,
+    operation: str,
+    goal_file: str | None = None,
+    issue_number: int | None = None,
+    pr_number: int | None = None,
+    branch_name: str | None = None,
+    head_sha: str | None = None,
+) -> dict[str, Any]:
+    context, errors = load_context(target_root, output_relative, expected_item)
+    if errors:
+        return {
+            "command": "goal",
+            "operation": operation,
+            "result": "block",
+            "summary": "goal command could not read a valid Loom fact chain.",
+            "missing_inputs": [f"fact-chain: {message}" for message in errors],
+            "fallback_to": "admission",
+            **fact_chain_error_contract(errors, output_relative=output_relative),
+        }
+    contract = goal_execution_contract(context)
+    if goal_file:
+        loaded, load_errors = load_optional_json_fixture(target_root, goal_file, label="goal execution contract")
+        if load_errors:
+            return {
+                "command": "goal",
+                "operation": operation,
+                "result": "block",
+                "summary": "goal command could not read the requested goal contract.",
+                "missing_inputs": load_errors,
+                "fallback_to": "admission",
+                "goal_execution_contract": contract,
+            }
+        if isinstance(loaded, dict):
+            contract = loaded
+    readiness = validate_goal_execution_contract(
+        contract,
+        context,
+        issue_number=issue_number,
+        pr_number=pr_number,
+        branch_name=branch_name,
+        head_sha=head_sha,
+    )
+    return {
+        "command": "goal",
+        "operation": operation,
+        "result": readiness["result"],
+        "summary": "goal execution contract was derived and validated." if readiness["result"] == "pass" else readiness["summary"],
+        "missing_inputs": readiness["missing_inputs"],
+        "fallback_to": readiness["fallback_to"],
+        "goal_execution_contract": contract,
+        "goal_readiness": readiness,
+    }
+
+
+def goal_completion_payload(target_root: Path, completion_file: str | None, context: dict[str, Any] | None) -> dict[str, Any]:
+    if not completion_file:
+        return {
+            "schema_version": GOAL_COMPLETION_SCHEMA,
+            "status": "missing",
+            "result": "not_applicable",
+            "summary": "/goal completion evidence was not provided and was not required by this closeout invocation.",
+            "missing_inputs": [],
+            "fallback_to": None,
+        }
+    payload, errors = load_optional_json_fixture(target_root, completion_file, label="goal completion evidence")
+    if errors or not isinstance(payload, dict):
+        return {
+            "schema_version": GOAL_COMPLETION_SCHEMA,
+            "status": "unreadable",
+            "result": "block",
+            "summary": "/goal completion evidence is unreadable.",
+            "missing_inputs": errors or ["goal completion must be a JSON object"],
+            "fallback_to": "closeout",
+        }
+    missing: list[str] = []
+    if payload.get("schema_version") not in {GOAL_COMPLETION_SCHEMA, GOAL_EXECUTION_CONTRACT_SCHEMA}:
+        missing.append("schema_version")
+    if context is not None:
+        work_item = payload.get("work_item")
+        item_id = work_item.get("id") if isinstance(work_item, dict) else payload.get("item_id")
+        if item_id not in {context["item_id"], None}:
+            missing.append("work_item mismatch")
+        if payload.get("head_sha") not in {git_head_sha(target_root), None}:
+            missing.append("head_sha mismatch")
+    return {
+        "schema_version": GOAL_COMPLETION_SCHEMA,
+        "status": "valid" if not missing else "mismatch",
+        "result": "pass" if not missing else "block",
+        "summary": "/goal completion evidence is bound to the closeout context." if not missing else "/goal completion evidence does not match the closeout context.",
+        "missing_inputs": missing,
+        "fallback_to": None if not missing else "closeout",
+        "completion": payload,
+    }
+
+
 def closeout_payload(
     *,
     target_root: Path,
@@ -12084,6 +13006,7 @@ def closeout_payload(
     owner: str,
     repo_name: str,
     skip_gate: bool,
+    goal_completion_file: str | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     missing_inputs: list[str] = []
     context, context_errors = load_context(target_root, ".loom/bootstrap/init-result.json", None)
@@ -12317,6 +13240,12 @@ def closeout_payload(
         summary = repo_specific_requirements["summary"]
         fallback_to = repo_specific_requirements["fallback_to"]
         missing_inputs.extend(repo_specific_requirements["missing_inputs"])
+    goal_completion = goal_completion_payload(target_root, goal_completion_file, fact_chain_context)
+    if goal_completion_file and goal_completion["result"] == "block":
+        result = "block"
+        summary = goal_completion["summary"]
+        fallback_to = goal_completion["fallback_to"]
+        missing_inputs.extend(f"goal_completion: {message}" for message in goal_completion.get("missing_inputs", []))
     return (
         {
             "command": "closeout",
@@ -12331,6 +13260,7 @@ def closeout_payload(
             "pr": pr_payload,
             "project": project_payload,
             "repo_specific_requirements": repo_specific_requirements,
+            "goal_completion": goal_completion,
             "target_release": target_release,
             "findings": closeout_findings,
             **(
@@ -12390,6 +13320,7 @@ def handle_closeout(args: argparse.Namespace) -> int:
         owner=owner,
         repo_name=repo_name,
         skip_gate=args.skip_gate,
+        goal_completion_file=args.goal_completion,
     )
     if errors:
         return emit(
@@ -12499,6 +13430,7 @@ def handle_closeout(args: argparse.Namespace) -> int:
         owner=owner,
         repo_name=repo_name,
         skip_gate=args.skip_gate,
+        goal_completion_file=args.goal_completion,
     )
     if errors:
         sync_missing.extend(errors)
@@ -14020,6 +14952,30 @@ def handle_flow(args: argparse.Namespace) -> int:
     upgrade_path = maturity_upgrade_path(governance_surface, target_root)
     repo_interface = governance_surface.get("repo_interface")
     repo_specific_requirements: dict[str, Any] | None = None
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    flow_owner = args.owner or detected_owner
+    flow_repo_name = args.repo_name or detected_repo
+    flow_project_drift = project_drift_payload(
+        target_root=target_root,
+        owner=flow_owner,
+        repo_name=flow_repo_name,
+        issue_number=args.issue,
+        pr_number=args.pr,
+        project_number=args.project,
+        mode=args.project_drift_mode if args.operation == "merge-ready" else "advisory",
+    )
+    goal_contract = goal_execution_contract(context) if args.operation == "resume" else None
+    goal_readiness = (
+        validate_goal_execution_contract(
+            goal_contract,
+            context,
+            issue_number=args.issue,
+            pr_number=args.pr,
+            branch_name=args.branch,
+        )
+        if isinstance(goal_contract, dict)
+        else None
+    )
 
     if args.operation in {"resume", "handoff"}:
         locate_payload = base_workspace_payload(context, "locate")
@@ -14178,6 +15134,33 @@ def handle_flow(args: argparse.Namespace) -> int:
             )
             steps.append(locate_step)
 
+    if args.operation in {"resume", "pre-review", "merge-ready"} and args.project is not None:
+        project_step_result = (
+            "block"
+            if args.operation == "merge-ready" and flow_project_drift.get("mode") == "blocking" and flow_project_drift.get("result") == "block"
+            else "pass"
+        )
+        steps.append(
+            {
+                "name": "project-drift",
+                "result": project_step_result,
+                "summary": flow_project_drift["summary"],
+                "missing_inputs": flow_project_drift.get("missing_inputs", []) if project_step_result == "block" else [],
+                "fallback_to": flow_project_drift.get("fallback_to") if project_step_result == "block" else None,
+                "project_drift": flow_project_drift,
+            }
+        )
+    if args.operation == "resume" and isinstance(goal_readiness, dict):
+        steps.append(
+            {
+                "name": "goal-bootstrap",
+                "result": goal_readiness["result"],
+                "summary": goal_readiness["summary"],
+                "missing_inputs": goal_readiness["missing_inputs"],
+                "fallback_to": goal_readiness["fallback_to"],
+            }
+        )
+
     result = "pass"
     fallback_to: str | None = None
     for step in steps:
@@ -14315,6 +15298,8 @@ def handle_flow(args: argparse.Namespace) -> int:
             "recovery_readiness": recovery_readiness,
             "execution_ledger": execution_ledger,
             "blocking_failures": blocking_failures,
+            "project_drift": flow_project_drift,
+            **({"goal_execution_contract": goal_contract, "goal_readiness": goal_readiness} if args.operation == "resume" else {}),
             **({"governance_surface": governance_surface} if args.operation == "resume" else {}),
             **({"maturity_upgrade_path": upgrade_path} if args.operation == "resume" else {}),
             **({"adoption_guidance": adoption_guidance} if args.operation == "resume" else {}),
@@ -14800,6 +15785,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_carrier(args)
     if args.command == "host-binding":
         return handle_host_binding(args)
+    if args.command == "goal":
+        return handle_goal(args)
     if args.command == "pr-gate":
         return handle_pr_gate(args)
     if args.command == "controlled-merge":

@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-827
-- Goal: 完成 Loom 中层能力聚合批次及其前置恢复链，接通 intake、dependency、host binding、Project drift、/goal 与 Governance Lint advanced，并把 PR #856 推进到 merge-ready / merge / closeout。
-- Scope: #827/#829/#830/#848/#795/#796/#798/#799/#801/#802/#803/#822/#823/#824/#825/#849/#850 的 docs、skills shared references、runtime scripts、fixtures、tests、installer version surface、PR gate carrier 和 closeout evidence；父项 #797/#800/#820 写入进度与验证证据。
-- Execution Path: harness/middle-capability-aggregation
+- Item ID: WI-857
+- Goal: 修复 Loom 自身 py_compile 验证留下 __pycache__ 工作区残留的问题。
+- Scope: 统一 Loom 源仓库 py_compile 验证入口；更新 CI、Makefile、PR validation recipe、loom_check fixture 和 generated skills surface；保留 #817 adopted repo installed runtime cache guard。
+- Execution Path: harness/pycompile-cache-hygiene
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-827.md
-- Review Entry: .loom/reviews/WI-827.json
-- Validation Entry: py_compile; skills_surface check; host_binding inspect; resume/status smoke; host_adapter_check; version_surface_check; git diff --check; loom_check; pr-gate check; CI checks
-- Closing Condition: PR #856 绑定 WI-827，host binding/dependency/Project drift/goal/governance lint hardcoding guard 全部验证通过，PR checks 绿并尽力 controlled merge；若 host 阻断则记录 owner、证据与恢复状态。
-- Current Checkpoint: merge
-- Current Stop: PR #856 carrier and installer gate repairs are committed; WI-827 owns the active PR lane and WI-819 is terminal after PR #855 merge.
-- Next Step: Record current-head spec and implementation reviews, update PR body with Loom Work Item: WI-827, run pr-gate locally, push, wait for CI, then perform controlled merge and closeout if permitted.
+- Recovery Entry: .loom/progress/WI-857.md
+- Review Entry: .loom/reviews/WI-857.json
+- Validation Entry: make py-compile; targeted Python cache find scan; python3 tools/skills_surface.py check; python3 tools/version_surface_check.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py; git diff --check; installer version bump check; PR checks.
+- Closing Condition: #857 修复合并到 main，PR checks 通过，closeout check 通过，#857 closed 且 Project #4 为 Done，工作区无 Python bytecode/cache 残留。
+- Current Checkpoint: merge-ready
+- Current Stop: Local validation passed on head b56ee756442c4956ebdc44fa23bfea4e5336a400; PR push and merge-ready gate are next.
+- Next Step: Push branch, open/update PR, run merge-ready gate, wait for checks, then merge and close out #857.
 - Blockers: None recorded.
-- Latest Validation Summary: PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile src/skills/shared/scripts/*.py skills/shared/scripts/*.py passed; python3 tools/skills_surface.py check passed; python3 tools/version_surface_check.py passed; git diff --check passed; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed with 0.1.121 -> 0.1.122.
-- Recovery Boundary: Current batch covers prerequisite recovery and middle aggregation for #827/#829/#830/#848/#795/#796/#798/#799/#801/#802/#803/#822/#823/#824/#825/#849/#850; parent evidence for #797/#800/#820 is closeout work.
-- Current Lane: PR #856 on branch work/827-850-middle-capability-aggregation
+- Latest Validation Summary: git diff --check passed; python3 tools/skills_surface.py check passed; python3 tools/version_surface_check.py passed; python3 tools/host_adapter_check.py passed; make py-compile passed with py_compile_clean OK for 34 files; cache scan after make py-compile returned no __pycache__, .pyc, .pyo, or .pyd artifacts; installer version bump check passed with 0.1.122 -> 0.1.123; python3 tools/loom_check.py passed with 36 surfaces; make check passed with 36 surfaces; final cache scan returned no __pycache__, .pyc, .pyo, or .pyd artifacts.
+- Recovery Boundary: Only #857 py_compile cache hygiene is in scope; #817 installed runtime `.loom/bin` cache guard remains existing behavior and must not be regressed.
+- Current Lane: branch work/857-pycompile-cache-hygiene in formal worktree /Users/mc/dev/Loom-work-857-pycompile-cache-hygiene
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-827.md
-- Dynamic Truth: .loom/progress/WI-827.md
+- Static Truth: .loom/work-items/WI-857.md
+- Dynamic Truth: .loom/progress/WI-857.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

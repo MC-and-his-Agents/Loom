@@ -38,7 +38,7 @@ python3 tools/loom_check.py .
 ## Validation Commands
 
 ```bash
-python3 -m py_compile tools/loom_init.py tools/loom_flow.py tools/loom_status.py tools/loom_check.py skills/shared/scripts/*.py
+make py-compile
 python3 tools/loom_check.py .
 make loom-check
 npm --prefix packages/loom-installer test
