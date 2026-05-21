@@ -12,7 +12,7 @@
 - Validation Entry: make py-compile; targeted Python cache find scan; python3 tools/skills_surface.py check; python3 tools/version_surface_check.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py; git diff --check; installer version bump check; PR checks.
 - Closing Condition: #857 修复合并到 main，PR checks 通过，closeout check 通过，#857 closed 且 Project #4 为 Done，工作区无 Python bytecode/cache 残留。
 - Current Checkpoint: review
-- Current Stop: Implementation head 92264a65308f20bf1488fa175744d65fea46d731 is recorded; spec/code reviews are being refreshed as carrier-only evidence before final local gate rerun.
+- Current Stop: Implementation head 69da8f7cf41835239479aa0ca087fd59212979a2 is recorded; spec/code reviews are being refreshed as carrier-only evidence before final local gate rerun.
 - Next Step: Rerun local gates, push PR, wait for checks, then merge and close out #857.
 - Blockers: None recorded.
 - Latest Validation Summary: git diff --check passed; python3 tools/skills_surface.py check passed; python3 tools/version_surface_check.py passed; python3 tools/host_adapter_check.py passed; make py-compile passed with py_compile_clean OK for 34 files; cache scan after make py-compile returned no __pycache__, .pyc, .pyo, or .pyd artifacts; installer version bump check passed with 0.1.122 -> 0.1.123; python3 tools/loom_check.py reached root-self-adoption and blocked only on missing WI-857 review records plus stale shadow evidence, which the review records and carrier refresh address before final rerun.

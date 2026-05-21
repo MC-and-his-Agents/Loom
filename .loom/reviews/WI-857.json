@@ -5,7 +5,7 @@
   "kind": "code_review",
   "summary": "WI-857 implementation is approved for merge readiness. The change adds a repo-local py_compile wrapper that writes bytecode only to an auto-cleaned temporary directory, wires Makefile and GitHub workflow compile validation through it, adds a loom_check cache hygiene fixture with pruned repository scanning, updates active validation guidance away from bare py_compile commands, and regenerates the skills surface without altering the #817 installed runtime cache guard or unrelated #856 capabilities.",
   "reviewer": "codex",
-  "reviewed_head": "92264a65308f20bf1488fa175744d65fea46d731",
+  "reviewed_head": "69da8f7cf41835239479aa0ca087fd59212979a2",
   "reviewed_validation_summary": "git diff --check passed; python3 tools/skills_surface.py check passed; python3 tools/version_surface_check.py passed; python3 tools/host_adapter_check.py passed; make py-compile passed with py_compile_clean OK for 34 files; repository cache scan after make py-compile returned no __pycache__, .pyc, .pyo, or .pyd artifacts; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed with 0.1.122 -> 0.1.123; python3 tools/loom_check.py reached root-self-adoption and blocked only on missing WI-857 review records plus stale shadow evidence, which this review/carrier refresh resolves before the final rerun.",
   "fallback_to": null,
   "findings": [],
