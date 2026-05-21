@@ -71,5 +71,9 @@
 
 - 本入口只读控制面并输出审计结论
 - 修复 drift 的正式写路径仍由 `reconciliation sync` 承接
+- `reconciliation sync` 必须先消费同范围 audit，再输出 `loom-safe-sync-plan/v1`
+- safe sync plan 只解释可机械证明的写入、跳过项与手动项，不替代 audit 本身
+- 计划中的每个写入动作必须包含 `source_finding`、`proof_locator`、`write_target` 与 `rollback_note`
+- 缺 proof、缺 GitHub object id、缺 Project status field 或存在 `block` finding 时不得生成可执行写入动作
 - `absorbed` 的 merge 证明继续由 [host-issue-binding.md](./host-issue-binding.md) 承接
 - taxonomy 必须服从 [governance-failure-taxonomy.md](./governance-failure-taxonomy.md)

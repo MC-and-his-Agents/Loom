@@ -323,6 +323,7 @@ EXECUTION_FAILURE_FIXTURE_SCHEMA = "loom-execution-failure-fixtures/v1"
 RETRY_EVIDENCE_FIXTURE_SCHEMA = "loom-retry-evidence-fixtures/v1"
 EXTERNAL_ORCHESTRATOR_FIXTURE_SCHEMA = "loom-external-orchestrator-interop-fixtures/v1"
 EXTERNAL_ORCHESTRATOR_CONFORMANCE_FIXTURE_SCHEMA = "loom-external-orchestrator-conformance-fixtures/v1"
+SAFE_SYNC_PLAN_FIXTURE_SCHEMA = "loom-safe-sync-plan-fixtures/v1"
 EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA = "loom-external-orchestrator-conformance/v1"
 EXTERNAL_ORCHESTRATOR_FORBIDDEN_FIELDS = {
     "scheduler_state",
@@ -860,6 +861,7 @@ sys.exit(41)
 """
     else:
         raise ValueError(f"unknown fake codex mode: {mode}")
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(body, encoding="utf-8")
     path.chmod(0o755)
 
@@ -2060,6 +2062,60 @@ def require_reconciliation_payload(
             failures.append(Failure(category, f"{context} binding must be an object when present"))
         elif binding.get("schema_version") != "loom-github-binding/v1":
             failures.append(Failure(category, f"{context} binding must use `loom-github-binding/v1`"))
+
+
+def require_safe_sync_plan_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must include `sync_plan` as an object"))
+        return
+    if payload.get("schema_version") != "loom-safe-sync-plan/v1":
+        failures.append(Failure(category, f"{context} sync_plan must use schema `loom-safe-sync-plan/v1`"))
+    if payload.get("result") not in {"pass", "block"}:
+        failures.append(Failure(category, f"{context} sync_plan result must be `pass` or `block`"))
+    for key in ("planned_actions", "skipped_actions", "manual_actions"):
+        if not isinstance(payload.get(key), list):
+            failures.append(Failure(category, f"{context} sync_plan must include `{key}` as a list"))
+            continue
+        for index, action in enumerate(payload[key]):
+            if not isinstance(action, dict):
+                failures.append(Failure(category, f"{context} sync_plan {key}[{index}] must be an object"))
+                continue
+            action_kind = action.get("action")
+            allowed_actions = {
+                "close_issue",
+                "set_project_done",
+                "add_closeout_comment",
+                "manual_reconciliation",
+                "none",
+            }
+            if action_kind not in allowed_actions:
+                failures.append(Failure(category, f"{context} sync_plan action `{action_kind}` is outside the stable action set"))
+            if key == "planned_actions":
+                if action_kind not in {"close_issue", "set_project_done", "add_closeout_comment"}:
+                    failures.append(Failure(category, f"{context} planned actions must be write actions only"))
+                for required in ("source_finding", "proof_locator", "write_target", "rollback_note"):
+                    value = action.get(required)
+                    if required in {"source_finding", "write_target"}:
+                        if not isinstance(value, dict) or not value:
+                            failures.append(Failure(category, f"{context} planned action `{action_kind}` must include `{required}`"))
+                    elif not isinstance(value, str) or not value:
+                        failures.append(Failure(category, f"{context} planned action `{action_kind}` must include `{required}`"))
+            else:
+                if not isinstance(action.get("reason"), str) or not action.get("reason"):
+                    failures.append(Failure(category, f"{context} {key}[{index}] must include a reason"))
+    proof = payload.get("proof")
+    if not isinstance(proof, dict):
+        failures.append(Failure(category, f"{context} sync_plan must include `proof`"))
+        return
+    for field in ("audit_result", "audit_operation", "finding_count", "planned_action_count", "skipped_action_count", "manual_action_count"):
+        if field not in proof:
+            failures.append(Failure(category, f"{context} sync_plan.proof must include `{field}`"))
 
 
 def require_closeout_reconciliation_contract(
@@ -9617,6 +9673,14 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         expected_carrier="installed-skills-root",
                         allowed_results={"pass"},
                     )
+                    require_safe_sync_plan_payload(
+                        failures,
+                        category="daily-execution-cli",
+                        context="`installed reconciliation sync --dry-run`",
+                        payload=payload.get("sync_plan"),
+                    )
+                    if payload.get("applied_actions") != []:
+                        failures.append(Failure("daily-execution-cli", "`reconciliation sync --dry-run` must not report applied actions"))
                 else:
                     if payload.get("result") != "pass" and not rate_limited:
                         failures.append(Failure("daily-execution-cli", f"`{label}` must pass on the historical closeout sample"))
@@ -16909,6 +16973,76 @@ def check_core_hardcoding_guard(root: Path) -> list[Failure]:
     return failures
 
 
+def check_safe_sync_plan_fixture_contract(root: Path) -> list[Failure]:
+    category = "safe-sync-plan-fixtures"
+    failures: list[Failure] = []
+    fixture_path = root / "docs" / "evidence" / "fixtures" / "safe-sync-plan-fixtures.json"
+    try:
+        fixture_payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return [Failure(category, "missing `docs/evidence/fixtures/safe-sync-plan-fixtures.json`")]
+    except json.JSONDecodeError as exc:
+        return [Failure(category, f"`safe-sync-plan-fixtures.json` is invalid JSON: {exc}")]
+    if fixture_payload.get("schema_version") != SAFE_SYNC_PLAN_FIXTURE_SCHEMA:
+        failures.append(Failure(category, f"`safe-sync-plan-fixtures.json` schema_version must be `{SAFE_SYNC_PLAN_FIXTURE_SCHEMA}`"))
+    fixtures = fixture_payload.get("fixtures")
+    if not isinstance(fixtures, list) or not fixtures:
+        failures.append(Failure(category, "`safe-sync-plan-fixtures.json` must expose non-empty fixtures"))
+        return failures
+    required_cases = {
+        "block-finding-stops-writes",
+        "missing-proof-skips-close-issue",
+        "close-issue-with-comment-plan",
+        "set-project-done-plan",
+    }
+    seen_cases: set[str] = set()
+    for index, fixture in enumerate(fixtures):
+        if not isinstance(fixture, dict):
+            failures.append(Failure(category, f"fixture #{index + 1} must be an object"))
+            continue
+        name = fixture.get("name")
+        if isinstance(name, str):
+            seen_cases.add(name)
+        audit_payload = fixture.get("audit_payload")
+        expected = fixture.get("expected")
+        if not isinstance(audit_payload, dict) or not isinstance(expected, dict):
+            failures.append(Failure(category, f"`{name or index}` must include audit_payload and expected objects"))
+            continue
+        plan = loom_flow_module.reconciliation_sync_plan(
+            audit_payload,
+            include_closeout_comment=bool(fixture.get("include_closeout_comment")),
+        )
+        require_safe_sync_plan_payload(
+            failures,
+            category=category,
+            context=f"`{name or index}`",
+            payload=plan,
+        )
+        if plan.get("result") != expected.get("result"):
+            failures.append(Failure(category, f"`{name or index}` expected result `{expected.get('result')}` but got `{plan.get('result')}`"))
+        for key in ("planned_actions", "skipped_actions", "manual_actions"):
+            expected_actions = expected.get(key)
+            if not isinstance(expected_actions, list):
+                failures.append(Failure(category, f"`{name or index}` expected.{key} must be a list"))
+                continue
+            actual_actions = [
+                action.get("action")
+                for action in plan.get(key, [])
+                if isinstance(action, dict)
+            ]
+            if actual_actions != expected_actions:
+                failures.append(Failure(category, f"`{name or index}` expected {key} {expected_actions}, got {actual_actions}"))
+        for action in plan.get("planned_actions", []):
+            if not isinstance(action, dict):
+                continue
+            if action.get("action") not in {"close_issue", "set_project_done", "add_closeout_comment"}:
+                failures.append(Failure(category, f"`{name or index}` planned action uses unsupported kind `{action.get('action')}`"))
+    missing_cases = sorted(required_cases - seen_cases)
+    if missing_cases:
+        failures.append(Failure(category, "safe sync plan fixtures missing required cases: " + ", ".join(missing_cases)))
+    return failures
+
+
 def is_within(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
@@ -16973,12 +17107,13 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_build_execution_contract(root))
     failures.extend(check_story_intake_contract(root))
     failures.extend(check_core_hardcoding_guard(root))
+    failures.extend(check_safe_sync_plan_fixture_contract(root))
     failures.extend(check_markdown_links(root))
     return failures
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 36
+    categories_checked = 37
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")
