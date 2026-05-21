@@ -12849,6 +12849,7 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
         status_payload, error = load_command_json(
             root,
             ["python3", "tools/loom_flow.py", "governance-profile", "status", "--target", str(baseline)],
+            timeout_seconds=60,
         )
         if error:
             failures.append(Failure("adversarial-adoption", f"`governance-profile status` baseline failed: {error}"))
