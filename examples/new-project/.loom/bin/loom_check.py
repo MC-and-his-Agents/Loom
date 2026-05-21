@@ -75,6 +75,7 @@ CORE_DOCS = (
     "docs/methodology/governance/state-machine.md",
     "docs/methodology/governance/truth-and-sync-boundary.md",
     "docs/methodology/governance/host-object-taxonomy.md",
+    "docs/methodology/governance/goal-schema.md",
     "docs/methodology/harness/work-item-contract.md",
     "docs/methodology/harness/item-context-contract.md",
     "docs/methodology/harness/fact-chain-contract.md",
@@ -93,7 +94,9 @@ CORE_DOCS = (
     "docs/methodology/harness/host-action-contract.md",
     "docs/methodology/harness/host-api-budget.md",
     "docs/methodology/harness/host-lifecycle-boundary.md",
+    "docs/methodology/harness/host-binding-inspector.md",
     "docs/methodology/harness/reconciliation-audit.md",
+    "docs/methodology/harness/native-dependency-contract.md",
     "docs/methodology/harness/recovery-model.md",
     "docs/methodology/harness/review-execution.md",
     "docs/methodology/harness/status-surface.md",
@@ -104,7 +107,9 @@ CORE_DOCS = (
     "docs/methodology/harness/controlled-merge.md",
     "docs/methodology/harness/pr-merge-gate.md",
     "docs/methodology/harness/governance-failure-taxonomy.md",
+    "docs/methodology/harness/governance-lint-taxonomy.md",
     "docs/methodology/harness/workspace-and-purity.md",
+    "docs/methodology/templates/default-governance-scaffold-policy.md",
     "docs/methodology/templates/spec-suite.md",
     "docs/methodology/templates/spec-template.md",
     "docs/methodology/templates/implementation-contract-template.md",
@@ -177,6 +182,7 @@ CORE_DOCS = (
     "packages/loom-installer/test/installer.test.ts",
     "tools/loom_init.py",
     "tools/loom_flow.py",
+    "tools/py_compile_clean.py",
 )
 
 AUTOMATION_FRONTLOAD_TEMPLATES = (
@@ -221,6 +227,7 @@ AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT = (
     "docs/methodology/harness/status-surface.md",
     "docs/methodology/harness/automation-frontload.md",
     "docs/methodology/harness/merge-checkpoint.md",
+    "docs/methodology/harness/governance-lint-taxonomy.md",
     "docs/methodology/harness/workspace-and-purity.md",
 )
 
@@ -353,6 +360,73 @@ def check_required_paths(root: Path, category: str, paths: tuple[str, ...]) -> l
     for relative_path in paths:
         if not (root / relative_path).exists():
             failures.append(Failure(category, f"missing `{relative_path}`"))
+    return failures
+
+
+def check_shared_foundation_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    required_terms = {
+        "docs/methodology/templates/default-governance-scaffold-policy.md": (
+            "generate",
+            "declare_loom_default",
+            "intentionally_absent",
+            "require_user_input",
+            "VISION.md",
+            "ROADMAP.md",
+        ),
+        "docs/methodology/governance/goal-schema.md": (
+            "Project goal",
+            "Phase goal",
+            "FR goal",
+            "Work Item goal",
+            "/goal",
+            "delegated goal",
+            "source issue",
+            "head SHA",
+        ),
+        "docs/methodology/harness/governance-lint-taxonomy.md": (
+            "blocking",
+            "advisory",
+            "repo_specific",
+            "not_applicable",
+            "fact_chain_broken",
+            "approval_bypass",
+            "companion_boundary_bypass",
+            "host_binding_drift",
+            "evidence_stale",
+            "core_hardcoding_leak",
+            "derived evidence",
+        ),
+    }
+    for relative_path, terms in required_terms.items():
+        path = root / relative_path
+        if not path.exists():
+            failures.append(Failure("shared-foundation-contract", f"missing `{relative_path}`"))
+            continue
+        text = path.read_text(encoding="utf-8")
+        for term in terms:
+            if term not in text:
+                failures.append(Failure("shared-foundation-contract", f"`{relative_path}` must mention `{term}`"))
+
+    cross_links = {
+        "docs/methodology/harness/work-item-contract.md": "goal-schema.md",
+        "docs/methodology/harness/subagent-driven-execution.md": "goal-schema.md",
+        "docs/methodology/harness/automation-frontload.md": "governance-lint-taxonomy.md",
+        "docs/methodology/harness/status-surface.md": "governance-lint-taxonomy.md",
+        "docs/methodology/harness/merge-checkpoint.md": "governance-lint-taxonomy.md",
+        "docs/adoption/repo-companion-contract.md": "governance-lint-taxonomy.md",
+        "docs/methodology/harness/workspace-lifecycle.md": "local_only",
+        "docs/methodology/harness/closeout-gate.md": "workspace retire",
+        "docs/methodology/harness/workspace-and-purity.md": "active_workspace_diagnostics",
+        "src/skills/loom-retire/references/output-contract.md": "versioned_carrier_updates",
+    }
+    for relative_path, term in cross_links.items():
+        path = root / relative_path
+        if not path.exists():
+            failures.append(Failure("shared-foundation-contract", f"missing `{relative_path}`"))
+            continue
+        if term not in path.read_text(encoding="utf-8"):
+            failures.append(Failure("shared-foundation-contract", f"`{relative_path}` must reference `{term}`"))
     return failures
 
 
@@ -5290,6 +5364,21 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             {"pass", "block"},
         ),
         (
+            "host-binding-inspect",
+            ["python3", "tools/loom_flow.py", "host-binding", "inspect", "--target", ".", "--owner", "MC-and-his-Agents", "--repo", "Loom", "--branch", "main"],
+            {"pass", "block"},
+        ),
+        (
+            "goal-derive",
+            ["python3", "tools/loom_flow.py", "goal", "derive", "--target", "examples/new-project", "--item", "INIT-0001"],
+            {"pass", "block"},
+        ),
+        (
+            "goal-validate",
+            ["python3", "tools/loom_flow.py", "goal", "validate", "--target", "examples/new-project", "--item", "INIT-0001"],
+            {"pass", "block"},
+        ),
+        (
             "governance-profile-status",
             ["python3", "tools/loom_flow.py", "governance-profile", "status", "--target", "examples/new-project"],
             {"pass"},
@@ -5517,6 +5606,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             execution_budget_risk = payload.get("execution_budget_risk")
             execution_failure = payload.get("execution_failure")
             retry_evidence = payload.get("retry_evidence")
+            if not isinstance(payload.get("goal_execution_contract"), dict):
+                failures.append(Failure("daily-execution-cli", "`loom_status` must include goal_execution_contract"))
+            if not isinstance(payload.get("goal_readiness"), dict):
+                failures.append(Failure("daily-execution-cli", "`loom_status` must include goal_readiness"))
+            if not isinstance(payload.get("project_drift"), dict):
+                failures.append(Failure("daily-execution-cli", "`loom_status` must include project_drift"))
             if not isinstance(execution_budget, dict):
                 failures.append(Failure("daily-execution-cli", "`loom_status` must include `execution_budget`"))
             else:
@@ -5735,6 +5830,25 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(Failure("daily-execution-cli", "`host-binding validate --branch main` must pass unless the host read is unavailable"))
             if (not isinstance(branch, dict) or branch.get("status") != "present") and not host_unavailable:
                 failures.append(Failure("daily-execution-cli", "`host-binding validate --branch main` must read the branch via REST"))
+        if label == "host-binding-inspect":
+            if payload.get("command") != "host-binding" or payload.get("operation") != "inspect":
+                failures.append(Failure("daily-execution-cli", "`host-binding inspect` must report command/operation"))
+            if payload.get("schema_version") != loom_flow_module.HOST_BINDING_INSPECTOR_SCHEMA:
+                failures.append(Failure("daily-execution-cli", "`host-binding inspect` must report inspection schema v1"))
+            if not isinstance(payload.get("binding_chain"), dict):
+                failures.append(Failure("daily-execution-cli", "`host-binding inspect` must include binding_chain"))
+            if not isinstance(payload.get("dependency_graph"), dict):
+                failures.append(Failure("daily-execution-cli", "`host-binding inspect` must include dependency_graph"))
+        if label in {"goal-derive", "goal-validate"}:
+            if payload.get("command") != "goal":
+                failures.append(Failure("daily-execution-cli", f"`{label}` must report command goal"))
+            if not isinstance(payload.get("goal_execution_contract"), dict):
+                failures.append(Failure("daily-execution-cli", f"`{label}` must include goal_execution_contract"))
+            else:
+                if payload["goal_execution_contract"].get("schema_version") != loom_flow_module.GOAL_EXECUTION_CONTRACT_SCHEMA:
+                    failures.append(Failure("daily-execution-cli", f"`{label}` goal contract must report schema v1"))
+            if not isinstance(payload.get("goal_readiness"), dict):
+                failures.append(Failure("daily-execution-cli", f"`{label}` must include goal_readiness"))
         if label in {"governance-profile-status", "governance-profile-upgrade-plan"}:
             if payload.get("command") != "governance-profile":
                 failures.append(Failure("daily-execution-cli", f"`{label}` must report `command: governance-profile`"))
@@ -5898,11 +6012,11 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(Failure("daily-execution-cli", "`flow resume` must include `steps`"))
                 continue
             step_names = [step.get("name") for step in steps if isinstance(step, dict)]
-            if step_names != ["runtime-state", "fact-chain", "state-check", "workspace-locate"]:
+            if step_names != ["runtime-state", "fact-chain", "state-check", "workspace-locate", "goal-bootstrap"]:
                 failures.append(
                     Failure(
                         "daily-execution-cli",
-                        "`flow resume` must run runtime-state, fact-chain, state-check, and workspace-locate in order",
+                        "`flow resume` must run runtime-state, fact-chain, state-check, workspace-locate, and goal-bootstrap in order",
                     )
                 )
             recovery = payload.get("recovery")
@@ -7339,7 +7453,10 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         if progress_path.read_text(encoding="utf-8") != progress_before_handoff:
             failures.append(Failure("daily-execution-cli", "`flow handoff` must not rewrite the recovery entry"))
 
+        status_path = lifecycle_target / ".loom/status/current.md"
         for operation in ("create", "attach", "cleanup", "retire"):
+            progress_before_operation = progress_path.read_text(encoding="utf-8")
+            status_before_operation = status_path.read_text(encoding="utf-8")
             payload, error = load_command_json(
                 root,
                 [
@@ -7371,6 +7488,15 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             )
             if operation == "cleanup" and residue.exists():
                 failures.append(Failure("daily-execution-cli", "`workspace cleanup` must remove marked Loom-owned residue"))
+            if operation == "retire":
+                if payload.get("retire_scope") != "local_only":
+                    failures.append(Failure("daily-execution-cli", "`workspace retire` must report local-only retire scope"))
+                if payload.get("versioned_carrier_updates") != []:
+                    failures.append(Failure("daily-execution-cli", "`workspace retire` must not report versioned carrier updates"))
+                if progress_path.read_text(encoding="utf-8") != progress_before_operation:
+                    failures.append(Failure("daily-execution-cli", "`workspace retire` must not rewrite the recovery entry"))
+                if status_path.read_text(encoding="utf-8") != status_before_operation:
+                    failures.append(Failure("daily-execution-cli", "`workspace retire` must not rewrite the status surface"))
 
         locate_payload, error = load_command_json(
             root,
@@ -7387,13 +7513,11 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         )
         if error:
             failures.append(Failure("daily-execution-cli", f"`workspace locate` after retire failed: {error}"))
-        elif (
-            not isinstance(locate_payload.get("checkpoint"), dict)
-            or locate_payload["checkpoint"].get("normalized") != "retired"
-        ):
-            failures.append(Failure("daily-execution-cli", "`workspace retire` must leave the copied sample in `retired` state"))
+        elif locate_payload.get("retire_scope") == "local_only":
+            failures.append(Failure("daily-execution-cli", "`workspace locate` must not treat local-only retire evidence as versioned checkpoint truth"))
         progress_after_retire = progress_path.read_text(encoding="utf-8")
         for stable_line in (
+            "- Current Checkpoint: admission checkpoint",
             "- Current Stop:",
             "- Next Step:",
             "- Blockers:",
@@ -7402,6 +7526,82 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         ):
             if stable_line not in progress_after_retire:
                 failures.append(Failure("daily-execution-cli", f"`workspace retire` must preserve recovery field `{stable_line}`"))
+
+    with tempfile.TemporaryDirectory(prefix="loom-check-active-carrier-") as tmp:
+        active_target = Path(tmp) / "new-project"
+        shutil.copytree(example_target, active_target)
+        source_work_item = active_target / ".loom/work-items/INIT-0001.md"
+        source_recovery = active_target / ".loom/progress/INIT-0001.md"
+        stale_item = active_target / ".loom/work-items/STALE-0002.md"
+        stale_recovery = active_target / ".loom/progress/STALE-0002.md"
+        stale_item.write_text(
+            source_work_item.read_text(encoding="utf-8")
+            .replace("INIT-0001", "STALE-0002")
+            .replace(".loom/progress/STALE-0002.md", ".loom/progress/STALE-0002.md"),
+            encoding="utf-8",
+        )
+        stale_recovery.write_text(
+            source_recovery.read_text(encoding="utf-8")
+            .replace("INIT-0001", "STALE-0002")
+            .replace("- Current Checkpoint: admission checkpoint", "- Current Checkpoint: retired"),
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "purity-check", "--target", str(active_target), "--item", "INIT-0001"],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`purity-check` stale active carrier fixture failed: {error}"))
+        elif payload.get("result") != "pass":
+            failures.append(Failure("daily-execution-cli", "terminal stale active carrier must not block current item purity"))
+        else:
+            diagnostics = payload.get("purity", {}).get("active_workspace_diagnostics", [])
+            if not any(isinstance(entry, dict) and entry.get("classification") == "stale_carrier" for entry in diagnostics):
+                failures.append(Failure("daily-execution-cli", "`purity-check` must expose stale active carrier diagnostics"))
+
+        malformed_item = active_target / ".loom/work-items/MALFORMED-0003.md"
+        malformed_item.write_text(
+            "# Broken Work Item\n\n- Item ID: MALFORMED-0003\n",
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "purity-check", "--target", str(active_target), "--item", "INIT-0001"],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`purity-check` malformed unrelated carrier fixture failed: {error}"))
+        elif payload.get("result") != "pass":
+            failures.append(Failure("daily-execution-cli", "malformed unrelated active carrier must not block current item purity"))
+        else:
+            diagnostics = payload.get("purity", {}).get("active_workspace_diagnostics", [])
+            unknown_entries = [
+                entry
+                for entry in diagnostics
+                if isinstance(entry, dict)
+                and entry.get("work_item_locator") == ".loom/work-items/MALFORMED-0003.md"
+            ]
+            if not unknown_entries:
+                failures.append(Failure("daily-execution-cli", "`purity-check` must expose malformed unrelated carrier diagnostics"))
+            elif any(entry.get("blocking") for entry in unknown_entries):
+                failures.append(Failure("daily-execution-cli", "malformed unrelated carrier diagnostics must be report-only"))
+
+        active_recovery = active_target / ".loom/progress/STALE-0002.md"
+        active_recovery.write_text(
+            active_recovery.read_text(encoding="utf-8").replace("- Current Checkpoint: retired", "- Current Checkpoint: build"),
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "state-check", "--target", str(active_target), "--item", "INIT-0001"],
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`state-check` shared workspace fixture failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "shared active workspace conflict must block state-check"))
+        else:
+            diagnostics = payload.get("checks", {}).get("active_workspace_diagnostics", [])
+            if not any(isinstance(entry, dict) and entry.get("classification") == "shared_workspace_conflict" for entry in diagnostics):
+                failures.append(Failure("daily-execution-cli", "`state-check` must expose shared workspace conflict diagnostics"))
 
     with tempfile.TemporaryDirectory(prefix="loom-check-missing-workspace-") as tmp:
         missing_workspace_target = Path(tmp) / "new-project"
@@ -9828,6 +10028,71 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 )
             )
 
+    return failures
+
+
+PY_COMPILE_CACHE_HYGIENE_TARGETS = (
+    "tools/loom_init.py",
+    "tools/loom_flow.py",
+    "tools/loom_check.py",
+    "tools/loom_status.py",
+    "tools/py_compile_clean.py",
+    "skills/shared/scripts/*.py",
+    "src/skills/shared/scripts/*.py",
+)
+
+
+def python_cache_artifacts(root: Path) -> set[str]:
+    artifacts: set[str] = set()
+    ignored_dirs = {".git", ".codegraph", "node_modules"}
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [dirname for dirname in dirnames if dirname not in ignored_dirs]
+        current = Path(dirpath)
+        if current.name == "__pycache__":
+            artifacts.add(current.relative_to(root).as_posix())
+            dirnames[:] = []
+            continue
+        for filename in filenames:
+            path = current / filename
+            if path.suffix in {".pyc", ".pyo", ".pyd"}:
+                artifacts.add(path.relative_to(root).as_posix())
+    return artifacts
+
+
+def check_py_compile_cache_hygiene(root: Path) -> list[Failure]:
+    category = "py-compile-cache-hygiene"
+    failures: list[Failure] = []
+    wrapper = root / "tools/py_compile_clean.py"
+    if not wrapper.exists():
+        return failures
+
+    workflow = root / ".github/workflows/loom-check.yml"
+    if workflow.exists() and "python3 -m py_compile" in workflow.read_text(encoding="utf-8"):
+        failures.append(Failure(category, "`loom-check.yml` must use `make py-compile`, not bare `python3 -m py_compile`"))
+
+    pr_template = root / ".github/PULL_REQUEST_TEMPLATE.md"
+    if pr_template.exists():
+        template_text = pr_template.read_text(encoding="utf-8")
+        if "tools/py_compile_clean.py" not in template_text:
+            failures.append(Failure(category, "PR template must direct Python compile validation through the cache-clean wrapper"))
+
+    before = python_cache_artifacts(root)
+    result = run_command(
+        root,
+        ["python3", "tools/py_compile_clean.py", *PY_COMPILE_CACHE_HYGIENE_TARGETS],
+        timeout_seconds=120,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "py_compile_clean failed without output"
+        failures.append(Failure(category, f"`tools/py_compile_clean.py` failed: {detail}"))
+        return failures
+
+    after = python_cache_artifacts(root)
+    created = sorted(after - before)
+    if created:
+        preview = ", ".join(created[:8])
+        suffix = "" if len(created) <= 8 else f", ... (+{len(created) - 8} more)"
+        failures.append(Failure(category, f"`tools/py_compile_clean.py` must not create repository Python cache artifacts: {preview}{suffix}"))
     return failures
 
 
@@ -16442,6 +16707,76 @@ def check_story_intake_contract(root: Path) -> list[Failure]:
     return failures
 
 
+def hardcoding_guard_line_allowed(line: str) -> bool:
+    lowered = line.lower()
+    allow_terms = (
+        "不得",
+        "不能",
+        "禁止",
+        "不把",
+        "不让",
+        "not ",
+        "never",
+        "must not",
+        "do not",
+        "without",
+        "instead of",
+        "rather than",
+        "example",
+        "fixture",
+        "反例",
+        "样本",
+        "locator",
+        "core_hardcoding_leak",
+    )
+    return any(term in lowered for term in allow_terms)
+
+
+def check_core_hardcoding_guard(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    scanned_roots = [
+        root / "docs" / "methodology",
+        root / "docs" / "adoption",
+        root / "src" / "skills" / "shared",
+        root / "tools",
+    ]
+    forbidden_patterns = {
+        "repo_specific_guardian_default": re.compile(r"(?i)(guardian|guardian-review|host/guardian-review\\.json).*(default|默认|must|should)"),
+        "repo_specific_review_path_default": re.compile(r"(?i)(spec_review\\.md|code_review\\.md).*(default|默认|lookup|read|open|load)"),
+        "repo_specific_final_verdict": re.compile(r"(?i)(final_verdict|override_decision|blocking_owner).*(repo-interface|interop|companion)"),
+    }
+    allowed_path_parts = {"evidence", "fixtures", "validations", "examples"}
+    for scan_root in scanned_roots:
+        if not scan_root.exists():
+            continue
+        for path in scan_root.rglob("*"):
+            if not path.is_file() or path.suffix not in {".md", ".py", ".json"}:
+                continue
+            if any(part in allowed_path_parts for part in path.parts):
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            for line_number, line in enumerate(text.splitlines(), start=1):
+                if "re.compile" in line or "forbidden_patterns" in line:
+                    continue
+                if hardcoding_guard_line_allowed(line):
+                    continue
+                for kind, pattern in forbidden_patterns.items():
+                    if pattern.search(line):
+                        failures.append(
+                            Failure(
+                                "core-hardcoding-guard",
+                                f"{path.relative_to(root)}:{line_number} leaks repo-specific default `{kind}`",
+                            )
+                        )
+    fixture_path = root / "docs" / "evidence" / "fixtures" / "core-hardcoding-guard-fixtures.json"
+    if not fixture_path.exists():
+        failures.append(Failure("core-hardcoding-guard", "missing `docs/evidence/fixtures/core-hardcoding-guard-fixtures.json`"))
+    return failures
+
+
 def is_within(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
@@ -16456,6 +16791,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_required_paths(root, "top-level-files", TOP_LEVEL_FILES))
     failures.extend(check_required_paths(root, "area-readmes", AREA_READMES))
     failures.extend(check_required_paths(root, "core-docs", CORE_DOCS))
+    failures.extend(check_shared_foundation_contract(root))
     failures.extend(
         check_required_paths(root, "automation-frontload-templates", AUTOMATION_FRONTLOAD_TEMPLATES)
     )
@@ -16476,6 +16812,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_root_self_adoption_carrier(root))
     failures.extend(check_deep_existing_repo_bootstrap(root))
     failures.extend(check_daily_execution_cli(root))
+    failures.extend(check_py_compile_cache_hygiene(root))
     failures.extend(check_repo_companion_interface_contracts(root))
     failures.extend(check_repo_interop_contracts(root))
     failures.extend(check_external_orchestrator_interop_fixture_contract(root))
@@ -16503,6 +16840,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_execution_attempt_contract(root))
     failures.extend(check_build_execution_contract(root))
     failures.extend(check_story_intake_contract(root))
+    failures.extend(check_core_hardcoding_guard(root))
     failures.extend(check_markdown_links(root))
     return failures
 
