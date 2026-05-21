@@ -1,0 +1,5 @@
+{
+  "decision": "allow",
+  "findings": [],
+  "summary": "WI-863 formal review passes: the changes correctly make complete Codex App host proof override CI/CODEX_CI headless fallback, preserve safe fallback with missing-proof diagnostics, add focused fixture coverage and prompt evidence snapshots, and keep raw App output bounded as runtime evidence while normalized findings feed the single review-record path."
+}

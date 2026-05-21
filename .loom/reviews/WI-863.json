@@ -1,39 +1,36 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-863",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "e71f662e284c4c9b4b743ab50ed9e4e6ba9208de",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-863 formal review passes: the changes correctly make complete Codex App host proof override CI/CODEX_CI headless fallback, preserve safe fallback with missing-proof diagnostics, add focused fixture coverage and prompt evidence snapshots, and keep raw App output bounded as runtime evidence while normalized findings feed the single review-record path.",
+  "reviewer": "loom/codex-app-review",
+  "reviewed_head": "b42fd122ef941d3de57818ec76cc5170bfa2eca3",
+  "reviewed_validation_summary": "py_compile passed for src/generated shared scripts; skills_surface check passed; embedded App JSON probe passed; root shadow-parity and adopt verify passed; version surface check passed; installer version bump check passed; tools/loom_check.py passed with 36 surfaces and loom-check-* temp dirs cleaned; live Codex App review run passed on head b42fd122 via thread 019e4af4-5eb2-7432-bd36-8d8facc33ab1 cwd /Users/mc/dev/Loom-863-codex-app-review-host-proof using App CLI 0.131.0-alpha.9; review record input decision=allow.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-863.md",
+    "recovery_entry": ".loom/progress/WI-863.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": "loom/codex-app-review",
+    "engine_evidence": ".loom/runtime/review/WI-863/b42fd122ef941d3de57818ec76cc5170bfa2eca3/engine-result.json",
+    "normalized_findings": ".loom/runtime/review/WI-863/b42fd122ef941d3de57818ec76cc5170bfa2eca3/normalized-findings.json"
+  }
 }
