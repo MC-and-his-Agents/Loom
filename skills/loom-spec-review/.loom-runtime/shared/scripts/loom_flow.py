@@ -9081,6 +9081,7 @@ def build_default_review_prompt(
             "Repeated Blocker Candidates:",
             *repeated_lines,
             "- 请将发现分类为 new、unresolved 或 repeated/root-cause candidate；不要在没有证据时把 repeat 自动升级成 hard gate。",
+            "- 若既有 review record 的 reviewed_head 落后于当前 HEAD，请只把它当作历史输入；本次 review run 正在生成替代 evidence，不能仅因既有 record stale 而 block，除非存在未解决 finding、验证漂移或当前差异本身未被审查覆盖。",
             "",
             *change_snapshot_lines,
             "",

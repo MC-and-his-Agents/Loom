@@ -148,6 +148,8 @@ Context pack 至少包含：
 
 Prompt 必须消费 context pack，并要求 reviewer 将 finding 分类为 `new`、`unresolved` 或 `repeated/root-cause candidate`。历史不可用时，context pack 仍必须存在并标明 `history_available = false`，不得猜测历史结论。
 
+当 `review run` 正在生成替代 review evidence 时，既有 review record 的 `reviewed_head` 可能落后于当前 `HEAD`。这种 stale record 只能作为历史输入，不能单独构成当前 review blocker；只有未解决 finding、验证漂移或当前差异本身未被本轮审查覆盖时，reviewer 才应阻断。
+
 ## 3. review record 最小字段
 
 review record 至少应包含：

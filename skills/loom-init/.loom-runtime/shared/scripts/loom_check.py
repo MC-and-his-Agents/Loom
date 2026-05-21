@@ -6715,6 +6715,8 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     failures.append(Failure("daily-execution-cli", "`review run` prompt must include recent review context pack guidance"))
                 if "Change Evidence Snapshot" not in prompt_text or "Focused Diff Excerpt" not in prompt_text:
                     failures.append(Failure("daily-execution-cli", "`review run` prompt must include focused change evidence for host-limited reviewers"))
+                if "不能仅因既有 record stale 而 block" not in prompt_text:
+                    failures.append(Failure("daily-execution-cli", "`review run` prompt must treat stale prior review records as historical input during replacement review runs"))
                 profile_probe = json.loads(json.dumps(payload))
                 if isinstance(profile_probe.get("engine"), dict):
                     profile_probe["engine"].pop("profile", None)
