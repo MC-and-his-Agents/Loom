@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-857
-- Goal: 修复 Loom 自身 py_compile 验证留下 __pycache__ 工作区残留的问题。
-- Scope: 统一 Loom 源仓库 py_compile 验证入口；更新 CI、Makefile、PR validation recipe、loom_check fixture 和 generated skills surface；保留 #817 adopted repo installed runtime cache guard。
-- Execution Path: harness/pycompile-cache-hygiene
+- Item ID: WI-862
+- Goal: Add a lightweight Story Business Confirmation point before story intake can feed formal spec / plan.
+- Scope: Update Loom story intake governance, spec / plan consumption rules, Work Item and gate references, story templates, loom-story skill contracts, runtime contract summaries, story carrier checks, generated skills surface, demo runtime, and extraction evidence for #862.
+- Execution Path: governance/story-intake-business-confirmation
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-857.md
-- Review Entry: .loom/reviews/WI-857.json
-- Validation Entry: make py-compile; targeted Python cache find scan; python3 tools/skills_surface.py check; python3 tools/version_surface_check.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py; git diff --check; installer version bump check; PR checks.
-- Closing Condition: #857 修复合并到 main，PR checks 通过，closeout check 通过，#857 closed 且 Project #4 为 Done，工作区无 Python bytecode/cache 残留。
-- Current Checkpoint: merge-ready
-- Current Stop: Local validation passed on head b56ee756442c4956ebdc44fa23bfea4e5336a400; PR push and merge-ready gate are next.
-- Next Step: Push branch, open/update PR, run merge-ready gate, wait for checks, then merge and close out #857.
+- Recovery Entry: .loom/progress/WI-862.md
+- Review Entry: .loom/reviews/WI-862.json
+- Validation Entry: python3 tools/skills_surface.py check; python3 tools/py_compile_clean.py tools/loom_flow.py tools/loom_init.py tools/loom_check.py skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_init.py skills/shared/scripts/loom_check.py skills/shared/scripts/loom_story_carriers.py src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_init.py src/skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_story_carriers.py; python3 tools/loom_init.py route --target examples/new-project --task '请确认 story 业务语义或根据修订意见回到 story shaping'; python3 tools/loom_flow.py flow story --target examples/new-project; python3 tools/loom_init.py bootstrap --target examples/new-project --scenario new --intent execution-control --write --force --verify --install-pr-template --portable-output; python3 tools/version_surface_check.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py; PR checks.
+- Closing Condition: #862 merged to main through controlled merge, PR checks pass, closeout state is synchronized, and #862 is closed.
+- Current Checkpoint: build
+- Current Stop: Local design and runtime updates are implemented on branch work/862-story-business-confirmation; review and merge-ready gates are next.
+- Next Step: Run spec review, implementation review, merge-ready validation, push PR, wait for checks, then controlled merge and closeout.
 - Blockers: None recorded.
-- Latest Validation Summary: git diff --check passed; python3 tools/skills_surface.py check passed; python3 tools/version_surface_check.py passed; python3 tools/host_adapter_check.py passed; make py-compile passed with py_compile_clean OK for 34 files; cache scan after make py-compile returned no __pycache__, .pyc, .pyo, or .pyd artifacts; installer version bump check passed with 0.1.122 -> 0.1.123; python3 tools/loom_check.py passed with 36 surfaces; make check passed with 36 surfaces; final cache scan returned no __pycache__, .pyc, .pyo, or .pyd artifacts.
-- Recovery Boundary: Only #857 py_compile cache hygiene is in scope; #817 installed runtime `.loom/bin` cache guard remains existing behavior and must not be regressed.
-- Current Lane: branch work/857-pycompile-cache-hygiene in formal worktree /Users/mc/dev/Loom-work-857-pycompile-cache-hygiene
+- Latest Validation Summary: python3 tools/skills_surface.py check passed; targeted py_compile_clean passed for 11 files; story confirmation route selected loom-story; python3 tools/loom_flow.py flow story exposed loom-story-business-confirmation/v1 with pending/revision-requested blocking spec / plan consumption; demo bootstrap verify passed; python3 tools/version_surface_check.py passed; python3 tools/host_adapter_check.py passed; python3 tools/loom_check.py passed with 36 surfaces.
+- Recovery Boundary: Only #862 story intake business semantic confirmation is in scope; do not redesign product management, Jira/Linear integration, technical review, test strategy approval, or HotCP-specific workflow.
+- Current Lane: branch work/862-story-business-confirmation in formal workspace /Users/mc/dev/Loom
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-857.md
-- Dynamic Truth: .loom/progress/WI-857.md
+- Static Truth: .loom/work-items/WI-862.md
+- Dynamic Truth: .loom/progress/WI-862.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

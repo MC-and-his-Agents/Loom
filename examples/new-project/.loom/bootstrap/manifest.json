@@ -120,7 +120,7 @@
       "path": ".loom/bin/loom_init.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_init.py",
-      "sha256": "9fa1e3460dcac9aaa05383ee830597d7b164c18e5095ed836201b9eb056f54d4"
+      "sha256": "6761b28f0d8d5eebf453b336edfcfa9b790b2b93e657ca56362f459819192422"
     },
     {
       "path": ".loom/bin/fact_chain_support.py",
@@ -138,7 +138,7 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "0ec99de56ba974e7a4523f3f49351283538b320fbbea71c1fb3ea2ac195cad34"
+      "sha256": "186e7bae3f5e032089d9da33c3e357ffdde61259dc9fee147546a382a2e6706e"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -162,13 +162,13 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "1aa314c0b20551ec0ca135c85352d1998f7ab0af953b220b115bc93f06d2c9e9"
+      "sha256": "fa401260c6cd3390b07a749ea3819fd390c0c99c4795a04687c9679eaacac501"
     },
     {
       "path": ".loom/bin/loom_story_carriers.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_story_carriers.py",
-      "sha256": "ef41d403624ce8d68daba2363b52a775cec14014fa9b73837aab65c7cc94447a"
+      "sha256": "02caf210fbb86a3f3e07c42fcb33252f81a8dbe60b67beaa74fdb4c6844ccca1"
     },
     {
       "path": ".loom/reviews/INIT-0001.json",

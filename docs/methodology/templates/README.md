@@ -34,7 +34,7 @@
 - [scaffold/plan.md](./scaffold/plan.md)
   - 对应 `spec-suite.md` 中定义的 `plan.md` 最小骨架
 - [scaffold/user-story.md](./scaffold/user-story.md)
-  - 对应 `story-intake.md` 中定义的 story intake 最小骨架；其中 User Story、Story Readiness 与 Delivery Consumption Boundary 是分离产物
+  - 对应 `story-intake.md` 中定义的 story intake 最小骨架；其中 User Story、Story Readiness、Story Business Confirmation 与 Delivery Consumption Boundary 是分离产物
 - [scaffold/release-closeout.md](./scaffold/release-closeout.md)
   - 对应 `release-closeout-template.md` 中定义的 target release closeout 最小骨架
 

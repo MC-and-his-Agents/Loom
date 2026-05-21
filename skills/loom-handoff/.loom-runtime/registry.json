@@ -1,5 +1,5 @@
 {
-  "registry_version": "1.6.0",
+  "registry_version": "1.7.0",
   "root_entry": "loom-init",
   "upgrade_contract": "upgrade-contract.json",
   "install_layout": "install-layout.json",
@@ -35,7 +35,7 @@
     {
       "id": "loom-story",
       "role": "scenario/story",
-      "contract_version": "1.0.0",
+      "contract_version": "1.1.0",
       "manifest": "loom-story/contract.json",
       "executable": "loom-story/scripts/loom-story.py"
     },

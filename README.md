@@ -89,7 +89,7 @@ Loom exposes one root entry and ten scenario skills:
 | `loom-adopt` | Creates the minimum Loom adoption surface for a repository. |
 | `loom-resume` | Restores context and continues the current `Work Item`. |
 | `loom-build` | Runs a bounded implementation/build round before review. |
-| `loom-story` | Turns product context into a User Story and Story Readiness result. |
+| `loom-story` | Turns product context into a User Story, Story Readiness, and business semantic confirmation point. |
 | `loom-pre-review` | Checks readiness before formal review. |
 | `loom-spec-review` | Reviews the formal spec path and produces the `spec-approved` gate. |
 | `loom-review` | Runs formal review and records the result. |

@@ -16,18 +16,22 @@ from fact_chain_support import parse_work_item
 STORY_MARKERS = (
     "loom-user-story/v1",
     "loom-story-readiness/v1",
+    "loom-story-business-confirmation/v1",
     "loom-story-delivery-mapping/v1",
 )
 PLACEHOLDER_MARKERS = (
     "a clear product or system starting point",
     "the actor uses the target capability",
     "the intended outcome is observable",
+    "pending | confirmed | revision-requested | not-applicable",
 )
 EMPTY_FIELD_MARKERS = (
     "- Actor:",
     "- Capability:",
     "- Outcome:",
     "- Business value:",
+    "- Out of scope:",
+    "- Decision:",
 )
 
 
@@ -66,6 +70,8 @@ def validate_story_file(target_root: Path, story_path: Path) -> list[str]:
     has_empty_fields = any(re.search(rf"^{re.escape(marker)}\s*$", text, re.MULTILINE) for marker in EMPTY_FIELD_MARKERS)
     if has_empty_fields or any(marker in text for marker in PLACEHOLDER_MARKERS):
         errors.append(f"{relative}: copied template placeholders must be replaced before the story can pass")
+    if re.search(r"^-\s*Decision:\s*(pending|revision-requested)\s*$", text, re.MULTILINE):
+        errors.append(f"{relative}: story business confirmation must be confirmed or not-applicable before delivery consumption")
     return errors
 
 

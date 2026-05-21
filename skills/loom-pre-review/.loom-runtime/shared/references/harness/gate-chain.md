@@ -35,6 +35,7 @@ formal spec 路径上必须证明：
 
 - 上位 `FR` 已存在
 - formal spec 已冻结到可审查版本
+- 若 formal spec 消费 User Story，Story Business Confirmation 已 `confirmed` 或明确 `not-applicable`
 - `spec_review` 为 `approved`
 - 未出现 `spec_stale`
 
