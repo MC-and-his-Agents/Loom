@@ -1,0 +1,21 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-857",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-857 implementation is approved for merge readiness. The change adds a repo-local py_compile wrapper that writes bytecode only to an auto-cleaned temporary directory, wires Makefile and GitHub workflow compile validation through it, adds a loom_check cache hygiene fixture with pruned repository scanning, updates active validation guidance away from bare py_compile commands, and regenerates the skills surface without altering the #817 installed runtime cache guard or unrelated #856 capabilities.",
+  "reviewer": "codex",
+  "reviewed_head": "dd0325d51563cd1a47dab4a89390e4dc877698a3",
+  "reviewed_validation_summary": "git diff --check passed; python3 tools/skills_surface.py check passed; python3 tools/version_surface_check.py passed; python3 tools/host_adapter_check.py passed; make py-compile passed with py_compile_clean OK for 34 files; repository cache scan after make py-compile returned no __pycache__, .pyc, .pyo, or .pyd artifacts; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed with no installer behavior changes; python3 tools/loom_check.py reached root-self-adoption and blocked only on missing WI-857 review records plus stale shadow evidence, which this review/carrier refresh resolves before the final rerun.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-857.md",
+    "recovery_entry": ".loom/progress/WI-857.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "engine_evidence": "Russell subagent read-only review found no blockers; it confirmed the diff is limited to Python bytecode hygiene and that #817 installed runtime cache guard semantics remain intact."
+  }
+}
