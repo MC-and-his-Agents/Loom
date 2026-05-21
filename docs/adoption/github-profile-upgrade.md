@@ -156,14 +156,15 @@ python3 tools/loom_flow.py governance-profile upgrade-plan --target <repo> --hos
 
 升级计划必须覆盖：
 
-- FR / Work Item 分层
-- closeout / reconciliation read surface
-- repo companion contract
-- repo interop contract
-- GitHub controlled merge
-- repo-specific residue
-- review instruction locators for spec review and implementation review
-- authority boundary
-- guardian / integration contract 作为 repo-native evidence 的读取边界
+- `fr_work_item_layer`: FR / Work Item 分层
+- `closeout_reconciliation_read`: closeout / reconciliation read surface
+- `repo_interface`: repo companion contract
+- `repo_interop`: repo interop contract
+- `github_controlled_merge`: GitHub controlled merge 宿主控制面
+- `repo_specific_residue`: repo-specific residue
+- `spec_review_instruction_locator`: spec review 的 repo-owned instruction locator
+- `implementation_review_instruction_locator`: implementation review 的 repo-owned instruction locator
+- `authority_boundary`: authority boundary
+- `guardian_integration_contract`: guardian / integration contract 作为 repo-native evidence 的读取边界
 
-这些判断只服务于 GitHub profile 采用和升级；不得把任何下游仓库的 repo-native review / guardian 规则、单仓命名或 repo-local gate 细节提升为 Loom core 默认规则。升级计划必须要求 mature / deep-existing 仓库声明 repo-owned review instruction locator，不能猜测 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 路径。
+这些判断只服务于 GitHub profile 采用和升级；不得把任何下游仓库的 repo-native review / guardian 规则、单仓命名或 repo-local gate 细节提升为 Loom core 默认规则。升级计划必须要求 mature / deep-existing 仓库声明 repo-owned review instruction locator，必须覆盖 review instruction locators for spec review and implementation review，不能猜测 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 路径。
