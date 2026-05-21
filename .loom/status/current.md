@@ -11,11 +11,11 @@
 - Review Entry: .loom/reviews/WI-810.json
 - Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py governance-profile upgrade-plan --target . --host github
 - Closing Condition: PR merge 后 closeout 消费 #810 issue、PR、merge commit、Project #4 状态和 #808 父 FR 依赖链。
-- Current Checkpoint: build
-- Current Stop: WI-810 implementation updates are in progress on branch work/810-github-profile-upgrade-plan; upgrade-plan output now covers the fixed GitHub profile read-judge-write-verify decision set and generated skills surface has been refreshed.
-- Next Step: Run targeted validation, record formal review, open PR for #810, and consume merge gate checks.
+- Current Checkpoint: review
+- Current Stop: WI-810 implementation and formal reviews are complete on branch work/810-github-profile-upgrade-plan; local validation passed including full loom_check.
+- Next Step: Push branch, open PR for #810, consume CI and merge gate, then perform controlled merge and closeout if checks pass.
 - Blockers: None recorded.
-- Latest Validation Summary: Initial smoke: governance-profile upgrade-plan --target . --host github returned pass/strong and emitted 10 fixed adoption judgments, each expanded to read/judge/write/verify; companion_generation remains dry-run.
+- Latest Validation Summary: py_compile_clean targeted loom_flow/loom_check passed; skills_surface check passed; governance-profile upgrade-plan --target . --host github returned pass/strong with 10 fixed judgments and 40 read/judge/write/verify steps; governance-profile upgrade --target . --to strong --dry-run --host github returned pass/dry_run; version_surface_check passed; installer version bump check passed with no bump required; git diff --check passed; adopt verify --target . --item WI-810 passed; shadow-parity --target . passed; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py passed with 38 surfaces.
 - Recovery Boundary: Only #810 upgrade-plan output contracts, validator consumption, documentation, generated skills surface, and WI-809 terminal carrier closeout needed to unblock this worktree are in scope.
 - Current Lane: branch work/810-github-profile-upgrade-plan in formal workspace /Users/mc/dev/Loom-work-810-github-profile-upgrade-plan, bound to issue #810, parent #808, and pending PR.
 
