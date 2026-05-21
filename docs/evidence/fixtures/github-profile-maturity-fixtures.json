@@ -1,0 +1,157 @@
+{
+  "schema_version": "loom-github-profile-maturity-fixtures/v1",
+  "fixtures": [
+    {
+      "name": "light",
+      "inputs": {
+        "repository_mode": "new",
+        "carrier_summary": {
+          "work_item": {"status": "present", "locator": ".loom/work-items/INIT-0001.md"},
+          "recovery": {"status": "present", "locator": ".loom/progress/INIT-0001.md"},
+          "status_surface": {"status": "present", "locator": ".loom/status/current.md"},
+          "review": {"status": "present", "locator": ".loom/reviews/INIT-0001.json"},
+          "spec_path": {"status": "missing", "locator": ".loom/specs/INIT-0001/spec.md"},
+          "plan_path": {"status": "missing", "locator": ".loom/specs/INIT-0001/plan.md"}
+        },
+        "repo_interface": {"availability": "absent"},
+        "repo_interop": {"availability": "absent"},
+        "github_control_plane": {
+          "default_branch": "main",
+          "host_enforcement": {"verification_status": "unverified", "branch_protection_or_ruleset": false, "required_checks": false},
+          "api_snapshot": {"verification_status": "verified", "errors": []}
+        },
+        "host_binding": {
+          "result": "block",
+          "required_objects": {
+            "branch": {"status": "present", "locator": "work/example", "authority": "git"},
+            "worktree": {"status": "present", "locator": ".", "authority": "git"},
+            "implementation_pr": {"status": "host-managed", "locator": "GitHub PR", "authority": "host"},
+            "merge_commit": {"status": "host-managed", "locator": "GitHub mergeCommit", "authority": "host"},
+            "closeout": {"status": "host-managed", "locator": "closeout gate", "authority": "loom + host"}
+          }
+        }
+      },
+      "expected": {
+        "current": "light",
+        "judgment": "light",
+        "missing_by_level": {
+          "standard": ["fr_work_item_layer", "spec_path", "plan_path", "spec_gate", "basic_host_binding", "closeout_reconciliation_read"]
+        }
+      }
+    },
+    {
+      "name": "standard",
+      "inputs": {
+        "repository_mode": "existing",
+        "carrier_summary": {
+          "work_item": {"status": "present", "locator": ".loom/work-items/WI-1.md"},
+          "recovery": {"status": "present", "locator": ".loom/progress/WI-1.md"},
+          "status_surface": {"status": "present", "locator": ".loom/status/current.md"},
+          "review": {"status": "present", "locator": ".loom/reviews/WI-1.json"},
+          "spec_path": {"status": "present", "locator": ".loom/specs/WI-1/spec.md"},
+          "plan_path": {"status": "present", "locator": ".loom/specs/WI-1/plan.md"}
+        },
+        "repo_interface": {"availability": "present"},
+        "repo_interop": {"availability": "present"},
+        "github_control_plane": {
+          "default_branch": "main",
+          "host_enforcement": {"verification_status": "verified", "branch_protection_or_ruleset": false, "required_checks": false},
+          "api_snapshot": {"verification_status": "verified", "errors": []}
+        },
+        "host_binding": {
+          "result": "pass",
+          "required_objects": {
+            "branch": {"status": "present", "locator": "work/1", "authority": "git"},
+            "worktree": {"status": "present", "locator": "/repo", "authority": "git"},
+            "implementation_pr": {"status": "host-managed", "locator": "GitHub PR", "authority": "host"},
+            "merge_commit": {"status": "host-managed", "locator": "GitHub mergeCommit", "authority": "host"},
+            "closeout": {"status": "present", "locator": "reconciliation audit + closeout gate", "authority": "loom + host"}
+          }
+        }
+      },
+      "expected": {
+        "current": "standard",
+        "judgment": "standard",
+        "missing_by_level": {
+          "strong": ["host_enforced_control_plane", "controlled_merge_basis", "github_controlled_merge"]
+        }
+      }
+    },
+    {
+      "name": "strong",
+      "inputs": {
+        "repository_mode": "existing",
+        "carrier_summary": {
+          "work_item": {"status": "present", "locator": ".loom/work-items/WI-1.md"},
+          "recovery": {"status": "present", "locator": ".loom/progress/WI-1.md"},
+          "status_surface": {"status": "present", "locator": ".loom/status/current.md"},
+          "review": {"status": "present", "locator": ".loom/reviews/WI-1.json"},
+          "spec_path": {"status": "present", "locator": ".loom/specs/WI-1/spec.md"},
+          "plan_path": {"status": "present", "locator": ".loom/specs/WI-1/plan.md"}
+        },
+        "repo_interface": {"availability": "present"},
+        "repo_interop": {"availability": "present"},
+        "github_control_plane": {
+          "default_branch": "main",
+          "host_enforcement": {"verification_status": "verified", "branch_protection_or_ruleset": true, "required_checks": true},
+          "api_snapshot": {"verification_status": "verified", "errors": []}
+        },
+        "host_binding": {
+          "result": "pass",
+          "required_objects": {
+            "branch": {"status": "present", "locator": "work/1", "authority": "git"},
+            "worktree": {"status": "present", "locator": "/repo", "authority": "git"},
+            "implementation_pr": {"status": "host-managed", "locator": "GitHub PR", "authority": "host"},
+            "merge_commit": {"status": "host-managed", "locator": "GitHub mergeCommit", "authority": "host"},
+            "closeout": {"status": "present", "locator": "reconciliation audit + closeout gate", "authority": "loom + host"}
+          }
+        }
+      },
+      "expected": {
+        "current": "strong",
+        "judgment": "strong",
+        "missing_by_level": {
+          "strong": []
+        }
+      }
+    },
+    {
+      "name": "blocked",
+      "inputs": {
+        "repository_mode": "existing",
+        "carrier_summary": {
+          "work_item": {"status": "present", "locator": ".loom/work-items/WI-1.md"},
+          "recovery": {"status": "present", "locator": ".loom/progress/WI-1.md"},
+          "status_surface": {"status": "present", "locator": ".loom/status/current.md"},
+          "review": {"status": "present", "locator": ".loom/reviews/WI-1.json"},
+          "spec_path": {"status": "missing", "locator": ".loom/specs/WI-1/spec.md"},
+          "plan_path": {"status": "missing", "locator": ".loom/specs/WI-1/plan.md"}
+        },
+        "repo_interface": {"availability": "absent"},
+        "repo_interop": {"availability": "absent"},
+        "github_control_plane": {
+          "default_branch": "main",
+          "host_enforcement": {"verification_status": "unverified", "branch_protection_or_ruleset": "unknown", "required_checks": "unknown"},
+          "api_snapshot": {"verification_status": "unverified", "errors": ["github rulesets read: HTTP 403"]}
+        },
+        "host_binding": {
+          "result": "block",
+          "required_objects": {
+            "branch": {"status": "present", "locator": "work/blocked", "authority": "git"},
+            "worktree": {"status": "present", "locator": "/repo", "authority": "git"},
+            "implementation_pr": {"status": "host-managed", "locator": "GitHub PR", "authority": "host"},
+            "merge_commit": {"status": "host-managed", "locator": "GitHub mergeCommit", "authority": "host"},
+            "closeout": {"status": "host-managed", "locator": "closeout gate", "authority": "loom + host"}
+          }
+        }
+      },
+      "expected": {
+        "current": "light",
+        "judgment": "blocked",
+        "missing_by_level": {
+          "standard": ["fr_work_item_layer", "spec_path", "plan_path", "spec_gate", "basic_host_binding", "closeout_reconciliation_read"]
+        }
+      }
+    }
+  ]
+}

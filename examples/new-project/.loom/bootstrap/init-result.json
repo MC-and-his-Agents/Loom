@@ -426,13 +426,13 @@
       "path": ".loom/bin/governance_surface.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/governance_surface.py",
-      "sha256": "5eab0807ec60cda184952226e14f2b5a1bf1cb99ba099cc5056263e055824f10"
+      "sha256": "ae8ad9167ceb8bd8d7e606e67cef48ff7f3d8a26f2bb31c0dcb36bf8732e2dd5"
     },
     {
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "680c38b25e508fb2b30093d771df8c4d02921efab96babb0a3f4505dd04716e2"
+      "sha256": "327c6a5dd0813e152c47504ad4e6f102245867ca76a8c8eb1ccd94ea926f92e2"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -456,7 +456,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "36ba73909c8c984f3a14aa8edce148bf6dd123cadeaf6e668ee030ee64dd74e9"
+      "sha256": "255866c432e136a848ee3a15e2bcd4edfe4f3760c30a0fecacab5368b3f23999"
     },
     {
       "path": ".loom/bin/loom_story_carriers.py",
@@ -1327,6 +1327,94 @@
       "maturity": {
         "schema_version": "loom-governance-maturity/v1",
         "current": "light",
+        "judgment": {
+          "schema_version": "loom-github-profile-maturity-judgment/v1",
+          "judgment": "light",
+          "current": "light",
+          "blocked": false,
+          "blockers": [],
+          "evidence": [
+            {
+              "id": "work_item",
+              "status": "present",
+              "locator": ".loom/work-items/INIT-0001.md",
+              "authority": "loom fact chain"
+            },
+            {
+              "id": "recovery",
+              "status": "present",
+              "locator": ".loom/progress/INIT-0001.md",
+              "authority": "loom fact chain"
+            },
+            {
+              "id": "status_surface",
+              "status": "present",
+              "locator": ".loom/status/current.md",
+              "authority": "loom fact chain"
+            },
+            {
+              "id": "review",
+              "status": "present",
+              "locator": ".loom/reviews/INIT-0001.json",
+              "authority": "loom fact chain"
+            },
+            {
+              "id": "spec_path",
+              "status": "present",
+              "locator": ".loom/specs/INIT-0001/spec.md",
+              "authority": "loom fact chain"
+            },
+            {
+              "id": "plan_path",
+              "status": "present",
+              "locator": ".loom/specs/INIT-0001/plan.md",
+              "authority": "loom fact chain"
+            },
+            {
+              "id": "github_api_snapshot",
+              "status": "verified",
+              "locator": "github_control_plane.api_snapshot",
+              "authority": "github"
+            },
+            {
+              "id": "host_enforcement",
+              "status": "verified",
+              "locator": "github_control_plane.host_enforcement",
+              "authority": "github"
+            },
+            {
+              "id": "host_binding.branch",
+              "status": "present",
+              "locator": "${CURRENT_BRANCH}",
+              "authority": "git"
+            },
+            {
+              "id": "host_binding.worktree",
+              "status": "present",
+              "locator": "${SOURCE_REPO_ROOT}",
+              "authority": "git"
+            },
+            {
+              "id": "host_binding.implementation_pr",
+              "status": "host-managed",
+              "locator": "GitHub PR linked from Work Item or branch",
+              "authority": "host"
+            },
+            {
+              "id": "host_binding.merge_commit",
+              "status": "host-managed",
+              "locator": "GitHub merged PR mergeCommit",
+              "authority": "host"
+            },
+            {
+              "id": "host_binding.closeout",
+              "status": "present",
+              "locator": "reconciliation audit + closeout gate",
+              "authority": "loom + host"
+            }
+          ],
+          "summary": "GitHub profile maturity judgment is `light`."
+        },
         "achieved": [
           "light"
         ],
