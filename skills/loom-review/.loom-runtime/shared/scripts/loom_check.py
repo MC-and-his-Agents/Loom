@@ -325,6 +325,19 @@ EXTERNAL_ORCHESTRATOR_FIXTURE_SCHEMA = "loom-external-orchestrator-interop-fixtu
 EXTERNAL_ORCHESTRATOR_CONFORMANCE_FIXTURE_SCHEMA = "loom-external-orchestrator-conformance-fixtures/v1"
 SAFE_SYNC_PLAN_FIXTURE_SCHEMA = "loom-safe-sync-plan-fixtures/v1"
 GITHUB_PROFILE_MATURITY_FIXTURE_SCHEMA = "loom-github-profile-maturity-fixtures/v1"
+REQUIRED_ADOPTION_DECISION_IDS = {
+    "fr_work_item_layer",
+    "closeout_reconciliation_read",
+    "repo_interface",
+    "repo_interop",
+    "github_controlled_merge",
+    "repo_specific_residue",
+    "spec_review_instruction_locator",
+    "implementation_review_instruction_locator",
+    "authority_boundary",
+    "guardian_integration_contract",
+}
+REQUIRED_ADOPTION_PHASES = {"read", "judge", "write", "verify"}
 EXTERNAL_ORCHESTRATOR_CONFORMANCE_SCHEMA = "loom-external-orchestrator-conformance/v1"
 EXTERNAL_ORCHESTRATOR_FORBIDDEN_FIELDS = {
     "scheduler_state",
@@ -3011,6 +3024,12 @@ def require_adoption_decisions_payload(
     if not isinstance(judgments, list) or not judgments:
         failures.append(Failure(category, f"{context} must include non-empty judgments"))
         return
+    requires_github_profile_decisions = payload.get("target_maturity") in {"standard", "strong"}
+    judgment_ids = {judgment.get("id") for judgment in judgments if isinstance(judgment, dict)}
+    if requires_github_profile_decisions:
+        missing_required = sorted(REQUIRED_ADOPTION_DECISION_IDS - judgment_ids)
+        if missing_required:
+            failures.append(Failure(category, f"{context} must cover required GitHub profile decisions: {', '.join(missing_required)}"))
     required_fields = {"id", "question", "source_locator", "reasoning", "write_targets", "verification_commands", "status"}
     for judgment in judgments:
         if not isinstance(judgment, dict):
@@ -3026,6 +3045,8 @@ def require_adoption_decisions_payload(
                 failures.append(Failure(category, f"{context} judgment `{judgment.get('id')}` must include non-empty `{field}`"))
         if not isinstance(judgment.get("write_targets"), list):
             failures.append(Failure(category, f"{context} judgment `{judgment.get('id')}` write_targets must be a list"))
+        elif requires_github_profile_decisions and judgment.get("id") in REQUIRED_ADOPTION_DECISION_IDS and not judgment.get("write_targets"):
+            failures.append(Failure(category, f"{context} judgment `{judgment.get('id')}` must declare concrete file or host write target locators"))
         if not isinstance(judgment.get("verification_commands"), list) or not judgment.get("verification_commands"):
             failures.append(Failure(category, f"{context} judgment `{judgment.get('id')}` verification_commands must be non-empty"))
 
@@ -3048,12 +3069,15 @@ def require_guided_adoption_plan_payload(
     if not isinstance(steps, list) or not steps:
         failures.append(Failure(category, f"{context} must include non-empty steps"))
         return
+    phases_by_judgment: dict[str, set[str]] = {}
     for step in steps:
         if not isinstance(step, dict):
             failures.append(Failure(category, f"{context} steps must be objects"))
             continue
-        if step.get("phase") not in {"read", "judge", "write", "verify"}:
+        if step.get("phase") not in REQUIRED_ADOPTION_PHASES:
             failures.append(Failure(category, f"{context} step phase must be read/judge/write/verify"))
+        elif isinstance(step.get("judgment_id"), str):
+            phases_by_judgment.setdefault(step["judgment_id"], set()).add(step["phase"])
         if not isinstance(step.get("judgment_id"), str) or not step.get("judgment_id"):
             failures.append(Failure(category, f"{context} step must include judgment_id"))
         if not isinstance(step.get("action"), str) or not step.get("action"):
@@ -3064,6 +3088,11 @@ def require_guided_adoption_plan_payload(
             failures.append(Failure(category, f"{context} step write_targets must be a list"))
         if not isinstance(step.get("verification_commands"), list) or not step.get("verification_commands"):
             failures.append(Failure(category, f"{context} step verification_commands must be non-empty"))
+    for judgment_id in sorted(phases_by_judgment):
+        phases = phases_by_judgment[judgment_id]
+        if phases != REQUIRED_ADOPTION_PHASES:
+            missing_phases = sorted(REQUIRED_ADOPTION_PHASES - phases)
+            failures.append(Failure(category, f"{context} judgment `{judgment_id}` must include read/judge/write/verify steps; missing: {', '.join(missing_phases)}"))
 
 
 def require_companion_generation_payload(

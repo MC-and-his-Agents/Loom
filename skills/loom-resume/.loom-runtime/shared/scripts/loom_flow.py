@@ -328,9 +328,24 @@ ADOPTION_DECISION_QUESTIONS: dict[str, str] = {
     "repo_interop": "Which retained host action results, repo-native carriers, and shadow parity surfaces should Loom read?",
     "github_controlled_merge": "Which GitHub-controlled merge evidence proves the host merge boundary is ready without Loom taking over the host action?",
     "repo_specific_residue": "Which repo-specific residue must stay repo-owned instead of becoming Loom core?",
+    "spec_review_instruction_locator": "Where does the adopted repository declare repo-owned spec review instructions without making Loom guess a filename?",
+    "implementation_review_instruction_locator": "Where does the adopted repository declare repo-owned implementation review instructions without making Loom guess a filename?",
     "authority_boundary": "Where is the authority-of-truth for repo-native results, overrides, and fallback decisions?",
     "guardian_integration_contract": "Which guardian or integration-contract verdicts should be read as repo-native evidence rather than promoted into Loom core?",
 }
+
+ADOPTION_DECISION_ORDER: list[str] = [
+    "fr_work_item_layer",
+    "closeout_reconciliation_read",
+    "repo_interface",
+    "repo_interop",
+    "github_controlled_merge",
+    "repo_specific_residue",
+    "spec_review_instruction_locator",
+    "implementation_review_instruction_locator",
+    "authority_boundary",
+    "guardian_integration_contract",
+]
 
 ADOPTION_DECISION_SOURCES: dict[str, str] = {
     "fr_work_item_layer": "docs/adoption/github-profile-upgrade.md",
@@ -339,6 +354,8 @@ ADOPTION_DECISION_SOURCES: dict[str, str] = {
     "repo_interop": "docs/adoption/repo-interop-contract.md",
     "github_controlled_merge": "docs/adoption/github-profile.md",
     "repo_specific_residue": "docs/adoption/repo-companion-contract.md",
+    "spec_review_instruction_locator": "docs/adoption/repo-companion-contract.md",
+    "implementation_review_instruction_locator": "docs/adoption/repo-companion-contract.md",
     "authority_boundary": "docs/adoption/repo-interop-contract.md",
     "guardian_integration_contract": "docs/adoption/repo-interop-contract.md",
 }
@@ -348,8 +365,10 @@ ADOPTION_DECISION_WRITE_TARGETS: dict[str, list[str]] = {
     "closeout_reconciliation_read": [".loom/companion/interop.json"],
     "repo_interface": [".loom/companion/manifest.json", ".loom/companion/repo-interface.json"],
     "repo_interop": [".loom/companion/interop.json"],
-    "github_controlled_merge": [],
+    "github_controlled_merge": ["github:branch_protection.required_checks", "github:pull_request.merge_method"],
     "repo_specific_residue": [".loom/companion/README.md", ".loom/companion/repo-interface.json"],
+    "spec_review_instruction_locator": [".loom/companion/repo-interface.json:review_instruction_locators.spec_review"],
+    "implementation_review_instruction_locator": [".loom/companion/repo-interface.json:review_instruction_locators.implementation_review"],
     "authority_boundary": [".loom/companion/interop.json"],
     "guardian_integration_contract": [".loom/companion/interop.json"],
 }
@@ -3117,12 +3136,18 @@ def live_smoke_run_payload(
 def adoption_validation_commands(target_root: Path) -> list[str]:
     target = command_target(target_root)
     return [
-        f"python3 tools/loom_flow.py governance-profile upgrade-plan --target {target}",
+        f"python3 tools/loom_flow.py governance-profile upgrade-plan --target {target} --host github",
         f"python3 tools/loom_flow.py adopt verify --target {target}",
     ]
 
 
 def adoption_decision_reasoning(decision_id: str, detail: dict[str, Any]) -> str:
+    if decision_id == "github_controlled_merge":
+        return "GitHub remains the merge authority; Loom only reads required checks, PR merge state, merge commit, and closeout basis before delegating host merge."
+    if decision_id == "spec_review_instruction_locator":
+        return "Deep existing repositories must declare their own spec review instruction locator so Loom does not infer repo-specific filenames or review policy."
+    if decision_id == "implementation_review_instruction_locator":
+        return "Deep existing repositories must declare their own implementation review instruction locator so Loom can consume repo-owned guidance without moving it into core."
     if decision_id == "guardian_integration_contract":
         return "Guardian and integration-contract verdicts are repo-native evidence; Loom may read them through interop but must not promote their rules into core."
     if decision_id == "authority_boundary":
@@ -3140,7 +3165,9 @@ def adoption_judgment_status(decision_id: str, missing: set[str]) -> str:
         return "blocked" if not ADOPTION_DECISION_WRITE_TARGETS.get(decision_id) else "missing"
     if decision_id == "repo_specific_residue" and "repo_interface" in missing:
         return "missing"
-    if decision_id in {"authority_boundary", "guardian_integration_contract"} and "repo_interop" in missing:
+    if decision_id in {"spec_review_instruction_locator", "implementation_review_instruction_locator"} and "repo_interface" in missing:
+        return "missing"
+    if decision_id in {"authority_boundary", "guardian_integration_contract", "closeout_reconciliation_read"} and "repo_interop" in missing:
         return "missing"
     return "answered"
 
@@ -3165,7 +3192,7 @@ def adoption_decisions_payload(
     )
     detail_by_id = {row.get("id"): row for row in details if isinstance(row, dict)}
     missing_set = {str(item) for item in missing}
-    ordered_ids = list(dict.fromkeys([*missing, "repo_specific_residue", "authority_boundary", "guardian_integration_contract"]))
+    ordered_ids = list(dict.fromkeys([*missing, *ADOPTION_DECISION_ORDER]))
     judgments: list[dict[str, Any]] = []
     for raw_id in ordered_ids:
         decision_id = str(raw_id)
@@ -7004,7 +7031,10 @@ def judgment_closure_payload(
             if not isinstance(target, str):
                 missing_inputs.append(f"judgment `{judgment.get('id')}` has non-string write target")
                 continue
-            path, errors = resolve_repo_relative_path(target_root, target, label=f"judgment `{judgment.get('id')}` write target")
+            if target.startswith("github:"):
+                continue
+            target_locator = target.split(":", 1)[0] if ":" in target else target
+            path, errors = resolve_repo_relative_path(target_root, target_locator, label=f"judgment `{judgment.get('id')}` write target")
             missing_inputs.extend(errors)
             if path is not None and not path.exists():
                 missing_inputs.append(f"judgment `{judgment.get('id')}` write target missing: {target}")
