@@ -11,11 +11,11 @@
 - Review Entry: .loom/reviews/WI-811.json
 - Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py governance-profile upgrade-plan --target . --host github
 - Closing Condition: PR merge 后 closeout 消费 #811 issue、PR、merge commit、Project #4 状态，并更新 #808 父 FR 状态。
-- Current Checkpoint: build
-- Current Stop: WI-811 implementation drafted in branch work/811-github-profile-gate-rollout; targeted output and surface checks passed, shadow carriers refreshed after status activation.
-- Next Step: Record formal spec/code reviews, rerun adopt verify and shadow parity, then run full loom_check before PR.
+- Current Checkpoint: review
+- Current Stop: WI-811 formal spec and implementation reviews are recorded; adopt verify and shadow parity pass on branch work/811-github-profile-gate-rollout.
+- Next Step: Run full loom_check, refresh review head if needed, then push branch and open PR for #811.
 - Blockers: None recorded.
-- Latest Validation Summary: governance-profile status/upgrade-plan/upgrade --dry-run show advisory default/current/recommended/target modes; blocking_allowed=false because adversarial_adoption_checks lacks version-controlled evidence; rollback conditions cover runtime/evidence/host_binding/review_head/metadata_parsing drift; py_compile_clean, skills_surface check, version_surface_check, git diff --check, and fact-chain passed; shadow parity required carrier refresh after status activation.
+- Latest Validation Summary: governance-profile status/upgrade-plan/upgrade --dry-run returned advisory default/current/recommended/target modes with blocking_allowed=false until adversarial adoption evidence exists; py_compile_clean, skills_surface check, version_surface_check, git diff --check, fact-chain, adopt verify, and shadow-parity passed.
 - Recovery Boundary: Only #811 gate_rollout/rollback output, validator consumption, docs/references, generated skills surface, WI-811 carriers, shadow hashes, and terminal WI-810 progress correction are in scope.
 - Current Lane: branch work/811-github-profile-gate-rollout in formal worktree /Users/mc/dev/Loom-work-811-github-profile-gate-rollout, bound to issue #811 and parent #808.
 
