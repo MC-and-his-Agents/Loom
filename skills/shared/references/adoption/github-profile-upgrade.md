@@ -104,10 +104,11 @@ GitHub profile adoption 的 gate 消费模式固定为三态：
 - `gate_rollout.default_mode`
 - `gate_rollout.current_mode`
 - `gate_rollout.recommended_mode`
+- `gate_rollout.target_mode`
 - `gate_rollout.blocking_preconditions`
 - `gate_rollout.rollback`
 
-默认建议必须保持 `advisory`。只有当所有 blocking 前置条件都有版本控制内证据时，才允许建议进入 `blocking`。
+默认建议必须保持 `advisory`。只有当所有 blocking 前置条件都有版本控制内证据时，才允许 `recommended_mode` / `target_mode` 进入 `blocking`。`rollback.conditions` 必须结构化覆盖 runtime、evidence、host binding、review head 与 metadata parsing 漂移，且 rollback 只能暂停 blocking 消费并回到 advisory，不删除既有证据。
 
 ## 8.1 Maturity detector judgment
 

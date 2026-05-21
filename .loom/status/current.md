@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-810
-- Goal: 输出 GitHub profile read-judge-write-verify 升级计划，使 adoption 不停留在缺字段列表。
-- Scope: 更新 GitHub profile upgrade-plan 的 adoption decision / guided plan / companion generation 输出合同、loom_check 消费规则、文档和 generated skills surface；默认 dry-run，不写 repo-native shadow verdict，不启用 blocking gate。
-- Execution Path: adoption/github-profile-upgrade-plan
+- Item ID: WI-811
+- Goal: 固化 GitHub profile gate rollout 与 rollback 输出，确保默认 advisory、blocking 前置证据和 rollback 漂移条件可被机器消费。
+- Scope: 更新 GitHub profile gate_rollout 输出、loom_check 校验、adoption 文档、validation 证据和 generated skills surface；不修改 GitHub branch protection，不启用 blocking gate，不扩大到 repo-specific rules。
+- Execution Path: adoption/github-profile-gate-rollout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-810.md
-- Review Entry: .loom/reviews/WI-810.json
+- Recovery Entry: .loom/progress/WI-811.md
+- Review Entry: .loom/reviews/WI-811.json
 - Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py governance-profile upgrade-plan --target . --host github
-- Closing Condition: PR merge 后 closeout 消费 #810 issue、PR、merge commit、Project #4 状态和 #808 父 FR 依赖链。
-- Current Checkpoint: review
-- Current Stop: WI-810 implementation and formal reviews are complete on branch work/810-github-profile-upgrade-plan; local validation passed including full loom_check.
-- Next Step: Push branch, open PR for #810, consume CI and merge gate, then perform controlled merge and closeout if checks pass.
+- Closing Condition: PR merge 后 closeout 消费 #811 issue、PR、merge commit、Project #4 状态，并更新 #808 父 FR 状态。
+- Current Checkpoint: build
+- Current Stop: WI-811 implementation drafted in branch work/811-github-profile-gate-rollout; targeted output and surface checks passed, shadow carriers refreshed after status activation.
+- Next Step: Record formal spec/code reviews, rerun adopt verify and shadow parity, then run full loom_check before PR.
 - Blockers: None recorded.
-- Latest Validation Summary: py_compile_clean targeted loom_flow/loom_check passed; skills_surface check passed; governance-profile upgrade-plan --target . --host github returned pass/strong with 10 fixed judgments and 40 read/judge/write/verify steps; governance-profile upgrade --target . --to strong --dry-run --host github returned pass/dry_run; version_surface_check passed; installer version bump check passed with 0.1.126 -> 0.1.127; git diff --check passed; adopt verify --target . --item WI-810 passed; shadow-parity --target . passed; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py passed with 38 surfaces.
-- Recovery Boundary: Only #810 upgrade-plan output contracts, validator consumption, documentation, generated skills surface, and WI-809 terminal carrier closeout needed to unblock this worktree are in scope.
-- Current Lane: branch work/810-github-profile-upgrade-plan in formal workspace /Users/mc/dev/Loom-work-810-github-profile-upgrade-plan, bound to issue #810, parent #808, and pending PR.
+- Latest Validation Summary: governance-profile status/upgrade-plan/upgrade --dry-run show advisory default/current/recommended/target modes; blocking_allowed=false because adversarial_adoption_checks lacks version-controlled evidence; rollback conditions cover runtime/evidence/host_binding/review_head/metadata_parsing drift; py_compile_clean, skills_surface check, version_surface_check, git diff --check, and fact-chain passed; shadow parity required carrier refresh after status activation.
+- Recovery Boundary: Only #811 gate_rollout/rollback output, validator consumption, docs/references, generated skills surface, WI-811 carriers, shadow hashes, and terminal WI-810 progress correction are in scope.
+- Current Lane: branch work/811-github-profile-gate-rollout in formal worktree /Users/mc/dev/Loom-work-811-github-profile-gate-rollout, bound to issue #811 and parent #808.
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-810.md
-- Dynamic Truth: .loom/progress/WI-810.md
+- Static Truth: .loom/work-items/WI-811.md
+- Dynamic Truth: .loom/progress/WI-811.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
