@@ -152,6 +152,24 @@ DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS: int | None = None
 REVIEW_ENGINE_PROFILE_SCHEMA = "loom-review-engine-profile/v1"
 REVIEW_ENGINE_PROFILE_IDS = {"default", "high-risk", "spec-review", "repeated-blocker"}
 REVIEW_ENGINE_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
+REVIEW_PROMPT_DIFF_MAX_CHARS = 60_000
+REVIEW_PROMPT_DIFF_PATHS = (
+    ".loom/bootstrap/init-result.json",
+    ".loom/progress",
+    ".loom/reviews",
+    ".loom/specs",
+    ".loom/status/current.md",
+    ".loom/work-items",
+    "docs/methodology/harness/review-execution.md",
+    "src/skills/loom-review/SKILL.md",
+    "src/skills/loom-spec-review/SKILL.md",
+    "src/skills/shared/scripts/loom_check.py",
+    "src/skills/shared/scripts/loom_flow.py",
+    "skills/loom-review/SKILL.md",
+    "skills/loom-spec-review/SKILL.md",
+    "skills/shared/scripts/loom_check.py",
+    "skills/shared/scripts/loom_flow.py",
+)
 PR_MERGE_GATE_SCHEMA = "loom-pr-merge-gate/v1"
 CONTROLLED_MERGE_SCHEMA = "loom-controlled-merge/v1"
 PR_MERGE_GATE_CHECK_NAME = "loom-pr-merge-gate"
@@ -8901,6 +8919,71 @@ def manual_review_payload(
     }
 
 
+def review_prompt_change_snapshot(context: dict[str, Any]) -> list[str]:
+    root = context["target_root"]
+    base_result = run_git(root, ["merge-base", "HEAD", "origin/main"])
+    if base_result.returncode != 0:
+        return [
+            "Change Evidence Snapshot：",
+            "- Base: unavailable; `git merge-base HEAD origin/main` failed.",
+            f"- Error: {(base_result.stderr.strip() or base_result.stdout.strip() or 'unknown')[:240]}",
+            "- Focused Diff Excerpt:",
+            "```diff",
+            "unavailable: origin/main could not be resolved in this review fixture.",
+            "```",
+        ]
+
+    base_sha = base_result.stdout.strip()
+    head_sha = git_head_sha(root) or "unknown-head"
+    stat_result = run_git(root, ["diff", "--stat", f"{base_sha}..HEAD"])
+    names_result = run_git(root, ["diff", "--name-only", "--no-renames", f"{base_sha}..HEAD"])
+    diff_result = run_git(
+        root,
+        [
+            "diff",
+            "--no-ext-diff",
+            "--unified=12",
+            f"{base_sha}..HEAD",
+            "--",
+            *REVIEW_PROMPT_DIFF_PATHS,
+        ],
+    )
+
+    stat_text = stat_result.stdout.strip() if stat_result.returncode == 0 else f"unavailable: {stat_result.stderr.strip() or stat_result.stdout.strip()}"
+    names = [line.strip() for line in names_result.stdout.splitlines() if line.strip()] if names_result.returncode == 0 else []
+    name_lines = [f"- {path}" for path in names[:80]]
+    if len(names) > 80:
+        name_lines.append(f"- ... ({len(names) - 80} more paths omitted)")
+    if not name_lines:
+        name_lines = ["- not_applicable: no changed paths were detected against origin/main."]
+
+    diff_text = diff_result.stdout if diff_result.returncode == 0 else f"unavailable: {diff_result.stderr.strip() or diff_result.stdout.strip()}"
+    diff_text = diff_text.strip()
+    if len(diff_text) > REVIEW_PROMPT_DIFF_MAX_CHARS:
+        diff_text = (
+            diff_text[:REVIEW_PROMPT_DIFF_MAX_CHARS]
+            + f"\n\n[diff excerpt truncated at {REVIEW_PROMPT_DIFF_MAX_CHARS} characters]"
+        )
+    if not diff_text:
+        diff_text = "not_applicable: no focused diff was available."
+
+    return [
+        "Change Evidence Snapshot：",
+        f"- Base: {base_sha}",
+        f"- Head: {head_sha}",
+        "- Changed Paths:",
+        *name_lines,
+        "- Diff Stat:",
+        "```text",
+        stat_text or "not_applicable",
+        "```",
+        "- Focused Diff Excerpt:",
+        "```diff",
+        diff_text,
+        "```",
+    ]
+
+
 def build_default_review_prompt(
     *,
     context: dict[str, Any],
@@ -8940,11 +9023,13 @@ def build_default_review_prompt(
     ]
     if not repeated_lines:
         repeated_lines = ["- absent: no repeated blocker candidate detected."]
+    change_snapshot_lines = review_prompt_change_snapshot(context)
     return "\n".join(
         [
             "你是 Loom 默认 formal reviewer。",
             "请基于当前仓库工作树做正式语义审查，并只输出符合 schema 的 JSON 结果。",
             "优先阅读当前事项直接相关的文件与差异，不要做整仓广播式探索。",
+            "若宿主工具不可用或 outputSchema 限制工具调用，请使用本 prompt 中的 Change Evidence Snapshot 与 Runtime Evidence 形成结论，不要仅因未运行工具而 fallback。",
             "",
             "Loom 审查边界：",
             "- 你负责 reviewer rubric：判断方向、边界、语义正确性、风险与验证充分性。",
@@ -8996,6 +9081,8 @@ def build_default_review_prompt(
             "Repeated Blocker Candidates:",
             *repeated_lines,
             "- 请将发现分类为 new、unresolved 或 repeated/root-cause candidate；不要在没有证据时把 repeat 自动升级成 hard gate。",
+            "",
+            *change_snapshot_lines,
             "",
             "Findings 写作要求：",
             "- 每条 finding 必须包含 `id`、`summary`、`severity`、`rebuttal`、`disposition`。",

@@ -29,6 +29,7 @@ from runtime_paths import repo_local_root
 
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 30.0
 ADOPT_VERIFY_TIMEOUT_SECONDS = 120.0
+BOOTSTRAP_TIMEOUT_SECONDS = 120.0
 
 TOP_LEVEL_DIRS = (
     "docs",
@@ -653,9 +654,24 @@ def command_timeout_seconds(args: list[str], requested_timeout_seconds: float | 
     if requested_timeout_seconds is not None:
         return requested_timeout_seconds
     normalized = [str(part) for part in args]
+    if "bootstrap" in normalized:
+        return BOOTSTRAP_TIMEOUT_SECONDS
     if "adopt" in normalized and "verify" in normalized:
         return ADOPT_VERIFY_TIMEOUT_SECONDS
     return DEFAULT_COMMAND_TIMEOUT_SECONDS
+
+
+def check_command_timeout_budget() -> list[Failure]:
+    failures: list[Failure] = []
+    if command_timeout_seconds(["python3", "tools/loom_init.py", "bootstrap", "--target", "."], None) != BOOTSTRAP_TIMEOUT_SECONDS:
+        failures.append(Failure("command-timeout-budget", "bootstrap commands must use the extended loom_check timeout budget"))
+    if command_timeout_seconds(["python3", "tools/loom_flow.py", "adopt", "verify"], None) != ADOPT_VERIFY_TIMEOUT_SECONDS:
+        failures.append(Failure("command-timeout-budget", "adopt verify commands must keep the extended loom_check timeout budget"))
+    if command_timeout_seconds(["python3", "tools/loom_flow.py", "flow", "resume"], None) != DEFAULT_COMMAND_TIMEOUT_SECONDS:
+        failures.append(Failure("command-timeout-budget", "ordinary commands must keep the default loom_check timeout budget"))
+    if command_timeout_seconds(["python3", "tools/loom_init.py", "bootstrap"], 5.0) != 5.0:
+        failures.append(Failure("command-timeout-budget", "explicit command timeout overrides must be honored"))
+    return failures
 
 
 def host_executable(name: str) -> str:
@@ -6694,8 +6710,11 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     if not isinstance(context_pack.get("repeated_blocker_signal"), dict):
                         failures.append(Failure("daily-execution-cli", "`review run` context pack must include repeated blocker signal"))
                 prompt_file = (review_target / prompt_path) if isinstance(prompt_path, str) else None
-                if prompt_file is None or not prompt_file.exists() or "Recent Review Context Pack" not in prompt_file.read_text(encoding="utf-8"):
+                prompt_text = prompt_file.read_text(encoding="utf-8") if prompt_file is not None and prompt_file.exists() else ""
+                if not prompt_text or "Recent Review Context Pack" not in prompt_text:
                     failures.append(Failure("daily-execution-cli", "`review run` prompt must include recent review context pack guidance"))
+                if "Change Evidence Snapshot" not in prompt_text or "Focused Diff Excerpt" not in prompt_text:
+                    failures.append(Failure("daily-execution-cli", "`review run` prompt must include focused change evidence for host-limited reviewers"))
                 profile_probe = json.loads(json.dumps(payload))
                 if isinstance(profile_probe.get("engine"), dict):
                     profile_probe["engine"].pop("profile", None)
@@ -16854,6 +16873,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_required_paths(root, "top-level-files", TOP_LEVEL_FILES))
     failures.extend(check_required_paths(root, "area-readmes", AREA_READMES))
     failures.extend(check_required_paths(root, "core-docs", CORE_DOCS))
+    failures.extend(check_command_timeout_budget())
     failures.extend(check_shared_foundation_contract(root))
     failures.extend(
         check_required_paths(root, "automation-frontload-templates", AUTOMATION_FRONTLOAD_TEMPLATES)
