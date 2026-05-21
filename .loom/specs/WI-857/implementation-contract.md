@@ -8,6 +8,7 @@
 - `.github/PULL_REQUEST_TEMPLATE.md`
 - `src/skills/shared/scripts/loom_check.py`
 - Generated `skills/**/loom_check.py` surfaces derived from `src/skills`
+- Installer package version files when generated `skills/` payload changes
 - Loom Work Item, progress, spec, review, and status carriers for `WI-857`
 
 ## Required Properties
