@@ -4320,6 +4320,12 @@ def write_json_file(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def write_runtime_text_artifact(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    normalized = "\n".join(line.rstrip(" \t") for line in text.splitlines()).rstrip("\n") + "\n"
+    path.write_text(normalized, encoding="utf-8")
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -6620,7 +6626,7 @@ def run_default_review_engine(
         review_path=review_path,
         context_pack=context_pack,
     )
-    prompt_path.write_text(prompt_text, encoding="utf-8")
+    write_runtime_text_artifact(prompt_path, prompt_text)
 
     effective_kind = review_kind or default_review_kind(context)
     raw_timeout_seconds = engine_profile.get("timeout_seconds")
@@ -8684,7 +8690,8 @@ def run_codex_app_review_authoritative_adapter(
     }
     runtime_root.mkdir(parents=True, exist_ok=True)
     write_json_file(context_pack_path, context_pack)
-    instructions_path.write_text(
+    write_runtime_text_artifact(
+        instructions_path,
         build_default_review_prompt(
             context=context,
             build_payload=build_payload,
@@ -8692,7 +8699,6 @@ def run_codex_app_review_authoritative_adapter(
             review_path=review_path,
             context_pack=context_pack,
         ),
-        encoding="utf-8",
     )
 
     missing_inputs: list[str] = []

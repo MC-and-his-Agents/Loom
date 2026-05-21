@@ -472,9 +472,9 @@ index 6944892..45b5ede 100644
 +++ b/.loom/status/current.md
 @@ -1,35 +1,35 @@
  # Current Status
- 
+
  ## Derived Fact Chain View
- 
+
 -- Item ID: WI-857
 -- Goal: 修复 Loom 自身 py_compile 验证留下 __pycache__ 工作区残留的问题。
 -- Scope: 统一 Loom 源仓库 py_compile 验证入口；更新 CI、Makefile、PR validation recipe、loom_check fixture 和 generated skills surface；保留 #817 adopted repo installed runtime cache guard。
@@ -507,17 +507,17 @@ index 6944892..45b5ede 100644
 +- Latest Validation Summary: Prompt guidance now tells formal reviewers not to block solely on a stale prior review record while review run is generating replacement evidence. Verified with PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile for shared loom_flow/loom_check scripts, python3 tools/skills_surface.py check, git diff --check, and PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py -> OK, checked 36 surfaces. Post-commit focused self-check passed py_compile, skills_surface check after pycache cleanup, version surface check, and fact-chain; a post-commit full loom_check rerun was discarded because pre-existing concurrent loom_check processes polluted the run, then all loom-check-* temp dirs were cleaned.
 +- Recovery Boundary: Scope remains #863/#864 review host proof discovery, adapter selection, diagnostic, fixture, live review evidence, review record, and merge-ready/review gate consumption.
 +- Current Lane: review-run-evidence
- 
+
  ## Runtime Evidence
- 
+
  - Run Entry: not_applicable
  - Logs Entry: not_applicable
  - Diagnostics Entry: not_applicable
  - Verification Entry: python3 .loom/bin/loom_init.py verify --target .
  - Lane Entry: not_applicable
- 
+
  ## Sources
- 
+
 -- Static Truth: .loom/work-items/WI-857.md
 -- Dynamic Truth: .loom/progress/WI-857.md
 +- Static Truth: .loom/work-items/WI-863.md
@@ -560,27 +560,27 @@ index 2711e52..4d300c5 100644
 --- a/docs/methodology/harness/review-execution.md
 +++ b/docs/methodology/harness/review-execution.md
 @@ -44,40 +44,42 @@ Loom 把 review 分成三层：
- 
+
  其中：
- 
+
  - `flow review` 固定保持只读，不触发 engine，也不产生副作用
  - `review run` 只负责选择安全的 authoritative adapter、落盘 evidence、生成 normalized findings，并显式 fail-closed
  - `review record` 仍只写入单一 `review_entry` 指向的 JSON
  - 结构化审查结论可通过 `--findings-file <path>` 写入同一 review record
  - `--blocking-issue` / `--follow-up` 只保留兼容 authored 入口，不得与 `--findings-file` 混用
- 
+
  默认 engine 按宿主 proof 选择：
- 
+
  - 已验证 Codex App host context 默认选择 `loom/codex-app-review`，不启动嵌套 `codex exec`
 -- `CI` / `CODEX_CI`、headless、host proof 缺失或 app-server unavailable 时 fallback 到 `loom/default-codex-exec`，能力来源仍是 `codex exec --output-schema`
 +- `CI` / `CODEX_CI` 只在缺少完整 Codex App host proof 时表示 headless fallback；若 app-server/session locator、thread id 与 thread cwd proof 已验证，真实 Codex App 主线程仍默认选择 `loom/codex-app-review`
 +- headless、host proof 缺失或 app-server unavailable 时 fallback 到 `loom/default-codex-exec`，能力来源仍是 `codex exec --output-schema`
  - 显式 `--engine-adapter` 优先级最高，继续保留 Stage 2 authoritative opt-in / fallback 调试入口
- 
+
  若 engine 不可用、schema 漂移、runtime 冲突或运行后改动了 tracked repo 内容，`review run` 必须返回 `block`，并指向 manual review 继续写回同一 `review record`；不得把这类失败伪装成 checkpoint fallback。
- 
+
  Codex App review adapter 有三种入口：
- 
+
  - verified host default：不传 `--engine-adapter`，但必须能证明 app-server/session locator、thread id、thread cwd、target root 与 reviewed head 绑定一致
  - explicit authoritative：显式选择 `review run --engine-adapter loom/codex-app-review`，用于调试或非默认宿主
  - shadow comparison：显式选择 `review run --shadow-engine-adapter loom/codex-app-review`
@@ -594,34 +594,34 @@ index 2711e52..4d300c5 100644
  - authoritative Codex App raw output 只作为 runtime evidence 保留；只有归一化后的 `review_record_input` 可被 `review record` 写入单一 authored truth
  - authoritative Codex App runtime files 使用与默认 engine 相同的 `.loom/runtime/review/<item>/<head>/engine-result.json`、`normalized-findings.json`、`engine-metadata.json` 和 `context-pack.json` 边界，保证历史 review context pack 可以继续读取 prior findings
  - `engine_metadata` 必须记录 selected adapter、selection source、fallback reason、thread/target binding summary、reviewed head 与 evidence locators
- 
+
  成熟既有仓库可以通过 repo companion 的 `review_instruction_locators` 声明 spec review 与 implementation review 的 repo-owned instruction 入口。正式 review 必须先消费这些 locator；缺失、不可读或越界时 fail closed，不得猜测 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 路径。
- 
+
  ### 2.1 Review engine profile contract
- 
+
  `review run` 在调用 Codex-backed reviewer 或 Codex App authoritative adapter 前必须解析稳定 profile，不得继承本机 `~/.codex/config.toml` 的默认 model 或 reasoning effort。
- 
+
  Resolved profile 的 schema 为 `loom-review-engine-profile/v1`，至少包含：
- 
+
 @@ -137,24 +139,26 @@ Context pack 至少包含：
  - 缺失或 unavailable budget 只说明预算读面不可用
  - 不得因为 budget risk 单独改变 review `decision`
- 
+
  `repeated_blocker_signal` 的 schema 为 `loom-repeated-blocker-signal/v1`。它在 v0.8.0 中只作为 advisory evidence：
- 
+
  - `result = present` 表示至少两个 block finding 共享 repeat key
  - `result = absent` 表示当前可用历史中未发现重复 blocker
  - `enforcement = advisory` 表示本批不把重复 blocker 自动升级成 merge gate blocker
  - `candidates[]` 必须列出 repeat key、count、source locators、summary 和 recommended action
- 
+
  Prompt 必须消费 context pack，并要求 reviewer 将 finding 分类为 `new`、`unresolved` 或 `repeated/root-cause candidate`。历史不可用时，context pack 仍必须存在并标明 `history_available = false`，不得猜测历史结论。
- 
+
 +当 `review run` 正在生成替代 review evidence 时，既有 review record 的 `reviewed_head` 可能落后于当前 `HEAD`。这种 stale record 只能作为历史输入，不能单独构成当前 review blocker；只有未解决 finding、验证漂移或当前差异本身未被本轮审查覆盖时，reviewer 才应阻断。
 +
  ## 3. review record 最小字段
- 
+
  review record 至少应包含：
- 
+
  - `item_id`
  - `kind`
  - `reviewed_head`
@@ -638,24 +638,24 @@ index 2c26b20..07e73dd 100644
  - `loom flow review --target <repo> [--item <id>]`
  - `loom review run --target <repo> [--item <id>]`
  - `loom review record --target <repo> [--item <id>] --decision <allow|block|fallback> --kind <general_review|code_review|spec_review> --summary <text> --reviewer <id>`
- 
+
  补充约束：
- 
+
  - 若需要写入结构化 findings / disposition，使用 `--findings-file <path>`
  - `--blocking-issue` / `--follow-up` 仅保留兼容 authored 入口，不得与 `--findings-file` 混用
  - 无论通过哪种入口，最终都只允许写回单一 `review_entry` 指向的 review record
- 
+
  这个 skill 先用 `flow review` 读取正式 review 的机械基线，再用 `review run` 选择安全的 authoritative adapter 并生成 Loom-normalized findings，最后用 `review record` 把审查结论写成可消费载体。
- 
+
 -已验证 Codex App host context 中，默认 `review run` 使用 `loom/codex-app-review`，并必须证明 app-server/session locator、thread id、cwd proof、target root 与 reviewed head 绑定一致；该路径不得启动嵌套 `codex exec`。`CI` / `CODEX_CI`、headless、host proof 缺失或 app-server unavailable 时 fallback 到 `loom/default-codex-exec` + `codex exec --output-schema`。proof 冲突、cwd / target / head 不匹配或 schema normalization 失败时必须 fail closed 并回到 manual review 写同一 review record。
 +已验证 Codex App host context 中，默认 `review run` 使用 `loom/codex-app-review`，并必须证明 app-server/session locator、thread id、cwd proof、target root 与 reviewed head 绑定一致；该路径不得启动嵌套 `codex exec`。`CI` / `CODEX_CI` 只在缺少完整 App host proof 时表示 headless fallback；真实 Codex App 主线程即使带有 `CODEX_CI=1`，只要 proof 齐全仍默认选择 `loom/codex-app-review`。headless、host proof 缺失或 app-server unavailable 时 fallback 到 `loom/default-codex-exec` + `codex exec --output-schema`，并输出缺失 locator diagnostic。proof 冲突、cwd / target / head 不匹配或 schema normalization 失败时必须 fail closed 并回到 manual review 写同一 review record。
- 
+
  安装态或 repo-local 开发态可以把这些 `loom ...` 动作映射到底层 `scripts/...` 或共享 runtime carrier；但 `loom-review` 自身的场景合同、进入时机和输出责任保持不变。
- 
+
  ## 3. 固定编排
- 
+
  `loom-review` 固定按以下顺序编排：
- 
+
  1. 运行 `flow review`，确认当前事项是否具备进入正式审查的最小条件
  2. 若 `flow review` 非 `pass`，直接返回 `block` 或 `fallback`，不伪造审查结论
  3. 运行 `review run`，在 verified Codex App host default、显式 authoritative adapter 或 headless fallback 中选择安全路径，并把 raw output 收敛为 Loom evidence 与 normalized findings
@@ -667,37 +667,37 @@ index 2e1bc1e..b64b86c 100644
 +++ b/skills/loom-spec-review/SKILL.md
 @@ -37,25 +37,25 @@ description: 负责 formal spec review 执行层。Use when Codex needs to revie
  补充约束：
- 
+
  - formal spec 路径不存在时，`flow spec-review` 必须 fail-closed
  - spec review 只写回单一 spec review record，不替代 implementation review record
  - `reviewed_head` 与 stale 语义必须显式暴露，供后续 gate 消费
- 
+
  ## 3. 固定编排
- 
+
  `loom-spec-review` 固定按以下顺序编排：
- 
+
  1. 运行 `flow spec-review`，确认 formal spec 路径、build checkpoint 与 runtime 读面齐全
  2. 若 `flow spec-review` 非 `pass`，直接返回 `block` 或 `fallback`
 -3. 运行 `review run`，在 verified Codex App host default、显式 authoritative adapter 或 headless fallback 中选择安全路径，生成 Loom-normalized spec findings
 +3. 运行 `review run`，在 verified Codex App host default、显式 authoritative adapter 或 headless fallback 中选择安全路径，生成 Loom-normalized spec findings；`CI` / `CODEX_CI` 不得遮蔽已验证的真实 Codex App host proof，proof 不足时必须输出缺失 locator diagnostic
  4. 若 `review run` fail-closed，回到 manual review 写回同一 spec review record
  5. 用 `review record` 写入 `kind = spec_review` 的正式结论
- 
+
  这个 skill 不做以下事情：
- 
+
  - 不替代 implementation review
  - 不替代 merge-ready 放行判断
  - 不直接执行 merge 或平台动作
  - 不回写 recovery entry、status control plane 或其他 authored 真相载体
  - 不把 Codex App raw review output 直接升级成 spec review authored truth；verified host default 与显式 Codex App path 都必须经同一 normalized `review_record_input` 与 spec review record 边界
- 
+
  ## 4. 输出要求
 diff --git a/skills/shared/scripts/loom_check.py b/skills/shared/scripts/loom_check.py
 index ef59a97..e429ee8 100644
 --- a/skills/shared/scripts/loom_check.py
 +++ b/skills/shared/scripts/loom_check.py
 @@ -20,24 +20,25 @@ sys.dont_write_bytecode = True
- 
+
  from fact_chain_support import inspect_fact_chain
  import governance_surface as governance_surface_module
  import loom_flow as loom_flow_module
@@ -706,11 +706,11 @@ index ef59a97..e429ee8 100644
  from governance_surface import build_governance_surface
  from loom_flow import allowed_post_review_carrier_paths, repo_specific_requirements_payload, review_head_binding
  from runtime_paths import repo_local_root
- 
+
  DEFAULT_COMMAND_TIMEOUT_SECONDS = 30.0
  ADOPT_VERIFY_TIMEOUT_SECONDS = 120.0
 +BOOTSTRAP_TIMEOUT_SECONDS = 120.0
- 
+
  TOP_LEVEL_DIRS = (
      "docs",
      "examples",
@@ -719,7 +719,7 @@ index ef59a97..e429ee8 100644
      "skills",
      "tools",
  )
- 
+
  TOP_LEVEL_FILES = (
      "AGENTS.md",
 @@ -644,29 +645,44 @@ def run_command(
@@ -729,8 +729,8 @@ index ef59a97..e429ee8 100644
          env=command_env,
          timeout=timeout_seconds,
      )
- 
- 
+
+
  def command_timeout_seconds(args: list[str], requested_timeout_seconds: float | None) -> float:
      if requested_timeout_seconds is not None:
          return requested_timeout_seconds
@@ -740,8 +740,8 @@ index ef59a97..e429ee8 100644
      if "adopt" in normalized and "verify" in normalized:
          return ADOPT_VERIFY_TIMEOUT_SECONDS
      return DEFAULT_COMMAND_TIMEOUT_SECONDS
- 
- 
+
+
 +def check_command_timeout_budget() -> list[Failure]:
 +    failures: list[Failure] = []
 +    if command_timeout_seconds(["python3", "tools/loom_init.py", "bootstrap", "--target", "."], None) != BOOTSTRAP_TIMEOUT_SECONDS:
@@ -812,7 +812,7 @@ index ef59a97..e429ee8 100644
              review_record_input = payload.get("review_record_input") if isinstance(payload, dict) and isinstance(payload.get("review_record_input"), dict) else {}
              if review_record_input.get("engine_adapter") != "loom/default-codex-exec":
                  failures.append(Failure("daily-execution-cli", "`review run` shadow unavailable must preserve the default review record input"))
- 
+
 +        app_embedded_result = {
 +            "decision": "allow",
 +            "summary": "Codex App turn/start embedded a structured review result in an app-server text field.",
@@ -863,7 +863,7 @@ index ef59a97..e429ee8 100644
                      failures.append(Failure("daily-execution-cli", f"`merge-ready before authored default app review record` failed: {merge_error}"))
                  elif merge_payload.get("result") == "pass":
                      failures.append(Failure("daily-execution-cli", "`merge-ready` must not consume default Codex App raw evidence before review record is authored"))
- 
+
 -        app_ci_fallback_target = Path(tmp) / "review-run-codex-app-ci-fallback"
 -        prepare_review_target(app_ci_fallback_target, "review run Codex App CI fallback")
 -        app_ci_raw = app_ci_fallback_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
@@ -952,7 +952,7 @@ index ef59a97..e429ee8 100644
 +                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI missing proof fallback must keep the default codex exec adapter"))
 +            if not missing_host_proof:
 +                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI missing proof fallback must expose missing host proof diagnostics"))
- 
+
          app_unavailable_fallback_target = Path(tmp) / "review-run-codex-app-unavailable-fallback"
          prepare_review_target(app_unavailable_fallback_target, "review run Codex App unavailable fallback")
          write_fake_codex(fake_bin / "codex", mode="success")
@@ -969,8 +969,8 @@ index ef59a97..e429ee8 100644
          return True
      except ValueError:
          return False
- 
- 
+
+
  def collect_failures(root: Path) -> list[Failure]:
      failures: list[Failure] = []
      failures.extend(check_required_paths(root, "top-level-dirs", TOP_LEVEL_DIRS))
@@ -995,9 +995,9 @@ index d87a1e0..4afc69c 100644
 --- a/skills/shared/scripts/loom_flow.py
 +++ b/skills/shared/scripts/loom_flow.py
 @@ -3,24 +3,25 @@
- 
+
  from __future__ import annotations
- 
+
  import argparse
  import hashlib
  import json
@@ -1014,9 +1014,9 @@ index d87a1e0..4afc69c 100644
  from urllib.error import HTTPError, URLError
  from urllib.parse import quote
  from urllib.request import Request, urlopen
- 
+
  sys.dont_write_bytecode = True
- 
+
  from fact_chain_support import (
      STATUS_FIELDS,
      STATUS_SOURCE_FIELDS,
@@ -1078,8 +1078,8 @@ index d87a1e0..4afc69c 100644
      if errors or normalized is None:
          return None, errors
      return normalized, []
- 
- 
+
+
  def codex_app_endpoint_socket_path(app_server: str | None) -> Path | None:
      endpoint = non_empty_str(app_server)
      if endpoint is None:
@@ -1095,8 +1095,8 @@ index d87a1e0..4afc69c 100644
      if not path_text:
          return None
      return Path(path_text).expanduser()
- 
- 
+
+
 +def codex_app_endpoint_is_stdio(app_server: str | None) -> bool:
 +    return non_empty_str(app_server) == "stdio://"
 +
@@ -1111,8 +1111,8 @@ index d87a1e0..4afc69c 100644
 +        return True
      socket_path = codex_app_endpoint_socket_path(app_server)
      return socket_path is not None and socket_path.exists()
- 
- 
+
+
 -def codex_app_review_bindings_from_args_env(args: argparse.Namespace) -> dict[str, str | None]:
 -    app_server = non_empty_str(args.codex_app_review_app_server) or non_empty_str(os.environ.get(CODEX_APP_REVIEW_ENDPOINT_ENV))
 -    thread_id = (
@@ -1347,8 +1347,8 @@ index d87a1e0..4afc69c 100644
 +        "host_discovery": discovery,
 +        "missing_host_proof": missing_host_proof,
      }
- 
- 
+
+
  def codex_app_binding_summary(
      target_root: Path,
      *,
@@ -1363,8 +1363,8 @@ index d87a1e0..4afc69c 100644
          "raw_source": raw_source,
          "live_endpoint_capable": codex_app_endpoint_is_live_capable(app_server),
      }
- 
- 
+
+
  def select_review_adapter(
      args: argparse.Namespace,
      target_root: Path,
