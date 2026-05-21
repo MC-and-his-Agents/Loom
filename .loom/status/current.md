@@ -12,12 +12,12 @@
 - Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py governance-profile upgrade-plan --target . --host github
 - Closing Condition: PR merge 后 closeout 消费 #811 issue、PR、merge commit、Project #4 状态，并更新 #808 父 FR 状态。
 - Current Checkpoint: merge-ready
-- Current Stop: WI-811 implementation, reviews, checkpoint merge, full tools/loom_check.py, and make loom-check passed on branch work/811-github-profile-gate-rollout; validation residual from examples/new-project bootstrap was classified as demo/runtime refresh side effect and restored.
-- Next Step: Push branch, open PR for #811, wait for GitHub checks, then run controlled merge and closeout if branch protection allows.
+- Current Stop: WI-811 implementation, reviews, checkpoint merge, installer version bump check, full tools/loom_check.py, and make loom-check passed on branch work/811-github-profile-gate-rollout; validation residual from examples/new-project bootstrap was classified as demo/runtime refresh side effect and restored.
+- Next Step: Wait for PR #882 GitHub checks, then run controlled merge and closeout if branch protection allows.
 - Blockers: None recorded.
-- Latest Validation Summary: governance-profile status/upgrade-plan/upgrade --dry-run returned advisory default/current/recommended/target modes with blocking_allowed=false until adversarial adoption evidence exists; py_compile_clean, skills_surface check, version_surface_check, git diff --check, fact-chain, adopt verify, shadow-parity, checkpoint merge, PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py, and make loom-check all passed.
-- Recovery Boundary: Only #811 gate_rollout/rollback output, validator consumption, docs/references, generated skills surface, WI-811 carriers, shadow hashes, and terminal WI-810 progress correction are in scope; examples/new-project bootstrap refresh remains validation side effect, not #811 authored scope.
-- Current Lane: branch work/811-github-profile-gate-rollout in formal worktree /Users/mc/dev/Loom-work-811-github-profile-gate-rollout, bound to issue #811 and parent #808; baseline origin/main@abbe400a1d1ce8d7014b34327a15e6b6708179c9.
+- Latest Validation Summary: governance-profile status/upgrade-plan/upgrade --dry-run returned advisory default/current/recommended/target modes with blocking_allowed=false until adversarial adoption evidence exists; py_compile_clean, skills_surface check, version_surface_check, node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main, git diff --check, fact-chain, adopt verify, shadow-parity, checkpoint merge, PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py, and make loom-check all passed.
+- Recovery Boundary: Only #811 gate_rollout/rollback output, validator consumption, docs/references, generated skills surface, installer version bump for changed skills payload, WI-811 carriers, shadow hashes, and terminal WI-810 progress correction are in scope; examples/new-project bootstrap refresh remains validation side effect, not #811 authored scope.
+- Current Lane: branch work/811-github-profile-gate-rollout in formal worktree /Users/mc/dev/Loom-work-811-github-profile-gate-rollout, bound to issue #811 and parent #808; PR #882; baseline origin/main@abbe400a1d1ce8d7014b34327a15e6b6708179c9.
 
 ## Runtime Evidence
 
