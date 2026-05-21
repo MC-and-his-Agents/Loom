@@ -798,7 +798,7 @@ def story_flow_payload(
             {
                 "name": "story-contract",
                 "result": "pass",
-                "summary": "User Story and Story Readiness contracts are separated from delivery state.",
+                "summary": "User Story, Story Readiness, and Story Business Confirmation contracts are separated from delivery state.",
                 "missing_inputs": [],
                 "fallback_to": None,
             }
@@ -816,6 +816,7 @@ def story_flow_payload(
                 "outcome",
                 "business_value",
                 "acceptance_scenarios",
+                "out_of_scope",
                 "provenance",
             ],
             "forbidden_fields": [
@@ -851,10 +852,34 @@ def story_flow_payload(
             ],
             "authority_boundary": "readiness judges entry into spec / plan, not product strategy correctness.",
         },
+        "business_confirmation_contract": {
+            "schema_version": "loom-story-business-confirmation/v1",
+            "decisions": ["pending", "confirmed", "revision-requested", "not-applicable"],
+            "required_fields": [
+                "decision",
+                "confirmation_scope",
+                "confirmation_source",
+                "revision_request",
+                "bypass_rationale",
+            ],
+            "confirmation_scope": [
+                "actor",
+                "capability",
+                "outcome",
+                "business_value",
+                "acceptance_scenarios",
+                "out_of_scope",
+            ],
+            "user_fast_path": "plain `确认` records confirmed when the visible story is the confirmation subject",
+            "revision_rule": "revision-requested returns to story shaping before spec / plan consumption",
+            "not_applicable_rule": "pure governance, maintenance, formatting, link repair, or carrier-only changes may bypass with rationale",
+            "authority_boundary": "confirmation covers business semantics only, not technical solution, test strategy, review quality, or code quality.",
+        },
         "delivery_consumption_contract": {
             "execution_entry": "Work Item",
-            "spec_consumes": "story scenario id / locator as behavior contract input",
-            "plan_consumes": "story scenario id mapped to tests, checks, manual validation, or not_applicable evidence",
+            "spec_consumes": "confirmed or not_applicable story scenario id / locator as behavior contract input",
+            "plan_consumes": "confirmed or not_applicable story scenario id mapped to tests, checks, manual validation, or not_applicable evidence",
+            "blocks_on_confirmation": ["pending", "revision-requested"],
             "forbidden": "story must not author recovery, review, PR, merge-ready, or closeout state",
         },
         "contract": {

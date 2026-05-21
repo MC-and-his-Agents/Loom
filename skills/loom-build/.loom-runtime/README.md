@@ -30,7 +30,7 @@ Loom exposes one root entry and ten scenario skills:
 | `loom-adopt` | Initializes a new repository or retrofits Loom into an existing one. |
 | `loom-resume` | Restores context and continues execution. |
 | `loom-build` | Runs a bounded implementation/build round and validates delegated output integration before review. |
-| `loom-story` | Turns product context into a User Story and Story Readiness result before spec / plan consumption. |
+| `loom-story` | Turns product context into a User Story, Story Readiness, and business semantic confirmation point before spec / plan consumption. |
 | `loom-pre-review` | Checks readiness before formal review. |
 | `loom-spec-review` | Reviews the formal spec path and produces the `spec gate` consumed by later gates. |
 | `loom-review` | Runs formal review and records review output. |

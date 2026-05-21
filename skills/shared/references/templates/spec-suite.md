@@ -35,6 +35,7 @@ Loom 当前把正式规约套件的最小内核定义为：
 - `Then` 固定可验证结果、状态变化或 gate 消费结果
 - 每个关键场景都应能映射到后续行为证据；若纯文档事项不适用，应显式说明 `not_applicable`
 - 若存在 User Story，`spec.md` 只消费 story scenario id / locator 与业务可读 GWT，不复制 story 为第二事实源
+- 若 User Story 涉及业务语义，`spec.md` 必须记录 `Story Business Confirmation` locator 或 `not_applicable` rationale；`pending` 或 `revision-requested` 不得进入 formal spec shaping
 
 ## 3. `plan.md` 最小要求
 
@@ -52,6 +53,7 @@ Loom 当前把正式规约套件的最小内核定义为：
 
 - 每个关键行为场景应声明将由哪些测试、检查、人工验证或运行证据覆盖
 - 若场景来自 User Story，`plan.md` 应保留 story scenario id 到验证策略的映射
+- 若场景来自 User Story，`plan.md` 只能基于已确认或明确 `not_applicable` 的 story 语义规划验证，不要求用户判断实现方案或测试策略
 - 能自动化的行为先写或先调整失败用例，再实现，再以通过结果作为 test evidence
 - 不能自动化的行为必须声明人工验证路径、证据 locator 与 fresh 条件
 - 纯文档或治理规则变更可以不强制 TDD，但必须说明行为证据如何由结构检查、审查记录或示例消费
@@ -101,7 +103,7 @@ Loom 当前不固化：
 | checkpoint / review / gate 输出 | `validation_evidence_locator` | 只说明验证证据入口 |
 | `handoff` 输出或交接说明 | `handoff_notes_locator` | 只说明交接入口 |
 
-若存在 story intake，User Story locator 只能作为 `spec.md` / `plan.md` 的上游来源记录，不能进入 execution ledger 替代 `acceptance_locator`、`plan_locator` 或恢复状态。
+若存在 story intake，User Story locator 与 Story Business Confirmation locator 只能作为 `spec.md` / `plan.md` 的上游来源记录，不能进入 execution ledger 替代 `acceptance_locator`、`plan_locator` 或恢复状态。
 
 纯文档事项可在对应字段声明 `not_applicable`，但必须与 spec / plan / recovery 中的事实不冲突。
 

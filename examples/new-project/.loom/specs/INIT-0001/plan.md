@@ -32,6 +32,7 @@
 - Runtime evidence:
 - Behavior evidence:
 - Story scenario to evidence mapping:
+- Story business confirmation locator or `not_applicable` rationale:
 - Fresh verification evidence:
 - Execution ledger plan locator:
 - Execution ledger validation evidence locator:
@@ -63,6 +64,7 @@
 
 - [ ] Spec is stable enough to implement
 - [ ] Scope and non-goals are clear
+- [ ] Story business semantics are confirmed or explicitly `not_applicable`
 - [ ] Validation path is defined
 - [ ] BDD outer-loop scenarios map to validation or `not_applicable`
 - [ ] TDD inner-loop expectations map to test evidence

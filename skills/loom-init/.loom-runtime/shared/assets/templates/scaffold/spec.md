@@ -16,6 +16,8 @@ Use these scenarios as the BDD outer loop. Each scenario should describe observa
 
 If a User Story exists, reference its scenario id or locator here instead of copying the full story into `spec.md` as a second truth source.
 
+If the User Story carries business semantics, record its Story Business Confirmation locator or `not_applicable` rationale before shaping this spec.
+
 ### Scenario 1
 
 Given
@@ -41,6 +43,7 @@ Then
 ## Behavior Evidence
 
 - Story scenario mapping:
+- Story business confirmation locator or `not_applicable` rationale:
 - Scenario coverage:
 - Expected evidence locator:
 - Freshness rule:

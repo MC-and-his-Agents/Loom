@@ -3828,6 +3828,7 @@ def check_skill_routing(root: Path) -> list[Failure]:
         ("请接手当前事项并恢复上下文后继续推进", "loom-resume"),
         ("请执行 build round 并集成 subagent 输出", "loom-build"),
         ("请把产品上下文整理成 user story 并检查 story readiness", "loom-story"),
+        ("请确认 story 业务语义或根据修订意见回到 story shaping", "loom-story"),
         ("请在进入 review 前做统一检查", "loom-pre-review"),
         ("请先对 formal spec 做 spec review", "loom-spec-review"),
         ("请对当前事项做正式 review 并给出审查结论", "loom-review"),
@@ -12848,6 +12849,7 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
         status_payload, error = load_command_json(
             root,
             ["python3", "tools/loom_flow.py", "governance-profile", "status", "--target", str(baseline)],
+            timeout_seconds=60,
         )
         if error:
             failures.append(Failure("adversarial-adoption", f"`governance-profile status` baseline failed: {error}"))
@@ -16339,6 +16341,7 @@ STORY_SCENARIO_DIMENSIONS = {
     "environment_interruption",
 }
 STORY_READINESS_DECISIONS = {"ready", "needs-shaping", "blocked", "not-applicable"}
+STORY_BUSINESS_CONFIRMATION_DECISIONS = {"pending", "confirmed", "revision-requested", "not-applicable"}
 
 
 def require_user_story_payload(
@@ -16355,7 +16358,15 @@ def require_user_story_payload(
     else:
         if payload.get("schema_version") != "loom-user-story/v1":
             errors.append("schema_version must be `loom-user-story/v1`")
-        for field in ("actor", "capability", "outcome", "business_value", "acceptance_scenarios", "provenance"):
+        for field in (
+            "actor",
+            "capability",
+            "outcome",
+            "business_value",
+            "acceptance_scenarios",
+            "out_of_scope",
+            "provenance",
+        ):
             if field not in payload:
                 errors.append(f"missing `{field}`")
         forbidden_present = sorted(STORY_FORBIDDEN_FIELDS.intersection(payload))
@@ -16440,6 +16451,42 @@ def require_story_readiness_payload(
         failures.append(Failure(category, f"{context} must not claim product strategy approval"))
 
 
+def require_story_business_confirmation_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("schema_version") != "loom-story-business-confirmation/v1":
+        failures.append(Failure(category, f"{context} schema_version must be `loom-story-business-confirmation/v1`"))
+    decision = payload.get("decision")
+    if decision not in STORY_BUSINESS_CONFIRMATION_DECISIONS:
+        failures.append(Failure(category, f"{context} decision must stay within the business confirmation vocabulary"))
+    scope = payload.get("confirmation_scope")
+    expected_scope = {
+        "actor",
+        "capability",
+        "outcome",
+        "business_value",
+        "acceptance_scenarios",
+        "out_of_scope",
+    }
+    if not isinstance(scope, list) or set(scope) != expected_scope:
+        failures.append(Failure(category, f"{context} must limit confirmation scope to business story semantics"))
+    if decision == "confirmed" and not isinstance(payload.get("confirmation_source"), str):
+        failures.append(Failure(category, f"{context} confirmed decision must include confirmation_source"))
+    if decision == "revision-requested" and not isinstance(payload.get("revision_request"), str):
+        failures.append(Failure(category, f"{context} revision-requested decision must include revision_request"))
+    if decision == "not-applicable" and not isinstance(payload.get("bypass_rationale"), str):
+        failures.append(Failure(category, f"{context} not-applicable decision must include bypass_rationale"))
+    if any(key in payload for key in ("technical_solution_approval", "test_strategy_approval", "code_quality_approval")):
+        failures.append(Failure(category, f"{context} must not ask the user to approve technical solution, test strategy, or code quality"))
+
+
 def require_story_delivery_mapping(
     failures: list[Failure],
     *,
@@ -16475,6 +16522,9 @@ def require_story_delivery_mapping(
     forbidden = payload.get("story_authored_delivery_state")
     if forbidden not in (False, None):
         failures.append(Failure(category, f"{context} must not let story author delivery state"))
+    confirmation = payload.get("business_confirmation_decision")
+    if confirmation in {"pending", "revision-requested"}:
+        failures.append(Failure(category, f"{context} must not enter spec / plan while story business confirmation is {confirmation}"))
 
 
 def require_story_flow_contract_summary(
@@ -16499,14 +16549,30 @@ def require_story_flow_contract_summary(
     story_contract = payload.get("story_contract")
     if not isinstance(story_contract, dict) or story_contract.get("schema_version") != "loom-user-story/v1":
         failures.append(Failure(category, f"{context} must include loom-user-story/v1 story_contract"))
+    elif "out_of_scope" not in story_contract.get("required_fields", []):
+        failures.append(Failure(category, f"{context} story_contract must require out_of_scope"))
     readiness_contract = payload.get("readiness_contract")
     if not isinstance(readiness_contract, dict) or readiness_contract.get("schema_version") != "loom-story-readiness/v1":
         failures.append(Failure(category, f"{context} must include loom-story-readiness/v1 readiness_contract"))
     elif "story_locator" not in readiness_contract.get("required_fields", []):
         failures.append(Failure(category, f"{context} readiness_contract must require story_locator"))
+    confirmation_contract = payload.get("business_confirmation_contract")
+    if (
+        not isinstance(confirmation_contract, dict)
+        or confirmation_contract.get("schema_version") != "loom-story-business-confirmation/v1"
+    ):
+        failures.append(Failure(category, f"{context} must include loom-story-business-confirmation/v1 business_confirmation_contract"))
+    else:
+        decisions = set(confirmation_contract.get("decisions", []))
+        if not STORY_BUSINESS_CONFIRMATION_DECISIONS.issubset(decisions):
+            failures.append(Failure(category, f"{context} business_confirmation_contract must expose confirmation decisions"))
+        if "technical solution" not in str(confirmation_contract.get("authority_boundary", "")):
+            failures.append(Failure(category, f"{context} business confirmation must exclude technical approval"))
     delivery_contract = payload.get("delivery_consumption_contract")
     if not isinstance(delivery_contract, dict) or delivery_contract.get("execution_entry") != "Work Item":
         failures.append(Failure(category, f"{context} must keep Work Item as delivery consumption entry"))
+    elif set(delivery_contract.get("blocks_on_confirmation", [])) != {"pending", "revision-requested"}:
+        failures.append(Failure(category, f"{context} delivery consumption must block pending or revision-requested story confirmation"))
     if any(key in payload for key in ("story", "readiness", "delivery_consumption")):
         failures.append(Failure(category, f"{context} must not expose actual story/readiness payload keys from contract-summary mode"))
 
@@ -16518,35 +16584,42 @@ def check_story_intake_contract(root: Path) -> list[Failure]:
         "docs/methodology/governance/story-intake.md": [
             "loom-user-story/v1",
             "loom-story-readiness/v1",
+            "loom-story-business-confirmation/v1",
             "Work Item",
             "delivery handoff",
             "not-applicable",
             "actor specificity",
+            "revision-requested",
         ],
         "docs/methodology/templates/spec-suite.md": [
             "User Story",
             "story scenario id",
+            "Story Business Confirmation",
             "plan.md",
         ],
         "docs/methodology/templates/scaffold/user-story.md": [
             "Actor",
             "Capability",
             "Story Readiness",
+            "Story Business Confirmation",
             "Delivery Consumption Boundary",
         ],
         "skills/route-matrix.md": [
             "loom-story",
             "story readiness",
+            "story business confirmation",
             "User Story",
         ],
         "skills/loom-story/SKILL.md": [
             "Story Readiness",
+            "Story Business Confirmation",
             "Work Item",
             "actor specificity",
         ],
         "skills/loom-story/references/output-contract.md": [
             "loom-user-story/v1",
             "loom-story-readiness/v1",
+            "loom-story-business-confirmation/v1",
             "contract_summary",
             "delivery handoff",
         ],
@@ -16571,6 +16644,7 @@ def check_story_intake_contract(root: Path) -> list[Failure]:
         "capability": "turn product discussion into a delivery-ready story",
         "outcome": "the delivery funnel can consume accepted behavior scenarios",
         "business_value": "reduces drift between product intent and spec / plan evidence",
+        "out_of_scope": ["technical solution approval", "test strategy approval"],
         "acceptance_scenarios": [
             {
                 "id": "S1",
@@ -16620,10 +16694,53 @@ def check_story_intake_contract(root: Path) -> list[Failure]:
             candidate["rationale"] = "story intake bypassed because the change is a pure repository maintenance closeout"
         require_story_readiness_payload(failures, category=category, context=f"{decision} readiness", payload=candidate)
 
+    confirmation = {
+        "schema_version": "loom-story-business-confirmation/v1",
+        "decision": "confirmed",
+        "confirmation_scope": [
+            "actor",
+            "capability",
+            "outcome",
+            "business_value",
+            "acceptance_scenarios",
+            "out_of_scope",
+        ],
+        "confirmation_source": "user said `确认`",
+        "revision_request": None,
+        "bypass_rationale": None,
+    }
+    require_story_business_confirmation_payload(
+        failures,
+        category=category,
+        context="confirmed story business semantics",
+        payload=confirmation,
+    )
+    revision_confirmation = dict(confirmation)
+    revision_confirmation["decision"] = "revision-requested"
+    revision_confirmation["confirmation_source"] = None
+    revision_confirmation["revision_request"] = "the acceptance scenario should exclude admin-only flows"
+    require_story_business_confirmation_payload(
+        failures,
+        category=category,
+        context="revision-requested story business semantics",
+        payload=revision_confirmation,
+    )
+    bypass_confirmation = dict(confirmation)
+    bypass_confirmation["decision"] = "not-applicable"
+    bypass_confirmation["confirmation_source"] = None
+    bypass_confirmation["bypass_rationale"] = "pure governance link repair has no business semantics to confirm"
+    require_story_business_confirmation_payload(
+        failures,
+        category=category,
+        context="not-applicable story business semantics",
+        payload=bypass_confirmation,
+    )
+
     mapping = {
         "schema_version": "loom-story-delivery-mapping/v1",
         "execution_entry": "Work Item",
         "story_locator": "docs/methodology/templates/scaffold/user-story.md",
+        "business_confirmation_decision": "confirmed",
         "spec_behavior_contract": [
             {"story_scenario_id": "S1", "spec_section": "Key Scenarios"},
             {"story_scenario_id": "S2", "spec_section": "Exceptions And Boundaries"},
@@ -16681,13 +16798,19 @@ def check_story_intake_contract(root: Path) -> list[Failure]:
             "- Capability: validate story carrier support\n"
             "- Outcome: story carrier can be consumed by runtime checks\n"
             "- Business value: avoids losing story readiness evidence\n\n"
+            "- Out of scope: technical solution approval\n\n"
             "## Story Readiness\n\n"
             "- Schema marker: loom-story-readiness/v1\n"
             "- Decision: ready\n"
             "- Rationale: concrete enough for fixture validation\n\n"
+            "## Story Business Confirmation\n\n"
+            "- Schema marker: loom-story-business-confirmation/v1\n"
+            "- Decision: not-applicable\n"
+            "- Bypass rationale, if not applicable: runtime fixture has no business semantic decision\n\n"
             "## Delivery Consumption Boundary\n\n"
             "- Schema marker: loom-story-delivery-mapping/v1\n"
             "- Intended Work Item or FR: WI-100\n"
+            "- Story confirmation requirement: not_applicable\n"
         )
         (target / ".loom/stories/WI-100.md").write_text(story_text, encoding="utf-8")
         payload, error = load_command_json(root, ["python3", "src/skills/shared/scripts/loom_story_carriers.py", str(target)])
@@ -16695,6 +16818,15 @@ def check_story_intake_contract(root: Path) -> list[Failure]:
             failures.append(Failure(category, f"story carrier pass fixture failed: {error}"))
         elif payload.get("result") != "pass":
             failures.append(Failure(category, "valid story carrier fixture must pass"))
+
+        pending_story_text = story_text.replace("- Decision: not-applicable\n", "- Decision: pending\n")
+        (target / ".loom/stories/WI-100.md").write_text(pending_story_text, encoding="utf-8")
+        payload, error = load_command_json(root, ["python3", "src/skills/shared/scripts/loom_story_carriers.py", str(target)])
+        if error:
+            failures.append(Failure(category, f"pending confirmation story carrier fixture failed to return JSON: {error}"))
+        elif payload.get("result") != "block" or not any("confirmed or not-applicable" in str(item) for item in payload.get("missing_inputs", [])):
+            failures.append(Failure(category, "pending story business confirmation must fail closed"))
+        (target / ".loom/stories/WI-100.md").write_text(story_text, encoding="utf-8")
 
         unregistered = target / ".loom/stories/WI-101.md"
         unregistered.write_text(story_text.replace("WI-100", "WI-101"), encoding="utf-8")
