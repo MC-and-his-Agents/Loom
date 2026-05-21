@@ -861,6 +861,7 @@ sys.exit(41)
 """
     else:
         raise ValueError(f"unknown fake codex mode: {mode}")
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(body, encoding="utf-8")
     path.chmod(0o755)
 
