@@ -5,8 +5,8 @@
   "kind": "code_review",
   "summary": "WI-863 formal review allows the current worktree. The focused changes correctly prioritize verified Codex App host proof over CI/CODEX_CI fallback, preserve safe fallback with missing-proof diagnostics, add bounded fixtures and prompt evidence, and fix the live review timeout/process cleanup boundary. Targeted checks passed: py_compile, skills_surface, py_compile_clean, bootstrap verify, and git diff --check.",
   "reviewer": "loom/codex-app-review",
-  "reviewed_head": "1af91b6e3b573a21ea6dd9cc4771cb6658469c34",
-  "reviewed_validation_summary": "Post-timeout-fix self-check passed with git diff --check, tools/py_compile_clean.py, skills_surface check, version surface check, `.loom/bin/loom_init.py verify --target .`, fact-chain, and flow review. The prior live Codex App review on 823b34d selected loom/codex-app-review from codex-app-host-default with stdio://, thread cwd bound to /Users/mc/dev/Loom-863-codex-app-review-host-proof, and reviewed_head 823b34d. It returned block only after proving the App path and identifying the missing live deadline/process cleanup boundary; that boundary is now fixed in src and generated skills surfaces.",
+  "reviewed_head": "5f7ccff4a406ef13f9ca3402e9b51b66387ad224",
+  "reviewed_validation_summary": "Self-check before live review passed: git diff --check, tools/py_compile_clean.py for shared loom_flow/loom_check scripts, skills_surface check, version_surface_check, .loom/bin/loom_init.py verify, fact-chain, flow review, and PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py . -> OK, checked 37 surfaces. Live Codex App review on 1af91b6 passed using stdio://, new-thread, formal worktree cwd, timeout_seconds=900, and normalized turn-start output; .loom/reviews/WI-863.json now consumes the App evidence locators and normalized findings.",
   "fallback_to": null,
   "findings": [
     {
