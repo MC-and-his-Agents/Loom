@@ -3,32 +3,49 @@
   "item_id": "WI-863",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-863 formal review allows the current worktree. The focused changes correctly prefer verified Codex App host proof over CI/CODEX_CI fallback, preserve safe default fallback with missing-proof diagnostics, keep raw App output as runtime evidence only, add bounded prompt/change evidence for host-limited review, and address prior timeout/process cleanup concerns. Focused verification consumed during review passed: git diff --check, py_compile_clean, skills_surface check, version_surface_check, bootstrap verify/fact-chain, and adapter selection probes.",
+  "summary": "WI-863 formal semantic review allows current HEAD 5f9b27c. Focused inspection covered Codex App host proof selection, missing-proof diagnostics, normalized review-record boundaries, prompt evidence, generated surfaces, fact-chain carriers, installer version bump, and current review/runtime records. Focused checks passed: diff hygiene, py_compile_clean, skills_surface check, version_surface_check, loom_init verify/fact-chain, and CODEX_CI plus valid App proof adapter-selection probe.",
   "reviewer": "loom/codex-app-review",
-  "reviewed_head": "5152649092716ba81b8721c1ab3df6c931145164",
-  "reviewed_validation_summary": "Current HEAD 5152649 self-check and live review passed: git diff --check, tools/py_compile_clean.py for shared loom_flow/loom_check scripts, PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check, python3 tools/version_surface_check.py, fact-chain, flow review, targeted shadow-parity/adopt verify, full PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py . -> OK checked 39 surfaces, and explicit Codex App review produced normalized allow review_record_input.",
+  "reviewed_head": "5f9b27c73ec8fc55ac30fd983e5fd00b11d353b8",
+  "reviewed_validation_summary": "Current HEAD 5f9b27c self-check and live review passed: git diff --check, tools/py_compile_clean.py for shared loom_flow/loom_check scripts, PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check, python3 tools/version_surface_check.py, node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main, fact-chain, flow review, full PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py . -> OK checked 39 surfaces, and explicit Codex App review produced normalized allow review_record_input.",
   "fallback_to": null,
   "findings": [
     {
       "code_location": {
-        "end_line": 8,
+        "end_line": 9,
         "line": 8,
         "path": ".loom/reviews/WI-863.json"
       },
-      "details": "Current HEAD is 5152649092716ba81b8721c1ab3df6c931145164 while the existing authored review record still references 5f7ccff4a406ef13f9ca3402e9b51b66387ad224. Per the current review-run replacement contract, this is historical input for this run and not a blocker by itself. Focused inspection and low-cost checks found no unresolved semantic blocker.",
+      "details": "Actual current HEAD is 5f9b27c73ec8fc55ac30fd983e5fd00b11d353b8, while the checked-in review record and status validation summary still reference 5152649092716ba81b8721c1ab3df6c931145164. Per the replacement-review contract, this is historical input rather than a blocker for this run. I inspected the post-515 changes and found only validation-summary alignment plus installer version bump; focused checks passed.",
       "disposition": {
         "status": "accepted",
-        "summary": "Non-blocking stale-record condition; this review output can replace the authored review record for the current head."
+        "summary": "Non-blocking stale authored record; this review output can replace it for current HEAD."
       },
-      "id": "wi-863-current-review-record-stale-nonblocking",
+      "id": "wi-863-review-record-stale-current-run",
       "rebuttal": null,
       "severity": "warn",
       "summary": "Existing WI-863 review record is stale relative to current HEAD, but this replacement review run is allowed to refresh it."
+    },
+    {
+      "code_location": {
+        "end_line": 184,
+        "line": 168,
+        "path": "src/skills/shared/scripts/loom_flow.py"
+      },
+      "details": "The generated Change Evidence Snapshot is intentionally bounded by REVIEW_PROMPT_DIFF_PATHS, so the current prompt snapshot omitted some actual branch changes such as tools/skills_surface.py and packages/loom-installer version files. I inspected those omitted current changes directly and ran focused checks, so this does not block WI-863; however future host-limited review prompts should either label this as a focused subset or include all non-generated current changed paths needed for semantic review.",
+      "disposition": {
+        "status": "deferred",
+        "summary": "Follow-up prompt-evidence clarity improvement; current review covered the omitted changes manually."
+      },
+      "id": "wi-863-focused-snapshot-omits-noncore-changes",
+      "rebuttal": null,
+      "severity": "warn",
+      "summary": "Focused review snapshot can omit current changed paths outside the hardcoded prompt diff path set."
     }
   ],
   "blocking_issues": [],
   "follow_ups": [
-    "Existing WI-863 review record is stale relative to current HEAD, but this replacement review run is allowed to refresh it."
+    "Existing WI-863 review record is stale relative to current HEAD, but this replacement review run is allowed to refresh it.",
+    "Focused review snapshot can omit current changed paths outside the hardcoded prompt diff path set."
   ],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-863.md",
@@ -49,7 +66,7 @@
       }
     },
     "engine_adapter": "loom/codex-app-review",
-    "engine_evidence": ".loom/runtime/review/WI-863/5152649092716ba81b8721c1ab3df6c931145164/engine-result.json",
-    "normalized_findings": ".loom/runtime/review/WI-863/5152649092716ba81b8721c1ab3df6c931145164/normalized-findings.json"
+    "engine_evidence": ".loom/runtime/review/WI-863/5f9b27c73ec8fc55ac30fd983e5fd00b11d353b8/engine-result.json",
+    "normalized_findings": ".loom/runtime/review/WI-863/5f9b27c73ec8fc55ac30fd983e5fd00b11d353b8/normalized-findings.json"
   }
 }

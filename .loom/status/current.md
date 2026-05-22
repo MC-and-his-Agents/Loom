@@ -12,10 +12,10 @@
 - Validation Entry: py_compile; skills_surface check; loom_check; live Codex App review run; review record; merge-ready/review gate
 - Closing Condition: #863/#864 evidence accepted, PR gates pass, controlled merge completes, main syncs, and issue closeout records proof.
 - Current Checkpoint: merge
-- Current Stop: Live Codex App review record refreshed for current HEAD 5152649: explicit App review used stdio://, new-thread, formal worktree cwd, selected loom/codex-app-review with no fallback, thread cwd matched target root, and .loom/reviews/WI-863.json now consumes only normalized review_record_input.
-- Next Step: Run carrier refresh, adopt verify, shadow parity, full loom_check, then merge-ready/checkpoint merge/PR gate for PR #879.
+- Current Stop: Live Codex App review refreshed for current HEAD 5f9b27c: explicit App review used stdio://, new-thread, formal worktree cwd, selected loom/codex-app-review with no fallback, thread cwd matched target root, and .loom/reviews/WI-863.json consumes only normalized review_record_input.
+- Next Step: Run carrier refresh, adopt verify, shadow parity, full loom_check, then merge-ready/checkpoint merge/PR gate for PR #879 and GitHub checks.
 - Blockers: None
-- Latest Validation Summary: Current HEAD 5152649 self-check and live review passed: git diff --check, tools/py_compile_clean.py for shared loom_flow/loom_check scripts, PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check, python3 tools/version_surface_check.py, fact-chain, flow review, targeted shadow-parity/adopt verify, full PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py . -> OK checked 39 surfaces, and explicit Codex App review produced normalized allow review_record_input.
+- Latest Validation Summary: Current HEAD 5f9b27c self-check and live review passed: git diff --check, tools/py_compile_clean.py for shared loom_flow/loom_check scripts, PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check, python3 tools/version_surface_check.py, node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main, fact-chain, flow review, full PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py . -> OK checked 39 surfaces, and explicit Codex App review produced normalized allow review_record_input.
 - Recovery Boundary: Current checkpoint is merge-ready/review gate consumption for PR #879. Keep scope limited to Codex App review host proof discovery, review run evidence, review record and gate consumption; do not expand #746 adapter migration, remove fallback, or promote raw App output to authored truth.
 - Current Lane: merge-ready-gate-consumption
 
