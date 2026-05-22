@@ -9115,6 +9115,8 @@ def build_default_review_prompt(
             *repeated_lines,
             "- 请将发现分类为 new、unresolved 或 repeated/root-cause candidate；不要在没有证据时把 repeat 自动升级成 hard gate。",
             "- 若既有 review record 的 reviewed_head 落后于当前 HEAD，请只把它当作历史输入；本次 review run 正在生成替代 evidence，不能仅因既有 record stale 而 block，除非存在未解决 finding、验证漂移或当前差异本身未被审查覆盖。",
+            "- 本次 review run 的 normalized 输出就是将被写入 `review_record_input` 的候选正式结论；不要要求 `.loom/reviews/<item>.json` 在本次 review run 结束前已经刷新到当前 HEAD。",
+            "- 如果当前 prompt 的 Head、Change Evidence Snapshot、Runtime Evidence 和验证摘要足以审查当前差异，请直接对当前 HEAD 给出 allow/block/fallback；只有这些当前输入本身缺失、互相矛盾或无法覆盖当前差异时，才把 current-head evidence gap 作为 blocker。",
             "",
             *change_snapshot_lines,
             "",
