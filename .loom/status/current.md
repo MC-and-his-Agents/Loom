@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-846
-- Goal: 将 Governance Lint / Operating Lint 接入 loom check 与 flow pre-review 输出面，提前暴露 blocking/advisory lint evidence，降低无效 review。
-- Scope: 更新 shared runtime pre-review governance_lint 输出、loom_check contract 与 negative fixture 验证、generated skills surface 和 #846 carriers；不新增独立 lint CLI、不接入高级 repo-specific lint、不改写 review 或 merge-ready 结论。
-- Execution Path: harness/governance-lint/pre-review-consumption
-- Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-846.md
-- Review Entry: .loom/reviews/WI-846.json
-- Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py
-- Closing Condition: PR merge 后 closeout 消费 #846 issue、PR、merge commit、Project #4 状态，并解除 #852 的 loom check / pre-review blocker。
-- Current Checkpoint: merge
-- Current Stop: #846 deterministic readiness carrier refresh is complete on branch work/846-governance-lint-check-pre-review at baseline origin/main@e9ce82e69b424169225044af74d38abf57339fb6; authored spec and implementation review records are chained so only carrier-only recovery/status/review updates remain after review, and Governance Lint evidence remains derived rather than authored truth.
-- Next Step: Push PR #958 head, rerun PR gate/checks against the remote head, then perform controlled merge and #846 closeout if host checks pass; #852 remains blocked until #846 is merged.
+- Item ID: WI-852
+- Goal: 在 status surface 与 merge-ready 消费 Governance Lint evidence，提前暴露 blocking/advisory lint 风险且不制造第二 authored truth。
+- Scope: 更新 status/merge-ready Governance Lint evidence 消费、deterministic loom_check 断言、输出合同与 generated skills surface；不改写 review approval、PR gate、controlled merge 或 repo-specific 私有规则。
+- Execution Path: harness/governance-lint/status-merge-ready-consumption
+- Workspace Entry: /Users/mc/dev/Loom-work-852-governance-lint-status-merge-ready
+- Recovery Entry: .loom/progress/WI-852.md
+- Review Entry: .loom/reviews/WI-852.json
+- Validation Entry: py_compile_clean; skills_surface check; targeted daily execution and governance lint fixture checks; tools/loom_flow.py flow merge-ready; tools/loom_status.py; tools/loom_check.py
+- Closing Condition: PR merge 后 closeout 消费 #852 issue、PR、merge commit、Project #4 状态，并解除 #844 的剩余 Governance Lint blocker。
+- Current Checkpoint: admission checkpoint
+- Current Stop: Work item scaffolded and waiting for the first execution pass.
+- Next Step: Write the first recovery update for this work item.
 - Blockers: None recorded.
-- Latest Validation Summary: git diff --check passed; py_compile_clean passed for source/generated loom_flow.py and loom_check.py; tools/skills_surface.py check passed; root state-check passed; root flow pre-review passed with governance_lint.result=pass; examples/new-project flow pre-review passed with governance_lint.result=pass; stale derived status pre-review negative smoke passed with governance_lint.result=block; undeclared same-directory artifact state-check smoke passed; root shadow-parity passed; root adopt verify WI-846 passed; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed for 0.1.131 -> 0.1.132; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py passed with checked 39 surfaces.
-- Recovery Boundary: Only #846 pre-review Governance Lint consumption, `loom_check.py` contract/negative fixture validation, generated skills surface, and WI-846 carriers are in scope.
-- Current Lane: branch `work/846-governance-lint-check-pre-review` in formal worktree `/Users/mc/dev/Loom-work-846-governance-lint-check-pre-review`, bound to issue #846 and parent #844.
+- Latest Validation Summary: No validation recorded yet.
+- Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-852.md`.
+- Current Lane: not yet assigned
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-846.md
-- Dynamic Truth: .loom/progress/WI-846.md
+- Static Truth: .loom/work-items/WI-852.md
+- Dynamic Truth: .loom/progress/WI-852.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

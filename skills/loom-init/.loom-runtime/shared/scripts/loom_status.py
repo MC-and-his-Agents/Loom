@@ -21,9 +21,11 @@ from loom_flow import (
     detect_github_repo,
     emit,
     fact_chain_error_contract,
+    flow_governance_lint_status,
     goal_execution_contract,
     github_issue_payload,
     github_pr_payload,
+    governance_lint_missing_inputs,
     implementation_review_status_payload,
     latest_execution_failure_payload,
     latest_execution_attempt_payload,
@@ -128,6 +130,7 @@ def gate_status(name: str, payload: dict[str, object] | None, *, required: bool 
 def governance_control_status(
     *,
     governance_surface: dict[str, object],
+    governance_lint: dict[str, object],
     spec_review: dict[str, object],
     review: dict[str, object],
     merge_ready: dict[str, object],
@@ -193,6 +196,15 @@ def governance_control_status(
         for message in gate.get("missing_inputs", []):
             if message not in missing_inputs:
                 missing_inputs.append(message)
+    if governance_lint.get("result") == "block":
+        if "governance_lint" not in classifications:
+            classifications.append("governance_lint")
+        for message in governance_lint_missing_inputs(governance_lint):
+            if message not in missing_inputs:
+                missing_inputs.append(message)
+        if not blocking:
+            current_gate = "governance_lint"
+    governance_lint_blocking = governance_lint.get("result") == "block"
     pr_payload = github_status.get("pr") if isinstance(github_status, dict) else None
     head_binding = {
         "status": "present" if isinstance(pr_payload, dict) and pr_payload.get("headRefName") else "host-managed",
@@ -201,7 +213,7 @@ def governance_control_status(
     }
     return {
         "schema_version": "loom-governance-status/v2",
-        "result": "pass" if not blocking else "block",
+        "result": "pass" if not blocking and not governance_lint_blocking else "block",
         "current_gate": current_gate,
         "classifications": list(dict.fromkeys(classifications)),
         "missing_inputs": missing_inputs,
@@ -540,8 +552,10 @@ def main(argv: list[str]) -> int:
         pr_number=args.pr,
         branch_name=args.branch,
     )
+    governance_lint = flow_governance_lint_status(context, surface="status")
     control_status = governance_control_status(
         governance_surface=governance_surface,
+        governance_lint=governance_lint,
         spec_review=spec_review,
         review=review,
         merge_ready=merge_ready,
@@ -595,6 +609,9 @@ def main(argv: list[str]) -> int:
     for message in report_blocking_messages(context["report"]):
         if message not in missing_inputs:
             missing_inputs.append(message)
+    for message in governance_lint_missing_inputs(governance_lint):
+        if message not in missing_inputs:
+            missing_inputs.append(message)
 
     result = "pass" if not missing_inputs else "block"
     summary = (
@@ -631,6 +648,7 @@ def main(argv: list[str]) -> int:
             "goal_execution_contract": goal_contract,
             "goal_readiness": goal_readiness,
             "project_drift": project_drift,
+            "governance_lint": governance_lint,
             "blocking_failures": report_blocking_failures(context["report"]),
             "item": {
                 "id": context["item_id"],
