@@ -698,32 +698,42 @@ ADOPTION_GATE_ROLLOUT_MODES = {
 
 
 def adoption_gate_rollout_status(*, maturity_current: str) -> dict[str, Any]:
+    strong_maturity_passed = maturity_current == "strong"
     blocking_preconditions = [
         {
             "id": "strong_maturity",
-            "status": "pass" if maturity_current == "strong" else "missing",
+            "status": "pass" if strong_maturity_passed else "missing",
             "layer": "github-profile",
+            "evidence_locator": ".loom/companion/interop.json" if strong_maturity_passed else None,
+            "version_controlled": strong_maturity_passed,
             "recommended_action": "upgrade the repository to strong maturity before enabling blocking gates",
         },
         {
             "id": "adversarial_adoption_checks",
             "status": "missing",
             "layer": "core",
+            "evidence_locator": None,
+            "version_controlled": False,
             "recommended_action": "run the Loom-owned strong-governance adversarial adoption fixture and record the validation evidence",
         },
         {
             "id": "rollback_switch",
             "status": "pass",
             "layer": "core",
+            "evidence_locator": "docs/adoption/github-profile-upgrade.md",
+            "version_controlled": True,
             "recommended_action": "keep rollback available by switching gate mode back to advisory and rerunning governance-profile status",
         },
     ]
     blocking_allowed = all(entry["status"] == "pass" for entry in blocking_preconditions)
+    target_mode = "blocking" if blocking_allowed else "advisory"
     return {
         "schema_version": "loom-adoption-gate-rollout/v1",
         "default_mode": "advisory",
         "current_mode": "advisory",
-        "recommended_mode": "blocking" if blocking_allowed else "advisory",
+        "current_mode_source": "default",
+        "recommended_mode": target_mode,
+        "target_mode": target_mode,
         "allowed_modes": ADOPTION_GATE_ROLLOUT_MODES,
         "blocking_allowed": blocking_allowed,
         "blocking_preconditions": blocking_preconditions,
@@ -731,7 +741,136 @@ def adoption_gate_rollout_status(*, maturity_current: str) -> dict[str, Any]:
             "mode": "rollback",
             "switch_to": "advisory",
             "recommended_action": "disable blocking consumption, preserve evidence, repair drift, then rerun adversarial adoption checks before re-enabling blocking",
+            "conditions": [
+                {
+                    "id": "runtime_drift",
+                    "signal": "runtime-state or runtime parity fails for the installed Loom runtime",
+                    "recommended_action": "restore the last known-good runtime or rebootstrap before consuming blocking gates again",
+                },
+                {
+                    "id": "evidence_drift",
+                    "signal": "version-controlled evidence locators are missing, stale, or no longer match the generated profile plan",
+                    "recommended_action": "repair evidence carriers and rerun adversarial adoption checks before re-enabling blocking",
+                },
+                {
+                    "id": "host_binding_drift",
+                    "signal": "GitHub issue, PR, branch, project, merge commit, or branch-protection bindings no longer match the recorded profile state",
+                    "recommended_action": "return to advisory and reconcile host bindings before consuming gate results as blocking",
+                },
+                {
+                    "id": "review_head_drift",
+                    "signal": "spec or implementation review records no longer bind to the expected review head",
+                    "recommended_action": "refresh review records against the current head and repeat the gate rollout check",
+                },
+                {
+                    "id": "metadata_parsing_drift",
+                    "signal": "Work Item, Project, PR, or companion metadata cannot be parsed into the expected Loom contracts",
+                    "recommended_action": "repair metadata parsing or carrier format before restoring blocking consumption",
+                },
+            ],
         },
+    }
+
+
+def maturity_judgment_payload(
+    *,
+    current: str,
+    carrier_summary: dict[str, dict[str, str]],
+    github_control_plane: dict[str, Any],
+    host_binding: dict[str, Any],
+) -> dict[str, Any]:
+    evidence: list[dict[str, str]] = []
+    for key in ("work_item", "recovery", "status_surface", "review", "spec_path", "plan_path"):
+        row = carrier_summary.get(key, {})
+        evidence.append(
+            {
+                "id": key,
+                "status": str(row.get("status", "missing")),
+                "locator": str(row.get("locator", "unknown")),
+                "authority": "loom fact chain",
+            }
+        )
+
+    api_snapshot = github_control_plane.get("api_snapshot")
+    api_errors: list[str] = []
+    if isinstance(api_snapshot, dict):
+        raw_errors = api_snapshot.get("errors")
+        if isinstance(raw_errors, list):
+            api_errors = [str(error) for error in raw_errors if str(error)]
+        evidence.append(
+            {
+                "id": "github_api_snapshot",
+                "status": str(api_snapshot.get("verification_status", "unverified")),
+                "locator": "github_control_plane.api_snapshot",
+                "authority": "github",
+            }
+        )
+
+    host_enforcement = github_control_plane.get("host_enforcement")
+    if isinstance(host_enforcement, dict):
+        evidence.append(
+            {
+                "id": "host_enforcement",
+                "status": str(host_enforcement.get("verification_status", "unverified")),
+                "locator": "github_control_plane.host_enforcement",
+                "authority": "github",
+            }
+        )
+
+    required_objects = host_binding.get("required_objects")
+    if isinstance(required_objects, dict):
+        for key in ("branch", "worktree", "implementation_pr", "merge_commit", "closeout"):
+            row = required_objects.get(key)
+            if isinstance(row, dict):
+                evidence.append(
+                    {
+                        "id": f"host_binding.{key}",
+                        "status": str(row.get("status", "unknown")),
+                        "locator": str(row.get("locator", "unknown")),
+                        "authority": str(row.get("authority", "host")),
+                    }
+                )
+
+    blockers: list[dict[str, str]] = []
+    critical_carriers = [
+        entry["id"]
+        for entry in evidence
+        if entry["authority"] == "loom fact chain"
+        and entry["id"] in {"work_item", "recovery", "status_surface", "review"}
+        and entry["status"] != "present"
+    ]
+    if current == "unadopted" and critical_carriers:
+        blockers.append(
+            {
+                "id": "critical_carriers_unreadable",
+                "reason": "required light maturity carriers are missing or unreadable",
+                "source_locator": ", ".join(sorted(critical_carriers)),
+                "fallback_to": "admission",
+            }
+        )
+    if api_errors:
+        blockers.append(
+            {
+                "id": "github_host_signals_unreadable",
+                "reason": "GitHub host signals could not be read reliably",
+                "source_locator": "github_control_plane.api_snapshot.errors",
+                "fallback_to": "github-profile-binding",
+            }
+        )
+
+    judgment = "blocked" if blockers else current
+    return {
+        "schema_version": "loom-github-profile-maturity-judgment/v1",
+        "judgment": judgment,
+        "current": current,
+        "blocked": bool(blockers),
+        "blockers": blockers,
+        "evidence": evidence,
+        "summary": (
+            "GitHub profile maturity is blocked by unreadable or conflicting required signals."
+            if blockers
+            else f"GitHub profile maturity judgment is `{current}`."
+        ),
     }
 
 
@@ -3284,6 +3423,12 @@ def maturity_status(
     return {
         "schema_version": "loom-governance-maturity/v1",
         "current": current,
+        "judgment": maturity_judgment_payload(
+            current=current,
+            carrier_summary=carrier_summary,
+            github_control_plane=github_control_plane,
+            host_binding=host_binding,
+        ),
         "achieved": achieved,
         "next": next_level,
         "levels": MATURITY_LEVELS,

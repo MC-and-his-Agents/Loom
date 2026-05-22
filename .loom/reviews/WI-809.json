@@ -1,0 +1,41 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-809",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "GitHub profile maturity detector implementation is approved for PR #880 merge readiness, subject to PR CI. The branch adds read-only GitHub host maturity detection, keeps `blocked` as a separate maturity judgment instead of a maturity level, covers light/standard/strong/blocked fixtures, updates loom_check consumption, regenerates runtime surfaces, bumps the installer package version, and stabilizes the adversarial adoption baseline fixture that surfaced during no-timeout loom_check. No blocking findings remain in the #809 scope.",
+  "reviewer": "codex",
+  "reviewed_head": "56e1e56d2d6784db3ccf7c7e4fcdda2944f2b1d8",
+  "reviewed_validation_summary": "python3 tools/skills_surface.py check passed; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed with 0.1.125 -> 0.1.126; python3 tools/version_surface_check.py passed; python3 tools/host_adapter_check.py passed; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py targeted #809 and loom_check runtime files passed; governance-profile status --target . --host github returned blocked/unadopted before WI-809 implementation review carrier was written, confirming missing review fails closed; governance-profile upgrade-plan --target examples/new-project --host github returned expected block for standard gaps; governance-profile upgrade --target examples/new-project --to standard --dry-run --host github returned pass with no writes; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py first exposed adversarial adoption baseline FileNotFoundError, fixed in 14c6be2, then rerun without timeout ended with runner/session code -1 and no Loom assertion output; PR CI loom-check remains required before merge.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "Consume PR #880 CI after push; do not merge until hosted loom-check and loom-pr-merge-gate pass for the final PR head."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-809.md",
+    "recovery_entry": ".loom/progress/WI-809.md",
+    "status_surface": ".loom/status/current.md",
+    "spec_review": ".loom/reviews/WI-809.spec.json",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "terminal_carrier_refresh": ".loom/progress/WI-805.md records PR #878 as merged at f14ceeb026aef43a4f52d190821034c3145d41fc so the completed safe sync carrier no longer appears active in the shared workspace.",
+    "shadow_parity_refresh": ".loom/shadow/merge-ready-loom.json and .loom/shadow/closeout-loom.json were refreshed to the current .loom/status/current.md sha256 so root-self-governance adopt verify can consume fresh shadow evidence."
+  }
+}

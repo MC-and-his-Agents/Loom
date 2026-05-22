@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-810",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-810 spec suite is approved for the GitHub profile read-judge-write-verify upgrade plan. Scope is limited to fixed upgrade-plan output coverage, companion generation dry-run preview, loom_check consumption, documentation, generated skills surface, and terminal WI-809 carrier alignment; it excludes blocking rollout, GitHub writes, and repo-native shadow verdict generation.",
+  "reviewer": "codex",
+  "reviewed_head": "b8c034e3fafbb09635c6e1a6a4bde006aa1ee5bd",
+  "reviewed_validation_summary": "Initial smoke: governance-profile upgrade-plan --target . --host github returned pass/strong and emitted 10 fixed adoption judgments, each expanded to read/judge/write/verify; companion_generation remains dry-run.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-810.md",
+    "recovery_entry": ".loom/progress/WI-810.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

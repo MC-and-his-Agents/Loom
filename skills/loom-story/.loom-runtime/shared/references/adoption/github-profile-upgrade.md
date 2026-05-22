@@ -104,10 +104,39 @@ GitHub profile adoption 的 gate 消费模式固定为三态：
 - `gate_rollout.default_mode`
 - `gate_rollout.current_mode`
 - `gate_rollout.recommended_mode`
+- `gate_rollout.target_mode`
 - `gate_rollout.blocking_preconditions`
 - `gate_rollout.rollback`
 
-默认建议必须保持 `advisory`。只有当所有 blocking 前置条件都有版本控制内证据时，才允许建议进入 `blocking`。
+默认建议必须保持 `advisory`。只有当所有 blocking 前置条件都有版本控制内证据时，才允许 `recommended_mode` / `target_mode` 进入 `blocking`。`rollback.conditions` 必须结构化覆盖 runtime、evidence、host binding、review head 与 metadata parsing 漂移，且 rollback 只能暂停 blocking 消费并回到 advisory，不删除既有证据。
+
+## 8.1 Maturity detector judgment
+
+GitHub profile maturity detector 的稳定入口是：
+
+```bash
+python3 tools/loom_flow.py governance-profile upgrade-plan --target <repo> --host github
+```
+
+`maturity.current` 仍只表达已满足的稳定 maturity level：`unadopted | light | standard | strong`。`blocked` 不进入 `current` 枚举，避免把“当前成熟度”和“无法可信判断”混成一个字段。
+
+阻断状态必须通过 `maturity.judgment` 独立表达：
+
+- `schema_version: loom-github-profile-maturity-judgment/v1`
+- `judgment: light | standard | strong | blocked`
+- `current`
+- `blocked`
+- `blockers[]`
+- `evidence[]`
+
+每个 evidence entry 必须包含：
+
+- `id`
+- `status`
+- `locator`
+- `authority`
+
+当 Work Item / recovery / status / review 等 light 前置 carrier 不可读，或 GitHub API / host enforcement 等关键宿主信号不可读、冲突、过期时，`judgment` 必须为 `blocked`，并给出 `blockers[].source_locator` 与 `fallback_to`。缺证据只能返回 `missing` 或 `blocked`，不得猜测通过。
 
 ## 9. Agent-assisted upgrade plan 输出
 

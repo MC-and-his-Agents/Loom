@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-810",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-810 implementation is approved for PR merge readiness. The branch fixes GitHub profile upgrade-plan to emit the complete read-judge-write-verify decision set, adds repo-owned review instruction locator judgments, treats GitHub controlled merge as host object targets, keeps companion generation dry-run, tightens loom_check only for GitHub profile maturity outputs, regenerates skills surface, terminates the merged WI-809 carrier, and bumps the installer package version for the changed runtime payload. Validation passed locally, including full loom_check. No blocking findings remain in #810 scope.",
+  "reviewer": "codex",
+  "reviewed_head": "3b386aee6460ffb1372c4597a569e74017384bf6",
+  "reviewed_validation_summary": "py_compile_clean targeted loom_flow/loom_check passed; skills_surface check passed; governance-profile upgrade-plan --target . --host github returned pass/strong with 10 fixed judgments and 40 read/judge/write/verify steps; governance-profile upgrade --target . --to strong --dry-run --host github returned pass/dry_run; version_surface_check passed; installer version bump check passed with 0.1.126 -> 0.1.127; git diff --check passed; adopt verify --target . --item WI-810 passed; shadow-parity --target . passed; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py passed with 38 surfaces.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-810.md",
+    "recovery_entry": ".loom/progress/WI-810.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

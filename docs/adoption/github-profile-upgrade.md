@@ -104,10 +104,39 @@ GitHub profile adoption 的 gate 消费模式固定为三态：
 - `gate_rollout.default_mode`
 - `gate_rollout.current_mode`
 - `gate_rollout.recommended_mode`
+- `gate_rollout.target_mode`
 - `gate_rollout.blocking_preconditions`
 - `gate_rollout.rollback`
 
-默认建议必须保持 `advisory`。只有当所有 blocking 前置条件都有版本控制内证据时，才允许建议进入 `blocking`。
+默认建议必须保持 `advisory`。只有当所有 blocking 前置条件都有版本控制内证据时，才允许 `recommended_mode` / `target_mode` 进入 `blocking`。`rollback.conditions` 必须结构化覆盖 runtime、evidence、host binding、review head 与 metadata parsing 漂移，且 rollback 只能暂停 blocking 消费并回到 advisory，不删除既有证据。
+
+## 8.1 Maturity detector judgment
+
+GitHub profile maturity detector 的稳定入口是：
+
+```bash
+python3 tools/loom_flow.py governance-profile upgrade-plan --target <repo> --host github
+```
+
+`maturity.current` 仍只表达已满足的稳定 maturity level：`unadopted | light | standard | strong`。`blocked` 不进入 `current` 枚举，避免把“当前成熟度”和“无法可信判断”混成一个字段。
+
+阻断状态必须通过 `maturity.judgment` 独立表达：
+
+- `schema_version: loom-github-profile-maturity-judgment/v1`
+- `judgment: light | standard | strong | blocked`
+- `current`
+- `blocked`
+- `blockers[]`
+- `evidence[]`
+
+每个 evidence entry 必须包含：
+
+- `id`
+- `status`
+- `locator`
+- `authority`
+
+当 Work Item / recovery / status / review 等 light 前置 carrier 不可读，或 GitHub API / host enforcement 等关键宿主信号不可读、冲突、过期时，`judgment` 必须为 `blocked`，并给出 `blockers[].source_locator` 与 `fallback_to`。缺证据只能返回 `missing` 或 `blocked`，不得猜测通过。
 
 ## 9. Agent-assisted upgrade plan 输出
 
@@ -128,14 +157,15 @@ GitHub profile adoption 的 gate 消费模式固定为三态：
 
 升级计划必须覆盖：
 
-- FR / Work Item 分层
-- closeout / reconciliation read surface
-- repo companion contract
-- repo interop contract
-- GitHub controlled merge
-- repo-specific residue
-- review instruction locators for spec review and implementation review
-- authority boundary
-- guardian / integration contract 作为 repo-native evidence 的读取边界
+- `fr_work_item_layer`: FR / Work Item 分层
+- `closeout_reconciliation_read`: closeout / reconciliation read surface
+- `repo_interface`: repo companion contract
+- `repo_interop`: repo interop contract
+- `github_controlled_merge`: GitHub controlled merge 宿主控制面
+- `repo_specific_residue`: repo-specific residue
+- `spec_review_instruction_locator`: spec review 的 repo-owned instruction locator
+- `implementation_review_instruction_locator`: implementation review 的 repo-owned instruction locator
+- `authority_boundary`: authority boundary
+- `guardian_integration_contract`: guardian / integration contract 作为 repo-native evidence 的读取边界
 
-这些判断只服务于 GitHub profile 采用和升级；不得把任何下游仓库的 repo-native review / guardian 规则、单仓命名或 repo-local gate 细节提升为 Loom core 默认规则。升级计划必须要求 mature / deep-existing 仓库声明 repo-owned review instruction locator，不能猜测 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 路径。
+这些判断只服务于 GitHub profile 采用和升级；不得把任何下游仓库的 repo-native review / guardian 规则、单仓命名或 repo-local gate 细节提升为 Loom core 默认规则。升级计划必须要求 mature / deep-existing 仓库声明 repo-owned review instruction locator，必须覆盖 review instruction locators for spec review and implementation review，不能猜测 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 路径。

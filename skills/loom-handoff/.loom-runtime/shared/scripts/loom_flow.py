@@ -100,6 +100,7 @@ GOAL_EXECUTION_CONTRACT_SCHEMA = "loom-goal-execution-contract/v1"
 GOAL_READINESS_SCHEMA = "loom-goal-readiness/v1"
 GOAL_COMPLETION_SCHEMA = "loom-goal-completion/v1"
 GOVERNANCE_LINT_RESULT_SCHEMA = "loom-governance-lint-result/v1"
+GOVERNANCE_LINT_STATUS_SCHEMA = "loom-governance-lint-status/v1"
 
 PROJECT_DRIFT_KINDS = {
     "project_missing_item",
@@ -135,6 +136,7 @@ WORK_ITEM_FIELD_LABELS = {
 
 REVIEW_DECISIONS = {"allow", "block", "fallback"}
 REVIEW_KINDS = {"general_review", "code_review", "spec_review"}
+IMPLEMENTATION_REVIEW_KINDS = {"general_review", "code_review"}
 REVIEW_FINDING_SEVERITIES = {"warn", "block"}
 REVIEW_FINDING_DISPOSITION_STATUSES = {"accepted", "rejected", "deferred"}
 DEFAULT_REVIEW_ENGINE = "codex"
@@ -360,9 +362,24 @@ ADOPTION_DECISION_QUESTIONS: dict[str, str] = {
     "repo_interop": "Which retained host action results, repo-native carriers, and shadow parity surfaces should Loom read?",
     "github_controlled_merge": "Which GitHub-controlled merge evidence proves the host merge boundary is ready without Loom taking over the host action?",
     "repo_specific_residue": "Which repo-specific residue must stay repo-owned instead of becoming Loom core?",
+    "spec_review_instruction_locator": "Where does the adopted repository declare repo-owned spec review instructions without making Loom guess a filename?",
+    "implementation_review_instruction_locator": "Where does the adopted repository declare repo-owned implementation review instructions without making Loom guess a filename?",
     "authority_boundary": "Where is the authority-of-truth for repo-native results, overrides, and fallback decisions?",
     "guardian_integration_contract": "Which guardian or integration-contract verdicts should be read as repo-native evidence rather than promoted into Loom core?",
 }
+
+ADOPTION_DECISION_ORDER: list[str] = [
+    "fr_work_item_layer",
+    "closeout_reconciliation_read",
+    "repo_interface",
+    "repo_interop",
+    "github_controlled_merge",
+    "repo_specific_residue",
+    "spec_review_instruction_locator",
+    "implementation_review_instruction_locator",
+    "authority_boundary",
+    "guardian_integration_contract",
+]
 
 ADOPTION_DECISION_SOURCES: dict[str, str] = {
     "fr_work_item_layer": "docs/adoption/github-profile-upgrade.md",
@@ -371,6 +388,8 @@ ADOPTION_DECISION_SOURCES: dict[str, str] = {
     "repo_interop": "docs/adoption/repo-interop-contract.md",
     "github_controlled_merge": "docs/adoption/github-profile.md",
     "repo_specific_residue": "docs/adoption/repo-companion-contract.md",
+    "spec_review_instruction_locator": "docs/adoption/repo-companion-contract.md",
+    "implementation_review_instruction_locator": "docs/adoption/repo-companion-contract.md",
     "authority_boundary": "docs/adoption/repo-interop-contract.md",
     "guardian_integration_contract": "docs/adoption/repo-interop-contract.md",
 }
@@ -380,8 +399,10 @@ ADOPTION_DECISION_WRITE_TARGETS: dict[str, list[str]] = {
     "closeout_reconciliation_read": [".loom/companion/interop.json"],
     "repo_interface": [".loom/companion/manifest.json", ".loom/companion/repo-interface.json"],
     "repo_interop": [".loom/companion/interop.json"],
-    "github_controlled_merge": [],
+    "github_controlled_merge": ["github:branch_protection.required_checks", "github:pull_request.merge_method"],
     "repo_specific_residue": [".loom/companion/README.md", ".loom/companion/repo-interface.json"],
+    "spec_review_instruction_locator": [".loom/companion/repo-interface.json:review_instruction_locators.spec_review"],
+    "implementation_review_instruction_locator": [".loom/companion/repo-interface.json:review_instruction_locators.implementation_review"],
     "authority_boundary": [".loom/companion/interop.json"],
     "guardian_integration_contract": [".loom/companion/interop.json"],
 }
@@ -728,6 +749,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     governance_profile.add_argument("operation", choices=("status", "upgrade-plan", "upgrade", "binding"))
     governance_profile.add_argument("--target", required=True, help="Target repository root")
+    governance_profile.add_argument("--host", choices=("github",), default="github", help="Host profile to evaluate")
     governance_profile.add_argument("--to", choices=("standard", "strong"), help="Target maturity for governance-profile upgrade")
     governance_profile.add_argument("--dry-run", action="store_true", default=True, help="Preview upgrade actions without writing files; this is the default")
     governance_profile.add_argument("--apply", dest="dry_run", action="store_false", help="Apply Loom-owned scaffold writes")
@@ -3148,12 +3170,18 @@ def live_smoke_run_payload(
 def adoption_validation_commands(target_root: Path) -> list[str]:
     target = command_target(target_root)
     return [
-        f"python3 tools/loom_flow.py governance-profile upgrade-plan --target {target}",
+        f"python3 tools/loom_flow.py governance-profile upgrade-plan --target {target} --host github",
         f"python3 tools/loom_flow.py adopt verify --target {target}",
     ]
 
 
 def adoption_decision_reasoning(decision_id: str, detail: dict[str, Any]) -> str:
+    if decision_id == "github_controlled_merge":
+        return "GitHub remains the merge authority; Loom only reads required checks, PR merge state, merge commit, and closeout basis before delegating host merge."
+    if decision_id == "spec_review_instruction_locator":
+        return "Deep existing repositories must declare their own spec review instruction locator so Loom does not infer repo-specific filenames or review policy."
+    if decision_id == "implementation_review_instruction_locator":
+        return "Deep existing repositories must declare their own implementation review instruction locator so Loom can consume repo-owned guidance without moving it into core."
     if decision_id == "guardian_integration_contract":
         return "Guardian and integration-contract verdicts are repo-native evidence; Loom may read them through interop but must not promote their rules into core."
     if decision_id == "authority_boundary":
@@ -3171,7 +3199,9 @@ def adoption_judgment_status(decision_id: str, missing: set[str]) -> str:
         return "blocked" if not ADOPTION_DECISION_WRITE_TARGETS.get(decision_id) else "missing"
     if decision_id == "repo_specific_residue" and "repo_interface" in missing:
         return "missing"
-    if decision_id in {"authority_boundary", "guardian_integration_contract"} and "repo_interop" in missing:
+    if decision_id in {"spec_review_instruction_locator", "implementation_review_instruction_locator"} and "repo_interface" in missing:
+        return "missing"
+    if decision_id in {"authority_boundary", "guardian_integration_contract", "closeout_reconciliation_read"} and "repo_interop" in missing:
         return "missing"
     return "answered"
 
@@ -3196,7 +3226,7 @@ def adoption_decisions_payload(
     )
     detail_by_id = {row.get("id"): row for row in details if isinstance(row, dict)}
     missing_set = {str(item) for item in missing}
-    ordered_ids = list(dict.fromkeys([*missing, "repo_specific_residue", "authority_boundary", "guardian_integration_contract"]))
+    ordered_ids = list(dict.fromkeys([*missing, *ADOPTION_DECISION_ORDER]))
     judgments: list[dict[str, Any]] = []
     for raw_id in ordered_ids:
         decision_id = str(raw_id)
@@ -7041,7 +7071,10 @@ def judgment_closure_payload(
             if not isinstance(target, str):
                 missing_inputs.append(f"judgment `{judgment.get('id')}` has non-string write target")
                 continue
-            path, errors = resolve_repo_relative_path(target_root, target, label=f"judgment `{judgment.get('id')}` write target")
+            if target.startswith("github:"):
+                continue
+            target_locator = target.split(":", 1)[0] if ":" in target else target
+            path, errors = resolve_repo_relative_path(target_root, target_locator, label=f"judgment `{judgment.get('id')}` write target")
             missing_inputs.extend(errors)
             if path is not None and not path.exists():
                 missing_inputs.append(f"judgment `{judgment.get('id')}` write target missing: {target}")
@@ -9711,6 +9744,14 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
                 result = "block"
         else:
             decision = review_record["decision"]
+            review_kind = review_record.get("kind")
+            if review_kind not in IMPLEMENTATION_REVIEW_KINDS:
+                missing_inputs.append(
+                    "implementation review kind must be general_review or code_review; "
+                    f"`{review_kind}` cannot satisfy implementation approval"
+                )
+                if result == "pass":
+                    result = "block"
             if review_record.get("reviewed_validation_summary") != context["latest_validation_summary"]:
                 missing_inputs.append("review artifact does not match the latest validation summary")
                 if result == "pass":
@@ -11288,6 +11329,8 @@ def pr_gate_failure_taxonomy(missing_inputs: list[str], gate_result: str) -> lis
             categories.add("review_missing")
         if "schema_version" in lowered or "invalid review" in lowered:
             categories.add("review_schema_invalid")
+        if "implementation review kind" in lowered or "cannot satisfy implementation approval" in lowered:
+            categories.add("review_not_approved")
         if "decision is blocking" in lowered or "decision is fallback" in lowered or "not approved" in lowered:
             categories.add("review_not_approved")
         if "stale" in lowered or "implementation drift" in lowered:
@@ -11305,6 +11348,125 @@ def pr_gate_failure_taxonomy(missing_inputs: list[str], gate_result: str) -> lis
     if gate_result == "fallback":
         categories.add("prior_gate_fallback")
     return sorted(categories)
+
+
+def approval_boundary_payload(*, raw_evidence_present: bool) -> dict[str, Any]:
+    return {
+        "authored_truth": "work_item.review_entry",
+        "raw_review_evidence_satisfies_approval": False,
+        "shadow_evidence_satisfies_approval": False,
+        "runtime_review_evidence_satisfies_approval": False,
+        "pr_body_summary_satisfies_approval": False,
+        "ci_success_satisfies_approval": False,
+        "github_review_comments_satisfy_approval": False,
+        "raw_evidence_present": raw_evidence_present,
+        "required_authored_review_kinds": sorted(IMPLEMENTATION_REVIEW_KINDS),
+    }
+
+
+def approval_boundary_lint_status(
+    *,
+    context: dict[str, Any],
+    pr_head: str | None,
+    review_approval: dict[str, Any],
+    raw_evidence_present: bool,
+    failure_taxonomy: list[str],
+) -> dict[str, Any]:
+    blocking_results: list[dict[str, Any]] = []
+    not_applicable_results: list[dict[str, Any]] = []
+    status = review_approval.get("status")
+    review_kind = review_approval.get("kind")
+    reviewed_head = review_approval.get("reviewed_head")
+    stale_taxonomy = {"review_stale", "head_binding_drift", "validation_summary_drift"} & set(failure_taxonomy)
+    base_result = {
+        "schema_version": GOVERNANCE_LINT_RESULT_SCHEMA,
+        "id": "authored_review_approval_boundary",
+        "kind": "approval_bypass",
+        "surface": "merge_ready",
+        "subject": "work_item.review_entry",
+        "mapped_failure": {
+            "category": "gate_failure",
+            "kind": "approval_bypass",
+        },
+        "provenance": {
+            "source_layer": "authored_truth",
+            "source_owner": "loom",
+            "source_locator": context.get("review_entry"),
+            "source_binding": "work_item.review_entry",
+            "freshness": "fresh" if status == "approved" else "missing" if status == "missing" else "stale",
+        },
+        "bindings": {
+            "item_id": context.get("item_id"),
+            "head_sha": pr_head,
+            "scope": context.get("scope"),
+            "reviewed_head_sha": reviewed_head,
+            "pr_ref": None,
+        },
+        "fallback_to": "review record / approval gate",
+    }
+    if stale_taxonomy:
+        blocking_results.append(
+            {
+                **base_result,
+                "id": "authored_review_evidence_freshness",
+                "kind": "evidence_stale",
+                "strength": "blocking",
+                "summary": "authored review approval exists but no longer binds to the current head or validation summary",
+                "mapped_failure": {
+                    "category": "stale",
+                    "kind": "evidence_stale",
+                },
+                "provenance": {
+                    **base_result["provenance"],
+                    "freshness": "stale",
+                },
+                "evidence_freshness": "stale",
+                "fallback_to": "validation / evidence refresh",
+            }
+        )
+    elif status == "approved":
+        not_applicable_results.append(
+            {
+                **base_result,
+                "strength": "not_applicable",
+                "summary": "Authored implementation review approval is present; raw, shadow, PR body, CI, and GitHub review evidence remain evidence-only.",
+                "evidence_freshness": "fresh",
+            }
+        )
+    else:
+        reasons = []
+        if raw_evidence_present:
+            reasons.append("raw or runtime review evidence is present")
+        if review_kind and review_kind not in IMPLEMENTATION_REVIEW_KINDS:
+            reasons.append(f"review kind `{review_kind}` is not an implementation approval kind")
+        if "raw_evidence_bypass" in failure_taxonomy:
+            reasons.append("raw evidence cannot satisfy semantic approval")
+        if not reasons:
+            reasons.append("fresh authored implementation review approval is absent")
+        blocking_results.append(
+            {
+                **base_result,
+                "strength": "blocking",
+                "summary": "; ".join(reasons),
+                "evidence_freshness": "missing" if status == "missing" else "stale",
+            }
+        )
+    return {
+        "schema_version": GOVERNANCE_LINT_STATUS_SCHEMA,
+        "surface": "merge_ready",
+        "result": "block" if blocking_results else "pass",
+        "result_summary": (
+            "approval bypass lint blocks merge-ready because authored implementation review approval is absent or invalid."
+            if blocking_results
+            else "approval bypass lint found no raw/shadow/PR/CI/GitHub evidence promoted to semantic approval."
+        ),
+        "blocking_results": blocking_results,
+        "advisory_results": [],
+        "repo_specific_results": [],
+        "not_applicable_results": not_applicable_results,
+        "mapped_failures": [entry["mapped_failure"] for entry in blocking_results],
+        "provenance": [entry["provenance"] for entry in [*blocking_results, *not_applicable_results]],
+    }
 
 
 def pr_gate_payload(
@@ -11408,15 +11570,25 @@ def pr_gate_payload(
                 "status": "missing",
                 "path": review_path,
                 "decision": None,
+                "kind": None,
                 "reviewed_head": None,
                 "head_binding": None,
                 "missing_inputs": review_errors or [f"missing review artifact: {review_path}"],
             }
         else:
+            review_kind = review_record.get("kind")
+            approval_status = (
+                "approved"
+                if review_record.get("decision") == "allow"
+                and not review_errors
+                and review_kind in IMPLEMENTATION_REVIEW_KINDS
+                else "not_approved"
+            )
             review_approval = {
-                "status": "approved" if review_record.get("decision") == "allow" and not review_errors else "not_approved",
+                "status": approval_status,
                 "path": review_path,
                 "decision": review_record.get("decision"),
+                "kind": review_kind,
                 "reviewed_head": review_record.get("reviewed_head"),
                 "reviewed_validation_summary": review_record.get("reviewed_validation_summary"),
                 "head_binding": review_record.get("head_binding"),
@@ -11458,6 +11630,29 @@ def pr_gate_payload(
     failure_taxonomy = pr_gate_failure_taxonomy(missing_inputs, result)
     if raw_evidence_present and review_approval.get("status") != "approved" and "raw_evidence_bypass" not in failure_taxonomy:
         failure_taxonomy.append("raw_evidence_bypass")
+    approval_boundary = approval_boundary_payload(raw_evidence_present=raw_evidence_present)
+    governance_lint = (
+        approval_boundary_lint_status(
+            context=context,
+            pr_head=pr_head,
+            review_approval=review_approval,
+            raw_evidence_present=raw_evidence_present,
+            failure_taxonomy=sorted(failure_taxonomy),
+        )
+        if context
+        else {
+            "schema_version": GOVERNANCE_LINT_STATUS_SCHEMA,
+            "surface": "merge_ready",
+            "result": "block",
+            "result_summary": "approval bypass lint cannot run until the Work Item fact chain is readable.",
+            "blocking_results": [],
+            "advisory_results": [],
+            "repo_specific_results": [],
+            "not_applicable_results": [],
+            "mapped_failures": [],
+            "provenance": [],
+        }
+    )
     return {
         "command": "pr-gate",
         "operation": "check",
@@ -11488,18 +11683,13 @@ def pr_gate_payload(
         },
         "review_approval": review_approval,
         "merge_checkpoint": merge_checkpoint,
+        "governance_lint": governance_lint,
         "host_enforcement": {
             "stable_check_name": PR_MERGE_GATE_CHECK_NAME,
             "status": "not_checked",
             "reason": "pr-gate check proves PR-local semantic approval; controlled-merge checks host required status.",
         },
-        "approval_boundary": {
-            "authored_truth": "work_item.review_entry",
-            "raw_review_evidence_satisfies_approval": False,
-            "shadow_evidence_satisfies_approval": False,
-            "ci_success_satisfies_approval": False,
-            "raw_evidence_present": raw_evidence_present,
-        },
+        "approval_boundary": approval_boundary,
         "failure_taxonomy": sorted(failure_taxonomy),
         "steps": steps,
         "inferences": inferences,
@@ -11830,7 +12020,7 @@ def host_lifecycle_payload(context: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def governance_profile_payload(target_root: Path, operation: str) -> dict[str, Any]:
+def governance_profile_payload(target_root: Path, operation: str, *, host: str = "github") -> dict[str, Any]:
     governance_surface = build_governance_surface(target_root)
     control_plane = governance_surface.get("governance_control_plane")
     maturity = control_plane.get("maturity") if isinstance(control_plane, dict) else None
@@ -11838,6 +12028,7 @@ def governance_profile_payload(target_root: Path, operation: str) -> dict[str, A
         return {
             "command": "governance-profile",
             "operation": operation,
+            "host": host,
             "result": "block",
             "summary": "governance profile maturity could not be read from the unified control plane.",
             "missing_inputs": ["governance_control_plane.maturity"],
@@ -11896,6 +12087,7 @@ def governance_profile_payload(target_root: Path, operation: str) -> dict[str, A
     return {
         "command": "governance-profile",
         "operation": operation,
+        "host": host,
         "result": result,
         "summary": summary,
         "missing_inputs": missing_inputs,
@@ -11970,17 +12162,19 @@ def governance_profile_upgrade_payload(
     target_level: str | None,
     dry_run: bool,
     force: bool,
+    host: str = "github",
 ) -> dict[str, Any]:
     if target_level is None:
         return {
             "command": "governance-profile",
             "operation": "upgrade",
+            "host": host,
             "result": "block",
             "summary": "governance profile upgrade requires `--to standard` or `--to strong`.",
             "missing_inputs": ["to"],
             "fallback_to": "adoption",
         }
-    base = governance_profile_payload(target_root, "upgrade-plan")
+    base = governance_profile_payload(target_root, "upgrade-plan", host=host)
     maturity = base.get("maturity") if isinstance(base.get("maturity"), dict) else {}
     workspace_profile = base.get("workspace_profile")
     gate_starter = base.get("gate_starter")
@@ -12006,6 +12200,7 @@ def governance_profile_upgrade_payload(
     return {
         "command": "governance-profile",
         "operation": "upgrade",
+        "host": host,
         "schema_version": "loom-governance-upgrade/v1",
         "result": result,
         "summary": (
@@ -12320,6 +12515,7 @@ def handle_governance_profile(args: argparse.Namespace) -> int:
                 target_level=args.to,
                 dry_run=args.dry_run,
                 force=args.force,
+                host=args.host,
             )
         )
     if args.operation == "binding":
@@ -12337,7 +12533,7 @@ def handle_governance_profile(args: argparse.Namespace) -> int:
                 dry_run=args.dry_run,
             )
         )
-    return emit(governance_profile_payload(target_root, args.operation))
+    return emit(governance_profile_payload(target_root, args.operation, host=args.host))
 
 
 def handle_host_lifecycle(args: argparse.Namespace) -> int:
