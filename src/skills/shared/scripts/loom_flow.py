@@ -8,11 +8,14 @@ import hashlib
 import json
 import os
 import re
+import select
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -148,6 +151,7 @@ CODEX_APP_REVIEW_SESSION_FILE_ENV = "LOOM_CODEX_APP_REVIEW_SESSION_FILE"
 CODEX_THREAD_ID_ENV = "CODEX_THREAD_ID"
 CODEX_SESSION_ID_ENV = "CODEX_SESSION_ID"
 CODEX_APP_REVIEW_NEW_THREAD_IDS = {"new", "new-thread", "start"}
+CODEX_APP_REVIEW_LIVE_TIMEOUT_SECONDS = 900
 LOOM_RUNTIME_ENV_KEYS = (
     "LOOM_SOURCE_REPO_ROOT",
     "LOOM_INSTALLED_SKILLS_ROOT",
@@ -8087,12 +8091,41 @@ def jsonrpc_send_notification(stdin: Any, *, method: str, params: dict[str, Any]
     stdin.flush()
 
 
-def jsonrpc_read_response(stdout: Any, *, request_id: int) -> tuple[dict[str, Any] | None, list[dict[str, Any]], list[str]]:
-    notifications: list[dict[str, Any]] = []
-    while True:
+def jsonrpc_readline(stdout: Any, *, deadline: float | None, close_error: str, timeout_error: str) -> tuple[str | None, str | None]:
+    if deadline is None:
         line = stdout.readline()
         if not line:
-            return None, notifications, [f"app-server closed before response id {request_id}"]
+            return None, close_error
+        return line, None
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return None, timeout_error
+    readable, _, _ = select.select([stdout], [], [], remaining)
+    if not readable:
+        return None, timeout_error
+    line = stdout.readline()
+    if not line:
+        return None, close_error
+    return line, None
+
+
+def jsonrpc_read_response(
+    stdout: Any,
+    *,
+    request_id: int,
+    deadline: float | None,
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]], list[str]]:
+    notifications: list[dict[str, Any]] = []
+    while True:
+        line, line_error = jsonrpc_readline(
+            stdout,
+            deadline=deadline,
+            close_error=f"app-server closed before response id {request_id}",
+            timeout_error=f"Codex App review timed out before response id {request_id}",
+        )
+        if line_error:
+            return None, notifications, [line_error]
+        assert line is not None
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:
@@ -8108,12 +8141,19 @@ def jsonrpc_read_until_review_text(
     stdout: Any,
     *,
     turn_id: str | None,
+    deadline: float | None,
 ) -> tuple[str | None, list[dict[str, Any]], list[str]]:
     notifications: list[dict[str, Any]] = []
     while True:
-        line = stdout.readline()
-        if not line:
-            return None, notifications, ["app-server closed before Codex App review completed"]
+        line, line_error = jsonrpc_readline(
+            stdout,
+            deadline=deadline,
+            close_error="app-server closed before Codex App review completed",
+            timeout_error="Codex App review timed out before review text was produced",
+        )
+        if line_error:
+            return None, notifications, [line_error]
+        assert line is not None
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:
@@ -8137,12 +8177,19 @@ def jsonrpc_read_until_normalized_review(
     stdout: Any,
     *,
     turn_id: str | None,
+    deadline: float | None,
 ) -> tuple[dict[str, Any] | None, list[dict[str, Any]], list[str]]:
     notifications: list[dict[str, Any]] = []
     while True:
-        line = stdout.readline()
-        if not line:
-            return None, notifications, ["app-server closed before Codex App normalization completed"]
+        line, line_error = jsonrpc_readline(
+            stdout,
+            deadline=deadline,
+            close_error="app-server closed before Codex App normalization completed",
+            timeout_error="Codex App review timed out before normalized review was produced",
+        )
+        if line_error:
+            return None, notifications, [line_error]
+        assert line is not None
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:
@@ -8160,6 +8207,36 @@ def jsonrpc_read_until_normalized_review(
             if turn_id and params.get("turnId") not in {turn_id, None}:
                 continue
             return None, notifications, ["Codex App turn/start did not return a Loom review result"]
+
+
+def terminate_process_group(process: subprocess.Popen[str]) -> None:
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    except OSError:
+        try:
+            process.terminate()
+        except OSError:
+            return
+    try:
+        process.wait(timeout=5)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return
+    except OSError:
+        try:
+            process.kill()
+        except OSError:
+            return
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
 
 
 def find_exited_review_text(payload: Any) -> str | None:
@@ -8222,10 +8299,12 @@ def run_codex_app_live_review(
     reviewed_head: str,
     thread_cwd: str,
     prompt_text: str,
+    timeout_seconds: int | None,
 ) -> tuple[str | None, dict[str, Any], list[str]]:
     command = app_server_proxy_command(app_server)
     if command is None:
         return None, {}, [f"unsupported Codex App review endpoint: {app_server}"]
+    deadline = time.monotonic() + timeout_seconds if timeout_seconds is not None else None
     try:
         env = os.environ.copy()
         for key in LOOM_RUNTIME_ENV_KEYS:
@@ -8238,15 +8317,19 @@ def run_codex_app_live_review(
             stderr=subprocess.PIPE,
             text=True,
             env=env,
+            start_new_session=True,
         )
     except OSError as exc:
         return None, {}, [f"Codex App review endpoint is unavailable: {exc}"]
     assert process.stdin is not None
     assert process.stdout is not None
-    metadata: dict[str, Any] = {"review_target": {"type": "commit", "sha": reviewed_head}}
+    metadata: dict[str, Any] = {
+        "review_target": {"type": "commit", "sha": reviewed_head},
+        "timeout_seconds": timeout_seconds,
+    }
     try:
         jsonrpc_send_request(process.stdin, request_id=1, method="initialize", params={"clientInfo": {"name": "loom", "version": "stage3"}, "capabilities": {}})
-        initialize_response, _, initialize_errors = jsonrpc_read_response(process.stdout, request_id=1)
+        initialize_response, _, initialize_errors = jsonrpc_read_response(process.stdout, request_id=1, deadline=deadline)
         if initialize_errors:
             return None, metadata, initialize_errors
         if isinstance(initialize_response, dict) and isinstance(initialize_response.get("error"), dict):
@@ -8267,7 +8350,7 @@ def run_codex_app_live_review(
                     "ephemeral": False,
                 },
             )
-            start_response, _, start_errors = jsonrpc_read_response(process.stdout, request_id=2)
+            start_response, _, start_errors = jsonrpc_read_response(process.stdout, request_id=2, deadline=deadline)
             if start_errors:
                 return None, metadata, start_errors
             if isinstance(start_response, dict) and isinstance(start_response.get("error"), dict):
@@ -8292,7 +8375,7 @@ def run_codex_app_live_review(
                     "cwd": thread_cwd,
                 },
             )
-            resume_response, _, resume_errors = jsonrpc_read_response(process.stdout, request_id=2)
+            resume_response, _, resume_errors = jsonrpc_read_response(process.stdout, request_id=2, deadline=deadline)
             if resume_errors:
                 return None, metadata, resume_errors
             if isinstance(resume_response, dict) and isinstance(resume_response.get("error"), dict):
@@ -8328,7 +8411,7 @@ def run_codex_app_live_review(
                     "outputSchema": load_json_file(review_engine_schema_path()),
                 },
             )
-            turn_response, turn_notifications, turn_errors = jsonrpc_read_response(process.stdout, request_id=3)
+            turn_response, turn_notifications, turn_errors = jsonrpc_read_response(process.stdout, request_id=3, deadline=deadline)
             if turn_errors:
                 return None, metadata, turn_errors
             if isinstance(turn_response, dict) and isinstance(turn_response.get("error"), dict):
@@ -8347,6 +8430,7 @@ def run_codex_app_live_review(
                 normalized, normalization_notifications, normalization_wait_errors = jsonrpc_read_until_normalized_review(
                     process.stdout,
                     turn_id=review_turn_id,
+                    deadline=deadline,
                 )
                 turn_notifications.extend(normalization_notifications)
                 if normalization_wait_errors:
@@ -8367,7 +8451,7 @@ def run_codex_app_live_review(
                 "target": {"type": "commit", "sha": reviewed_head},
             },
         )
-        review_response, review_notifications, review_errors = jsonrpc_read_response(process.stdout, request_id=3)
+        review_response, review_notifications, review_errors = jsonrpc_read_response(process.stdout, request_id=3, deadline=deadline)
         if review_errors:
             return None, metadata, review_errors
         if isinstance(review_response, dict) and isinstance(review_response.get("error"), dict):
@@ -8385,6 +8469,7 @@ def run_codex_app_live_review(
             review_text, completion_notifications, completion_errors = jsonrpc_read_until_review_text(
                 process.stdout,
                 turn_id=review_turn_id,
+                deadline=deadline,
             )
             review_notifications.extend(completion_notifications)
             if completion_errors:
@@ -8399,7 +8484,7 @@ def run_codex_app_live_review(
                     "includeTurns": True,
                 },
             )
-            thread_response, thread_notifications, thread_errors = jsonrpc_read_response(process.stdout, request_id=4)
+            thread_response, thread_notifications, thread_errors = jsonrpc_read_response(process.stdout, request_id=4, deadline=deadline)
             review_notifications.extend(thread_notifications)
             if thread_errors:
                 return None, metadata, thread_errors
@@ -8434,7 +8519,7 @@ def run_codex_app_live_review(
                 "outputSchema": load_json_file(review_engine_schema_path()),
             },
         )
-        turn_response, turn_notifications, turn_errors = jsonrpc_read_response(process.stdout, request_id=5)
+        turn_response, turn_notifications, turn_errors = jsonrpc_read_response(process.stdout, request_id=5, deadline=deadline)
         if turn_errors:
             return review_text, metadata, turn_errors
         if isinstance(turn_response, dict) and isinstance(turn_response.get("error"), dict):
@@ -8453,6 +8538,7 @@ def run_codex_app_live_review(
             normalized, normalization_notifications, normalization_wait_errors = jsonrpc_read_until_normalized_review(
                 process.stdout,
                 turn_id=normalization_turn_id,
+                deadline=deadline,
             )
             turn_notifications.extend(normalization_notifications)
             if normalization_wait_errors:
@@ -8462,10 +8548,7 @@ def run_codex_app_live_review(
         metadata["normalization_source"] = "turn-start-output-schema"
         return review_text, {**metadata, "normalized": normalized}, []
     finally:
-        try:
-            process.terminate()
-        except OSError:
-            pass
+        terminate_process_group(process)
 
 
 def shadow_adapter_slug(adapter: str) -> str:
@@ -8813,12 +8896,19 @@ def run_codex_app_review_authoritative_adapter(
                 relative=source_relative or str(raw_file),
             )
     else:
+        raw_timeout_seconds = engine_profile.get("timeout_seconds")
+        live_timeout_seconds = (
+            int(raw_timeout_seconds)
+            if raw_timeout_seconds is not None
+            else CODEX_APP_REVIEW_LIVE_TIMEOUT_SECONDS
+        )
         raw_text, live_metadata, normalization_errors = run_codex_app_live_review(
             app_server=str(app_server),
             thread_id=str(thread_id),
             reviewed_head=reviewed_head,
             thread_cwd=str(thread_cwd),
             prompt_text=instructions_path.read_text(encoding="utf-8"),
+            timeout_seconds=live_timeout_seconds,
         )
         normalized = live_metadata.get("normalized") if isinstance(live_metadata.get("normalized"), dict) else None
         if raw_text is None:
