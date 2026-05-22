@@ -148,6 +148,12 @@ CODEX_APP_REVIEW_SESSION_FILE_ENV = "LOOM_CODEX_APP_REVIEW_SESSION_FILE"
 CODEX_THREAD_ID_ENV = "CODEX_THREAD_ID"
 CODEX_SESSION_ID_ENV = "CODEX_SESSION_ID"
 CODEX_APP_REVIEW_NEW_THREAD_IDS = {"new", "new-thread", "start"}
+LOOM_RUNTIME_ENV_KEYS = (
+    "LOOM_SOURCE_REPO_ROOT",
+    "LOOM_INSTALLED_SKILLS_ROOT",
+    "LOOM_PACKAGE_SKILL_ID",
+    "LOOM_RUNTIME_SCENE",
+)
 DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS: int | None = None
 REVIEW_ENGINE_PROFILE_SCHEMA = "loom-review-engine-profile/v1"
 REVIEW_ENGINE_PROFILE_IDS = {"default", "high-risk", "spec-review", "repeated-blocker"}
@@ -4202,7 +4208,7 @@ def run_git(root: Path, args: list[str]) -> subprocess.CompletedProcess[str] | N
 
 def run_process(args: list[str], cwd: Path, *, timeout_seconds: float | None = None) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
-    for key in ("LOOM_SOURCE_REPO_ROOT", "LOOM_INSTALLED_SKILLS_ROOT", "LOOM_RUNTIME_SCENE"):
+    for key in LOOM_RUNTIME_ENV_KEYS:
         env.pop(key, None)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     return subprocess.run(
@@ -8221,12 +8227,17 @@ def run_codex_app_live_review(
     if command is None:
         return None, {}, [f"unsupported Codex App review endpoint: {app_server}"]
     try:
+        env = os.environ.copy()
+        for key in LOOM_RUNTIME_ENV_KEYS:
+            env.pop(key, None)
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
         process = subprocess.Popen(
             command,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            env=env,
         )
     except OSError as exc:
         return None, {}, [f"Codex App review endpoint is unavailable: {exc}"]
