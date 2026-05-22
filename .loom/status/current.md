@@ -6,7 +6,7 @@
 - Goal: 为 Governance Lint 增加 negative fixtures，覆盖 approval bypass、companion / interop 边界绕过、core hardcoding guard、高级 lint 声明缺口以及 stale evidence / head drift。
 - Scope: 新增 `governance-lint-negative-fixtures.json`、扩展 `loom_check.py` repo-local fixture 消费、同步 generated skills surface 和 installer version；不新增独立 lint CLI、不复制下游 guardian 实现、不把 repo-specific 规则写入 Loom core。
 - Execution Path: harness/governance-lint/negative-fixtures
-- Workspace Entry: /Users/mc/dev/Loom-work-851-governance-lint-negative-fixtures
+- Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-851.md
 - Review Entry: .loom/reviews/WI-851.json
 - Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py
