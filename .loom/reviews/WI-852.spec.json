@@ -1,0 +1,22 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-852",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-852 spec suite is approved for the status and merge-ready Governance Lint consumption work. The scope is limited to derived lint evidence exposure, deterministic status/merge-ready consumption, loom_check contract coverage, output contract updates, generated skills surface sync, and Work Item carriers; it explicitly excludes PR gate, controlled merge, closeout authority, repo-specific private lint, and unrelated parent lines.",
+  "reviewer": "codex",
+  "reviewed_head": "ed4b99068991143906bf051b32ac25060fee4252",
+  "reviewed_validation_summary": "Spec review consumed .loom/specs/WI-852/spec.md, plan.md, and implementation-contract.md after state-check and flow pre-review passed for WI-852. Implementation validation remains tracked by the WI-852 implementation review.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-852.md",
+    "recovery_entry": ".loom/progress/WI-852.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-852/spec.md",
+    "plan": ".loom/specs/WI-852/plan.md",
+    "implementation_contract": ".loom/specs/WI-852/implementation-contract.md"
+  }
+}

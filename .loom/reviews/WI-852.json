@@ -1,39 +1,25 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-852",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "2802acc9801b0697dd84067999afe3a128067f24",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
-      }
-    },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-852 implementation is approved for PR readiness: `loom_status` exposes `governance_lint` as status-surface derived evidence, `flow merge-ready` consumes the same stable lint envelope through a deterministic `governance-lint` step, blocking lint can override unrelated checkpoint fallback so merge risk is not hidden, advisory lint remains non-blocking, and status/merge-ready do not create a second authored truth source. The change preserves authored review records, checkpoint payloads, host merge, PR gate, controlled merge, and closeout authority.",
+  "reviewer": "codex",
+  "reviewed_head": "ed4b99068991143906bf051b32ac25060fee4252",
+  "reviewed_validation_summary": "py_compile_clean passed for source/generated loom_flow.py, loom_status.py, and loom_check.py; tools/skills_surface.py check passed; git diff --check passed; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main passed; state-check WI-852 passed; flow merge-ready WI-852 passed with governance_lint(surface=merge_ready) result=pass; loom_status WI-852 passed with governance_lint(surface=status) result=pass; carrier refresh dry-run/write refreshed only shadow hashes for status/current.md; shadow-parity passed; adopt verify passed; full python3 tools/loom_check.py . passed with 39 surfaces.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-852.md",
+    "recovery_entry": ".loom/progress/WI-852.md",
+    "status_surface": ".loom/status/current.md",
+    "spec_review": ".loom/reviews/WI-852.spec.json",
+    "implementation_review": ".loom/reviews/WI-852.json",
+    "status_governance_lint": "status surface exposes loom-governance-lint-status/v1",
+    "merge_ready_governance_lint": "flow merge-ready exposes loom-governance-lint-status/v1",
+    "negative_fixture": "stale derived status blocks status and merge-ready through governance_lint",
+    "authority_boundary": "lint evidence remains derived and does not replace authored review truth"
+  }
 }
