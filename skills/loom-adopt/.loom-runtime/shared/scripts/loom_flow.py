@@ -10689,6 +10689,7 @@ def approval_boundary_lint_status(
     status = review_approval.get("status")
     review_kind = review_approval.get("kind")
     reviewed_head = review_approval.get("reviewed_head")
+    stale_taxonomy = {"review_stale", "head_binding_drift", "validation_summary_drift"} & set(failure_taxonomy)
     base_result = {
         "schema_version": GOVERNANCE_LINT_RESULT_SCHEMA,
         "id": "authored_review_approval_boundary",
@@ -10715,7 +10716,27 @@ def approval_boundary_lint_status(
         },
         "fallback_to": "review record / approval gate",
     }
-    if status == "approved":
+    if stale_taxonomy:
+        blocking_results.append(
+            {
+                **base_result,
+                "id": "authored_review_evidence_freshness",
+                "kind": "evidence_stale",
+                "strength": "blocking",
+                "summary": "authored review approval exists but no longer binds to the current head or validation summary",
+                "mapped_failure": {
+                    "category": "stale",
+                    "kind": "evidence_stale",
+                },
+                "provenance": {
+                    **base_result["provenance"],
+                    "freshness": "stale",
+                },
+                "evidence_freshness": "stale",
+                "fallback_to": "validation / evidence refresh",
+            }
+        )
+    elif status == "approved":
         not_applicable_results.append(
             {
                 **base_result,

@@ -325,6 +325,17 @@ EXTERNAL_ORCHESTRATOR_FIXTURE_SCHEMA = "loom-external-orchestrator-interop-fixtu
 EXTERNAL_ORCHESTRATOR_CONFORMANCE_FIXTURE_SCHEMA = "loom-external-orchestrator-conformance-fixtures/v1"
 SAFE_SYNC_PLAN_FIXTURE_SCHEMA = "loom-safe-sync-plan-fixtures/v1"
 GITHUB_PROFILE_MATURITY_FIXTURE_SCHEMA = "loom-github-profile-maturity-fixtures/v1"
+GOVERNANCE_LINT_NEGATIVE_FIXTURE_SCHEMA = "loom-governance-lint-negative-fixtures/v1"
+GOVERNANCE_LINT_CORE_KINDS = {
+    "fact_chain_broken",
+    "approval_bypass",
+    "companion_boundary_bypass",
+    "host_binding_drift",
+    "evidence_stale",
+    "core_hardcoding_leak",
+}
+GOVERNANCE_LINT_STRENGTHS = {"blocking", "advisory", "repo_specific", "not_applicable"}
+GOVERNANCE_LINT_SURFACES = {"admission", "pre_review", "review", "build", "merge_ready", "closeout", "status"}
 REQUIRED_ADOPTION_DECISION_IDS = {
     "fr_work_item_layer",
     "closeout_reconciliation_read",
@@ -9175,6 +9186,52 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 elif controlled_missing_payload.get("result") != "block":
                     failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must block when loom-pr-merge-gate is not required"))
 
+                ci_bypass_target = tmp_root / "pr-gate-ci-success-bypass"
+                shutil.copytree(positive_target, ci_bypass_target)
+                ci_review_path = ci_bypass_target / ".loom/reviews/INIT-0001.json"
+                if ci_review_path.exists():
+                    ci_review_path.unlink()
+                git_add = run_command(root, ["git", "add", "-u", ".loom/reviews/INIT-0001.json"], cwd=ci_bypass_target)
+                git_commit = run_command(root, ["git", "commit", "-m", "remove authored review for ci bypass fixture"], cwd=ci_bypass_target)
+                if git_add.returncode != 0 or git_commit.returncode != 0:
+                    detail = git_add.stderr.strip() or git_add.stdout.strip() or git_commit.stderr.strip() or git_commit.stdout.strip() or "git fixture setup failed"
+                    failures.append(Failure("daily-execution-cli", f"`installed controlled-merge` CI bypass fixture setup failed: {detail}"))
+                else:
+                    ci_pr_fixture = pr_gate_fixture(ci_bypass_target, number=20)
+                    ci_controlled_payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                            "controlled-merge",
+                            "check",
+                            "--target",
+                            str(ci_bypass_target),
+                            "--item",
+                            "INIT-0001",
+                            "--pr",
+                            "20",
+                            "--pr-payload-file",
+                            ci_pr_fixture,
+                            "--branch-protection-file",
+                            protection_fixture,
+                            "--status-checks-file",
+                            status_fixture,
+                        ],
+                    )
+                    if error:
+                        failures.append(Failure("daily-execution-cli", f"`installed controlled-merge` CI bypass failed: {error}"))
+                    elif ci_controlled_payload.get("result") != "block":
+                        failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must block CI-success-only approval bypass"))
+                    else:
+                        pr_gate = ci_controlled_payload.get("pr_gate")
+                        governance_lint = pr_gate.get("governance_lint") if isinstance(pr_gate, dict) else None
+                        approval_boundary = pr_gate.get("approval_boundary") if isinstance(pr_gate, dict) else None
+                        if not isinstance(governance_lint, dict) or governance_lint.get("result") != "block":
+                            failures.append(Failure("daily-execution-cli", "`installed controlled-merge` CI bypass must expose blocking governance lint"))
+                        if not isinstance(approval_boundary, dict) or approval_boundary.get("ci_success_satisfies_approval") is not False:
+                            failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must not treat CI success as semantic approval"))
+
                 ruleset_fixture = write_json_fixture(
                     positive_target,
                     ".loom/tmp/pr-gate/branch-ruleset.json",
@@ -9262,6 +9319,59 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         failures.append(Failure("daily-execution-cli", f"`installed pr-gate` missing review failed: {error}"))
                     elif missing_review_payload.get("result") != "block" or "review_missing" not in taxonomy:
                         failures.append(Failure("daily-execution-cli", "`installed pr-gate` must block when authored review is missing"))
+
+                pr_body_bypass_target = tmp_root / "pr-gate-pr-body-bypass"
+                shutil.copytree(positive_target, pr_body_bypass_target)
+                pr_body_review_path = pr_body_bypass_target / ".loom/reviews/INIT-0001.json"
+                if pr_body_review_path.exists():
+                    pr_body_review_path.unlink()
+                git_add = run_command(root, ["git", "add", "-u", ".loom/reviews/INIT-0001.json"], cwd=pr_body_bypass_target)
+                git_commit = run_command(root, ["git", "commit", "-m", "remove authored review for pr body bypass fixture"], cwd=pr_body_bypass_target)
+                if git_add.returncode != 0 or git_commit.returncode != 0:
+                    failures.append(Failure("daily-execution-cli", "`installed pr-gate` PR body bypass fixture setup failed"))
+                else:
+                    pr_body_fixture = write_json_fixture(
+                        pr_body_bypass_target,
+                        ".loom/tmp/pr-gate/pr-body-approval.json",
+                        {
+                            "number": 21,
+                            "state": "OPEN",
+                            "isDraft": False,
+                            "headRefName": "feature/pr-body-bypass",
+                            "baseRefName": "main",
+                            "headRefOid": current_head(pr_body_bypass_target),
+                            "body": "## Related Work\n\n- Loom Work Item: INIT-0001\n\n## Review\n\nApproved by PR body summary.\n",
+                            "url": "https://github.example/owner/repo/pull/21",
+                        },
+                    )
+                    pr_body_payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                            "pr-gate",
+                            "check",
+                            "--target",
+                            str(pr_body_bypass_target),
+                            "--item",
+                            "INIT-0001",
+                            "--pr",
+                            "21",
+                            "--pr-payload-file",
+                            pr_body_fixture,
+                        ],
+                    )
+                    if error:
+                        failures.append(Failure("daily-execution-cli", f"`installed pr-gate` PR body bypass failed: {error}"))
+                    elif pr_body_payload.get("result") != "block":
+                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` must block PR-body-only approval bypass"))
+                    else:
+                        approval_boundary = pr_body_payload.get("approval_boundary")
+                        governance_lint = pr_body_payload.get("governance_lint")
+                        if not isinstance(approval_boundary, dict) or approval_boundary.get("pr_body_summary_satisfies_approval") is not False:
+                            failures.append(Failure("daily-execution-cli", "`installed pr-gate` must not treat PR body approval text as semantic approval"))
+                        if not isinstance(governance_lint, dict) or governance_lint.get("result") != "block":
+                            failures.append(Failure("daily-execution-cli", "`installed pr-gate` PR body bypass must expose blocking governance lint"))
 
                 raw_only_target = tmp_root / "pr-gate-raw-only"
                 shutil.copytree(positive_target, raw_only_target)
@@ -9394,6 +9504,43 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         failures.append(Failure("daily-execution-cli", "`installed pr-gate` must not mark spec_review records as implementation approval"))
                     elif not isinstance(governance_lint, dict) or governance_lint.get("result") != "block":
                         failures.append(Failure("daily-execution-cli", "`installed pr-gate` spec_review case must expose blocking approval-boundary governance lint"))
+
+                stale_review_target = tmp_root / "pr-gate-stale-review"
+                shutil.copytree(positive_target, stale_review_target)
+                readme_path = stale_review_target / "README.md"
+                readme_path.write_text(readme_path.read_text(encoding="utf-8") + "\nStale review fixture change.\n", encoding="utf-8")
+                git_add = run_command(root, ["git", "add", "README.md"], cwd=stale_review_target)
+                git_commit = run_command(root, ["git", "commit", "-m", "change implementation after review fixture"], cwd=stale_review_target)
+                if git_add.returncode != 0 or git_commit.returncode != 0:
+                    detail = git_add.stderr.strip() or git_add.stdout.strip() or git_commit.stderr.strip() or git_commit.stdout.strip() or "git fixture setup failed"
+                    failures.append(Failure("daily-execution-cli", f"`installed pr-gate` stale review fixture setup failed: {detail}"))
+                else:
+                    stale_pr_fixture = pr_gate_fixture(stale_review_target, number=22)
+                    stale_payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                            "pr-gate",
+                            "check",
+                            "--target",
+                            str(stale_review_target),
+                            "--item",
+                            "INIT-0001",
+                            "--pr",
+                            "22",
+                            "--pr-payload-file",
+                            stale_pr_fixture,
+                        ],
+                    )
+                    taxonomy = stale_payload.get("failure_taxonomy") if isinstance(stale_payload, dict) else []
+                    governance_lint = stale_payload.get("governance_lint") if isinstance(stale_payload, dict) else {}
+                    if error:
+                        failures.append(Failure("daily-execution-cli", f"`installed pr-gate` stale review failed: {error}"))
+                    elif stale_payload.get("result") != "block" or not ({"review_stale", "head_binding_drift"} & set(taxonomy)):
+                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` must block stale review/head drift evidence"))
+                    elif not isinstance(governance_lint, dict) or governance_lint.get("result") != "block":
+                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` stale review case must expose blocking governance lint"))
 
                 payload, error = load_command_json(
                     root,
@@ -17178,6 +17325,187 @@ def check_core_hardcoding_guard(root: Path) -> list[Failure]:
     return failures
 
 
+def check_governance_lint_negative_fixture_contract(root: Path) -> list[Failure]:
+    category = "governance-lint-negative-fixtures"
+    failures: list[Failure] = []
+    fixture_path = root / "docs" / "evidence" / "fixtures" / "governance-lint-negative-fixtures.json"
+    try:
+        fixture_payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return [Failure(category, "missing `docs/evidence/fixtures/governance-lint-negative-fixtures.json`")]
+    except json.JSONDecodeError as exc:
+        return [Failure(category, f"`governance-lint-negative-fixtures.json` is invalid JSON: {exc}")]
+    if fixture_payload.get("schema_version") != GOVERNANCE_LINT_NEGATIVE_FIXTURE_SCHEMA:
+        failures.append(Failure(category, f"`governance-lint-negative-fixtures.json` schema_version must be `{GOVERNANCE_LINT_NEGATIVE_FIXTURE_SCHEMA}`"))
+    fixtures = fixture_payload.get("fixtures")
+    if not isinstance(fixtures, list) or not fixtures:
+        failures.append(Failure(category, "`governance-lint-negative-fixtures.json` must expose non-empty fixtures"))
+        return failures
+    required_cases = {
+        "raw-review-approval-bypass",
+        "pr-body-approval-bypass",
+        "ci-success-approval-bypass",
+        "repo-companion-bypass",
+        "repo-interop-locator-misuse",
+        "downstream-guardian-hardcode",
+        "advanced-architecture-lint-declaration-missing",
+        "stale-evidence-head-drift",
+    }
+    seen_cases: set[str] = set()
+    for index, fixture in enumerate(fixtures):
+        if not isinstance(fixture, dict):
+            failures.append(Failure(category, f"fixture #{index + 1} must be an object"))
+            continue
+        name = fixture.get("name")
+        if isinstance(name, str):
+            seen_cases.add(name)
+        expected = fixture.get("expected")
+        if not isinstance(expected, dict):
+            failures.append(Failure(category, f"`{name or index}` must include expected taxonomy"))
+            continue
+        kind = expected.get("kind")
+        strength = expected.get("strength")
+        surface = expected.get("surface")
+        taxonomy = expected.get("taxonomy")
+        if kind not in GOVERNANCE_LINT_CORE_KINDS:
+            failures.append(Failure(category, f"`{name or index}` expected.kind must be a core Governance Lint kind"))
+        if strength not in GOVERNANCE_LINT_STRENGTHS:
+            failures.append(Failure(category, f"`{name or index}` expected.strength must be a Governance Lint strength"))
+        if surface not in GOVERNANCE_LINT_SURFACES:
+            failures.append(Failure(category, f"`{name or index}` expected.surface must be a Governance Lint surface"))
+        if not isinstance(taxonomy, list) or not taxonomy or not all(isinstance(entry, str) and entry.strip() for entry in taxonomy):
+            failures.append(Failure(category, f"`{name or index}` expected.taxonomy must be a non-empty string list"))
+        if fixture.get("source_mode") != "synthetic":
+            failures.append(Failure(category, f"`{name or index}` must use synthetic fixture input, not a real downstream repository"))
+        if fixture.get("no_temp_truth_carrier") is not True:
+            failures.append(Failure(category, f"`{name or index}` must declare no temporary authored truth carrier"))
+        consumed_by = fixture.get("consumed_by")
+        if not isinstance(consumed_by, list) or not consumed_by:
+            failures.append(Failure(category, f"`{name or index}` must declare a repo-local check or test entry"))
+
+    missing_cases = sorted(required_cases - seen_cases)
+    if missing_cases:
+        failures.append(Failure(category, "Governance Lint negative fixtures missing required cases: " + ", ".join(missing_cases)))
+
+    advanced_path = root / "docs" / "evidence" / "fixtures" / "governance-lint-advanced-fixtures.json"
+    try:
+        advanced_payload = json.loads(advanced_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        failures.append(Failure(category, f"`governance-lint-advanced-fixtures.json` must be readable for advanced lint negatives: {exc}"))
+        advanced_payload = {}
+    blocked_advanced = advanced_payload.get("blocked_declarations") if isinstance(advanced_payload, dict) else None
+    blocked_kinds = {entry.get("kind") for entry in blocked_advanced if isinstance(entry, dict)} if isinstance(blocked_advanced, list) else set()
+    if not {"unsafe_locator", "wrong_schema", "loom_owned_repo_rule"}.issubset(blocked_kinds):
+        failures.append(Failure(category, "`governance-lint-advanced-fixtures.json` must cover unsafe locator, wrong schema, and Loom-owned repo rule negatives"))
+
+    hardcoding_path = root / "docs" / "evidence" / "fixtures" / "core-hardcoding-guard-fixtures.json"
+    try:
+        hardcoding_payload = json.loads(hardcoding_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        failures.append(Failure(category, f"`core-hardcoding-guard-fixtures.json` must be readable for hardcoding negatives: {exc}"))
+        hardcoding_payload = {}
+    blocked_examples = hardcoding_payload.get("blocked_examples") if isinstance(hardcoding_payload, dict) else None
+    blocked_results = {entry.get("expected_result") for entry in blocked_examples if isinstance(entry, dict)} if isinstance(blocked_examples, list) else set()
+    if not {"core_hardcoding_leak", "companion_boundary_bypass"}.issubset(blocked_results):
+        failures.append(Failure(category, "`core-hardcoding-guard-fixtures.json` must cover core hardcoding and companion-boundary bypass outcomes"))
+
+    with tempfile.TemporaryDirectory(prefix="loom-governance-lint-negative-") as tmp:
+        target = Path(tmp) / "target"
+        companion = target / ".loom" / "companion"
+        companion.mkdir(parents=True)
+
+        def write_json(path: Path, payload: object) -> None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+        write_json(
+            companion / "manifest.json",
+            {
+                "schema_version": "loom-repo-companion-manifest/v1",
+                "companion_entry": ".loom/companion/README.md",
+                "repo_interface": ".loom/companion/repo-interface.json",
+            },
+        )
+        (companion / "README.md").write_text("# Companion\n", encoding="utf-8")
+        write_json(companion / "lint" / "boundary.json", {"schema_version": "loom-governance-lint-result/v1"})
+        write_json(
+            companion / "repo-interface.json",
+            {
+                "schema_version": "loom-repo-interface/v2",
+                "companion_entry": ".loom/companion/README.md",
+                "repo_specific_requirements": {"review": [], "merge_ready": [], "closeout": []},
+                "specialized_gates": [],
+                "metadata_contract": {
+                    "fields": [
+                        {
+                            "id": "review_verdict",
+                            "summary": "Forbidden authored truth field in companion metadata.",
+                            "applicability_locator": ".loom/companion/README.md",
+                            "authority_locator": ".loom/companion/README.md",
+                            "enforcement": "blocking",
+                        }
+                    ]
+                },
+                "advanced_lint_locators": [
+                    {
+                        "id": "missing-architecture-boundary",
+                        "summary": "Required advanced lint declaration points to a missing result.",
+                        "lint_type": "architecture_boundary",
+                        "locator": ".loom/companion/lint/missing-boundary.json",
+                        "owner": "repo",
+                        "requirement": "required",
+                        "surface": "merge_ready",
+                        "fallback_to": "manual_repair",
+                        "result_envelope_schema": "loom-governance-lint-result/v1",
+                    }
+                ],
+            },
+        )
+        surface = build_governance_surface(target)
+        repo_interface = surface.get("repo_interface") if isinstance(surface, dict) else {}
+        missing_inputs = repo_interface.get("missing_inputs") if isinstance(repo_interface, dict) else []
+        serialized_missing = "\n".join(str(item) for item in missing_inputs)
+        if not isinstance(repo_interface, dict) or repo_interface.get("availability") != "incomplete":
+            failures.append(Failure(category, "companion boundary and required advanced lint negatives must make repo_interface incomplete"))
+        if "review_verdict" not in serialized_missing:
+            failures.append(Failure(category, "companion boundary negative must reject authored review verdict fields in repo-interface"))
+        if "advanced_lint_locators[0] locator points to missing path" not in serialized_missing:
+            failures.append(Failure(category, "advanced lint negative must fail closed when a required declaration result is missing"))
+
+        write_json(
+            companion / "interop.json",
+            {
+                "schema_version": "loom-repo-interop/v1",
+                "host_adapters": [
+                    {
+                        "id": "unsafe-retained-host-result",
+                        "summary": "Unsafe retained host result locator must not escape the repository.",
+                        "surfaces": ["merge_ready"],
+                        "locator": "../private/host-result.json",
+                        "owner": "host-adapter",
+                        "requirement": "required",
+                        "fallback_to": "host-adapter",
+                    }
+                ],
+                "repo_native_carriers": [],
+                "shadow_surfaces": {
+                    "admission": {"summary": "Admission", "loom_locator": ".loom/companion/README.md", "repo_locator": ".loom/companion/README.md"},
+                    "review": {"summary": "Review", "loom_locator": ".loom/companion/README.md", "repo_locator": ".loom/companion/README.md"},
+                    "merge_ready": {"summary": "Merge ready", "loom_locator": ".loom/companion/README.md", "repo_locator": ".loom/companion/README.md"},
+                    "closeout": {"summary": "Closeout", "loom_locator": ".loom/companion/README.md", "repo_locator": ".loom/companion/README.md"},
+                },
+            },
+        )
+        surface = build_governance_surface(target)
+        repo_interop = surface.get("repo_interop") if isinstance(surface, dict) else {}
+        interop_missing = repo_interop.get("missing_inputs") if isinstance(repo_interop, dict) else []
+        if not isinstance(repo_interop, dict) or repo_interop.get("availability") != "incomplete":
+            failures.append(Failure(category, "repo interop locator misuse negative must make repo_interop incomplete"))
+        if not any("unsafe-retained-host-result" in str(item) and "locator" in str(item) for item in interop_missing):
+            failures.append(Failure(category, "repo interop locator misuse negative must report the unsafe retained host result locator"))
+    return failures
+
+
 def check_safe_sync_plan_fixture_contract(root: Path) -> list[Failure]:
     category = "safe-sync-plan-fixtures"
     failures: list[Failure] = []
@@ -17381,6 +17709,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_build_execution_contract(root))
     failures.extend(check_story_intake_contract(root))
     failures.extend(check_core_hardcoding_guard(root))
+    failures.extend(check_governance_lint_negative_fixture_contract(root))
     failures.extend(check_safe_sync_plan_fixture_contract(root))
     failures.extend(check_github_profile_maturity_fixture_contract(root))
     failures.extend(check_markdown_links(root))
@@ -17388,7 +17717,7 @@ def collect_failures(root: Path) -> list[Failure]:
 
 
 def print_report(root: Path, failures: list[Failure]) -> None:
-    categories_checked = 38
+    categories_checked = 39
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"checked {categories_checked} surfaces")

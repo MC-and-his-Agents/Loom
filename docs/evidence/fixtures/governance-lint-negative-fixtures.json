@@ -1,0 +1,155 @@
+{
+  "schema_version": "loom-governance-lint-negative-fixtures/v1",
+  "purpose": "Negative Governance Lint fixtures for bypass cases that must fail closed without creating a second authored truth source.",
+  "fixtures": [
+    {
+      "name": "raw-review-approval-bypass",
+      "source_mode": "synthetic",
+      "description": "Raw runtime review output says allow while the authored review record is absent.",
+      "consumed_by": [
+        "tools/loom_check.py daily-execution-cli installed pr-gate raw evidence bypass"
+      ],
+      "expected": {
+        "kind": "approval_bypass",
+        "strength": "blocking",
+        "surface": "merge_ready",
+        "taxonomy": [
+          "raw_evidence_bypass",
+          "review_missing"
+        ],
+        "fallback_to": "review record / approval gate"
+      },
+      "no_temp_truth_carrier": true
+    },
+    {
+      "name": "pr-body-approval-bypass",
+      "source_mode": "synthetic",
+      "description": "PR body text says approved while the authored review record is absent.",
+      "consumed_by": [
+        "tools/loom_check.py daily-execution-cli installed pr-gate PR body bypass"
+      ],
+      "expected": {
+        "kind": "approval_bypass",
+        "strength": "blocking",
+        "surface": "merge_ready",
+        "taxonomy": [
+          "review_missing"
+        ],
+        "fallback_to": "review record / approval gate"
+      },
+      "no_temp_truth_carrier": true
+    },
+    {
+      "name": "ci-success-approval-bypass",
+      "source_mode": "synthetic",
+      "description": "All required status checks are successful while authored semantic approval is absent.",
+      "consumed_by": [
+        "tools/loom_check.py daily-execution-cli installed controlled-merge CI bypass"
+      ],
+      "expected": {
+        "kind": "approval_bypass",
+        "strength": "blocking",
+        "surface": "merge_ready",
+        "taxonomy": [
+          "review_missing"
+        ],
+        "fallback_to": "review record / approval gate"
+      },
+      "no_temp_truth_carrier": true
+    },
+    {
+      "name": "repo-companion-bypass",
+      "source_mode": "synthetic",
+      "description": "repo-interface tries to declare authored review verdict as companion metadata.",
+      "consumed_by": [
+        "tools/loom_check.py governance-lint-negative-fixtures synthetic repo-interface fixture",
+        "docs/evidence/fixtures/core-hardcoding-guard-fixtures.json"
+      ],
+      "expected": {
+        "kind": "companion_boundary_bypass",
+        "strength": "blocking",
+        "surface": "pre_review",
+        "taxonomy": [
+          "companion_boundary_bypass"
+        ],
+        "fallback_to": "repo companion / interop boundary repair"
+      },
+      "no_temp_truth_carrier": true
+    },
+    {
+      "name": "repo-interop-locator-misuse",
+      "source_mode": "synthetic",
+      "description": "repo interop retained host result locator escapes the repository boundary.",
+      "consumed_by": [
+        "tools/loom_check.py governance-lint-negative-fixtures synthetic repo-interop fixture"
+      ],
+      "expected": {
+        "kind": "companion_boundary_bypass",
+        "strength": "blocking",
+        "surface": "merge_ready",
+        "taxonomy": [
+          "companion_boundary_bypass"
+        ],
+        "fallback_to": "repo companion / interop boundary repair"
+      },
+      "no_temp_truth_carrier": true
+    },
+    {
+      "name": "downstream-guardian-hardcode",
+      "source_mode": "synthetic",
+      "description": "A downstream guardian or review path is promoted as a Loom core default.",
+      "consumed_by": [
+        "tools/loom_check.py core-hardcoding-guard",
+        "docs/evidence/fixtures/core-hardcoding-guard-fixtures.json"
+      ],
+      "expected": {
+        "kind": "core_hardcoding_leak",
+        "strength": "blocking",
+        "surface": "pre_review",
+        "taxonomy": [
+          "core_hardcoding_leak"
+        ],
+        "fallback_to": "adoption / companion boundary repair"
+      },
+      "no_temp_truth_carrier": true
+    },
+    {
+      "name": "advanced-architecture-lint-declaration-missing",
+      "source_mode": "synthetic",
+      "description": "A required advanced architecture lint declaration points to missing or invalid derived evidence.",
+      "consumed_by": [
+        "tools/loom_check.py governance-lint-negative-fixtures synthetic advanced_lint_locators fixture",
+        "docs/evidence/fixtures/governance-lint-advanced-fixtures.json"
+      ],
+      "expected": {
+        "kind": "companion_boundary_bypass",
+        "strength": "blocking",
+        "surface": "merge_ready",
+        "taxonomy": [
+          "companion_boundary_bypass"
+        ],
+        "fallback_to": "manual_repair"
+      },
+      "no_temp_truth_carrier": true
+    },
+    {
+      "name": "stale-evidence-head-drift",
+      "source_mode": "synthetic",
+      "description": "Authored review approval exists but no longer binds to the current implementation head.",
+      "consumed_by": [
+        "tools/loom_check.py daily-execution-cli installed pr-gate stale review fixture"
+      ],
+      "expected": {
+        "kind": "evidence_stale",
+        "strength": "blocking",
+        "surface": "merge_ready",
+        "taxonomy": [
+          "review_stale",
+          "head_binding_drift"
+        ],
+        "fallback_to": "validation / evidence refresh"
+      },
+      "no_temp_truth_carrier": true
+    }
+  ]
+}
