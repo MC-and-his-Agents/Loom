@@ -9068,6 +9068,7 @@ def build_default_review_prompt(
             "- 你不是 merge gate；不要输出 safe_to_merge、guardian verdict 或宿主按钮决策。",
             "- 你的输出只是 review evidence；最终正式真相会被回写到单一 review record。",
             "- 若阻断项成立，decision 设为 `block`；若当前输入不足以形成正式结论，decision 设为 `fallback`。",
+            "- 运行 Python 验证命令时必须设置 `PYTHONDONTWRITEBYTECODE=1`；如果验证过程产生 `__pycache__` 或 `.pyc`，先删除这些运行副作用并重跑对应检查，不要把 reviewer 自己产生的缓存污染当作实现缺陷。",
             *(
                 [
                     "- 当前任务是 spec review；必须优先判断 formal spec 是否完整、边界是否清晰、接受条件是否足以支撑后续实现 review。",
