@@ -405,7 +405,16 @@ def run_launcher_smoke(package_root: Path, skill_id: str) -> list[str]:
     args = [sys.executable, str(launcher), "runtime-state", "--target", str(REPO_ROOT)]
     if skill_id not in {"loom-init", "loom-adopt"}:
         args.extend(["--item", "INIT-0001"])
-    result = subprocess.run(args, cwd=REPO_ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    env = os.environ.copy()
+    for key in (
+        "LOOM_INSTALLED_SKILLS_ROOT",
+        "LOOM_PACKAGE_SKILL_ID",
+        "LOOM_RUNTIME_SCENE",
+        "LOOM_SOURCE_REPO_ROOT",
+    ):
+        env.pop(key, None)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    result = subprocess.run(args, cwd=REPO_ROOT, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode != 0:
         return [f"{skill_id}: launcher runtime-state failed: {(result.stderr or result.stdout).strip()}"]
     try:
