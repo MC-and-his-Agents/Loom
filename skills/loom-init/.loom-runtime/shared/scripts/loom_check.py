@@ -30,6 +30,7 @@ from runtime_paths import repo_local_root
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 30.0
 ADOPT_VERIFY_TIMEOUT_SECONDS = 120.0
 BOOTSTRAP_TIMEOUT_SECONDS = 120.0
+SHADOW_PARITY_TIMEOUT_SECONDS = 120.0
 
 TOP_LEVEL_DIRS = (
     "docs",
@@ -684,6 +685,8 @@ def command_timeout_seconds(args: list[str], requested_timeout_seconds: float | 
         return BOOTSTRAP_TIMEOUT_SECONDS
     if "adopt" in normalized and "verify" in normalized:
         return ADOPT_VERIFY_TIMEOUT_SECONDS
+    if "shadow-parity" in normalized:
+        return SHADOW_PARITY_TIMEOUT_SECONDS
     return DEFAULT_COMMAND_TIMEOUT_SECONDS
 
 
@@ -693,6 +696,8 @@ def check_command_timeout_budget() -> list[Failure]:
         failures.append(Failure("command-timeout-budget", "bootstrap commands must use the extended loom_check timeout budget"))
     if command_timeout_seconds(["python3", "tools/loom_flow.py", "adopt", "verify"], None) != ADOPT_VERIFY_TIMEOUT_SECONDS:
         failures.append(Failure("command-timeout-budget", "adopt verify commands must keep the extended loom_check timeout budget"))
+    if command_timeout_seconds(["python3", "tools/loom_flow.py", "shadow-parity"], None) != SHADOW_PARITY_TIMEOUT_SECONDS:
+        failures.append(Failure("command-timeout-budget", "shadow-parity commands must keep the extended loom_check timeout budget"))
     if command_timeout_seconds(["python3", "tools/loom_flow.py", "flow", "resume"], None) != DEFAULT_COMMAND_TIMEOUT_SECONDS:
         failures.append(Failure("command-timeout-budget", "ordinary commands must keep the default loom_check timeout budget"))
     if command_timeout_seconds(["python3", "tools/loom_init.py", "bootstrap"], 5.0) != 5.0:

@@ -12,12 +12,12 @@
 - Validation Entry: py_compile; skills_surface check; loom_check; live Codex App review run; review record; merge-ready/review gate
 - Closing Condition: #863/#864 evidence accepted, PR gates pass, controlled merge completes, main syncs, and issue closeout records proof.
 - Current Checkpoint: merge
-- Current Stop: Live Codex App review on 1af91b6 passed with selected_adapter=loom/codex-app-review, selection_source=codex-app-host-default, thread_cwd_matches_target_root=true, fallback_reason=null, and authority_boundary=normalized review_record_input only. The formal review record was refreshed from normalized review_record_input; adopt verify and shadow-parity passed. A flow review rerun before commit fell back only on expected dirty review-record purity.
-- Next Step: Commit review record and progress, then rerun clean flow review, loom_check, merge-ready, checkpoint merge, and PR gate consumption for PR #879.
+- Current Stop: Post-merge loom_check stability checkpoint passed: shadow-parity now has an explicit 120s loom_check command budget across source, shared runtime, and generated skill runtime copies; generated skills surface is synchronized; full PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py . passed, checked 39 surfaces. Temporary loom-check/loom-pycompile/cache directories from this round were cleaned.
+- Next Step: Commit the post-merge loom_check stability fix, then resume PR #879 merge/closeout mainline.
 - Blockers: None
-- Latest Validation Summary: Self-check before live review passed: git diff --check, tools/py_compile_clean.py for shared loom_flow/loom_check scripts, skills_surface check, version_surface_check, .loom/bin/loom_init.py verify, fact-chain, flow review, and PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py . -> OK, checked 37 surfaces. Live Codex App review on 1af91b6 passed using stdio://, new-thread, formal worktree cwd, timeout_seconds=900, and normalized turn-start output; .loom/reviews/WI-863.json now consumes the App evidence locators and normalized findings.
-- Recovery Boundary: Scope remains #863/#864 review host proof discovery, adapter selection, diagnostic, fixture, live review evidence, review record, and merge-ready/review gate consumption.
-- Current Lane: record-gate-consumption
+- Latest Validation Summary: Post-merge stability self-check passed: tools/py_compile_clean.py for shared loom_flow/loom_check scripts, PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check, python3 tools/version_surface_check.py, git diff --check, root .loom/bin shadow-parity, root .loom/bin adopt verify, and full PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py . -> OK, checked 39 surfaces.
+- Recovery Boundary: Current checkpoint is post-merge loom_check and generated skills surface stability only. Existing Codex App host proof and review record remain authoritative; do not expand #746 adapter migration, remove fallback, or promote raw App output to authored truth.
+- Current Lane: post-merge-loom-check-stability
 
 ## Runtime Evidence
 
