@@ -24,6 +24,8 @@
   - `checkpoint build` 的结果、摘要、阻断项与回退去向
 - `merge_checkpoint`
   - `checkpoint merge` 的结果、摘要、阻断项、回退去向，以及可读的 PR 模板检查结果
+- `governance_lint`
+  - `loom-governance-lint-status/v1` 派生证据；只消费 fact-chain 与 repo companion 的 blocking/advisory lint result，不替代 authored review record、merge checkpoint 或 host merge truth
 - `gate_chain`
   - `spec_gate`、`build_gate`、`review_gate`、`merge_gate` 的当前可消费状态
 - `github_controlled_merge`
@@ -35,6 +37,6 @@
 - `latest_validation_summary`
   - 最近可用验证摘要
 - `steps`
-  - 固定按 `runtime-state -> fact-chain -> state-check -> runtime-evidence -> checkpoint-build -> checkpoint-merge` 顺序列出
+  - 固定按 `runtime-state -> fact-chain -> state-check -> runtime-evidence -> checkpoint-build -> checkpoint-merge -> governance-lint` 顺序列出
 
 这个 skill 只给出 `merge gate` 摘要，不替代宿主平台 merge，也不直接执行平台动作。

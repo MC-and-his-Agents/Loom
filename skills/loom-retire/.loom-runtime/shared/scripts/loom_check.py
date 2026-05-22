@@ -5879,10 +5879,18 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             if payload.get("command") != "status":
                 failures.append(Failure("daily-execution-cli", "`loom_status` must report `command: status`"))
             governance_status = payload.get("governance_status")
+            governance_lint = payload.get("governance_lint")
             execution_budget = payload.get("execution_budget")
             execution_budget_risk = payload.get("execution_budget_risk")
             execution_failure = payload.get("execution_failure")
             retry_evidence = payload.get("retry_evidence")
+            require_governance_lint_status_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`loom_status`.governance_lint",
+                payload=governance_lint,
+                expected_surface="status",
+            )
             if not isinstance(payload.get("goal_execution_contract"), dict):
                 failures.append(Failure("daily-execution-cli", "`loom_status` must include goal_execution_contract"))
             if not isinstance(payload.get("goal_readiness"), dict):
@@ -6631,13 +6639,24 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 "runtime-evidence",
                 "checkpoint-build",
                 "checkpoint-merge",
+                "governance-lint",
             ]:
                 failures.append(
                     Failure(
                         "daily-execution-cli",
-                        "`flow merge-ready` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-build, and checkpoint-merge in order",
+                        "`flow merge-ready` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-build, checkpoint-merge, and governance-lint in order",
                     )
                 )
+            governance_step = next((step for step in steps if isinstance(step, dict) and step.get("name") == "governance-lint"), None)
+            if not isinstance(governance_step, dict) or "governance_lint" not in governance_step:
+                failures.append(Failure("daily-execution-cli", "`flow merge-ready` governance-lint step must embed governance_lint evidence"))
+            require_governance_lint_status_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`flow merge-ready`.governance_lint",
+                payload=payload.get("governance_lint"),
+                expected_surface="merge_ready",
+            )
             state_check = payload.get("state_check")
             if isinstance(state_check, dict):
                 if state_check.get("result") not in {"pass", "block"}:
@@ -6796,6 +6815,10 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 ["python3", "tools/loom_flow.py", "flow", "pre-review", "--target", str(stale_target), "--item", "INIT-0001"],
             ),
             (
+                "stale status flow merge-ready",
+                ["python3", "tools/loom_flow.py", "flow", "merge-ready", "--target", str(stale_target), "--item", "INIT-0001"],
+            ),
+            (
                 "stale status control",
                 ["python3", "tools/loom_status.py", "--target", str(stale_target), "--item", "INIT-0001"],
             ),
@@ -6826,6 +6849,28 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 )
                 if not isinstance(governance_lint, dict) or governance_lint.get("result") != "block":
                     failures.append(Failure("daily-execution-cli", f"`{label}` governance_lint must block stale derived status before review"))
+            if label.endswith("merge-ready"):
+                governance_lint = payload.get("governance_lint")
+                require_governance_lint_status_payload(
+                    failures,
+                    category="daily-execution-cli",
+                    context=f"`{label}`.governance_lint",
+                    payload=governance_lint,
+                    expected_surface="merge_ready",
+                )
+                if not isinstance(governance_lint, dict) or governance_lint.get("result") != "block":
+                    failures.append(Failure("daily-execution-cli", f"`{label}` governance_lint must block stale derived status before merge-ready"))
+            if label.endswith("control"):
+                governance_lint = payload.get("governance_lint")
+                require_governance_lint_status_payload(
+                    failures,
+                    category="daily-execution-cli",
+                    context=f"`{label}`.governance_lint",
+                    payload=governance_lint,
+                    expected_surface="status",
+                )
+                if not isinstance(governance_lint, dict) or governance_lint.get("result") != "block":
+                    failures.append(Failure("daily-execution-cli", f"`{label}` governance_lint must block stale derived status in status surface"))
 
         mirror_target = Path(tmp) / "host-mirror-overwrite"
         shutil.copytree(example_target, mirror_target)
@@ -9777,6 +9822,15 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     merge_checkpoint = merge_ready_payload.get("merge_checkpoint")
                     if not isinstance(merge_checkpoint, dict) or merge_checkpoint.get("result") != "pass":
                         failures.append(Failure("daily-execution-cli", "`installed flow merge-ready` must expose `merge_checkpoint.result = pass`"))
+                    require_governance_lint_status_payload(
+                        failures,
+                        category="daily-execution-cli",
+                        context="`installed flow merge-ready`.governance_lint",
+                        payload=merge_ready_payload.get("governance_lint"),
+                        expected_surface="merge_ready",
+                    )
+                    if merge_ready_payload.get("governance_lint", {}).get("result") != "pass":
+                        failures.append(Failure("daily-execution-cli", "`installed flow merge-ready` governance_lint must pass for the positive chain"))
 
                 checkpoint_merge_payload, error = load_command_json(
                     root,

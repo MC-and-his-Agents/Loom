@@ -16360,6 +16360,11 @@ def handle_flow(args: argparse.Namespace) -> int:
                 target_root=target_root,
                 surface="merge_ready",
             )
+            governance_lint = flow_governance_lint_status(
+                context,
+                surface="merge_ready",
+                repo_specific_requirements=repo_specific_requirements,
+            )
             steps.extend(
                 [
                     {
@@ -16375,6 +16380,14 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "summary": merge_payload["summary"],
                         "missing_inputs": merge_payload["missing_inputs"],
                         "fallback_to": merge_payload["fallback_to"],
+                    },
+                    {
+                        "name": "governance-lint",
+                        "result": governance_lint["result"],
+                        "summary": governance_lint["result_summary"],
+                        "missing_inputs": governance_lint_missing_inputs(governance_lint),
+                        "fallback_to": governance_lint_fallback(governance_lint),
+                        "governance_lint": governance_lint,
                     },
                 ]
             )
@@ -16503,6 +16516,13 @@ def handle_flow(args: argparse.Namespace) -> int:
         if step_result == "block" and result == "pass":
             result = "block"
             fallback_to = step.get("fallback_to")
+    if (
+        args.operation in {"pre-review", "merge-ready"}
+        and isinstance(governance_lint, dict)
+        and governance_lint.get("result") == "block"
+    ):
+        result = "block"
+        fallback_to = governance_lint_fallback(governance_lint) or fallback_to
     if result != "block" and isinstance(repo_specific_requirements, dict) and repo_specific_requirements["result"] == "block":
         result = "block"
         fallback_to = fallback_to or repo_specific_requirements["fallback_to"]
@@ -16630,7 +16650,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             "execution_ledger": execution_ledger,
             "blocking_failures": blocking_failures,
             "project_drift": flow_project_drift,
-            **({"governance_lint": governance_lint} if args.operation == "pre-review" else {}),
+            **({"governance_lint": governance_lint} if args.operation in {"pre-review", "merge-ready"} else {}),
             **({"goal_execution_contract": goal_contract, "goal_readiness": goal_readiness} if args.operation == "resume" else {}),
             **({"governance_surface": governance_surface} if args.operation == "resume" else {}),
             **({"maturity_upgrade_path": upgrade_path} if args.operation == "resume" else {}),

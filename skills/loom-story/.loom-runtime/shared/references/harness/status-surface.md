@@ -48,6 +48,11 @@
 - `execution_budget_risk`
   - 从 `execution_budget` 派生 provider-neutral 风险摘要
   - 仅作 advisory evidence，不作为 gate 阻断条件
+- `governance_lint`
+  - 从 fact-chain blocking failures、repo companion requirements 与既有 runtime evidence envelope 派生
+  - blocking lint 可阻断对应 status / pre-review / merge-ready surface
+  - advisory lint 只进入风险摘要，不改变 verdict
+  - 不替代 authored review record、raw review output、CI status、PR body 或 host merge truth
 - retained host / repo-native result
   - 作为 evidence provenance 或 gate 前置结果派生
 - `taxonomy`
