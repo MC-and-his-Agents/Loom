@@ -1,0 +1,22 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-846",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-846 spec suite is approved for the pre-review Governance Lint integration. The spec, plan, and implementation contract keep the scope limited to pre-review derived lint evidence, loom_check contract validation, stale-status negative fixture coverage, generated skills surface sync, and current Work Item carrier readiness; #852 status and merge-ready consumption remain explicitly out of scope.",
+  "reviewer": "codex",
+  "reviewed_head": "3ae6e9ab0ec610520df2e2b803d3f7704d8ab925",
+  "reviewed_validation_summary": "Spec review consumed WI-846 spec, plan, and implementation contract after deterministic pre-review readiness passed; implementation validation remains tracked by WI-846 implementation review.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-846.md",
+    "recovery_entry": ".loom/progress/WI-846.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-846/spec.md",
+    "plan": ".loom/specs/WI-846/plan.md",
+    "implementation_contract": ".loom/specs/WI-846/implementation-contract.md"
+  }
+}

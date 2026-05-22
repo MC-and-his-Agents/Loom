@@ -3471,6 +3471,7 @@ def companion_generation_payload(
 def repo_specific_default_fallback(surface: str) -> str:
     return {
         "spec_review": "build",
+        "pre_review": "build",
         "review": "build",
         "merge_ready": "merge",
         "closeout": "merge",
@@ -3768,6 +3769,12 @@ def repo_specific_requirements_payload(
     requirements = payload.get("repo_specific_requirements") if isinstance(payload, dict) else None
     entries = requirements.get(surface) if isinstance(requirements, dict) else None
     if not isinstance(entries, list):
+        if surface == "pre_review":
+            return {
+                **empty_payload,
+                "source_locator": declared_locator,
+                "summary": "no repo companion requirements are declared for the pre-review surface.",
+            }
         return {
             **empty_payload,
             "result": "block",
@@ -5405,7 +5412,7 @@ def graphql_budget_guard(scope: str, errors: list[str] | None = None) -> dict[st
 
 
 def git_dirty_entries(root: Path) -> list[dict[str, str]]:
-    result = run_git(root, ["status", "--porcelain=v1"])
+    result = run_git(root, ["status", "--porcelain=v1", "--untracked-files=all"])
     if result is None or result.returncode != 0:
         return []
 
@@ -7409,6 +7416,47 @@ def dirty_runtime_evidence_paths(target_root: Path) -> list[str]:
         if owned_dirty_path_kind(target_root, path) == "evidence":
             evidence.append(path)
     return evidence
+
+
+def declared_current_item_dirty_paths(context: dict[str, Any]) -> set[str]:
+    target_root = context["target_root"]
+    report = context["report"]
+    entry_points = report.get("fact_chain", {}).get("entry_points", {})
+    candidates = {
+        context.get("output_relative"),
+        context.get("review_entry"),
+    }
+    if isinstance(entry_points, dict):
+        candidates.update(
+            entry_points.get(key)
+            for key in ("work_item", "recovery_entry", "status_surface")
+        )
+    candidates.update(
+        artifact
+        for artifact in context.get("associated_artifacts", [])
+        if isinstance(artifact, str)
+    )
+
+    declared: set[str] = set()
+    for index, candidate in enumerate(sorted(str(value) for value in candidates if value), start=1):
+        path, errors = resolve_repo_relative_path(
+            target_root,
+            candidate,
+            label=f"declared current item artifact[{index}]",
+        )
+        if errors or path is None:
+            continue
+        declared.add(path.relative_to(target_root).as_posix())
+    return declared
+
+
+def path_matches_declared_current_item(path: str, declared_paths: set[str]) -> bool:
+    normalized = path.rstrip("/")
+    return any(
+        normalized == declared.rstrip("/")
+        or normalized.startswith(f"{declared.rstrip('/')}/")
+        for declared in declared_paths
+    )
 
 
 def declared_scope_paths(scope_text: str) -> list[str]:
@@ -9502,6 +9550,13 @@ def purity_report_from_context(context: dict[str, Any], fact_chain_errors: list[
     owned_dirty, foreign_dirty = dirty_paths_by_owner(target_root)
     evidence_dirty = dirty_runtime_evidence_paths(target_root)
     foreign_dirty = [path for path in foreign_dirty if path not in evidence_dirty]
+    declared_current_item_paths = declared_current_item_dirty_paths(context)
+    declared_dirty = sorted(
+        path
+        for path in foreign_dirty
+        if path_matches_declared_current_item(path, declared_current_item_paths)
+    )
+    foreign_dirty = [path for path in foreign_dirty if path not in declared_dirty]
     if foreign_dirty:
         preview = ", ".join(sorted(foreign_dirty)[:5])
         hard_failures.append(f"workspace contains untriaged residual changes: {preview}")
@@ -9511,6 +9566,9 @@ def purity_report_from_context(context: dict[str, Any], fact_chain_errors: list[
     if evidence_dirty:
         preview = ", ".join(sorted(evidence_dirty)[:5])
         report_only.append(f"runtime review evidence is present and does not block purity on its own: {preview}")
+    if declared_dirty:
+        preview = ", ".join(declared_dirty[:5])
+        report_only.append(f"current Work Item declares dirty artifacts and they do not block purity on their own: {preview}")
 
     scope_paths = declared_scope_paths(context["scope"])
     out_of_scope_changes: list[str] = []
@@ -10201,6 +10259,162 @@ def report_blocking_messages(report: dict[str, Any]) -> list[str]:
             if isinstance(message, str) and message not in messages:
                 messages.append(message)
     return messages
+
+
+def governance_lint_kind_from_failure(failure: dict[str, Any]) -> str:
+    text = " ".join(
+        str(failure.get(field, ""))
+        for field in ("category", "kind", "surface", "message", "summary")
+    ).lower()
+    if "companion" in text or "interop" in text:
+        return "companion_boundary_bypass"
+    if "hardcod" in text:
+        return "core_hardcoding_leak"
+    if "stale" in text or "freshness" in text or "head" in text:
+        return "evidence_stale"
+    return "fact_chain_broken"
+
+
+def flow_governance_lint_status(
+    context: dict[str, Any],
+    *,
+    surface: str,
+    repo_specific_requirements: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    bindings = {
+        "item_id": context["item_id"],
+        "head_sha": git_head_sha(context["target_root"]),
+        "scope": context["scope"],
+        "reviewed_head_sha": None,
+        "pr_ref": None,
+    }
+    blocking_results: list[dict[str, Any]] = []
+    advisory_results: list[dict[str, Any]] = []
+    repo_specific_results: list[dict[str, Any]] = []
+    for index, failure in enumerate(report_blocking_failures(context["report"]), start=1):
+        if not isinstance(failure, dict):
+            continue
+        kind = governance_lint_kind_from_failure(failure)
+        summary = str(
+            failure.get("message")
+            or failure.get("summary")
+            or failure.get("kind")
+            or "fact-chain blocking failure"
+        )
+        blocking_results.append(
+            {
+                "schema_version": GOVERNANCE_LINT_RESULT_SCHEMA,
+                "id": f"fact_chain_blocking_{index}",
+                "kind": kind,
+                "strength": "blocking",
+                "surface": surface,
+                "subject": failure.get("carrier") or failure.get("field") or "fact_chain",
+                "summary": summary,
+                "mapped_failure": {
+                    "category": failure.get("category") or "drift",
+                    "kind": failure.get("kind") or kind,
+                },
+                "provenance": {
+                    "source_layer": "fact_chain",
+                    "source_owner": "loom",
+                    "source_locator": failure.get("path") or failure.get("locator"),
+                    "source_binding": failure.get("field") or failure.get("carrier") or "fact_chain",
+                    "freshness": failure.get("freshness") or "stale",
+                },
+                "bindings": bindings,
+                "evidence_freshness": failure.get("freshness") or "stale",
+                "fallback_to": failure.get("fallback_to") or "admission",
+            }
+        )
+
+    if isinstance(repo_specific_requirements, dict):
+        source_locator = repo_specific_requirements.get("source_locator")
+        for field in ("blocking_requirements", "advisory_requirements"):
+            entries = repo_specific_requirements.get(field)
+            if not isinstance(entries, list):
+                continue
+            for index, entry in enumerate(entries, start=1):
+                if not isinstance(entry, dict):
+                    continue
+                enforcement = entry.get("enforcement")
+                result = {
+                    "schema_version": GOVERNANCE_LINT_RESULT_SCHEMA,
+                    "id": f"repo_specific_{field}_{index}",
+                    "kind": "companion_boundary_bypass",
+                    "strength": "repo_specific",
+                    "surface": surface,
+                    "subject": "repo_companion_requirement",
+                    "summary": str(entry.get("summary") or entry.get("id") or "repo companion requirement"),
+                    "mapped_failure": {
+                        "category": "gate_failure",
+                        "kind": "repo_specific_requirement",
+                    },
+                    "provenance": {
+                        "source_layer": "repo_companion",
+                        "source_owner": "repo",
+                        "source_locator": source_locator,
+                        "source_binding": entry.get("id") or "repo_specific_requirements",
+                        "freshness": "current",
+                    },
+                    "bindings": bindings,
+                    "evidence_freshness": "current",
+                    "fallback_to": repo_specific_requirements.get("fallback_to") or repo_specific_default_fallback(surface),
+                    "enforcement": enforcement,
+                }
+                repo_specific_results.append(result)
+                if enforcement == "blocking":
+                    blocking_results.append(result)
+                elif enforcement == "advisory":
+                    advisory_results.append(result)
+
+    result = "block" if blocking_results else "pass"
+    return {
+        "schema_version": GOVERNANCE_LINT_STATUS_SCHEMA,
+        "surface": surface,
+        "result": result,
+        "result_summary": (
+            "Governance Lint blocks this surface because derived lint evidence found blocking failures."
+            if result == "block"
+            else "Governance Lint found no blocking derived lint evidence for this surface."
+        ),
+        "blocking_results": blocking_results,
+        "advisory_results": advisory_results,
+        "repo_specific_results": repo_specific_results,
+        "not_applicable_results": [],
+        "mapped_failures": [entry["mapped_failure"] for entry in blocking_results],
+        "provenance": [
+            entry["provenance"]
+            for entry in [*blocking_results, *advisory_results, *repo_specific_results]
+        ],
+    }
+
+
+def governance_lint_missing_inputs(payload: dict[str, Any]) -> list[str]:
+    messages: list[str] = []
+    entries = payload.get("blocking_results")
+    if not isinstance(entries, list):
+        return messages
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        summary = entry.get("summary") or entry.get("kind") or "blocking lint result"
+        message = f"governance lint {entry.get('kind', 'unknown')}: {summary}"
+        if message not in messages:
+            messages.append(message)
+    return messages
+
+
+def governance_lint_fallback(payload: dict[str, Any]) -> str | None:
+    entries = payload.get("blocking_results")
+    if not isinstance(entries, list):
+        return None
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        fallback_to = entry.get("fallback_to")
+        if isinstance(fallback_to, str) and fallback_to:
+            return fallback_to
+    return None
 
 
 def fact_chain_error_contract(
@@ -16042,6 +16256,7 @@ def handle_flow(args: argparse.Namespace) -> int:
 
     review_payload: dict[str, Any] | None = None
     build_execution: dict[str, Any] | None = None
+    governance_lint: dict[str, Any] | None = None
     governance_surface = build_governance_surface(target_root)
     upgrade_path = maturity_upgrade_path(governance_surface, target_root)
     repo_interface = governance_surface.get("repo_interface")
@@ -16204,6 +16419,17 @@ def handle_flow(args: argparse.Namespace) -> int:
             }
         else:
             admission_payload = checkpoint_payload("admission", context)
+            if args.operation == "pre-review":
+                repo_specific_requirements = repo_specific_requirements_payload(
+                    repo_interface,
+                    target_root=target_root,
+                    surface="pre_review",
+                )
+                governance_lint = flow_governance_lint_status(
+                    context,
+                    surface="pre_review",
+                    repo_specific_requirements=repo_specific_requirements,
+                )
             locate_payload = base_workspace_payload(context, "locate")
             locate_result = "pass" if not locate_payload["purity"]["hard_failures"] else "block"
             locate_step = {
@@ -16227,6 +16453,17 @@ def handle_flow(args: argparse.Namespace) -> int:
                 }
             )
             steps.append(locate_step)
+            if args.operation == "pre-review" and isinstance(governance_lint, dict):
+                steps.append(
+                    {
+                        "name": "governance-lint",
+                        "result": governance_lint["result"],
+                        "summary": governance_lint["result_summary"],
+                        "missing_inputs": governance_lint_missing_inputs(governance_lint),
+                        "fallback_to": governance_lint_fallback(governance_lint),
+                        "governance_lint": governance_lint,
+                    }
+                )
 
     if args.operation in {"resume", "pre-review", "merge-ready"} and args.project is not None:
         project_step_result = (
@@ -16393,6 +16630,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             "execution_ledger": execution_ledger,
             "blocking_failures": blocking_failures,
             "project_drift": flow_project_drift,
+            **({"governance_lint": governance_lint} if args.operation == "pre-review" else {}),
             **({"goal_execution_contract": goal_contract, "goal_readiness": goal_readiness} if args.operation == "resume" else {}),
             **({"governance_surface": governance_surface} if args.operation == "resume" else {}),
             **({"maturity_upgrade_path": upgrade_path} if args.operation == "resume" else {}),
@@ -16508,6 +16746,32 @@ def handle_flow(args: argparse.Namespace) -> int:
                     },
                 }
                 if args.operation == "review"
+                else {}
+            ),
+            **(
+                {
+                    "state_check": {
+                        "result": state_payload["result"],
+                        "summary": state_payload["summary"],
+                        "missing_inputs": state_payload["missing_inputs"],
+                        "fallback_to": state_payload["fallback_to"],
+                        "checks": state_payload["checks"],
+                    },
+                    "runtime_evidence": runtime_fields,
+                    "admission_checkpoint": {
+                        "result": admission_payload["result"],
+                        "summary": admission_payload["summary"],
+                        "missing_inputs": admission_payload["missing_inputs"],
+                        "fallback_to": admission_payload["fallback_to"],
+                    },
+                    "repo_specific_requirements": repo_specific_requirements,
+                    "current_checkpoint": {
+                        "raw": context["current_checkpoint_raw"],
+                        "normalized": context["current_checkpoint"],
+                    },
+                    "current_lane": context["current_lane"],
+                }
+                if args.operation == "pre-review"
                 else {}
             ),
             **(
