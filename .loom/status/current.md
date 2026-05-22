@@ -12,8 +12,8 @@
 - Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py
 - Closing Condition: PR merge 后 closeout 消费 #851 issue、PR、merge commit、Project #4 状态，并解除 #852 的 negative-fixtures blocker。
 - Current Checkpoint: merge-ready
-- Current Stop: #851 implementation and carrier sync are committed through 1e5f0b83763e264e5d5dfeaa9ceceb766890ef7b; authored implementation review is refreshed against that head. Full `tools/loom_check.py` passed naturally with 39 checked surfaces after the stale evidence lint gap was fixed.
-- Next Step: Commit final review carrier refresh, rerun checkpoint merge, then push and open PR for #851.
+- Current Stop: #851 implementation and review carrier sync are committed through e63517cfc7f69dc04c4d295cfa599d4dea069440. Fact-chain passed and checkpoint merge passed with carrier-only review head binding. Full `tools/loom_check.py` passed naturally with 39 checked surfaces after the stale evidence lint gap was fixed.
+- Next Step: Push branch, open PR for #851, wait for checks, then run controlled merge and closeout if branch protection allows.
 - Blockers: None recorded.
 - Latest Validation Summary: py_compile_clean passed for source/generated loom_flow.py and loom_check.py; skills_surface check passed; targeted check_governance_lint_negative_fixture_contract passed with 0 failures; git diff --check passed; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py passed naturally with checked 39 surfaces.
 - Recovery Boundary: Only #851 Governance Lint negative fixture manifest, repo-local checker consumption, installed runtime negative PR-gate fixtures, generated skills surface, installer version bump, and WI-851 carriers are in scope.
