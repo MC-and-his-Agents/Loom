@@ -7588,6 +7588,13 @@ def review_focus_paths(context: dict[str, Any]) -> list[str]:
     scope_paths = declared_scope_paths(context["scope"])
     if scope_paths:
         return scope_paths
+    artifact_paths = [
+        artifact.strip()
+        for artifact in context.get("associated_artifacts", [])
+        if isinstance(artifact, str) and artifact.strip()
+    ]
+    if artifact_paths:
+        return artifact_paths
     return [relative_to_root(context["workspace_path"], context["target_root"])]
 
 
@@ -8967,8 +8974,9 @@ def review_prompt_change_snapshot(context: dict[str, Any]) -> list[str]:
 
     base_sha = base_result.stdout.strip()
     head_sha = git_head_sha(root) or "unknown-head"
-    stat_result = run_git(root, ["diff", "--stat", f"{base_sha}..HEAD"])
-    names_result = run_git(root, ["diff", "--name-only", "--no-renames", f"{base_sha}..HEAD"])
+    focused_diff_args = ["--", *REVIEW_PROMPT_DIFF_PATHS]
+    stat_result = run_git(root, ["diff", "--stat", f"{base_sha}..HEAD", *focused_diff_args])
+    names_result = run_git(root, ["diff", "--name-only", "--no-renames", f"{base_sha}..HEAD", *focused_diff_args])
     diff_result = run_git(
         root,
         [
@@ -8976,8 +8984,7 @@ def review_prompt_change_snapshot(context: dict[str, Any]) -> list[str]:
             "--no-ext-diff",
             "--unified=12",
             f"{base_sha}..HEAD",
-            "--",
-            *REVIEW_PROMPT_DIFF_PATHS,
+            *focused_diff_args,
         ],
     )
 
