@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-851",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-851 spec is approved for synthetic Governance Lint negative fixtures covering approval, companion, interop, hardcoding, advanced lint declaration, and stale evidence/head drift boundaries.",
+  "reviewer": "codex",
+  "reviewed_head": "6acefb2046c1e432e70e869cb01e2a267fd99cba",
+  "reviewed_validation_summary": "Spec suite defines #851 required negative fixture manifest, repo-local checker consumption, validation plan, rollback, and boundaries.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-851.md",
+    "recovery_entry": ".loom/progress/WI-851.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
