@@ -6,7 +6,7 @@
   "summary": "WI-863 formal review allows the current worktree. The focused changes correctly prefer verified Codex App host proof over CI/CODEX_CI fallback, preserve safe default fallback with missing-proof diagnostics, keep raw App output as runtime evidence only, add bounded prompt/change evidence for host-limited review, and address prior timeout/process cleanup concerns. Focused verification consumed during review passed: git diff --check, py_compile_clean, skills_surface check, version_surface_check, bootstrap verify/fact-chain, and adapter selection probes.",
   "reviewer": "loom/codex-app-review",
   "reviewed_head": "5152649092716ba81b8721c1ab3df6c931145164",
-  "reviewed_validation_summary": "Post-prompt-fix self-check passed: git diff --check, tools/py_compile_clean.py for shared loom_flow/loom_check scripts, PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check, python3 tools/version_surface_check.py, fact-chain, targeted shadow-parity/adopt verify, and full PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py . -> OK, checked 39 surfaces.",
+  "reviewed_validation_summary": "Current HEAD 5152649 self-check and live review passed: git diff --check, tools/py_compile_clean.py for shared loom_flow/loom_check scripts, PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check, python3 tools/version_surface_check.py, fact-chain, flow review, targeted shadow-parity/adopt verify, full PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py . -> OK checked 39 surfaces, and explicit Codex App review produced normalized allow review_record_input.",
   "fallback_to": null,
   "findings": [
     {
