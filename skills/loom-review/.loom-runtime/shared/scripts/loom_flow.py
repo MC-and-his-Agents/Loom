@@ -9203,6 +9203,7 @@ def build_default_review_prompt(
             "请基于当前仓库工作树做正式语义审查，并只输出符合 schema 的 JSON 结果。",
             "优先阅读当前事项直接相关的文件与差异，不要做整仓广播式探索。",
             "若宿主工具不可用或 outputSchema 限制工具调用，请使用本 prompt 中的 Change Evidence Snapshot 与 Runtime Evidence 形成结论，不要仅因未运行工具而 fallback。",
+            "不要重跑 full `tools/loom_check.py .`、`make check`、merge-ready、PR gate 或其他长耗时全量门禁；这些属于调用方提供的验证摘要与后续 gate 职责。只有当前输入互相矛盾时，才运行局部、低成本、可解释的 focused check。",
             "",
             "Loom 审查边界：",
             "- 你负责 reviewer rubric：判断方向、边界、语义正确性、风险与验证充分性。",
