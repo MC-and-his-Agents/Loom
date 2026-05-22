@@ -4,6 +4,8 @@
 
 - `src/skills/shared/scripts/loom_flow.py`
 - `src/skills/shared/scripts/loom_check.py`
+- `packages/loom-installer/package.json`
+- `packages/loom-installer/package-lock.json`
 - `skills/shared/scripts/loom_flow.py`
 - `skills/shared/scripts/loom_check.py`
 - `skills/*/.loom-runtime/shared/scripts/loom_flow.py`
@@ -21,6 +23,7 @@
 - Stale derived status evidence must block at pre-review through `governance_lint` before formal review.
 - Absent optional pre-review repo companion requirement surfaces must not block the positive bootstrap path.
 - `loom_check.py` must verify the pre-review lint envelope and step ordering for repo-local and installed runtime paths.
+- Installer package version must bump when generated runtime behavior changes.
 
 ## Boundaries
 
