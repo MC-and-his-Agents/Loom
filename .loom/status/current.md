@@ -12,12 +12,12 @@
 - Validation Entry: py_compile; skills_surface check; loom_check; live Codex App review run; review record; merge-ready/review gate
 - Closing Condition: #863/#864 evidence accepted, PR gates pass, controlled merge completes, main syncs, and issue closeout records proof.
 - Current Checkpoint: merge
-- Current Stop: Codex App live review timeout and process-group cleanup are committed. Focused self-check after that code change passed, including `tools/py_compile_clean.py`, skills surface, version surface, bootstrap verify, fact-chain, and flow review.
-- Next Step: Rerun Codex App default-host review on the current head and record only the normalized review_record_input if it allows.
+- Current Stop: Live Codex App review on 1af91b6 passed with selected_adapter=loom/codex-app-review, selection_source=codex-app-host-default, thread_cwd_matches_target_root=true, fallback_reason=null, and authority_boundary=normalized review_record_input only. The formal review record was refreshed from normalized review_record_input; adopt verify and shadow-parity passed. A flow review rerun before commit fell back only on expected dirty review-record purity.
+- Next Step: Commit review record and progress, then rerun clean flow review, loom_check, merge-ready, checkpoint merge, and PR gate consumption for PR #879.
 - Blockers: None
-- Latest Validation Summary: Post-timeout-fix self-check passed with git diff --check, tools/py_compile_clean.py, skills_surface check, version surface check, `.loom/bin/loom_init.py verify --target .`, fact-chain, and flow review. The prior live Codex App review on 823b34d selected loom/codex-app-review from codex-app-host-default with stdio://, thread cwd bound to /Users/mc/dev/Loom-863-codex-app-review-host-proof, and reviewed_head 823b34d. It returned block only after proving the App path and identifying the missing live deadline/process cleanup boundary; that boundary is now fixed in src and generated skills surfaces.
+- Latest Validation Summary: Self-check before live review passed: git diff --check, tools/py_compile_clean.py for shared loom_flow/loom_check scripts, skills_surface check, version_surface_check, .loom/bin/loom_init.py verify, fact-chain, flow review, and PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py . -> OK, checked 37 surfaces. Live Codex App review on 1af91b6 passed using stdio://, new-thread, formal worktree cwd, timeout_seconds=900, and normalized turn-start output; .loom/reviews/WI-863.json now consumes the App evidence locators and normalized findings.
 - Recovery Boundary: Scope remains #863/#864 review host proof discovery, adapter selection, diagnostic, fixture, live review evidence, review record, and merge-ready/review gate consumption.
-- Current Lane: live-E2E-proof
+- Current Lane: record-gate-consumption
 
 ## Runtime Evidence
 
