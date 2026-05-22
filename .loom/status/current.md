@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-851
-- Goal: 为 Governance Lint 增加 negative fixtures，覆盖 approval bypass、companion / interop 边界绕过、core hardcoding guard、高级 lint 声明缺口以及 stale evidence / head drift。
-- Scope: 新增 `governance-lint-negative-fixtures.json`、扩展 `loom_check.py` repo-local fixture 消费、同步 generated skills surface 和 installer version；不新增独立 lint CLI、不复制下游 guardian 实现、不把 repo-specific 规则写入 Loom core。
-- Execution Path: harness/governance-lint/negative-fixtures
-- Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-851.md
-- Review Entry: .loom/reviews/WI-851.json
-- Validation Entry: PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py
-- Closing Condition: PR merge 后 closeout 消费 #851 issue、PR、merge commit、Project #4 状态，并解除 #852 的 negative-fixtures blocker。
-- Current Checkpoint: merge-ready
-- Current Stop: #851 implementation, portable workspace entry fix, WI-847 terminal carrier sync, and review carrier refresh are committed through 3ed1d318d6734ec5c8f84188f9e6edeb3f77b954; fact-chain and checkpoint merge passed after the PR gate retry fixes. Full `tools/loom_check.py` passed naturally with 39 checked surfaces after the stale evidence lint gap was fixed.
-- Next Step: Push branch, update PR #884 body to include `Loom Work Item: WI-851`, wait for checks, then run controlled merge and closeout if branch protection allows.
-- Blockers: None recorded.
-- Latest Validation Summary: py_compile_clean passed for source/generated loom_flow.py and loom_check.py; skills_surface check passed; targeted check_governance_lint_negative_fixture_contract passed with 0 failures; git diff --check passed; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py passed naturally with checked 39 surfaces.
-- Recovery Boundary: Only #851 Governance Lint negative fixture manifest, repo-local checker consumption, installed runtime negative PR-gate fixtures, generated skills surface, installer version bump, and WI-851 carriers are in scope.
-- Current Lane: branch work/851-governance-lint-negative-fixtures in formal worktree /Users/mc/dev/Loom-work-851-governance-lint-negative-fixtures, bound to issue #851 and parent #844; baseline origin/main@6acefb2046c1e432e70e869cb01e2a267fd99cba.
+- Item ID: WI-863
+- Goal: Fix Codex App main-thread review host proof discovery and prove App review E2E for #863/#864.
+- Scope: Codex App review host proof discovery, adapter selection, missing-proof diagnostics, focused fixtures, live review evidence, review record, and merge-ready/review gate consumption.
+- Execution Path: issue-scoped branch work/863-codex-app-review-host-proof in independent worktree /Users/mc/dev/Loom-863-codex-app-review-host-proof
+- Workspace Entry: ./
+- Recovery Entry: .loom/progress/WI-863.md
+- Review Entry: .loom/reviews/WI-863.json
+- Validation Entry: py_compile; skills_surface check; loom_check; live Codex App review run; review record; merge-ready/review gate
+- Closing Condition: #863/#864 evidence accepted, PR gates pass, controlled merge completes, main syncs, and issue closeout records proof.
+- Current Checkpoint: merge
+- Current Stop: Live Codex App review refreshed for current HEAD 5f9b27c: explicit App review used stdio://, new-thread, formal worktree cwd, selected loom/codex-app-review with no fallback, thread cwd matched target root, and .loom/reviews/WI-863.json consumes only normalized review_record_input.
+- Next Step: Run carrier refresh, adopt verify, shadow parity, full loom_check, then merge-ready/checkpoint merge/PR gate for PR #879 and GitHub checks.
+- Blockers: None
+- Latest Validation Summary: Current HEAD 5f9b27c self-check and live review passed: git diff --check, tools/py_compile_clean.py for shared loom_flow/loom_check scripts, PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check, python3 tools/version_surface_check.py, node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main, fact-chain, flow review, full PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py . -> OK checked 39 surfaces, and explicit Codex App review produced normalized allow review_record_input.
+- Recovery Boundary: Current checkpoint is merge-ready/review gate consumption for PR #879. Keep scope limited to Codex App review host proof discovery, review run evidence, review record and gate consumption; do not expand #746 adapter migration, remove fallback, or promote raw App output to authored truth.
+- Current Lane: merge-ready-gate-consumption
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-851.md
-- Dynamic Truth: .loom/progress/WI-851.md
+- Static Truth: .loom/work-items/WI-863.md
+- Dynamic Truth: .loom/progress/WI-863.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

@@ -1,0 +1,73 @@
+{
+  "schema_version": "loom-review-context-pack/v1",
+  "item_id": "WI-863",
+  "review_path": ".loom/reviews/WI-863.json",
+  "current_head": "b42fd122ef941d3de57818ec76cc5170bfa2eca3",
+  "validation_summary": "py_compile passed for src/generated shared scripts after live runner protocol fix; skills_surface check passed; focused selection probe confirmed CODEX_CI plus valid proof selects loom/codex-app-review; tools/loom_check.py passed earlier: OK, checked 36 surfaces; loom-check-* temp fixtures cleaned after run.",
+  "history_available": true,
+  "history_policy": "not_applicable when no prior review record or normalized findings are available",
+  "recent_findings": [
+    {
+      "source": ".loom/reviews/WI-863.json",
+      "source_kind": "review_record",
+      "reviewed_head": "e71f662e284c4c9b4b743ab50ed9e4e6ba9208de",
+      "validation_summary": "No validation recorded yet.",
+      "id": "scaffolded-block-1",
+      "summary": "Review artifact scaffolded but not yet concluded.",
+      "severity": "block",
+      "disposition": {
+        "status": "rejected",
+        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+      },
+      "repeat_key": "scaffolded-block-1"
+    },
+    {
+      "source": ".loom/reviews/WI-863.json",
+      "source_kind": "review_record",
+      "reviewed_head": "e71f662e284c4c9b4b743ab50ed9e4e6ba9208de",
+      "validation_summary": "No validation recorded yet.",
+      "id": "scaffolded-warn-1",
+      "summary": "Record a real review before asking merge checkpoint to consume it.",
+      "severity": "warn",
+      "disposition": {
+        "status": "deferred",
+        "summary": "This follow-up stays open until a real review is recorded."
+      },
+      "repeat_key": "scaffolded-warn-1"
+    },
+    {
+      "source": ".loom/runtime/review/WI-863/b5d9f3be7acf1e9043c940a58fea786910006b95/normalized-findings.json",
+      "source_kind": "normalized_findings",
+      "reviewed_head": "b5d9f3be7acf1e9043c940a58fea786910006b95",
+      "validation_summary": "py_compile passed for src/generated shared scripts after live runner protocol fix; skills_surface check passed; focused selection probe confirmed CODEX_CI plus valid proof selects loom/codex-app-review; tools/loom_check.py passed earlier: OK, checked 36 surfaces; loom-check-* temp fixtures cleaned after run.",
+      "id": "review-tooling-error",
+      "summary": "Formal review could not be completed because the inspection step was not executed.",
+      "severity": "block",
+      "disposition": {
+        "status": "deferred",
+        "summary": "Reviewer needs to inspect the worktree and review record before issuing a formal conclusion."
+      },
+      "repeat_key": "review-tooling-error"
+    }
+  ],
+  "budget_risk": {
+    "schema_version": "loom-execution-budget-risk/v1",
+    "status": "not_applicable",
+    "enforcement": "advisory",
+    "highest_risk": "none",
+    "risk_dimensions": [],
+    "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+    "budget_summary": "execution budget is not collected for this invocation.",
+    "adapter_evidence_locator": "",
+    "provenance": {
+      "source": "github_host"
+    }
+  },
+  "repeated_blocker_signal": {
+    "schema_version": "loom-repeated-blocker-signal/v1",
+    "result": "absent",
+    "enforcement": "advisory",
+    "summary": "No repeated blocker candidates detected in available review history.",
+    "candidates": []
+  }
+}

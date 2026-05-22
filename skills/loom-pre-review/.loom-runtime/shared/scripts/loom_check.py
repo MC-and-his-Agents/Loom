@@ -29,6 +29,8 @@ from runtime_paths import repo_local_root
 
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 30.0
 ADOPT_VERIFY_TIMEOUT_SECONDS = 120.0
+BOOTSTRAP_TIMEOUT_SECONDS = 120.0
+SHADOW_PARITY_TIMEOUT_SECONDS = 120.0
 
 TOP_LEVEL_DIRS = (
     "docs",
@@ -679,9 +681,28 @@ def command_timeout_seconds(args: list[str], requested_timeout_seconds: float | 
     if requested_timeout_seconds is not None:
         return requested_timeout_seconds
     normalized = [str(part) for part in args]
+    if "bootstrap" in normalized:
+        return BOOTSTRAP_TIMEOUT_SECONDS
     if "adopt" in normalized and "verify" in normalized:
         return ADOPT_VERIFY_TIMEOUT_SECONDS
+    if "shadow-parity" in normalized:
+        return SHADOW_PARITY_TIMEOUT_SECONDS
     return DEFAULT_COMMAND_TIMEOUT_SECONDS
+
+
+def check_command_timeout_budget() -> list[Failure]:
+    failures: list[Failure] = []
+    if command_timeout_seconds(["python3", "tools/loom_init.py", "bootstrap", "--target", "."], None) != BOOTSTRAP_TIMEOUT_SECONDS:
+        failures.append(Failure("command-timeout-budget", "bootstrap commands must use the extended loom_check timeout budget"))
+    if command_timeout_seconds(["python3", "tools/loom_flow.py", "adopt", "verify"], None) != ADOPT_VERIFY_TIMEOUT_SECONDS:
+        failures.append(Failure("command-timeout-budget", "adopt verify commands must keep the extended loom_check timeout budget"))
+    if command_timeout_seconds(["python3", "tools/loom_flow.py", "shadow-parity"], None) != SHADOW_PARITY_TIMEOUT_SECONDS:
+        failures.append(Failure("command-timeout-budget", "shadow-parity commands must keep the extended loom_check timeout budget"))
+    if command_timeout_seconds(["python3", "tools/loom_flow.py", "flow", "resume"], None) != DEFAULT_COMMAND_TIMEOUT_SECONDS:
+        failures.append(Failure("command-timeout-budget", "ordinary commands must keep the default loom_check timeout budget"))
+    if command_timeout_seconds(["python3", "tools/loom_init.py", "bootstrap"], 5.0) != 5.0:
+        failures.append(Failure("command-timeout-budget", "explicit command timeout overrides must be honored"))
+    return failures
 
 
 def host_executable(name: str) -> str:
@@ -6888,8 +6909,15 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     if not isinstance(context_pack.get("repeated_blocker_signal"), dict):
                         failures.append(Failure("daily-execution-cli", "`review run` context pack must include repeated blocker signal"))
                 prompt_file = (review_target / prompt_path) if isinstance(prompt_path, str) else None
-                if prompt_file is None or not prompt_file.exists() or "Recent Review Context Pack" not in prompt_file.read_text(encoding="utf-8"):
+                prompt_text = prompt_file.read_text(encoding="utf-8") if prompt_file is not None and prompt_file.exists() else ""
+                if not prompt_text or "Recent Review Context Pack" not in prompt_text:
                     failures.append(Failure("daily-execution-cli", "`review run` prompt must include recent review context pack guidance"))
+                if "Change Evidence Snapshot" not in prompt_text or "Focused Diff Excerpt" not in prompt_text:
+                    failures.append(Failure("daily-execution-cli", "`review run` prompt must include focused change evidence for host-limited reviewers"))
+                if "不要重跑 full `tools/loom_check.py .`" not in prompt_text:
+                    failures.append(Failure("daily-execution-cli", "`review run` prompt must keep full validation commands outside reviewer scope"))
+                if "不能仅因既有 record stale 而 block" not in prompt_text:
+                    failures.append(Failure("daily-execution-cli", "`review run` prompt must treat stale prior review records as historical input during replacement review runs"))
                 profile_probe = json.loads(json.dumps(payload))
                 if isinstance(profile_probe.get("engine"), dict):
                     profile_probe["engine"].pop("profile", None)
@@ -7012,6 +7040,32 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             if review_record_input.get("engine_adapter") != "loom/default-codex-exec":
                 failures.append(Failure("daily-execution-cli", "`review run` shadow unavailable must preserve the default review record input"))
 
+        app_embedded_result = {
+            "decision": "allow",
+            "summary": "Codex App turn/start embedded a structured review result in an app-server text field.",
+            "findings": [
+                {
+                    "id": "codex-app-embedded-json-warn-1",
+                    "summary": "Codex App embedded JSON was recovered from a notification string.",
+                    "severity": "warn",
+                    "rebuttal": None,
+                    "disposition": {
+                        "status": "accepted",
+                        "summary": "Only schema-valid structured review output is accepted from string fields.",
+                    },
+                    "details": "Fixture mirrors app-server agent_message.message / output_text.text wrapping.",
+                    "code_location": None,
+                }
+            ],
+        }
+        app_embedded_notification = {
+            "method": "agent_message",
+            "params": {"message": json.dumps(app_embedded_result, ensure_ascii=False)},
+        }
+        app_embedded_normalized = loom_flow_module.find_normalized_review_payload(app_embedded_notification)
+        if not isinstance(app_embedded_normalized, dict) or app_embedded_normalized.get("decision") != "allow":
+            failures.append(Failure("daily-execution-cli", "`review run` must recover schema-valid Codex App results embedded in app-server text fields"))
+
         app_default_target = Path(tmp) / "review-run-codex-app-default"
         prepare_review_target(app_default_target, "review run Codex App host default")
         app_default_raw = app_default_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
@@ -7101,11 +7155,53 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 elif merge_payload.get("result") == "pass":
                     failures.append(Failure("daily-execution-cli", "`merge-ready` must not consume default Codex App raw evidence before review record is authored"))
 
-        app_ci_fallback_target = Path(tmp) / "review-run-codex-app-ci-fallback"
-        prepare_review_target(app_ci_fallback_target, "review run Codex App CI fallback")
-        app_ci_raw = app_ci_fallback_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
+        app_ci_default_target = Path(tmp) / "review-run-codex-app-ci-default"
+        prepare_review_target(app_ci_default_target, "review run Codex App CI host default")
+        app_ci_raw = app_ci_default_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
         app_ci_raw.parent.mkdir(parents=True, exist_ok=True)
         app_ci_raw.write_text(app_default_raw.read_text(encoding="utf-8"), encoding="utf-8")
+        write_fake_codex(fake_bin / "codex", mode="fail_if_called")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(app_ci_default_target),
+                "--item",
+                "INIT-0001",
+                "--codex-app-review-app-server",
+                "stdio://stage3-ci-proof",
+                "--codex-app-review-thread-id",
+                "thread-stage3-ci-proof",
+                "--codex-app-review-cwd",
+                str(app_ci_default_target),
+                "--codex-app-review-raw-file",
+                ".loom/runtime/tmp/codex-app-review-normalized.json",
+            ],
+            env=prepend_path_env(fake_bin, {"CODEX_CI": "1"}),
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` Codex App CI host default failed: {error}"))
+        else:
+            require_review_run_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`review run` Codex App CI host default",
+                payload=payload,
+                expected_result={"pass"},
+            )
+            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
+            metadata = payload.get("engine_metadata") if isinstance(payload, dict) and isinstance(payload.get("engine_metadata"), dict) else {}
+            if engine.get("adapter") != "loom/codex-app-review" or metadata.get("selection_source") != "codex-app-host-default":
+                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI host default must prefer valid app proof over CODEX_CI"))
+            if metadata.get("ci_env_present") is not True:
+                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI host default must record that CI env was present"))
+
+        app_ci_fallback_target = Path(tmp) / "review-run-codex-app-ci-missing-proof-fallback"
+        prepare_review_target(app_ci_fallback_target, "review run Codex App CI missing proof fallback")
         write_fake_codex(fake_bin / "codex", mode="success")
         payload, error = load_command_json(
             root,
@@ -7118,31 +7214,26 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 str(app_ci_fallback_target),
                 "--item",
                 "INIT-0001",
-                "--codex-app-review-app-server",
-                "stdio://stage3-ci-proof",
-                "--codex-app-review-thread-id",
-                "thread-stage3-ci-proof",
-                "--codex-app-review-cwd",
-                str(app_ci_fallback_target),
-                "--codex-app-review-raw-file",
-                ".loom/runtime/tmp/codex-app-review-normalized.json",
             ],
             env=prepend_path_env(fake_bin, {"CODEX_CI": "1"}),
         )
         if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` Codex App CI fallback failed: {error}"))
+            failures.append(Failure("daily-execution-cli", f"`review run` Codex App CI missing proof fallback failed: {error}"))
         else:
             require_review_run_payload(
                 failures,
                 category="daily-execution-cli",
-                context="`review run` Codex App CI fallback",
+                context="`review run` Codex App CI missing proof fallback",
                 payload=payload,
                 expected_result={"pass"},
             )
             engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
             metadata = payload.get("engine_metadata") if isinstance(payload, dict) and isinstance(payload.get("engine_metadata"), dict) else {}
+            missing_host_proof = metadata.get("missing_host_proof") if isinstance(metadata.get("missing_host_proof"), list) else []
             if engine.get("adapter") != "loom/default-codex-exec" or metadata.get("fallback_reason") != "ci-or-codex-ci":
-                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI fallback must keep the default codex exec adapter"))
+                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI missing proof fallback must keep the default codex exec adapter"))
+            if not missing_host_proof:
+                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI missing proof fallback must expose missing host proof diagnostics"))
 
         app_unavailable_fallback_target = Path(tmp) / "review-run-codex-app-unavailable-fallback"
         prepare_review_target(app_unavailable_fallback_target, "review run Codex App unavailable fallback")
@@ -17659,6 +17750,7 @@ def collect_failures(root: Path) -> list[Failure]:
     failures.extend(check_required_paths(root, "top-level-files", TOP_LEVEL_FILES))
     failures.extend(check_required_paths(root, "area-readmes", AREA_READMES))
     failures.extend(check_required_paths(root, "core-docs", CORE_DOCS))
+    failures.extend(check_command_timeout_budget())
     failures.extend(check_shared_foundation_contract(root))
     failures.extend(
         check_required_paths(root, "automation-frontload-templates", AUTOMATION_FRONTLOAD_TEMPLATES)
