@@ -1905,6 +1905,68 @@ def require_repo_specific_requirements_payload(
     )
 
 
+def require_governance_lint_status_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: object,
+    expected_surface: str,
+) -> None:
+    if not isinstance(payload, dict):
+        failures.append(Failure(category, f"{context} must be an object"))
+        return
+    if payload.get("schema_version") != "loom-governance-lint-status/v1":
+        failures.append(Failure(category, f"{context} schema_version must be `loom-governance-lint-status/v1`"))
+    if payload.get("surface") != expected_surface:
+        failures.append(Failure(category, f"{context} surface must be `{expected_surface}`"))
+    if payload.get("result") not in {"pass", "block"}:
+        failures.append(Failure(category, f"{context} result must be `pass` or `block`"))
+    if not isinstance(payload.get("result_summary"), str) or not payload.get("result_summary"):
+        failures.append(Failure(category, f"{context} must include non-empty result_summary"))
+    required_lists = (
+        "blocking_results",
+        "advisory_results",
+        "repo_specific_results",
+        "not_applicable_results",
+        "mapped_failures",
+        "provenance",
+    )
+    for field in required_lists:
+        if not isinstance(payload.get(field), list):
+            failures.append(Failure(category, f"{context} must include `{field}` as a list"))
+    for collection in ("blocking_results", "advisory_results", "repo_specific_results", "not_applicable_results"):
+        entries = payload.get(collection)
+        if not isinstance(entries, list):
+            continue
+        for index, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                failures.append(Failure(category, f"{context}.{collection}[{index}] must be an object"))
+                continue
+            if entry.get("schema_version") != "loom-governance-lint-result/v1":
+                failures.append(Failure(category, f"{context}.{collection}[{index}] schema_version must be `loom-governance-lint-result/v1`"))
+            if entry.get("kind") not in GOVERNANCE_LINT_CORE_KINDS:
+                failures.append(Failure(category, f"{context}.{collection}[{index}] kind must be a core Governance Lint kind"))
+            if entry.get("strength") not in GOVERNANCE_LINT_STRENGTHS:
+                failures.append(Failure(category, f"{context}.{collection}[{index}] strength must be stable"))
+            if entry.get("surface") != expected_surface:
+                failures.append(Failure(category, f"{context}.{collection}[{index}] surface must match `{expected_surface}`"))
+            if not isinstance(entry.get("summary"), str) or not entry.get("summary"):
+                failures.append(Failure(category, f"{context}.{collection}[{index}] must include summary"))
+            for field in ("mapped_failure", "provenance", "bindings"):
+                if not isinstance(entry.get(field), dict):
+                    failures.append(Failure(category, f"{context}.{collection}[{index}] must include `{field}` object"))
+            bindings = entry.get("bindings")
+            if isinstance(bindings, dict):
+                for field in ("item_id", "head_sha", "scope", "reviewed_head_sha", "pr_ref"):
+                    if field not in bindings:
+                        failures.append(Failure(category, f"{context}.{collection}[{index}].bindings missing `{field}`"))
+            if not isinstance(entry.get("fallback_to"), str) or not entry.get("fallback_to"):
+                failures.append(Failure(category, f"{context}.{collection}[{index}] must include fallback_to"))
+            if entry.get("evidence_freshness") not in {"fresh", "current", "stale", "missing", "not_applicable"}:
+                failures.append(Failure(category, f"{context}.{collection}[{index}] evidence_freshness must be stable"))
+
+
 def require_missing_details(
     failures: list[Failure],
     *,
@@ -6139,13 +6201,24 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     "runtime-evidence",
                     "checkpoint-admission",
                     "workspace-locate",
+                    "governance-lint",
                 ]:
                     failures.append(
                         Failure(
                             "daily-execution-cli",
-                            "`flow pre-review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-admission, and workspace-locate in order",
+                            "`flow pre-review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-admission, workspace-locate, and governance-lint in order",
                         )
                     )
+                governance_step = next((step for step in steps if isinstance(step, dict) and step.get("name") == "governance-lint"), None)
+                if not isinstance(governance_step, dict) or "governance_lint" not in governance_step:
+                    failures.append(Failure("daily-execution-cli", "`flow pre-review` governance-lint step must embed governance_lint evidence"))
+            require_governance_lint_status_payload(
+                failures,
+                category="daily-execution-cli",
+                context="`flow pre-review`.governance_lint",
+                payload=payload.get("governance_lint"),
+                expected_surface="pre_review",
+            )
         if label == "purity":
             purity = payload.get("purity")
             if not isinstance(purity, dict):
@@ -6719,6 +6792,10 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 ["python3", "tools/loom_flow.py", "flow", "resume", "--target", str(stale_target), "--item", "INIT-0001"],
             ),
             (
+                "stale status flow pre-review",
+                ["python3", "tools/loom_flow.py", "flow", "pre-review", "--target", str(stale_target), "--item", "INIT-0001"],
+            ),
+            (
                 "stale status control",
                 ["python3", "tools/loom_status.py", "--target", str(stale_target), "--item", "INIT-0001"],
             ),
@@ -6738,6 +6815,17 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             failure_blob = json.dumps(payload.get("blocking_failures") or payload.get("report", {}).get("blocking_failures"), ensure_ascii=False)
             if "stale" not in failure_blob and "parallel_truth_drift" not in failure_blob:
                 failures.append(Failure("daily-execution-cli", f"`{label}` must expose stale/drift blocking failures"))
+            if label.endswith("pre-review"):
+                governance_lint = payload.get("governance_lint")
+                require_governance_lint_status_payload(
+                    failures,
+                    category="daily-execution-cli",
+                    context=f"`{label}`.governance_lint",
+                    payload=governance_lint,
+                    expected_surface="pre_review",
+                )
+                if not isinstance(governance_lint, dict) or governance_lint.get("result") != "block":
+                    failures.append(Failure("daily-execution-cli", f"`{label}` governance_lint must block stale derived status before review"))
 
         mirror_target = Path(tmp) / "host-mirror-overwrite"
         shutil.copytree(example_target, mirror_target)
@@ -8723,6 +8811,15 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 elif payload.get("result") != "pass":
                     failures.append(Failure("daily-execution-cli", "`installed flow pre-review` must pass for the positive chain"))
                 else:
+                    require_governance_lint_status_payload(
+                        failures,
+                        category="daily-execution-cli",
+                        context="`installed flow pre-review`.governance_lint",
+                        payload=payload.get("governance_lint"),
+                        expected_surface="pre_review",
+                    )
+                    if payload.get("governance_lint", {}).get("result") != "pass":
+                        failures.append(Failure("daily-execution-cli", "`installed flow pre-review` governance_lint must pass for the positive chain"))
                     require_execution_attempt_summary(
                         failures,
                         category="daily-execution-cli",
