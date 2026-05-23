@@ -76,6 +76,8 @@
   - 定义正式 review 执行层、review record 与 merge checkpoint 的对接边界
 - [automation-frontload.md](./automation-frontload.md)
   - 定义适合机械化前置的检查矩阵与覆盖边界
+- [loom-check-runtime-purity.md](./loom-check-runtime-purity.md)
+  - 定义 `loom_check` 并发隔离、运行现场纯度、临时目录 ownership 与宿主环境继承边界
 - [merge-checkpoint.md](./merge-checkpoint.md)
   - 定义 `merge-ready` 的执行侧放行输入、结果语义与回退承接
 - [closeout-gate.md](./closeout-gate.md)

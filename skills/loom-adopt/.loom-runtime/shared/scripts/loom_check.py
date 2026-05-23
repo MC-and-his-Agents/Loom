@@ -140,6 +140,7 @@ CORE_DOCS = (
     "docs/methodology/harness/review-execution.md",
     "docs/methodology/harness/status-surface.md",
     "docs/methodology/harness/automation-frontload.md",
+    "docs/methodology/harness/loom-check-runtime-purity.md",
     "docs/methodology/harness/merge-checkpoint.md",
     "docs/methodology/harness/closeout-gate.md",
     "docs/methodology/harness/gate-chain.md",
@@ -265,6 +266,7 @@ AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT = (
     "docs/methodology/harness/recovery-model.md",
     "docs/methodology/harness/status-surface.md",
     "docs/methodology/harness/automation-frontload.md",
+    "docs/methodology/harness/loom-check-runtime-purity.md",
     "docs/methodology/harness/merge-checkpoint.md",
     "docs/methodology/harness/governance-lint-taxonomy.md",
     "docs/methodology/harness/workspace-and-purity.md",
@@ -18361,6 +18363,7 @@ def collect_source_failures(root: Path) -> list[Failure]:
     failures.extend(check_governance_lint_negative_fixture_contract(root))
     failures.extend(check_safe_sync_plan_fixture_contract(root))
     failures.extend(check_github_profile_maturity_fixture_contract(root))
+    failures.extend(check_loom_check_runtime_purity_contract(root))
     failures.extend(check_loom_check_profile_contract(root))
     failures.extend(check_markdown_links(root))
     return failures
@@ -18368,6 +18371,43 @@ def collect_source_failures(root: Path) -> list[Failure]:
 
 def collect_failures(root: Path) -> list[Failure]:
     return collect_source_failures(root)
+
+
+def check_loom_check_runtime_purity_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    category = "loom-check-runtime-purity"
+    required_anchors = [
+        "source/distribution",
+        "bootstrapped consumer",
+        "run_id",
+        "single-flight",
+        "stale lock",
+        "同仓不同 worktree",
+        "固定 `/tmp`",
+        "stable fixture",
+        "Node installer regression",
+        "npm cache",
+        "CODEX_*",
+        "LOOM_CODEX_APP_REVIEW_*",
+        "显式 opt-in",
+    ]
+    for relative in (
+        "docs/methodology/harness/loom-check-runtime-purity.md",
+        "skills/shared/references/harness/loom-check-runtime-purity.md",
+    ):
+        path = root / relative
+        if not path.exists():
+            failures.append(Failure(category, f"missing `{relative}`"))
+            continue
+        text = path.read_text(encoding="utf-8")
+        for anchor in required_anchors:
+            if anchor not in text:
+                failures.append(Failure(category, f"`{relative}` must mention `{anchor}`"))
+
+    readme = root / "docs/methodology/harness/README.md"
+    if not readme.exists() or "loom-check-runtime-purity.md" not in readme.read_text(encoding="utf-8"):
+        failures.append(Failure(category, "harness README must link `loom-check-runtime-purity.md`"))
+    return failures
 
 
 def check_loom_check_profile_contract(root: Path) -> list[Failure]:
