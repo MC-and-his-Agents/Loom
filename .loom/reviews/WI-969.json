@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-969",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-969 implementation review allows the gpt-5.5 profile upgrade, repo-owned review profile policy, explicit local Codex config opt-in governance, Codex App requested/actual model proof recording, fixture/doc/generated runtime sync, installer version bump to 0.1.142, and active fact-chain carrier refresh after rebase. No #836 adopted repo migration, #957 cost guard, fallback removal, or raw-engine authored truth change was introduced.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "873b2022666cd7392b57466bb226d9a714d32da4",
+  "reviewed_validation_summary": "Passed after rebasing WI-969 onto origin/main: make py-compile; python3 tools/skills_surface.py check; git diff --check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK (0.1.141 -> 0.1.142); python3 tools/loom_flow.py carrier refresh --target . --item WI-969; python3 tools/loom_flow.py shadow-parity --target . --surface all; python3 tools/loom_flow.py adopt verify --target . --item WI-969; python3 tools/loom_check.py -> OK, profile source, checked 40 source/distribution surfaces; make check -> OK.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-969.md",
+    "recovery_entry": ".loom/progress/WI-969.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

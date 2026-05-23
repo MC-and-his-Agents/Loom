@@ -92,21 +92,35 @@ Resolved profile 的 schema 为 `loom-review-engine-profile/v1`，至少包含�
 - `context_policy`: 本次 review 允许消费的上下文策略
 - `selection_reason`: 选择该 profile 的原因
 - `override_reason`: 若发生人工或 repo override，必须为非空；无 override 时为 `null`
+- `profile_source`: `loom-built-in`、`repo-owned-policy`、`explicit-cli-override` 或 `local-codex-config-opt-in`
 
 默认选择规则：
 
-- `spec-review`: `kind = spec_review` 时使用，reasoning 至少为 `high`
-- `high-risk`: active item 涉及 shared contract、security、permission、approval、sandbox、host adapter、runtime 或 release 边界时使用
-- `repeated-blocker`: active item 已标记重复 blocker / root-cause review 时使用
-- `default`: 普通 implementation review 使用
+- `default`: `model = gpt-5.5`，`reasoning_effort = medium`，普通 implementation review 使用
+- `high-risk`: `model = gpt-5.5`，`reasoning_effort = high`，active item 涉及 shared contract、security、permission、approval、sandbox、host adapter、runtime 或 release 边界时使用
+- `spec-review`: `model = gpt-5.5`，`reasoning_effort = high`，`kind = spec_review` 时使用
+- `repeated-blocker`: `model = gpt-5.5`，`reasoning_effort = high`，active item 已标记重复 blocker / root-cause review 时使用
+
+Profile source 解析顺序固定为：
+
+1. explicit CLI override：`review run --engine-profile`、`--engine-model` 或 `--engine-reasoning`
+2. repo-owned policy：`.loom/review-profiles.json`
+3. explicit local config opt-in：`--engine-use-local-codex-defaults`
+4. Loom built-in stable profile
+
+`.loom/review-profiles.json` 的 schema 为 `loom-review-profiles/v1`。`profiles` 只能覆盖 `default`、`high-risk`、`spec-review`、`repeated-blocker`，每个 profile 必须提供非空 `model`、合法 `reasoning_effort` 和非空 `selection_reason`，可选 `timeout_seconds`、`context_policy`。schema drift、未知 profile、空 model 或未知 reasoning 必须 fail closed。
 
 允许通过 `review run --engine-profile`、`--engine-model` 或 `--engine-reasoning` override，但必须同时提供 `--engine-override-reason`。override evidence 必须记录 previous profile、selected profile 和 reason。
+
+本机 `~/.codex/config.toml` 只能通过 `--engine-use-local-codex-defaults` 显式 opt in，且必须提供 `--engine-override-reason`。CI / headless / merge gate 默认拒绝本机 config opt-in；只有 repo-owned policy 明确允许时才可使用。默认 review run 不读取本机 config。
 
 Resolved profile 必须同时出现在：
 
 - `engine.profile`
 - `.loom/runtime/review/<item>/<head>/engine-metadata.json`
 - `review_record_input.engine_profile`
+
+Codex App authoritative adapter 还必须记录 actual model proof。`engine_metadata` 至少包含 `requested_model`、`requested_reasoning`、`actual_model`、`actual_reasoning`、`proof_source`、`enforcement_mode` 和 `model_proof`。raw-file 或 host 无法返回 actual proof 时必须结构化标记 `unverified`；`high-risk`、`spec-review`、`repeated-blocker` 在 actual proof 缺失或 mismatch 时 fail closed。raw App output 仍只是 runtime evidence，authored review truth 只能来自 normalized `review_record_input`。
 
 ### 2.2 Review context pack
 
