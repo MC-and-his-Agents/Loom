@@ -86,6 +86,15 @@ Required payload fields:
 - `approval_boundary`
 - `failure_taxonomy`
 
+The same payload is the retained `pr-gate` result envelope. A downstream consumer may read it from a repo-relative retained result locator only when the envelope remains bound to:
+
+- the same Work Item and `review_entry`
+- the same review record locator, `decision`, `kind`, `reviewed_head`, and reviewed validation summary
+- the same PR number, PR head SHA, base branch, and branch name
+- a passing merge checkpoint result for the same gate chain
+
+The retained envelope is fresh only when the current PR readback still reports the same head SHA and Work Item binding. Missing, unreadable, non-`pass`, wrong-schema, wrong-PR, wrong-Work-Item, stale-head, stale-validation, or non-implementation-review envelopes must `block` or fall back to `pr-gate` / `review`; they must not be treated as approval truth.
+
 `governance_lint` exposes the approval-boundary lint result as derived evidence. It must not author a review verdict or replace `work_item.review_entry`; it only explains why raw review output, shadow evidence, PR body text, CI success, or GitHub review comments did not satisfy semantic approval.
 
 `approval_boundary` must explicitly keep every non-authored evidence source false for approval truth:
@@ -114,6 +123,9 @@ The gate must fail closed for:
 - `checkout_head_drift`
 - `raw_evidence_bypass`
 - `host_enforcement_unverified`
+- `retained_result_missing`
+- `retained_result_unreadable`
+- `retained_result_stale`
 
 `raw_evidence_bypass` means raw or shadow evidence is present without an authored `review_entry` approval. This is always a block, never a pass.
 
@@ -139,6 +151,8 @@ The default GitHub workflow runs on `pull_request` and checks out the PR head SH
 ## 7. Controlled Merge Boundary
 
 `controlled merge` must run or consume this PR gate before delegating to `gh pr merge`.
+
+When it consumes a retained `pr-gate` result, it must still perform drift-only readback for the current PR head, required checks, branch protection or active ruleset, mergeability, and merge method. The retained result only avoids re-reading the full semantic review and merge-ready decision.
 
 Bare `gh pr merge` bypasses Loom's semantic review approval bridge unless the host required check is already enforced. It should be treated as a bypass risk for Loom-governed PRs.
 
