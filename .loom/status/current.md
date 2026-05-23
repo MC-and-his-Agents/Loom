@@ -12,11 +12,11 @@
 - Validation Entry: py_compile_clean; skills_surface check; make loom-demo-new-project-check; make loom-check; git status confirms examples/new-project remains unchanged
 - Closing Condition: PR for #965 merged or merge-ready with default loom-check no longer dirtying examples/new-project while fixture drift remains detectable.
 - Current Checkpoint: merge checkpoint
-- Current Stop: WI-965 implementation head 1c40b56511dbc8274fe9efd00a942725c9c40374 is validated locally with spec and implementation review recorded.
-- Next Step: Commit review carrier updates, push, open PR, run PR gate and GitHub checks, then merge or record blocker.
+- Current Stop: WI-965 PR recovery fixes are committed and pushed at implementation head 9c41ac8b623bf6648e3f3dce90941ba6f3c1f8db; review binding is being refreshed as carrier-only evidence for PR #979.
+- Next Step: Push review binding refresh, update PR #979 head_sha, run PR gate and GitHub checks, then merge or record blocker.
 - Blockers: None recorded.
-- Latest Validation Summary: Head 1c40b56511dbc8274fe9efd00a942725c9c40374 passed: make py-compile; python3 tools/skills_surface.py check; make loom-demo-new-project-check; make loom-check -> loom_check OK, profile source, checked 40 source/distribution surfaces; git diff --check; node installer version bump check reports no installer behavior changes; git status confirms examples/new-project is not dirty; checkpoint admission/build passed; spec and implementation reviews recorded.
-- Recovery Boundary: WI-965 owns demo bootstrap fixture isolation in Makefile/CI/helper script, harness docs/reference sync, WI-965 carriers/reviews, and terminal predecessor WI-967 recovery update. Excludes #966 Node installer write isolation, #968 regression matrix, #969 review profile, #953 source self-check layering, and CLI-first mainline.
+- Latest Validation Summary: Local recovery state after PR #979 CI failure passed: git diff --check; python3 tools/py_compile_clean.py tools/check_demo_bootstrap_fixture.py; python3 tools/skills_surface.py check; GH_TOKEN from gh auth with CI=true GITHUB_ACTIONS=true make loom-demo-new-project-check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK (0.1.137 -> 0.1.138); python3 .loom/bin/loom_flow.py shadow-parity --target .; ACTIVE_ITEM from .loom/bootstrap/init-result.json with python3 .loom/bin/loom_flow.py adopt verify --target . --item "$ACTIVE_ITEM"; make loom-check -> loom_check OK, profile source, checked 40 source/distribution surfaces; git status confirms examples/new-project is not dirty.
+- Recovery Boundary: WI-965 owns demo bootstrap fixture isolation in Makefile/CI/helper script, harness docs/reference sync, installer package version bump required by distributed runtime reference payload drift, WI-965 carriers/reviews, shadow parity refresh for .loom/status/current.md, and terminal predecessor WI-967 recovery update. Excludes #966 Node installer write isolation, #968 regression matrix, #969 review profile, #953 source self-check layering, and CLI-first mainline.
 - Current Lane: pr-prep
 
 ## Runtime Evidence

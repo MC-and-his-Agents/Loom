@@ -20,6 +20,13 @@ DEFAULT_IGNORES = {
     "__pycache__",
 }
 
+HOST_DYNAMIC_INIT_RESULT_SECTIONS = {
+    "governance_surface",
+    "lifecycle_expectations",
+    "maturity_upgrade_path",
+    "runtime_state",
+}
+
 
 def relative_to_root(path: Path, root: Path) -> str:
     return path.relative_to(root).as_posix()
@@ -78,11 +85,12 @@ def comparable_bytes(path: Path, relative: str) -> bytes:
 def canonical_init_result(path: Path) -> bytes:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(payload, dict):
-        governance_surface = payload.get("governance_surface")
-        if isinstance(governance_surface, dict):
-            # Host/CI visibility is intentionally outside the demo fixture drift
-            # contract; compare stable bootstrap content without live host proof.
-            governance_surface["github_control_plane"] = {"comparison": "ignored-host-dynamic"}
+        # Host/runtime visibility is intentionally outside the stable demo
+        # fixture drift contract; compare authored bootstrap content without
+        # live GitHub, CI, checkout, or runtime path proof.
+        for section in HOST_DYNAMIC_INIT_RESULT_SECTIONS:
+            if section in payload:
+                payload[section] = {"comparison": "ignored-host-dynamic"}
     return (json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
 
 
