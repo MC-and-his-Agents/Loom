@@ -124,6 +124,9 @@ GitHub native dependency 与 host binding inspector 的读取结果属于 host/c
 - integration contract verdict
 - repo settings / ruleset verdict
 - repo-native merge readiness verdict
+- retained `pr-gate` / `merge-gate` result envelope
+
+retained `pr-gate` / `merge-gate` locator 只能作为前序 gate result 消费。消费者必须重新判断 Work Item、PR number、head SHA、review approval、validation summary 与 host enforcement readback 是否仍 fresh；任一 drift 都必须 block 或回到 `pr-gate` / `merge-ready` / `review`。
 
 ## 4. `repo_native_carriers`
 

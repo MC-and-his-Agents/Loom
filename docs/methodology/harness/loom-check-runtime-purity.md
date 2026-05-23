@@ -63,11 +63,11 @@ Node installer regression 覆盖 `npm ci`、`npm test`、`npm pack --dry-run`、
 
 这些写入必须满足以下任一策略：
 
-- 在同一 worktree installer regression lock 内串行执行
+- 在同一 worktree installer regression lock 内串行执行，默认 lock 路径为 package root 下的 `.installer-regression-lock`
 - 在临时 package root 中执行，并把结果作为 drift evidence 消费
 - 对 payload build 使用覆盖完整 rebuild 窗口的 lock
 
-npm cache 必须使用本次运行唯一 cache。payload drift check 仍必须发现真实 drift，不能因为隔离而跳过 release readiness 的确定性验证。
+npm cache 必须使用本次运行唯一 cache。锁等待失败或超时必须输出 owner 信息，包括 `run_id`、`pid`、`started_at`、`command` 与 `cwd`，并给出等待、确认 stale lock 或切换 worktree 的处理路径。payload drift check 仍必须发现真实 drift，不能因为隔离而跳过 release readiness 的确定性验证。
 
 ## 6. 宿主环境纯度
 

@@ -65,7 +65,7 @@ Loom 的宿主动作面不是新的 umbrella CLI，也不是宿主平台替身�
 | PR merge gate | `python3 tools/loom_flow.py pr-gate check --target <repo> --pr <n>` | 否 | 证明当前 PR head 已有 fresh authored review approval |
 | merge control read | `python3 tools/loom_flow.py checkpoint merge --target <repo> [--item <id>]` | 否 | 读取 Loom 对 required checks / validation / review / risk rollback 的放行结论 |
 | merge control summary | `python3 tools/loom_flow.py flow merge-ready --target <repo> [--item <id>]` | 否 | 汇总进入 host merge 前的统一放行摘要 |
-| controlled merge | `python3 tools/loom_flow.py controlled-merge check\|merge --target <repo> --pr <n>` | `merge` 会写宿主 | 先消费 PR merge gate、merge-ready 与 required checks，再委托 `gh pr merge` |
+| controlled merge | `python3 tools/loom_flow.py controlled-merge check\|merge --target <repo> --pr <n> [--pr-gate-result-file <path>] [--merge-gate-result-file <path>]` | `merge` 会写宿主 | 先消费 live 或 retained PR merge gate、merge-ready 与 required checks，再委托 `gh pr merge` |
 | drift audit | `python3 tools/loom_flow.py reconciliation audit --target <repo> [--issue <n>] [--pr <n>] [--project <n>]` | 否 | 只读 issue / PR / project 控制面并输出 drift findings |
 | control-plane sync | `python3 tools/loom_flow.py reconciliation sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>] [--comment-file <path>] [--dry-run\|--apply]` | `--apply` 会写宿主 | 默认 dry-run；只执行 safe sync plan 中有 proof 的机械动作 |
 | closeout check | `python3 tools/loom_flow.py closeout check --target <repo> [--issue <n>] [--pr <n>] [--project <n>] [--gate-profile <profile>]` | 否 | 默认用 `closeout-contract` 校验 retained evidence backlink、main、issue、PR、project 与仓内结果是否一致；显式 profile 才执行 heavy local gate |
@@ -158,6 +158,8 @@ v0.7 只冻结 declaration-time locator contract。
 - retained host action result locator 留在 `.loom/companion/interop.json`
 - dynamic tool availability locator 留在 `.loom/companion/repo-interface.json`
 - approval / sandbox policy read locator 留在 `.loom/companion/repo-interface.json`
+
+`controlled-merge check|merge` 也可以通过显式 CLI locator 消费本次 PR 的 retained `pr-gate` / `merge-gate` result。该消费仍沿用同一 locator 纪律：路径必须 repo-relative、可读、不能越界，且 envelope 必须能回链 Work Item、PR、head、review approval、validation summary 与 merge checkpoint。fresh retained result 只允许跳过重复语义审查读取；当前 PR head、required checks、branch protection / active ruleset、mergeability 与 merge method 必须重新 read back，并以 `drift_readback.mode = drift-only` 输出。
 
 明确排除：
 

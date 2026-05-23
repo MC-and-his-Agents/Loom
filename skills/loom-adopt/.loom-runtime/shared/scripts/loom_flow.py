@@ -200,6 +200,7 @@ REVIEW_PROMPT_DIFF_PATHS = (
 PR_MERGE_GATE_SCHEMA = "loom-pr-merge-gate/v1"
 CONTROLLED_MERGE_SCHEMA = "loom-controlled-merge/v1"
 PR_MERGE_GATE_CHECK_NAME = "loom-pr-merge-gate"
+MERGE_GATE_RESULT_SCHEMAS = {"loom-flow-merge-ready/v1", "loom-merge-gate/v1"}
 LIVE_SMOKE_SCHEMA = "loom-live-smoke/v1"
 HOST_ADAPTER_LIVE_DRIFT_SCHEMA = "loom-host-adapter-live-drift/v1"
 DYNAMIC_TOOL_LIVE_AVAILABILITY_SCHEMA = "loom-dynamic-tool-live-availability/v1"
@@ -570,6 +571,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     controlled_merge.add_argument("--status-checks-file", help="Optional repo-relative statusCheckRollup JSON fixture")
     controlled_merge.add_argument("--branch-protection-file", help="Optional repo-relative branch protection JSON fixture")
     controlled_merge.add_argument("--ruleset-file", help="Optional repo-relative branch rules/ruleset JSON fixture")
+    controlled_merge.add_argument("--pr-gate-result-file", help="Optional repo-relative retained pr-gate result JSON")
+    controlled_merge.add_argument("--merge-gate-result-file", help="Optional repo-relative retained merge-gate or merge-ready result JSON")
 
     state = subparsers.add_parser(
         "state-check",
@@ -12326,6 +12329,226 @@ def required_check_status_payload(status_rollup: Any, required_contexts: list[st
     }
 
 
+def load_retained_result_file(target_root: Path, fixture: str | None, *, label: str) -> tuple[dict[str, Any] | None, list[str]]:
+    payload, errors = load_optional_json_fixture(target_root, fixture, label=label)
+    if errors:
+        return None, errors
+    if payload is None:
+        return None, [f"{label} is required"]
+    if not isinstance(payload, dict):
+        return None, [f"{label} must expose a JSON object"]
+    return payload, []
+
+
+def retained_pr_gate_consumption(
+    *,
+    retained: dict[str, Any] | None,
+    locator: str | None,
+    current_pr: dict[str, Any],
+    expected_item: str | None,
+    pr_number: int,
+) -> dict[str, Any]:
+    missing_inputs: list[str] = []
+    retained_pr = retained.get("pr") if isinstance(retained, dict) and isinstance(retained.get("pr"), dict) else {}
+    retained_work_item = (
+        retained.get("work_item")
+        if isinstance(retained, dict) and isinstance(retained.get("work_item"), dict)
+        else {}
+    )
+    review_approval = (
+        retained.get("review_approval")
+        if isinstance(retained, dict) and isinstance(retained.get("review_approval"), dict)
+        else {}
+    )
+    merge_checkpoint = (
+        retained.get("merge_checkpoint")
+        if isinstance(retained, dict) and isinstance(retained.get("merge_checkpoint"), dict)
+        else {}
+    )
+    retained_head = retained_pr.get("head_sha")
+    current_head = current_pr.get("headRefOid")
+    retained_item = retained_work_item.get("id")
+
+    if not isinstance(retained, dict):
+        missing_inputs.append("retained pr-gate result is unreadable")
+    else:
+        if retained.get("schema_version") != PR_MERGE_GATE_SCHEMA:
+            missing_inputs.append(f"retained pr-gate schema_version must be `{PR_MERGE_GATE_SCHEMA}`")
+        if retained.get("result") != "pass":
+            missing_inputs.append("retained pr-gate result must be pass")
+        if retained_pr.get("number") != pr_number:
+            missing_inputs.append("retained pr-gate PR number does not match current PR")
+        if not isinstance(retained_head, str) or not retained_head:
+            missing_inputs.append("retained pr-gate PR head is missing")
+        elif isinstance(current_head, str) and current_head and retained_head != current_head:
+            missing_inputs.append("retained pr-gate PR head does not match current PR head")
+        if expected_item and retained_item != expected_item:
+            missing_inputs.append("retained pr-gate Work Item does not match expected item")
+        if review_approval.get("status") != "approved" or review_approval.get("decision") != "allow":
+            missing_inputs.append("retained pr-gate does not carry authored allow review approval")
+        if review_approval.get("kind") not in IMPLEMENTATION_REVIEW_KINDS:
+            missing_inputs.append("retained pr-gate review kind cannot satisfy implementation approval")
+        if merge_checkpoint.get("result") not in {None, "pass"}:
+            missing_inputs.append("retained pr-gate merge checkpoint is not pass")
+
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "source": "retained",
+        "locator": locator,
+        "schema_version": retained.get("schema_version") if isinstance(retained, dict) else None,
+        "result": result,
+        "summary": (
+            "retained pr-gate result is fresh for the current PR head."
+            if result == "pass"
+            else "retained pr-gate result is missing, stale, or not an approval result."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": None if result == "pass" else "pr-gate",
+        "freshness": "fresh" if result == "pass" else "stale",
+        "bindings": {
+            "pr": pr_number,
+            "work_item": retained_item,
+            "retained_head_sha": retained_head,
+            "current_head_sha": current_head,
+            "review_entry": retained_work_item.get("review_entry"),
+            "reviewed_head": review_approval.get("reviewed_head"),
+            "reviewed_validation_summary": review_approval.get("reviewed_validation_summary"),
+        },
+    }
+
+
+def merge_gate_latest_validation_summary(payload: dict[str, Any]) -> str | None:
+    value = payload.get("latest_validation_summary")
+    if isinstance(value, str) and value.strip():
+        return value
+    merge_checkpoint = payload.get("merge_checkpoint") if isinstance(payload.get("merge_checkpoint"), dict) else None
+    if isinstance(merge_checkpoint, dict):
+        recovery = merge_checkpoint.get("recovery") if isinstance(merge_checkpoint.get("recovery"), dict) else None
+        if isinstance(recovery, dict) and isinstance(recovery.get("latest_validation_summary"), str):
+            return recovery["latest_validation_summary"]
+    recovery = payload.get("recovery") if isinstance(payload.get("recovery"), dict) else None
+    if isinstance(recovery, dict) and isinstance(recovery.get("latest_validation_summary"), str):
+        return recovery["latest_validation_summary"]
+    return None
+
+
+def retained_merge_gate_consumption(
+    *,
+    retained: dict[str, Any] | None,
+    locator: str | None,
+    expected_item: str | None,
+    pr_gate: dict[str, Any],
+) -> dict[str, Any]:
+    missing_inputs: list[str] = []
+    item = retained.get("item") if isinstance(retained, dict) and isinstance(retained.get("item"), dict) else {}
+    retained_item = item.get("id")
+    merge_checkpoint = (
+        retained.get("merge_checkpoint")
+        if isinstance(retained, dict) and isinstance(retained.get("merge_checkpoint"), dict)
+        else retained
+        if isinstance(retained, dict) and retained.get("command") == "checkpoint" and retained.get("checkpoint") == "merge"
+        else {}
+    )
+    review_approval = pr_gate.get("review_approval") if isinstance(pr_gate.get("review_approval"), dict) else {}
+    reviewed_validation_summary = review_approval.get("reviewed_validation_summary")
+    retained_validation_summary = merge_gate_latest_validation_summary(retained) if isinstance(retained, dict) else None
+
+    if not isinstance(retained, dict):
+        missing_inputs.append("retained merge-gate result is unreadable")
+    else:
+        schema_version = retained.get("schema_version")
+        command = retained.get("command")
+        operation = retained.get("operation")
+        checkpoint = retained.get("checkpoint")
+        is_merge_ready = command == "flow" and operation == "merge-ready"
+        is_checkpoint_merge = command == "checkpoint" and checkpoint == "merge"
+        if schema_version is not None and schema_version not in MERGE_GATE_RESULT_SCHEMAS:
+            missing_inputs.append("retained merge-gate schema_version is not recognized")
+        if not is_merge_ready and not is_checkpoint_merge:
+            missing_inputs.append("retained merge-gate result must be flow merge-ready or checkpoint merge")
+        if retained.get("result") != "pass":
+            missing_inputs.append("retained merge-gate result must be pass")
+        if expected_item and retained_item and retained_item != expected_item:
+            missing_inputs.append("retained merge-gate Work Item does not match expected item")
+        if not isinstance(merge_checkpoint, dict) or merge_checkpoint.get("result") != "pass":
+            missing_inputs.append("retained merge-gate merge checkpoint is not pass")
+        if (
+            isinstance(reviewed_validation_summary, str)
+            and reviewed_validation_summary
+            and isinstance(retained_validation_summary, str)
+            and retained_validation_summary
+            and reviewed_validation_summary != retained_validation_summary
+        ):
+            missing_inputs.append("retained merge-gate validation summary drifts from retained pr-gate review")
+
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "source": "retained",
+        "locator": locator,
+        "schema_version": retained.get("schema_version") if isinstance(retained, dict) else None,
+        "result": result,
+        "summary": (
+            "retained merge-gate result is fresh for the retained pr-gate approval."
+            if result == "pass"
+            else "retained merge-gate result is missing, stale, or not a passing merge gate."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": None if result == "pass" else "merge-ready",
+        "freshness": "fresh" if result == "pass" else "stale",
+        "bindings": {
+            "work_item": retained_item,
+            "retained_validation_summary": retained_validation_summary,
+            "reviewed_validation_summary": reviewed_validation_summary,
+            "merge_checkpoint_result": merge_checkpoint.get("result") if isinstance(merge_checkpoint, dict) else None,
+        },
+    }
+
+
+def current_pr_drift_readback(
+    *,
+    current_pr: dict[str, Any],
+    pr_number: int,
+    expected_head: str | None,
+    merge_method: str,
+    pr_gate_consumption: dict[str, Any],
+    merge_gate_consumption: dict[str, Any] | None,
+    required_checks: dict[str, Any],
+    host_enforcement: dict[str, Any],
+) -> dict[str, Any]:
+    head_sha = current_pr.get("headRefOid")
+    mergeability = current_pr.get("mergeStateStatus")
+    mergeability_result = "pass"
+    mergeability_summary = "host mergeability is not present in the PR fixture/readback."
+    if isinstance(mergeability, str) and mergeability:
+        mergeability_result = "block" if mergeability in {"DIRTY", "BLOCKED", "DRAFT"} else "pass"
+        mergeability_summary = f"host mergeability is `{mergeability}`."
+    return {
+        "mode": "drift-only",
+        "summary": "controlled merge reused retained gate results and re-read only current PR and host merge-control drift surfaces.",
+        "subchecks": {
+            "current_pr_head": {
+                "result": "pass" if not expected_head or expected_head == head_sha else "block",
+                "expected_head_sha": expected_head,
+                "current_head_sha": head_sha,
+                "pr": pr_number,
+            },
+            "retained_pr_gate": pr_gate_consumption,
+            "retained_merge_gate": merge_gate_consumption,
+            "required_checks": required_checks,
+            "host_enforcement": host_enforcement,
+            "mergeability": {
+                "result": mergeability_result,
+                "status": mergeability,
+                "summary": mergeability_summary,
+            },
+            "merge_method": {
+                "result": "pass",
+                "method": merge_method,
+            },
+        },
+    }
+
+
 def controlled_merge_payload(
     *,
     target_root: Path,
@@ -12342,26 +12565,134 @@ def controlled_merge_payload(
     status_checks_file: str | None,
     branch_protection_file: str | None,
     ruleset_file: str | None,
+    pr_gate_result_file: str | None,
+    merge_gate_result_file: str | None,
 ) -> dict[str, Any]:
     detected_owner, detected_repo = detect_github_repo(target_root)
     owner = owner or detected_owner
     repo_name = repo_name or detected_repo
-    pr_gate = pr_gate_payload(
-        target_root=target_root,
-        output_relative=output_relative,
-        expected_item=expected_item,
-        owner=owner,
-        repo_name=repo_name,
-        pr_number=pr_number,
-        head_sha=head_sha,
-        branch_name=None,
-        pr_payload_file=pr_payload_file,
-    )
-    missing_inputs = [f"pr-gate: {message}" for message in pr_gate.get("missing_inputs", [])]
-    result = pr_gate.get("result")
-    fallback_to = pr_gate.get("fallback_to")
+    retained_results: dict[str, Any] = {
+        "pr_gate": {"source": "live", "locator": None, "consumption": None},
+        "merge_gate": {"source": "live", "locator": None, "consumption": None},
+    }
+    if pr_gate_result_file:
+        pr_payload_raw, effective_pr, pr_errors, _inferences = load_pr_payload_for_gate(
+            target_root=target_root,
+            owner=owner,
+            repo_name=repo_name,
+            pr_number=pr_number,
+            head_sha=head_sha,
+            branch_name=None,
+            pr_payload_file=pr_payload_file,
+        )
+        pr_payload = pr_payload_raw if isinstance(pr_payload_raw, dict) else {}
+        missing_inputs = [f"current PR readback: {message}" for message in pr_errors]
+        if effective_pr != pr_number:
+            missing_inputs.append("current PR readback does not match requested PR")
+        if not pr_payload:
+            missing_inputs.append("current PR readback is unavailable")
+        else:
+            if pr_payload.get("state") != "OPEN":
+                missing_inputs.append(f"current PR state must be OPEN before controlled merge: {pr_payload.get('state')}")
+            if pr_payload.get("isDraft") is True:
+                missing_inputs.append("current PR is draft")
+            current_head = pr_payload.get("headRefOid")
+            if head_sha and current_head and head_sha != current_head:
+                missing_inputs.append("current PR head does not match --head-sha")
+        retained_pr_gate, retained_pr_gate_errors = load_retained_result_file(
+            target_root,
+            pr_gate_result_file,
+            label="retained pr-gate result",
+        )
+        missing_inputs.extend(f"retained pr-gate: {message}" for message in retained_pr_gate_errors)
+        pr_gate = retained_pr_gate or {
+            "command": "pr-gate",
+            "operation": "check",
+            "schema_version": PR_MERGE_GATE_SCHEMA,
+            "result": "block",
+            "missing_inputs": retained_pr_gate_errors,
+            "fallback_to": "pr-gate",
+            "pr": {"number": pr_number, "head_sha": pr_payload.get("headRefOid")},
+            "work_item": {"id": expected_item},
+            "review_approval": {},
+            "merge_checkpoint": {},
+        }
+        result = pr_gate.get("result") if pr_gate.get("result") in {"pass", "block", "fallback"} else "block"
+        fallback_to = pr_gate.get("fallback_to")
+        pr_gate_consumption = retained_pr_gate_consumption(
+            retained=retained_pr_gate,
+            locator=pr_gate_result_file,
+            current_pr=pr_payload,
+            expected_item=expected_item,
+            pr_number=pr_number,
+        )
+        retained_results["pr_gate"] = {
+            "source": "retained",
+            "locator": pr_gate_result_file,
+            "consumption": pr_gate_consumption,
+        }
+        if pr_gate_consumption["result"] != "pass":
+            result = "block"
+            fallback_to = pr_gate_consumption["fallback_to"]
+            missing_inputs.extend(f"retained pr-gate: {message}" for message in pr_gate_consumption["missing_inputs"])
+    else:
+        pr_gate = pr_gate_payload(
+            target_root=target_root,
+            output_relative=output_relative,
+            expected_item=expected_item,
+            owner=owner,
+            repo_name=repo_name,
+            pr_number=pr_number,
+            head_sha=head_sha,
+            branch_name=None,
+            pr_payload_file=pr_payload_file,
+        )
+        missing_inputs = [f"pr-gate: {message}" for message in pr_gate.get("missing_inputs", [])]
+        result = pr_gate.get("result")
+        fallback_to = pr_gate.get("fallback_to")
+        pr_payload = pr_gate.get("pr") if isinstance(pr_gate.get("pr"), dict) else {}
+        retained_results["pr_gate"]["consumption"] = {
+            "source": "live",
+            "result": pr_gate.get("result"),
+            "summary": "controlled merge evaluated pr-gate inline because no retained pr-gate result locator was provided.",
+            "missing_inputs": pr_gate.get("missing_inputs", []),
+            "fallback_to": pr_gate.get("fallback_to"),
+            "freshness": "fresh" if pr_gate.get("result") == "pass" else "stale",
+        }
 
-    pr_payload = pr_gate.get("pr") if isinstance(pr_gate.get("pr"), dict) else {}
+    merge_gate_consumption: dict[str, Any] | None = None
+    if merge_gate_result_file:
+        retained_merge_gate, retained_merge_gate_errors = load_retained_result_file(
+            target_root,
+            merge_gate_result_file,
+            label="retained merge-gate result",
+        )
+        missing_inputs.extend(f"retained merge-gate: {message}" for message in retained_merge_gate_errors)
+        merge_gate_consumption = retained_merge_gate_consumption(
+            retained=retained_merge_gate,
+            locator=merge_gate_result_file,
+            expected_item=expected_item,
+            pr_gate=pr_gate,
+        )
+        retained_results["merge_gate"] = {
+            "source": "retained",
+            "locator": merge_gate_result_file,
+            "consumption": merge_gate_consumption,
+        }
+        if merge_gate_consumption["result"] != "pass":
+            result = "block"
+            fallback_to = merge_gate_consumption["fallback_to"]
+            missing_inputs.extend(f"retained merge-gate: {message}" for message in merge_gate_consumption["missing_inputs"])
+    else:
+        merge_gate_consumption = {
+            "source": "inline-pr-gate",
+            "result": pr_gate.get("merge_checkpoint", {}).get("result") if isinstance(pr_gate.get("merge_checkpoint"), dict) else None,
+            "summary": "controlled merge reused the merge checkpoint embedded in the current pr-gate evaluation.",
+            "missing_inputs": pr_gate.get("merge_checkpoint", {}).get("missing_inputs", []) if isinstance(pr_gate.get("merge_checkpoint"), dict) else [],
+            "fallback_to": pr_gate.get("merge_checkpoint", {}).get("fallback_to") if isinstance(pr_gate.get("merge_checkpoint"), dict) else None,
+        }
+        retained_results["merge_gate"]["consumption"] = merge_gate_consumption
+
     base_ref = pr_payload.get("baseRefName") if isinstance(pr_payload, dict) else None
 
     protection_payload, protection_errors = load_optional_json_fixture(
@@ -12418,6 +12749,18 @@ def controlled_merge_payload(
         for key in ("missing", "pending", "failing"):
             for context in required_checks[key]:
                 missing_inputs.append(f"required check `{context}` is {labels[key]}")
+    host_enforcement = {
+        "stable_check_name": PR_MERGE_GATE_CHECK_NAME,
+        "required_contexts": required_contexts,
+        "required": PR_MERGE_GATE_CHECK_NAME in required_contexts,
+        "branch_protection_readable": protection_payload is not None,
+        "branch_protection_required_contexts": protection_contexts,
+        "ruleset_readable": ruleset_payload is not None,
+        "ruleset_required_contexts": ruleset_contexts,
+    }
+    mergeability = pr_payload.get("mergeStateStatus") if isinstance(pr_payload, dict) else None
+    if isinstance(mergeability, str) and mergeability in {"DIRTY", "BLOCKED", "DRAFT"}:
+        missing_inputs.append(f"host mergeability is `{mergeability}`")
 
     merge_result: dict[str, Any] = {
         "attempted": False,
@@ -12445,6 +12788,16 @@ def controlled_merge_payload(
             result = "block"
             fallback_to = "merge"
             missing_inputs.append(completed.stderr.strip() or completed.stdout.strip() or "gh pr merge failed")
+    drift_readback = current_pr_drift_readback(
+        current_pr=pr_payload if isinstance(pr_payload, dict) else {},
+        pr_number=pr_number,
+        expected_head=head_sha or pr_gate.get("pr", {}).get("head_sha") if isinstance(pr_gate.get("pr"), dict) else head_sha,
+        merge_method=merge_method,
+        pr_gate_consumption=retained_results["pr_gate"]["consumption"],
+        merge_gate_consumption=merge_gate_consumption,
+        required_checks=required_checks,
+        host_enforcement=host_enforcement,
+    )
 
     return {
         "command": "controlled-merge",
@@ -12462,16 +12815,10 @@ def controlled_merge_payload(
         "fallback_to": fallback_to,
         "repository": {"owner": owner, "name": repo_name},
         "pr_gate": pr_gate,
+        "retained_results": retained_results,
+        "drift_readback": drift_readback,
         "required_checks": required_checks,
-        "host_enforcement": {
-            "stable_check_name": PR_MERGE_GATE_CHECK_NAME,
-            "required_contexts": required_contexts,
-            "required": PR_MERGE_GATE_CHECK_NAME in required_contexts,
-            "branch_protection_readable": protection_payload is not None,
-            "branch_protection_required_contexts": protection_contexts,
-            "ruleset_readable": ruleset_payload is not None,
-            "ruleset_required_contexts": ruleset_contexts,
-        },
+        "host_enforcement": host_enforcement,
         "merge": merge_result,
     }
 
@@ -12494,6 +12841,8 @@ def handle_controlled_merge(args: argparse.Namespace) -> int:
             status_checks_file=args.status_checks_file,
             branch_protection_file=args.branch_protection_file,
             ruleset_file=args.ruleset_file,
+            pr_gate_result_file=args.pr_gate_result_file,
+            merge_gate_result_file=args.merge_gate_result_file,
         )
     )
 

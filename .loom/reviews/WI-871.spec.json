@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-871",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-871 spec review allows retained pr-gate / merge-gate result locators for controlled-merge check|merge, with drift-only re-read semantics, strict Work Item / PR / head / review / validation / merge checkpoint freshness checks, synchronized harness and repo interop contracts, generated skills surface, and installer version metadata.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "8f4cb477694dd0bf3767d7892482f979197ff616",
+  "reviewed_validation_summary": "Head 2d9b8f8e4e6d797a7079b2bf97ac6c56d97c958d passed: make py-compile; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source; git diff --check. Pending after installer version bump and WI-871 carrier binding: rerun validation and record fresh reviews.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-871.md",
+    "recovery_entry": ".loom/progress/WI-871.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
