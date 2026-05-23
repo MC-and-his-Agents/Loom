@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-871",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-871 implementation review allows the retained pr-gate / merge-gate locator implementation, controlled-merge drift-only readback, source self-check coverage for retained pass and stale-head block cases, synchronized canonical/source/generated docs and skills surface, WI-871 carrier binding, and installer version metadata bump. No scope expansion beyond #871.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "36e913d0179a08c9ef78ec718f5fad07a087b234",
+  "reviewed_validation_summary": "Head 2d9b8f8e4e6d797a7079b2bf97ac6c56d97c958d passed: make py-compile; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source; git diff --check. Pending after installer version bump and WI-871 carrier binding: rerun validation and record fresh reviews.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-871.md",
+    "recovery_entry": ".loom/progress/WI-871.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
