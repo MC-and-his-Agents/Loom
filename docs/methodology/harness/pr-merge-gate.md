@@ -21,6 +21,7 @@ The gate must be able to read:
 - PR number or a unique PR inferred from PR head SHA
 - PR head SHA
 - PR body or host payload that binds the PR to a Loom Work Item
+- repo-specific PR metadata preflight when declared by `metadata_contract.fields[*].machine_carrier`
 - current Loom fact chain for that Work Item
 - `work_item.review_entry`
 - authored review record at `review_entry`
@@ -81,6 +82,7 @@ Required payload fields:
 - `work_item`
 - `review_approval`
 - `merge_checkpoint`
+- `pr_metadata_preflight`
 - `governance_lint`
 - `host_enforcement`
 - `approval_boundary`
@@ -122,12 +124,15 @@ The gate must fail closed for:
 - `head_binding_drift`
 - `checkout_head_drift`
 - `raw_evidence_bypass`
+- `pr_metadata_preflight_failed`
 - `host_enforcement_unverified`
 - `retained_result_missing`
 - `retained_result_unreadable`
 - `retained_result_stale`
 
 `raw_evidence_bypass` means raw or shadow evidence is present without an authored `review_entry` approval. This is always a block, never a pass.
+
+`pr_metadata_preflight_failed` means a repo companion declared a blocking PR metadata machine carrier and the PR body machine block is malformed, missing required fields, or required but absent. The gate must report parser diagnostics instead of collapsing the failure into generic missing metadata fields.
 
 ## 6. Host Enforcement
 

@@ -116,6 +116,9 @@ CLOSEOUT_HEAVY_PROFILES = {
     "distribution-regression",
     "strong-profile-full-gate",
 }
+PR_METADATA_PREFLIGHT_SCHEMA = "loom-pr-metadata-preflight/v1"
+PR_METADATA_MACHINE_SCHEMA = "loom-repo-pr-metadata/v1"
+PR_METADATA_PARSER_VERSION = "loom-pr-metadata-parser/v1"
 
 PROJECT_DRIFT_KINDS = {
     "project_missing_item",
@@ -556,6 +559,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     pr_gate.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
     pr_gate.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
 
+    pr_metadata = subparsers.add_parser("pr-metadata", help="Validate repo-specific PR metadata machine carriers")
+    pr_metadata.add_argument("operation", choices=("preflight",))
+    pr_metadata.add_argument("--target", required=True, help="Target repository root")
+    pr_metadata.add_argument("--surface", choices=("review", "merge_ready"), required=True, help="Gate surface that consumes the metadata preflight")
+    pr_metadata.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
+    pr_metadata.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    pr_metadata.add_argument("--pr", type=int, help="GitHub implementation PR number")
+    pr_metadata.add_argument("--head-sha", help="Expected PR head SHA")
+    pr_metadata.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
+    pr_metadata.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+
     controlled_merge = subparsers.add_parser("controlled-merge", help="Check or execute Loom-controlled PR merge")
     controlled_merge.add_argument("operation", choices=("check", "merge"))
     controlled_merge.add_argument("--target", required=True, help="Target repository root")
@@ -849,6 +863,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     flow.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
     flow.add_argument("--issue", type=int, help="GitHub Work Item issue number for host status reads")
     flow.add_argument("--pr", type=int, help="GitHub implementation PR number for host status reads")
+    flow.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
     flow.add_argument("--project", type=int, help="GitHub Project number for Project drift reads")
     flow.add_argument("--branch", help="GitHub branch name for host binding reads")
     flow.add_argument("--project-drift-mode", choices=("advisory", "blocking"), default="advisory")
@@ -12115,6 +12130,407 @@ def pr_body_mentions_item(body: Any, item_id: str) -> bool:
     return bool(re.search(rf"(?<![A-Z0-9-]){re.escape(item_id)}(?![A-Z0-9-])", body))
 
 
+def pr_metadata_block_locator(body: str, start: int, end: int, marker: str) -> dict[str, Any]:
+    return {
+        "marker": marker,
+        "start_offset": start,
+        "end_offset": end,
+        "start_line": body.count("\n", 0, start) + 1,
+        "end_line": body.count("\n", 0, end) + 1,
+    }
+
+
+def pr_metadata_expected_format(marker: str) -> str:
+    return (
+        f"<!-- {marker}\n"
+        "{\n"
+        '  "schema_version": "loom-repo-pr-metadata/v1",\n'
+        '  "metadata_contract_id": "<repo-specific-id>",\n'
+        '  "surface": "review|merge_ready",\n'
+        '  "fields": {"<repo-field>": "<value>"},\n'
+        '  "source": {"rendered_hash": "<sha256-or-repo-renderer-hash>"},\n'
+        '  "parser_version": "loom-pr-metadata-parser/v1"\n'
+        "}\n"
+        "-->"
+    )
+
+
+def metadata_contract_raw_fields(
+    target_root: Path,
+    governance_surface: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[str], str | None]:
+    repo_interface = governance_surface.get("repo_interface")
+    if not isinstance(repo_interface, dict):
+        return [], ["governance_surface.repo_interface"], None
+    availability = repo_interface.get("availability")
+    if availability in {"absent", "companion_docs_only"}:
+        return [], [], None
+    if availability == "incomplete":
+        missing = repo_interface.get("missing_inputs")
+        return [], list(missing) if isinstance(missing, list) else ["repo companion interface"], None
+    if availability != "present":
+        return [], [f"unknown repo companion availability: {availability}"], None
+
+    locator = ".loom/companion/repo-interface.json"
+    locator_entry = repo_interface.get("repo_specific_requirements")
+    if isinstance(locator_entry, dict) and isinstance(locator_entry.get("locator"), str):
+        locator = locator_entry["locator"]
+    repo_interface_path, locator_errors = resolve_repo_relative_path(
+        target_root,
+        locator,
+        label="repo companion metadata contract locator",
+    )
+    if locator_errors:
+        return [], locator_errors, locator
+    assert repo_interface_path is not None
+    try:
+        payload = load_json_file(repo_interface_path)
+    except (FileNotFoundError, json.JSONDecodeError, OSError, ValueError) as exc:
+        return [], [f"repo companion metadata contract is unreadable: {exc}"], locator
+    metadata_contract = payload.get("metadata_contract") if isinstance(payload, dict) else None
+    fields = metadata_contract.get("fields") if isinstance(metadata_contract, dict) else None
+    if fields is None:
+        return [], [], locator
+    if not isinstance(fields, list):
+        return [], ["metadata_contract.fields must be a list"], locator
+    return [field for field in fields if isinstance(field, dict)], [], locator
+
+
+def applicable_pr_metadata_contracts(
+    fields: list[dict[str, Any]],
+    *,
+    surface: str,
+) -> list[dict[str, Any]]:
+    contracts: list[dict[str, Any]] = []
+    for field in fields:
+        machine_carrier = field.get("machine_carrier")
+        if not isinstance(machine_carrier, dict):
+            continue
+        preflight = machine_carrier.get("preflight")
+        required_before = preflight.get("required_before") if isinstance(preflight, dict) else None
+        if isinstance(required_before, list) and surface in required_before:
+            contracts.append(field)
+    return contracts
+
+
+def pr_metadata_html_comment_blocks(body: str, marker: str) -> list[dict[str, Any]]:
+    pattern = re.compile(rf"<!--\s*{re.escape(marker)}\s*(.*?)\s*-->", flags=re.DOTALL)
+    blocks: list[dict[str, Any]] = []
+    for match in pattern.finditer(body):
+        blocks.append(
+            {
+                "raw": match.group(1).strip(),
+                "locator": pr_metadata_block_locator(body, match.start(), match.end(), marker),
+            }
+        )
+    return blocks
+
+
+def pr_metadata_diagnostic(
+    *,
+    contract_id: str,
+    marker: str,
+    reason: str,
+    block_locator: dict[str, Any] | None = None,
+    parse_error: str | None = None,
+    missing_fields: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "metadata_contract_id": contract_id,
+        "block_locator": block_locator,
+        "parse_error": parse_error,
+        "missing_fields": missing_fields or [],
+        "expected_format": pr_metadata_expected_format(marker),
+        "suggested_fix": "rewrite the PR metadata HTML comment JSON block with the declared schema, surface, contract id, and required fields.",
+        "reason": reason,
+    }
+
+
+def validate_pr_metadata_envelope(
+    *,
+    envelope: Any,
+    field: dict[str, Any],
+    surface: str,
+    block_locator: dict[str, Any],
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    contract_id = str(field.get("id") or "")
+    machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
+    marker = str(machine_carrier.get("marker") or "loom:repo-pr-metadata")
+    diagnostics: list[dict[str, Any]] = []
+    if not isinstance(envelope, dict):
+        diagnostics.append(
+            pr_metadata_diagnostic(
+                contract_id=contract_id,
+                marker=marker,
+                reason="machine block JSON must decode to an object",
+                block_locator=block_locator,
+                parse_error="decoded JSON is not an object",
+            )
+        )
+        return None, diagnostics
+    if envelope.get("metadata_contract_id") != contract_id or envelope.get("surface") != surface:
+        return None, []
+
+    missing_fields: list[str] = []
+    if envelope.get("schema_version") != PR_METADATA_MACHINE_SCHEMA:
+        missing_fields.append("schema_version")
+    fields = envelope.get("fields")
+    if not isinstance(fields, dict):
+        missing_fields.append("fields")
+        fields = {}
+    source = envelope.get("source")
+    if not isinstance(source, dict) or not isinstance(source.get("rendered_hash"), str) or not source.get("rendered_hash"):
+        missing_fields.append("source.rendered_hash")
+    if not isinstance(envelope.get("parser_version"), str) or not envelope.get("parser_version"):
+        missing_fields.append("parser_version")
+    required_fields = machine_carrier.get("required_fields")
+    if isinstance(required_fields, list):
+        for required_field in required_fields:
+            if isinstance(required_field, str) and required_field.strip():
+                if required_field not in fields or fields.get(required_field) in (None, ""):
+                    missing_fields.append(f"fields.{required_field}")
+    if missing_fields:
+        diagnostics.append(
+            pr_metadata_diagnostic(
+                contract_id=contract_id,
+                marker=marker,
+                reason="machine block is missing required envelope or repo-specific fields",
+                block_locator=block_locator,
+                missing_fields=missing_fields,
+            )
+        )
+        return None, diagnostics
+    normalized = {
+        "metadata_contract_id": contract_id,
+        "surface": surface,
+        "schema_version": envelope.get("schema_version"),
+        "fields": fields,
+        "source": source,
+        "parser_version": envelope.get("parser_version"),
+        "block_locator": block_locator,
+    }
+    return normalized, []
+
+
+def pr_metadata_contract_preflight(
+    *,
+    field: dict[str, Any],
+    body: str | None,
+    surface: str,
+) -> dict[str, Any]:
+    contract_id = str(field.get("id") or "unknown")
+    machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
+    marker = str(machine_carrier.get("marker") or "loom:repo-pr-metadata")
+    migration_mode = str(machine_carrier.get("migration_mode") or "advisory_legacy")
+    required_fields = [
+        required_field
+        for required_field in machine_carrier.get("required_fields", [])
+        if isinstance(required_field, str) and required_field.strip()
+    ]
+    base = {
+        "metadata_contract_id": contract_id,
+        "surface": surface,
+        "marker": marker,
+        "required_fields": required_fields,
+        "migration_mode": migration_mode,
+        "schema_version": machine_carrier.get("schema_version"),
+        "parser_version": PR_METADATA_PARSER_VERSION,
+        "diagnostics": [],
+        "envelope": None,
+    }
+    if not isinstance(body, str):
+        diagnostic = pr_metadata_diagnostic(
+            contract_id=contract_id,
+            marker=marker,
+            reason="PR body is unavailable for metadata preflight",
+            missing_fields=["pr.body"],
+        )
+        result = "block" if migration_mode == "required" else "pass"
+        return {
+            **base,
+            "result": result,
+            "summary": (
+                "required PR metadata machine block is absent because the PR body is unavailable."
+                if result == "block"
+                else "PR body is unavailable; legacy migration mode leaves metadata preflight advisory."
+            ),
+            "missing_inputs": ["PR body metadata machine block"] if result == "block" else [],
+            "fallback_to": "update_pr_body" if result == "block" else None,
+            "diagnostics": [diagnostic],
+            "legacy_mode": result == "pass",
+        }
+
+    blocks = pr_metadata_html_comment_blocks(body, marker)
+    if not blocks:
+        diagnostic = pr_metadata_diagnostic(
+            contract_id=contract_id,
+            marker=marker,
+            reason="PR body does not contain the declared metadata machine block",
+            missing_fields=["metadata_block"],
+        )
+        result = "block" if migration_mode == "required" else "pass"
+        return {
+            **base,
+            "result": result,
+            "summary": (
+                "required PR metadata machine block is absent."
+                if result == "block"
+                else "PR metadata machine block is absent; legacy migration mode remains advisory."
+            ),
+            "missing_inputs": [f"PR metadata machine block missing: {contract_id}"] if result == "block" else [],
+            "fallback_to": "update_pr_body" if result == "block" else None,
+            "diagnostics": [diagnostic],
+            "legacy_mode": result == "pass",
+        }
+
+    diagnostics: list[dict[str, Any]] = []
+    for block in blocks:
+        try:
+            envelope = json.loads(block["raw"])
+        except json.JSONDecodeError as exc:
+            diagnostics.append(
+                pr_metadata_diagnostic(
+                    contract_id=contract_id,
+                    marker=marker,
+                    reason="metadata machine block JSON is malformed",
+                    block_locator=block["locator"],
+                    parse_error=exc.msg,
+                )
+            )
+            continue
+        normalized, envelope_diagnostics = validate_pr_metadata_envelope(
+            envelope=envelope,
+            field=field,
+            surface=surface,
+            block_locator=block["locator"],
+        )
+        diagnostics.extend(envelope_diagnostics)
+        if normalized is not None:
+            return {
+                **base,
+                "result": "pass",
+                "summary": "PR metadata machine block is parseable and contains the required repo-specific fields.",
+                "missing_inputs": [],
+                "fallback_to": None,
+                "diagnostics": diagnostics,
+                "envelope": normalized,
+                "legacy_mode": False,
+            }
+
+    if diagnostics:
+        return {
+            **base,
+            "result": "block",
+            "summary": "PR metadata machine block is present but not parseable or complete.",
+            "missing_inputs": [f"PR metadata machine block invalid: {contract_id}"],
+            "fallback_to": "update_pr_body",
+            "diagnostics": diagnostics,
+            "legacy_mode": False,
+        }
+    diagnostic = pr_metadata_diagnostic(
+        contract_id=contract_id,
+        marker=marker,
+        reason="PR metadata machine blocks did not match the expected contract id and surface",
+        missing_fields=["metadata_contract_id", "surface"],
+    )
+    result = "block" if migration_mode == "required" else "pass"
+    return {
+        **base,
+        "result": result,
+        "summary": (
+            "required PR metadata machine block for this contract and surface is absent."
+            if result == "block"
+            else "PR metadata machine block for this contract and surface is absent; legacy migration mode remains advisory."
+        ),
+        "missing_inputs": [f"PR metadata machine block missing: {contract_id}"] if result == "block" else [],
+        "fallback_to": "update_pr_body" if result == "block" else None,
+        "diagnostics": [diagnostic],
+        "legacy_mode": result == "pass",
+    }
+
+
+def pr_metadata_preflight_payload(
+    *,
+    target_root: Path,
+    surface: str,
+    owner: str | None = None,
+    repo_name: str | None = None,
+    pr_number: int | None = None,
+    head_sha: str | None = None,
+    branch_name: str | None = None,
+    pr_payload_file: str | None = None,
+    pr_payload: dict[str, Any] | None = None,
+    effective_pr: int | None = None,
+    governance_surface: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    governance_surface = governance_surface or build_governance_surface(target_root)
+    fields, contract_errors, source_locator = metadata_contract_raw_fields(target_root, governance_surface)
+    applicable_contracts = applicable_pr_metadata_contracts(fields, surface=surface)
+    missing_inputs: list[str] = []
+    if contract_errors:
+        missing_inputs.extend(str(message) for message in contract_errors)
+
+    pr_errors: list[str] = []
+    inferences: list[dict[str, Any]] = []
+    if applicable_contracts and pr_payload is None and not contract_errors:
+        detected_owner, detected_repo = detect_github_repo(target_root)
+        pr_payload, effective_pr, pr_errors, inferences = load_pr_payload_for_gate(
+            target_root=target_root,
+            owner=owner or detected_owner,
+            repo_name=repo_name or detected_repo,
+            pr_number=pr_number,
+            head_sha=head_sha,
+            branch_name=branch_name,
+            pr_payload_file=pr_payload_file,
+        )
+        missing_inputs.extend(f"pr: {message}" for message in pr_errors)
+
+    body = pr_payload.get("body") if isinstance(pr_payload, dict) else None
+    contract_results = [
+        pr_metadata_contract_preflight(field=field, body=body if isinstance(body, str) else None, surface=surface)
+        for field in applicable_contracts
+    ]
+    for contract_result in contract_results:
+        if contract_result.get("result") == "block":
+            for message in contract_result.get("missing_inputs", []):
+                if message not in missing_inputs:
+                    missing_inputs.append(str(message))
+
+    result = "pass" if not missing_inputs else "block"
+    if contract_errors:
+        summary = "repo companion metadata contract is incomplete or unreadable."
+    elif not applicable_contracts:
+        summary = "no repo-specific PR metadata machine preflight is declared for this surface."
+    elif result == "pass":
+        summary = "repo-specific PR metadata machine preflight passed or is in advisory legacy migration mode."
+    else:
+        summary = "repo-specific PR metadata machine preflight found blocking parser diagnostics."
+    return {
+        "command": "pr-metadata",
+        "operation": "preflight",
+        "schema_version": PR_METADATA_PREFLIGHT_SCHEMA,
+        "surface": surface,
+        "result": result,
+        "summary": summary,
+        "missing_inputs": missing_inputs,
+        "fallback_to": "update_pr_body" if result == "block" and not contract_errors else "adoption" if result == "block" else None,
+        "source_locator": source_locator,
+        "metadata_contracts": contract_results,
+        "diagnostics": [
+            diagnostic
+            for contract_result in contract_results
+            for diagnostic in contract_result.get("diagnostics", [])
+            if isinstance(diagnostic, dict)
+        ],
+        "pr": {
+            "number": effective_pr,
+            "head_sha": pr_payload.get("headRefOid") if isinstance(pr_payload, dict) else head_sha,
+            "has_body": isinstance(body, str),
+        },
+        "inferences": inferences,
+    }
+
+
 def load_pr_payload_for_gate(
     *,
     target_root: Path,
@@ -12189,6 +12605,8 @@ def pr_gate_failure_taxonomy(missing_inputs: list[str], gate_result: str) -> lis
             categories.add("raw_evidence_bypass")
         if "required check" in lowered or "branch protection" in lowered or "ruleset" in lowered:
             categories.add("host_enforcement_unverified")
+        if "pr metadata" in lowered:
+            categories.add("pr_metadata_preflight_failed")
     if gate_result == "fallback":
         categories.add("prior_gate_fallback")
     return sorted(categories)
@@ -12457,6 +12875,33 @@ def pr_gate_payload(
     else:
         raw_evidence_present = False
 
+    governance_surface = build_governance_surface(target_root)
+    pr_metadata_preflight = pr_metadata_preflight_payload(
+        target_root=target_root,
+        surface="merge_ready",
+        owner=owner,
+        repo_name=repo_name,
+        pr_number=effective_pr,
+        head_sha=pr_head,
+        branch_name=branch_name,
+        pr_payload_file=pr_payload_file,
+        pr_payload=pr_payload if isinstance(pr_payload, dict) else None,
+        effective_pr=effective_pr,
+        governance_surface=governance_surface,
+    )
+    if pr_metadata_preflight.get("result") == "block":
+        missing_inputs.extend(str(message) for message in pr_metadata_preflight.get("missing_inputs", []))
+    steps.append(
+        {
+            "name": "pr-metadata-preflight",
+            "result": pr_metadata_preflight["result"],
+            "summary": pr_metadata_preflight["summary"],
+            "missing_inputs": pr_metadata_preflight["missing_inputs"],
+            "fallback_to": pr_metadata_preflight["fallback_to"],
+            "pr_metadata_preflight": pr_metadata_preflight,
+        }
+    )
+
     result = "pass"
     fallback_to: str | None = None
     for step in steps:
@@ -12527,6 +12972,7 @@ def pr_gate_payload(
         },
         "review_approval": review_approval,
         "merge_checkpoint": merge_checkpoint,
+        "pr_metadata_preflight": pr_metadata_preflight,
         "governance_lint": governance_lint,
         "host_enforcement": {
             "stable_check_name": PR_MERGE_GATE_CHECK_NAME,
@@ -12547,6 +12993,22 @@ def handle_pr_gate(args: argparse.Namespace) -> int:
             target_root=target_root,
             output_relative=args.output,
             expected_item=args.item,
+            owner=args.owner,
+            repo_name=args.repo_name,
+            pr_number=args.pr,
+            head_sha=args.head_sha,
+            branch_name=args.branch,
+            pr_payload_file=args.pr_payload_file,
+        )
+    )
+
+
+def handle_pr_metadata(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    return emit(
+        pr_metadata_preflight_payload(
+            target_root=target_root,
+            surface=args.surface,
             owner=args.owner,
             repo_name=args.repo_name,
             pr_number=args.pr,
@@ -17395,6 +17857,7 @@ def handle_flow(args: argparse.Namespace) -> int:
     build_execution: dict[str, Any] | None = None
     governance_lint: dict[str, Any] | None = None
     retained_host_signals: dict[str, Any] | None = None
+    pr_metadata_preflight: dict[str, Any] | None = None
     governance_surface = build_governance_surface(target_root)
     upgrade_path = maturity_upgrade_path(governance_surface, target_root)
     repo_interface = governance_surface.get("repo_interface")
@@ -17504,6 +17967,17 @@ def handle_flow(args: argparse.Namespace) -> int:
                 surface="merge_ready",
                 current_head=git_head_sha(target_root),
             )
+            pr_metadata_preflight = pr_metadata_preflight_payload(
+                target_root=target_root,
+                surface="merge_ready",
+                owner=flow_owner,
+                repo_name=flow_repo_name,
+                pr_number=args.pr,
+                head_sha=None,
+                branch_name=args.branch,
+                pr_payload_file=args.pr_payload_file,
+                governance_surface=governance_surface,
+            )
             governance_lint = flow_governance_lint_status(
                 context,
                 surface="merge_ready",
@@ -17532,6 +18006,14 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "missing_inputs": governance_lint_missing_inputs(governance_lint),
                         "fallback_to": governance_lint_fallback(governance_lint),
                         "governance_lint": governance_lint,
+                    },
+                    {
+                        "name": "pr-metadata-preflight",
+                        "result": pr_metadata_preflight["result"],
+                        "summary": pr_metadata_preflight["summary"],
+                        "missing_inputs": pr_metadata_preflight["missing_inputs"],
+                        "fallback_to": pr_metadata_preflight["fallback_to"],
+                        "pr_metadata_preflight": pr_metadata_preflight,
                     },
                 ]
             )
@@ -17806,6 +18288,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             "blocking_failures": blocking_failures,
             "project_drift": flow_project_drift,
             **({"governance_lint": governance_lint} if args.operation in {"pre-review", "merge-ready"} else {}),
+            **({"pr_metadata_preflight": pr_metadata_preflight} if args.operation == "merge-ready" else {}),
             **({"goal_execution_contract": goal_contract, "goal_readiness": goal_readiness} if args.operation == "resume" else {}),
             **({"governance_surface": governance_surface} if args.operation == "resume" else {}),
             **({"maturity_upgrade_path": upgrade_path} if args.operation == "resume" else {}),
@@ -18331,6 +18814,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_goal(args)
     if args.command == "pr-gate":
         return handle_pr_gate(args)
+    if args.command == "pr-metadata":
+        return handle_pr_metadata(args)
     if args.command == "controlled-merge":
         return handle_controlled_merge(args)
     if args.command == "runtime-evidence":

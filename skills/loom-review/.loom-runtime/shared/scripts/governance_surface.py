@@ -346,6 +346,11 @@ REPO_INTERFACE_GATE_TYPES = {
     "closeout",
 }
 REPO_INTERFACE_CONTEXT_TYPES = {"string", "integer", "number", "boolean"}
+REPO_METADATA_MACHINE_CARRIER_TYPES = {"pr_body_html_comment_json"}
+REPO_METADATA_MACHINE_CARRIER_SCHEMAS = {"loom-repo-pr-metadata/v1"}
+REPO_METADATA_MACHINE_CARRIER_MIGRATION_MODES = {"advisory_legacy", "dual_read", "required"}
+REPO_METADATA_MACHINE_CARRIER_PREFLIGHT_SURFACES = {"review", "merge_ready"}
+REPO_METADATA_MACHINE_CARRIER_FAILURE_MODES = {"blocking", "advisory"}
 REPO_INTERFACE_MANIFEST_KEYS = {"schema_version", "companion_entry", "repo_interface"}
 REPO_INTERFACE_V1_KEYS = {"schema_version", "companion_entry", "repo_specific_requirements", "specialized_gates"}
 REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {
@@ -1226,6 +1231,81 @@ def validate_metadata_contract(
         for forbidden in FORBIDDEN_COMPANION_TRUTH_FIELDS:
             if forbidden in field_id:
                 missing_inputs.append(f"{field_prefix} must not declare authored truth field `{forbidden}`")
+        machine_carrier = field.get("machine_carrier")
+        if machine_carrier is not None:
+            missing_inputs.extend(
+                validate_metadata_machine_carrier(
+                    root=root,
+                    entry=machine_carrier,
+                    prefix=f"{field_prefix}.machine_carrier",
+                )
+            )
+    return missing_inputs
+
+
+def validate_metadata_machine_carrier(
+    *,
+    root: Path,
+    entry: object,
+    prefix: str,
+) -> list[str]:
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"]
+    missing_inputs: list[str] = []
+    if entry.get("type") not in REPO_METADATA_MACHINE_CARRIER_TYPES:
+        missing_inputs.append(f"{prefix}.type must be `pr_body_html_comment_json`")
+    if entry.get("schema_version") not in REPO_METADATA_MACHINE_CARRIER_SCHEMAS:
+        missing_inputs.append(f"{prefix}.schema_version must be `loom-repo-pr-metadata/v1`")
+    marker = entry.get("marker")
+    if not isinstance(marker, str) or not marker.strip():
+        missing_inputs.append(f"{prefix} missing `marker`")
+    required_fields = entry.get("required_fields")
+    if not isinstance(required_fields, list):
+        missing_inputs.append(f"{prefix}.required_fields must be a list")
+    else:
+        for index, required_field in enumerate(required_fields):
+            if not isinstance(required_field, str) or not required_field.strip():
+                missing_inputs.append(f"{prefix}.required_fields[{index}] must be a non-empty string")
+            lowered = str(required_field).lower()
+            for forbidden in FORBIDDEN_COMPANION_TRUTH_FIELDS:
+                if forbidden in lowered:
+                    missing_inputs.append(f"{prefix}.required_fields[{index}] must not declare authored truth field `{forbidden}`")
+    migration_mode = entry.get("migration_mode", "advisory_legacy")
+    if migration_mode not in REPO_METADATA_MACHINE_CARRIER_MIGRATION_MODES:
+        missing_inputs.append(f"{prefix}.migration_mode must be `advisory_legacy`, `dual_read`, or `required`")
+    preflight = entry.get("preflight")
+    if not isinstance(preflight, dict):
+        missing_inputs.append(f"{prefix} must include `preflight`")
+    else:
+        required_before = preflight.get("required_before")
+        if not isinstance(required_before, list) or not required_before:
+            missing_inputs.append(f"{prefix}.preflight.required_before must be a non-empty list")
+        else:
+            for index, surface in enumerate(required_before):
+                if surface not in REPO_METADATA_MACHINE_CARRIER_PREFLIGHT_SURFACES:
+                    missing_inputs.append(f"{prefix}.preflight.required_before[{index}] must be `review` or `merge_ready`")
+        if preflight.get("failure_mode") not in REPO_METADATA_MACHINE_CARRIER_FAILURE_MODES:
+            missing_inputs.append(f"{prefix}.preflight.failure_mode must be `blocking` or `advisory`")
+        command_locator = preflight.get("command_locator")
+        locator, target = resolve_locator(root, command_locator)
+        if locator is None or target is None:
+            missing_inputs.append(locator_boundary_error(command_locator, label=f"{prefix}.preflight.command_locator"))
+        elif not target.exists():
+            missing_inputs.append(f"{prefix}.preflight.command_locator points to missing path `{locator}`")
+    diagnostics = entry.get("diagnostics")
+    if not isinstance(diagnostics, dict):
+        missing_inputs.append(f"{prefix} must include `diagnostics`")
+    else:
+        required_diagnostics = {
+            "block_locator",
+            "parse_error",
+            "missing_fields",
+            "expected_format",
+            "suggested_fix",
+        }
+        for key in sorted(required_diagnostics):
+            if diagnostics.get(key) is not True:
+                missing_inputs.append(f"{prefix}.diagnostics.{key} must be true")
     return missing_inputs
 
 

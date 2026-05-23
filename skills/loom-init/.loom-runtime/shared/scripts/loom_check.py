@@ -7154,16 +7154,20 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 "checkpoint-build",
                 "checkpoint-merge",
                 "governance-lint",
+                "pr-metadata-preflight",
             ]:
                 failures.append(
                     Failure(
                         "daily-execution-cli",
-                        "`flow merge-ready` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-build, checkpoint-merge, and governance-lint in order",
+                        "`flow merge-ready` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-build, checkpoint-merge, governance-lint, and pr-metadata-preflight in order",
                     )
                 )
             governance_step = next((step for step in steps if isinstance(step, dict) and step.get("name") == "governance-lint"), None)
             if not isinstance(governance_step, dict) or "governance_lint" not in governance_step:
                 failures.append(Failure("daily-execution-cli", "`flow merge-ready` governance-lint step must embed governance_lint evidence"))
+            metadata_step = next((step for step in steps if isinstance(step, dict) and step.get("name") == "pr-metadata-preflight"), None)
+            if not isinstance(metadata_step, dict) or "pr_metadata_preflight" not in metadata_step:
+                failures.append(Failure("daily-execution-cli", "`flow merge-ready` pr-metadata-preflight step must embed parser preflight evidence"))
             require_governance_lint_status_payload(
                 failures,
                 category="daily-execution-cli",
@@ -19302,6 +19306,217 @@ def collect_consumer_failures(root: Path) -> list[Failure]:
     return failures
 
 
+def check_pr_metadata_machine_preflight_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    category = "pr-metadata-machine-preflight"
+
+    def write_json(path: Path, payload: object) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    def install_companion(
+        target: Path,
+        *,
+        migration_mode: str = "required",
+        command_locator: str = ".loom/companion/pr-metadata-preflight.md",
+        field_id: str = "integration_check",
+        required_fields: list[str] | None = None,
+    ) -> None:
+        companion = target / ".loom" / "companion"
+        companion.mkdir(parents=True, exist_ok=True)
+        (companion / "README.md").write_text("# Repo Companion\n", encoding="utf-8")
+        (companion / "metadata-contract.md").write_text("# Metadata Contract\n", encoding="utf-8")
+        if not command_locator.startswith("../"):
+            command_path = target / command_locator
+            command_path.parent.mkdir(parents=True, exist_ok=True)
+            command_path.write_text("# PR Metadata Preflight\n", encoding="utf-8")
+        write_json(
+            companion / "manifest.json",
+            {
+                "schema_version": "loom-repo-companion-manifest/v1",
+                "companion_entry": ".loom/companion/README.md",
+                "repo_interface": ".loom/companion/repo-interface.json",
+            },
+        )
+        write_json(
+            companion / "repo-interface.json",
+            {
+                "schema_version": "loom-repo-interface/v2",
+                "companion_entry": ".loom/companion/README.md",
+                "repo_specific_requirements": {"review": [], "merge_ready": [], "closeout": []},
+                "specialized_gates": [],
+                "review_instruction_locators": {
+                    "spec_review": {"locator": "loom_default", "mode": "loom_default"},
+                    "implementation_review": {"locator": "loom_default", "mode": "loom_default"},
+                },
+                "metadata_contract": {
+                    "fields": [
+                        {
+                            "id": field_id,
+                            "summary": "Repo-specific PR metadata machine block.",
+                            "applicability_locator": ".loom/companion/metadata-contract.md",
+                            "authority_locator": ".loom/companion/metadata-contract.md",
+                            "enforcement": "blocking",
+                            "machine_carrier": {
+                                "type": "pr_body_html_comment_json",
+                                "schema_version": "loom-repo-pr-metadata/v1",
+                                "marker": "loom:repo-pr-metadata",
+                                "required_fields": required_fields or ["contract_surface"],
+                                "preflight": {
+                                    "required_before": ["merge_ready"],
+                                    "failure_mode": "blocking",
+                                    "command_locator": command_locator,
+                                },
+                                "diagnostics": {
+                                    "block_locator": True,
+                                    "parse_error": True,
+                                    "missing_fields": True,
+                                    "expected_format": True,
+                                    "suggested_fix": True,
+                                },
+                                "migration_mode": migration_mode,
+                            },
+                        }
+                    ]
+                },
+                "context_schema": {"fields": []},
+                "dynamic_tool_locators": [],
+                "policy_locators": [],
+                "hook_locators": [],
+            },
+        )
+
+    def pr_payload(body: str) -> dict[str, object]:
+        return {
+            "number": 873,
+            "state": "OPEN",
+            "isDraft": False,
+            "headRefName": "work/873-pr-metadata-machine-preflight",
+            "headRefOid": "abc123",
+            "baseRefName": "main",
+            "body": body,
+        }
+
+    def run_preflight(target: Path, payload: dict[str, object]) -> dict[str, object] | None:
+        write_json(target / ".loom/tmp/pr.json", payload)
+        result, error = load_command_json(
+            root,
+            [
+                "python3",
+                "src/skills/shared/scripts/loom_flow.py",
+                "pr-metadata",
+                "preflight",
+                "--target",
+                str(target),
+                "--surface",
+                "merge_ready",
+                "--pr-payload-file",
+                ".loom/tmp/pr.json",
+            ],
+        )
+        if error:
+            failures.append(Failure(category, f"preflight command returned invalid output: {error}"))
+        return result
+
+    valid_body = """## Summary
+
+Human-readable PR text.
+
+<!-- loom:repo-pr-metadata
+{
+  "schema_version": "loom-repo-pr-metadata/v1",
+  "metadata_contract_id": "integration_check",
+  "surface": "merge_ready",
+  "fields": {
+    "contract_surface": "checked"
+  },
+  "source": {
+    "rendered_hash": "sha256:test"
+  },
+  "parser_version": "repo-parser/v1"
+}
+-->
+"""
+
+    with tempfile.TemporaryDirectory(prefix="loom-pr-metadata-preflight-") as tmp:
+        base = Path(tmp)
+
+        valid_target = base / "valid"
+        valid_target.mkdir()
+        install_companion(valid_target)
+        valid_payload = run_preflight(valid_target, pr_payload(valid_body))
+        if not isinstance(valid_payload, dict) or valid_payload.get("result") != "pass":
+            failures.append(Failure(category, "valid HTML comment JSON metadata block must pass preflight"))
+
+        malformed_target = base / "malformed"
+        malformed_target.mkdir()
+        install_companion(malformed_target)
+        malformed_body = valid_body.replace('"contract_surface": "checked"', '"contract_surface": ')
+        malformed_payload = run_preflight(malformed_target, pr_payload(malformed_body))
+        diagnostics = malformed_payload.get("diagnostics") if isinstance(malformed_payload, dict) else []
+        if not isinstance(malformed_payload, dict) or malformed_payload.get("result") != "block":
+            failures.append(Failure(category, "malformed metadata JSON must block"))
+        elif "parse_error" not in json.dumps(diagnostics, ensure_ascii=False):
+            failures.append(Failure(category, "malformed metadata JSON must expose parser diagnostics"))
+
+        missing_field_target = base / "missing-field"
+        missing_field_target.mkdir()
+        install_companion(missing_field_target)
+        missing_field_body = valid_body.replace('"contract_surface": "checked"', '"other_field": "checked"')
+        missing_field_payload = run_preflight(missing_field_target, pr_payload(missing_field_body))
+        missing_diagnostics = missing_field_payload.get("diagnostics") if isinstance(missing_field_payload, dict) else []
+        if not isinstance(missing_field_payload, dict) or missing_field_payload.get("result") != "block":
+            failures.append(Failure(category, "missing required repo-specific metadata field must block"))
+        elif "fields.contract_surface" not in json.dumps(missing_diagnostics, ensure_ascii=False):
+            failures.append(Failure(category, "missing field diagnostics must name the exact repo-specific field"))
+
+        advisory_legacy_target = base / "advisory-legacy"
+        advisory_legacy_target.mkdir()
+        install_companion(advisory_legacy_target, migration_mode="advisory_legacy")
+        advisory_payload = run_preflight(advisory_legacy_target, pr_payload("## Summary\n\nNo machine block yet.\n"))
+        if not isinstance(advisory_payload, dict) or advisory_payload.get("result") != "pass":
+            failures.append(Failure(category, "advisory legacy migration mode must not break old PR bodies"))
+
+        required_absent_target = base / "required-absent"
+        required_absent_target.mkdir()
+        install_companion(required_absent_target, migration_mode="required")
+        required_absent_payload = run_preflight(required_absent_target, pr_payload("## Summary\n\nNo machine block.\n"))
+        if not isinstance(required_absent_payload, dict) or required_absent_payload.get("result") != "block":
+            failures.append(Failure(category, "required migration mode must block absent machine blocks"))
+
+        forbidden_target = base / "forbidden-truth"
+        forbidden_target.mkdir()
+        install_companion(forbidden_target, required_fields=["guardian_verdict"])
+        forbidden_surface = loom_flow_module.build_governance_surface(forbidden_target)
+        repo_interface = forbidden_surface.get("repo_interface") if isinstance(forbidden_surface, dict) else None
+        missing_inputs = json.dumps(repo_interface.get("missing_inputs", []) if isinstance(repo_interface, dict) else [], ensure_ascii=False)
+        if not isinstance(repo_interface, dict) or repo_interface.get("availability") != "incomplete":
+            failures.append(Failure(category, "metadata machine carrier must reject forbidden host/action truth fields"))
+        elif "guardian_verdict" not in missing_inputs:
+            failures.append(Failure(category, "forbidden metadata field diagnostics must name `guardian_verdict`"))
+
+        escape_target = base / "command-locator-escape"
+        escape_target.mkdir()
+        install_companion(escape_target, command_locator="../outside-preflight.md")
+        escape_surface = loom_flow_module.build_governance_surface(escape_target)
+        escape_interface = escape_surface.get("repo_interface") if isinstance(escape_surface, dict) else None
+        escape_missing = json.dumps(escape_interface.get("missing_inputs", []) if isinstance(escape_interface, dict) else [], ensure_ascii=False)
+        if not isinstance(escape_interface, dict) or escape_interface.get("availability") != "incomplete":
+            failures.append(Failure(category, "metadata preflight command_locator path escape must fail closed"))
+        elif "outside-preflight.md" not in escape_missing:
+            failures.append(Failure(category, "unsafe command_locator diagnostics must name the escaped path"))
+
+    source_text = (root / "src/skills/shared/scripts/loom_flow.py").read_text(encoding="utf-8")
+    for anchor in (
+        "pr_metadata_preflight_payload(",
+        "\"name\": \"pr-metadata-preflight\"",
+        "PR_METADATA_PREFLIGHT_SCHEMA",
+    ):
+        if anchor not in source_text:
+            failures.append(Failure(category, f"`loom_flow.py` must retain `{anchor}`"))
+    return failures
+
+
 def collect_source_failures(root: Path) -> list[Failure]:
     failures: list[Failure] = []
     failures.extend(check_required_paths(root, "top-level-dirs", TOP_LEVEL_DIRS))
@@ -19364,6 +19579,7 @@ def collect_source_failures(root: Path) -> list[Failure]:
     failures.extend(check_governance_lint_negative_fixture_contract(root))
     failures.extend(check_complex_existing_authority_migration_fixture_contract(root))
     failures.extend(check_safe_sync_plan_fixture_contract(root))
+    failures.extend(check_pr_metadata_machine_preflight_contract(root))
     failures.extend(check_github_profile_maturity_fixture_contract(root))
     failures.extend(check_loom_check_runtime_purity_contract(root))
     failures.extend(check_loom_check_profile_contract(root))
