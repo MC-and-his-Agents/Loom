@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-963",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-963 implementation review allows the runtime-purity contract changes. The patch adds the harness authority document, synchronizes shared skill references and generated runtime surfaces, and adds loom_check source self-check anchors without changing runtime behavior outside the contract validation surface.",
+  "reviewer": "codex",
+  "reviewed_head": "53cb31fb0fbc23e1c49139fd1ce91edae7954dc2",
+  "reviewed_validation_summary": "Passed for WI-963: git diff --check; python3 tools/py_compile_clean.py tools/loom_check.py skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_check.py; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source . -> loom_check: OK, profile source, checked 40 source/distribution surfaces; host-binding inspect for #962/#963/PR #976/branch work/963-loom-check-purity-contract/head 7a9e856e083893ae4d009d22a83d26b86507fff7 returned pass.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-963.md",
+    "recovery_entry": ".loom/progress/WI-963.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
