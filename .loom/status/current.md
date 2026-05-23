@@ -12,10 +12,10 @@
 - Validation Entry: make py-compile; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main
 - Closing Condition: PR #980 for #871 is merge-ready or merged with branch, worktree, PR head, retained gate result checks, required host checks, and review carriers aligned.
 - Current Checkpoint: merge checkpoint
-- Current Stop: WI-871 implementation head is locally validated and awaiting refreshed spec / implementation review carrier commits plus PR checks.
-- Next Step: Record spec review on the base carrier head, then record implementation review on the spec-review head, push, and rerun PR gate/checks.
+- Current Stop: WI-871 implementation and review carriers are locally validated through head 7191dc2b389bfbf409d879c0d2c67507c707feba; awaiting push, PR checks, pr-gate, merge-gate, controlled merge, and closeout.
+- Next Step: Push the branch, update PR #980 workspace binding to the pushed head, rerun PR checks, then consume pr-gate / merge-gate results through controlled-merge drift-only readback.
 - Blockers: None recorded.
-- Latest Validation Summary: Head 2d9b8f8e4e6d797a7079b2bf97ac6c56d97c958d passed: make py-compile; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source; git diff --check. Pending after installer version bump and WI-871 carrier binding: rerun validation and record fresh reviews.
+- Latest Validation Summary: Head 7191dc2b389bfbf409d879c0d2c67507c707feba passed: make py-compile; python3 tools/skills_surface.py check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main; python3 tools/version_surface_check.py; git diff --check; python3 tools/loom_flow.py shadow-parity --target . --mode blocking; python3 tools/loom_flow.py adopt verify --target .; npm ci; npm test; npm pack --dry-run; python3 tools/loom_check.py --profile source. Initial source loom_check failure was traced to stale shadow evidence and npm install interruption; both were corrected and rerun successfully.
 - Recovery Boundary: WI-871 owns retained pr-gate / merge-gate locator consumption, controlled-merge drift-only readback, harness / interop contract updates, generated skills surface updates, and required installer version metadata for this distribution change.
 - Current Lane: pr-prep
 
