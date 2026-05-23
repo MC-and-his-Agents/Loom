@@ -12,7 +12,7 @@
 - Validation Entry: node packages/loom-installer/scripts/run-regression.mjs; npm --prefix packages/loom-installer run check:payload; python3 tools/skills_surface.py check; make loom-check; git status
 - Closing Condition: PR for #966 merged or merge-ready with installer regression writes protected by a worktree-local lock, unique npm cache evidence, payload drift still detected, and issue/branch/worktree/PR/head/check state aligned.
 - Current Checkpoint: review checkpoint
-- Current Stop: WI-966 local implementation and review are complete through head c3e9575; full make loom-check passed after review/shadow carrier refresh.
+- Current Stop: WI-966 local implementation, review, and final validation carrier are complete through head 5f18a98; full make loom-check passed after review/shadow carrier refresh.
 - Next Step: Push branch, open PR for #966, run PR gate and GitHub checks, then mark merge-ready or merge.
 - Blockers: None recorded.
 - Latest Validation Summary: Passed: lock-busy diagnostic smoke for run-regression.mjs; node packages/loom-installer/scripts/run-regression.mjs; npm --prefix packages/loom-installer run check:payload -> payload drift OK; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> no installer package version bump required; git diff --check; python3 tools/py_compile_clean.py tools/loom_check.py src/skills/shared/scripts/loom_check.py skills/shared/scripts/loom_check.py examples/new-project/.loom/bin/loom_check.py; python3 tools/skills_surface.py check; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-966 -> pass; python3 .loom/bin/loom_flow.py shadow-parity --target . -> pass; make loom-check -> loom_check OK, profile source, checked 40 source/distribution surfaces.
