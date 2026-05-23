@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-873
-- Goal: 收敛 PR metadata machine carrier contract 与 parser preflight，使 repo-specific PR metadata 不再依赖自由 Markdown。
-- Scope: 扩展 repo companion metadata_contract machine_carrier 合同；实现 pr-metadata preflight CLI；接入 pr-gate check 与 flow merge-ready；补充 loom_check fixtures；同步 adoption/harness 文档、shared references、skills 安装面与 demo runtime。
-- Execution Path: harness/pr-metadata-machine-preflight
+- Item ID: WI-969
+- Goal: Review engine profile 治理与 gpt-5.5 默认模型升级
+- Scope: 将稳定 review engine profiles 默认模型升级到 gpt-5.5；新增 repo-owned review profile policy；限制 local Codex config 为显式 opt-in 且 CI/headless/merge gate 默认拒绝；记录 Codex App requested/actual model proof；同步 docs、fixtures、generated skills runtime 与 installer version；不实施 #836 adopted repo migration 或 #957 expensive review readiness/cost guard。
+- Execution Path: harness/review-engine-profile-governance
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-873.md
-- Review Entry: .loom/reviews/WI-873.json
-- Validation Entry: python3 tools/skills_surface.py generate; make check; python3 tools/loom_check.py .; git diff --check; direct pr-metadata preflight fixture CLI checks
-- Closing Condition: PR for #873 is merge-ready or merged with PR metadata machine contract, parser preflight, diagnostics, migration behavior, and fixture coverage validated.
-- Current Checkpoint: merge checkpoint
-- Current Stop: Implementation is rebased onto origin/main at 5cdd8db8d80731a0bee036495506a6e67b22e5e6, local validation is complete, and PR #982 is ready for updated push/CI consumption.
-- Next Step: Push rebased branch with force-with-lease, update PR #982 head/validation binding, confirm required checks, merge, then verify #873 closeout.
+- Recovery Entry: .loom/progress/WI-969.md
+- Review Entry: .loom/reviews/WI-969.json
+- Validation Entry: codex exec -m gpt-5.5; make py-compile; python3 tools/skills_surface.py check; python3 tools/loom_check.py; make check; PR required checks; reconciliation audit; closeout check
+- Closing Condition: PR #985 merged to main, required checks passed, reconciliation/closeout sync aligned, and GitHub issues #970-#975 plus #969 closed with Project status Done.
+- Current Checkpoint: review
+- Current Stop: PR #985 implementation is pushed; merge gate feedback is being addressed by refreshing PR body binding and review carrier freshness.
+- Next Step: Push refreshed carrier commits, wait for required PR checks, then merge and run reconciliation/closeout sync for #970-#975 and #969.
 - Blockers: None recorded.
-- Latest Validation Summary: Post-5cdd8db rebase validation passed: python3 tools/skills_surface.py generate; make loom-demo-new-project-sync; make check; git diff --check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main; direct pr-metadata preflight CLI fixtures for valid, malformed, and missing-field PR payloads. make test unavailable: no Makefile target.
-- Recovery Boundary: WI-873 owns PR metadata machine carrier contract, parser/preflight runtime integration, diagnostics/migration behavior, loom_check fixtures, docs/reference sync, generated skills/runtime surfaces, and WI-873 carriers/review. Excludes adopting WebEnvoy-specific field taxonomy or unrelated governance gate redesign.
-- Current Lane: merge-ready
+- Latest Validation Summary: Passed after rebasing WI-969 onto origin/main c4773f0: make py-compile; python3 tools/skills_surface.py check; git diff --check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK (0.1.142 -> 0.1.143); python3 tools/loom_flow.py carrier refresh --target . --item WI-969; python3 tools/loom_flow.py shadow-parity --target . --surface all; python3 tools/loom_flow.py adopt verify --target . --item WI-969. Full loom_check and merge gate are consumed through PR required checks before merge.
+- Recovery Boundary: #969 owns review profile default model, repo-owned review profile policy, local config opt-in governance, Codex App model proof, fixtures/docs/generated runtime sync, installer version metadata required by package gate, and closeout for #970-#975/#969. Excludes #836 adopted repo migration and #957 expensive review readiness/cost guard.
+- Current Lane: pr-prep
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: python3 tools/loom_check.py --profile source .
+- Verification Entry: make py-compile; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main
 - Lane Entry: not_applicable
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-873.md
-- Dynamic Truth: .loom/progress/WI-873.md
+- Static Truth: .loom/work-items/WI-969.md
+- Dynamic Truth: .loom/progress/WI-969.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

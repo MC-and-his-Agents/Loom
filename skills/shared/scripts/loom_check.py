@@ -7558,6 +7558,13 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 engine = payload.get("engine") if isinstance(payload.get("engine"), dict) else {}
                 if engine.get("engine") != "codex" or engine.get("adapter") != "loom/default-codex-exec":
                     failures.append(Failure("daily-execution-cli", "`review run` positive chain must keep the default codex exec adapter"))
+                profile = engine.get("profile") if isinstance(engine.get("profile"), dict) else {}
+                if profile.get("model") != "gpt-5.5" or profile.get("reasoning_effort") != "medium":
+                    failures.append(Failure("daily-execution-cli", "`review run` positive chain must resolve the gpt-5.5 default profile"))
+                source = profile.get("profile_source") if isinstance(profile.get("profile_source"), dict) else {}
+                expected_source = "repo-owned-policy" if (review_target / ".loom/review-profiles.json").exists() else "loom-built-in"
+                if source.get("kind") != expected_source:
+                    failures.append(Failure("daily-execution-cli", "`review run` positive chain must record the resolved profile source"))
                 review_record_input = payload.get("review_record_input") if isinstance(payload.get("review_record_input"), dict) else {}
                 if review_record_input.get("engine_adapter") != "loom/default-codex-exec" or review_record_input.get("reviewer") != "loom/default-codex-exec":
                     failures.append(Failure("daily-execution-cli", "`review run` positive chain must keep default review_record_input adapter"))
@@ -8051,6 +8058,11 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 metadata = payload.get("engine_metadata") if isinstance(payload.get("engine_metadata"), dict) else {}
                 if metadata.get("thread_id") != "thread-stage2-live-proof":
                     failures.append(Failure("daily-execution-cli", "`review run` Codex App authoritative must expose live thread proof metadata"))
+                model_proof = metadata.get("model_proof") if isinstance(metadata.get("model_proof"), dict) else {}
+                if model_proof.get("requested_model") != "gpt-5.5" or model_proof.get("requested_reasoning") != "medium":
+                    failures.append(Failure("daily-execution-cli", "`review run` Codex App authoritative must record requested gpt-5.5 model proof"))
+                if model_proof.get("result") != "unverified" or model_proof.get("proof_source") != "raw-file-unverified":
+                    failures.append(Failure("daily-execution-cli", "`review run` Codex App raw-file proof must be structured as unverified"))
                 merge_payload, merge_error = load_command_json(
                     root,
                     [
@@ -8068,6 +8080,58 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     failures.append(Failure("daily-execution-cli", f"`merge-ready before authored app review record` failed: {merge_error}"))
                 elif merge_payload.get("result") == "pass":
                     failures.append(Failure("daily-execution-cli", "`merge-ready` must not consume raw Codex App authoritative evidence before review record is authored"))
+
+        app_unverified_high_risk_target = Path(tmp) / "review-run-codex-app-unverified-high-risk"
+        prepare_review_target(app_unverified_high_risk_target, "review run Codex App high-risk unverified model proof")
+        app_unverified_raw = app_unverified_high_risk_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
+        app_unverified_raw.parent.mkdir(parents=True, exist_ok=True)
+        app_unverified_raw.write_text(
+            json.dumps(
+                {
+                    "decision": "allow",
+                    "summary": "Raw-file review result is structurally valid but lacks actual model proof.",
+                    "findings": [],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(app_unverified_high_risk_target),
+                "--item",
+                "INIT-0001",
+                "--engine-adapter",
+                "loom/codex-app-review",
+                "--engine-profile",
+                "high-risk",
+                "--engine-override-reason",
+                "fixture requires high-risk profile to fail closed without actual model proof",
+                "--codex-app-review-app-server",
+                "stdio://stage2-live-proof",
+                "--codex-app-review-thread-id",
+                "thread-stage2-live-proof",
+                "--codex-app-review-cwd",
+                str(app_unverified_high_risk_target),
+                "--codex-app-review-raw-file",
+                ".loom/runtime/tmp/codex-app-review-normalized.json",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` Codex App high-risk unverified proof failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`review run` Codex App high-risk profile must fail closed without actual model proof"))
+        elif "actual model/reasoning proof is unverified" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
+            failures.append(Failure("daily-execution-cli", "`review run` Codex App high-risk unverified proof must expose the proof failure reason"))
 
         app_missing_target = Path(tmp) / "review-run-codex-app-missing-proof"
         prepare_review_target(app_missing_target, "review run Codex App missing proof")
@@ -8264,6 +8328,222 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             failures.append(Failure("daily-execution-cli", "`review run` profile override must block without an override reason"))
         elif "override requires" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
             failures.append(Failure("daily-execution-cli", "`review run` profile override missing reason must expose the missing reason"))
+
+        repo_policy_target = Path(tmp) / "repo-owned-profile"
+        prepare_review_target(repo_policy_target, "review run repo-owned profile")
+        repo_policy_path = repo_policy_target / ".loom/review-profiles.json"
+        repo_policy_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": "loom-review-profiles/v1",
+                    "profiles": {
+                        "default": {
+                            "model": "gpt-5.5-repo-fixture",
+                            "reasoning_effort": "high",
+                            "selection_reason": "repo-owned fixture policy raises normal review reasoning",
+                        }
+                    },
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(repo_policy_target),
+                "--item",
+                "INIT-0001",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` repo-owned profile failed: {error}"))
+        else:
+            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
+            profile = engine.get("profile") if isinstance(engine.get("profile"), dict) else {}
+            source = profile.get("profile_source") if isinstance(profile.get("profile_source"), dict) else {}
+            if profile.get("model") != "gpt-5.5-repo-fixture" or profile.get("reasoning_effort") != "high":
+                failures.append(Failure("daily-execution-cli", "`review run` repo-owned profile must override the built-in profile"))
+            if source.get("kind") != "repo-owned-policy" or source.get("locator") != ".loom/review-profiles.json":
+                failures.append(Failure("daily-execution-cli", "`review run` repo-owned profile must record repo policy as the profile source"))
+
+        invalid_repo_policy_target = Path(tmp) / "repo-owned-profile-invalid"
+        prepare_review_target(invalid_repo_policy_target, "review run invalid repo-owned profile")
+        invalid_repo_policy_path = invalid_repo_policy_target / ".loom/review-profiles.json"
+        invalid_repo_policy_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": "loom-review-profiles/v1",
+                    "profiles": {
+                        "default": {
+                            "model": "",
+                            "reasoning_effort": "medium",
+                            "selection_reason": "invalid fixture",
+                        }
+                    },
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(invalid_repo_policy_target),
+                "--item",
+                "INIT-0001",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` invalid repo-owned profile failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`review run` invalid repo-owned profile must fail closed"))
+        elif "model must be non-empty" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
+            failures.append(Failure("daily-execution-cli", "`review run` invalid repo-owned profile must expose stable validation failure"))
+
+        local_default_target = Path(tmp) / "local-config-default-ignored"
+        prepare_review_target(local_default_target, "review run local config default ignored")
+        (local_default_target / ".loom/review-profiles.json").unlink(missing_ok=True)
+        local_codex_home = Path(tmp) / "codex-home"
+        local_codex_home.mkdir(parents=True, exist_ok=True)
+        (local_codex_home / "config.toml").write_text(
+            'model = "gpt-local-fixture"\nmodel_reasoning_effort = "xhigh"\n',
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(local_default_target),
+                "--item",
+                "INIT-0001",
+            ],
+            env=prepend_path_env(fake_bin, {"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` local config default ignored failed: {error}"))
+        else:
+            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
+            profile = engine.get("profile") if isinstance(engine.get("profile"), dict) else {}
+            if profile.get("model") != "gpt-5.5" or profile.get("reasoning_effort") != "medium":
+                failures.append(Failure("daily-execution-cli", "`review run` must not read local Codex config without explicit opt-in"))
+
+        local_opt_in_target = Path(tmp) / "local-config-opt-in"
+        prepare_review_target(local_opt_in_target, "review run local config opt-in")
+        (local_opt_in_target / ".loom/review-profiles.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "loom-review-profiles/v1",
+                    "allow_local_codex_config_in_ci": True,
+                    "profiles": {},
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(local_opt_in_target),
+                "--item",
+                "INIT-0001",
+                "--engine-use-local-codex-defaults",
+                "--engine-override-reason",
+                "fixture explicitly opts into local Codex defaults",
+            ],
+            env=prepend_path_env(fake_bin, {"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` local config opt-in failed: {error}"))
+        else:
+            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
+            profile = engine.get("profile") if isinstance(engine.get("profile"), dict) else {}
+            source = profile.get("profile_source") if isinstance(profile.get("profile_source"), dict) else {}
+            if profile.get("model") != "gpt-local-fixture" or profile.get("reasoning_effort") != "xhigh":
+                failures.append(Failure("daily-execution-cli", "`review run` local config opt-in must consume local model and reasoning"))
+            if source.get("kind") != "local-codex-config-opt-in" or not isinstance(profile.get("override"), dict):
+                failures.append(Failure("daily-execution-cli", "`review run` local config opt-in must record override evidence and source"))
+
+        local_headless_target = Path(tmp) / "local-config-headless-rejected"
+        prepare_review_target(local_headless_target, "review run local config headless rejected")
+        (local_headless_target / ".loom/review-profiles.json").unlink(missing_ok=True)
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(local_headless_target),
+                "--item",
+                "INIT-0001",
+                "--engine-use-local-codex-defaults",
+                "--engine-override-reason",
+                "fixture proves headless rejects local Codex defaults by default",
+            ],
+            env=prepend_path_env(fake_bin, {"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` local config headless rejected failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`review run` local config opt-in must be rejected in headless fallback by default"))
+        elif "local Codex config opt-in is disabled" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
+            failures.append(Failure("daily-execution-cli", "`review run` local config headless rejection must expose stable failure reason"))
+
+        local_ci_target = Path(tmp) / "local-config-ci-rejected"
+        prepare_review_target(local_ci_target, "review run local config CI rejected")
+        (local_ci_target / ".loom/review-profiles.json").unlink(missing_ok=True)
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(local_ci_target),
+                "--item",
+                "INIT-0001",
+                "--engine-use-local-codex-defaults",
+                "--engine-override-reason",
+                "fixture proves CI rejects local Codex defaults by default",
+            ],
+            env=prepend_path_env(fake_bin, {"CI": "true", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` local config CI rejected failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`review run` local config opt-in must be rejected in CI by default"))
+        elif "local Codex config opt-in is disabled" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
+            failures.append(Failure("daily-execution-cli", "`review run` local config CI rejection must expose stable failure reason"))
 
         engine_missing_target = Path(tmp) / "engine-missing"
         prepare_review_target(engine_missing_target, "review run engine unavailable")
