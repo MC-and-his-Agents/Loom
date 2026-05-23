@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import argparse
-import filecmp
+import json
 import os
 import shutil
 import subprocess
@@ -63,10 +63,27 @@ def compare_trees(expected: Path, actual: Path, ignored_relatives: set[str]) -> 
             if expected_path.is_symlink() != actual_path.is_symlink() or os.readlink(expected_path) != os.readlink(actual_path):
                 differences.append(f"symlink target differs: {relative}")
             continue
-        if not filecmp.cmp(expected_path, actual_path, shallow=False):
+        if comparable_bytes(expected_path, relative) != comparable_bytes(actual_path, relative):
             differences.append(f"file content differs: {relative}")
 
     return differences
+
+
+def comparable_bytes(path: Path, relative: str) -> bytes:
+    if relative == ".loom/bootstrap/init-result.json":
+        return canonical_init_result(path)
+    return path.read_bytes()
+
+
+def canonical_init_result(path: Path) -> bytes:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(payload, dict):
+        governance_surface = payload.get("governance_surface")
+        if isinstance(governance_surface, dict):
+            # Host/CI visibility is intentionally outside the demo fixture drift
+            # contract; compare stable bootstrap content without live host proof.
+            governance_surface["github_control_plane"] = {"comparison": "ignored-host-dynamic"}
+    return (json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
 
 
 def run(args: argparse.Namespace) -> int:
