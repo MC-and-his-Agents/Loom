@@ -12,10 +12,10 @@
 - Validation Entry: codex exec -m gpt-5.5; make py-compile; python3 tools/skills_surface.py check; python3 tools/loom_check.py; make check; PR required checks; reconciliation audit; closeout check
 - Closing Condition: PR #985 merged to main, required checks passed, reconciliation/closeout sync aligned, and GitHub issues #970-#975 plus #969 closed with Project status Done.
 - Current Checkpoint: review
-- Current Stop: PR #985 local implementation, WI-969 fact chain, formal spec/code review records, shadow carriers, and installer version bump are ready for push after validation.
-- Next Step: Amend commit, push branch work/969-review-engine-profile-gpt55, wait for required PR checks, then merge and run reconciliation/closeout sync for #970-#975 and #969.
+- Current Stop: PR #985 implementation is pushed; merge gate feedback is being addressed by refreshing PR body binding and review carrier freshness.
+- Next Step: Push refreshed carrier commits, wait for required PR checks, then merge and run reconciliation/closeout sync for #970-#975 and #969.
 - Blockers: None recorded.
-- Latest Validation Summary: Passed after WI-969 activation and carrier refresh: make py-compile; python3 tools/skills_surface.py check; git diff --check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK (0.1.140 -> 0.1.141); python3 tools/loom_flow.py shadow-parity --target . --surface all; python3 tools/loom_flow.py adopt verify --target . --item WI-969; python3 tools/loom_check.py -> OK, profile source, checked 40 source/distribution surfaces; make check -> OK.
+- Latest Validation Summary: Passed after rebasing WI-969 onto origin/main: make py-compile; python3 tools/skills_surface.py check; git diff --check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK (0.1.141 -> 0.1.142); python3 tools/loom_flow.py carrier refresh --target . --item WI-969; python3 tools/loom_flow.py shadow-parity --target . --surface all; python3 tools/loom_flow.py adopt verify --target . --item WI-969; python3 tools/loom_check.py -> OK, profile source, checked 40 source/distribution surfaces; make check -> OK.
 - Recovery Boundary: #969 owns review profile default model, repo-owned review profile policy, local config opt-in governance, Codex App model proof, fixtures/docs/generated runtime sync, installer version metadata required by package gate, and closeout for #970-#975/#969. Excludes #836 adopted repo migration and #957 expensive review readiness/cost guard.
 - Current Lane: pr-prep
 
