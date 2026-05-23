@@ -1,39 +1,36 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-873",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "bee122344b41587474f32744b0c40796a4e993ba",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-873 implementation review allows the PR metadata machine carrier and parser preflight changes: Loom core defines only the stable HTML comment JSON carrier contract, parser diagnostics, migration semantics, and runtime preflight consumption; repo-specific field taxonomy remains companion-owned. The implementation adds validation for machine_carrier, pr-metadata preflight CLI, pr-gate and merge-ready integration, fail-closed parser diagnostics, loom_check fixture coverage, and generated docs/runtime surface sync. Local validation passed via py_compile, skills_surface generate, make check, loom_check, git diff --check, and direct preflight fixture checks; make test is not available in this repository.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "9cf9c83ad99aab8caf298effc6a49127cd911f18",
+  "reviewed_validation_summary": "After carrier recovery: fact-chain pass; #979/#965 GitHub readback confirmed WI-965 is terminal; git diff --check passed. Earlier implementation validation passed: py_compile for governance_surface/loom_flow/loom_check; python3 tools/skills_surface.py generate; make check; python3 tools/loom_check.py .; direct pr-metadata preflight fixtures. make test unavailable because this repository has no test target.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-873.md",
+    "recovery_entry": ".loom/progress/WI-873.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
 }
