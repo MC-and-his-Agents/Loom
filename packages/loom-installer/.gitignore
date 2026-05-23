@@ -1,4 +1,5 @@
 node_modules/
 dist/
 payload/
+.installer-regression-lock/
 *.tgz

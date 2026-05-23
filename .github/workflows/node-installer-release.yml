@@ -54,9 +54,6 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install installer dependencies
-        run: npm ci --prefix packages/loom-installer
-
       - name: Check doc sync
         run: npm --prefix packages/loom-installer run check:docs
 
@@ -72,12 +69,8 @@ jobs:
       - name: Check payload drift
         run: npm --prefix packages/loom-installer run check:payload
 
-      - name: Run installer tests
-        run: npm --prefix packages/loom-installer test
-
-      - name: Run installer pack smoke
-        working-directory: packages/loom-installer
-        run: npm pack --dry-run
+      - name: Run installer regression
+        run: node packages/loom-installer/scripts/run-regression.mjs
 
       - name: Run loom check
         env:
