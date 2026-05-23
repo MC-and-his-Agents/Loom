@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-967",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-967 spec review allows the scoped env/tmp purity contract: default subprocess sanitization, explicit fixture opt-in, unique absent live target paths, and no expansion into #965/#966/#968.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "d5a6a33bb440db041af580fbf2d1b24937ed9113",
+  "reviewed_validation_summary": "Passed: py_compile_clean for loom_check scripts; skills_surface check; installer version bump check against origin/main; runtime purity self-check; carrier refresh; checkpoint admission. Pending: checkpoint build, spec review record, adopt verify, shadow parity, full source loom_check, final git hygiene.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-967.md",
+    "recovery_entry": ".loom/progress/WI-967.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
