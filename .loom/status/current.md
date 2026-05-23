@@ -12,12 +12,12 @@
 - Validation Entry: python3 tools/skills_surface.py generate; make check; python3 tools/loom_check.py .; git diff --check; direct pr-metadata preflight fixture CLI checks
 - Closing Condition: PR for #873 is merge-ready or merged with PR metadata machine contract, parser preflight, diagnostics, migration behavior, and fixture coverage validated.
 - Current Checkpoint: merge checkpoint
-- Current Stop: Implementation is committed at bee122344b41587474f32744b0c40796a4e993ba; PR #982 is open and bound to #873; carrier activation is being recorded so PR gate consumes WI-873 instead of stale WI-965 state.
-- Next Step: Commit WI-873 carrier activation, refresh formal review against the implementation head, rerun local gates and PR checks, then merge or record any remaining blocker.
-- Blockers: CI loom-pr-merge-gate initially blocked because active Loom fact chain still pointed at WI-965; root cause is being corrected by activating WI-873 carriers.
-- Latest Validation Summary: Before carrier activation: python3 -m py_compile src/skills/shared/scripts/governance_surface.py src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_check.py passed; python3 tools/skills_surface.py generate completed; make check passed; python3 tools/loom_check.py . passed; git diff --check passed; direct pr-metadata preflight fixtures were exercised; make test unavailable because this repository has no test target.
+- Current Stop: Implementation is committed and PR #982 is bound to #873; active fact chain now points at WI-873, and predecessor WI-965 is terminal after PR #979 merge/issue #965 closeout readback.
+- Next Step: Record fresh formal review for WI-873, rerun local gates, push PR #982, confirm CI and merge readiness, then merge or record any remaining blocker.
+- Blockers: None recorded.
+- Latest Validation Summary: After carrier recovery: fact-chain pass; #979/#965 GitHub readback confirmed WI-965 is terminal; git diff --check passed. Earlier implementation validation passed: py_compile for governance_surface/loom_flow/loom_check; python3 tools/skills_surface.py generate; make check; python3 tools/loom_check.py .; direct pr-metadata preflight fixtures. make test unavailable because this repository has no test target.
 - Recovery Boundary: WI-873 owns PR metadata machine carrier contract, parser/preflight runtime integration, diagnostics/migration behavior, loom_check fixtures, docs/reference sync, generated skills/runtime surfaces, and WI-873 carriers/review. Excludes adopting WebEnvoy-specific field taxonomy or unrelated governance gate redesign.
-- Current Lane: pr-recovery
+- Current Lane: pr-review
 
 ## Runtime Evidence
 
