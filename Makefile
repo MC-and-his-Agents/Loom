@@ -1,10 +1,10 @@
-.PHONY: loom-check check py-compile skills-check host-adapter-check version-surface-check loom-demo-new-project loom-self-plugin-check
+.PHONY: loom-check check py-compile skills-check host-adapter-check version-surface-check loom-demo-new-project loom-demo-new-project-check loom-demo-new-project-sync loom-self-plugin-check
 
-loom-check: loom-self-plugin-check loom-demo-new-project
+loom-check: loom-self-plugin-check loom-demo-new-project-check
 	python3 tools/loom_check.py
 
 py-compile:
-	python3 tools/py_compile_clean.py tools/loom_init.py tools/loom_flow.py tools/loom_check.py tools/loom_status.py tools/py_compile_clean.py skills/shared/scripts/*.py src/skills/shared/scripts/*.py skills/loom-init/scripts/*.py skills/loom-adopt/scripts/*.py skills/loom-resume/scripts/*.py skills/loom-pre-review/scripts/*.py skills/loom-review/scripts/*.py skills/loom-spec-review/scripts/*.py skills/loom-handoff/scripts/*.py skills/loom-retire/scripts/*.py skills/loom-merge-ready/scripts/*.py skills/loom-build/scripts/*.py skills/loom-story/scripts/*.py
+	python3 tools/py_compile_clean.py tools/loom_init.py tools/loom_flow.py tools/loom_check.py tools/loom_status.py tools/py_compile_clean.py tools/check_demo_bootstrap_fixture.py skills/shared/scripts/*.py src/skills/shared/scripts/*.py skills/loom-init/scripts/*.py skills/loom-adopt/scripts/*.py skills/loom-resume/scripts/*.py skills/loom-pre-review/scripts/*.py skills/loom-review/scripts/*.py skills/loom-spec-review/scripts/*.py skills/loom-handoff/scripts/*.py skills/loom-retire/scripts/*.py skills/loom-merge-ready/scripts/*.py skills/loom-build/scripts/*.py skills/loom-story/scripts/*.py
 
 skills-check:
 	python3 tools/skills_surface.py check
@@ -18,6 +18,12 @@ version-surface-check:
 check: py-compile skills-check host-adapter-check version-surface-check loom-check
 
 loom-demo-new-project:
+	python3 tools/check_demo_bootstrap_fixture.py
+
+loom-demo-new-project-check:
+	python3 tools/check_demo_bootstrap_fixture.py
+
+loom-demo-new-project-sync:
 	python3 tools/loom_init.py bootstrap --target examples/new-project --scenario new --intent execution-control --intake examples/new-project/.loom/bootstrap/intake.snapshot.json --write --force --verify --install-pr-template --portable-output
 
 loom-self-plugin-check:
