@@ -24,6 +24,8 @@
   - `spec_gate`、`build_gate` 的当前可消费状态
 - `spec_review`
   - formal spec 路径、spec review record、head 绑定、stale 语义与当前 gate 结论
+- `spec_review_authority_migration`
+  - `loom-spec-review-authority-migration/v1`，说明 spec review verdict authority 是否已经唯一落到 Loom spec review record
 - `current_checkpoint`
   - 当前 recovery checkpoint 的原始值与归一化值
 - `steps`

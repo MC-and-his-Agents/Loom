@@ -218,6 +218,24 @@ subagent 输出只能作为 review 输入证据。主执行者必须先把它整
 
 它不得直接消费 engine raw output、prompt、日志或其他 evidence 文件。
 
+## 6. Complex-existing authority migration records
+
+成熟既有仓库迁移 review authority 时，`review run` 与 `flow review` 必须暴露以下机器合同：
+
+- `loom-adopted-review-engine-adapter/v1`
+  - 只证明 Loom review engine adapter 可以产出 normalized `review_record_input`
+  - 不在 Phase 2 单独成为 implementation review verdict authority
+- `loom-review-authority-migration/v1`
+  - 证明 implementation review 的唯一 verdict authority 已迁到 Loom review record
+  - host guardian comment、proof store 或 native JSON 只能作为 compatibility mirror 或 rollback-only
+- `loom-spec-review-authority-migration/v1`
+  - 证明 spec review 的唯一 verdict authority 已迁到 Loom spec review record
+  - repo-owned `spec_review` rules 继续作为 input locator，不复制进 Loom core
+
+这些记录至少保留 `authority_before`、`authority_after`、`unique_verdict_authority`、`no_dual_authority`、record locator、head binding、rollback 与 fail-closed condition。
+
+若 host verdict 仍作为独立 blocker 存在，或 Loom record 缺失、过期、malformed、target/head/spec locator mismatch，消费方必须 fail closed。
+
 `merge gate` 进一步只消费通过后的 review record 与宿主控制面，不再重做实现审查。
 
 ## 6. 非目标
