@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unicodedata
 import uuid
 from collections import Counter, defaultdict
@@ -221,6 +222,7 @@ CORE_DOCS = (
     "packages/loom-installer/scripts/check-doc-sync.mjs",
     "packages/loom-installer/scripts/check-payload-drift.mjs",
     "packages/loom-installer/scripts/check-version-bump.mjs",
+    "packages/loom-installer/scripts/run-regression.mjs",
     "packages/loom-installer/src/cli.ts",
     "packages/loom-installer/src/index.ts",
     "packages/loom-installer/test/installer.test.ts",
@@ -424,6 +426,13 @@ class LoomCheckLock:
     run_id: str
 
 
+@dataclass(frozen=True)
+class InstallerRegressionLock:
+    path: Path
+    owner_path: Path
+    run_id: str
+
+
 class LoomCheckLockBusy(RuntimeError):
     def __init__(self, path: Path, owner: dict[str, object], fallback: str):
         self.path = path
@@ -545,6 +554,78 @@ def release_single_flight_lock(lock: LoomCheckLock) -> None:
         lock.path.unlink()
     except FileNotFoundError:
         pass
+
+
+def installer_regression_lock_path(package_root: Path) -> Path:
+    return package_root / ".installer-regression-lock"
+
+
+def format_installer_regression_lock_busy_message(path: Path, owner: dict[str, object], fallback: str) -> str:
+    run_id = owner.get("run_id") or "unknown"
+    pid = owner.get("pid") or "unknown"
+    started_at = owner.get("started_at") or "unknown"
+    command = owner.get("command") or "unknown"
+    cwd = owner.get("cwd") or "unknown"
+    return (
+        "installer regression lock is busy\n"
+        f"lock: {path}\n"
+        f"owner: run_id={run_id} pid={pid} started_at={started_at}\n"
+        f"owner_command: {command}\n"
+        f"owner_cwd: {cwd}\n"
+        f"fallback: {fallback}"
+    )
+
+
+def acquire_installer_regression_lock(
+    package_root: Path,
+    *,
+    command: str,
+    cwd: Path,
+    timeout_seconds: float = 300.0,
+) -> InstallerRegressionLock:
+    path = installer_regression_lock_path(package_root)
+    owner_path = path / "owner.json"
+    payload = {
+        "schema_version": "loom-installer-regression-lock/v1",
+        "run_id": uuid.uuid4().hex,
+        "pid": os.getpid(),
+        "started_at": utc_now_iso(),
+        "command": command,
+        "cwd": str(cwd.resolve()),
+    }
+    started = time.monotonic()
+    while True:
+        try:
+            path.mkdir()
+        except FileExistsError as exc:
+            owner = read_lock_owner(owner_path)
+            if lock_owner_is_stale(owner):
+                try:
+                    shutil.rmtree(path)
+                except FileNotFoundError:
+                    continue
+                except OSError:
+                    pass
+                else:
+                    continue
+            if time.monotonic() - started >= timeout_seconds:
+                fallback = "wait for the owner to finish, verify/remove a stale lock, or run in a different worktree"
+                raise RuntimeError(format_installer_regression_lock_busy_message(path, owner, fallback)) from exc
+            time.sleep(0.25)
+            continue
+        try:
+            owner_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        except OSError:
+            shutil.rmtree(path, ignore_errors=True)
+            raise
+        return InstallerRegressionLock(path=path, owner_path=owner_path, run_id=str(payload["run_id"]))
+
+
+def release_installer_regression_lock(lock: InstallerRegressionLock) -> None:
+    owner = read_lock_owner(lock.owner_path)
+    if owner.get("run_id") != lock.run_id:
+        return
+    shutil.rmtree(lock.path, ignore_errors=True)
 
 
 def repo_root_from_argv(argv: list[str]) -> Path:
@@ -4980,13 +5061,17 @@ def check_root_self_plugin_install(root: Path) -> list[Failure]:
         tmp_root = Path(tmp)
         target = tmp_root / "target"
         home = tmp_root / "home"
+        npm_cache = tmp_root / "npm-cache"
         target.mkdir(parents=True, exist_ok=True)
         home.mkdir(parents=True, exist_ok=True)
+        npm_cache.mkdir(parents=True, exist_ok=True)
         env = {
             "HOME": str(home),
             "CODEX_HOME": str(home / ".codex"),
             "LOOM_INSTALLER_BUILD_TIMESTAMP": "2026-01-01T00:00:00.000Z",
             "LOOM_INSTALLER_PYTHON_BIN": python_bin,
+            "npm_config_cache": str(npm_cache),
+            "NPM_CONFIG_CACHE": str(npm_cache),
         }
         clean_path_entries = [
             entry
@@ -5030,16 +5115,28 @@ def check_root_self_plugin_install(root: Path) -> list[Failure]:
                 ),
             )
         )
-        for label, args, cwd in commands:
-            try:
-                result = run_command(root, args, cwd=cwd, env=env, timeout_seconds=300)
-            except subprocess.TimeoutExpired:
-                failures.append(Failure("root-self-plugin", f"`{label}` timed out"))
-                return failures
-            if result.returncode != 0:
-                detail = result.stderr.strip() or result.stdout.strip() or "command failed without output"
-                failures.append(Failure("root-self-plugin", f"`{label}` failed: {detail}"))
-                return failures
+        try:
+            lock = acquire_installer_regression_lock(
+                package_root,
+                command="loom_check root-self-plugin installer build/install",
+                cwd=root,
+            )
+        except RuntimeError as exc:
+            failures.append(Failure("root-self-plugin", str(exc)))
+            return failures
+        try:
+            for label, args, cwd in commands:
+                try:
+                    result = run_command(root, args, cwd=cwd, env=env, timeout_seconds=300)
+                except subprocess.TimeoutExpired:
+                    failures.append(Failure("root-self-plugin", f"`{label}` timed out"))
+                    return failures
+                if result.returncode != 0:
+                    detail = result.stderr.strip() or result.stdout.strip() or "command failed without output"
+                    failures.append(Failure("root-self-plugin", f"`{label}` failed: {detail}"))
+                    return failures
+        finally:
+            release_installer_regression_lock(lock)
 
         installed_marketplace = target / ".agents/plugins/marketplace.json"
         plugin_root = target / "plugins/loom"
@@ -14698,29 +14795,23 @@ def check_node_installer(root: Path) -> list[Failure]:
     package_root = root / "packages/loom-installer"
     if not package_root.exists():
         return [Failure(category, "missing `packages/loom-installer`")]
+    node_bin = shutil.which("node")
     npm_bin = shutil.which("npm")
+    if not node_bin:
+        return [Failure(category, "`node` is required to validate the Node installer")]
     if not npm_bin:
         return [Failure(category, "`npm` is required to validate the Node installer")]
+    regression_script = package_root / "scripts/run-regression.mjs"
+    if not regression_script.exists():
+        return [Failure(category, "missing installer regression runner: `packages/loom-installer/scripts/run-regression.mjs`")]
 
-    commands = (
-        ["npm", "ci"],
-        ["npm", "test"],
-        ["npm", "pack", "--dry-run"],
-    )
-    with tempfile.TemporaryDirectory(prefix="loom-check-npm-cache-") as cache_dir:
-        npm_env = {
-            "npm_config_cache": cache_dir,
-            "NPM_CONFIG_CACHE": cache_dir,
-        }
-        for args in commands:
-            try:
-                result = run_command(root, args, cwd=package_root, env=npm_env, timeout_seconds=300)
-            except subprocess.TimeoutExpired:
-                failures.append(Failure(category, f"`{' '.join(args)}` timed out"))
-                continue
-            if result.returncode != 0:
-                detail = result.stderr.strip() or result.stdout.strip() or "command failed without output"
-                failures.append(Failure(category, f"`{' '.join(args)}` failed: {detail}"))
+    try:
+        result = run_command(root, [node_bin, str(regression_script)], cwd=root, timeout_seconds=900)
+    except subprocess.TimeoutExpired:
+        return [Failure(category, "`node packages/loom-installer/scripts/run-regression.mjs` timed out")]
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "command failed without output"
+        failures.append(Failure(category, f"`node packages/loom-installer/scripts/run-regression.mjs` failed: {detail}"))
     return failures
 
 
@@ -18673,6 +18764,8 @@ def check_loom_check_runtime_purity_contract(root: Path) -> list[Failure]:
         "固定 `/tmp`",
         "stable fixture",
         "Node installer regression",
+        "installer regression lock",
+        ".installer-regression-lock",
         "npm cache",
         "CODEX_*",
         "LOOM_CODEX_APP_REVIEW_*",
@@ -18694,6 +18787,19 @@ def check_loom_check_runtime_purity_contract(root: Path) -> list[Failure]:
     readme = root / "docs/methodology/harness/README.md"
     if not readme.exists() or "loom-check-runtime-purity.md" not in readme.read_text(encoding="utf-8"):
         failures.append(Failure(category, "harness README must link `loom-check-runtime-purity.md`"))
+    regression_script = root / "packages/loom-installer/scripts/run-regression.mjs"
+    if not regression_script.exists():
+        failures.append(Failure(category, "missing `packages/loom-installer/scripts/run-regression.mjs`"))
+    gitignore = root / "packages/loom-installer/.gitignore"
+    if not gitignore.exists() or ".installer-regression-lock/" not in gitignore.read_text(encoding="utf-8"):
+        failures.append(Failure(category, "installer package gitignore must exclude `.installer-regression-lock/`"))
+    for relative in (
+        ".github/workflows/node-installer-pr.yml",
+        ".github/workflows/node-installer-release.yml",
+    ):
+        workflow = root / relative
+        if not workflow.exists() or "scripts/run-regression.mjs" not in workflow.read_text(encoding="utf-8"):
+            failures.append(Failure(category, f"`{relative}` must run the installer regression lock entrypoint"))
     return failures
 
 

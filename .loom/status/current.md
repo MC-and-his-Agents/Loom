@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-965
-- Goal: 让默认 loom_check 不再重写 stable demo fixture，并保留 demo bootstrap drift 检测能力。
-- Scope: 调整 Makefile 与 CI 的 demo bootstrap 入口，使默认 check 在隔离临时目录重建并对比 examples/new-project；新增显式 sync 入口用于有意刷新 stable fixture；同步 harness 文档与 skill runtime references；不进入 #966/#968 或 CLI-first 主线。
-- Execution Path: checks/demo-bootstrap-fixture-isolation
+- Item ID: WI-966
+- Goal: 隔离 Node installer regression 的 npm/dist/payload 写入，使同一 worktree 并发或相邻检查不会互删 node_modules、dist 或 payload。
+- Scope: 新增 Node installer regression 受锁入口；让 CI 与 loom_check 通过同一 worktree-local installer regression lock 执行 npm ci、npm test 与 npm pack --dry-run；使用本次运行唯一 npm cache；同步 loom_check runtime purity 合同与 generated skill runtime copies；不进入 #968 回归矩阵、#965 demo fixture、#969 review profile、#953 source self-check 分层或 CLI-first 主线。
+- Execution Path: checks/node-installer-regression-isolation
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-965.md
-- Review Entry: .loom/reviews/WI-965.json
-- Validation Entry: py_compile_clean; skills_surface check; make loom-demo-new-project-check; make loom-check; git status confirms examples/new-project remains unchanged
-- Closing Condition: PR for #965 merged or merge-ready with default loom-check no longer dirtying examples/new-project while fixture drift remains detectable.
-- Current Checkpoint: merge checkpoint
-- Current Stop: WI-965 PR recovery fixes are committed at implementation head e61157d7acde3632545ce12e0f086f7607965c8f; review binding is being refreshed as carrier-only evidence for PR #979.
-- Next Step: Push review binding refresh, update PR #979 head_sha, run PR gate and GitHub checks, then merge or record blocker.
+- Recovery Entry: .loom/progress/WI-966.md
+- Review Entry: .loom/reviews/WI-966.json
+- Validation Entry: node packages/loom-installer/scripts/run-regression.mjs; npm --prefix packages/loom-installer run check:payload; python3 tools/skills_surface.py check; make loom-check; git status
+- Closing Condition: PR for #966 merged or merge-ready with installer regression writes protected by a worktree-local lock, unique npm cache evidence, payload drift still detected, and issue/branch/worktree/PR/head/check state aligned.
+- Current Checkpoint: admission checkpoint
+- Current Stop: Work item scaffolded and waiting for the first execution pass.
+- Next Step: Write the first recovery update for this work item.
 - Blockers: None recorded.
-- Latest Validation Summary: Local recovery state after PR #979 CI failure passed: git diff --check; python3 tools/py_compile_clean.py tools/check_demo_bootstrap_fixture.py; python3 tools/skills_surface.py check; GH_TOKEN from gh auth with CI=true GITHUB_ACTIONS=true make loom-demo-new-project-check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK (0.1.137 -> 0.1.138); python3 .loom/bin/loom_flow.py shadow-parity --target .; ACTIVE_ITEM from .loom/bootstrap/init-result.json with python3 .loom/bin/loom_flow.py adopt verify --target . --item "$ACTIVE_ITEM"; make loom-check -> loom_check OK, profile source, checked 40 source/distribution surfaces; git status confirms examples/new-project is not dirty.
-- Recovery Boundary: WI-965 owns demo bootstrap fixture isolation in Makefile/CI/helper script, harness docs/reference sync, installer package version bump required by distributed runtime reference payload drift, WI-965 carriers/reviews, shadow parity refresh for .loom/status/current.md, and terminal predecessor WI-967 recovery update. Excludes #966 Node installer write isolation, #968 regression matrix, #969 review profile, #953 source self-check layering, and CLI-first mainline.
-- Current Lane: pr-prep
+- Latest Validation Summary: No validation recorded yet.
+- Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-966.md`.
+- Current Lane: not yet assigned
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-965.md
-- Dynamic Truth: .loom/progress/WI-965.md
+- Static Truth: .loom/work-items/WI-966.md
+- Dynamic Truth: .loom/progress/WI-966.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
