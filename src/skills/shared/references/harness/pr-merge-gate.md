@@ -10,9 +10,13 @@ python3 tools/loom_flow.py pr-gate check --target <repo> --pr <number>
 
 The PR merge gate bridges Loom's authored semantic review truth to host required checks. It passes only when the current PR head has a fresh authored review record referenced by `work_item.review_entry` and that record declares `decision: allow`.
 
-It must fail closed for missing or stale review records, `block` or `fallback` decisions, validation-summary drift, checkout/PR head mismatch, Work Item binding conflicts, and raw-evidence-only bypass attempts.
+It must also consume repo-specific PR metadata preflight when `metadata_contract.fields[*].machine_carrier` declares a blocking PR body machine carrier.
+
+It must fail closed for missing or stale review records, `block` or `fallback` decisions, validation-summary drift, checkout/PR head mismatch, Work Item binding conflicts, raw-evidence-only bypass attempts, and blocking PR metadata parser diagnostics.
 
 Raw review output, shadow evidence, runtime evidence, CI logs, GitHub review comments, and PR summaries are evidence only. They never satisfy semantic approval.
+
+PR metadata machine blocks are separate from PR summaries: malformed HTML comment JSON, missing required repo-specific fields, or required-but-absent machine blocks must return parser diagnostics instead of generic missing-field collapse.
 
 Host enforcement is proven only by live branch protection or active ruleset readback requiring the stable check name `loom-pr-merge-gate`; workflow presence alone is not enough.
 
