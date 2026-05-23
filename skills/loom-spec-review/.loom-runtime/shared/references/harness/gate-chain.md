@@ -81,9 +81,13 @@ formal spec 路径上必须证明：
 必须消费：
 
 - `GitHub controlled merge` 已成功
+- retained review / validation / merge-ready evidence 与 PR head 的 backlink
+- host required checks / PR checks evidence 的 head 绑定
 - merge commit 与目标主干已可定位
 - `reconciliation audit` 结果
 - issue / parent / project 收口 basis
+
+普通 closeout 默认只执行 `closeout-contract` 轻量消费。source self-fixture、bootstrap regression、distribution regression 与 strong profile full gate 只有在 profile 显式 opt-in 时才进入 closeout 本地 gate，不得被伪装成普通 closeout 的默认前置。
 
 ## 4. fail-closed 纪律
 

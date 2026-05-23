@@ -14292,6 +14292,7 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
         original_reconciliation_audit = loom_flow_module.reconciliation_audit_payload
         original_contains = loom_flow_module.contains_merged_commit
         original_run_process = loom_flow_module.run_process
+        original_gh_json = loom_flow_module.gh_json
         seen_target_branches: list[str] = []
         try:
             repo_declared_gate_target = base / "repo-declared-closeout-gate"
@@ -14334,8 +14335,29 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             )
             if closeout_errors:
                 failures.append(Failure("adversarial-adoption", f"repo-declared closeout gate fixture failed: {closeout_errors}"))
-            elif payload.get("gate", {}).get("source") != "repo_declared_make_target":
-                failures.append(Failure("adversarial-adoption", "closeout payload must report repo-declared gate source"))
+            elif payload.get("gate", {}).get("source") != "closeout_contract":
+                failures.append(Failure("adversarial-adoption", "default closeout payload must use the lightweight closeout contract source"))
+            elif payload.get("gate", {}).get("profile") != "closeout-contract":
+                failures.append(Failure("adversarial-adoption", "default closeout payload must expose closeout-contract profile"))
+            heavy_payload, heavy_errors = loom_flow_module.closeout_payload(
+                target_root=repo_declared_gate_target,
+                phase_number=None,
+                fr_number=None,
+                issue_number=None,
+                pr_number=None,
+                project_number=None,
+                branch_name=None,
+                owner="owner",
+                repo_name="repo",
+                skip_gate=False,
+                gate_profile="source-self-fixture",
+            )
+            if heavy_errors:
+                failures.append(Failure("adversarial-adoption", f"source profile closeout gate fixture failed: {heavy_errors}"))
+            elif heavy_payload.get("gate", {}).get("source") != "repo_declared_make_target":
+                failures.append(Failure("adversarial-adoption", "explicit source-self-fixture closeout gate must report repo-declared gate source"))
+            elif heavy_payload.get("gate", {}).get("profile") != "source-self-fixture":
+                failures.append(Failure("adversarial-adoption", "explicit source-self-fixture closeout gate must expose heavy profile"))
             loom_flow_module.run_process = original_run_process
 
             loom_flow_module.github_pr_payload = lambda *_args, **_kwargs: (
@@ -14368,6 +14390,78 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             closeout_target_branch_target = base / "closeout-target-branch"
             if not copy_baseline_fixture(closeout_target_branch_target, "closeout target branch"):
                 return failures
+            target_branch_validation_summary = "Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist."
+            write_json(
+                closeout_target_branch_target / ".loom/reviews/INIT-0001.json",
+                {
+                    "schema_version": "loom-review/v1",
+                    "item_id": "INIT-0001",
+                    "decision": "allow",
+                    "kind": "code_review",
+                    "summary": "Closeout target branch fixture review is fresh.",
+                    "reviewer": "loom-check",
+                    "reviewed_head": current_head,
+                    "reviewed_validation_summary": target_branch_validation_summary,
+                    "fallback_to": None,
+                    "findings": [],
+                    "blocking_issues": [],
+                    "follow_ups": [],
+                },
+            )
+            write_json(
+                closeout_target_branch_target / ".loom/runtime/attempts/INIT-0001/INIT-0001-merge-ready-target-branch.json",
+                {
+                    "schema_version": "loom-execution-attempt/v1",
+                    "attempt_id": "INIT-0001-merge-ready-target-branch",
+                    "item_id": "INIT-0001",
+                    "command": "flow",
+                    "operation": "merge-ready",
+                    "result": "pass",
+                    "created_at": "2026-05-24T00:00:00Z",
+                    "head_sha": current_head,
+                    "branch": "work/closeout-fixture",
+                    "workspace": {"entry": ".", "path": "."},
+                    "failure": {
+                        "category": "none",
+                        "execution_classification": "none",
+                        "execution_summary": "merge-ready fixture passed",
+                        "missing_inputs": [],
+                        "fallback_to": None,
+                    },
+                    "steps": [],
+                    "evidence": {
+                        "status": "present",
+                        "locator": ".loom/runtime/attempts/INIT-0001/INIT-0001-merge-ready-target-branch.json",
+                        "latest_locator": ".loom/runtime/attempts/INIT-0001/latest.json",
+                    },
+                },
+            )
+            write_json(
+                closeout_target_branch_target / "fixtures/pr.json",
+                {
+                    "state": "MERGED",
+                    "headRefOid": current_head,
+                    "baseRefName": "release/main",
+                    "mergeCommit": {"oid": "abc123"},
+                },
+            )
+            write_json(
+                closeout_target_branch_target / "fixtures/protection.json",
+                {"required_status_checks": {"contexts": ["loom-pr-merge-gate"]}},
+            )
+            write_json(closeout_target_branch_target / "fixtures/rules.json", [])
+            write_json(
+                closeout_target_branch_target / "fixtures/status.json",
+                {
+                    "statusCheckRollup": [
+                        {
+                            "name": "loom-pr-merge-gate",
+                            "status": "COMPLETED",
+                            "conclusion": "SUCCESS",
+                        }
+                    ]
+                },
+            )
             closeout_target_branch_payload, closeout_errors = loom_flow_module.closeout_payload(
                 target_root=closeout_target_branch_target,
                 phase_number=None,
@@ -14379,6 +14473,10 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                 owner="owner",
                 repo_name="repo",
                 skip_gate=True,
+                pr_payload_file="fixtures/pr.json",
+                status_checks_file="fixtures/status.json",
+                branch_protection_file="fixtures/protection.json",
+                ruleset_file="fixtures/rules.json",
             )
             if closeout_errors:
                 failures.append(Failure("adversarial-adoption", f"closeout target branch fixture failed: {closeout_errors}"))
@@ -14418,12 +14516,189 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                     failures.append(Failure("adversarial-adoption", "closeout must block when PR baseRefName is missing instead of falling back to main"))
             if seen_target_branches:
                 failures.append(Failure("adversarial-adoption", "closeout must not check origin/main when PR baseRefName is missing"))
+
+            def write_closeout_backlink_fixtures(
+                target: Path,
+                *,
+                head: str,
+                status_readable: bool = True,
+                review_head: str | None = None,
+                validation_summary: str | None = None,
+                merge_ready_head: str | None = None,
+                merge_ready_latest_only: bool = False,
+            ) -> dict[str, str | None]:
+                review_head = review_head or head
+                merge_ready_head = merge_ready_head or head
+                validation_summary = validation_summary or "Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist."
+                write_json(
+                    target / ".loom/reviews/INIT-0001.json",
+                    {
+                        "schema_version": "loom-review/v1",
+                        "item_id": "INIT-0001",
+                        "decision": "allow",
+                        "kind": "code_review",
+                        "summary": "Closeout backlink fixture review is fresh.",
+                        "reviewer": "loom-check",
+                        "reviewed_head": review_head,
+                        "reviewed_validation_summary": validation_summary,
+                        "fallback_to": None,
+                        "findings": [],
+                        "blocking_issues": [],
+                        "follow_ups": [],
+                    },
+                )
+                attempt_filename = "latest.json" if merge_ready_latest_only else "INIT-0001-merge-ready-fixture.json"
+                attempt_locator = f".loom/runtime/attempts/INIT-0001/{attempt_filename}"
+                attempt_path = target / attempt_locator
+                write_json(
+                    attempt_path,
+                    {
+                        "schema_version": "loom-execution-attempt/v1",
+                        "attempt_id": "INIT-0001-merge-ready-fixture",
+                        "item_id": "INIT-0001",
+                        "command": "flow",
+                        "operation": "merge-ready",
+                        "result": "pass",
+                        "created_at": "2026-05-24T00:00:00Z",
+                        "head_sha": merge_ready_head,
+                        "branch": "work/closeout-fixture",
+                        "workspace": {"entry": ".", "path": "."},
+                        "failure": {
+                            "category": "none",
+                            "execution_classification": "none",
+                            "execution_summary": "merge-ready fixture passed",
+                            "missing_inputs": [],
+                            "fallback_to": None,
+                        },
+                        "steps": [],
+                        "evidence": {
+                            "status": "present",
+                            "locator": attempt_locator,
+                            "latest_locator": ".loom/runtime/attempts/INIT-0001/latest.json",
+                        },
+                    },
+                )
+                write_json(
+                    target / "fixtures/pr.json",
+                    {
+                        "state": "MERGED",
+                        "headRefOid": head,
+                        "headRefName": "work/closeout-fixture",
+                        "baseRefName": "release/main",
+                        "mergeCommit": {"oid": "abc123"},
+                        "url": "https://github.com/owner/repo/pull/2",
+                    },
+                )
+                write_json(
+                    target / "fixtures/protection.json",
+                    {"required_status_checks": {"contexts": ["loom-pr-merge-gate"]}},
+                )
+                write_json(target / "fixtures/rules.json", [])
+                status_path: str | None = None
+                if status_readable:
+                    status_path = "fixtures/status.json"
+                    write_json(
+                        target / status_path,
+                        {
+                            "statusCheckRollup": [
+                                {
+                                    "name": "loom-pr-merge-gate",
+                                    "status": "COMPLETED",
+                                    "conclusion": "SUCCESS",
+                                }
+                            ]
+                        },
+                    )
+                return {
+                    "pr_payload_file": "fixtures/pr.json",
+                    "status_checks_file": status_path,
+                    "branch_protection_file": "fixtures/protection.json",
+                    "ruleset_file": "fixtures/rules.json",
+                }
+
+            def closeout_backlink_payload(target: Path, fixture_files: dict[str, str | None]) -> dict[str, object]:
+                payload, errors = loom_flow_module.closeout_payload(
+                    target_root=target,
+                    phase_number=None,
+                    fr_number=None,
+                    issue_number=1,
+                    pr_number=2,
+                    project_number=None,
+                    branch_name=None,
+                    owner="owner",
+                    repo_name="repo",
+                    skip_gate=True,
+                    pr_payload_file=fixture_files["pr_payload_file"],
+                    status_checks_file=fixture_files["status_checks_file"],
+                    branch_protection_file=fixture_files["branch_protection_file"],
+                    ruleset_file=fixture_files["ruleset_file"],
+                )
+                if errors:
+                    failures.append(Failure("adversarial-adoption", f"closeout backlink fixture returned internal errors: {errors}"))
+                return payload
+
+            fresh_target = base / "fresh-backlink-pass"
+            if not copy_baseline_fixture(fresh_target, "fresh closeout backlink"):
+                return failures
+            fresh_files = write_closeout_backlink_fixtures(fresh_target, head=current_head)
+            fresh_payload = closeout_backlink_payload(fresh_target, fresh_files)
+            if fresh_payload.get("result") != "pass":
+                failures.append(Failure("adversarial-adoption", "fresh_backlink_pass closeout fixture must pass without running full loom_check"))
+            fresh_gate = fresh_payload.get("gate")
+            if not isinstance(fresh_gate, dict) or fresh_gate.get("source") != "closeout_contract":
+                failures.append(Failure("adversarial-adoption", "fresh_backlink_pass must use closeout-contract gate source"))
+            else:
+                subcheck_ids = {check.get("id") for check in fresh_gate.get("subchecks", []) if isinstance(check, dict)}
+                expected_ids = {"review_record", "merge_ready_attempt", "pr_merge_backlink", "host_pr_checks"}
+                if not expected_ids.issubset(subcheck_ids):
+                    failures.append(Failure("adversarial-adoption", "fresh_backlink_pass must expose review, merge-ready, PR merge, and host checks subchecks"))
+
+            latest_only_target = base / "latest-only-merge-ready-pass"
+            if not copy_baseline_fixture(latest_only_target, "latest-only merge-ready closeout backlink"):
+                return failures
+            latest_only_files = write_closeout_backlink_fixtures(latest_only_target, head=current_head, merge_ready_latest_only=True)
+            latest_only_payload = closeout_backlink_payload(latest_only_target, latest_only_files)
+            if latest_only_payload.get("result") != "pass":
+                failures.append(Failure("adversarial-adoption", "latest-only merge-ready execution_attempt must satisfy closeout backlink consumption"))
+
+            stale_review_target = base / "review-head-stale-block"
+            if not copy_baseline_fixture(stale_review_target, "stale review closeout backlink"):
+                return failures
+            stale_files = write_closeout_backlink_fixtures(stale_review_target, head=current_head, review_head="stale-head")
+            stale_payload = closeout_backlink_payload(stale_review_target, stale_files)
+            if stale_payload.get("result") != "block" or stale_payload.get("fallback_to") != "review":
+                failures.append(Failure("adversarial-adoption", "review_head_stale_block must block back to review"))
+
+            validation_drift_target = base / "validation-summary-drift-block"
+            if not copy_baseline_fixture(validation_drift_target, "validation drift closeout backlink"):
+                return failures
+            drift_files = write_closeout_backlink_fixtures(validation_drift_target, head=current_head, validation_summary="stale validation")
+            drift_payload = closeout_backlink_payload(validation_drift_target, drift_files)
+            if drift_payload.get("result") != "block" or drift_payload.get("fallback_to") != "review":
+                failures.append(Failure("adversarial-adoption", "validation_summary_drift_block must block back to review"))
+
+            unreadable_checks_target = base / "host-check-unreadable-block"
+            if not copy_baseline_fixture(unreadable_checks_target, "host check unreadable closeout backlink"):
+                return failures
+            unreadable_files = write_closeout_backlink_fixtures(unreadable_checks_target, head=current_head, status_readable=False)
+            loom_flow_module.gh_json = lambda *_args, **_kwargs: (None, ["host unavailable"])
+            unreadable_payload = closeout_backlink_payload(unreadable_checks_target, unreadable_files)
+            loom_flow_module.gh_json = original_gh_json
+            if unreadable_payload.get("result") != "block" or unreadable_payload.get("fallback_to") != "pr-gate":
+                failures.append(Failure("adversarial-adoption", "host_check_unreadable_block must block back to pr-gate"))
+
+            implicit_pre_review_gate = fresh_payload.get("gate") if isinstance(fresh_payload, dict) else None
+            if isinstance(implicit_pre_review_gate, dict):
+                serialized_gate = json.dumps(implicit_pre_review_gate, ensure_ascii=False)
+                if "pre-review" in serialized_gate or "bootstrap-regression" in serialized_gate:
+                    failures.append(Failure("adversarial-adoption", "no_implicit_pre_review fixture must not expose pre-review or bootstrap regression as ordinary closeout subchecks"))
         finally:
             loom_flow_module.github_pr_payload = original_pr_payload
             loom_flow_module.github_issue_payload = original_issue_payload
             loom_flow_module.reconciliation_audit_payload = original_reconciliation_audit
             loom_flow_module.contains_merged_commit = original_contains
             loom_flow_module.run_process = original_run_process
+            loom_flow_module.gh_json = original_gh_json
 
         rollover_target = base / "active-rollover"
         if not copy_baseline_fixture(rollover_target, "active item rollover"):

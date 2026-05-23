@@ -68,7 +68,7 @@ Loom 的宿主动作面不是新的 umbrella CLI，也不是宿主平台替身�
 | controlled merge | `python3 tools/loom_flow.py controlled-merge check\|merge --target <repo> --pr <n>` | `merge` 会写宿主 | 先消费 PR merge gate、merge-ready 与 required checks，再委托 `gh pr merge` |
 | drift audit | `python3 tools/loom_flow.py reconciliation audit --target <repo> [--issue <n>] [--pr <n>] [--project <n>]` | 否 | 只读 issue / PR / project 控制面并输出 drift findings |
 | control-plane sync | `python3 tools/loom_flow.py reconciliation sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>] [--comment-file <path>] [--dry-run\|--apply]` | `--apply` 会写宿主 | 默认 dry-run；只执行 safe sync plan 中有 proof 的机械动作 |
-| closeout check | `python3 tools/loom_flow.py closeout check --target <repo> [--issue <n>] [--pr <n>] [--project <n>]` | 否 | 校验 main、issue、PR、project 与仓内结果是否一致 |
+| closeout check | `python3 tools/loom_flow.py closeout check --target <repo> [--issue <n>] [--pr <n>] [--project <n>] [--gate-profile <profile>]` | 否 | 默认用 `closeout-contract` 校验 retained evidence backlink、main、issue、PR、project 与仓内结果是否一致；显式 profile 才执行 heavy local gate |
 | closeout sync | `python3 tools/loom_flow.py closeout sync --target <repo> [--issue <n>] [--pr <n>] [--project <n>]` | 是 | 在可同步条件下继续做 closeout 控制面对齐 |
 
 以下内容继续明确排除在 Loom 宿主动作面之外：
@@ -121,6 +121,8 @@ Loom 的宿主动作面不是新的 umbrella CLI，也不是宿主平台替身�
 - `warn` 与 `fix-needed` 只作为 `reconciliation audit` 的顶层结果存在
 - `fallback_to` 是下一步去向，不等价于把 `result` 改写成 `fallback`
 - 宿主动作不得把 branch / PR / worktree 的真实生命周期命令当作 `fallback_to`
+- `closeout check` 默认不得无条件执行完整 `loom_check`；只有 `source-self-fixture`、`bootstrap-regression`、`distribution-regression` 或 `strong-profile-full-gate` profile 显式 opt-in 时才执行 heavy local gate
+- `closeout check` 的 host PR checks evidence 只作为当前 PR head freshness / backlink 输入，不替代 authored review record、merge-ready result 或 reconciliation audit
 - `reconciliation sync` 默认 `dry_run=true`；只有显式 `--apply` 才允许执行 GitHub 写入
 - `reconciliation sync` 必须输出 `loom-safe-sync-plan/v1`，包含 `planned_actions`、`skipped_actions`、`manual_actions` 与 `proof`
 - `planned_actions` 固定只允许 `close_issue`、`set_project_done`、`add_closeout_comment`，且每项必须带 `source_finding`、`proof_locator`、`write_target`、`rollback_note`

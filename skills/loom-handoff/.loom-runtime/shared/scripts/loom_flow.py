@@ -101,6 +101,21 @@ GOAL_READINESS_SCHEMA = "loom-goal-readiness/v1"
 GOAL_COMPLETION_SCHEMA = "loom-goal-completion/v1"
 GOVERNANCE_LINT_RESULT_SCHEMA = "loom-governance-lint-result/v1"
 GOVERNANCE_LINT_STATUS_SCHEMA = "loom-governance-lint-status/v1"
+CLOSEOUT_GATE_PROFILES = (
+    "auto",
+    "closeout-contract",
+    "source-self-fixture",
+    "bootstrap-regression",
+    "distribution-regression",
+    "strong-profile-full-gate",
+)
+CLOSEOUT_LIGHT_PROFILE = "closeout-contract"
+CLOSEOUT_HEAVY_PROFILES = {
+    "source-self-fixture",
+    "bootstrap-regression",
+    "distribution-regression",
+    "strong-profile-full-gate",
+}
 
 PROJECT_DRIFT_KINDS = {
     "project_missing_item",
@@ -687,7 +702,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     closeout.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
     closeout.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
     closeout.add_argument("--comment", help="Optional closeout comment for issue sync")
-    closeout.add_argument("--skip-gate", action="store_true", help="Skip local loom_check execution during closeout")
+    closeout.add_argument(
+        "--gate-profile",
+        choices=CLOSEOUT_GATE_PROFILES,
+        default="auto",
+        help="Closeout local gate profile; auto uses the lightweight closeout contract unless a heavier profile is explicit.",
+    )
+    closeout.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+    closeout.add_argument("--status-checks-file", help="Optional repo-relative statusCheckRollup JSON fixture")
+    closeout.add_argument("--branch-protection-file", help="Optional repo-relative branch protection JSON fixture")
+    closeout.add_argument("--ruleset-file", help="Optional repo-relative branch rules/ruleset JSON fixture")
+    closeout.add_argument("--skip-gate", action="store_true", help="Skip explicit heavyweight local gate execution during closeout")
 
     reconciliation = subparsers.add_parser("reconciliation", help="Audit Loom GitHub drift before closeout reconciliation")
     reconciliation.add_argument("operation", choices=("audit", "sync"))
@@ -4281,6 +4306,306 @@ def closeout_gate_command(target_root: Path) -> tuple[list[str], str]:
     if repo_gate.exists():
         return ["python3", ".loom/bin/loom_check.py", "."], "repo_local_loom_check"
     return ["python3", str(shared_script(__file__, "loom_check.py")), str(target_root)], "shared_loom_check"
+
+
+def effective_closeout_gate_profile(profile: str | None) -> str:
+    return CLOSEOUT_LIGHT_PROFILE if profile in {None, "auto"} else profile
+
+
+def closeout_subcheck(
+    *,
+    check_id: str,
+    source: str,
+    profile: str,
+    required_for_closeout: bool,
+    trigger_reason: str,
+    result: str,
+    fallback_to: str | None = None,
+    evidence_locator: str | None = None,
+    missing_inputs: list[str] | None = None,
+    **evidence: Any,
+) -> dict[str, Any]:
+    payload = {
+        "id": check_id,
+        "source": source,
+        "profile": profile,
+        "required_for_closeout": required_for_closeout,
+        "trigger_reason": trigger_reason,
+        "result": result,
+        "fallback_to": fallback_to,
+        "missing_inputs": missing_inputs or [],
+    }
+    if evidence_locator is not None:
+        payload["evidence_locator"] = evidence_locator
+    for key, value in evidence.items():
+        if value is not None:
+            payload[key] = value
+    return payload
+
+
+def validation_summary_digest(summary: str | None) -> str | None:
+    if not isinstance(summary, str) or not summary.strip():
+        return None
+    return hashlib.sha256(summary.strip().encode("utf-8")).hexdigest()
+
+
+def latest_successful_execution_attempt(
+    target_root: Path,
+    item_id: str,
+    operation: str,
+) -> tuple[dict[str, Any] | None, str | None, list[str]]:
+    attempts_dir = execution_attempt_directory(target_root, item_id)
+    if not attempts_dir.exists():
+        return None, None, [f"missing execution_attempt directory: {relative_to_root(attempts_dir, target_root)}"]
+    candidates: list[tuple[float, str, dict[str, Any]]] = []
+    errors: list[str] = []
+    for path in sorted(attempts_dir.glob("*.json")):
+        relative = relative_to_root(path, target_root)
+        try:
+            payload = load_json_file(path)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            errors.append(f"invalid execution_attempt `{relative}`: {exc}")
+            continue
+        if not isinstance(payload, dict):
+            errors.append(f"execution_attempt `{relative}` must be a JSON object")
+            continue
+        if payload.get("schema_version") != EXECUTION_ATTEMPT_SCHEMA:
+            continue
+        if payload.get("operation") != operation or payload.get("result") != "pass":
+            continue
+        candidates.append((path.stat().st_mtime, relative, payload))
+    if not candidates:
+        return None, None, errors or [f"missing successful `{operation}` execution_attempt for `{item_id}`"]
+    _, relative, payload = sorted(candidates, key=lambda entry: (entry[0], entry[1]))[-1]
+    return payload, relative, []
+
+
+def closeout_required_status_subcheck(
+    *,
+    target_root: Path,
+    profile: str,
+    owner: str,
+    repo_name: str,
+    pr_number: int | None,
+    pr_payload: dict[str, Any] | None,
+    pr_head: str | None,
+    pr_payload_file: str | None,
+    status_checks_file: str | None,
+    branch_protection_file: str | None,
+    ruleset_file: str | None,
+) -> dict[str, Any]:
+    missing_inputs: list[str] = []
+    source = "host_pr_checks"
+    base_ref = pr_payload.get("baseRefName") if isinstance(pr_payload, dict) else None
+    if pr_number is None:
+        missing_inputs.append("pr")
+    if not isinstance(pr_head, str) or not pr_head:
+        missing_inputs.append("pr head SHA")
+    if not isinstance(base_ref, str) or not base_ref:
+        missing_inputs.append("pr baseRefName")
+
+    protection_payload, protection_errors = load_optional_json_fixture(
+        target_root,
+        branch_protection_file,
+        label="branch protection fixture",
+    )
+    if protection_payload is None and not protection_errors and owner and repo_name and isinstance(base_ref, str) and base_ref:
+        protection_payload, protection_errors = gh_rest_json(
+            target_root,
+            f"repos/{owner}/{repo_name}/branches/{quote(base_ref, safe='')}/protection",
+        )
+    missing_inputs.extend(f"branch protection: {message}" for message in protection_errors)
+
+    ruleset_payload, ruleset_errors = load_optional_json_fixture(
+        target_root,
+        ruleset_file,
+        label="branch rules/ruleset fixture",
+    )
+    if ruleset_payload is None and not ruleset_errors and owner and repo_name and isinstance(base_ref, str) and base_ref:
+        ruleset_payload, ruleset_errors = github_public_rest_list(
+            f"repos/{owner}/{repo_name}/rules/branches/{quote(base_ref, safe='')}",
+        )
+    missing_inputs.extend(f"branch rules/ruleset: {message}" for message in ruleset_errors)
+
+    status_payload, status_errors = load_optional_json_fixture(
+        target_root,
+        status_checks_file,
+        label="status checks fixture",
+    )
+    if status_payload is None and not status_errors and pr_number is not None:
+        status_payload, status_errors = gh_json(
+            target_root,
+            ["pr", "view", str(pr_number), "--json", "statusCheckRollup"],
+        )
+    missing_inputs.extend(f"status checks: {message}" for message in status_errors)
+
+    protection_contexts = required_status_contexts_from_protection(protection_payload)
+    ruleset_contexts = required_status_contexts_from_branch_rules(ruleset_payload)
+    required_contexts = sorted(set(protection_contexts + ruleset_contexts))
+    required_checks = required_check_status_payload(
+        status_payload.get("statusCheckRollup") if isinstance(status_payload, dict) else status_payload,
+        required_contexts,
+    )
+    if protection_payload is None and ruleset_payload is None:
+        missing_inputs.append("branch protection or ruleset readback is unavailable")
+    for key in ("missing", "pending", "failing"):
+        for context in required_checks[key]:
+            missing_inputs.append(f"required check `{context}` is {key}")
+
+    evidence_locator = status_checks_file or (f"github:pr/{pr_number}/statusCheckRollup" if pr_number is not None else None)
+    return closeout_subcheck(
+        check_id="host_pr_checks",
+        source=source,
+        profile=profile,
+        required_for_closeout=True,
+        trigger_reason="closeout must prove host required checks were fresh for the retained PR head",
+        result="pass" if not missing_inputs else "block",
+        fallback_to=None if not missing_inputs else "pr-gate",
+        evidence_locator=evidence_locator,
+        missing_inputs=missing_inputs,
+        head_sha=pr_head,
+        required_checks=required_checks,
+        required_contexts=required_contexts,
+        pr_payload_locator=pr_payload_file,
+    )
+
+
+def closeout_backlink_subchecks(
+    *,
+    target_root: Path,
+    context: dict[str, Any] | None,
+    profile: str,
+    owner: str,
+    repo_name: str,
+    pr_number: int | None,
+    pr_payload: dict[str, Any] | None,
+    merge_commit_sha: str | None,
+    merge_commit_in_target: bool | None,
+    pr_payload_file: str | None,
+    status_checks_file: str | None,
+    branch_protection_file: str | None,
+    ruleset_file: str | None,
+) -> list[dict[str, Any]]:
+    subchecks: list[dict[str, Any]] = []
+    if context is None:
+        subchecks.append(
+            closeout_subcheck(
+                check_id="fact_chain",
+                source="fact_chain",
+                profile=profile,
+                required_for_closeout=True,
+                trigger_reason="closeout contract needs a readable Work Item fact chain",
+                result="block",
+                fallback_to="admission",
+                missing_inputs=["fact-chain"],
+            )
+        )
+        return subchecks
+
+    item_id = context["item_id"]
+    validation_digest = validation_summary_digest(context.get("latest_validation_summary"))
+    pr_head = pr_payload.get("headRefOid") if isinstance(pr_payload, dict) and isinstance(pr_payload.get("headRefOid"), str) else None
+    target_branch = pr_payload.get("baseRefName") if isinstance(pr_payload, dict) else None
+
+    review_record, review_path, review_errors = load_review_record(target_root, item_id, context["review_entry"])
+    review_missing = list(review_errors)
+    if review_record is None and not review_missing:
+        review_missing.append(f"missing review artifact: {review_path}")
+    if review_record is not None:
+        if review_record.get("decision") != "allow":
+            review_missing.append("review decision is not allow")
+        if review_record.get("kind") not in IMPLEMENTATION_REVIEW_KINDS:
+            review_missing.append("review kind is not an implementation review")
+        if review_record.get("reviewed_validation_summary") != context["latest_validation_summary"]:
+            review_missing.append("reviewed_validation_summary does not match current validation summary")
+        if pr_head and review_record.get("reviewed_head") != pr_head:
+            review_missing.append("reviewed_head does not match PR head")
+    subchecks.append(
+        closeout_subcheck(
+            check_id="review_record",
+            source="review_record",
+            profile=profile,
+            required_for_closeout=True,
+            trigger_reason="closeout consumes authored implementation review approval instead of raw review evidence",
+            result="pass" if not review_missing else "block",
+            fallback_to=None if not review_missing else "review",
+            evidence_locator=review_path,
+            missing_inputs=review_missing,
+            item_id=item_id,
+            reviewed_head=review_record.get("reviewed_head") if isinstance(review_record, dict) else None,
+            head_sha=pr_head,
+            validation_summary_digest=validation_digest,
+        )
+    )
+
+    merge_ready_payload, merge_ready_locator, merge_ready_errors = latest_successful_execution_attempt(target_root, item_id, "merge-ready")
+    merge_ready_missing = list(merge_ready_errors)
+    if merge_ready_payload is not None and pr_head and merge_ready_payload.get("head_sha") != pr_head:
+        merge_ready_missing.append("merge-ready execution_attempt head_sha does not match PR head")
+    subchecks.append(
+        closeout_subcheck(
+            check_id="merge_ready_attempt",
+            source="execution_attempt",
+            profile=profile,
+            required_for_closeout=True,
+            trigger_reason="closeout consumes retained merge-ready pass evidence instead of rerunning the full gate chain",
+            result="pass" if not merge_ready_missing else "block",
+            fallback_to=None if not merge_ready_missing else "merge-ready",
+            evidence_locator=merge_ready_locator,
+            missing_inputs=merge_ready_missing,
+            item_id=item_id,
+            head_sha=merge_ready_payload.get("head_sha") if isinstance(merge_ready_payload, dict) else None,
+            validation_summary_digest=validation_digest,
+        )
+    )
+
+    pr_missing: list[str] = []
+    if pr_payload is None:
+        pr_missing.append("pr payload")
+    else:
+        if pr_payload.get("state") != "MERGED":
+            pr_missing.append("pr is not merged")
+        if not pr_head:
+            pr_missing.append("PR head SHA is unavailable")
+        if not isinstance(target_branch, str) or not target_branch:
+            pr_missing.append("pr baseRefName is missing")
+        if not merge_commit_sha:
+            pr_missing.append("merge commit SHA is unavailable")
+        if merge_commit_in_target is not True:
+            pr_missing.append("target branch does not contain merge commit")
+    subchecks.append(
+        closeout_subcheck(
+            check_id="pr_merge_backlink",
+            source="github_pr",
+            profile=profile,
+            required_for_closeout=True,
+            trigger_reason="closeout must link PR head, merge commit, and target branch containment",
+            result="pass" if not pr_missing else "block",
+            fallback_to=None if not pr_missing else "merge",
+            evidence_locator=pr_payload_file or (f"github:pr/{pr_number}" if pr_number is not None else None),
+            missing_inputs=pr_missing,
+            head_sha=pr_head,
+            merge_commit_sha=merge_commit_sha,
+            target_branch=target_branch,
+        )
+    )
+
+    subchecks.append(
+        closeout_required_status_subcheck(
+            target_root=target_root,
+            profile=profile,
+            owner=owner,
+            repo_name=repo_name,
+            pr_number=pr_number,
+            pr_payload=pr_payload,
+            pr_head=pr_head,
+            pr_payload_file=pr_payload_file,
+            status_checks_file=status_checks_file,
+            branch_protection_file=branch_protection_file,
+            ruleset_file=ruleset_file,
+        )
+    )
+    return subchecks
 
 
 def git_branch(root: Path) -> str | None:
@@ -14292,8 +14617,14 @@ def closeout_payload(
     repo_name: str,
     skip_gate: bool,
     goal_completion_file: str | None = None,
+    gate_profile: str = "auto",
+    pr_payload_file: str | None = None,
+    status_checks_file: str | None = None,
+    branch_protection_file: str | None = None,
+    ruleset_file: str | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     missing_inputs: list[str] = []
+    effective_profile = effective_closeout_gate_profile(gate_profile)
     context, context_errors = load_context(target_root, ".loom/bootstrap/init-result.json", None)
     fact_chain_context: dict[str, Any] | None = context if not context_errors else None
     if context_errors:
@@ -14319,17 +14650,55 @@ def closeout_payload(
         else "unknown"
     )
     closeout_findings: list[dict[str, Any]] = []
-    gate: dict[str, Any] = {"skipped": skip_gate}
-    if not skip_gate:
+    gate: dict[str, Any] = {
+        "skipped": skip_gate and effective_profile in CLOSEOUT_HEAVY_PROFILES,
+        "profile": effective_profile,
+        "requested_profile": gate_profile,
+        "source": "closeout_contract",
+        "trigger_reason": "ordinary closeout defaults to retained evidence backlink checks",
+        "required_for_closeout": True,
+        "subchecks": [],
+    }
+    if effective_profile in CLOSEOUT_HEAVY_PROFILES and not skip_gate:
         gate_command, gate_source = closeout_gate_command(target_root)
         gate_result = run_process(gate_command, target_root)
         gate["source"] = gate_source
+        gate["trigger_reason"] = f"`{effective_profile}` explicitly requires the heavier local gate"
+        gate["required_for_closeout"] = effective_profile == "strong-profile-full-gate"
         gate["command"] = " ".join(gate_command)
         gate["exit_code"] = gate_result.returncode
         gate["stdout"] = gate_result.stdout.strip()
         gate["stderr"] = gate_result.stderr.strip()
+        gate["subchecks"].append(
+            closeout_subcheck(
+                check_id=effective_profile,
+                source=gate_source,
+                profile=effective_profile,
+                required_for_closeout=gate["required_for_closeout"],
+                trigger_reason=gate["trigger_reason"],
+                result="pass" if gate_result.returncode == 0 else "block",
+                fallback_to=None if gate_result.returncode == 0 else "merge",
+                evidence_locator=gate["command"],
+                missing_inputs=[] if gate_result.returncode == 0 else [f"loom_check:{gate_source}"],
+            )
+        )
         if gate_result.returncode != 0:
             missing_inputs.append(f"loom_check:{gate_source}")
+    elif effective_profile in CLOSEOUT_HEAVY_PROFILES and skip_gate:
+        gate["source"] = "skipped_heavy_gate"
+        gate["trigger_reason"] = f"`{effective_profile}` was requested but --skip-gate suppressed heavyweight execution"
+        gate["required_for_closeout"] = False
+        gate["subchecks"].append(
+            closeout_subcheck(
+                check_id=effective_profile,
+                source="skipped_heavy_gate",
+                profile=effective_profile,
+                required_for_closeout=False,
+                trigger_reason=gate["trigger_reason"],
+                result="pass",
+                fallback_to=None,
+            )
+        )
 
     reconciliation_payload: dict[str, Any] | None = None
     closeout_fallback: str | None = None
@@ -14368,8 +14737,21 @@ def closeout_payload(
 
     pr_payload: dict[str, Any] | None = None
     merge_commit_sha: str | None = None
+    merge_commit_in_target: bool | None = None
     if pr_number is not None:
-        pr_payload, pr_errors = github_pr_payload(target_root, owner, repo_name, pr_number)
+        fixture_pr_payload, fixture_pr_errors = load_optional_json_fixture(
+            target_root,
+            pr_payload_file,
+            label="PR payload fixture",
+        )
+        if fixture_pr_errors:
+            pr_payload = None
+            pr_errors = fixture_pr_errors
+        elif isinstance(fixture_pr_payload, dict):
+            pr_payload = fixture_pr_payload
+            pr_errors = []
+        else:
+            pr_payload, pr_errors = github_pr_payload(target_root, owner, repo_name, pr_number)
         if pr_errors:
             missing_inputs.extend(f"pr: {message}" for message in pr_errors)
         elif pr_payload is not None:
@@ -14383,10 +14765,33 @@ def closeout_payload(
             if merge_commit_sha:
                 base_ref = pr_payload.get("baseRefName")
                 if isinstance(base_ref, str) and base_ref:
-                    if not contains_merged_commit(target_root, merge_commit_sha, base_ref):
+                    merge_commit_in_target = contains_merged_commit(target_root, merge_commit_sha, base_ref)
+                    if not merge_commit_in_target:
                         missing_inputs.append(f"origin/{base_ref} does not contain the merged PR commit")
                 else:
                     missing_inputs.append("pr baseRefName is missing")
+
+    if pr_number is not None:
+        backlink_subchecks = closeout_backlink_subchecks(
+            target_root=target_root,
+            context=fact_chain_context,
+            profile=CLOSEOUT_LIGHT_PROFILE,
+            owner=owner,
+            repo_name=repo_name,
+            pr_number=pr_number,
+            pr_payload=pr_payload,
+            merge_commit_sha=merge_commit_sha,
+            merge_commit_in_target=merge_commit_in_target,
+            pr_payload_file=pr_payload_file,
+            status_checks_file=status_checks_file,
+            branch_protection_file=branch_protection_file,
+            ruleset_file=ruleset_file,
+        )
+        gate["subchecks"].extend(backlink_subchecks)
+        for subcheck in backlink_subchecks:
+            if subcheck.get("required_for_closeout") is True and subcheck.get("result") == "block":
+                for message in subcheck.get("missing_inputs", []):
+                    missing_inputs.append(f"{subcheck.get('id')}: {message}")
 
     project_payload: dict[str, Any] | None = None
     if project_number is not None:
@@ -14509,9 +14914,23 @@ def closeout_payload(
         else "closeout state is not yet consistent across gate, GitHub issue/PR, project, and main."
     )
     fallback_to = None if result == "pass" else "merge"
+    blocking_subcheck = next(
+        (
+            subcheck
+            for subcheck in gate.get("subchecks", [])
+            if isinstance(subcheck, dict)
+            and subcheck.get("required_for_closeout") is True
+            and subcheck.get("result") == "block"
+        ),
+        None,
+    )
     if result == "block" and closeout_summary_override is not None:
         summary = closeout_summary_override
         fallback_to = closeout_fallback
+    elif result == "block" and isinstance(blocking_subcheck, dict):
+        fallback_value = blocking_subcheck.get("fallback_to")
+        fallback_to = fallback_value if isinstance(fallback_value, str) and fallback_value else fallback_to
+        summary = f"closeout retained evidence backlink failed at `{blocking_subcheck.get('id')}`."
     elif result == "block" and closeout_findings:
         primary_finding = closeout_findings[0]
         summary = str(primary_finding.get("why_blocking") or summary)
@@ -14606,6 +15025,11 @@ def handle_closeout(args: argparse.Namespace) -> int:
         repo_name=repo_name,
         skip_gate=args.skip_gate,
         goal_completion_file=args.goal_completion,
+        gate_profile=args.gate_profile,
+        pr_payload_file=args.pr_payload_file,
+        status_checks_file=args.status_checks_file,
+        branch_protection_file=args.branch_protection_file,
+        ruleset_file=args.ruleset_file,
     )
     if errors:
         return emit(

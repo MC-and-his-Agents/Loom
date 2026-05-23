@@ -25,7 +25,7 @@ closeout gate 用来回答两件事：
 
 `closeout check` 至少读取：
 
-- 本地 gate 结果
+- closeout contract gate source、profile、subchecks 与 trigger reason
 - 同范围 `reconciliation audit` 结果
 - 若仓库声明了目标仓库 `release / version`，则读取当前 target release object 与 release closeout evidence
 - issue 状态
@@ -39,6 +39,18 @@ closeout gate 用来回答两件事：
 - 可选 `/goal completion` evidence；调用方提供时只作为一致性输入消费，不作为完成真相源
 
 若这些事实不一致，结果必须返回 `block`。
+
+closeout 本地 gate 分为五层：
+
+| profile | 默认消费者 | 说明 |
+| --- | --- | --- |
+| `closeout-contract` | 普通 closeout 默认 | 只校验 retained evidence schema、freshness、backlink、merge commit、target branch、issue / PR / Project / reconciliation 范围 |
+| `source-self-fixture` | Loom source repo 或显式 source profile | 执行 Loom source fixture、runtime hygiene 与 repo-local wrapper 自检 |
+| `bootstrap-regression` | scaffold / installer / demo bootstrap 场景显式 opt-in | 验证 bootstrap shaping，不是普通 closeout 默认必需面 |
+| `distribution-regression` | release / generated skills / installer version 场景显式 opt-in | 验证安装面与发行面，不是普通 closeout 默认必需面 |
+| `strong-profile-full-gate` | strong governance 或 repo-declared profile 显式 opt-in | 执行完整本地 gate；必须声明 owner、fallback、override path 与 authority-of-truth |
+
+`--gate-profile auto` 等价普通 closeout 的 `closeout-contract`。`--skip-gate` 只允许跳过显式 heavy profile 的本地 `loom_check` 执行；它不得跳过 `closeout-contract` 的 retained evidence、backlink、PR、merge commit、target branch 或 reconciliation 检查。
 
 native dependency unreadable、stale edge、open blocker 或 host binding inspector conflict 都必须按 [host-binding-inspector.md](./host-binding-inspector.md) 与 [native-dependency-contract.md](./native-dependency-contract.md) 暴露为 closeout finding；blocking profile 下不得把这些 gap 折叠成普通 issue closed/open 判断。
 
@@ -62,7 +74,7 @@ native dependency unreadable、stale edge、open blocker 或 host binding inspec
 
 `closeout` 不把 drift 或控制面缺口伪装成顶层 `fallback` 结果。
 
-`closeout check` 的本地 gate 读取顺序必须保留来源：
+当显式选择 `source-self-fixture`、`bootstrap-regression`、`distribution-regression` 或 `strong-profile-full-gate` 时，本地 heavy gate 读取顺序必须保留来源：
 
 1. 有 repo-declared `Makefile` `loom-check` target 时，先执行 `make loom-check`，来源标记为 `repo_declared_make_target`。
 2. 只有缺少该 target 时，才回退到 profile-aware `.loom/bin/loom_check.py`，来源标记为 `repo_local_loom_check`；bootstrapped consumer repo 必须走 consumer profile / consumer validation chain，不得套用 Loom source/distribution self-check。
@@ -82,6 +94,10 @@ Adopted product repo 的 closeout 不得因为缺少 Loom source repo self-fixtu
 closeout 消费 behavior/test evidence 的语义如下：
 
 - 它不重新执行 BDD/TDD 判断，只校验 merge-ready 放行所消费的证据仍可回链当前 merged result
+- 普通 closeout 默认消费 `review record -> merge-ready execution_attempt -> PR head -> host required checks -> merge commit -> target branch -> reconciliation audit`
+- host PR checks evidence 只证明当前 head 的检查状态和 freshness，不替代 Loom review record、merge-ready result 或 reconciliation audit
+- review record 必须 `decision == allow`、kind 属于 implementation review，并且 `reviewed_head` 与 PR head 一致、`reviewed_validation_summary` 与当前 validation summary 一致
+- merge-ready evidence 必须来自同一 Work Item 的 successful `merge-ready` execution attempt，且 `head_sha` 与 PR head 一致
 - 若证据只覆盖 merge 前 `HEAD`，必须能通过 PR / merge commit / main 包含关系证明该证据仍覆盖当前主干结果
 - 若 closeout 发现主干、issue、project 或 evidence locator 无法互相回链，必须返回 `block`
 - 若 subagent 输出没有被整合到 review record、验证摘要或 merge-ready basis，closeout 不得把它作为 `absorbed` 或 `closed_out` 依据
