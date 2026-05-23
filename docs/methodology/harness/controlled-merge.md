@@ -19,6 +19,8 @@
 
 - PR-specific `pr merge gate` 已通过，见 [pr-merge-gate.md](./pr-merge-gate.md)
 - `merge-ready` 已通过
+- 可选 retained `pr-gate` result locator
+- 可选 retained `merge-gate` / `merge-ready` result locator
 - 当前 `Work Item` 与 PR 绑定
 - 当前 PR 的 `head_sha`
 - required checks / branch protection or active ruleset / mergeability
@@ -64,7 +66,37 @@ GitHub profile 的 strong governance 默认要求：
 - branch protection 或 active ruleset 仍禁止当前 merge 行为
 - branch protection 与 active ruleset 读面都不可用，无法证明 `pr merge gate` 是宿主强制 check
 
-## 6. merge 后交接
+## 6. retained gate result 消费
+
+`controlled merge` 可以消费 retained `pr-gate` / `merge-gate` result locator，但只能把它们当作前序 gate 的 retained result，不得把它们提升为新的 approval truth。
+
+retained `pr-gate` result 必须满足：
+
+- schema 为 `loom-pr-merge-gate/v1`
+- `result == pass`
+- PR number、Work Item、PR head SHA 与当前 PR 读面一致
+- review approval 仍指向 authored implementation review：`decision == allow`，`kind` 为 `general_review` 或 `code_review`
+- retained merge checkpoint 为 pass
+
+retained `merge-gate` result 必须满足：
+
+- 来源为 `flow merge-ready` 或 `checkpoint merge`
+- `result == pass`
+- Work Item 与 retained `pr-gate` 一致
+- merge checkpoint 为 pass
+- 若暴露 validation summary，必须与 retained `pr-gate.review_approval.reviewed_validation_summary` 一致
+
+消费 retained result 后，`controlled merge` 只补做 drift-only readback：
+
+- current PR head
+- required checks status
+- branch protection / active ruleset 是否要求 `loom-pr-merge-gate`
+- host mergeability
+- merge method
+
+任一 identity、head、validation、required check、branch protection / ruleset、mergeability 或 merge method drift 都必须 `block`，或回到 `pr-gate` / `merge-ready` / `review`。retained result 不能替代 host enforcement readback，也不能让 raw review / shadow evidence 成为 approval truth。
+
+## 7. merge 后交接
 
 merge 成功后，`controlled merge` 必须输出最小交接 basis 给 `closeout`：
 
@@ -77,7 +109,7 @@ merge 成功后，`controlled merge` 必须输出最小交接 basis 给 `closeou
 
 `closeout` 与 `reconciliation` 只消费这组 basis，不重新发明另一套 merge 证明方式。
 
-## 7. merge signal drift
+## 8. merge signal drift
 
 若 merge 后出现以下冲突，应归类为 `merge_signal_drift`：
 
@@ -86,7 +118,7 @@ merge 成功后，`controlled merge` 必须输出最小交接 basis 给 `closeou
 - merge method 与 profile 声明不一致
 - 宿主返回的 mergeability、checks、branch protection 或 ruleset 结论互相冲突
 
-## 8. 非目标
+## 9. 非目标
 
 - 不在 Loom 文档内冻结 GitHub UI 操作步骤
 - 不接管宿主 branch protection 或 ruleset 的底层实现

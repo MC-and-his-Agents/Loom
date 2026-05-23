@@ -9724,6 +9724,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     )
 
                 pr_fixture = pr_gate_fixture(positive_target)
+                retained_pr_gate_fixture: str | None = None
                 pr_gate_payload, error = load_command_json(
                     root,
                     [
@@ -9768,6 +9769,11 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     governance_lint = pr_gate_payload.get("governance_lint")
                     if not isinstance(governance_lint, dict) or governance_lint.get("result") != "pass":
                         failures.append(Failure("daily-execution-cli", "`installed pr-gate` must expose passing approval-boundary governance lint for fresh authored review approval"))
+                    retained_pr_gate_fixture = write_json_fixture(
+                        positive_target,
+                        ".loom/tmp/pr-gate/retained-pr-gate.json",
+                        pr_gate_payload,
+                    )
 
                 protection_fixture = write_json_fixture(
                     positive_target,
@@ -10264,6 +10270,11 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 elif merge_ready_payload.get("result") != "pass":
                     failures.append(Failure("daily-execution-cli", "`installed flow merge-ready` must pass for the positive chain"))
                 else:
+                    retained_merge_gate_fixture = write_json_fixture(
+                        positive_target,
+                        ".loom/tmp/pr-gate/retained-merge-gate.json",
+                        merge_ready_payload,
+                    )
                     merge_checkpoint = merge_ready_payload.get("merge_checkpoint")
                     if not isinstance(merge_checkpoint, dict) or merge_checkpoint.get("result") != "pass":
                         failures.append(Failure("daily-execution-cli", "`installed flow merge-ready` must expose `merge_checkpoint.result = pass`"))
@@ -10276,6 +10287,80 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     )
                     if merge_ready_payload.get("governance_lint", {}).get("result") != "pass":
                         failures.append(Failure("daily-execution-cli", "`installed flow merge-ready` governance_lint must pass for the positive chain"))
+                    if retained_pr_gate_fixture is not None:
+                        retained_controlled_payload, error = load_command_json(
+                            root,
+                            [
+                                "python3",
+                                str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                                "controlled-merge",
+                                "check",
+                                "--target",
+                                str(positive_target),
+                                "--item",
+                                "INIT-0001",
+                                "--pr",
+                                "1",
+                                "--pr-payload-file",
+                                pr_fixture,
+                                "--branch-protection-file",
+                                protection_fixture,
+                                "--status-checks-file",
+                                status_fixture,
+                                "--pr-gate-result-file",
+                                retained_pr_gate_fixture,
+                                "--merge-gate-result-file",
+                                retained_merge_gate_fixture,
+                            ],
+                        )
+                        if error:
+                            failures.append(Failure("daily-execution-cli", f"`installed controlled-merge` retained result consumption failed: {error}"))
+                        elif retained_controlled_payload.get("result") != "pass":
+                            failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must pass with fresh retained pr-gate and merge-gate results"))
+                        else:
+                            retained_results = retained_controlled_payload.get("retained_results")
+                            drift_readback = retained_controlled_payload.get("drift_readback")
+                            if not isinstance(retained_results, dict) or retained_results.get("pr_gate", {}).get("source") != "retained":
+                                failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must report retained pr-gate consumption"))
+                            if not isinstance(drift_readback, dict) or drift_readback.get("mode") != "drift-only":
+                                failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must expose drift-only readback when consuming retained results"))
+
+                        stale_pr_gate_payload = json.loads(json.dumps(pr_gate_payload))
+                        stale_pr_gate_payload["pr"]["head_sha"] = "0" * 40
+                        stale_pr_gate_fixture = write_json_fixture(
+                            positive_target,
+                            ".loom/tmp/pr-gate/retained-pr-gate-stale-head.json",
+                            stale_pr_gate_payload,
+                        )
+                        stale_retained_payload, error = load_command_json(
+                            root,
+                            [
+                                "python3",
+                                str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                                "controlled-merge",
+                                "check",
+                                "--target",
+                                str(positive_target),
+                                "--item",
+                                "INIT-0001",
+                                "--pr",
+                                "1",
+                                "--pr-payload-file",
+                                pr_fixture,
+                                "--branch-protection-file",
+                                protection_fixture,
+                                "--status-checks-file",
+                                status_fixture,
+                                "--pr-gate-result-file",
+                                stale_pr_gate_fixture,
+                                "--merge-gate-result-file",
+                                retained_merge_gate_fixture,
+                            ],
+                        )
+                        if error:
+                            failures.append(Failure("daily-execution-cli", f"`installed controlled-merge` stale retained pr-gate failed: {error}"))
+                        elif stale_retained_payload.get("result") != "block":
+                            failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must block stale retained pr-gate head drift"))
 
                 checkpoint_merge_payload, error = load_command_json(
                     root,

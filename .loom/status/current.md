@@ -2,21 +2,21 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-965
-- Goal: 让默认 loom_check 不再重写 stable demo fixture，并保留 demo bootstrap drift 检测能力。
-- Scope: 调整 Makefile 与 CI 的 demo bootstrap 入口，使默认 check 在隔离临时目录重建并对比 examples/new-project；新增显式 sync 入口用于有意刷新 stable fixture；同步 harness 文档与 skill runtime references；不进入 #966/#968 或 CLI-first 主线。
-- Execution Path: checks/demo-bootstrap-fixture-isolation
+- Item ID: WI-871
+- Goal: 彻底收口 FR #871 retained pr-gate / merge-gate result 与 controlled merge drift-only 消费。
+- Scope: 在 `controlled-merge check|merge` 中支持 repo-relative retained `pr-gate` / `merge-gate` result locator；校验 retained result 的 Work Item、PR、head SHA、review approval、validation summary 与 merge checkpoint freshness；输出 drift-only readback；同步 harness / interop 合同、source skills references、generated skills surface 与 installer version metadata。
+- Execution Path: harness/controlled-merge-retained-results
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-965.md
-- Review Entry: .loom/reviews/WI-965.json
-- Validation Entry: py_compile_clean; skills_surface check; make loom-demo-new-project-check; make loom-check; git status confirms examples/new-project remains unchanged
-- Closing Condition: PR for #965 merged or merge-ready with default loom-check no longer dirtying examples/new-project while fixture drift remains detectable.
+- Recovery Entry: .loom/progress/WI-871.md
+- Review Entry: .loom/reviews/WI-871.json
+- Validation Entry: make py-compile; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main
+- Closing Condition: PR #980 for #871 is merge-ready or merged with branch, worktree, PR head, retained gate result checks, required host checks, and review carriers aligned.
 - Current Checkpoint: merge checkpoint
-- Current Stop: WI-965 PR recovery fixes are committed at implementation head e61157d7acde3632545ce12e0f086f7607965c8f; review binding is being refreshed as carrier-only evidence for PR #979.
-- Next Step: Push review binding refresh, update PR #979 head_sha, run PR gate and GitHub checks, then merge or record blocker.
+- Current Stop: WI-871 implementation, main merge, installer 0.1.139 bump, demo fixture sync, and review carriers are locally validated through head 00e923acf08cd37d5772b971ce7445414fac93ab; awaiting push, PR checks, pr-gate, merge-gate, controlled merge, and closeout.
+- Next Step: Push the branch, update PR #980 workspace binding to the pushed head, rerun PR checks, then consume pr-gate / merge-gate results through controlled-merge drift-only readback.
 - Blockers: None recorded.
-- Latest Validation Summary: Local recovery state after PR #979 CI failure passed: git diff --check; python3 tools/py_compile_clean.py tools/check_demo_bootstrap_fixture.py; python3 tools/skills_surface.py check; GH_TOKEN from gh auth with CI=true GITHUB_ACTIONS=true make loom-demo-new-project-check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK (0.1.137 -> 0.1.138); python3 .loom/bin/loom_flow.py shadow-parity --target .; ACTIVE_ITEM from .loom/bootstrap/init-result.json with python3 .loom/bin/loom_flow.py adopt verify --target . --item "$ACTIVE_ITEM"; make loom-check -> loom_check OK, profile source, checked 40 source/distribution surfaces; git status confirms examples/new-project is not dirty.
-- Recovery Boundary: WI-965 owns demo bootstrap fixture isolation in Makefile/CI/helper script, harness docs/reference sync, installer package version bump required by distributed runtime reference payload drift, WI-965 carriers/reviews, shadow parity refresh for .loom/status/current.md, and terminal predecessor WI-967 recovery update. Excludes #966 Node installer write isolation, #968 regression matrix, #969 review profile, #953 source self-check layering, and CLI-first mainline.
+- Latest Validation Summary: Head 00e923acf08cd37d5772b971ce7445414fac93ab passed after merging origin/main: make py-compile; python3 tools/skills_surface.py check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK (0.1.138 -> 0.1.139); python3 tools/version_surface_check.py; git diff --check; make loom-demo-new-project-check after explicit make loom-demo-new-project-sync; python3 tools/loom_check.py --profile source. Previous local source loom_check failure was traced to stale shadow evidence and npm install interruption; both were corrected and rerun successfully before main merge.
+- Recovery Boundary: WI-871 owns retained pr-gate / merge-gate locator consumption, controlled-merge drift-only readback, harness / interop contract updates, generated skills surface updates, and required installer version metadata for this distribution change.
 - Current Lane: pr-prep
 
 ## Runtime Evidence
@@ -24,12 +24,12 @@
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: python3 tools/loom_check.py --profile source .
+- Verification Entry: make py-compile; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main
 - Lane Entry: not_applicable
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-965.md
-- Dynamic Truth: .loom/progress/WI-965.md
+- Static Truth: .loom/work-items/WI-871.md
+- Dynamic Truth: .loom/progress/WI-871.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
