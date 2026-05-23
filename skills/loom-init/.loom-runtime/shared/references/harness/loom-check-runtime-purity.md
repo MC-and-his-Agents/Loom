@@ -94,3 +94,5 @@ live GitHub、Codex App proof、dynamic tool live smoke 与 host adapter live dr
 - 默认 `make loom-check` 不让 `examples/new-project` 因检查本身变脏
 
 重型并发矩阵可以作为显式 opt-in validation，但 P0-A 默认回归必须可在本地和 CI 中稳定消费。
+
+默认轻量入口为 `make loom-check-runtime-regression`，并由 `make loom-check` 消费。该入口只验证 fail-fast owner 诊断、worktree-local lock path、默认环境净化、唯一缺失路径、Node installer lock busy 输出和 demo fixture 不变脏；不得在默认 CI 中启动重型 full-check 并发矩阵。
