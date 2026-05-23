@@ -52,6 +52,8 @@ closeout 本地 gate 分为五层：
 
 `--gate-profile auto` 等价普通 closeout 的 `closeout-contract`。`--skip-gate` 只允许跳过显式 heavy profile 的本地 `loom_check` 执行；它不得跳过 `closeout-contract` 的 retained evidence、backlink、PR、merge commit、target branch 或 reconciliation 检查。
 
+review record backlink 使用与 merge checkpoint 相同的 head-binding 语义：PR head 与 reviewed head 完全一致时通过；差异仅限允许的 recovery/status/review/shadow/runtime carrier 时通过并输出 `head_binding.status == carrier-only`；任何实现文件漂移、schema drift、validation summary drift 或 unreadable head comparison 必须 fail closed。
+
 native dependency unreadable、stale edge、open blocker 或 host binding inspector conflict 都必须按 [host-binding-inspector.md](./host-binding-inspector.md) 与 [native-dependency-contract.md](./native-dependency-contract.md) 暴露为 closeout finding；blocking profile 下不得把这些 gap 折叠成普通 issue closed/open 判断。
 
 若仓库声明了目标仓库 `release / version`，`closeout check` 还必须至少能区分：

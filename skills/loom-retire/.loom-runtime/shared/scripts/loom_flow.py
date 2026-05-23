@@ -4544,6 +4544,7 @@ def closeout_backlink_subchecks(
 
     review_record, review_path, review_errors = load_review_record(target_root, item_id, context["review_entry"])
     review_missing = list(review_errors)
+    review_head_binding_payload: dict[str, Any] | None = None
     if review_record is None and not review_missing:
         review_missing.append(f"missing review artifact: {review_path}")
     if review_record is not None:
@@ -4553,8 +4554,14 @@ def closeout_backlink_subchecks(
             review_missing.append("review kind is not an implementation review")
         if review_record.get("reviewed_validation_summary") != context["latest_validation_summary"]:
             review_missing.append("reviewed_validation_summary does not match current validation summary")
-        if pr_head and review_record.get("reviewed_head") != pr_head:
-            review_missing.append("reviewed_head does not match PR head")
+        if pr_head:
+            review_head_binding_payload, review_head_errors = review_head_binding_for_head(
+                target_root,
+                reviewed_head=review_record.get("reviewed_head"),
+                target_head=pr_head,
+                allowed_paths=allowed_post_review_carrier_paths(context, review_path),
+            )
+            review_missing.extend(review_head_errors)
     subchecks.append(
         closeout_subcheck(
             check_id="review_record",
@@ -4569,6 +4576,7 @@ def closeout_backlink_subchecks(
             item_id=item_id,
             reviewed_head=review_record.get("reviewed_head") if isinstance(review_record, dict) else None,
             head_sha=pr_head,
+            head_binding=review_head_binding_payload,
             validation_summary_digest=validation_digest,
         )
     )
@@ -6104,9 +6112,24 @@ def review_head_binding(
     allowed_paths: set[str],
 ) -> tuple[dict[str, Any], list[str]]:
     current_head = git_head_sha(target_root)
+    return review_head_binding_for_head(
+        target_root,
+        reviewed_head=reviewed_head,
+        target_head=current_head,
+        allowed_paths=allowed_paths,
+    )
+
+
+def review_head_binding_for_head(
+    target_root: Path,
+    *,
+    reviewed_head: str | None,
+    target_head: str | None,
+    allowed_paths: set[str],
+) -> tuple[dict[str, Any], list[str]]:
     payload: dict[str, Any] = {
         "reviewed_head": reviewed_head,
-        "current_head": current_head,
+        "current_head": target_head,
         "status": "unknown",
         "stale": None,
         "changed_paths": [],
@@ -6114,14 +6137,14 @@ def review_head_binding(
     }
     if not isinstance(reviewed_head, str) or not reviewed_head.strip():
         return payload, ["review artifact is missing reviewed_head"]
-    if not isinstance(current_head, str) or not current_head.strip():
-        return payload, ["current HEAD is unavailable"]
-    if reviewed_head == current_head:
+    if not isinstance(target_head, str) or not target_head.strip():
+        return payload, ["target HEAD is unavailable"]
+    if reviewed_head == target_head:
         payload["status"] = "fresh"
         payload["stale"] = False
         return payload, []
 
-    changed_paths, head_errors = git_changed_paths(target_root, reviewed_head, current_head)
+    changed_paths, head_errors = git_changed_paths(target_root, reviewed_head, target_head)
     if head_errors:
         return payload, [f"review HEAD comparison failed: {detail}" for detail in head_errors]
 
@@ -6142,7 +6165,7 @@ def review_head_binding(
     payload["stale"] = True
     if not changed_paths:
         return payload, ["review artifact was recorded against a different HEAD"]
-    return payload, ["review artifact is stale for the current HEAD"]
+    return payload, ["review artifact is stale for the target HEAD"]
 
 
 def spec_review_head_binding(
