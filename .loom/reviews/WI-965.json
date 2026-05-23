@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-965",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-965 implementation review allows the committed Makefile/CI/helper/docs/runtime-reference changes. The default check path no longer writes examples/new-project, drift remains detectable through isolated rebuild comparison, and no Node installer or #968 regression scope was added.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "1c40b56511dbc8274fe9efd00a942725c9c40374",
+  "reviewed_validation_summary": "Head 1c40b56511dbc8274fe9efd00a942725c9c40374 passed: make py-compile; python3 tools/skills_surface.py check; make loom-demo-new-project-check; make loom-check -> loom_check OK, profile source, checked 40 source/distribution surfaces; git diff --check; node installer version bump check reports no installer behavior changes; git status confirms examples/new-project is not dirty; checkpoint admission/build passed; spec and implementation reviews recorded.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-965.md",
+    "recovery_entry": ".loom/progress/WI-965.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
