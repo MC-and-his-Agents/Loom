@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-859",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-859 implementation is approved for merge readiness. The change adds profile-aware loom_check source/consumer detection, consumer carrier/hash/command validation, source self-check profile reporting, generated docs/runtime updates, CI fixture git identity hardening, installer version bump metadata, and WI-859 PR gate binding without expanding to downstream Syvert runtime upgrade.",
+  "reviewer": "codex",
+  "reviewed_head": "ffcc614f4380fca3f2cc47b2705a166d41e729bd",
+  "reviewed_validation_summary": "Earlier pass set: git diff checks, py_compile_clean, skills_surface check, make loom-demo-new-project, tools/loom_check.py source/auto, make check, and Syvert branch-runtime consumer smoke passed. Current PR CI failures are known gate-binding/version/fixture issues addressed locally and pending push.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-859.md",
+    "recovery_entry": ".loom/progress/WI-859.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
