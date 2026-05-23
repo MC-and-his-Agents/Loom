@@ -88,3 +88,9 @@
 - rollback 能回到 vendored `.loom/bin` 或重新 bootstrap
 
 de-vendor 不得删除 repo-owned residue，也不得替代 guardian、integration contract、release / sprint 等仓库私有规则。
+
+## 8. Attach-only 之后的 authority migration
+
+当成熟既有仓库需要从 attach-only 进入 Loom-governed execution 时，必须按 [complex-existing-authority-migration-playbook.md](./complex-existing-authority-migration-playbook.md) 分阶段迁移 authority。
+
+该迁移不得跳过 review engine replacement 与 review record authority 的边界，也不得让 Loom verdict 和 host verdict 同时作为独立 merge blocker。

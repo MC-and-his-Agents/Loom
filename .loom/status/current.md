@@ -2,21 +2,21 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-866
-- Goal: 收口 FR #866 分层 closeout 本地 gate 与 evidence 回链消费。
-- Scope: 定义 closeout gate 分层合同；实现 closeout retained evidence backlink 消费、gate profile/fixture 输入和 subcheck 输出；同步 generated skills surface；验证 PR #981 达到 merge-ready、合并后 closeout 可验证一致；不改变 GitHub required checks、ProjectV2、review engine 或底层 host 能力。
-- Execution Path: harness/closeout-layered-gate
+- Item ID: WI-835
+- Goal: 收口 FR #835 complex-existing repo governance authority migration
+- Scope: 实现 complex-existing authority migration playbook、review/spec/merge-ready/controlled-merge 合同、loom_flow 机器输出、loom_check synthetic fixtures，并同步 generated skills surface。
+- Execution Path: adoption/complex-existing-authority-migration
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-866.md
-- Review Entry: .loom/reviews/WI-866.json
-- Validation Entry: py_compile_clean; skills_surface check; targeted closeout fixtures; make loom-check; make check; PR checks; post-merge closeout check/sync
-- Closing Condition: PR #981 merged to main; #867-#870 closed or have closing evidence; #866 consumes PR, merge commit, target branch, Project, and reconciliation evidence consistently.
+- Recovery Entry: .loom/progress/WI-835.md
+- Review Entry: .loom/reviews/WI-835.json
+- Validation Entry: python3 tools/skills_surface.py check; make py-compile; python3 tools/loom_check.py; make check
+- Closing Condition: PR #984 merged; #836-#842 closed by PR; #835 closeout reconciled after children and Project Done.
 - Current Checkpoint: merge checkpoint
-- Current Stop: Merged origin/main through 456773e4bd05, resolved WI-966 terminal predecessor state, refreshed demo bootstrap fixture hashes, and prepared WI-866 review refresh for current head.
-- Next Step: Record refreshed implementation review, refresh carrier/shadow evidence, rerun merge checkpoint and make check, push, consume PR checks, merge, and run post-merge closeout.
+- Current Stop: Implementation and generated surfaces are complete on PR #984; WI-835 fact-chain has been activated; awaiting fresh review, PR gate, controlled merge, and GitHub closeout.
+- Next Step: Record fresh WI-835 review, update PR body with Loom Work Item binding, rerun make check and pr-gate, then merge and reconcile #836-#842/#835.
 - Blockers: None recorded.
-- Latest Validation Summary: Head 6a1db5ba0860 after merging origin/main passed: git diff --check; python3 tools/check_demo_bootstrap_fixture.py; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main (0.1.140 -> 0.1.141). Earlier merged-main validation also passed py_compile_clean for loom_flow/loom_check and installed scripts, skills_surface check, and carrier refresh. WI-966 predecessor confirmed merged via PR #983 and issue #966 closed. Pending: refreshed implementation review binding, carrier/shadow refresh, make check, PR checks, post-merge closeout.
-- Recovery Boundary: WI-866 owns #866/#867-#870 closeout gate layering, retained evidence backlink consumption, generated skills surface refresh, installer package bump for distributed runtime drift, and PR #981 closeout evidence. It excludes GitHub required checks, ProjectV2, review engine, and low-level host capability changes.
+- Latest Validation Summary: Head 98d0242cd06b7b36703ba4a5634f99b017c1fa2f passed before WI-835 carrier activation: python3 tools/skills_surface.py check; make py-compile; python3 tools/loom_check.py; make check. After activating WI-835 carriers, make check reached root self-adoption and blocked only because the review record was still the scaffold placeholder.
+- Recovery Boundary: WI-835 owns FR #835 complex-existing authority migration playbook, contracts, loom_flow outputs, loom_check fixtures, generated skills surface, PR #984, and closeout for #836-#842/#835.
 - Current Lane: pr-prep
 
 ## Runtime Evidence
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-866.md
-- Dynamic Truth: .loom/progress/WI-866.md
+- Static Truth: .loom/work-items/WI-835.md
+- Dynamic Truth: .loom/progress/WI-835.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

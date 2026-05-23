@@ -28,6 +28,10 @@
   - 唯一 `review_entry` review record 的定位、已记录结论，以及权威 findings / disposition 摘要
 - `engine`
   - 默认 reviewer adapter、evidence 路径、运行结果与 fail-closed 原因
+- `adopted_review_engine_adapter`
+  - `loom-adopted-review-engine-adapter/v1`，说明 complex-existing adopted repo 的 review engine adapter proof、fallback、normalized output 与 fail-closed 条件
+- `review_authority_migration`
+  - `loom-review-authority-migration/v1`，说明 implementation review verdict authority 是否已经唯一落到 Loom review record
 - `manual_review`
   - engine block 时如何继续写回同一 `review record`
 - `current_checkpoint`

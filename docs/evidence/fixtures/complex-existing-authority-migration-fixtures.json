@@ -1,0 +1,276 @@
+{
+  "schema_version": "loom-complex-existing-authority-migration-fixtures/v1",
+  "documented_by": [
+    "docs/adoption/complex-existing-authority-migration-playbook.md",
+    "docs/methodology/harness/review-execution.md",
+    "docs/methodology/harness/controlled-merge.md"
+  ],
+  "phases": [
+    {
+      "id": "phase-1",
+      "summary": "Attach runtime without changing repo-native authority.",
+      "authority_before": "repo-native rules and host gates",
+      "authority_after": "repo-native rules and host gates; Loom only reads attach metadata",
+      "rollback": "remove Loom attach metadata and keep host gates unchanged",
+      "validation": "loom-init verify plus repo-local runtime smoke",
+      "no_dual_authority_invariant": "Loom does not author review, spec, merge-ready, or recovery verdicts"
+    },
+    {
+      "id": "phase-1.1",
+      "summary": "Install repo-local Loom skills baseline.",
+      "authority_before": "host launcher and repo-native scripts",
+      "authority_after": "repo-local Loom launcher available; host still owns verdicts",
+      "rollback": "return to host scripts",
+      "validation": "repo-local .loom/bin verify and skills runtime parity",
+      "no_dual_authority_invariant": "repo-local Loom launcher is not a verdict authority"
+    },
+    {
+      "id": "phase-2",
+      "summary": "Replace review execution engine without flipping verdict authority.",
+      "authority_before": "host semantic review execution",
+      "authority_after": "Loom review engine executes; host guardian remains compatibility blocker",
+      "rollback": "switch guardian back to host execution",
+      "validation": "loom-adopted-review-engine-adapter/v1 covers app proof, fallback, and fail-closed variants",
+      "no_dual_authority_invariant": "Loom engine output is normalized review input, not the implementation review verdict"
+    },
+    {
+      "id": "phase-3",
+      "summary": "Move implementation review verdict authority to Loom review record.",
+      "authority_before": "host implementation review verdict",
+      "authority_after": "Loom review record is the only implementation review verdict authority",
+      "rollback": "mark Loom review advisory and restore host verdict as blocker",
+      "validation": "current-head approval, stale-head rejection, and dual authority rejection",
+      "no_dual_authority_invariant": "host guardian comment and proof store are compatibility mirrors or rollback-only"
+    },
+    {
+      "id": "phase-4",
+      "summary": "Move spec review verdict authority to Loom spec review record.",
+      "authority_before": "host or repo-native spec verdict",
+      "authority_after": "Loom spec review record is the only spec verdict authority",
+      "rollback": "restore host spec gate as blocker",
+      "validation": "record binds PR, head, base, spec locator, and reviewed scope",
+      "no_dual_authority_invariant": "repo-owned spec rules remain inputs but do not author the final spec verdict"
+    },
+    {
+      "id": "phase-5",
+      "summary": "Move merge-ready verdict authority to Loom merge-ready result.",
+      "authority_before": "host merge readiness aggregation",
+      "authority_after": "Loom merge-ready result is the only merge-ready verdict authority",
+      "rollback": "return wrapper to host aggregation",
+      "validation": "retained host signals are consumed as inputs and controlled merge consumes Loom allow result",
+      "no_dual_authority_invariant": "repo-specific gates stay repo-owned input signals, not independent merge blockers"
+    },
+    {
+      "id": "phase-6",
+      "summary": "Move handoff/resume orchestration to Loom while preserving GitHub progress truth.",
+      "authority_before": "repo-native recovery entry or GitHub issue notes",
+      "authority_after": "Loom handoff/resume orchestrates recovery; GitHub Issues/Projects remain progress truth",
+      "rollback": "use repo-native recovery entry",
+      "validation": "loom-resume and loom-handoff consume the same fact chain and ledger",
+      "no_dual_authority_invariant": "handoff notes never become a second progress truth"
+    },
+    {
+      "id": "phase-7",
+      "summary": "Clean up duplicate host mechanisms after authority migration.",
+      "authority_before": "host duplicate mechanisms mirror Loom decisions",
+      "authority_after": "duplicate host mechanisms are adapter, renderer, or rollback-only",
+      "rollback": "re-enable the last host blocker and mark Loom authority advisory",
+      "validation": "no retained host result is still an independent blocker",
+      "no_dual_authority_invariant": "cleanup cannot remove the only rollback path until Loom authority is proven fresh"
+    }
+  ],
+  "fixtures": {
+    "review_engine_adapter": [
+      {
+        "id": "app-proof-path",
+        "input": {
+          "adapter": "loom/codex-app-review",
+          "proof": {
+            "app_server": "unix://codex.sock",
+            "thread_id": "thread-1",
+            "thread_cwd_matches_target_root": true,
+            "reviewed_head": "HEAD1"
+          },
+          "normalized_output": true
+        },
+        "expected": {
+          "result": "pass",
+          "fail_closed": false
+        }
+      },
+      {
+        "id": "headless-fallback-path",
+        "input": {
+          "adapter": "loom/default-codex-exec",
+          "fallback_reason": "ci-or-codex-ci",
+          "normalized_output": true
+        },
+        "expected": {
+          "result": "pass",
+          "fail_closed": false
+        }
+      },
+      {
+        "id": "tracked-file-mutation-fail-closed",
+        "input": {
+          "adapter": "loom/default-codex-exec",
+          "failure_reason": "repo_diff_detected",
+          "dirty_paths": [
+            "src/app.py"
+          ]
+        },
+        "expected": {
+          "result": "block",
+          "fail_closed": true
+        }
+      }
+    ],
+    "review_authority": [
+      {
+        "id": "current-head-approval",
+        "input": {
+          "schema_version": "loom-review-authority-migration/v1",
+          "record_decision": "allow",
+          "reviewed_head": "HEAD1",
+          "current_head": "HEAD1",
+          "host_status": "compatibility_mirror"
+        },
+        "expected": {
+          "result": "pass",
+          "fail_closed": false
+        }
+      },
+      {
+        "id": "stale-head-rejection",
+        "input": {
+          "record_decision": "allow",
+          "reviewed_head": "HEAD0",
+          "current_head": "HEAD1"
+        },
+        "expected": {
+          "result": "block",
+          "fail_closed": true
+        }
+      },
+      {
+        "id": "dual-authority-rejection",
+        "input": {
+          "record_decision": "allow",
+          "host_verdict": "block",
+          "host_verdict_role": "independent_blocker"
+        },
+        "expected": {
+          "result": "block",
+          "fail_closed": true
+        }
+      }
+    ],
+    "spec_review_authority": [
+      {
+        "id": "spec-current-head-approval",
+        "input": {
+          "schema_version": "loom-spec-review-authority-migration/v1",
+          "record_decision": "allow",
+          "reviewed_head": "HEAD1",
+          "current_head": "HEAD1",
+          "spec_locator": "docs/specs/FR-1/spec.md"
+        },
+        "expected": {
+          "result": "pass",
+          "fail_closed": false
+        }
+      },
+      {
+        "id": "spec-locator-mismatch-rejection",
+        "input": {
+          "record_decision": "allow",
+          "record_spec_locator": "docs/specs/FR-1/spec.md",
+          "current_spec_locator": "docs/specs/FR-2/spec.md"
+        },
+        "expected": {
+          "result": "block",
+          "fail_closed": true
+        }
+      }
+    ],
+    "retained_host_signals": [
+      {
+        "id": "retained-signal-allow",
+        "input": {
+          "schema_version": "loom-retained-host-signal/v1",
+          "result": "pass",
+          "head_sha": "HEAD1",
+          "locator": "native/live-evidence.json"
+        },
+        "expected": {
+          "result": "pass",
+          "fail_closed": false
+        }
+      },
+      {
+        "id": "retained-signal-stale-head",
+        "input": {
+          "schema_version": "loom-retained-host-signal/v1",
+          "result": "pass",
+          "head_sha": "HEAD0",
+          "current_head": "HEAD1"
+        },
+        "expected": {
+          "result": "block",
+          "fail_closed": true
+        }
+      },
+      {
+        "id": "retained-signal-schema-drift",
+        "input": {
+          "schema_version": "repo-native-live-evidence/v0",
+          "result": "pass",
+          "head_sha": "HEAD1"
+        },
+        "expected": {
+          "result": "block",
+          "fail_closed": true
+        }
+      }
+    ],
+    "controlled_merge_consumption": [
+      {
+        "id": "clean-merge-consumption",
+        "input": {
+          "schema_version": "loom-controlled-merge-consumption/v1",
+          "merge_ready_result": "pass",
+          "head_sha": "HEAD1",
+          "required_checks": "pass"
+        },
+        "expected": {
+          "result": "pass",
+          "fail_closed": false
+        }
+      },
+      {
+        "id": "missing-allow-result",
+        "input": {
+          "merge_ready_result": "missing",
+          "head_sha": "HEAD1",
+          "required_checks": "pass"
+        },
+        "expected": {
+          "result": "block",
+          "fail_closed": true
+        }
+      },
+      {
+        "id": "required-checks-drift",
+        "input": {
+          "merge_ready_result": "pass",
+          "head_sha": "HEAD1",
+          "required_checks": "pending"
+        },
+        "expected": {
+          "result": "block",
+          "fail_closed": true
+        }
+      }
+    ]
+  }
+}

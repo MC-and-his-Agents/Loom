@@ -373,6 +373,7 @@ EXTERNAL_ORCHESTRATOR_CONFORMANCE_FIXTURE_SCHEMA = "loom-external-orchestrator-c
 SAFE_SYNC_PLAN_FIXTURE_SCHEMA = "loom-safe-sync-plan-fixtures/v1"
 GITHUB_PROFILE_MATURITY_FIXTURE_SCHEMA = "loom-github-profile-maturity-fixtures/v1"
 GOVERNANCE_LINT_NEGATIVE_FIXTURE_SCHEMA = "loom-governance-lint-negative-fixtures/v1"
+COMPLEX_EXISTING_AUTHORITY_MIGRATION_FIXTURE_SCHEMA = "loom-complex-existing-authority-migration-fixtures/v1"
 GOVERNANCE_LINT_CORE_KINDS = {
     "fact_chain_broken",
     "approval_bypass",
@@ -18711,6 +18712,268 @@ def check_governance_lint_negative_fixture_contract(root: Path) -> list[Failure]
     return failures
 
 
+def evaluate_complex_existing_authority_migration_fixture(group: str, input_payload: dict) -> dict:
+    if group == "review_engine_adapter":
+        missing_inputs: list[str] = []
+        proof = input_payload.get("proof") if isinstance(input_payload.get("proof"), dict) else None
+        if input_payload.get("adapter") == loom_flow_module.CODEX_APP_REVIEW_ADAPTER:
+            if not proof:
+                missing_inputs.append("Codex app proof")
+            elif proof.get("thread_cwd_matches_target_root") is not True:
+                missing_inputs.append("Codex app proof target root binding")
+        engine_payload = {
+            "result": "pass",
+            "missing_inputs": [],
+            "review_record_input": {"normalized_findings": "synthetic://review-findings"}
+            if input_payload.get("normalized_output") is True
+            else None,
+        }
+        if input_payload.get("failure_reason"):
+            engine_payload["result"] = "block"
+            engine_payload["missing_inputs"] = [str(input_payload["failure_reason"])]
+            engine_payload["engine"] = {"failure_reason": str(input_payload["failure_reason"])}
+        elif input_payload.get("normalized_output") is not True:
+            engine_payload["result"] = "block"
+            engine_payload["missing_inputs"] = ["normalized review output"]
+        reviewed_head = input_payload.get("reviewed_head")
+        if not reviewed_head and isinstance(proof, dict):
+            reviewed_head = proof.get("reviewed_head")
+        adapter_payload = loom_flow_module.adopted_review_engine_adapter_payload(
+            adapter_selection={
+                "adapter": input_payload.get("adapter"),
+                "selection_source": "synthetic_fixture",
+                "fallback_reason": input_payload.get("fallback_reason"),
+                "binding_summary": proof,
+                "missing_host_proof": missing_inputs,
+            },
+            engine_profile={"schema_version": loom_flow_module.REVIEW_ENGINE_PROFILE_SCHEMA, "id": "default"},
+            review_kind="implementation_review",
+            reviewed_head=str(reviewed_head or "HEAD1"),
+            engine_payload=engine_payload,
+        )
+        return {
+            "result": adapter_payload.get("result"),
+            "fail_closed": adapter_payload.get("result") == "block" and adapter_payload.get("fallback_to") is not None,
+        }
+
+    if group in {"review_authority", "spec_review_authority"}:
+        reviewed_head = input_payload.get("reviewed_head")
+        current_head = input_payload.get("current_head")
+        head_binding = {}
+        if reviewed_head and current_head:
+            head_binding = {"stale": reviewed_head != current_head}
+        review_payload = {
+            "path": "synthetic://review-record.json",
+            "record": {
+                "decision": input_payload.get("record_decision"),
+                "spec_locator": input_payload.get("record_spec_locator") or input_payload.get("spec_locator"),
+            },
+            "head_binding": head_binding,
+            "host_verdict_role": input_payload.get("host_verdict_role"),
+            "record_spec_locator": input_payload.get("record_spec_locator") or input_payload.get("spec_locator"),
+            "current_spec_locator": input_payload.get("current_spec_locator") or input_payload.get("spec_locator"),
+        }
+        authority_payload = loom_flow_module.review_authority_migration_payload(
+            review_payload=review_payload,
+            review_kind="spec_review" if group == "spec_review_authority" else "implementation_review",
+            authority_before="synthetic previous authority",
+            authority_after="synthetic Loom authority",
+        )
+        return {
+            "result": authority_payload.get("result"),
+            "fail_closed": authority_payload.get("result") == "block" and authority_payload.get("fallback_to") is not None,
+        }
+
+    if group == "retained_host_signals":
+        with tempfile.TemporaryDirectory(prefix="loom-retained-host-signal-fixture-") as tmp:
+            target = Path(tmp) / "target"
+            companion = target / ".loom" / "companion"
+            companion.mkdir(parents=True)
+            locator = str(input_payload.get("locator") or "native/live-evidence.json")
+            signal_payload = {
+                key: value
+                for key, value in input_payload.items()
+                if key not in {"current_head", "locator"}
+            }
+            signal_path = target / locator
+            signal_path.parent.mkdir(parents=True, exist_ok=True)
+            signal_path.write_text(json.dumps(signal_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            (companion / "interop.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "loom-repo-interop/v1",
+                        "host_adapters": [
+                            {
+                                "id": "synthetic-retained-signal",
+                                "surfaces": ["merge_ready"],
+                                "locator": locator,
+                                "requirement": "required",
+                                "owner": "repo",
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            payload = loom_flow_module.retained_host_signals_payload(
+                target_root=target,
+                governance_surface={"repo_interop": {"availability": "present"}},
+                surface="merge_ready",
+                current_head=str(input_payload.get("current_head") or input_payload.get("head_sha") or "HEAD1"),
+            )
+        return {
+            "result": payload.get("result"),
+            "fail_closed": payload.get("result") == "block" and payload.get("fallback_to") is not None,
+        }
+
+    if group == "controlled_merge_consumption":
+        missing_inputs = []
+        if input_payload.get("merge_ready_result") != "pass":
+            missing_inputs.append("fresh Loom merge-ready / PR merge gate allow result")
+        if input_payload.get("required_checks") != "pass":
+            missing_inputs.append("required checks readback")
+        if input_payload.get("observed_pr_head") and input_payload.get("observed_pr_head") != input_payload.get("head_sha"):
+            missing_inputs.append("PR head drift after Loom merge-ready allow result")
+        return {
+            "result": "block" if missing_inputs else "pass",
+            "fail_closed": bool(missing_inputs),
+        }
+
+    return {"result": "block", "fail_closed": True}
+
+
+def check_complex_existing_authority_migration_fixture_contract(root: Path) -> list[Failure]:
+    category = "complex-existing-authority-migration-fixtures"
+    fixture_path = root / "docs" / "evidence" / "fixtures" / "complex-existing-authority-migration-fixtures.json"
+    if not fixture_path.exists():
+        return [Failure(category, "missing `docs/evidence/fixtures/complex-existing-authority-migration-fixtures.json`")]
+    try:
+        fixture_payload = load_json_file(fixture_path)
+    except (OSError, json.JSONDecodeError) as exc:
+        return [Failure(category, f"`complex-existing-authority-migration-fixtures.json` is invalid JSON: {exc}")]
+    failures: list[Failure] = []
+    if fixture_payload.get("schema_version") != COMPLEX_EXISTING_AUTHORITY_MIGRATION_FIXTURE_SCHEMA:
+        failures.append(
+            Failure(
+                category,
+                f"`complex-existing-authority-migration-fixtures.json` schema_version must be `{COMPLEX_EXISTING_AUTHORITY_MIGRATION_FIXTURE_SCHEMA}`",
+            )
+        )
+    phases = fixture_payload.get("phases")
+    if not isinstance(phases, list) or len(phases) < 7:
+        failures.append(Failure(category, "authority migration fixtures must declare all migration phases"))
+    else:
+        required_phase_fields = {
+            "id",
+            "authority_before",
+            "authority_after",
+            "rollback",
+            "validation",
+            "no_dual_authority_invariant",
+        }
+        observed_phase_ids = set()
+        for index, phase in enumerate(phases):
+            if not isinstance(phase, dict):
+                failures.append(Failure(category, f"phase #{index + 1} must be an object"))
+                continue
+            observed_phase_ids.add(str(phase.get("id")))
+            missing = [field for field in sorted(required_phase_fields) if not phase.get(field)]
+            if missing:
+                failures.append(Failure(category, f"phase `{phase.get('id') or index + 1}` missing {', '.join(missing)}"))
+        required_phase_ids = {"phase-1", "phase-1.1", "phase-2", "phase-3", "phase-4", "phase-5", "phase-6", "phase-7"}
+        missing_phase_ids = sorted(required_phase_ids - observed_phase_ids)
+        if missing_phase_ids:
+            failures.append(Failure(category, "missing migration phases: " + ", ".join(missing_phase_ids)))
+
+    required_groups = {
+        "review_engine_adapter": {
+            "app-proof-path",
+            "headless-fallback-path",
+            "tracked-file-mutation-fail-closed",
+        },
+        "review_authority": {
+            "current-head-approval",
+            "stale-head-rejection",
+            "dual-authority-rejection",
+        },
+        "spec_review_authority": {
+            "spec-current-head-approval",
+            "spec-locator-mismatch-rejection",
+        },
+        "retained_host_signals": {
+            "retained-signal-allow",
+            "retained-signal-stale-head",
+            "retained-signal-schema-drift",
+        },
+        "controlled_merge_consumption": {
+            "clean-merge-consumption",
+            "missing-allow-result",
+            "required-checks-drift",
+        },
+    }
+    fixtures = fixture_payload.get("fixtures")
+    if not isinstance(fixtures, dict):
+        failures.append(Failure(category, "authority migration fixtures must group fixtures by contract"))
+        return failures
+    for group, required_cases in required_groups.items():
+        entries = fixtures.get(group)
+        if not isinstance(entries, list) or not entries:
+            failures.append(Failure(category, f"fixtures.{group} must be a non-empty list"))
+            continue
+        observed = set()
+        for index, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                failures.append(Failure(category, f"fixtures.{group}[{index}] must be an object"))
+                continue
+            case_id = str(entry.get("id") or "")
+            observed.add(case_id)
+            expected = entry.get("expected")
+            if not isinstance(expected, dict):
+                failures.append(Failure(category, f"{group}.{case_id or index} must include expected"))
+                continue
+            if expected.get("result") not in {"pass", "block", "fallback"}:
+                failures.append(Failure(category, f"{group}.{case_id or index} expected.result must stay within pass/block/fallback"))
+            fail_closed = expected.get("fail_closed")
+            if expected.get("result") == "block" and fail_closed is not True:
+                failures.append(Failure(category, f"{group}.{case_id or index} block fixtures must declare fail_closed=true"))
+            if not isinstance(entry.get("input"), dict):
+                failures.append(Failure(category, f"{group}.{case_id or index} must include synthetic input"))
+                continue
+            actual = evaluate_complex_existing_authority_migration_fixture(group, entry["input"])
+            if actual.get("result") != expected.get("result"):
+                failures.append(
+                    Failure(
+                        category,
+                        f"{group}.{case_id or index} expected result `{expected.get('result')}` but got `{actual.get('result')}`",
+                    )
+                )
+            if actual.get("fail_closed") != fail_closed:
+                failures.append(
+                    Failure(
+                        category,
+                        f"{group}.{case_id or index} expected fail_closed `{fail_closed}` but got `{actual.get('fail_closed')}`",
+                    )
+                )
+        missing_cases = sorted(required_cases - observed)
+        if missing_cases:
+            failures.append(Failure(category, f"fixtures.{group} missing required cases: {', '.join(missing_cases)}"))
+
+    docs = fixture_payload.get("documented_by")
+    if not isinstance(docs, list) or not docs:
+        failures.append(Failure(category, "authority migration fixtures must declare documented_by links"))
+    else:
+        for relative in docs:
+            if not isinstance(relative, str) or not relative:
+                failures.append(Failure(category, "documented_by entries must be non-empty strings"))
+                continue
+            if not (root / relative).exists():
+                failures.append(Failure(category, f"documented_by target is missing: `{relative}`"))
+    return failures
+
+
 def check_safe_sync_plan_fixture_contract(root: Path) -> list[Failure]:
     category = "safe-sync-plan-fixtures"
     failures: list[Failure] = []
@@ -19099,6 +19362,7 @@ def collect_source_failures(root: Path) -> list[Failure]:
     failures.extend(check_story_intake_contract(root))
     failures.extend(check_core_hardcoding_guard(root))
     failures.extend(check_governance_lint_negative_fixture_contract(root))
+    failures.extend(check_complex_existing_authority_migration_fixture_contract(root))
     failures.extend(check_safe_sync_plan_fixture_contract(root))
     failures.extend(check_github_profile_maturity_fixture_contract(root))
     failures.extend(check_loom_check_runtime_purity_contract(root))

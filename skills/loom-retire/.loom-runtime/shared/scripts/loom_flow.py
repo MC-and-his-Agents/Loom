@@ -177,6 +177,11 @@ LOOM_RUNTIME_ENV_KEYS = (
 )
 DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS: int | None = None
 REVIEW_ENGINE_PROFILE_SCHEMA = "loom-review-engine-profile/v1"
+ADOPTED_REVIEW_ENGINE_ADAPTER_SCHEMA = "loom-adopted-review-engine-adapter/v1"
+REVIEW_AUTHORITY_MIGRATION_SCHEMA = "loom-review-authority-migration/v1"
+SPEC_REVIEW_AUTHORITY_MIGRATION_SCHEMA = "loom-spec-review-authority-migration/v1"
+RETAINED_HOST_SIGNAL_SCHEMA = "loom-retained-host-signal/v1"
+CONTROLLED_MERGE_CONSUMPTION_SCHEMA = "loom-controlled-merge-consumption/v1"
 REVIEW_ENGINE_PROFILE_IDS = {"default", "high-risk", "spec-review", "repeated-blocker"}
 REVIEW_ENGINE_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
 REVIEW_PROMPT_DIFF_MAX_CHARS = 60_000
@@ -6338,6 +6343,288 @@ def implementation_review_status_payload(context: dict[str, Any]) -> dict[str, A
     }
 
 
+def review_authority_migration_payload(
+    *,
+    review_payload: dict[str, Any] | None,
+    review_kind: str,
+    authority_before: str,
+    authority_after: str,
+) -> dict[str, Any]:
+    record = review_payload.get("record") if isinstance(review_payload, dict) else None
+    head_binding = review_payload.get("head_binding") if isinstance(review_payload, dict) else None
+    missing_inputs: list[str] = []
+    if not isinstance(review_payload, dict):
+        missing_inputs.append("review authority payload")
+    else:
+        missing_inputs.extend(str(message) for message in review_payload.get("missing_inputs", []) if message)
+    if not isinstance(record, dict):
+        missing_inputs.append("loom review record")
+    elif record.get("decision") != "allow":
+        missing_inputs.append("loom review record decision is not allow")
+    if isinstance(head_binding, dict) and head_binding.get("stale") is True:
+        missing_inputs.append("loom review record head binding is stale")
+    if isinstance(review_payload, dict) and review_payload.get("host_verdict_role") == "independent_blocker":
+        missing_inputs.append("host verdict remains an independent blocker")
+    if review_kind == "spec_review":
+        schema = SPEC_REVIEW_AUTHORITY_MIGRATION_SCHEMA
+        unique_authority = "loom spec review record"
+        if isinstance(review_payload, dict):
+            record_spec_locator = review_payload.get("record_spec_locator")
+            current_spec_locator = review_payload.get("current_spec_locator")
+            if isinstance(record, dict):
+                record_spec_locator = record_spec_locator or record.get("spec_locator") or record.get("spec_path")
+            if record_spec_locator and current_spec_locator and record_spec_locator != current_spec_locator:
+                missing_inputs.append("loom spec review record locator does not match current spec locator")
+    else:
+        schema = REVIEW_AUTHORITY_MIGRATION_SCHEMA
+        unique_authority = "loom review record"
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "schema_version": schema,
+        "result": result,
+        "summary": (
+            f"{unique_authority} is the only current-head verdict authority."
+            if result == "pass"
+            else f"{unique_authority} is not yet safe to consume as the only verdict authority."
+        ),
+        "missing_inputs": list(dict.fromkeys(missing_inputs)),
+        "fallback_to": None if result == "pass" else "review",
+        "review_kind": review_kind,
+        "authority_before": authority_before,
+        "authority_after": authority_after,
+        "unique_verdict_authority": unique_authority,
+        "host_status": "compatibility_mirror_or_rollback_only",
+        "no_dual_authority": result == "pass",
+        "fail_closed_conditions": [
+            "missing-record",
+            "malformed-record",
+            "stale-head",
+            "target-mismatch",
+            "schema-drift",
+            "contradictory-host-verdict",
+            "dual-independent-blocker",
+        ],
+        "rollback": "restore the host-native verdict as the only blocker and mark the Loom record advisory until a fresh migration record is authored.",
+        "record_locator": review_payload.get("path") if isinstance(review_payload, dict) else None,
+        "head_binding": head_binding if isinstance(head_binding, dict) else None,
+    }
+
+
+def adopted_review_engine_adapter_payload(
+    *,
+    adapter_selection: dict[str, Any],
+    engine_profile: dict[str, Any] | None,
+    review_kind: str,
+    reviewed_head: str,
+    engine_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    selected_adapter = adapter_selection.get("adapter")
+    missing_inputs: list[str] = []
+    if selected_adapter not in AUTHORITATIVE_REVIEW_ADAPTERS:
+        missing_inputs.append(f"unsupported authoritative review adapter: {selected_adapter}")
+    if engine_profile is None:
+        missing_inputs.append("resolved review engine profile")
+    if isinstance(adapter_selection.get("missing_host_proof"), list) and selected_adapter == CODEX_APP_REVIEW_ADAPTER:
+        missing_inputs.extend(str(message) for message in adapter_selection["missing_host_proof"])
+    if isinstance(engine_payload, dict):
+        missing_inputs.extend(str(message) for message in engine_payload.get("missing_inputs", []) if message)
+        if engine_payload.get("result") != "pass":
+            missing_inputs.append(str(engine_payload.get("engine", {}).get("failure_reason") or "review engine did not pass"))
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "schema_version": ADOPTED_REVIEW_ENGINE_ADAPTER_SCHEMA,
+        "result": result,
+        "summary": (
+            "adopted-repo review engine adapter can produce normalized review record input."
+            if result == "pass"
+            else "adopted-repo review engine adapter is blocked before authority consumption."
+        ),
+        "missing_inputs": list(dict.fromkeys(missing_inputs)),
+        "fallback_to": None if result == "pass" else "review",
+        "review_kind": review_kind,
+        "adapter": selected_adapter,
+        "selection_source": adapter_selection.get("selection_source"),
+        "fallback_reason": adapter_selection.get("fallback_reason"),
+        "reviewed_head": reviewed_head,
+        "engine_profile": engine_profile,
+        "proof": adapter_selection.get("binding_summary"),
+        "normalized_output": {
+            "target": "review_record_input",
+            "present": isinstance(engine_payload, dict) and isinstance(engine_payload.get("review_record_input"), dict),
+            "locator": (
+                engine_payload.get("review_record_input", {}).get("normalized_findings")
+                if isinstance(engine_payload, dict) and isinstance(engine_payload.get("review_record_input"), dict)
+                else None
+            ),
+        },
+        "authority_phase": "execution_adapter_only",
+        "fail_closed_conditions": [
+            "proof-missing",
+            "proof-conflict",
+            "cwd-target-mismatch",
+            "head-mismatch",
+            "schema-drift",
+            "output-missing",
+            "tracked-file-mutation",
+        ],
+    }
+
+
+def retained_host_signals_payload(
+    *,
+    target_root: Path,
+    governance_surface: dict[str, Any],
+    surface: str,
+    current_head: str | None,
+) -> dict[str, Any]:
+    repo_interop = governance_surface.get("repo_interop")
+    availability = repo_interop.get("availability") if isinstance(repo_interop, dict) else "absent"
+    if availability in {None, "absent"}:
+        return {
+            "schema_version": RETAINED_HOST_SIGNAL_SCHEMA,
+            "surface": surface,
+            "result": "pass",
+            "summary": "no retained host signals are declared for this surface.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "signals": [],
+        }
+    if availability != "present":
+        return {
+            "schema_version": RETAINED_HOST_SIGNAL_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "repo interop is incomplete, so retained host signals cannot be consumed.",
+            "missing_inputs": list(repo_interop.get("missing_inputs", [])) if isinstance(repo_interop, dict) else ["repo interop"],
+            "fallback_to": "adoption",
+            "signals": [],
+        }
+
+    interop_path = target_root / ".loom/companion/interop.json"
+    missing_inputs: list[str] = []
+    signals: list[dict[str, Any]] = []
+    try:
+        interop_payload = load_json_file(interop_path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return {
+            "schema_version": RETAINED_HOST_SIGNAL_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "repo interop is present but unreadable.",
+            "missing_inputs": [f".loom/companion/interop.json: {exc}"],
+            "fallback_to": "adoption",
+            "signals": [],
+        }
+    host_adapters = interop_payload.get("host_adapters") if isinstance(interop_payload, dict) else None
+    if not isinstance(host_adapters, list):
+        return {
+            "schema_version": RETAINED_HOST_SIGNAL_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "repo interop is missing host_adapters.",
+            "missing_inputs": ["repo interop host_adapters"],
+            "fallback_to": "adoption",
+            "signals": [],
+        }
+
+    for index, entry in enumerate(host_adapters):
+        if not isinstance(entry, dict):
+            continue
+        surfaces = entry.get("surfaces")
+        if not isinstance(surfaces, list) or surface not in surfaces:
+            continue
+        signal_missing: list[str] = []
+        locator = str(entry.get("locator") or "")
+        requirement = entry.get("requirement")
+        resolved_path, locator_errors = resolve_repo_relative_path(
+            target_root,
+            locator,
+            label=f"retained host signal {entry.get('id') or index}",
+        )
+        signal_missing.extend(locator_errors)
+        payload: dict[str, Any] | None = None
+        freshness = "unknown"
+        observed_result = None
+        if resolved_path is None or locator_errors:
+            freshness = "unreadable"
+        elif not resolved_path.exists() or resolved_path.is_dir():
+            freshness = "missing"
+            signal_missing.append(f"retained host signal locator is missing: {locator}")
+        else:
+            try:
+                loaded = load_json_file(resolved_path)
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                freshness = "unreadable"
+                signal_missing.append(f"retained host signal `{locator}` is unreadable: {exc}")
+            else:
+                if not isinstance(loaded, dict):
+                    freshness = "schema_drift"
+                    signal_missing.append(f"retained host signal `{locator}` must be a JSON object")
+                else:
+                    payload = loaded
+                    observed_result = (
+                        loaded.get("result")
+                        or loaded.get("decision")
+                        or loaded.get("status")
+                        or loaded.get("verdict")
+                    )
+                    bound_head = loaded.get("head_sha") or loaded.get("reviewed_head") or loaded.get("head")
+                    if isinstance(bound_head, str) and current_head and bound_head != current_head:
+                        freshness = "stale"
+                        signal_missing.append(f"retained host signal `{locator}` is bound to stale head `{bound_head}`")
+                    elif loaded.get("schema_version") not in {None, RETAINED_HOST_SIGNAL_SCHEMA}:
+                        freshness = "schema_drift"
+                        signal_missing.append(f"retained host signal `{locator}` schema drift")
+                    else:
+                        freshness = "current"
+                    if observed_result not in {"pass", "allow", "success", "ok", True}:
+                        signal_missing.append(f"retained host signal `{entry.get('id') or locator}` is not passing")
+        blocking = requirement == "required" and bool(signal_missing)
+        if blocking:
+            missing_inputs.extend(signal_missing)
+        signals.append(
+            {
+                "schema_version": RETAINED_HOST_SIGNAL_SCHEMA,
+                "id": entry.get("id") or f"host-adapter-{index + 1}",
+                "summary": entry.get("summary"),
+                "surface": surface,
+                "locator": locator,
+                "requirement": requirement,
+                "owner": entry.get("owner"),
+                "result": "block" if blocking else "pass" if not signal_missing else "warn",
+                "observed_result": observed_result,
+                "freshness": freshness,
+                "missing_inputs": signal_missing,
+                "fallback_to": entry.get("fallback_to") or "merge_ready",
+                "provenance": {
+                    "interop_locator": ".loom/companion/interop.json",
+                    "payload_schema": payload.get("schema_version") if isinstance(payload, dict) else None,
+                },
+            }
+        )
+
+    return {
+        "schema_version": RETAINED_HOST_SIGNAL_SCHEMA,
+        "surface": surface,
+        "result": "pass" if not missing_inputs else "block",
+        "summary": (
+            "retained host signals are readable and current."
+            if not missing_inputs
+            else "required retained host signals are missing, stale, failing, or schema-drifted."
+        ),
+        "missing_inputs": list(dict.fromkeys(missing_inputs)),
+        "fallback_to": None if not missing_inputs else "merge_ready",
+        "signals": signals,
+        "fail_closed_conditions": [
+            "missing-applicable-signal",
+            "failed-signal",
+            "stale-signal",
+            "schema-drift",
+            "head-mismatch",
+        ],
+    }
+
+
 def compat_findings_from_lists(
     *,
     decision: str | None,
@@ -6797,6 +7084,12 @@ def build_review_flow_payload(
             "path": review_path,
             "record": review_record,
         }
+        review_authority = review_authority_migration_payload(
+            review_payload=review_payload,
+            review_kind="spec_review",
+            authority_before="repo-owned spec review gate or guardian compatibility verdict",
+            authority_after="loom spec review record",
+        )
         extra_steps: list[dict[str, Any]] = []
     else:
         review_path = context["review_entry"]
@@ -6807,6 +7100,12 @@ def build_review_flow_payload(
             expected_kind=implementation_review_kind(context),
             gate_name="implementation_review",
             required=True,
+        )
+        review_authority = review_authority_migration_payload(
+            review_payload=review_payload,
+            review_kind=implementation_review_kind(context),
+            authority_before="host guardian or repo-native implementation review verdict",
+            authority_after="loom review record",
         )
         spec_gate = spec_review_gate_payload(context)
         extra_steps = [
@@ -6939,6 +7238,7 @@ def build_review_flow_payload(
         **(
             {
                 "spec_review": review_payload,
+                "spec_review_authority_migration": review_authority,
             }
             if operation == "spec-review"
             else {
@@ -6947,6 +7247,7 @@ def build_review_flow_payload(
                     "record": review_record,
                 },
                 "spec_review": spec_gate,
+                "review_authority_migration": review_authority,
             }
         ),
         "repo_specific_requirements": repo_specific_requirements,
@@ -12799,6 +13100,46 @@ def controlled_merge_payload(
         host_enforcement=host_enforcement,
     )
 
+    merge_ready_consumption_missing: list[str] = []
+    if pr_gate.get("result") != "pass":
+        merge_ready_consumption_missing.append("fresh Loom merge-ready / PR merge gate allow result")
+    if required_checks["result"] != "pass":
+        merge_ready_consumption_missing.append("required checks readback")
+    pr_head = (
+        pr_payload.get("headRefOid") or pr_payload.get("headRefName")
+        if isinstance(pr_payload, dict)
+        else None
+    )
+    if head_sha and isinstance(pr_payload, dict):
+        actual_head = pr_payload.get("headRefOid") or pr_payload.get("head_sha")
+        if isinstance(actual_head, str) and actual_head and actual_head != head_sha:
+            merge_ready_consumption_missing.append("PR head drift after Loom merge-ready allow result")
+    controlled_merge_consumption = {
+        "schema_version": CONTROLLED_MERGE_CONSUMPTION_SCHEMA,
+        "result": "pass" if not merge_ready_consumption_missing else "block",
+        "summary": (
+            "controlled merge wrapper consumed Loom merge-ready allow result and host readback."
+            if not merge_ready_consumption_missing
+            else "controlled merge wrapper cannot consume Loom merge-ready allow result safely."
+        ),
+        "missing_inputs": merge_ready_consumption_missing,
+        "fallback_to": None if not merge_ready_consumption_missing else "merge_ready",
+        "source_authority": "loom merge-ready result",
+        "wrapper_role": "host_action_adapter",
+        "merge_ready_required": True,
+        "head_sha": head_sha,
+        "observed_pr_head": pr_head,
+        "merge_method": merge_method,
+        "required_checks_snapshot": required_checks,
+        "fail_closed_conditions": [
+            "missing-allow-result",
+            "stale-head",
+            "target-mismatch",
+            "required-checks-drift",
+            "malformed-merge-ready-result",
+        ],
+    }
+
     return {
         "command": "controlled-merge",
         "operation": "merge" if execute else "check",
@@ -12819,6 +13160,7 @@ def controlled_merge_payload(
         "drift_readback": drift_readback,
         "required_checks": required_checks,
         "host_enforcement": host_enforcement,
+        "controlled_merge_consumption": controlled_merge_consumption,
         "merge": merge_result,
     }
 
@@ -15860,6 +16202,12 @@ def handle_review(args: argparse.Namespace) -> int:
                 kind=review_kind,
                 review_record_path=review_path,
             )
+            adopted_adapter = adopted_review_engine_adapter_payload(
+                adapter_selection=adapter_selection,
+                engine_profile=None,
+                review_kind=review_kind,
+                reviewed_head=current_head,
+            )
             return emit(
                 {
                     "command": "review",
@@ -15879,6 +16227,7 @@ def handle_review(args: argparse.Namespace) -> int:
                         "evidence": None,
                     },
                     "engine_metadata": review_adapter_selection_metadata(adapter_selection, reviewed_head=current_head),
+                    "adopted_review_engine_adapter": adopted_adapter,
                     "manual_review": manual_review,
                 }
             )
@@ -15890,6 +16239,12 @@ def handle_review(args: argparse.Namespace) -> int:
                 findings_file=None,
                 kind=review_kind,
                 review_record_path=review_path,
+            )
+            adopted_adapter = adopted_review_engine_adapter_payload(
+                adapter_selection=adapter_selection,
+                engine_profile=engine_profile,
+                review_kind=review_kind,
+                reviewed_head=current_head,
             )
             return emit(
                 {
@@ -15920,6 +16275,7 @@ def handle_review(args: argparse.Namespace) -> int:
                         "evidence": None,
                     },
                     "engine_metadata": review_adapter_selection_metadata(adapter_selection, reviewed_head=current_head),
+                    "adopted_review_engine_adapter": adopted_adapter,
                     "manual_review": manual_review,
                 }
             )
@@ -15966,6 +16322,13 @@ def handle_review(args: argparse.Namespace) -> int:
             review_record_path=review_path,
         )
         result = engine_payload["result"]
+        adopted_adapter = adopted_review_engine_adapter_payload(
+            adapter_selection=adapter_selection,
+            engine_profile=engine_profile,
+            review_kind=review_kind,
+            reviewed_head=current_head,
+            engine_payload=engine_payload,
+        )
         summary = (
             engine_payload["summary"]
             if result == "pass"
@@ -15992,6 +16355,7 @@ def handle_review(args: argparse.Namespace) -> int:
                 "current_checkpoint": flow_payload.get("current_checkpoint"),
                 "engine": engine_payload["engine"],
                 **({"engine_metadata": engine_payload["engine_metadata"]} if isinstance(engine_payload.get("engine_metadata"), dict) else {}),
+                "adopted_review_engine_adapter": adopted_adapter,
                 **({"shadow_engine": shadow_engine_payload} if isinstance(shadow_engine_payload, dict) else {}),
                 "manual_review": manual_review,
                 **({"review_record_input": review_record_input} if isinstance(review_record_input, dict) else {}),
@@ -17030,6 +17394,7 @@ def handle_flow(args: argparse.Namespace) -> int:
     review_payload: dict[str, Any] | None = None
     build_execution: dict[str, Any] | None = None
     governance_lint: dict[str, Any] | None = None
+    retained_host_signals: dict[str, Any] | None = None
     governance_surface = build_governance_surface(target_root)
     upgrade_path = maturity_upgrade_path(governance_surface, target_root)
     repo_interface = governance_surface.get("repo_interface")
@@ -17132,6 +17497,12 @@ def handle_flow(args: argparse.Namespace) -> int:
                 repo_interface,
                 target_root=target_root,
                 surface="merge_ready",
+            )
+            retained_host_signals = retained_host_signals_payload(
+                target_root=target_root,
+                governance_surface=governance_surface,
+                surface="merge_ready",
+                current_head=git_head_sha(target_root),
             )
             governance_lint = flow_governance_lint_status(
                 context,
@@ -17296,6 +17667,13 @@ def handle_flow(args: argparse.Namespace) -> int:
     ):
         result = "block"
         fallback_to = governance_lint_fallback(governance_lint) or fallback_to
+    if (
+        args.operation == "merge-ready"
+        and isinstance(retained_host_signals, dict)
+        and retained_host_signals.get("result") == "block"
+    ):
+        result = "block"
+        fallback_to = retained_host_signals.get("fallback_to") or fallback_to
     if result != "block" and isinstance(repo_specific_requirements, dict) and repo_specific_requirements["result"] == "block":
         result = "block"
         fallback_to = fallback_to or repo_specific_requirements["fallback_to"]
@@ -17352,6 +17730,10 @@ def handle_flow(args: argparse.Namespace) -> int:
                     missing_inputs.append(message)
     if isinstance(repo_specific_requirements, dict) and repo_specific_requirements["result"] == "block":
         for message in repo_specific_requirements.get("missing_inputs", []):
+            if message not in missing_inputs:
+                missing_inputs.append(message)
+    if args.operation == "merge-ready" and isinstance(retained_host_signals, dict) and retained_host_signals.get("result") == "block":
+        for message in retained_host_signals.get("missing_inputs", []):
             if message not in missing_inputs:
                 missing_inputs.append(message)
     if args.operation == "resume":
@@ -17592,6 +17974,15 @@ def handle_flow(args: argparse.Namespace) -> int:
                     },
                     "budget_risk": merge_payload.get("budget_risk"),
                     "spec_review": merge_payload.get("spec_review"),
+                    "retained_host_signals": retained_host_signals,
+                    "merge_ready_authority": {
+                        "authority_after": "loom merge-ready result",
+                        "host_signal_role": "retained_input_only",
+                        "no_dual_authority": bool(
+                            isinstance(retained_host_signals, dict)
+                            and retained_host_signals.get("result") == "pass"
+                        ),
+                    },
                     "current_checkpoint": {
                         "raw": context["current_checkpoint_raw"],
                         "normalized": context["current_checkpoint"],
