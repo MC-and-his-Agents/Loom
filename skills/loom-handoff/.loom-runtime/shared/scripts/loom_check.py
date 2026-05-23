@@ -511,7 +511,7 @@ def acquire_single_flight_lock(root: Path, argv: list[str]) -> LoomCheckLock:
         "run_id": uuid.uuid4().hex,
         "pid": os.getpid(),
         "started_at": utc_now_iso(),
-        "command": " ".join(argv),
+        "command": " ".join(str(part) for part in argv),
         "cwd": str(Path.cwd().resolve()),
     }
     encoded = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
