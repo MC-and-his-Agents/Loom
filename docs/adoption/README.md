@@ -21,6 +21,7 @@
 - agent-assisted zero-friction adoption 合同：[zero-friction-adoption-contract.md](./zero-friction-adoption-contract.md)
 - 小型既有仓库的默认 retrofit 策略：[lightweight-retrofit-default.md](./lightweight-retrofit-default.md)
 - 成熟治理重仓的默认 attach 策略：[deep-existing-repo-default.md](./deep-existing-repo-default.md)
+- 成熟治理重仓的 authority migration playbook：[complex-existing-authority-migration-playbook.md](./complex-existing-authority-migration-playbook.md)
 - GitHub 默认治理实现 profile：[github-profile.md](./github-profile.md)
 - GitHub profile 升级路径：[github-profile-upgrade.md](./github-profile-upgrade.md)
 - CI required checks bootstrap：[ci-required-checks-bootstrap.md](./ci-required-checks-bootstrap.md)

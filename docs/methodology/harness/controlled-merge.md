@@ -124,3 +124,16 @@ merge 成功后，`controlled merge` 必须输出最小交接 basis 给 `closeou
 - 不接管宿主 branch protection 或 ruleset 的底层实现
 - 不把 `controlled merge` 简化成“PR 绿了就能合”
 - 不把裸 `gh pr merge` 当成 Loom-governed PR 的日常合并入口；它会绕过本地受控合并检查，除非宿主 required check 已经强制 `pr merge gate`
+
+## 9. Complex-existing wrapper consumption
+
+成熟既有仓库可以保留 repo-owned merge wrapper，但 wrapper 必须降级为 host-action adapter。
+
+稳定输出为 `loom-controlled-merge-consumption/v1`：
+
+- `source_authority` 固定指向 Loom merge-ready result
+- `wrapper_role` 固定为 `host_action_adapter`
+- 必须校验 PR/head/base 未漂移
+- 必须保留 required checks snapshot、review/spec record locators、retained host signal snapshot、merge commit 与 closeout basis
+
+wrapper 不得继续自行聚合最终 merge readiness。Loom merge-ready allow result 缺失、stale、malformed，或 required checks readback 漂移时必须 fail closed。

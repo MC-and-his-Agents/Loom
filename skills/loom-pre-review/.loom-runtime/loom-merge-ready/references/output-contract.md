@@ -30,6 +30,10 @@
   - `spec_gate`、`build_gate`、`review_gate`、`merge_gate` 的当前可消费状态
 - `github_controlled_merge`
   - required checks、branch protection、merge method 与 host merge 前置状态
+- `retained_host_signals`
+  - `loom-retained-host-signal/v1`，只消费 adopted repo 持有的 live evidence、integration check 或 guardian/result locator，不把 repo-specific gate 迁入 Loom core
+- `merge_ready_authority`
+  - 声明 Loom merge-ready result 是唯一 merge-ready verdict authority，retained host signals 只是输入证据
 - `current_checkpoint`
   - 当前 recovery checkpoint 的原始值与归一化值
 - `current_lane`

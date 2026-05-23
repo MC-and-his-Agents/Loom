@@ -128,6 +128,26 @@ GitHub native dependency 与 host binding inspector 的读取结果属于 host/c
 
 当 `host_adapters[*]` 声明 retained `pr-gate` / `merge-gate` result 时，locator 仍然只表示“可读取 retained result”，不表示 Loom 可以调用宿主动作或接受第二个 approval truth。消费者必须重新判断 envelope freshness：Work Item、PR number、head SHA、review approval、validation summary、required check name 与 host enforcement readback 必须与当前 PR 一致。若任一字段 drift，消费结果只能 `block` 或回到 `pr-gate` / `merge-ready` / `review`。
 
+### 3.1 retained host signal envelope
+
+当 retained host action result 被 `loom-merge-ready` 作为 complex-existing authority migration 输入消费时，推荐 envelope schema 为 `loom-retained-host-signal/v1`。
+
+最小字段：
+
+- `schema_version`
+- `result`
+- `summary`
+- `head_sha`
+- `locator`
+- `provenance`
+
+稳定约束：
+
+- `result` 只允许表达已发生宿主动作或 repo-native gate 的读回结果
+- `head_sha` 必须绑定当前 PR head；缺失或 mismatch 时 fail closed
+- schema drift、locator unreadable、stale signal、failed signal 或 applicable required signal missing 必须 fail closed
+- 该 envelope 只是 Loom merge-ready 的 retained input，不得声明 final merge-ready verdict authority
+
 ## 4. `repo_native_carriers`
 
 `repo_native_carriers[*]` 固定字段：
