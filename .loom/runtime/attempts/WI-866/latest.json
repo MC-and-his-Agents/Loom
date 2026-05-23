@@ -1,0 +1,71 @@
+{
+  "schema_version": "loom-execution-attempt/v1",
+  "attempt_id": "WI-866-merge-ready-75c913de38db-80ec76884296",
+  "item_id": "WI-866",
+  "command": "flow",
+  "operation": "merge-ready",
+  "result": "pass",
+  "created_at": "2026-05-23T18:51:02Z",
+  "head_sha": "75c913de38db70dcee9d7eede44ec5988ffb02ef",
+  "branch": "work/866-layered-closeout-gate",
+  "workspace": {
+    "entry": ".",
+    "path": "."
+  },
+  "failure": {
+    "category": "none",
+    "execution_classification": "none",
+    "execution_summary": "latest execution attempt completed without an execution failure classification.",
+    "missing_inputs": [],
+    "fallback_to": null
+  },
+  "steps": [
+    {
+      "name": "runtime-state",
+      "result": "pass",
+      "fallback_to": null,
+      "missing_count": 0
+    },
+    {
+      "name": "fact-chain",
+      "result": "pass",
+      "fallback_to": null,
+      "missing_count": 0
+    },
+    {
+      "name": "state-check",
+      "result": "pass",
+      "fallback_to": null,
+      "missing_count": 0
+    },
+    {
+      "name": "runtime-evidence",
+      "result": "pass",
+      "fallback_to": null,
+      "missing_count": 0
+    },
+    {
+      "name": "checkpoint-build",
+      "result": "pass",
+      "fallback_to": null,
+      "missing_count": 0
+    },
+    {
+      "name": "checkpoint-merge",
+      "result": "pass",
+      "fallback_to": null,
+      "missing_count": 0
+    },
+    {
+      "name": "governance-lint",
+      "result": "pass",
+      "fallback_to": null,
+      "missing_count": 0
+    }
+  ],
+  "evidence": {
+    "status": "present",
+    "locator": ".loom/runtime/attempts/WI-866/WI-866-merge-ready-75c913de38db-80ec76884296.json",
+    "latest_locator": ".loom/runtime/attempts/WI-866/latest.json"
+  }
+}

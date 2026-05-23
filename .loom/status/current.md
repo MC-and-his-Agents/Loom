@@ -2,21 +2,21 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-965
-- Goal: 让默认 loom_check 不再重写 stable demo fixture，并保留 demo bootstrap drift 检测能力。
-- Scope: 调整 Makefile 与 CI 的 demo bootstrap 入口，使默认 check 在隔离临时目录重建并对比 examples/new-project；新增显式 sync 入口用于有意刷新 stable fixture；同步 harness 文档与 skill runtime references；不进入 #966/#968 或 CLI-first 主线。
-- Execution Path: checks/demo-bootstrap-fixture-isolation
+- Item ID: WI-866
+- Goal: 收口 FR #866 分层 closeout 本地 gate 与 evidence 回链消费。
+- Scope: 定义 closeout gate 分层合同；实现 closeout retained evidence backlink 消费、gate profile/fixture 输入和 subcheck 输出；同步 generated skills surface；验证 PR #981 达到 merge-ready、合并后 closeout 可验证一致；不改变 GitHub required checks、ProjectV2、review engine 或底层 host 能力。
+- Execution Path: harness/closeout-layered-gate
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-965.md
-- Review Entry: .loom/reviews/WI-965.json
-- Validation Entry: py_compile_clean; skills_surface check; make loom-demo-new-project-check; make loom-check; git status confirms examples/new-project remains unchanged
-- Closing Condition: PR for #965 merged or merge-ready with default loom-check no longer dirtying examples/new-project while fixture drift remains detectable.
+- Recovery Entry: .loom/progress/WI-866.md
+- Review Entry: .loom/reviews/WI-866.json
+- Validation Entry: py_compile_clean; skills_surface check; targeted closeout fixtures; make loom-check; make check; PR checks; post-merge closeout check/sync
+- Closing Condition: PR #981 merged to main; #867-#870 closed or have closing evidence; #866 consumes PR, merge commit, target branch, Project, and reconciliation evidence consistently.
 - Current Checkpoint: merge checkpoint
-- Current Stop: WI-965 PR recovery fixes are committed at implementation head e61157d7acde3632545ce12e0f086f7607965c8f; review binding is being refreshed as carrier-only evidence for PR #979.
-- Next Step: Push review binding refresh, update PR #979 head_sha, run PR gate and GitHub checks, then merge or record blocker.
+- Current Stop: WI-866 formal reviews are recorded against implementation head 75c913de38db70dcee9d7eede44ec5988ffb02ef; preparing merge-ready evidence and full gate rerun.
+- Next Step: Run merge-ready, commit carrier-only evidence, rerun make loom-check/make check, update PR body, push, and consume PR checks.
 - Blockers: None recorded.
-- Latest Validation Summary: Local recovery state after PR #979 CI failure passed: git diff --check; python3 tools/py_compile_clean.py tools/check_demo_bootstrap_fixture.py; python3 tools/skills_surface.py check; GH_TOKEN from gh auth with CI=true GITHUB_ACTIONS=true make loom-demo-new-project-check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK (0.1.137 -> 0.1.138); python3 .loom/bin/loom_flow.py shadow-parity --target .; ACTIVE_ITEM from .loom/bootstrap/init-result.json with python3 .loom/bin/loom_flow.py adopt verify --target . --item "$ACTIVE_ITEM"; make loom-check -> loom_check OK, profile source, checked 40 source/distribution surfaces; git status confirms examples/new-project is not dirty.
-- Recovery Boundary: WI-965 owns demo bootstrap fixture isolation in Makefile/CI/helper script, harness docs/reference sync, installer package version bump required by distributed runtime reference payload drift, WI-965 carriers/reviews, shadow parity refresh for .loom/status/current.md, and terminal predecessor WI-967 recovery update. Excludes #966 Node installer write isolation, #968 regression matrix, #969 review profile, #953 source self-check layering, and CLI-first mainline.
+- Latest Validation Summary: Head 75c913de38db70dcee9d7eede44ec5988ffb02ef passed: py_compile_clean for loom_flow/loom_check/tools/check_demo_bootstrap_fixture scripts; skills_surface check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main (0.1.138 -> 0.1.139); git diff --check. Pending: formal review records, merge-ready evidence, make loom-check, make check, PR checks, post-merge closeout.
+- Recovery Boundary: WI-866 owns #866/#867-#870 closeout gate layering, retained evidence backlink consumption, generated skills surface refresh, installer package bump for distributed runtime drift, and PR #981 closeout evidence. It excludes GitHub required checks, ProjectV2, review engine, and low-level host capability changes.
 - Current Lane: pr-prep
 
 ## Runtime Evidence
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-965.md
-- Dynamic Truth: .loom/progress/WI-965.md
+- Static Truth: .loom/work-items/WI-866.md
+- Dynamic Truth: .loom/progress/WI-866.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
