@@ -114,13 +114,13 @@ closeout 需要控制面对齐时，顺序必须是先处理 `fix-needed` / `blo
 最小执行面至少应把以下检查拆成可单独读取的失败面：
 
 - 入口脚本可编译
-- demo bootstrap 可重建
+- demo bootstrap 可在隔离目录重建并与 stable fixture 对比
 - repo-local demo CLI 可真实执行
 - `loom_check` source/distribution 仓库自检可通过
 
-最小接入 demo 则通过以下入口复验：
+最小接入 demo 则通过以下入口复验；需要有意刷新 stable fixture 时才使用 `make loom-demo-new-project-sync`：
 
-- `loom init bootstrap --target examples/new-project --write --force --verify --install-pr-template`
+- `make loom-demo-new-project-check`
 
 ## 4. 不应错误前置的判断
 
