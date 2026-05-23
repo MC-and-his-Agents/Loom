@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-866",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-866 spec review allows the closeout gate layering contract, retained evidence backlink acceptance criteria, and explicit non-goals for host capability changes.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "75c913de38db70dcee9d7eede44ec5988ffb02ef",
+  "reviewed_validation_summary": "Head 75c913de38db70dcee9d7eede44ec5988ffb02ef passed: py_compile_clean for loom_flow/loom_check/tools/check_demo_bootstrap_fixture scripts; skills_surface check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main (0.1.138 -> 0.1.139); git diff --check. Pending: formal review records, merge-ready evidence, make loom-check, make check, PR checks, post-merge closeout.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-866.md",
+    "recovery_entry": ".loom/progress/WI-866.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

@@ -2,21 +2,21 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-966
-- Goal: 隔离 Node installer regression 的 npm/dist/payload 写入，使同一 worktree 并发或相邻检查不会互删 node_modules、dist 或 payload。
-- Scope: 新增 Node installer regression 受锁入口；让 CI 与 loom_check 通过同一 worktree-local installer regression lock 执行 npm ci、npm test 与 npm pack --dry-run；使用本次运行唯一 npm cache；同步 loom_check runtime purity 合同与 generated skill runtime copies；不进入 #968 回归矩阵、#965 demo fixture、#969 review profile、#953 source self-check 分层或 CLI-first 主线。
-- Execution Path: checks/node-installer-regression-isolation
+- Item ID: WI-866
+- Goal: 收口 FR #866 分层 closeout 本地 gate 与 evidence 回链消费。
+- Scope: 定义 closeout gate 分层合同；实现 closeout retained evidence backlink 消费、gate profile/fixture 输入和 subcheck 输出；同步 generated skills surface；验证 PR #981 达到 merge-ready、合并后 closeout 可验证一致；不改变 GitHub required checks、ProjectV2、review engine 或底层 host 能力。
+- Execution Path: harness/closeout-layered-gate
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-966.md
-- Review Entry: .loom/reviews/WI-966.json
-- Validation Entry: node packages/loom-installer/scripts/run-regression.mjs; npm --prefix packages/loom-installer run check:payload; python3 tools/skills_surface.py check; make loom-check; git status
-- Closing Condition: PR for #966 merged or merge-ready with installer regression writes protected by a worktree-local lock, unique npm cache evidence, payload drift still detected, and issue/branch/worktree/PR/head/check state aligned.
-- Current Checkpoint: review checkpoint
-- Current Stop: WI-966 implementation merged origin/main through head 5db1941 with installer version 0.1.140; final make loom-check passed on the resolved merge head.
-- Next Step: Push branch, update PR #983 to head 5db1941 plus final carrier-only evidence refresh, run PR gate and GitHub checks, then mark merge-ready or merge.
+- Recovery Entry: .loom/progress/WI-866.md
+- Review Entry: .loom/reviews/WI-866.json
+- Validation Entry: py_compile_clean; skills_surface check; targeted closeout fixtures; make loom-check; make check; PR checks; post-merge closeout check/sync
+- Closing Condition: PR #981 merged to main; #867-#870 closed or have closing evidence; #866 consumes PR, merge commit, target branch, Project, and reconciliation evidence consistently.
+- Current Checkpoint: merge checkpoint
+- Current Stop: Merged origin/main through 456773e4bd05, resolved WI-966 terminal predecessor state, refreshed demo bootstrap fixture hashes, and prepared WI-866 review refresh for current head.
+- Next Step: Record refreshed implementation review, refresh carrier/shadow evidence, rerun merge checkpoint and make check, push, consume PR checks, merge, and run post-merge closeout.
 - Blockers: None recorded.
-- Latest Validation Summary: Passed after merging origin/main: git diff --check; python3 tools/py_compile_clean.py tools/loom_check.py src/skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_check.py skills/shared/scripts/loom_flow.py examples/new-project/.loom/bin/loom_check.py examples/new-project/.loom/bin/loom_flow.py; python3 tools/skills_surface.py check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK (0.1.139 -> 0.1.140); python3 tools/version_surface_check.py; make loom-demo-new-project-check; node packages/loom-installer/scripts/run-regression.mjs; npm --prefix packages/loom-installer run check:payload -> payload drift OK d463c13f4ed042cbb438385d8a3956ed7fcb842fa125e2d5209beebabbe18981; make loom-check -> loom_check OK, profile source, checked 40 source/distribution surfaces.
-- Recovery Boundary: WI-966 owns Node installer regression write isolation, worktree-local installer regression lock, unique npm cache handling, Node installer workflow routing, loom_check runtime integration, explicit demo runtime fixture sync caused by loom_check.py drift, WI-966 review/spec/status/shadow carriers, and WI-965 terminal predecessor progress. Excludes #968 regression matrix, #969 review profile, #953 source self-check layering, #965 feature work beyond terminal predecessor state, and CLI-first mainline.
+- Latest Validation Summary: Head 6a1db5ba0860 after merging origin/main passed: git diff --check; python3 tools/check_demo_bootstrap_fixture.py; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main (0.1.140 -> 0.1.141). Earlier merged-main validation also passed py_compile_clean for loom_flow/loom_check and installed scripts, skills_surface check, and carrier refresh. WI-966 predecessor confirmed merged via PR #983 and issue #966 closed. Pending: refreshed implementation review binding, carrier/shadow refresh, make check, PR checks, post-merge closeout.
+- Recovery Boundary: WI-866 owns #866/#867-#870 closeout gate layering, retained evidence backlink consumption, generated skills surface refresh, installer package bump for distributed runtime drift, and PR #981 closeout evidence. It excludes GitHub required checks, ProjectV2, review engine, and low-level host capability changes.
 - Current Lane: pr-prep
 
 ## Runtime Evidence
@@ -24,12 +24,12 @@
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: make py-compile; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main
+- Verification Entry: python3 tools/loom_check.py --profile source .
 - Lane Entry: not_applicable
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-966.md
-- Dynamic Truth: .loom/progress/WI-966.md
+- Static Truth: .loom/work-items/WI-866.md
+- Dynamic Truth: .loom/progress/WI-866.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
