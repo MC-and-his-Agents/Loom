@@ -124,6 +124,9 @@ GitHub native dependency 与 host binding inspector 的读取结果属于 host/c
 - integration contract verdict
 - repo settings / ruleset verdict
 - repo-native merge readiness verdict
+- retained `pr-gate` / `merge-gate` result envelope
+
+当 `host_adapters[*]` 声明 retained `pr-gate` / `merge-gate` result 时，locator 仍然只表示“可读取 retained result”，不表示 Loom 可以调用宿主动作或接受第二个 approval truth。消费者必须重新判断 envelope freshness：Work Item、PR number、head SHA、review approval、validation summary、required check name 与 host enforcement readback 必须与当前 PR 一致。若任一字段 drift，消费结果只能 `block` 或回到 `pr-gate` / `merge-ready` / `review`。
 
 ## 4. `repo_native_carriers`
 
