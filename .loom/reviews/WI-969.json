@@ -5,7 +5,7 @@
   "kind": "code_review",
   "summary": "WI-969 implementation review allows the gpt-5.5 profile upgrade, repo-owned review profile policy, explicit local Codex config opt-in governance, Codex App requested/actual model proof recording, fixture/doc/generated runtime sync, installer version bump to 0.1.143, and active fact-chain carrier refresh after rebase. No #836 adopted repo migration, #957 cost guard, fallback removal, or raw-engine authored truth change was introduced.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "4608be4cc9495640b2f76302f62959ae627000e3",
+  "reviewed_head": "b2e002cce5b1aab7a9ac3d532add3dea0dc1c1ad",
   "reviewed_validation_summary": "Passed after rebasing WI-969 onto origin/main c4773f0: make py-compile; python3 tools/skills_surface.py check; git diff --check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK (0.1.142 -> 0.1.143); python3 tools/loom_flow.py carrier refresh --target . --item WI-969; python3 tools/loom_flow.py shadow-parity --target . --surface all; python3 tools/loom_flow.py adopt verify --target . --item WI-969. Full loom_check and merge gate are consumed through PR required checks before merge.",
   "fallback_to": null,
   "findings": [],
