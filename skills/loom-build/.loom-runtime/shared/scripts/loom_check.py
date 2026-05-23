@@ -19,6 +19,7 @@ import uuid
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Mapping
 
 sys.dont_write_bytecode = True
 
@@ -912,9 +913,7 @@ def run_command(
     env: dict[str, str] | None = None,
     timeout_seconds: float | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    command_env = os.environ.copy()
-    for key in ("LOOM_SOURCE_REPO_ROOT", "LOOM_INSTALLED_SKILLS_ROOT", "LOOM_RUNTIME_SCENE"):
-        command_env.pop(key, None)
+    command_env = clean_subprocess_env(os.environ)
     command_env["PYTHONDONTWRITEBYTECODE"] = "1"
     if env:
         command_env.update(env)
@@ -927,6 +926,30 @@ def run_command(
         env=command_env,
         timeout=timeout_seconds,
     )
+
+
+def clean_subprocess_env(source_env: Mapping[str, str]) -> dict[str, str]:
+    exact_denylist = {
+        "CI",
+        "CODEX_CI",
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "LOOM_SOURCE_REPO_ROOT",
+        "LOOM_INSTALLED_SKILLS_ROOT",
+        "LOOM_RUNTIME_SCENE",
+    }
+    prefix_denylist = ("CODEX_", "LOOM_CODEX_APP_REVIEW_")
+    return {
+        key: value
+        for key, value in source_env.items()
+        if key not in exact_denylist and not any(key.startswith(prefix) for prefix in prefix_denylist)
+    }
+
+
+def unique_missing_path(prefix: str) -> Path:
+    path = Path(tempfile.mkdtemp(prefix=prefix))
+    shutil.rmtree(path)
+    return path
 
 
 def command_timeout_seconds(args: list[str], requested_timeout_seconds: float | None) -> float:
@@ -999,6 +1022,91 @@ def check_loom_check_single_flight_lock() -> list[Failure]:
                 failures.append(Failure(category, "stale lock must be replaced by the next run"))
         finally:
             release_single_flight_lock(recovered)
+    return failures
+
+
+def check_loom_check_runtime_purity() -> list[Failure]:
+    failures: list[Failure] = []
+    category = "loom-check-runtime-purity"
+    poisoned_env = {
+        "CI": "1",
+        "CODEX_CI": "1",
+        "CODEX_HOME": "/tmp/host-codex-home",
+        "CODEX_THREAD_ID": "host-thread",
+        "GH_TOKEN": "host-gh-token",
+        "GITHUB_TOKEN": "host-github-token",
+        "LOOM_CODEX_APP_REVIEW_ENDPOINT": "stdio://host-proof",
+        "LOOM_CODEX_APP_REVIEW_THREAD_ID": "host-review-thread",
+        "LOOM_CODEX_APP_REVIEW_CWD": "/tmp/host-cwd",
+        "LOOM_SOURCE_REPO_ROOT": "/tmp/host-source",
+        "LOOM_INSTALLED_SKILLS_ROOT": "/tmp/host-skills",
+        "LOOM_RUNTIME_SCENE": "host-scene",
+    }
+    cleaned = clean_subprocess_env(poisoned_env)
+    if cleaned:
+        failures.append(Failure(category, f"default subprocess env must strip host-only variables, kept {sorted(cleaned)}"))
+
+    probe_keys = sorted(poisoned_env)
+    probe = (
+        "import json, os; "
+        f"keys={probe_keys!r}; "
+        "print(json.dumps({key: os.environ.get(key) for key in keys}, sort_keys=True))"
+    )
+    saved_env = {key: os.environ.get(key) for key in probe_keys}
+    try:
+        os.environ.update(poisoned_env)
+        default_result = run_command(Path.cwd(), [sys.executable, "-c", probe], timeout_seconds=DEFAULT_COMMAND_TIMEOUT_SECONDS)
+    finally:
+        for key, value in saved_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+    if default_result.returncode != 0:
+        failures.append(Failure(category, f"default env purity probe failed: {default_result.stderr.strip() or default_result.stdout.strip()}"))
+    else:
+        try:
+            default_payload = json.loads(default_result.stdout)
+        except json.JSONDecodeError as exc:
+            failures.append(Failure(category, f"default env purity probe returned invalid JSON: {exc.msg}"))
+        else:
+            for key in probe_keys:
+                if default_payload.get(key) is not None:
+                    failures.append(Failure(category, f"default subprocess env must not inherit `{key}`"))
+
+    explicit_result = run_command(
+        Path.cwd(),
+        [sys.executable, "-c", probe],
+        env=poisoned_env,
+        timeout_seconds=DEFAULT_COMMAND_TIMEOUT_SECONDS,
+    )
+    if explicit_result.returncode != 0:
+        failures.append(Failure(category, f"explicit env fixture probe failed: {explicit_result.stderr.strip() or explicit_result.stdout.strip()}"))
+    else:
+        try:
+            explicit_payload = json.loads(explicit_result.stdout)
+        except json.JSONDecodeError as exc:
+            failures.append(Failure(category, f"explicit env fixture probe returned invalid JSON: {exc.msg}"))
+        else:
+            for key in probe_keys:
+                if explicit_payload.get(key) != poisoned_env[key]:
+                    failures.append(Failure(category, f"explicit fixture env must be preserved for `{key}`"))
+
+    missing_a = unique_missing_path("loom-missing-live-target-")
+    missing_b = unique_missing_path("loom-missing-live-target-")
+    if missing_a == missing_b:
+        failures.append(Failure(category, "missing live target helper must return unique paths"))
+    for path in (missing_a, missing_b):
+        if path.exists():
+            failures.append(Failure(category, f"missing live target helper must return an absent path: `{path}`"))
+        fixed_missing_path = "/tmp/" + "loom-missing-live-target"
+        if path.as_posix() == fixed_missing_path:
+            failures.append(Failure(category, "missing live target helper must not use the fixed /tmp fixture path"))
+
+    source_text = Path(__file__).read_text(encoding="utf-8")
+    fixed_missing_path = "/tmp/" + "loom-missing-live-target"
+    if f'Path("{fixed_missing_path}")' in source_text or f"Path('{fixed_missing_path}')" in source_text:
+        failures.append(Failure(category, "loom_check must not retain the fixed `/tmp/loom-missing-live-target` sample path"))
     return failures
 
 
@@ -15339,7 +15447,7 @@ def check_dynamic_tool_live_availability_contract(root: Path) -> list[Failure]:
 
     example_target = root / "examples/new-project"
 
-    missing_target = Path("/tmp/loom-missing-live-target")
+    missing_target = unique_missing_path("loom-dynamic-tool-live-availability-missing-")
     payload, error = load_command_json(
         root,
         ["python3", "tools/loom_flow.py", "live-smoke", "dynamic-tool-availability", "--target", str(missing_target)],
@@ -16221,7 +16329,7 @@ def check_live_validation_only_guardrail_contract(root: Path) -> list[Failure]:
             if anchor not in text:
                 failures.append(Failure("live-validation-only-guardrail", f"`{relative}` must mention `{anchor}`"))
 
-    missing_target = Path("/tmp/loom-missing-live-target")
+    missing_target = unique_missing_path("loom-live-validation-guardrail-missing-")
     unavailable_payload, error = load_command_json(
         root,
         ["python3", "tools/loom_flow.py", "live-smoke", "run", "--target", str(missing_target), "--item", "INIT-0001"],
@@ -18488,6 +18596,7 @@ def collect_source_failures(root: Path) -> list[Failure]:
     failures.extend(check_required_paths(root, "core-docs", CORE_DOCS))
     failures.extend(check_command_timeout_budget())
     failures.extend(check_loom_check_single_flight_lock())
+    failures.extend(check_loom_check_runtime_purity())
     failures.extend(check_shared_foundation_contract(root))
     failures.extend(
         check_required_paths(root, "automation-frontload-templates", AUTOMATION_FRONTLOAD_TEMPLATES)
