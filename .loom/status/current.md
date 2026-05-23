@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-966.json
 - Validation Entry: node packages/loom-installer/scripts/run-regression.mjs; npm --prefix packages/loom-installer run check:payload; python3 tools/skills_surface.py check; make loom-check; git status
 - Closing Condition: PR for #966 merged or merge-ready with installer regression writes protected by a worktree-local lock, unique npm cache evidence, payload drift still detected, and issue/branch/worktree/PR/head/check state aligned.
-- Current Checkpoint: admission checkpoint
-- Current Stop: Work item scaffolded and waiting for the first execution pass.
-- Next Step: Write the first recovery update for this work item.
+- Current Checkpoint: build checkpoint
+- Current Stop: WI-966 implementation committed at 2d814a5 with installer regression lock runner, CI routing, loom_check lock integration, explicit demo fixture sync, and runtime purity contract updates.
+- Next Step: Record spec/code review for head 2d814a5, rerun adoption/shadow and make loom-check, then push PR.
 - Blockers: None recorded.
-- Latest Validation Summary: No validation recorded yet.
-- Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-966.md`.
-- Current Lane: not yet assigned
+- Latest Validation Summary: Passed before implementation commit: lock-busy diagnostic smoke for run-regression.mjs; node packages/loom-installer/scripts/run-regression.mjs; npm --prefix packages/loom-installer run check:payload; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main; git diff --check; python3 tools/py_compile_clean.py tools/loom_check.py src/skills/shared/scripts/loom_check.py skills/shared/scripts/loom_check.py examples/new-project/.loom/bin/loom_check.py; python3 tools/skills_surface.py check. make loom-check reached root self-adoption and exposed only carrier/review state sync gaps, then shadow refresh and #965 terminal progress were repaired.
+- Recovery Boundary: WI-966 owns Node installer regression write isolation, worktree-local installer regression lock, unique npm cache handling, Node installer workflow routing, loom_check runtime integration, explicit demo runtime fixture sync caused by loom_check.py drift, and WI-966 carriers. Excludes #968 regression matrix, #969 review profile, #953 source self-check layering, #965 feature work beyond terminal predecessor state, and CLI-first mainline.
+- Current Lane: pr-prep
 
 ## Runtime Evidence
 
