@@ -12,10 +12,10 @@
 - Validation Entry: python3 tools/skills_surface.py check; make py-compile; python3 tools/loom_check.py; make check
 - Closing Condition: PR #984 merged; #836-#842 closed by PR; #835 closeout reconciled after children and Project Done.
 - Current Checkpoint: merge checkpoint
-- Current Stop: Implementation and generated surfaces are complete on PR #984; WI-835 fact-chain has been activated; awaiting fresh review, PR gate, controlled merge, and GitHub closeout.
-- Next Step: Record fresh WI-835 review, update PR body with Loom Work Item binding, rerun make check and pr-gate, then merge and reconcile #836-#842/#835.
+- Current Stop: Implementation and generated surfaces are complete on PR #984; branch has been rebased onto origin/main 8ba0eff and local validation passed at head 37a0495b4d52c0d1a3c2f0e3892883bdac5f7aee.
+- Next Step: Push the rebased branch, consume PR checks and controlled merge gate, then merge and reconcile #836-#842/#835.
 - Blockers: None recorded.
-- Latest Validation Summary: Head 98d0242cd06b7b36703ba4a5634f99b017c1fa2f passed before WI-835 carrier activation: python3 tools/skills_surface.py check; make py-compile; python3 tools/loom_check.py; make check. After activating WI-835 carriers, make check reached root self-adoption and blocked only because the review record was still the scaffold placeholder.
+- Latest Validation Summary: Head 37a0495b4d52c0d1a3c2f0e3892883bdac5f7aee after rebasing onto origin/main 8ba0eff passed: python3 tools/skills_surface.py check; make py-compile; python3 tools/loom_check.py; make check.
 - Recovery Boundary: WI-835 owns FR #835 complex-existing authority migration playbook, contracts, loom_flow outputs, loom_check fixtures, generated skills surface, PR #984, and closeout for #836-#842/#835.
 - Current Lane: pr-prep
 
