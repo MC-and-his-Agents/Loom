@@ -18,7 +18,7 @@ version-surface-check:
 check: py-compile skills-check host-adapter-check version-surface-check loom-check
 
 loom-demo-new-project:
-	python3 tools/loom_init.py bootstrap --target examples/new-project --scenario new --intent execution-control --write --force --verify --install-pr-template --portable-output
+	python3 tools/loom_init.py bootstrap --target examples/new-project --scenario new --intent execution-control --intake examples/new-project/.loom/bootstrap/intake.snapshot.json --write --force --verify --install-pr-template --portable-output
 
 loom-self-plugin-check:
 	test -f plugins/loom/.codex-plugin/plugin.json

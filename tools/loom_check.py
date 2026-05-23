@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Repo-local wrapper for the installed-skills loom_check runtime."""
+"""Repo-local wrapper for the Loom source/distribution loom_check runtime."""
 
 from __future__ import annotations
 

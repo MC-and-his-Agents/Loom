@@ -2379,7 +2379,9 @@ def render_loom_readme(result: dict[str, object]) -> str:
         "- Runtime-state entry: `.loom/bin/loom_init.py runtime-state --target .`\n"
         "- Daily execution CLI: `.loom/bin/loom_flow.py`\n"
         "- Unified status CLI: `.loom/bin/loom_status.py --target .`\n"
-        "- Gate CLI: `.loom/bin/loom_check.py`\n"
+        "- Carrier verification: `.loom/bin/loom_init.py verify --target .`\n"
+        "- Consumer validation chain: `loom_init verify -> governance-profile status -> runtime-parity validate -> shadow-parity`\n"
+        "- Profile-aware check: `.loom/bin/loom_check.py --profile consumer .` validates consumer runtime/adoption surfaces; it is not the Loom source/distribution self-check.\n"
     )
 
 

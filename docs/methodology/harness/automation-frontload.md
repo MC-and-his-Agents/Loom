@@ -87,6 +87,7 @@ Loom 仓库当前通过以下入口承接最小 core 前置检查：
 - `loom flow purity-check --target <repo> [--item <id>]`
 
 在当前 Loom 仓库开发态中，这些 repo-local `loom CLI` 动作由 `tools/loom_init.py`、`tools/loom_flow.py`、`tools/loom_check.py` 承接；自动化前置关注的是统一命令语义，而不是要求读者先记住底层 carrier 文件名。
+其中 `tools/loom_check.py` 默认执行 Loom source/distribution self-check；bootstrapped consumer repo 应走 profile-aware consumer check 或 `loom_init verify -> governance-profile status -> runtime-parity validate -> shadow-parity` 消费侧验证链。
 
 当前脚本至少覆盖：
 
@@ -115,7 +116,7 @@ closeout 需要控制面对齐时，顺序必须是先处理 `fix-needed` / `blo
 - 入口脚本可编译
 - demo bootstrap 可重建
 - repo-local demo CLI 可真实执行
-- `loom_check` 仓库自检可通过
+- `loom_check` source/distribution 仓库自检可通过
 
 最小接入 demo 则通过以下入口复验：
 
