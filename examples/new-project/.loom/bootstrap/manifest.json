@@ -162,7 +162,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "0acbff467c256f8c9720b313d5ad53940445610554836e3ff57152123e2c124b"
+      "sha256": "5833bbcb1cff7455b50363241d581329b654781e6e01f7e0013c5760fe017458"
     },
     {
       "path": ".loom/bin/loom_story_carriers.py",

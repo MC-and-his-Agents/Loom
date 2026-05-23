@@ -9674,6 +9674,8 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     clone = run_command(root, ["git", "clone", "--quiet", str(positive_target), str(target)])
                     if clone.returncode != 0:
                         shutil.copytree(positive_target, target)
+                    run_command(root, ["git", "config", "user.email", "loom-check@example.com"], cwd=target)
+                    run_command(root, ["git", "config", "user.name", "loom-check"], cwd=target)
 
                 missing_review_target = tmp_root / "pr-gate-missing-review"
                 copy_pr_gate_fixture(missing_review_target)
@@ -9710,7 +9712,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         failures.append(Failure("daily-execution-cli", "`installed pr-gate` must block when authored review is missing"))
 
                 pr_body_bypass_target = tmp_root / "pr-gate-pr-body-bypass"
-                shutil.copytree(positive_target, pr_body_bypass_target)
+                copy_pr_gate_fixture(pr_body_bypass_target)
                 pr_body_review_path = pr_body_bypass_target / ".loom/reviews/INIT-0001.json"
                 if pr_body_review_path.exists():
                     pr_body_review_path.unlink()
