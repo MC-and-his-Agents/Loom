@@ -12,11 +12,11 @@
 - Validation Entry: py_compile_clean for loom_check scripts; skills_surface check; fixed tmp/env purity self-check; tools/loom_check.py --profile source .
 - Closing Condition: PR for #967 merged or merge-ready with issue/branch/worktree/PR/head/check state aligned, and default loom_check no longer inherits host/Codex env or fixed /tmp missing target pollution.
 - Current Checkpoint: merge checkpoint
-- Current Stop: WI-967 implementation commit 02ea65939ae3947ed3cf7175ce9e716973ffa2df is ready for implementation review and PR creation.
-- Next Step: Record implementation review on 02ea65939ae3947ed3cf7175ce9e716973ffa2df, commit review carriers, push branch, open PR for #967, then run PR gate and host checks.
+- Current Stop: WI-967 implementation head 3a633197a57c8b6e7d55f41464d3ff4b199b8c24 is validated locally and ready for refreshed review evidence plus PR checks.
+- Next Step: Record refreshed spec and implementation reviews on 3a633197a57c8b6e7d55f41464d3ff4b199b8c24, commit carrier updates, push, rerun PR gate/checks, then merge or record blocker.
 - Blockers: None recorded.
-- Latest Validation Summary: Head 02ea65939ae3947ed3cf7175ce9e716973ffa2df passed: py_compile_clean for loom_check scripts; skills_surface check; installer version bump check against origin/main; runtime purity self-check; checkpoint admission/build; spec review record; adopt verify; shadow parity; python3 tools/loom_check.py --profile source .; git diff --check; no loom_check lock; no pycache remains. Pending: implementation review carrier commit, PR, PR gate, host checks.
-- Recovery Boundary: WI-967 owns env/tmp purity changes in loom_check runtime surfaces and associated Loom carriers; #965/#966/#968 remain separate work items.
+- Latest Validation Summary: Head 3a633197a57c8b6e7d55f41464d3ff4b199b8c24 passed: py_compile_clean for loom_check scripts; skills_surface check; runtime purity self-check; checkpoint admission/build/merge; spec review record; implementation review record; adopt verify; shadow parity; python3 tools/loom_check.py --profile source . on implementation head 02ea65939ae3947ed3cf7175ce9e716973ffa2df; installer version bump check 0.1.136 -> 0.1.137 against origin/main; git diff --check; no loom_check lock; no pycache remains. Pending: refreshed review carrier commit, push, PR gate, host checks.
+- Recovery Boundary: WI-967 owns env/tmp purity changes in loom_check runtime surfaces, required installer version metadata, and associated Loom carriers; #965/#966/#968 remain separate work items.
 - Current Lane: pr-prep
 
 ## Runtime Evidence
