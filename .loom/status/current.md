@@ -11,7 +11,7 @@
 - Review Entry: .loom/reviews/WI-859.json
 - Validation Entry: git diff --check; py_compile_clean; skills_surface check; make loom-demo-new-project; tools/loom_check.py --profile source .; tools/loom_check.py .; make check; Syvert consumer smoke
 - Closing Condition: PR #960 merge 后 #859/#860/#861 自动关闭或 closeout 同步关闭，main、PR、issues 与 Work Item 状态一致。
-- Current Checkpoint: merged
+- Current Checkpoint: merge checkpoint
 - Current Stop: PR #960 merged into main at 6a07f0fe6c71c6277f2a5f5f13edef45f33ebe5c; #859/#860/#861 are closed; WI-859 closeout state is aligned with PR, head, merge commit, and issue states.
 - Next Step: None for WI-859; terminal closeout evidence is recorded.
 - Blockers: None recorded.
