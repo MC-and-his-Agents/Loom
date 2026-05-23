@@ -4,15 +4,18 @@
 from __future__ import annotations
 
 import argparse
-import re
+import datetime as dt
+import errno
 import hashlib
+import json
+import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import unicodedata
-import json
-import os
+import uuid
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -412,6 +415,135 @@ EXTERNAL_ORCHESTRATOR_FORBIDDEN_FIELDS = {
 class CheckOptions:
     root: Path
     requested_profile: str
+
+
+@dataclass(frozen=True)
+class LoomCheckLock:
+    path: Path
+    run_id: str
+
+
+class LoomCheckLockBusy(RuntimeError):
+    def __init__(self, path: Path, owner: dict[str, object], fallback: str):
+        self.path = path
+        self.owner = owner
+        self.fallback = fallback
+        super().__init__(format_lock_busy_message(path, owner, fallback))
+
+
+LOCK_STALE_AFTER_SECONDS = 6 * 60 * 60
+
+
+def utc_now_iso() -> str:
+    return dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def loom_check_lock_path(root: Path) -> Path:
+    return root / ".loom" / "runtime" / "loom_check.lock"
+
+
+def process_is_alive(pid: object) -> bool:
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError as exc:
+        return exc.errno == errno.EPERM
+    return True
+
+
+def parse_started_at(value: object) -> dt.datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        parsed = dt.datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt.UTC)
+    return parsed
+
+
+def lock_owner_is_stale(owner: dict[str, object]) -> bool:
+    if not process_is_alive(owner.get("pid")):
+        return True
+    started_at = parse_started_at(owner.get("started_at"))
+    if started_at is None:
+        return False
+    age = (dt.datetime.now(dt.UTC) - started_at).total_seconds()
+    return age > LOCK_STALE_AFTER_SECONDS
+
+
+def read_lock_owner(path: Path) -> dict[str, object]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def format_lock_busy_message(path: Path, owner: dict[str, object], fallback: str) -> str:
+    run_id = owner.get("run_id") or "unknown"
+    pid = owner.get("pid") or "unknown"
+    started_at = owner.get("started_at") or "unknown"
+    command = owner.get("command") or "unknown"
+    cwd = owner.get("cwd") or "unknown"
+    return (
+        "loom_check: another run is already active for this worktree\n"
+        f"lock: {path}\n"
+        f"owner: run_id={run_id} pid={pid} started_at={started_at}\n"
+        f"owner_command: {command}\n"
+        f"owner_cwd: {cwd}\n"
+        f"fallback: {fallback}"
+    )
+
+
+def acquire_single_flight_lock(root: Path, argv: list[str]) -> LoomCheckLock:
+    path = loom_check_lock_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": "loom-check-single-flight-lock/v1",
+        "run_id": uuid.uuid4().hex,
+        "pid": os.getpid(),
+        "started_at": utc_now_iso(),
+        "command": " ".join(str(part) for part in argv),
+        "cwd": str(Path.cwd().resolve()),
+    }
+    encoded = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+    while True:
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        except FileExistsError as exc:
+            owner = read_lock_owner(path)
+            if owner and lock_owner_is_stale(owner):
+                try:
+                    path.unlink()
+                except FileNotFoundError:
+                    continue
+                except OSError:
+                    pass
+                else:
+                    continue
+            fallback = "wait for the owner to finish, remove the stale lock after verifying the owner is gone, or run in a different worktree"
+            raise LoomCheckLockBusy(path, owner, fallback) from exc
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(encoded)
+        return LoomCheckLock(path=path, run_id=str(payload["run_id"]))
+
+
+def release_single_flight_lock(lock: LoomCheckLock) -> None:
+    owner = read_lock_owner(lock.path)
+    if owner.get("run_id") != lock.run_id:
+        return
+    try:
+        lock.path.unlink()
+    except FileNotFoundError:
+        pass
 
 
 def repo_root_from_argv(argv: list[str]) -> Path:
@@ -822,6 +954,51 @@ def check_command_timeout_budget() -> list[Failure]:
         failures.append(Failure("command-timeout-budget", "ordinary commands must keep the default loom_check timeout budget"))
     if command_timeout_seconds(["python3", "tools/loom_init.py", "bootstrap"], 5.0) != 5.0:
         failures.append(Failure("command-timeout-budget", "explicit command timeout overrides must be honored"))
+    return failures
+
+
+def check_loom_check_single_flight_lock() -> list[Failure]:
+    failures: list[Failure] = []
+    category = "loom-check-single-flight-lock"
+    with tempfile.TemporaryDirectory(prefix="loom-check-single-flight-") as tmp:
+        root = Path(tmp) / "target"
+        root.mkdir()
+        lock = acquire_single_flight_lock(root, ["loom_check.py", str(root)])
+        try:
+            owner = read_lock_owner(lock.path)
+            for field in ("run_id", "pid", "started_at", "command", "cwd"):
+                if not owner.get(field):
+                    failures.append(Failure(category, f"lock owner must include `{field}`"))
+            try:
+                acquire_single_flight_lock(root, ["loom_check.py", str(root)])
+            except LoomCheckLockBusy as exc:
+                message = str(exc)
+                for term in ("owner:", "started_at=", "owner_command:", "owner_cwd:", "fallback:"):
+                    if term not in message:
+                        failures.append(Failure(category, f"busy lock output must include `{term}`"))
+            else:
+                failures.append(Failure(category, "second lock acquisition in the same worktree must fail fast"))
+        finally:
+            release_single_flight_lock(lock)
+
+        stale_owner = {
+            "schema_version": "loom-check-single-flight-lock/v1",
+            "run_id": "stale",
+            "pid": -1,
+            "started_at": "2000-01-01T00:00:00Z",
+            "command": "stale",
+            "cwd": str(root),
+        }
+        lock_path = loom_check_lock_path(root)
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path.write_text(json.dumps(stale_owner, indent=2) + "\n", encoding="utf-8")
+        recovered = acquire_single_flight_lock(root, ["loom_check.py", str(root)])
+        try:
+            recovered_owner = read_lock_owner(recovered.path)
+            if recovered_owner.get("run_id") == "stale":
+                failures.append(Failure(category, "stale lock must be replaced by the next run"))
+        finally:
+            release_single_flight_lock(recovered)
     return failures
 
 
@@ -18310,6 +18487,7 @@ def collect_source_failures(root: Path) -> list[Failure]:
     failures.extend(check_required_paths(root, "area-readmes", AREA_READMES))
     failures.extend(check_required_paths(root, "core-docs", CORE_DOCS))
     failures.extend(check_command_timeout_budget())
+    failures.extend(check_loom_check_single_flight_lock())
     failures.extend(check_shared_foundation_contract(root))
     failures.extend(
         check_required_paths(root, "automation-frontload-templates", AUTOMATION_FRONTLOAD_TEMPLATES)
@@ -18503,9 +18681,17 @@ def main(argv: list[str]) -> int:
         print("python3 .loom/bin/loom_flow.py shadow-parity --target .")
         print("python3 .loom/bin/loom_flow.py shadow-parity --target . --blocking")
         return 2
-    failures = collect_source_failures(root) if profile == SOURCE_PROFILE else collect_consumer_failures(root)
-    print_report(root, failures, profile)
-    return 1 if failures else 0
+    try:
+        lock = acquire_single_flight_lock(root, argv)
+    except LoomCheckLockBusy as exc:
+        print(str(exc), file=sys.stderr)
+        return 3
+    try:
+        failures = collect_source_failures(root) if profile == SOURCE_PROFILE else collect_consumer_failures(root)
+        print_report(root, failures, profile)
+        return 1 if failures else 0
+    finally:
+        release_single_flight_lock(lock)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-964",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-964 code review allows head 0419941: the follow-up fix only stringifies lock owner argv values for wrapper compatibility, syncs generated loom_check distribution surfaces and demo runtime hashes, and bumps the installer version required by distributed script drift; no findings remain.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "04199416e2b6c0b38ae3915c489c3b1095e1cff2",
+  "reviewed_validation_summary": "Passed: git diff --check; python3 tools/py_compile_clean.py tools/loom_check.py skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_check.py; python3 tools/skills_surface.py check; python3 tools/loom_flow.py adopt verify --target . --item WI-964; python3 tools/loom_flow.py shadow-parity --target .; python3 tools/loom_flow.py checkpoint build --target . --item WI-964; python3 tools/loom_check.py --profile source . -> OK, checked 40 source/distribution surfaces; lock residue absent after run.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-964.md",
+    "recovery_entry": ".loom/progress/WI-964.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
