@@ -1,0 +1,37 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-964",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-964 spec review allows the scoped single-flight lock contract: same worktree lock only, readable owner payload, stale recovery, no machine-wide lock, and no expansion beyond #964.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "0de56d484f034f8b236b60bafea053d86dc32e08",
+  "reviewed_validation_summary": "Passed: git diff --check; python3 tools/py_compile_clean.py tools/loom_check.py skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_check.py; python3 tools/skills_surface.py check; manual CLI busy-lock fixture returned exit 3 with owner/start/fallback output. First full source loom_check failed on carrier/spec/shadow readiness, not lock behavior; remediation in progress.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-964.md",
+    "recovery_entry": ".loom/progress/WI-964.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "unavailable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github rulesets read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/rulesets\": EOF",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_control_plane",
+        "error_count": 1
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
