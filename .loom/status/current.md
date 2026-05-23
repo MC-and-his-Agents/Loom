@@ -12,10 +12,10 @@
 - Validation Entry: make loom-check-runtime-regression; make py-compile; python3 tools/skills_surface.py check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main; make loom-check; git status
 - Closing Condition: PR for #968 merged or merge-ready with lightweight regression coverage consumed by CI/source self-check, issue/branch/worktree/PR/head/check state aligned, and #962 closeout basis updated.
 - Current Checkpoint: validation checkpoint
-- Current Stop: WI-968 lightweight regression implementation passed local validation in formal worktree `/Users/mc/dev/Loom-work-968-loom-check-regression-coverage`.
-- Next Step: Commit and push `work/968-loom-check-regression-coverage`, open PR for #968, wait for GitHub checks, then mark merge-ready or merge.
+- Current Stop: Merged `origin/main` 5cdd8db into `work/968-loom-check-regression-coverage` and revalidated WI-968 in the formal worktree `/Users/mc/dev/Loom-work-968-loom-check-regression-coverage`.
+- Next Step: Commit and push the refreshed #968 branch, consume PR #986 checks, then mark merge-ready or merge.
 - Blockers: None recorded.
-- Latest Validation Summary: Passed after rebase onto origin/main: make loom-check-runtime-regression -> OK; make py-compile -> py_compile_clean OK (36 files); git diff --check; python3 tools/skills_surface.py check -> OK after bytecode write fix; python3 tools/version_surface_check.py -> OK; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK after bumping installer metadata to 0.1.142; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source . -> OK, checked 40 source/distribution surfaces; earlier post-status adopt verify and shadow-parity passed.
+- Latest Validation Summary: Passed after merging origin/main 5cdd8db: make loom-check-runtime-regression -> OK; python3 tools/skills_surface.py check -> OK; python3 tools/version_surface_check.py -> OK; git diff --check; make py-compile -> py_compile_clean OK (36 files); node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK (0.1.141 -> 0.1.142); PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . -> pass; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source . -> OK, checked 40 source/distribution surfaces.
 - Recovery Boundary: WI-968 owns lightweight regression coverage for loom_check single-flight, worktree-local lock path, temp/env purity, Node installer lock busy diagnostics, demo fixture clean-check behavior, corresponding docs/evidence, and installer version metadata. Excludes #969 review profile, #953 source self-check layering, #866 closeout gate, #873 PR metadata, and CLI-first mainline.
 - Current Lane: pr-prep
 
