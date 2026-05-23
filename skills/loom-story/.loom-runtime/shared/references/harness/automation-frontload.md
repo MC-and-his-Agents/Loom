@@ -85,6 +85,8 @@ Loom 仓库当前通过以下入口承接最小 core 前置检查：
 
 当前脚本至少覆盖：
 
+`loom_check.py` 默认执行 Loom source/distribution self-check；bootstrapped consumer repo 应走 profile-aware consumer check 或 `loom_init verify -> governance-profile status -> runtime-parity validate -> shadow-parity` 消费侧验证链。
+
 - 结构完整性
 - 规则与核心落点存在性
 - 模板与入口资产存在性
@@ -109,7 +111,7 @@ closeout 需要控制面对齐时，顺序必须是先处理 `fix-needed` / `blo
 - 入口脚本可编译
 - demo bootstrap 可重建
 - repo-local demo CLI 可真实执行
-- `loom_check` 仓库自检可通过
+- `loom_check` source/distribution 仓库自检可通过
 
 最小接入 demo 则通过以下入口复验：
 

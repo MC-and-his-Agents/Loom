@@ -65,8 +65,8 @@ native dependency unreadable、stale edge、open blocker 或 host binding inspec
 `closeout check` 的本地 gate 读取顺序必须保留来源：
 
 1. 有 repo-declared `Makefile` `loom-check` target 时，先执行 `make loom-check`，来源标记为 `repo_declared_make_target`。
-2. 只有缺少该 target 时，才回退到 `.loom/bin/loom_check.py`，来源标记为 `repo_local_loom_check`。
-3. 只有缺少 repo-local runtime gate 时，才回退到 shared runtime `loom_check.py`，来源标记为 `shared_loom_check`。
+2. 只有缺少该 target 时，才回退到 profile-aware `.loom/bin/loom_check.py`，来源标记为 `repo_local_loom_check`；bootstrapped consumer repo 必须走 consumer profile / consumer validation chain，不得套用 Loom source/distribution self-check。
+3. 只有缺少 repo-local runtime gate 时，才回退到 shared runtime `loom_check.py`，来源标记为 `shared_loom_check`；shared runtime 也必须先识别 source / consumer profile。
 
 Adopted product repo 的 closeout 不得因为缺少 Loom source repo self-fixture（例如 `examples/new-project`）而绕过 repo 声明的正式 gate。
 

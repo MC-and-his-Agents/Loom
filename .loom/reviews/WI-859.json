@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-859",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-859 implementation is approved for merge readiness after gate evidence refresh. The final branch state includes profile-aware loom_check source/consumer detection, consumer carrier/hash/command validation, source self-check profile reporting, generated docs/runtime updates, CI fixture git identity hardening, installer version bump metadata, WI-859 PR gate binding, and terminal WI-852 carrier cleanup required for purity without expanding to downstream Syvert runtime upgrade.",
+  "reviewer": "codex",
+  "reviewed_head": "0b9081ab4df7352932342d6ab933d26d2f250c8a",
+  "reviewed_validation_summary": "Passed: git diff --check; py_compile_clean; skills_surface check; installer version bump check 0.1.133 -> 0.1.134; make loom-demo-new-project; src/skills/shared/scripts/loom_check.py examples/new-project profile consumer; npm test --prefix packages/loom-installer; shadow-parity; adopt verify; tools/loom_check.py --profile source . checked 40 source/distribution surfaces; tools/loom_check.py . profile source checked 40 source/distribution surfaces; make check.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-859.md",
+    "recovery_entry": ".loom/progress/WI-859.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
