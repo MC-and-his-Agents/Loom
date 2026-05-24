@@ -15,8 +15,8 @@
 - Current Stop: Closeout review backlink carrier-only semantics implemented; WI-987 formal spec and review evidence are refreshed; local validation passed.
 - Next Step: Commit carrier refresh, push branch, open PR #987, consume PR checks and merge gate.
 - Blockers: None recorded.
-- Latest Validation Summary: Passed: python3 tools/skills_surface.py check; make py-compile; python3 tools/loom_flow.py shadow-parity --target .; python3 tools/loom_flow.py adopt verify --target .; python3 tools/loom_flow.py checkpoint merge --target . --item WI-987; python3 tools/loom_check.py; make check.
-- Recovery Boundary: Reviewed head `9bd297b2bc2f00d43a6bb1dc8e23cb5306b245ca` includes the closeout backlink fix, WI-987 spec suite, WI-987 spec review carrier, WI-835 terminal carrier refresh, WI-969 terminal carrier sync, rebase-safe review head corrections, and demo bootstrap fixture sync; subsequent changes are governance evidence refresh only.
+- Latest Validation Summary: Passed: python3 tools/skills_surface.py check; make py-compile; python3 tools/loom_flow.py shadow-parity --target .; python3 tools/loom_flow.py adopt verify --target .; python3 tools/loom_flow.py checkpoint merge --target . --item WI-987; python3 tools/loom_check.py; make check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main.
+- Recovery Boundary: Reviewed head `e5f2064c3f78db148bed4ab2aae370e6f5511d29` includes the closeout backlink fix, WI-987 spec suite, WI-987 spec review carrier, WI-835 terminal carrier refresh, WI-969 terminal carrier sync, rebase-safe review head corrections, demo bootstrap fixture sync, and installer version bump to 0.1.144; subsequent changes are governance evidence refresh only.
 - Current Lane: closeout backlink follow-up
 
 ## Runtime Evidence
