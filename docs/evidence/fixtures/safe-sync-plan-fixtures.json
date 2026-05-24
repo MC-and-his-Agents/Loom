@@ -151,6 +151,120 @@
         "manual_actions": [],
         "skipped_actions": []
       }
+    },
+    {
+      "name": "add-native-dependency-with-proof",
+      "include_closeout_comment": false,
+      "audit_payload": {
+        "command": "reconciliation",
+        "operation": "audit",
+        "result": "fix-needed",
+        "findings": [
+          {
+            "category": "drift",
+            "kind": "missing_native_edge",
+            "severity": "fix-needed",
+            "subject": "dependency edge 794 blocked by 793",
+            "evidence": {
+              "edge": {
+                "source_issue": 794,
+                "blocking_issue": 793,
+                "direction": "blocked_by",
+                "source_of_truth": "issue_body_dependency_section",
+                "provenance": {
+                  "source_owner": "github_issue_body",
+                  "source_locator": "issue #794"
+                }
+              }
+            },
+            "recommended_action": "add the mechanically proven native dependency edge.",
+            "fallback_to": "reconciliation-sync"
+          }
+        ]
+      },
+      "expected": {
+        "result": "pass",
+        "planned_actions": [
+          "add_blocked_by"
+        ],
+        "manual_actions": [],
+        "skipped_actions": []
+      }
+    },
+    {
+      "name": "remove-stale-native-dependency",
+      "include_closeout_comment": false,
+      "audit_payload": {
+        "command": "reconciliation",
+        "operation": "audit",
+        "result": "fix-needed",
+        "findings": [
+          {
+            "category": "drift",
+            "kind": "stale_native_edge",
+            "severity": "fix-needed",
+            "subject": "dependency edge 832 blocked by 831",
+            "evidence": {
+              "edge": {
+                "source_issue": 832,
+                "blocking_issue": 831,
+                "direction": "blocked_by",
+                "blocker_state": "closed",
+                "source_of_truth": "github_native_edge",
+                "provenance": {
+                  "source_owner": "github",
+                  "source_locator": "graphql:repository.issue.blockedBy"
+                }
+              }
+            },
+            "recommended_action": "remove the stale native dependency edge after verifying the blocker is closed.",
+            "fallback_to": "reconciliation-sync"
+          }
+        ]
+      },
+      "expected": {
+        "result": "pass",
+        "planned_actions": [
+          "remove_blocked_by"
+        ],
+        "manual_actions": [],
+        "skipped_actions": []
+      }
+    },
+    {
+      "name": "missing-native-proof-skips-write",
+      "include_closeout_comment": false,
+      "audit_payload": {
+        "command": "reconciliation",
+        "operation": "audit",
+        "result": "fix-needed",
+        "findings": [
+          {
+            "category": "drift",
+            "kind": "missing_native_edge",
+            "severity": "fix-needed",
+            "subject": "dependency edge 831 blocked by 830",
+            "evidence": {
+              "edge": {
+                "source_issue": 831,
+                "blocking_issue": 830,
+                "direction": "blocked_by",
+                "source_of_truth": "agent_inference"
+              }
+            },
+            "recommended_action": "do not write native dependency edges without mechanical proof.",
+            "fallback_to": "manual-reconciliation"
+          }
+        ]
+      },
+      "expected": {
+        "result": "block",
+        "planned_actions": [],
+        "manual_actions": [],
+        "skipped_actions": [
+          "sync_native_dependency"
+        ]
+      }
     }
   ]
 }

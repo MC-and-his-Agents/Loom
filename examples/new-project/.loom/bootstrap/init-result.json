@@ -432,7 +432,7 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "94ecc961f4c7e302f79a45762924bfad22dd18f4e4850c40c7d1dc72445f445d"
+      "sha256": "2daf043374a7215be1a1c52ae5c8aae2e03488c0b2584e84f651e790ac7a710d"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -456,7 +456,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "b0dee550493d479236e9b91b750f77126a924788293356fe830ce8b678e1b651"
+      "sha256": "83f00d2051271c559a9b4a714ef4993a916f7976f33a75883d3bc9c9fcd6fe65"
     },
     {
       "path": ".loom/bin/loom_story_carriers.py",
@@ -995,8 +995,8 @@
     },
     "workspace_profile": {
       "schema_version": "loom-workspace-profile/v1",
-      "selected": "unknown",
-      "selection_reason": "workspace_entry is not readable",
+      "selected": "single-workspace",
+      "selection_reason": "workspace_entry points at the repository root",
       "profiles": {
         "single-workspace": {
           "summary": "Use the repository root as the Loom execution workspace.",
@@ -1014,19 +1014,17 @@
           "recommended_action": "declare the repo-specific workspace locator and keep host lifecycle ownership external"
         }
       },
-      "workspace_entry": "unknown",
-      "workspace_path": "unknown",
-      "workspace_exists": false,
+      "workspace_entry": ".",
+      "workspace_path": ".",
+      "workspace_exists": true,
       "host_worktree": {
         "ownership": "host",
         "status": "present",
         "locator": "${SOURCE_REPO_ROOT}"
       },
-      "result": "block",
-      "missing_inputs": [
-        "missing_workspace_entry"
-      ],
-      "recommended_action": "restore the Work Item workspace_entry before running workspace profile checks"
+      "result": "pass",
+      "missing_inputs": [],
+      "recommended_action": "keep workspace_entry as `.` unless isolation becomes necessary"
     },
     "gate_starter": {
       "schema_version": "loom-gate-starter/v1",
@@ -1107,8 +1105,8 @@
       },
       "workspace_profile": {
         "schema_version": "loom-workspace-profile/v1",
-        "selected": "unknown",
-        "selection_reason": "workspace_entry is not readable",
+        "selected": "single-workspace",
+        "selection_reason": "workspace_entry points at the repository root",
         "profiles": {
           "single-workspace": {
             "summary": "Use the repository root as the Loom execution workspace.",
@@ -1126,19 +1124,17 @@
             "recommended_action": "declare the repo-specific workspace locator and keep host lifecycle ownership external"
           }
         },
-        "workspace_entry": "unknown",
-        "workspace_path": "unknown",
-        "workspace_exists": false,
+        "workspace_entry": ".",
+        "workspace_path": ".",
+        "workspace_exists": true,
         "host_worktree": {
           "ownership": "host",
           "status": "present",
           "locator": "${SOURCE_REPO_ROOT}"
         },
-        "result": "block",
-        "missing_inputs": [
-          "missing_workspace_entry"
-        ],
-        "recommended_action": "restore the Work Item workspace_entry before running workspace profile checks"
+        "result": "pass",
+        "missing_inputs": [],
+        "recommended_action": "keep workspace_entry as `.` unless isolation becomes necessary"
       },
       "gate_starter": {
         "schema_version": "loom-gate-starter/v1",
@@ -1769,10 +1765,10 @@
     "result": "pass",
     "missing_inputs": [],
     "workspace": {
-      "entry": "unknown",
-      "path": "unknown",
-      "profile": "unknown",
-      "exists": false
+      "entry": ".",
+      "path": ".",
+      "profile": "single-workspace",
+      "exists": true
     },
     "operations": {
       "create": {
