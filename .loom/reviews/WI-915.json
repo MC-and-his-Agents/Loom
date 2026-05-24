@@ -5,7 +5,7 @@
   "kind": "code_review",
   "summary": "WI-915 implementation is approved for the #890/#891 CLI-first adoption/profile, fact-chain, checkpoint, and gate command batch based on focused local validation, including the WI-929 terminal carrier parser fix required for PR gate purity.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "aa5d95899dc30470a47dda7f9e6b763de2aa5b96",
+  "reviewed_head": "891a12333bd38e138f269419630d068ac9daaf64",
   "reviewed_validation_summary": "Passed on branch work/890-891-adoption-gates: python3 tools/check_cli_contract.py; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-915; python3 .loom/bin/loom_flow.py shadow-parity --target .; local pr-gate purity is clean at aa5d95899dc30470a47dda7f9e6b763de2aa5b96, with remaining fallback expected until the head is pushed and a PR exists.",
   "fallback_to": null,
   "findings": [],
