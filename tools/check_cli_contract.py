@@ -28,6 +28,23 @@ REQUIRED_COMMANDS = {
     "upgrade",
     "rollback",
     "verify",
+    "init",
+    "adopt",
+    "route",
+    "status",
+    "fact-chain",
+    "profile status",
+    "profile upgrade-plan",
+    "profile upgrade",
+    "checkpoint admission",
+    "checkpoint build",
+    "checkpoint merge",
+    "gate pre-review",
+    "gate spec-review",
+    "gate review",
+    "gate pr",
+    "gate merge",
+    "gate closeout",
     "host list",
     "host doctor",
     "host install",
@@ -150,6 +167,27 @@ def main() -> int:
     ):
         if matrix[command]["status"] != "implemented":
             raise AssertionError(f"{command} must be implemented for #893/#894/#895")
+    for command in (
+        "init",
+        "adopt",
+        "route",
+        "status",
+        "fact-chain",
+        "profile status",
+        "profile upgrade-plan",
+        "profile upgrade",
+        "checkpoint admission",
+        "checkpoint build",
+        "checkpoint merge",
+        "gate pre-review",
+        "gate spec-review",
+        "gate review",
+        "gate pr",
+        "gate merge",
+        "gate closeout",
+    ):
+        if matrix[command]["status"] != "implemented":
+            raise AssertionError(f"{command} must be implemented for #890/#891")
 
     _, version_payload = run_json(["version", "--json"], expect=0)
     if version_payload["result"] != "pass" or not version_payload["versions"]["repo_version"]:
@@ -222,6 +260,49 @@ def main() -> int:
         _, skills_package = run_json(["skills", "package", "--json"], expect=0)
         if not skills_package["packages"]:
             raise AssertionError("skills package did not emit package metadata")
+        _, route_payload = run_json(["route", "--target", str(REPO_ROOT), "--task", "adopt existing repo", "--json"], expect=0)
+        if route_payload["command"] != "route" or route_payload["selected_skill"] != "loom-adopt":
+            raise AssertionError("route did not expose CLI-first scenario routing")
+        _, status_payload = run_json(["status", "--target", str(REPO_ROOT), "--json"])
+        if status_payload["command"] != "status" or status_payload.get("result") not in {"pass", "block", "fallback"}:
+            raise AssertionError("status wrapper did not emit structured status JSON")
+        missing_status_target = tmp / "missing-status"
+        missing_status_target.mkdir()
+        status, missing_status = run_json(["status", "--target", str(missing_status_target), "--json"])
+        if status == 0 or missing_status["result"] != "block" or not missing_status.get("blocking_failures"):
+            raise AssertionError("status missing-carrier fixture did not fail closed")
+        _, fact_chain_payload = run_json(["fact-chain", "--target", str(REPO_ROOT), "--json"], expect=0)
+        if fact_chain_payload["command"] != "fact-chain" or fact_chain_payload.get("result") != "pass":
+            raise AssertionError("fact-chain wrapper did not consume loom_flow fact-chain JSON")
+        _, profile_status = run_json(["profile", "status", "--target", str(REPO_ROOT), "--json"], expect=0)
+        if profile_status["command"] != "profile status" or profile_status.get("wrapped_command") != "governance-profile":
+            raise AssertionError("profile status did not wrap governance-profile status")
+        _, profile_plan = run_json(["profile", "upgrade-plan", "--target", str(REPO_ROOT), "--json"])
+        if profile_plan["command"] != "profile upgrade-plan" or profile_plan.get("wrapped_command") != "governance-profile":
+            raise AssertionError("profile upgrade-plan did not wrap governance-profile upgrade-plan")
+        _, profile_upgrade = run_json(["profile", "upgrade", "--target", str(REPO_ROOT), "--to", "standard", "--json"])
+        if profile_upgrade["command"] != "profile upgrade" or profile_upgrade.get("wrapped_command") != "governance-profile":
+            raise AssertionError("profile upgrade did not wrap governance-profile upgrade")
+        _, adoption_verify = run_json(["adopt", "verify", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"])
+        if adoption_verify["command"] != "adopt" or adoption_verify.get("schema_version") != "loom-adoption-verify/v1":
+            raise AssertionError("adopt verify did not expose adoption verification JSON")
+        _, checkpoint_admission = run_json(["checkpoint", "admission", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"])
+        if checkpoint_admission["command"] != "checkpoint admission" or checkpoint_admission.get("checkpoint") != "admission":
+            raise AssertionError("checkpoint admission did not wrap checkpoint JSON")
+        _, checkpoint_build = run_json(["checkpoint", "build", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"])
+        if checkpoint_build["command"] != "checkpoint build" or checkpoint_build.get("checkpoint") != "build":
+            raise AssertionError("checkpoint build did not wrap checkpoint JSON")
+        _, checkpoint_merge = run_json(["checkpoint", "merge", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"])
+        if checkpoint_merge["command"] != "checkpoint merge" or checkpoint_merge.get("checkpoint") != "merge":
+            raise AssertionError("checkpoint merge did not wrap checkpoint JSON")
+        for gate_command in (
+            ["gate", "pr", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"],
+            ["gate", "merge", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"],
+            ["gate", "closeout", "--json"],
+        ):
+            status, gate_payload = run_json(gate_command)
+            if status == 0 or gate_payload["result"] not in {"block", "fallback"} or not gate_payload.get("fallback_to"):
+                raise AssertionError(f"{gate_command} did not fail closed with structured JSON")
 
         mixed_target = tmp / "mixed"
         mixed_target.mkdir()

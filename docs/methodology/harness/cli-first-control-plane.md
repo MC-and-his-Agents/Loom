@@ -112,3 +112,32 @@ The CLI separates:
 `loom skills list`, `loom skills generate`, `loom skills sync`, `loom skills check`, `loom skills doctor`, `loom skills package`, and `loom skills release-check` implement the #895 generated SKILLS surface with `loom-skills-surface/v1`.
 
 `skills list` and `skills package` read checked-in generated package metadata. `skills check`, `skills doctor`, and `skills release-check` delegate to the existing surface, host adapter, and version checks. `skills generate` and `skills sync` mutate `skills/`, so they fail closed unless `--apply` is supplied.
+
+## Adoption And Profile Commands
+
+`loom init`, `loom adopt verify`, `loom route`, and `loom profile status|upgrade-plan|upgrade` implement the #890 adoption/profile surface.
+
+These commands keep the CLI as the user-facing control plane while preserving the existing runtime as the fact reader:
+
+- `loom init ...` delegates to the initialization runtime and keeps bootstrap/verify/fact-chain semantics there.
+- `loom adopt verify ...` delegates to adoption contract verification. It does not scaffold a repository; scaffolding remains `loom init bootstrap`.
+- `loom route ...` delegates to route detection and returns structured selected-skill/fallback evidence.
+- `loom profile ...` delegates to governance-profile status, upgrade-plan, and upgrade. Upgrade remains dry-run by default through the underlying runtime.
+
+Fail-closed outputs cover missing operations, unsupported adoption/profile operations, unreadable target carriers, and invalid delegated JSON.
+
+## Fact Chain And Gate Commands
+
+`loom status`, `loom fact-chain`, `loom checkpoint admission|build|merge`, and `loom gate pre-review|spec-review|review|pr|merge|closeout` implement the #891 harness/gate surface.
+
+The wrappers do not create a second truth source:
+
+- `status` is a derived read over current fact-chain, recovery, review, checkpoint, closeout, and host signals.
+- `fact-chain` reads the locator truth and current Work Item/recovery/status entries.
+- `checkpoint` consumes the existing admission/build/merge checkpoint payloads.
+- `gate pre-review`, `gate spec-review`, and `gate review` consume the existing flow gates.
+- `gate pr` consumes the authored semantic review PR gate.
+- `gate merge` maps to controlled-merge check and never executes host merge.
+- `gate closeout` maps to closeout check and never performs closeout sync.
+
+Representative fail-closed cases are part of `tools/check_cli_contract.py`: missing status carriers, missing PR/head input, missing merge PR input, and missing closeout target input all return structured `block` payloads with fallback commands.

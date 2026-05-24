@@ -61,6 +61,30 @@ loom skills list|generate|sync|check|doctor|package|release-check
 
 `skills generate` and `skills sync` require `--apply`; check, doctor, package, and release-check are read-only.
 
+#890 implements the adoption and governance profile command family:
+
+```text
+loom init
+loom adopt verify
+loom route
+loom profile status|upgrade-plan|upgrade
+```
+
+`init`, `route`, and `adopt verify` are CLI-first wrappers over the existing initialization and adoption runtimes. `loom adopt verify` is the adoption contract verifier; bootstrap remains under `loom init bootstrap` to avoid mixing adoption verification with repository scaffolding.
+
+`profile status`, `profile upgrade-plan`, and `profile upgrade` wrap the existing governance profile runtime. `profile upgrade` inherits the underlying dry-run-by-default semantics and does not promote validation-only parity into a blocking gate.
+
+#891 implements the fact-chain, checkpoint, and gate command family:
+
+```text
+loom status
+loom fact-chain
+loom checkpoint admission|build|merge
+loom gate pre-review|spec-review|review|pr|merge|closeout
+```
+
+`status` and `fact-chain` are derived reads over the existing Loom carriers. `checkpoint` commands consume the established checkpoint payloads. `gate merge` checks host merge readiness through controlled-merge check but does not execute a merge. `gate closeout` checks closeout state but does not sync or close host objects.
+
 ## Reserved Phase Commands
 
 These names are frozen for #885. Until their Work Items implement them, invoking them returns `result=block`.
@@ -71,7 +95,6 @@ loom upgrade-plan
 loom upgrade
 loom rollback
 loom verify
-loom profile status|upgrade-plan|upgrade
 loom story
 loom spec
 loom plan
@@ -80,8 +103,6 @@ loom pre-review
 loom closeout
 loom handoff
 loom retire
-loom checkpoint admission|build|merge
-loom gate pre-review|spec-review|review|pr|merge|closeout
 ```
 
 ## Delegated Compatibility Commands
@@ -89,11 +110,6 @@ loom gate pre-review|spec-review|review|pr|merge|closeout
 These commands currently route to existing wrappers and remain compatibility paths while the CLI-first execution layer is filled in:
 
 ```text
-loom init
-loom adopt
-loom route
-loom status
-loom fact-chain
 loom resume
 loom spec-review
 loom review
