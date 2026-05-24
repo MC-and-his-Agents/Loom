@@ -1,39 +1,23 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-898",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "289ad5c1802e6cce1021ca93db11a78c12695587",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
-      }
-    },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-898 implementation is approved for PR #992: the CLI-first entry now exposes version/help JSON, reserves the full #885 command matrix with structured fail-closed output, implements installed-state show/validate/export for loom-installed-state/v2, documents CLI/SKILLS/plugin/.loom authority boundaries, and adds contract fixtures for missing metadata, legacy hints, valid graph export, and mixed unknown version metadata.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "325ae6b36e8afb52c6d7f3dbab545d093e05de89",
+  "reviewed_validation_summary": "Passed on branch work/886-cli-core-installed-state at 289ad5c1802e6cce1021ca93db11a78c12695587: python3 tools/loom.py version --json; python3 tools/loom.py installed-state validate --target examples/new-project --json expected fail-closed with legacy hints; make cli-contract-check; make check with loom_check OK over 40 source/distribution surfaces.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-898.md",
+    "recovery_entry": ".loom/progress/WI-898.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-898/spec.md",
+    "plan": ".loom/specs/WI-898/plan.md",
+    "implementation_contract": ".loom/specs/WI-898/implementation-contract.md",
+    "build_checkpoint": "pass"
+  }
 }
