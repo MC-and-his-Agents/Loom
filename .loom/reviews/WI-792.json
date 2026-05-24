@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-792",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-792 implementation review allows PR #991 head after the #792 retained GitHub host control plane closeout integration, installer version refresh, carrier rebinding, shadow refresh, and local CI blocker validation. The reviewed scope covers github-intake issue, native dependency mirror gating and dry-run planning, #953 source check surface split, #812 phase closeout basis, generated/runtime sync, and cleanup evidence; no blocking findings remain for this head.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "9ccbbbb5fd939bbe8bb5d857fe75d92f23d8870d",
+  "reviewed_validation_summary": "Passed for PR #991 CI blocker refresh: node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main -> OK (0.1.147 -> 0.1.148); npm --prefix packages/loom-installer run check:versions -> OK; git diff --check -> OK; python3 -m py_compile src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_check.py skills/shared/scripts/loom_check.py -> OK; python3 tools/loom_flow.py pr-gate check --target . --pr 991 --head-sha 09b4553e328df187ed420b61069128f41901fccc --branch work/792-phase-closeout -> pass; root-self-governance local equivalent -> OK for WI-792; carrier refresh dry-run -> pass with no refresh_needed. Cleanup removed pycache from this run.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-792.md",
+    "recovery_entry": ".loom/progress/WI-792.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
