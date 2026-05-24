@@ -5,7 +5,7 @@
   "kind": "code_review",
   "summary": "WI-987 implementation review allows the closeout review backlink fix: closeout now consumes retained review evidence through the same head-binding semantics used by merge and PR gates, carrier-only drift is accepted for governance evidence, and implementation drift remains fail-closed. Synthetic source-profile coverage and generated surfaces are included.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "da09890434847fd2b6d258d3d83496da22f9718e",
+  "reviewed_head": "bab4092b457509b6a8f0437649e36023078567de",
   "reviewed_validation_summary": "Passed: python3 tools/skills_surface.py check; make py-compile; python3 tools/loom_flow.py shadow-parity --target .; python3 tools/loom_flow.py adopt verify --target .; python3 tools/loom_flow.py checkpoint merge --target . --item WI-987; python3 tools/loom_check.py; make check.",
   "fallback_to": null,
   "findings": [],
