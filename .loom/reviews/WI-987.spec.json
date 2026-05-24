@@ -5,7 +5,7 @@
   "kind": "spec_review",
   "summary": "WI-987 spec review allows the formal suite: acceptance binds closeout backlink behavior to carrier-only head-binding semantics, keeps implementation drift fail-closed, requires synthetic fixture coverage, generated surface synchronization, and #835/#984 closeout evidence.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "da09890434847fd2b6d258d3d83496da22f9718e",
+  "reviewed_head": "7855c3bccefe3c07fd5df5117424de61856f636f",
   "reviewed_validation_summary": "Passed: python3 tools/skills_surface.py check; make py-compile; python3 tools/loom_flow.py shadow-parity --target .; python3 tools/loom_flow.py adopt verify --target .; python3 tools/loom_flow.py checkpoint merge --target . --item WI-987; python3 tools/loom_check.py; make check.",
   "fallback_to": null,
   "findings": [],
