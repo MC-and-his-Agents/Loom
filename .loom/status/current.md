@@ -16,7 +16,7 @@
 - Next Step: Commit carrier refresh, push branch, open PR #987, consume PR checks and merge gate.
 - Blockers: None recorded.
 - Latest Validation Summary: Passed: python3 tools/skills_surface.py check; make py-compile; python3 tools/loom_flow.py shadow-parity --target .; python3 tools/loom_flow.py adopt verify --target .; python3 tools/loom_flow.py checkpoint merge --target . --item WI-987; python3 tools/loom_check.py; make check.
-- Recovery Boundary: Reviewed head `bab40925f64e2f5645da730b821375596d20eb71` includes the closeout backlink fix, WI-987 spec suite, WI-987 spec review carrier, and WI-835 terminal carrier refresh; subsequent changes are governance evidence refresh only.
+- Recovery Boundary: Reviewed head `785976004f4aec43db0ea8abfaa6cf4c7c1a0be6` includes the closeout backlink fix, WI-987 spec suite, WI-987 spec review carrier, WI-835 terminal carrier refresh, WI-969 terminal carrier sync, and rebase-safe review head corrections; subsequent changes are governance evidence refresh only.
 - Current Lane: closeout backlink follow-up
 
 ## Runtime Evidence
