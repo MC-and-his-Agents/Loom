@@ -20,7 +20,7 @@
 - `consumer` profile 检查 bootstrapped consumer repo，必须只消费 consumer runtime/adoption surface，不得回退到 Loom source self-check。
 - `auto` 只负责选择 `source` 或 `consumer`，不得因为宿主环境变量或 live host proof 改变 profile。
 
-所有 profile 都必须设置唯一 `run_id`，并把运行态写入限定在当前 worktree 或本次运行拥有的唯一临时目录。
+所有 profile 都必须设置唯一 `run_id`，并把运行态写入限定在当前 worktree 或本次运行拥有的唯一临时目录。本次运行创建的 `loom-check-*` 临时目录必须在使用结束后及时清理，不得成为后续检查的隐式输入。
 
 ## 3. 并发语义
 
@@ -94,3 +94,5 @@ live GitHub、Codex App proof、dynamic tool live smoke 与 host adapter live dr
 - 默认 `make loom-check` 不让 `examples/new-project` 因检查本身变脏
 
 重型并发矩阵可以作为显式 opt-in validation，但 P0-A 默认回归必须可在本地和 CI 中稳定消费。
+
+默认轻量入口为 `make loom-check-runtime-regression`，并由 `make loom-check` 消费。该入口只验证 fail-fast owner 诊断、worktree-local lock path、默认环境净化、唯一缺失路径、Node installer lock busy 输出和 demo fixture 不变脏；不得在默认 CI 中启动重型 full-check 并发矩阵。

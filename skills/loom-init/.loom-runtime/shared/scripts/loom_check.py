@@ -355,6 +355,16 @@ class Failure:
     detail: str
 
 
+def remove_temp_tree(path: Path, *, attempts: int = 5, delay_seconds: float = 0.2) -> bool:
+    for attempt in range(attempts):
+        shutil.rmtree(path, ignore_errors=True)
+        if not path.exists():
+            return True
+        if attempt + 1 < attempts:
+            time.sleep(delay_seconds)
+    return not path.exists()
+
+
 GOVERNANCE_SURFACE_ROUTE_SKILLS = {
     "loom-adopt",
     "loom-resume",
@@ -1090,7 +1100,7 @@ def loom_check_temporary_directory(prefix: str):
     try:
         yield path
     finally:
-        shutil.rmtree(path, ignore_errors=True)
+        remove_temp_tree(path, attempts=20, delay_seconds=0.25)
 
 
 def loom_check_tempdir_snapshot() -> set[str]:
@@ -6159,6 +6169,7 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
 
 def check_daily_execution_cli(root: Path) -> list[Failure]:
     failures: list[Failure] = []
+    flow_temp_roots: list[Path] = []
     example_target = root / "examples/new-project"
     tool_path = root / "tools/loom_flow.py"
     if not tool_path.exists() or not example_target.exists():
@@ -8726,6 +8737,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
     flow_tmp_path: Path | None = None
     with loom_check_temporary_directory(prefix="loom-check-flow-") as tmp:
         flow_tmp_path = tmp
+        flow_temp_roots.append(flow_tmp_path)
         lifecycle_target = tmp / "new-project"
         shutil.copytree(example_target, lifecycle_target)
         temp_root = lifecycle_target / ".loom/flow/tmp"
@@ -11667,6 +11679,9 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 )
             )
 
+    for flow_temp_root in flow_temp_roots:
+        if flow_temp_root.exists() and not remove_temp_tree(flow_temp_root, attempts=20, delay_seconds=0.25):
+            failures.append(Failure("daily-execution-cli", f"`flow lifecycle fixture` must not leave temporary directory residue: {flow_temp_root}"))
     return failures
 
 
