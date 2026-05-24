@@ -535,6 +535,19 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     host_binding.add_argument("--head-sha", help="Implementation head SHA to validate")
     host_binding.add_argument("--base-sha", help="Base SHA used for diff validation")
 
+    github_intake = subparsers.add_parser("github-intake", help="Read GitHub issue or Project entrypoints without writing host state")
+    github_intake.add_argument("operation", choices=("issue",))
+    github_intake.add_argument("--target", required=True, help="Target repository root")
+    github_intake.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
+    github_intake.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    github_intake.add_argument("--issue", type=int, required=True, help="GitHub issue number to classify")
+    github_intake.add_argument("--project", type=int, help="GitHub Project number for Project item/drift reads")
+    github_intake.add_argument("--phase", type=int, help="Expected parent Phase issue number")
+    github_intake.add_argument("--fr", type=int, help="Expected parent FR issue number")
+    github_intake.add_argument("--pr", type=int, help="Known implementation PR number")
+    github_intake.add_argument("--branch", help="Known implementation branch name")
+    github_intake.add_argument("--head-sha", help="Known implementation head SHA")
+
     goal = subparsers.add_parser("goal", help="Derive or validate Loom /goal execution contracts")
     goal.add_argument("operation", choices=("derive", "validate"))
     goal.add_argument("--target", required=True, help="Target repository root")
@@ -887,6 +900,18 @@ def emit(payload: dict[str, Any]) -> int:
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     result = payload.get("result")
     return 0 if result == "pass" else 1
+
+
+def dedupe_strings(values: list[str]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        normalized = str(value)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(normalized)
+    return deduped
 
 
 def runtime_state_payload(target_root: Path) -> dict[str, Any]:
@@ -5534,6 +5559,7 @@ def github_pr_state(payload: dict[str, Any]) -> str:
 
 
 def normalize_rest_issue(payload: dict[str, Any]) -> dict[str, Any]:
+    labels = payload.get("labels")
     return {
         "id": payload.get("node_id"),
         "databaseId": payload.get("id"),
@@ -5542,6 +5568,13 @@ def normalize_rest_issue(payload: dict[str, Any]) -> dict[str, Any]:
         "title": payload.get("title"),
         "body": payload.get("body"),
         "url": payload.get("html_url"),
+        "labels": [
+            str(label.get("name"))
+            for label in labels
+            if isinstance(label, dict) and isinstance(label.get("name"), str)
+        ]
+        if isinstance(labels, list)
+        else [],
     }
 
 
@@ -5601,7 +5634,174 @@ def normalize_dependency_issue(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def github_native_dependency_capability(root: Path, owner: str, repo_name: str, issue_number: int) -> dict[str, Any]:
+    query = """
+    query($owner: String!, $repo: String!, $issue: Int!) {
+      issueType: __type(name: "Issue") {
+        fields { name }
+      }
+      mutationType: __schema {
+        mutationType {
+          fields { name }
+        }
+      }
+      repository(owner: $owner, name: $repo) {
+        issue(number: $issue) {
+          id
+          blockedBy(first: 1) { totalCount }
+          blocking(first: 1) { totalCount }
+        }
+      }
+    }
+    """
+    payload, errors = gh_graphql(root, query, {"owner": owner, "repo": repo_name, "issue": issue_number})
+    if errors or payload is None:
+        text = " ".join(errors).lower()
+        if any(token in text for token in ("could not resolve to an issue", "field 'blockedby'", "field 'blocking'", "undefinedfield")):
+            status = "unsupported"
+        elif any(token in text for token in ("permission", "forbidden", "resource not accessible", "403")):
+            status = "permission_denied"
+        else:
+            status = "unreadable"
+        return {
+            "status": status,
+            "read": False,
+            "write": False,
+            "fields": [],
+            "mutations": [],
+            "errors": errors,
+        }
+    issue_type = payload.get("issueType") if isinstance(payload.get("issueType"), dict) else {}
+    fields = [
+        str(field.get("name"))
+        for field in issue_type.get("fields", [])
+        if isinstance(field, dict) and isinstance(field.get("name"), str)
+    ]
+    schema = payload.get("mutationType") if isinstance(payload.get("mutationType"), dict) else {}
+    mutation_type = schema.get("mutationType") if isinstance(schema.get("mutationType"), dict) else {}
+    mutations = [
+        str(field.get("name"))
+        for field in mutation_type.get("fields", [])
+        if isinstance(field, dict) and isinstance(field.get("name"), str)
+    ]
+    read_supported = {"blockedBy", "blocking"}.issubset(set(fields))
+    write_supported = {"addBlockedBy", "removeBlockedBy"}.issubset(set(mutations))
+    issue = payload.get("repository", {}).get("issue") if isinstance(payload.get("repository"), dict) else None
+    read_ok = read_supported and isinstance(issue, dict) and isinstance(issue.get("id"), str)
+    status = "read-write" if read_ok and write_supported else "read-only" if read_ok else "unsupported"
+    return {
+        "status": status,
+        "read": read_ok,
+        "write": read_ok and write_supported,
+        "fields": sorted(field for field in fields if field in {"blockedBy", "blocking", "issueDependenciesSummary"}),
+        "mutations": sorted(mutation for mutation in mutations if mutation in {"addBlockedBy", "removeBlockedBy"}),
+        "errors": [],
+    }
+
+
+def normalize_graphql_dependency_issue(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": payload.get("id"),
+        "number": payload.get("number"),
+        "state": github_issue_state(payload.get("state")),
+        "title": payload.get("title"),
+        "url": payload.get("url"),
+    }
+
+
+def github_issue_dependencies_graphql(root: Path, owner: str, repo_name: str, issue_number: int) -> tuple[dict[str, Any] | None, list[str]]:
+    query = """
+    query($owner: String!, $repo: String!, $issue: Int!) {
+      repository(owner: $owner, name: $repo) {
+        issue(number: $issue) {
+          id
+          blockedBy(first: 100) {
+            nodes { id number state title url }
+          }
+          blocking(first: 100) {
+            nodes { id number state title url }
+          }
+        }
+      }
+    }
+    """
+    payload, errors = gh_graphql(root, query, {"owner": owner, "repo": repo_name, "issue": issue_number})
+    if errors or payload is None:
+        return None, errors
+    issue = payload.get("repository", {}).get("issue") if isinstance(payload.get("repository"), dict) else None
+    if not isinstance(issue, dict):
+        return None, [f"GitHub issue #{issue_number} dependency query returned no issue"]
+    checks: list[dict[str, Any]] = []
+    all_edges: list[dict[str, Any]] = []
+    for direction, field in (("blocked_by", "blockedBy"), ("blocking", "blocking")):
+        connection = issue.get(field) if isinstance(issue.get(field), dict) else {}
+        nodes = connection.get("nodes") if isinstance(connection.get("nodes"), list) else []
+        source_locator = f"graphql:repository.issue.{field}"
+        checks.append(
+            {
+                "direction": direction,
+                "endpoint": source_locator,
+                "status": "present",
+                "errors": [],
+                "provenance": {
+                    "source_layer": "host_control_mirror",
+                    "source_owner": "github",
+                    "source_locator": source_locator,
+                    "freshness": "fresh",
+                },
+            }
+        )
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            normalized = normalize_graphql_dependency_issue(node)
+            number = normalized.get("number")
+            if not isinstance(number, int):
+                continue
+            all_edges.append(
+                {
+                    "source_issue": issue_number if direction == "blocked_by" else number,
+                    "blocking_issue": number if direction == "blocked_by" else issue_number,
+                    "direction": direction,
+                    "blocker_state": str(normalized.get("state") or "UNKNOWN").lower(),
+                    "source_of_truth": "github_native_edge",
+                    "host_mirror_status": "matched",
+                    "native": "present",
+                    "issue": normalized,
+                    "provenance": checks[-1]["provenance"],
+                }
+            )
+    return {"availability": "present", "checks": checks, "native_edges": all_edges}, []
+
+
 def github_issue_dependencies_payload(root: Path, owner: str, repo_name: str, issue_number: int) -> dict[str, Any]:
+    capability = github_native_dependency_capability(root, owner, repo_name, issue_number)
+    if capability.get("read") is True:
+        graphql_payload, graphql_errors = github_issue_dependencies_graphql(root, owner, repo_name, issue_number)
+        if graphql_payload is not None:
+            graphql_payload["capability"] = capability
+            return graphql_payload
+        capability = {**capability, "status": "unreadable", "errors": graphql_errors}
+    if capability.get("status") in {"unsupported", "permission_denied"}:
+        return {
+            "availability": capability.get("status"),
+            "capability": capability,
+            "checks": [
+                {
+                    "direction": "all",
+                    "endpoint": "graphql:repository.issue.blockedBy/blocking",
+                    "status": "unreadable",
+                    "errors": capability.get("errors", []),
+                    "provenance": {
+                        "source_layer": "host_control_mirror",
+                        "source_owner": "github",
+                        "source_locator": "graphql:repository.issue.blockedBy/blocking",
+                        "freshness": "unreadable",
+                    },
+                }
+            ],
+            "native_edges": [],
+        }
     checks: list[dict[str, Any]] = []
     all_edges: list[dict[str, Any]] = []
     unsupported = False
@@ -5659,6 +5859,7 @@ def github_issue_dependencies_payload(root: Path, owner: str, repo_name: str, is
         availability = "unreadable"
     return {
         "availability": availability,
+        "capability": capability,
         "checks": checks,
         "native_edges": all_edges,
     }
@@ -5754,16 +5955,18 @@ def dependency_graph_payload(
     for edge in native_edges:
         key = dependency_edge_key(edge)
         if key not in authored_by_key:
-            unexpected = {**edge, "host_mirror_status": "unexpected_native_edge"}
+            stale_closed_blocker = edge.get("direction") == "blocked_by" and edge.get("blocker_state") == "closed"
+            drift_kind = "stale_native_edge" if stale_closed_blocker else "unexpected_native_edge"
+            unexpected = {**edge, "host_mirror_status": drift_kind}
             edges.append(unexpected)
             findings.append(
                 {
                     "category": "drift",
-                    "kind": "unexpected_native_edge",
+                    "kind": drift_kind,
                     "severity": "fix-needed",
                     "subject": f"dependency edge {key[0]} blocked by {key[1]}",
                     "evidence": {"edge": unexpected},
-                    "fallback_to": "manual-reconciliation",
+                    "fallback_to": "reconciliation-sync" if stale_closed_blocker else "manual-reconciliation",
                 }
             )
         if edge.get("direction") == "blocked_by" and edge.get("blocker_state") == "open":
@@ -5795,6 +5998,7 @@ def dependency_graph_payload(
             "state": issue_payload.get("state") if isinstance(issue_payload, dict) else None,
         },
         "availability": availability,
+        "capability": native_dependency_payload.get("capability") if isinstance(native_dependency_payload, dict) else None,
         "edges": edges,
         "native_edges": native_edges,
         "authored_edges": authored_edges,
@@ -14466,6 +14670,35 @@ def governance_profile_upgrade_payload(
     }
 
 
+def native_dependency_capability_for_args(
+    target_root: Path,
+    *,
+    owner: str | None,
+    repo_name: str | None,
+    issue_number: int | None,
+) -> dict[str, Any]:
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    owner = owner or detected_owner
+    repo_name = repo_name or detected_repo
+    if not owner or not repo_name or issue_number is None:
+        return {
+            "status": "unverified",
+            "read": False,
+            "write": False,
+            "reason": "owner/repo and --issue are required to verify native dependency capability.",
+        }
+    return github_native_dependency_capability(target_root, owner, repo_name, issue_number)
+
+
+def native_dependency_upgrade_plan_payload() -> dict[str, str]:
+    return {
+        "read": "query GitHub issue blockedBy/blocking before resume, merge-ready, and closeout.",
+        "judge": "treat native dependencies as host mirror and compare with issue/repo-authored dependency truth.",
+        "write": "generate dry-run addBlockedBy/removeBlockedBy actions only from mechanical proof.",
+        "verify": "re-read blockedBy/blocking after any approved host sync.",
+    }
+
+
 def maturity_upgrade_path(governance_surface: dict[str, Any], target_root: Path) -> dict[str, Any]:
     control_plane = governance_surface.get("governance_control_plane")
     maturity = control_plane.get("maturity") if isinstance(control_plane, dict) else None
@@ -14745,15 +14978,21 @@ def github_binding_payload(
 def handle_governance_profile(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
     if args.operation == "upgrade":
-        return emit(
-            governance_profile_upgrade_payload(
-                target_root=target_root,
-                target_level=args.to,
-                dry_run=args.dry_run,
-                force=args.force,
-                host=args.host,
-            )
+        payload = governance_profile_upgrade_payload(
+            target_root=target_root,
+            target_level=args.to,
+            dry_run=args.dry_run,
+            force=args.force,
+            host=args.host,
         )
+        payload["native_dependency_capability"] = native_dependency_capability_for_args(
+            target_root,
+            owner=args.owner,
+            repo_name=args.repo_name,
+            issue_number=args.issue,
+        )
+        payload["native_dependency_upgrade_plan"] = native_dependency_upgrade_plan_payload()
+        return emit(payload)
     if args.operation == "binding":
         return emit(
             github_binding_payload(
@@ -14769,7 +15008,15 @@ def handle_governance_profile(args: argparse.Namespace) -> int:
                 dry_run=args.dry_run,
             )
         )
-    return emit(governance_profile_payload(target_root, args.operation, host=args.host))
+    payload = governance_profile_payload(target_root, args.operation, host=args.host)
+    payload["native_dependency_capability"] = native_dependency_capability_for_args(
+        target_root,
+        owner=args.owner,
+        repo_name=args.repo_name,
+        issue_number=args.issue,
+    )
+    payload["native_dependency_upgrade_plan"] = native_dependency_upgrade_plan_payload()
+    return emit(payload)
 
 
 def handle_host_lifecycle(args: argparse.Namespace) -> int:
@@ -15150,6 +15397,20 @@ def reconciliation_audit_payload(
                 parent = issue_payload.get("parent")
                 if isinstance(parent, dict):
                     parent_payload = parent
+            native_dependencies = github_issue_dependencies_payload(target_root, owner, repo_name, issue_number)
+            dependency_graph = dependency_graph_payload(
+                issue_number=issue_number,
+                issue_payload=issue_payload,
+                native_dependency_payload=native_dependencies,
+            )
+            for finding in dependency_graph.get("findings", []):
+                if isinstance(finding, dict) and finding.get("kind") in {
+                    "missing_native_edge",
+                    "stale_native_edge",
+                    "open_blocker_executable_conflict",
+                    "native_dependency_unreadable",
+                }:
+                    findings.append(finding)
 
     pr_payload: dict[str, Any] | None = None
     merge_commit_sha: str | None = None
@@ -15539,6 +15800,66 @@ def reconciliation_sync_plan(audit_payload: dict[str, Any], *, include_closeout_
             )
             continue
         if severity != "fix-needed":
+            continue
+        if kind in {"missing_native_edge", "stale_native_edge"}:
+            edge = evidence.get("edge") if isinstance(evidence, dict) else None
+            if not isinstance(edge, dict):
+                skipped_actions.append(
+                    reconciliation_skipped_action(
+                        action="sync_native_dependency",
+                        finding=finding,
+                        finding_index=index,
+                        subject=subject,
+                        reason="dependency drift is missing edge proof",
+                    )
+                )
+                continue
+            source_issue = edge.get("source_issue")
+            blocking_issue = edge.get("blocking_issue")
+            edge_proof = edge.get("provenance") if isinstance(edge.get("provenance"), dict) else {}
+            proof_owner = edge_proof.get("source_owner")
+            proof_locator = edge_proof.get("source_locator")
+            proof_is_mechanical = proof_owner in {"github_issue_body", "repo_authored_dependency"}
+            if kind == "stale_native_edge":
+                proof_is_mechanical = edge.get("source_of_truth") == "github_native_edge" and edge.get("blocker_state") == "closed"
+                proof_locator = proof_locator or f"issue #{blocking_issue}"
+            if not all(isinstance(value, int) for value in (source_issue, blocking_issue)) or not proof_is_mechanical:
+                skipped_actions.append(
+                    reconciliation_skipped_action(
+                        action="sync_native_dependency",
+                        finding=finding,
+                        finding_index=index,
+                        subject=subject,
+                        reason="native dependency write requires mechanical proof from repo-authored or issue-authored dependency truth",
+                    )
+                )
+                continue
+            action = "add_blocked_by" if kind == "missing_native_edge" else "remove_blocked_by"
+            mutation = "addBlockedBy" if kind == "missing_native_edge" else "removeBlockedBy"
+            planned_actions.append(
+                reconciliation_planned_action(
+                    action=action,
+                    finding=finding,
+                    finding_index=index,
+                    subject=subject,
+                    write_target={
+                        "host": "github",
+                        "type": "native_dependency",
+                        "mutation": mutation,
+                        "issue_number": source_issue,
+                        "blocking_issue_number": blocking_issue,
+                    },
+                    rollback_note=(
+                        f"run removeBlockedBy for issue #{source_issue} blocked by #{blocking_issue} if the add is reverted."
+                        if action == "add_blocked_by"
+                        else f"run addBlockedBy for issue #{source_issue} blocked by #{blocking_issue} if the removal is reverted."
+                    ),
+                    issue_number=source_issue,
+                    blocking_issue_number=blocking_issue,
+                    proof_source=proof_locator,
+                    verification_step=f"read GitHub native dependency edge issue #{source_issue} blocked by #{blocking_issue}",
+                )
+            )
             continue
         if kind in {"merged_but_open", "absorbed_but_open"}:
             issue_number = audit_payload.get("issue", {}).get("number")
@@ -16127,6 +16448,175 @@ def project_drift_payload(
     }
 
 
+def github_intake_object_type(issue_payload: dict[str, Any] | None) -> str:
+    if not isinstance(issue_payload, dict):
+        return "unknown"
+    labels = set(issue_payload.get("labels", [])) if isinstance(issue_payload.get("labels"), list) else set()
+    title = str(issue_payload.get("title") or "").lower()
+    if "phase" in labels or title.startswith("phase:"):
+        return "phase"
+    if "fr" in labels or title.startswith("fr:"):
+        return "fr"
+    if "work-item" in labels or title.startswith("work-item:") or title.startswith("bug:"):
+        return "work_item"
+    return "unknown"
+
+
+def github_intake_route(object_type: str, issue_payload: dict[str, Any] | None, dependency_graph: dict[str, Any]) -> str:
+    state = issue_payload.get("state") if isinstance(issue_payload, dict) else None
+    if any(finding.get("kind") == "open_blocker_executable_conflict" for finding in dependency_graph.get("findings", []) if isinstance(finding, dict)):
+        return "manual-reconciliation"
+    if state == "CLOSED":
+        return "closeout"
+    if object_type == "work_item":
+        return "loom-resume"
+    if object_type in {"phase", "fr"}:
+        return "loom-story"
+    return "manual-reconciliation"
+
+
+def github_intake_payload(
+    *,
+    target_root: Path,
+    owner: str | None,
+    repo_name: str | None,
+    issue_number: int,
+    project_number: int | None,
+    phase_number: int | None,
+    fr_number: int | None,
+    pr_number: int | None,
+    branch_name: str | None,
+    head_sha: str | None,
+) -> dict[str, Any]:
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    owner = owner or detected_owner
+    repo_name = repo_name or detected_repo
+    missing_inputs: list[str] = []
+    provenance = [
+        {
+            "source_layer": "host_control_mirror",
+            "source_owner": "github",
+            "source_locator": f"issue #{issue_number}",
+            "freshness": "fresh",
+        }
+    ]
+    if not owner or not repo_name:
+        missing_inputs.append("owner/repo")
+        owner = owner or "unknown"
+        repo_name = repo_name or "unknown"
+
+    issue_payload: dict[str, Any] | None = None
+    issue_errors: list[str] = []
+    if owner != "unknown" and repo_name != "unknown":
+        issue_payload, issue_errors = github_issue_payload(target_root, owner, repo_name, issue_number)
+        missing_inputs.extend(f"issue: {message}" for message in issue_errors)
+
+    native_dependencies = (
+        github_issue_dependencies_payload(target_root, owner, repo_name, issue_number)
+        if owner != "unknown" and repo_name != "unknown" and issue_payload is not None
+        else {"availability": "not_requested", "checks": [], "native_edges": []}
+    )
+    dependency_graph = dependency_graph_payload(
+        issue_number=issue_number,
+        issue_payload=issue_payload,
+        native_dependency_payload=native_dependencies,
+    )
+    object_type = github_intake_object_type(issue_payload)
+    route = github_intake_route(object_type, issue_payload, dependency_graph)
+
+    binding = host_binding_inspection_payload(
+        target_root=target_root,
+        owner=owner if owner != "unknown" else None,
+        repo_name=repo_name if repo_name != "unknown" else None,
+        phase_number=phase_number,
+        fr_number=fr_number,
+        issue_number=issue_number,
+        pr_number=pr_number,
+        project_number=project_number,
+        branch_name=branch_name,
+        head_sha=head_sha,
+        base_sha=None,
+    )
+    project_drift = project_drift_payload(
+        target_root=target_root,
+        owner=owner if owner != "unknown" else None,
+        repo_name=repo_name if repo_name != "unknown" else None,
+        issue_number=issue_number,
+        pr_number=pr_number,
+        project_number=project_number,
+        mode="blocking",
+    )
+    for message in binding.get("missing_inputs", []):
+        if message not in missing_inputs:
+            missing_inputs.append(f"binding: {message}")
+    if object_type == "unknown":
+        missing_inputs.append("object_type")
+    for finding in dependency_graph.get("findings", []):
+        if not isinstance(finding, dict):
+            continue
+        if finding.get("severity") == "block":
+            missing_inputs.append(str(finding.get("subject") or finding.get("kind")))
+        if finding.get("kind") == "native_dependency_unreadable":
+            missing_inputs.append("native dependency capability")
+    if project_number is not None and project_drift.get("result") == "block":
+        for message in project_drift.get("missing_inputs", []):
+            if message not in missing_inputs:
+                missing_inputs.append(f"project: {message}")
+        for finding in project_drift.get("findings", []):
+            if isinstance(finding, dict):
+                missing_inputs.append(str(finding.get("subject") or finding.get("kind")))
+
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "command": "github-intake",
+        "operation": "issue",
+        "schema_version": "loom-github-intake/v1",
+        "result": result,
+        "summary": (
+            "GitHub issue intake produced a read-only route for Loom execution."
+            if result == "pass"
+            else "GitHub issue intake found host-control gaps that must be reconciled before execution."
+        ),
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "fallback_to": None if result == "pass" else route,
+        "object_type": object_type,
+        "route": route,
+        "issue": issue_payload,
+        "bindings": binding,
+        "dependency_graph": dependency_graph,
+        "project_drift": project_drift,
+        "provenance": provenance,
+    }
+
+
+def handle_github_intake(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    runtime_state = runtime_state_payload(target_root)
+    if runtime_state["result"] != "pass":
+        return emit(
+            runtime_state_block_payload(
+                command="github-intake",
+                operation=args.operation,
+                runtime_state=runtime_state,
+                summary="GitHub intake is blocked because the Loom runtime state is inconsistent.",
+            )
+        )
+    return emit(
+        github_intake_payload(
+            target_root=target_root,
+            owner=args.owner,
+            repo_name=args.repo_name,
+            issue_number=args.issue,
+            project_number=args.project,
+            phase_number=args.phase,
+            fr_number=args.fr,
+            pr_number=args.pr,
+            branch_name=args.branch,
+            head_sha=args.head_sha,
+        )
+    )
+
+
 def goal_execution_contract(context: dict[str, Any]) -> dict[str, Any]:
     current_branch = run_git(context["target_root"], ["branch", "--show-current"])
     branch = current_branch.stdout.strip() if current_branch is not None and current_branch.returncode == 0 else None
@@ -16432,6 +16922,7 @@ def closeout_payload(
 
     issue_payload: dict[str, Any] | None = None
     issue_id: str | None = None
+    dependency_graph: dict[str, Any] | None = None
     if issue_number is not None:
         issue_payload, issue_errors = github_issue_payload(target_root, owner, repo_name, issue_number)
         if issue_errors:
@@ -16440,6 +16931,30 @@ def closeout_payload(
             raw_issue_id = issue_payload.get("id")
             if isinstance(raw_issue_id, str) and raw_issue_id:
                 issue_id = raw_issue_id
+            native_dependencies = github_issue_dependencies_payload(target_root, owner, repo_name, issue_number)
+            dependency_graph = dependency_graph_payload(
+                issue_number=issue_number,
+                issue_payload=issue_payload,
+                native_dependency_payload=native_dependencies,
+            )
+            for finding in dependency_graph.get("findings", []):
+                if not isinstance(finding, dict):
+                    continue
+                if finding.get("kind") in {"open_blocker_executable_conflict", "stale_native_edge"}:
+                    missing_inputs.append(str(finding.get("subject") or finding.get("kind")))
+                    closeout_findings.append(
+                        {
+                            **finding,
+                            "why_blocking": (
+                                "closeout is blocked because an open native dependency blocker remains."
+                                if finding.get("kind") == "open_blocker_executable_conflict"
+                                else "closeout is blocked because the native dependency mirror is stale."
+                            ),
+                            "fallback_to": finding.get("fallback_to") or "manual-reconciliation",
+                        }
+                    )
+                elif finding.get("kind") == "native_dependency_unreadable":
+                    closeout_findings.append({**finding, "severity": "warn"})
 
     pr_payload: dict[str, Any] | None = None
     merge_commit_sha: str | None = None
@@ -16670,6 +17185,7 @@ def closeout_payload(
             "pr": pr_payload,
             "project": project_payload,
             "repo_specific_requirements": repo_specific_requirements,
+            "dependency_graph": dependency_graph,
             "goal_completion": goal_completion,
             "target_release": target_release,
             "findings": closeout_findings,
@@ -18674,6 +19190,66 @@ def handle_flow(args: argparse.Namespace) -> int:
                 "project_drift": flow_project_drift,
             }
         )
+    if args.operation in {"resume", "merge-ready"} and args.issue is not None:
+        detected_owner, detected_repo = detect_github_repo(target_root)
+        dependency_owner = args.owner or detected_owner
+        dependency_repo = args.repo_name or detected_repo
+        dependency_missing: list[str] = []
+        issue_payload_for_dependency: dict[str, Any] | None = None
+        dependency_graph: dict[str, Any] = {
+            "schema_version": HOST_DEPENDENCY_GRAPH_SCHEMA,
+            "availability": "not_requested",
+            "edges": [],
+            "findings": [],
+        }
+        if not dependency_owner or not dependency_repo:
+            dependency_missing.append("owner/repo")
+        else:
+            issue_payload_for_dependency, issue_errors = github_issue_payload(
+                target_root,
+                dependency_owner,
+                dependency_repo,
+                args.issue,
+            )
+            dependency_missing.extend(f"issue: {message}" for message in issue_errors)
+            if issue_payload_for_dependency is not None:
+                dependency_graph = dependency_graph_payload(
+                    issue_number=args.issue,
+                    issue_payload=issue_payload_for_dependency,
+                    native_dependency_payload=github_issue_dependencies_payload(
+                        target_root,
+                        dependency_owner,
+                        dependency_repo,
+                        args.issue,
+                    ),
+                )
+        dependency_blocking = [
+            finding
+            for finding in dependency_graph.get("findings", [])
+            if isinstance(finding, dict)
+            and (
+                finding.get("severity") == "block"
+                or (args.operation == "merge-ready" and finding.get("kind") == "stale_native_edge")
+            )
+        ]
+        dependency_step_result = "block" if dependency_missing or dependency_blocking else "pass"
+        steps.append(
+            {
+                "name": "native-dependency",
+                "result": dependency_step_result,
+                "summary": (
+                    "native dependency mirror is readable and has no open blocker for this issue."
+                    if dependency_step_result == "pass"
+                    else "native dependency mirror has blockers or unreadable host signals."
+                ),
+                "missing_inputs": [
+                    *dependency_missing,
+                    *[str(finding.get("subject") or finding.get("kind")) for finding in dependency_blocking],
+                ],
+                "fallback_to": "manual-reconciliation" if dependency_step_result == "block" else None,
+                "dependency_graph": dependency_graph,
+            }
+        )
     if args.operation == "resume" and isinstance(goal_readiness, dict):
         steps.append(
             {
@@ -19364,6 +19940,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_carrier(args)
     if args.command == "host-binding":
         return handle_host_binding(args)
+    if args.command == "github-intake":
+        return handle_github_intake(args)
     if args.command == "goal":
         return handle_goal(args)
     if args.command == "pr-gate":

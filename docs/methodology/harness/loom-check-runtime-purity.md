@@ -10,7 +10,7 @@
 
 它必须验证当前目标，而不是把当前 shell、Codex App 会话、固定临时路径、Node 构建目录或稳定 fixture 当作共享运行现场。
 
-本合同不定义新的 local / CI profile 分层，不替代 #953 的 source self-check 分层，也不扩大 closeout gate、PR metadata 或 review profile 范围。
+本合同同时冻结 #953 的 source self-check 分层入口，但不扩大 closeout gate、PR metadata 或 review profile 的判定范围。
 
 ## 2. Profile 边界
 
@@ -19,6 +19,16 @@
 - `source` profile 检查 Loom source/distribution 仓库，允许消费 source repo 的 checked-in docs、skills surface、installer package 与 demo fixture。
 - `consumer` profile 检查 bootstrapped consumer repo，必须只消费 consumer runtime/adoption surface，不得回退到 Loom source self-check。
 - `auto` 只负责选择 `source` 或 `consumer`，不得因为宿主环境变量或 live host proof 改变 profile。
+
+`source` profile 还支持 `--source-surface full|contract-only|source-self-fixture|bootstrap-regression|distribution-regression`：
+
+- `full` 是默认值，等价于既有完整 source/distribution self-check。
+- `contract-only` 面向普通本地 closeout 与快速合同验证，只消费文档、schema、fixture contract、routing、profile 和 link 检查。
+- `source-self-fixture` 面向 Loom source repo 深层 harness fixture，覆盖 daily execution、adversarial adoption、repo companion / interop 等重型行为样本。
+- `bootstrap-regression` 面向 scaffold、demo bootstrap、repo-local CLI 与 root self-adoption 回归。
+- `distribution-regression` 面向 installer、generated artifacts、GitHub CLI budget 与分发一致性。
+
+所有 source surface 必须向 stderr 输出阶段化进度，至少包含 surface、step、elapsed 和本 step 新增 failure 数。stdout 仍保留最终机器/人工可读报告。
 
 所有 profile 都必须设置唯一 `run_id`，并把运行态写入限定在当前 worktree 或本次运行拥有的唯一临时目录。本次运行创建的 `loom-check-*` 临时目录必须在使用结束后及时清理，不得成为后续检查的隐式输入。
 

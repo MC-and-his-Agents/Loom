@@ -12,21 +12,23 @@ Stable dependency drift kinds:
 - `open_blocker_executable_conflict`
 - `native_dependency_unreadable`
 
-Stable native read states:
+Stable native read states and capability judgments:
 
 - `present`
 - `missing`
 - `unsupported`
 - `permission_denied`
 - `unreadable`
+- `read-only`
+- `read-write`
 
 ## Read Semantics
 
-The native dependency reader compares:
+The native dependency reader prefers GitHub GraphQL `blockedBy` / `blocking` and falls back only when the host capability is unreadable. It compares:
 
 - repo-authored dependency statements
 - issue body dependency statements
-- GitHub native `blocked_by` / `blocking` edges
+- GitHub native `blockedBy` / `blocking` edges
 - Project status when a Project read is requested
 
 Unsupported or permission-denied native dependency reads are not interpreted as “no blockers.” They remain explicit host mirror gaps and must be visible to status, Project drift, merge-ready, and closeout.
@@ -35,9 +37,10 @@ Unsupported or permission-denied native dependency reads are not interpreted as 
 
 ## Gate Consumption
 
-- `resume` and `pre-review` expose dependency drift as advisory status evidence by default.
-- `merge-ready` blocks when an open native blocker exists under a blocking governance profile.
+- `github-intake issue` reads dependency state before choosing a route and blocks on open blockers or unreadable host mirror capability.
+- `resume` exposes dependency drift as a visible status step without requiring a Project read.
+- `merge-ready` blocks when an open native blocker exists under a blocking governance profile or when a stale native dependency mirror would make the merge basis ambiguous.
 - `closeout` blocks when Work Item, FR, or Phase closeout still has an open blocker or stale dependency mirror.
-- Safe sync plans may propose native edge writes only when proof comes from repo-authored or issue-authored dependency truth.
+- Safe sync plans may propose dry-run `addBlockedBy` / `removeBlockedBy` actions only when proof comes from repo-authored or issue-authored dependency truth, or when a stale native edge points to a closed blocker. Every planned action must carry a proof locator and a verification step.
 
 Project ordering can support diagnosis, but it is never sufficient proof for writing native dependency edges.
