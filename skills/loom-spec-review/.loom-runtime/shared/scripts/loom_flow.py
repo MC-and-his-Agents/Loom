@@ -4415,6 +4415,17 @@ def latest_successful_execution_attempt(
     return payload, relative, []
 
 
+def missing_versioned_execution_attempt(errors: list[str], operation: str) -> bool:
+    if not errors:
+        return False
+    expected_missing_success = f"missing successful `{operation}` execution_attempt"
+    return all(
+        error.startswith("missing execution_attempt directory:")
+        or error.startswith(expected_missing_success)
+        for error in errors
+    )
+
+
 def closeout_required_status_subcheck(
     *,
     target_root: Path,
@@ -4581,23 +4592,58 @@ def closeout_backlink_subchecks(
         )
     )
 
+    status_subcheck = closeout_required_status_subcheck(
+        target_root=target_root,
+        profile=profile,
+        owner=owner,
+        repo_name=repo_name,
+        pr_number=pr_number,
+        pr_payload=pr_payload,
+        pr_head=pr_head,
+        pr_payload_file=pr_payload_file,
+        status_checks_file=status_checks_file,
+        branch_protection_file=branch_protection_file,
+        ruleset_file=ruleset_file,
+    )
+
     merge_ready_payload, merge_ready_locator, merge_ready_errors = latest_successful_execution_attempt(target_root, item_id, "merge-ready")
     merge_ready_missing = list(merge_ready_errors)
+    merge_ready_source = "execution_attempt"
+    merge_ready_trigger_reason = "closeout consumes retained merge-ready pass evidence instead of rerunning the full gate chain"
+    merge_ready_evidence_locator = merge_ready_locator
+    merge_ready_head = merge_ready_payload.get("head_sha") if isinstance(merge_ready_payload, dict) else None
+    merge_ready_fallback_reason: str | None = None
     if merge_ready_payload is not None and pr_head and merge_ready_payload.get("head_sha") != pr_head:
         merge_ready_missing.append("merge-ready execution_attempt head_sha does not match PR head")
+    if (
+        merge_ready_missing
+        and pr_head
+        and missing_versioned_execution_attempt(merge_ready_errors, "merge-ready")
+        and status_subcheck.get("result") == "pass"
+    ):
+        merge_ready_missing = []
+        merge_ready_source = "host_pr_checks"
+        merge_ready_trigger_reason = (
+            "closeout consumes fresh host required checks as legacy merge-ready evidence "
+            "when no versioned execution_attempt was retained"
+        )
+        merge_ready_evidence_locator = status_subcheck.get("evidence_locator") if isinstance(status_subcheck.get("evidence_locator"), str) else None
+        merge_ready_head = pr_head
+        merge_ready_fallback_reason = "missing_versioned_execution_attempt"
     subchecks.append(
         closeout_subcheck(
             check_id="merge_ready_attempt",
-            source="execution_attempt",
+            source=merge_ready_source,
             profile=profile,
             required_for_closeout=True,
-            trigger_reason="closeout consumes retained merge-ready pass evidence instead of rerunning the full gate chain",
+            trigger_reason=merge_ready_trigger_reason,
             result="pass" if not merge_ready_missing else "block",
             fallback_to=None if not merge_ready_missing else "merge-ready",
-            evidence_locator=merge_ready_locator,
+            evidence_locator=merge_ready_evidence_locator,
             missing_inputs=merge_ready_missing,
             item_id=item_id,
-            head_sha=merge_ready_payload.get("head_sha") if isinstance(merge_ready_payload, dict) else None,
+            head_sha=merge_ready_head,
+            fallback_reason=merge_ready_fallback_reason,
             validation_summary_digest=validation_digest,
         )
     )
@@ -4633,21 +4679,7 @@ def closeout_backlink_subchecks(
         )
     )
 
-    subchecks.append(
-        closeout_required_status_subcheck(
-            target_root=target_root,
-            profile=profile,
-            owner=owner,
-            repo_name=repo_name,
-            pr_number=pr_number,
-            pr_payload=pr_payload,
-            pr_head=pr_head,
-            pr_payload_file=pr_payload_file,
-            status_checks_file=status_checks_file,
-            branch_protection_file=branch_protection_file,
-            ruleset_file=ruleset_file,
-        )
-    )
+    subchecks.append(status_subcheck)
     return subchecks
 
 
@@ -6110,12 +6142,13 @@ def review_head_binding(
     *,
     reviewed_head: str | None,
     allowed_paths: set[str],
+    current_head: str | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
-    current_head = git_head_sha(target_root)
+    target_head = current_head or git_head_sha(target_root)
     return review_head_binding_for_head(
         target_root,
         reviewed_head=reviewed_head,
-        target_head=current_head,
+        target_head=target_head,
         allowed_paths=allowed_paths,
     )
 

@@ -18,6 +18,7 @@ import time
 import unicodedata
 import uuid
 from collections import Counter, defaultdict
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
@@ -42,12 +43,40 @@ DEFAULT_COMMAND_TIMEOUT_SECONDS = 30.0
 ADOPT_VERIFY_TIMEOUT_SECONDS = 120.0
 BOOTSTRAP_TIMEOUT_SECONDS = 120.0
 SHADOW_PARITY_TIMEOUT_SECONDS = 120.0
+LOOM_CHECK_RUN_ID_ENV = "LOOM_CHECK_RUN_ID"
 
 SOURCE_PROFILE = "source"
 CONSUMER_PROFILE = "consumer"
 AUTO_PROFILE = "auto"
 PROFILE_CHOICES = (AUTO_PROFILE, SOURCE_PROFILE, CONSUMER_PROFILE)
 SOURCE_SURFACE_COUNT = 40
+SOURCE_SNAPSHOT_EXCLUDED_ROOTS = {
+    ".loom/cache",
+    ".loom/runtime",
+    ".loom/tmp",
+    "packages/loom-installer/dist",
+    "packages/loom-installer/node_modules",
+    "packages/loom-installer/payload",
+}
+
+
+def source_snapshot_ignore(root: Path):
+    base_ignore = shutil.ignore_patterns(".git", ".DS_Store", "__pycache__", ".agents")
+    root_resolved = root.resolve()
+
+    def ignore(current: str, names: list[str]) -> set[str]:
+        ignored = set(base_ignore(current, names))
+        current_path = Path(current)
+        for name in names:
+            try:
+                relative = (current_path / name).resolve().relative_to(root_resolved).as_posix()
+            except ValueError:
+                continue
+            if relative in SOURCE_SNAPSHOT_EXCLUDED_ROOTS:
+                ignored.add(name)
+        return ignored
+
+    return ignore
 
 SOURCE_PROFILE_MARKERS = (
     "src/skills/shared/scripts/loom_check.py",
@@ -1039,6 +1068,50 @@ def unique_missing_path(prefix: str) -> Path:
     return path
 
 
+@contextmanager
+def loom_check_temporary_directory(prefix: str):
+    path = Path(tempfile.mkdtemp(prefix=prefix))
+    run_id = os.environ.setdefault(LOOM_CHECK_RUN_ID_ENV, uuid.uuid4().hex)
+    marker = path / ".loom-check-owner.json"
+    marker.write_text(
+        json.dumps(
+            {
+                "schema_version": "loom-check-temp-owner/v1",
+                "run_id": run_id,
+                "pid": os.getpid(),
+                "created_at": utc_now_iso(),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
+
+
+def loom_check_tempdir_snapshot() -> set[str]:
+    tmp_root = Path(tempfile.gettempdir())
+    return {str(path) for path in tmp_root.glob("loom-check-*")}
+
+
+def cleanup_owned_loom_check_tempdirs(run_id: str, baseline: set[str]) -> None:
+    tmp_root = Path(tempfile.gettempdir())
+    for path in tmp_root.glob("loom-check-*"):
+        marker = path / ".loom-check-owner.json"
+        try:
+            owner = json.loads(marker.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            if str(path) not in baseline:
+                shutil.rmtree(path, ignore_errors=True)
+            continue
+        if isinstance(owner, dict) and owner.get("run_id") == run_id:
+            shutil.rmtree(path, ignore_errors=True)
+
+
 def command_timeout_seconds(args: list[str], requested_timeout_seconds: float | None) -> float:
     if requested_timeout_seconds is not None:
         return requested_timeout_seconds
@@ -1070,7 +1143,7 @@ def check_command_timeout_budget() -> list[Failure]:
 def check_loom_check_single_flight_lock() -> list[Failure]:
     failures: list[Failure] = []
     category = "loom-check-single-flight-lock"
-    with tempfile.TemporaryDirectory(prefix="loom-check-single-flight-") as tmp:
+    with loom_check_temporary_directory(prefix="loom-check-single-flight-") as tmp:
         root = Path(tmp) / "target"
         root.mkdir()
         lock = acquire_single_flight_lock(root, ["loom_check.py", str(root)])
@@ -4705,7 +4778,7 @@ def check_skill_routing(root: Path) -> list[Failure]:
         if "unknown skill" not in str(unknown_payload.get("summary", "")):
             failures.append(Failure("skill-routing", "unknown explicit skill must expose an `unknown skill` summary"))
 
-    with tempfile.TemporaryDirectory(prefix="loom-check-route-registry-") as tmp:
+    with loom_check_temporary_directory(prefix="loom-check-route-registry-") as tmp:
         broken_skills = Path(tmp) / "skills"
         shutil.copytree(root / "skills", broken_skills)
         registry_path = broken_skills / "loom-init" / ".loom-runtime" / "registry.json"
@@ -4809,7 +4882,7 @@ def check_demo_fact_chain(root: Path) -> list[Failure]:
         )
         if head_errors or head_binding.get("status") != "fresh":
             failures.append(Failure("demo-fact-chain", "review head binding must report `fresh` for the current HEAD"))
-    with tempfile.TemporaryDirectory(prefix="loom-check-metadata-spoof-") as tmp:
+    with loom_check_temporary_directory(prefix="loom-check-metadata-spoof-") as tmp:
         spoof_target = Path(tmp) / "new-project"
         shutil.copytree(target, spoof_target)
         work_item_path = spoof_target / ".loom/work-items/INIT-0001.md"
@@ -5189,7 +5262,7 @@ def check_root_self_plugin_install(root: Path) -> list[Failure]:
 
 def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
     failures: list[Failure] = []
-    with tempfile.TemporaryDirectory(prefix="loom-check-deep-existing-") as tmp:
+    with loom_check_temporary_directory(prefix="loom-check-deep-existing-") as tmp:
         tmp_root = Path(tmp)
 
         def write_repo(target: Path, *, validation_entry: bool, pr_template: bool, workflow_doc: bool) -> None:
@@ -7234,7 +7307,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             if isinstance(payload.get("merge_checkpoint"), dict) and payload["merge_checkpoint"].get("fallback_to") != "admission":
                 failures.append(Failure("daily-execution-cli", "`flow merge-ready` merge checkpoint must fall back to `admission` for the bootstrap demo"))
 
-    with tempfile.TemporaryDirectory(prefix="loom-check-fact-chain-provenance-") as tmp:
+    with loom_check_temporary_directory(prefix="loom-check-fact-chain-provenance-") as tmp:
         missing_ledger_target = Path(tmp) / "missing-ledger"
         shutil.copytree(example_target, missing_ledger_target)
         progress_path = missing_ledger_target / ".loom/progress/INIT-0001.md"
@@ -7424,18 +7497,18 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             if "parallel_truth_drift" not in failure_blob:
                 failures.append(Failure("daily-execution-cli", "`host mirror overwrite` must expose parallel_truth_drift"))
 
-    with tempfile.TemporaryDirectory(prefix="loom-check-review-run-") as tmp:
+    with loom_check_temporary_directory(prefix="loom-check-review-run-") as tmp:
         source_snapshot = Path(tmp) / "source-snapshot"
         review_target = Path(tmp) / "new-project"
         fake_bin = Path(tmp) / "bin"
         fake_bin.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(root, source_snapshot, ignore=shutil.ignore_patterns(".git", ".DS_Store", "__pycache__", ".agents"))
+        shutil.copytree(root, source_snapshot, ignore=source_snapshot_ignore(root))
 
         def ensure_source_snapshot() -> bool:
             if source_snapshot.exists():
                 return True
             try:
-                shutil.copytree(root, source_snapshot, ignore=shutil.ignore_patterns(".git", ".DS_Store", "__pycache__", ".agents"))
+                shutil.copytree(root, source_snapshot, ignore=source_snapshot_ignore(root))
             except OSError as exc:
                 failures.append(Failure("daily-execution-cli", f"`review run` source snapshot setup failed: {exc}"))
                 return False
@@ -8650,8 +8723,10 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             if isinstance(engine, dict) and engine.get("failure_reason") != "repo_diff_detected":
                 failures.append(Failure("daily-execution-cli", "`review run` must report `repo_diff_detected` when tracked files change"))
 
-    with tempfile.TemporaryDirectory(prefix="loom-check-flow-") as tmp:
-        lifecycle_target = Path(tmp) / "new-project"
+    flow_tmp_path: Path | None = None
+    with loom_check_temporary_directory(prefix="loom-check-flow-") as tmp:
+        flow_tmp_path = tmp
+        lifecycle_target = tmp / "new-project"
         shutil.copytree(example_target, lifecycle_target)
         temp_root = lifecycle_target / ".loom/flow/tmp"
         residue = temp_root / "loom-owned-residue"
@@ -8760,8 +8835,10 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         ):
             if stable_line not in progress_after_retire:
                 failures.append(Failure("daily-execution-cli", f"`workspace retire` must preserve recovery field `{stable_line}`"))
+    if flow_tmp_path is not None and flow_tmp_path.exists():
+        failures.append(Failure("daily-execution-cli", "`loom-check-flow` temporary directory must be removed after the fixture completes"))
 
-    with tempfile.TemporaryDirectory(prefix="loom-check-active-carrier-") as tmp:
+    with loom_check_temporary_directory(prefix="loom-check-active-carrier-") as tmp:
         active_target = Path(tmp) / "new-project"
         shutil.copytree(example_target, active_target)
         source_work_item = active_target / ".loom/work-items/INIT-0001.md"
@@ -8837,7 +8914,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             if not any(isinstance(entry, dict) and entry.get("classification") == "shared_workspace_conflict" for entry in diagnostics):
                 failures.append(Failure("daily-execution-cli", "`state-check` must expose shared workspace conflict diagnostics"))
 
-    with tempfile.TemporaryDirectory(prefix="loom-check-missing-workspace-") as tmp:
+    with loom_check_temporary_directory(prefix="loom-check-missing-workspace-") as tmp:
         missing_workspace_target = Path(tmp) / "new-project"
         shutil.copytree(example_target, missing_workspace_target)
         work_item = missing_workspace_target / ".loom/work-items/INIT-0001.md"
@@ -8893,7 +8970,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             if not any(needle in missing_text or needle in payload_text for needle in workspace_needles):
                 failures.append(Failure("daily-execution-cli", f"`{label}` must report the missing workspace locator"))
 
-    with tempfile.TemporaryDirectory(prefix="loom-check-unowned-temp-") as tmp:
+    with loom_check_temporary_directory(prefix="loom-check-unowned-temp-") as tmp:
         unowned_target = Path(tmp) / "new-project"
         shutil.copytree(example_target, unowned_target)
         unowned_note = unowned_target / ".loom/flow/tmp/user-note.txt"
@@ -8919,7 +8996,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         if not unowned_note.exists():
             failures.append(Failure("daily-execution-cli", "`workspace cleanup` must not delete non-Loom-owned temp content"))
 
-    with tempfile.TemporaryDirectory(prefix="loom-check-authoring-") as tmp:
+    with loom_check_temporary_directory(prefix="loom-check-authoring-") as tmp:
         authoring_target = Path(tmp) / "new-project"
         shutil.copytree(example_target, authoring_target)
 
@@ -9176,7 +9253,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 )
 
     if shutil.which("git") is not None:
-        with tempfile.TemporaryDirectory(prefix="loom-check-purity-") as tmp:
+        with loom_check_temporary_directory(prefix="loom-check-purity-") as tmp:
             dirty_target = Path(tmp) / "new-project"
             shutil.copytree(example_target, dirty_target)
             run_command(root, ["git", "init"], cwd=dirty_target)
@@ -9228,7 +9305,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     )
                 )
 
-    with tempfile.TemporaryDirectory(prefix="loom-check-runtime-state-") as tmp:
+    with loom_check_temporary_directory(prefix="loom-check-runtime-state-") as tmp:
         tmp_root = Path(tmp)
         install_root = tmp_root / "installed" / "skills"
         target_root = tmp_root / "target"
@@ -9420,7 +9497,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         elif payload.get("result") != "block":
             failures.append(Failure("daily-execution-cli", "`bootstrapped runtime-state` must block when runtime provenance hashes drift"))
 
-    with tempfile.TemporaryDirectory(prefix="loom-check-governance-surface-boundary-") as tmp:
+    with loom_check_temporary_directory(prefix="loom-check-governance-surface-boundary-") as tmp:
         tmp_root = Path(tmp)
         outside = tmp_root / "outside.md"
         outside.write_text("# outside\n", encoding="utf-8")
@@ -9450,7 +9527,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     failures.append(Failure("daily-execution-cli", f"`governance surface` must not report unsafe {label} `{carrier}` fact-chain locators as present"))
 
     if shutil.which("git") is not None:
-        with tempfile.TemporaryDirectory(prefix="loom-check-installed-pre-merge-") as tmp:
+        with loom_check_temporary_directory(prefix="loom-check-installed-pre-merge-") as tmp:
             tmp_root = Path(tmp)
             install_root = tmp_root / "installed" / "skills"
             source_snapshot = tmp_root / "source-snapshot"
@@ -9461,7 +9538,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             write_fake_codex(fake_bin / "codex", mode="success")
             installed_review_env = prepend_path_env(fake_bin)
             shutil.copytree(root / "skills", install_root)
-            shutil.copytree(root, source_snapshot, ignore=shutil.ignore_patterns(".git", ".DS_Store", "__pycache__", ".agents"))
+            shutil.copytree(root, source_snapshot, ignore=source_snapshot_ignore(root))
 
             def prepare_target(target: Path) -> tuple[str | None, list[str]]:
                 errors: list[str] = []
@@ -11047,7 +11124,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
     # samples. Keep those samples as local authenticated coverage instead of
     # making CI depend on mutable host permissions.
     if gh_auth_ready and os.environ.get("GITHUB_ACTIONS") != "true":
-        with tempfile.TemporaryDirectory(prefix="loom-check-installed-post-merge-") as tmp:
+        with loom_check_temporary_directory(prefix="loom-check-installed-post-merge-") as tmp:
             tmp_root = Path(tmp)
             install_root = tmp_root / "installed" / "skills"
             retire_target = tmp_root / "retire-target"
@@ -11962,7 +12039,7 @@ def check_repo_companion_interface_contracts(root: Path) -> list[Failure]:
         },
     }
 
-    with tempfile.TemporaryDirectory(prefix="loom-check-repo-companion-") as tmp:
+    with loom_check_temporary_directory(prefix="loom-check-repo-companion-") as tmp:
         base = Path(tmp)
 
         absent_target = base / "absent"
@@ -13073,7 +13150,7 @@ def check_repo_interop_contracts(root: Path) -> list[Failure]:
         },
     }
 
-    with tempfile.TemporaryDirectory(prefix="loom-check-repo-interop-") as tmp:
+    with loom_check_temporary_directory(prefix="loom-check-repo-interop-") as tmp:
         base = Path(tmp)
 
         absent_target = base / "absent"
@@ -14133,7 +14210,7 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
         head = run_command(root, ["git", "rev-parse", "HEAD"], cwd=target, timeout_seconds=30)
         return head.stdout.strip() if head.returncode == 0 else reviewed_head
 
-    with tempfile.TemporaryDirectory(prefix="loom-check-syvert-adoption-") as tmp:
+    with loom_check_temporary_directory(prefix="loom-check-syvert-adoption-") as tmp:
         base = Path(tmp)
 
         original_governance_remote = governance_surface_module.git_remote_origin
@@ -15133,6 +15210,93 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             if latest_only_payload.get("result") != "pass":
                 failures.append(Failure("adversarial-adoption", "latest-only merge-ready execution_attempt must satisfy closeout backlink consumption"))
 
+            missing_attempt_target = base / "missing-merge-ready-host-check-fallback"
+            if not copy_baseline_fixture(missing_attempt_target, "missing merge-ready host check fallback"):
+                return failures
+            missing_attempt_files = write_closeout_backlink_fixtures(missing_attempt_target, head=current_head)
+            shutil.rmtree(missing_attempt_target / ".loom/runtime/attempts/INIT-0001")
+            missing_attempt_payload = closeout_backlink_payload(missing_attempt_target, missing_attempt_files)
+            if missing_attempt_payload.get("result") != "pass":
+                failures.append(Failure("adversarial-adoption", "missing versioned merge-ready attempt may pass only through fresh host required checks fallback"))
+            else:
+                gate = missing_attempt_payload.get("gate")
+                merge_ready_check = None
+                if isinstance(gate, dict):
+                    merge_ready_check = next(
+                        (
+                            check
+                            for check in gate.get("subchecks", [])
+                            if isinstance(check, dict) and check.get("id") == "merge_ready_attempt"
+                        ),
+                        None,
+                    )
+                if not isinstance(merge_ready_check, dict) or merge_ready_check.get("source") != "host_pr_checks":
+                    failures.append(Failure("adversarial-adoption", "missing merge-ready fallback must be explicitly sourced from host_pr_checks"))
+                elif merge_ready_check.get("fallback_reason") != "missing_versioned_execution_attempt":
+                    failures.append(Failure("adversarial-adoption", "missing merge-ready fallback must record the missing versioned attempt reason"))
+
+            stale_attempt_target = base / "merge-ready-head-stale-block"
+            if not copy_baseline_fixture(stale_attempt_target, "stale merge-ready closeout backlink"):
+                return failures
+            stale_attempt_files = write_closeout_backlink_fixtures(stale_attempt_target, head=current_head, merge_ready_head="stale-head")
+            stale_attempt_payload = closeout_backlink_payload(stale_attempt_target, stale_attempt_files)
+            if stale_attempt_payload.get("result") != "block" or stale_attempt_payload.get("fallback_to") != "merge-ready":
+                failures.append(Failure("adversarial-adoption", "stale merge-ready execution_attempt must block instead of falling back to host checks"))
+
+            carrier_only_binding_target = base / "review-carrier-only-binding"
+            carrier_only_binding_target.mkdir(parents=True, exist_ok=True)
+            run_command(root, ["git", "init", "-q"], cwd=carrier_only_binding_target, timeout_seconds=30)
+            run_command(root, ["git", "config", "user.email", "loom@example.invalid"], cwd=carrier_only_binding_target, timeout_seconds=30)
+            run_command(root, ["git", "config", "user.name", "Loom Check"], cwd=carrier_only_binding_target, timeout_seconds=30)
+            review_path = carrier_only_binding_target / ".loom/reviews/INIT-0001.json"
+            write_json(
+                review_path,
+                {
+                    "schema_version": "loom-review/v1",
+                    "item_id": "INIT-0001",
+                    "decision": "allow",
+                    "kind": "code_review",
+                    "summary": "Closeout backlink fixture review is fresh.",
+                    "reviewer": "loom-check",
+                    "reviewed_head": "filled-after-initial-commit",
+                    "reviewed_validation_summary": "validation",
+                    "fallback_to": None,
+                    "findings": [],
+                    "blocking_issues": [],
+                    "follow_ups": [],
+                },
+            )
+            run_command(root, ["git", "add", "-f", ".loom/reviews/INIT-0001.json"], cwd=carrier_only_binding_target, timeout_seconds=30)
+            run_command(root, ["git", "commit", "-m", "initial review"], cwd=carrier_only_binding_target, timeout_seconds=30)
+            reviewed_head = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=carrier_only_binding_target,
+                check=False,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            review_payload = json.loads(review_path.read_text(encoding="utf-8"))
+            review_payload["reviewed_head"] = reviewed_head
+            review_payload["summary"] = "Closeout backlink fixture review is followed only by review carrier refresh."
+            write_json(review_path, review_payload)
+            run_command(root, ["git", "add", "-f", ".loom/reviews/INIT-0001.json"], cwd=carrier_only_binding_target, timeout_seconds=30)
+            run_command(root, ["git", "commit", "-m", "refresh review carrier"], cwd=carrier_only_binding_target, timeout_seconds=30)
+            carrier_only_head = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=carrier_only_binding_target,
+                check=False,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            binding, binding_errors = loom_flow_module.review_head_binding(
+                carrier_only_binding_target,
+                reviewed_head=reviewed_head,
+                allowed_paths={".loom/reviews/INIT-0001.json"},
+                current_head=carrier_only_head,
+            )
+            if binding_errors or binding.get("status") != "carrier-only":
+                failures.append(Failure("adversarial-adoption", "review carrier-only drift after review must be consumable by closeout head binding"))
+
             stale_review_target = base / "review-head-stale-block"
             if not copy_baseline_fixture(stale_review_target, "stale review closeout backlink"):
                 return failures
@@ -16058,22 +16222,22 @@ def check_host_adapter_live_drift_contract(root: Path) -> list[Failure]:
     )
 
     example_target = root / "examples/new-project"
-    absent_target = Path(tempfile.mkdtemp(prefix="loom-host-adapter-live-drift-absent-"))
-    shutil.rmtree(absent_target)
-    shutil.copytree(example_target, absent_target)
-    (absent_target / ".loom" / "companion" / "interop.json").unlink(missing_ok=True)
-    payload, error = load_command_json(root, ["python3", "tools/loom_flow.py", "live-smoke", "host-adapter-drift", "--target", str(absent_target)])
-    if error:
-        failures.append(Failure("host-adapter-live-drift", f"`host-adapter-drift` absent sample failed: {error}"))
-    else:
-        require_host_adapter_live_drift_payload(
-            failures,
-            category="host-adapter-live-drift",
-            context="absent-host-adapter-live-drift-command",
-            payload=payload,
-        )
-        if not isinstance(payload, dict) or payload.get("result") != "warn":
-            failures.append(Failure("host-adapter-live-drift", "absent host adapter live drift sample must warn"))
+    with tempfile.TemporaryDirectory(prefix="loom-host-adapter-live-drift-absent-") as absent_tmp:
+        absent_target = Path(absent_tmp) / "target"
+        shutil.copytree(example_target, absent_target)
+        (absent_target / ".loom" / "companion" / "interop.json").unlink(missing_ok=True)
+        payload, error = load_command_json(root, ["python3", "tools/loom_flow.py", "live-smoke", "host-adapter-drift", "--target", str(absent_target)])
+        if error:
+            failures.append(Failure("host-adapter-live-drift", f"`host-adapter-drift` absent sample failed: {error}"))
+        else:
+            require_host_adapter_live_drift_payload(
+                failures,
+                category="host-adapter-live-drift",
+                context="absent-host-adapter-live-drift-command",
+                payload=payload,
+            )
+            if not isinstance(payload, dict) or payload.get("result") != "warn":
+                failures.append(Failure("host-adapter-live-drift", "absent host adapter live drift sample must warn"))
 
     with tempfile.TemporaryDirectory(prefix="loom-host-adapter-live-drift-") as tmp:
         base = Path(tmp)
@@ -16268,25 +16432,25 @@ def check_dynamic_tool_live_availability_contract(root: Path) -> list[Failure]:
         if not isinstance(payload, dict) or payload.get("result") != "warn":
             failures.append(Failure("dynamic-tool-live-availability", "missing target sample must warn"))
 
-    absent_target = Path(tempfile.mkdtemp(prefix="loom-dynamic-tool-live-availability-absent-"))
-    shutil.rmtree(absent_target)
-    shutil.copytree(example_target, absent_target)
-    shutil.rmtree(absent_target / ".loom" / "companion", ignore_errors=True)
-    absent_payload, error = load_command_json(
-        root,
-        ["python3", "tools/loom_flow.py", "live-smoke", "dynamic-tool-availability", "--target", str(absent_target)],
-    )
-    if error:
-        failures.append(Failure("dynamic-tool-live-availability", f"`dynamic-tool-availability` absent interface sample failed: {error}"))
-    else:
-        require_dynamic_tool_live_availability_payload(
-            failures,
-            category="dynamic-tool-live-availability",
-            context="absent-interface-dynamic-tool-live-availability",
-            payload=absent_payload,
+    with tempfile.TemporaryDirectory(prefix="loom-dynamic-tool-live-availability-absent-") as absent_tmp:
+        absent_target = Path(absent_tmp) / "target"
+        shutil.copytree(example_target, absent_target)
+        shutil.rmtree(absent_target / ".loom" / "companion", ignore_errors=True)
+        absent_payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "live-smoke", "dynamic-tool-availability", "--target", str(absent_target)],
         )
-        if not isinstance(absent_payload, dict) or absent_payload.get("result") != "warn":
-            failures.append(Failure("dynamic-tool-live-availability", "absent repo interface sample must warn"))
+        if error:
+            failures.append(Failure("dynamic-tool-live-availability", f"`dynamic-tool-availability` absent interface sample failed: {error}"))
+        else:
+            require_dynamic_tool_live_availability_payload(
+                failures,
+                category="dynamic-tool-live-availability",
+                context="absent-interface-dynamic-tool-live-availability",
+                payload=absent_payload,
+            )
+            if not isinstance(absent_payload, dict) or absent_payload.get("result") != "warn":
+                failures.append(Failure("dynamic-tool-live-availability", "absent repo interface sample must warn"))
 
     valid_interface = {
         "schema_version": "loom-repo-interface/v2",
@@ -16921,23 +17085,23 @@ def check_hooks_extension_profile_contract(root: Path) -> list[Failure]:
                 failures.append(Failure("hooks-extension-profile", f"`{relative}` must mention `{anchor}`"))
 
     example_target = root / "examples/new-project"
-    absent_target = Path(tempfile.mkdtemp(prefix="loom-hooks-extension-absent-"))
-    shutil.rmtree(absent_target)
-    shutil.copytree(example_target, absent_target)
-    shutil.rmtree(absent_target / ".loom" / "companion", ignore_errors=True)
-    absent_payload, error = load_command_json(
-        root,
-        ["python3", "tools/loom_flow.py", "live-smoke", "hooks-extension", "--target", str(absent_target)],
-    )
-    if error:
-        failures.append(Failure("hooks-extension-profile", f"`hooks-extension` absent interface sample failed: {error}"))
-    else:
-        require_hooks_extension_live_check_payload(
-            failures,
-            category="hooks-extension-profile",
-            context="absent-hooks-extension",
-            payload=absent_payload,
+    with tempfile.TemporaryDirectory(prefix="loom-hooks-extension-absent-") as absent_tmp:
+        absent_target = Path(absent_tmp) / "target"
+        shutil.copytree(example_target, absent_target)
+        shutil.rmtree(absent_target / ".loom" / "companion", ignore_errors=True)
+        absent_payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "live-smoke", "hooks-extension", "--target", str(absent_target)],
         )
+        if error:
+            failures.append(Failure("hooks-extension-profile", f"`hooks-extension` absent interface sample failed: {error}"))
+        else:
+            require_hooks_extension_live_check_payload(
+                failures,
+                category="hooks-extension-profile",
+                context="absent-hooks-extension",
+                payload=absent_payload,
+            )
         hooks_extension = absent_payload.get("hooks_extension") if isinstance(absent_payload, dict) else None
         if not isinstance(absent_payload, dict) or absent_payload.get("result") != "pass":
             failures.append(Failure("hooks-extension-profile", "absent hooks extension sample must pass"))
@@ -17977,7 +18141,7 @@ def check_retry_evidence_fixture_contract(root: Path) -> list[Failure]:
         failures.append(Failure(category, "`retry-evidence-fixtures.json` must expose fixtures list"))
         return failures
 
-    with tempfile.TemporaryDirectory(prefix="loom-check-retry-evidence-") as tmp:
+    with loom_check_temporary_directory(prefix="loom-check-retry-evidence-") as tmp:
         root_dir = Path(tmp)
         current_head = "1" * 40
         stale_head = "0" * 40
@@ -18066,7 +18230,7 @@ def check_execution_attempt_contract(root: Path) -> list[Failure]:
     if not example_target.exists():
         return failures
 
-    with tempfile.TemporaryDirectory(prefix="loom-check-execution-attempt-") as tmp:
+    with loom_check_temporary_directory(prefix="loom-check-execution-attempt-") as tmp:
         target = Path(tmp) / "target"
         shutil.copytree(example_target, target)
         for args in (
@@ -18206,7 +18370,7 @@ def check_build_execution_contract(root: Path) -> list[Failure]:
     if not example_target.exists():
         return failures
 
-    with tempfile.TemporaryDirectory(prefix="loom-check-build-execution-") as tmp:
+    with loom_check_temporary_directory(prefix="loom-check-build-execution-") as tmp:
         target = Path(tmp) / "target"
         shutil.copytree(example_target, target)
         context, errors = loom_flow_module.load_context(target, ".loom/bootstrap/init-result.json", "INIT-0001")
@@ -18744,7 +18908,7 @@ def check_story_intake_contract(root: Path) -> list[Failure]:
         if not isinstance(contract, dict) or contract.get("story_carrier_locator") != ".loom/stories/<item-id>.md":
             failures.append(Failure(category, "flow story contract must expose `.loom/stories/<item-id>.md` as the story carrier locator"))
 
-    with tempfile.TemporaryDirectory(prefix="loom-check-story-carriers-") as tmp:
+    with loom_check_temporary_directory(prefix="loom-check-story-carriers-") as tmp:
         target = Path(tmp) / "target"
         (target / ".loom/stories").mkdir(parents=True)
         (target / ".loom/work-items").mkdir(parents=True)
@@ -20068,6 +20232,8 @@ def print_report(root: Path, failures: list[Failure], profile: str) -> None:
 
 
 def main(argv: list[str]) -> int:
+    run_id = os.environ.setdefault(LOOM_CHECK_RUN_ID_ENV, uuid.uuid4().hex)
+    tempdir_baseline = loom_check_tempdir_snapshot()
     options = parse_args(argv)
     root = options.root
     if not root.exists():
@@ -20095,6 +20261,7 @@ def main(argv: list[str]) -> int:
         return 1 if failures else 0
     finally:
         release_single_flight_lock(lock)
+        cleanup_owned_loom_check_tempdirs(run_id, tempdir_baseline)
 
 
 if __name__ == "__main__":

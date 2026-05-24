@@ -12,11 +12,11 @@
 - Validation Entry: python3 tools/skills_surface.py check; make py-compile; python3 tools/loom_check.py; make check; closeout check for #835/#984
 - Closing Condition: closeout review_record subcheck accepts carrier-only review refresh against PR head, implementation drift remains fail-closed, generated surfaces are synchronized, validation passes, PR merged.
 - Current Checkpoint: merge checkpoint
-- Current Stop: Closeout review backlink carrier-only semantics implemented; WI-987 formal spec and review evidence are refreshed; local validation passed.
-- Next Step: Commit carrier refresh, push branch, open PR #987, consume PR checks and merge gate.
+- Current Stop: Closeout review backlink carrier-only semantics implemented; WI-987 review evidence and validation summary are refreshed for PR #989.
+- Next Step: Push refreshed PR #989 head, consume PR checks, and merge once required gates pass.
 - Blockers: None recorded.
-- Latest Validation Summary: Passed: python3 tools/skills_surface.py check; make py-compile; python3 tools/loom_flow.py shadow-parity --target .; python3 tools/loom_flow.py adopt verify --target .; python3 tools/loom_flow.py checkpoint merge --target . --item WI-987; python3 tools/loom_check.py; make check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main.
-- Recovery Boundary: Reviewed head `e5f2064c3f78db148bed4ab2aae370e6f5511d29` includes the closeout backlink fix, WI-987 spec suite, WI-987 spec review carrier, WI-835 terminal carrier refresh, WI-969 terminal carrier sync, rebase-safe review head corrections, demo bootstrap fixture sync, and installer version bump to 0.1.144; subsequent changes are governance evidence refresh only.
+- Latest Validation Summary: Passed: make py-compile; python3 tools/skills_surface.py check; python3 tools/check_demo_bootstrap_fixture.py; python3 src/skills/shared/scripts/loom_check.py --profile consumer examples/new-project; python3 tools/loom_check.py --profile source; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main. Verified no loom_check.py process, no .loom/runtime/loom_check.lock, and no /tmp/loom-check-* residual directories after loom_check.
+- Recovery Boundary: Reviewed head `dbec8735a5d95a7b69acee44eca821b3868a7377` includes the closeout backlink fix, WI-987 spec suite, rebase-safe review head corrections, demo bootstrap fixture sync, loom-check tempdir cleanup, root self-governance history checkout, and installer version bump to 0.1.145; subsequent changes are governance evidence refresh only.
 - Current Lane: closeout backlink follow-up
 
 ## Runtime Evidence
