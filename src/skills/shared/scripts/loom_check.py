@@ -15186,6 +15186,136 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                     failures.append(Failure("adversarial-adoption", f"closeout backlink fixture returned internal errors: {errors}"))
                 return payload
 
+            explicit_issue_target = base / "closeout-explicit-issue-retained-item"
+            if not copy_baseline_fixture(explicit_issue_target, "explicit issue retained closeout item"):
+                return failures
+            retained_validation = "Retained WI-1 validation evidence remains authoritative after active item rollover."
+            write_json(
+                explicit_issue_target / ".loom/reviews/WI-1.json",
+                {
+                    "schema_version": "loom-review/v1",
+                    "item_id": "WI-1",
+                    "decision": "allow",
+                    "kind": "code_review",
+                    "summary": "Retained issue item review is fresh.",
+                    "reviewer": "loom-check",
+                    "reviewed_head": "filled-after-initial-commit",
+                    "reviewed_validation_summary": retained_validation,
+                    "fallback_to": None,
+                    "findings": [],
+                    "blocking_issues": [],
+                    "follow_ups": [],
+                },
+            )
+            (explicit_issue_target / ".loom/work-items").mkdir(parents=True, exist_ok=True)
+            (explicit_issue_target / ".loom/progress").mkdir(parents=True, exist_ok=True)
+            (explicit_issue_target / ".loom/work-items/WI-1.md").write_text(
+                "\n".join(
+                    [
+                        "# WI-1",
+                        "",
+                        "## Static Facts",
+                        "",
+                        "- Item ID: WI-1",
+                        "- Goal: Retained closeout issue item",
+                        "- Scope: Prove closeout --issue binds retained issue work item instead of current active item",
+                        "- Execution Path: harness/closeout-retained-item",
+                        "- Workspace Entry: .",
+                        "- Recovery Entry: .loom/progress/WI-1.md",
+                        "- Review Entry: .loom/reviews/WI-1.json",
+                        "- Validation Entry: retained validation",
+                        "- Closing Condition: closeout consumes WI-1 evidence even when another item is active",
+                        "",
+                        "## Associated Artifacts",
+                        "",
+                        "- `.loom/work-items/WI-1.md`",
+                        "- `.loom/progress/WI-1.md`",
+                        "- `.loom/reviews/WI-1.json`",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (explicit_issue_target / ".loom/progress/WI-1.md").write_text(
+                "\n".join(
+                    [
+                        "# WI-1 Progress",
+                        "",
+                        "## Dynamic Facts",
+                        "",
+                        "- Item ID: WI-1",
+                        "- Current Checkpoint: merged",
+                        "- Current Stop: Retained WI-1 closeout evidence is ready.",
+                        "- Next Step: None.",
+                        "- Blockers: None recorded.",
+                        f"- Latest Validation Summary: {retained_validation}",
+                        "- Recovery Boundary: Retained WI-1 closeout fixture only.",
+                        "- Current Lane: closed",
+                        "",
+                        "## Execution Ledger",
+                        "",
+                        "- Ledger Binding: recovery_entry",
+                        "- Plan Locator: not_applicable",
+                        "- Acceptance Locator: not_applicable",
+                        "- Validation Evidence Locator: retained validation",
+                        "- Handoff Notes Locator: not_applicable",
+                        "- Evidence Freshness: current",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            run_command(
+                root,
+                ["git", "add", "-f", ".loom/work-items/WI-1.md", ".loom/progress/WI-1.md", ".loom/reviews/WI-1.json"],
+                cwd=explicit_issue_target,
+                timeout_seconds=30,
+            )
+            run_command(root, ["git", "commit", "-m", "add retained issue evidence"], cwd=explicit_issue_target, timeout_seconds=30)
+            retained_reviewed_head = run_command(
+                root,
+                ["git", "rev-parse", "HEAD"],
+                cwd=explicit_issue_target,
+                timeout_seconds=30,
+            ).stdout.strip()
+            retained_review_payload = load_json_file(explicit_issue_target / ".loom/reviews/WI-1.json")
+            if isinstance(retained_review_payload, dict):
+                retained_review_payload["reviewed_head"] = retained_reviewed_head
+                write_json(explicit_issue_target / ".loom/reviews/WI-1.json", retained_review_payload)
+            run_command(root, ["git", "add", "-f", ".loom/reviews/WI-1.json"], cwd=explicit_issue_target, timeout_seconds=30)
+            run_command(root, ["git", "commit", "-m", "refresh retained review carrier"], cwd=explicit_issue_target, timeout_seconds=30)
+            explicit_issue_head = run_command(
+                root,
+                ["git", "rev-parse", "HEAD"],
+                cwd=explicit_issue_target,
+                timeout_seconds=30,
+            ).stdout.strip()
+            terminal_validation = "Retained WI-1 terminal closeout summary was written after the PR head."
+            (explicit_issue_target / ".loom/progress/WI-1.md").write_text(
+                (explicit_issue_target / ".loom/progress/WI-1.md").read_text(encoding="utf-8").replace(
+                    f"- Latest Validation Summary: {retained_validation}",
+                    f"- Latest Validation Summary: {terminal_validation}",
+                ),
+                encoding="utf-8",
+            )
+            explicit_issue_files = write_closeout_backlink_fixtures(explicit_issue_target, head=explicit_issue_head)
+            explicit_issue_payload = closeout_backlink_payload(explicit_issue_target, explicit_issue_files)
+            explicit_gate = explicit_issue_payload.get("gate") if isinstance(explicit_issue_payload, dict) else None
+            explicit_review_check = None
+            if isinstance(explicit_gate, dict):
+                explicit_review_check = next(
+                    (
+                        check
+                        for check in explicit_gate.get("subchecks", [])
+                        if isinstance(check, dict) and check.get("id") == "review_record"
+                    ),
+                    None,
+                )
+            if explicit_issue_payload.get("result") != "pass":
+                failures.append(Failure("adversarial-adoption", "closeout --issue must consume retained issue item evidence even when another item is active"))
+            elif not isinstance(explicit_review_check, dict) or explicit_review_check.get("item_id") != "WI-1":
+                failures.append(Failure("adversarial-adoption", "closeout --issue must bind review_record to the retained issue item id"))
+
             fresh_target = base / "fresh-backlink-pass"
             if not copy_baseline_fixture(fresh_target, "fresh closeout backlink"):
                 return failures
