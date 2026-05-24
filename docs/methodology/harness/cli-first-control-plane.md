@@ -78,3 +78,37 @@ Detected surfaces are evidence, not authority by themselves. Legacy `.loom/bin`,
 `loom doctor --target <repo> --json` consumes detection plus installed-state validation. It passes only when versioned installed-state is valid and no blocking legacy surface remains.
 
 `loom repair plan --target <repo> --json` emits ordered non-mutating actions. `loom repair apply --target <repo> --json` currently fails closed and returns the plan because mutation ownership, rollback, and host adapter writes belong to later Work Items.
+
+## Host Control Commands
+
+`loom workspace`, `loom issue`, `loom project`, `loom pr`, `loom merge`, and `loom reconcile` implement the #893 control-plane command names.
+
+These commands are thin CLI-first entries over host-owned truth. They read GitHub, git worktree, PR gate, controlled merge, and reconciliation evidence through existing Loom harness commands instead of creating another state source.
+
+Stable schemas:
+
+- `loom-workspace-control/v1` for workspace lifecycle wrappers.
+- `loom-host-object-control/v1` for issue, project, PR, merge, and reconciliation wrappers.
+- Existing delegated schemas such as `loom-pr-merge-gate/v1`, `loom-controlled-merge/v1`, and `loom-reconciliation-audit/v1` remain authoritative when the wrapper delegates to `loom_flow.py`.
+
+Fail-closed conditions include missing issue or PR identifiers, unreadable GitHub state, fact-chain mismatch, dirty or ambiguous workspace state, stale PR head, missing Work Item binding, incomplete required checks, and mergeability drift.
+
+Mutating actions require an explicit execution flag on the underlying command. `loom merge run` maps to controlled merge and requires `--apply` before `--execute` is passed to the host merge command. Reconciliation defaults to audit/dry-run semantics.
+
+## Host Adapter Commands
+
+`loom host list`, `loom host doctor`, `loom host install`, `loom host verify`, `loom host upgrade`, and `loom host remove` implement the #894 host orchestration surface with `loom-host-orchestration/v1`.
+
+The CLI separates:
+
+- Codex full-repo/native skills discovery as the default path.
+- Adapter-managed plugin and single-skill installation through `loom-installer`.
+- Contract-only hosts such as OpenCode, Gemini, and Cursor until adapter CLIs are available.
+
+`host list` and `host doctor` are read-only. `host install` and `host upgrade` fail closed unless `--apply` is present and the built installer shim is available. `host remove` remains non-mutating in this phase and reports the missing rollback/delete ownership contract.
+
+## Skills Commands
+
+`loom skills list`, `loom skills generate`, `loom skills sync`, `loom skills check`, `loom skills doctor`, `loom skills package`, and `loom skills release-check` implement the #895 generated SKILLS surface with `loom-skills-surface/v1`.
+
+`skills list` and `skills package` read checked-in generated package metadata. `skills check`, `skills doctor`, and `skills release-check` delegate to the existing surface, host adapter, and version checks. `skills generate` and `skills sync` mutate `skills/`, so they fail closed unless `--apply` is supplied.

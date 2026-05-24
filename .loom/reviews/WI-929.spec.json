@@ -1,0 +1,22 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-929",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-929 spec and implementation contract are approved for the #893/#894/#895 CLI-first command batch.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "b1b2b58f3de635340e457339566250c712cb595c",
+  "reviewed_validation_summary": "Spec review consumed .loom/specs/WI-929/spec.md, plan.md, and implementation-contract.md; scope is limited to #929-#943 and excludes profile finalization or bottom-layer host rewrites.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-929.md",
+    "recovery_entry": ".loom/progress/WI-929.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-929/spec.md",
+    "plan": ".loom/specs/WI-929/plan.md",
+    "implementation_contract": ".loom/specs/WI-929/implementation-contract.md"
+  }
+}

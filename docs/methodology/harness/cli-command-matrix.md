@@ -30,6 +30,37 @@ The JSON output is the canonical machine-readable matrix for tests and downstrea
 | `loom repair plan` | implemented | Emits a non-mutating repair plan for missing, invalid, or legacy installed surfaces. |
 | `loom repair apply` | implemented | Fails closed until write ownership and rollback semantics are approved by a later Work Item. |
 
+## Implemented Phase Commands
+
+#893 implements the host-control command family:
+
+```text
+loom workspace create|locate|check|retire
+loom issue inspect|bind|reconcile
+loom project status|reconcile
+loom pr inspect|metadata-preflight|gate
+loom merge check|run
+loom reconcile
+```
+
+These commands use JSON wrappers over existing harness control-plane readers. GitHub and git remain the host-owned truth sources; Loom only freezes the command names, output shape, fail-closed reasons, and fallback names.
+
+#894 implements the host adapter command family:
+
+```text
+loom host list|doctor|install|verify|upgrade|remove
+```
+
+`host list` and `host doctor` are read-only. Adapter-managed mutations fail closed unless explicit `--apply` is present. Full-repo/native discovery remains operator-owned and is not mutated by the CLI.
+
+#895 implements the generated SKILLS command family:
+
+```text
+loom skills list|generate|sync|check|doctor|package|release-check
+```
+
+`skills generate` and `skills sync` require `--apply`; check, doctor, package, and release-check are read-only.
+
 ## Reserved Phase Commands
 
 These names are frozen for #885. Until their Work Items implement them, invoking them returns `result=block`.
@@ -51,14 +82,6 @@ loom handoff
 loom retire
 loom checkpoint admission|build|merge
 loom gate pre-review|spec-review|review|pr|merge|closeout
-loom workspace create|locate|check|retire
-loom issue inspect|bind|reconcile
-loom project status|reconcile
-loom pr inspect|metadata-preflight|gate
-loom merge check|run
-loom reconcile
-loom host list|doctor|install|verify|upgrade|remove
-loom skills list|generate|sync|check|doctor|package|release-check
 ```
 
 ## Delegated Compatibility Commands
@@ -98,3 +121,12 @@ For #906-#909 it also checks:
 - valid installed-state makes `doctor` pass and `repair plan` no-op;
 - invalid graph edge endpoints fail closed;
 - `repair apply` remains a structured blocking command until mutation semantics are approved.
+
+For #929-#943 it also checks:
+
+- host-control, host, and skills command names are implemented in `loom help --json`;
+- `loom host list` emits `loom-host-orchestration/v1`;
+- `loom host install` fails closed without `--apply`;
+- `loom skills list` emits the generated registry and root entry;
+- `loom skills generate` fails closed without `--apply`;
+- `loom skills package` emits package metadata for generated skills.
