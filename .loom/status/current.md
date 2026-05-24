@@ -16,7 +16,7 @@
 - Next Step: Push refreshed PR #989 head, consume PR checks, and merge once required gates pass.
 - Blockers: None recorded.
 - Latest Validation Summary: Passed: make py-compile; python3 tools/skills_surface.py check; python3 tools/check_demo_bootstrap_fixture.py; python3 src/skills/shared/scripts/loom_check.py --profile consumer examples/new-project; python3 tools/loom_check.py --profile source; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main. Verified no loom_check.py process, no .loom/runtime/loom_check.lock, and no /tmp/loom-check-* residual directories after loom_check.
-- Recovery Boundary: Reviewed head `eb2d0dac5bca9e367ab2b5157f771c5cc8366745` includes the closeout backlink fix, WI-987 spec suite, rebase-safe review head corrections, demo bootstrap fixture sync, loom-check tempdir cleanup, and installer version bump to 0.1.145; subsequent changes are governance evidence refresh only.
+- Recovery Boundary: Reviewed head `dbec8735a5d95a7b69acee44eca821b3868a7377` includes the closeout backlink fix, WI-987 spec suite, rebase-safe review head corrections, demo bootstrap fixture sync, loom-check tempdir cleanup, root self-governance history checkout, and installer version bump to 0.1.145; subsequent changes are governance evidence refresh only.
 - Current Lane: closeout backlink follow-up
 
 ## Runtime Evidence
