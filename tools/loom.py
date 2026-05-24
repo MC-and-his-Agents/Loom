@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -27,6 +28,10 @@ INSTALLED_STATE_SCHEMA = "loom-installed-state/v2"
 DETECT_SCHEMA = "loom-installed-surface-detect/v1"
 DOCTOR_SCHEMA = "loom-installed-surface-doctor/v1"
 REPAIR_PLAN_SCHEMA = "loom-installed-surface-repair-plan/v1"
+WORKSPACE_SCHEMA = "loom-workspace-control/v1"
+HOST_OBJECT_SCHEMA = "loom-host-object-control/v1"
+HOST_SCHEMA = "loom-host-orchestration/v1"
+SKILLS_SCHEMA = "loom-skills-surface/v1"
 
 
 COMMANDS: list[dict[str, Any]] = [
@@ -127,34 +132,34 @@ COMMANDS: list[dict[str, Any]] = [
     {"command": "gate pr", "domain": "gate", "status": "reserved", "json": True},
     {"command": "gate merge", "domain": "gate", "status": "reserved", "json": True},
     {"command": "gate closeout", "domain": "gate", "status": "reserved", "json": True},
-    {"command": "workspace create", "domain": "host-control", "status": "reserved", "json": True},
-    {"command": "workspace locate", "domain": "host-control", "status": "reserved", "json": True},
-    {"command": "workspace check", "domain": "host-control", "status": "reserved", "json": True},
-    {"command": "workspace retire", "domain": "host-control", "status": "reserved", "json": True},
-    {"command": "issue inspect", "domain": "host-control", "status": "reserved", "json": True},
-    {"command": "issue bind", "domain": "host-control", "status": "reserved", "json": True},
-    {"command": "issue reconcile", "domain": "host-control", "status": "reserved", "json": True},
-    {"command": "project status", "domain": "host-control", "status": "reserved", "json": True},
-    {"command": "project reconcile", "domain": "host-control", "status": "reserved", "json": True},
-    {"command": "pr inspect", "domain": "host-control", "status": "reserved", "json": True},
-    {"command": "pr metadata-preflight", "domain": "host-control", "status": "reserved", "json": True},
-    {"command": "pr gate", "domain": "host-control", "status": "reserved", "json": True},
-    {"command": "merge check", "domain": "delivery", "status": "reserved", "json": True},
-    {"command": "merge run", "domain": "delivery", "status": "reserved", "json": True},
-    {"command": "reconcile", "domain": "host-control", "status": "reserved", "json": True},
-    {"command": "host list", "domain": "host", "status": "reserved", "json": True},
-    {"command": "host doctor", "domain": "host", "status": "reserved", "json": True},
-    {"command": "host install", "domain": "host", "status": "reserved", "json": True},
-    {"command": "host verify", "domain": "host", "status": "reserved", "json": True},
-    {"command": "host upgrade", "domain": "host", "status": "reserved", "json": True},
-    {"command": "host remove", "domain": "host", "status": "reserved", "json": True},
-    {"command": "skills list", "domain": "skills", "status": "reserved", "json": True},
-    {"command": "skills generate", "domain": "skills", "status": "reserved", "json": True},
-    {"command": "skills sync", "domain": "skills", "status": "reserved", "json": True},
-    {"command": "skills check", "domain": "skills", "status": "reserved", "json": True},
-    {"command": "skills doctor", "domain": "skills", "status": "reserved", "json": True},
-    {"command": "skills package", "domain": "skills", "status": "reserved", "json": True},
-    {"command": "skills release-check", "domain": "skills", "status": "reserved", "json": True},
+    {"command": "workspace create", "domain": "host-control", "status": "implemented", "json": True},
+    {"command": "workspace locate", "domain": "host-control", "status": "implemented", "json": True},
+    {"command": "workspace check", "domain": "host-control", "status": "implemented", "json": True},
+    {"command": "workspace retire", "domain": "host-control", "status": "implemented", "json": True},
+    {"command": "issue inspect", "domain": "host-control", "status": "implemented", "json": True},
+    {"command": "issue bind", "domain": "host-control", "status": "implemented", "json": True},
+    {"command": "issue reconcile", "domain": "host-control", "status": "implemented", "json": True},
+    {"command": "project status", "domain": "host-control", "status": "implemented", "json": True},
+    {"command": "project reconcile", "domain": "host-control", "status": "implemented", "json": True},
+    {"command": "pr inspect", "domain": "host-control", "status": "implemented", "json": True},
+    {"command": "pr metadata-preflight", "domain": "host-control", "status": "implemented", "json": True},
+    {"command": "pr gate", "domain": "host-control", "status": "implemented", "json": True},
+    {"command": "merge check", "domain": "delivery", "status": "implemented", "json": True},
+    {"command": "merge run", "domain": "delivery", "status": "implemented", "json": True},
+    {"command": "reconcile", "domain": "host-control", "status": "implemented", "json": True},
+    {"command": "host list", "domain": "host", "status": "implemented", "json": True},
+    {"command": "host doctor", "domain": "host", "status": "implemented", "json": True},
+    {"command": "host install", "domain": "host", "status": "implemented", "json": True},
+    {"command": "host verify", "domain": "host", "status": "implemented", "json": True},
+    {"command": "host upgrade", "domain": "host", "status": "implemented", "json": True},
+    {"command": "host remove", "domain": "host", "status": "implemented", "json": True},
+    {"command": "skills list", "domain": "skills", "status": "implemented", "json": True},
+    {"command": "skills generate", "domain": "skills", "status": "implemented", "json": True},
+    {"command": "skills sync", "domain": "skills", "status": "implemented", "json": True},
+    {"command": "skills check", "domain": "skills", "status": "implemented", "json": True},
+    {"command": "skills doctor", "domain": "skills", "status": "implemented", "json": True},
+    {"command": "skills package", "domain": "skills", "status": "implemented", "json": True},
+    {"command": "skills release-check", "domain": "skills", "status": "implemented", "json": True},
 ]
 
 COMMAND_INDEX = {entry["command"]: entry for entry in COMMANDS}
@@ -229,6 +234,53 @@ def output(command: str, result: str, **fields: Any) -> dict[str, Any]:
         "generated_at": now_iso(),
         **fields,
     }
+
+
+def run_capture(args: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(args, cwd=cwd, check=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+
+def parse_json_or_block(command: str, completed: subprocess.CompletedProcess[str], *, failed_layer: str, fallback_to: list[str]) -> dict[str, Any]:
+    raw = completed.stdout or completed.stderr
+    if raw:
+        try:
+            payload = json.loads(raw)
+            if payload.get("command") and payload.get("command") != command:
+                payload["wrapped_command"] = payload.get("command")
+            payload["command"] = command
+            return payload
+        except json.JSONDecodeError:
+            pass
+    if completed.returncode != 0:
+        return output(
+            command,
+            "block",
+            summary="Delegated command failed.",
+            failed_layer=failed_layer,
+            fail_closed_reason=raw.strip() if raw else f"{completed.args} failed",
+            fallback_to=fallback_to,
+        )
+    return output(
+        command,
+        "block",
+        summary="Delegated command did not emit JSON.",
+        failed_layer=failed_layer,
+        fail_closed_reason="invalid JSON from delegated command",
+        fallback_to=fallback_to,
+    )
+
+
+def flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str]) -> dict[str, Any]:
+    completed = run_capture([sys.executable, str(TOOLS_ROOT / "loom_flow.py"), *flow_args])
+    return parse_json_or_block(command, completed, failed_layer="loom-flow", fallback_to=fallback_to)
+
+
+def emit_flow(command: str, flow_args: list[str], *, fallback_to: list[str]) -> int:
+    payload = flow_payload(command, flow_args, fallback_to=fallback_to)
+    if payload.get("command") and payload.get("command") != command:
+        payload["wrapped_command"] = payload.get("command")
+    payload["command"] = command
+    return emit(payload)
 
 
 def command_matrix() -> list[dict[str, Any]]:
@@ -835,6 +887,245 @@ def handle_installed_state(argv: list[str]) -> int:
     return 0
 
 
+def workspace_payload(action: str, args: argparse.Namespace) -> dict[str, Any]:
+    command = f"workspace {action}"
+    target = resolve_target(args.target)
+    item_args = ["--item", args.item] if getattr(args, "item", None) else []
+    if action in {"locate", "create", "retire"}:
+        operation = "retire" if action == "retire" else action
+        payload = flow_payload(command, ["workspace", operation, "--target", str(target), *item_args], fallback_to=["admission", "loom workspace check --target <repo> --json"])
+        if payload.get("command") and payload.get("command") != command:
+            payload["wrapped_command"] = payload.get("command")
+        payload["command"] = command
+        return payload
+    if action == "check":
+        payload = flow_payload(command, ["purity-check", "--target", str(target), *item_args], fallback_to=["admission", "loom workspace locate --target <repo> --json"])
+        if payload.get("command") and payload.get("command") != command:
+            payload["wrapped_command"] = payload.get("command")
+        payload["command"] = command
+        return payload
+    return output(command, "block", schema=WORKSPACE_SCHEMA, summary="Unsupported workspace action.", failed_layer="cli-router", fail_closed_reason=action, fallback_to=["loom help --json"])
+
+
+def handle_workspace(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="loom workspace")
+    parser.add_argument("action", choices=("create", "locate", "check", "retire"))
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--path")
+    parser.add_argument("--branch")
+    parser.add_argument("--item")
+    parser.add_argument("--start-point", default="origin/main")
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    return emit(workspace_payload(args.action, args))
+
+
+def handle_issue(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="loom issue")
+    parser.add_argument("action", choices=("inspect", "bind", "reconcile"))
+    parser.add_argument("issue", nargs="?")
+    parser.add_argument("--work-item")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    command = f"issue {args.action}"
+    if args.action == "inspect":
+        if not args.issue:
+            return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="Issue inspect requires an issue number.", failed_layer="issue-input", fail_closed_reason="missing issue number", fallback_to=["loom help --json"]))
+        return emit_flow(command, ["github-intake", "issue", "--target", ".", "--issue", args.issue], fallback_to=["github-intake", "manual-reconciliation"])
+    if args.action == "bind":
+        if not args.issue or not args.work_item:
+            return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="Issue bind requires issue and --work-item.", failed_layer="issue-binding", fail_closed_reason="missing issue or work item", fallback_to=["loom issue inspect <issue> --json"]))
+        return emit_flow(command, ["host-binding", "inspect", "--target", ".", "--issue", args.issue], fallback_to=["loom issue inspect <issue> --json", "manual-reconciliation"])
+    flow_args = ["reconciliation", "audit", "--target", "."]
+    if args.issue:
+        flow_args.extend(["--issue", args.issue])
+    return emit_flow(command, flow_args, fallback_to=["manual-reconciliation"])
+
+
+def handle_project(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="loom project")
+    parser.add_argument("action", choices=("status", "reconcile"))
+    parser.add_argument("--issue")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    command = f"project {args.action}"
+    if args.issue:
+        flow_args = ["github-intake", "issue", "--target", ".", "--issue", args.issue]
+        return emit_flow(command, flow_args, fallback_to=["loom issue inspect <issue> --json", "manual-reconciliation"])
+    return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="Project status requires --issue for this CLI contract.", failed_layer="project-input", fail_closed_reason="missing --issue", fallback_to=["loom issue inspect <issue> --json"]))
+
+
+def handle_pr(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="loom pr")
+    parser.add_argument("action", choices=("inspect", "metadata-preflight", "gate"))
+    parser.add_argument("pr", nargs="?")
+    parser.add_argument("--head-sha")
+    parser.add_argument("--work-item")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    command = f"pr {args.action}"
+    if not args.pr:
+        return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="PR command requires a PR number.", failed_layer="pr-input", fail_closed_reason="missing PR number", fallback_to=["loom help --json"]))
+    if args.action == "inspect":
+        flow_args = ["host-binding", "inspect", "--target", ".", "--pr", args.pr]
+        if args.head_sha:
+            flow_args.extend(["--head-sha", args.head_sha])
+        return emit_flow(command, flow_args, fallback_to=["loom pr gate <pr> --json", "manual-reconciliation"])
+    if args.action == "metadata-preflight":
+        flow_args = ["pr-metadata", "preflight", "--target", ".", "--surface", "merge_ready", "--pr", args.pr]
+        if args.head_sha:
+            flow_args.extend(["--head-sha", args.head_sha])
+        return emit_flow(command, flow_args, fallback_to=["update PR body", "loom pr inspect <pr> --json"])
+    flow_args = ["pr-gate", "check", "--target", ".", "--pr", args.pr]
+    if args.head_sha:
+        flow_args.extend(["--head-sha", args.head_sha])
+    if args.work_item:
+        flow_args.extend(["--item", args.work_item])
+    return emit_flow(command, flow_args, fallback_to=["loom pr inspect <pr> --json", "manual-reconciliation"])
+
+
+def handle_merge(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="loom merge")
+    parser.add_argument("action", choices=("check", "run"))
+    parser.add_argument("pr")
+    parser.add_argument("--head-sha")
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    command = f"merge {args.action}"
+    flow_args = ["controlled-merge", "merge" if args.action == "run" else "check", "--target", ".", "--pr", args.pr, "--merge-method", "merge", "--delete-branch"]
+    if args.head_sha:
+        flow_args.extend(["--head-sha", args.head_sha])
+    if args.action == "run" and args.apply:
+        flow_args.append("--execute")
+    return emit_flow(command, flow_args, fallback_to=["loom pr gate <pr> --json", "loom merge check <pr> --json"])
+
+
+def handle_reconcile(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="loom reconcile")
+    parser.add_argument("--issue")
+    parser.add_argument("--pr")
+    parser.add_argument("--work-item")
+    parser.add_argument("--head-sha")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    flow_args = ["reconciliation", "audit", "--target", "."]
+    if args.issue:
+        flow_args.extend(["--issue", args.issue])
+    if args.pr:
+        flow_args.extend(["--pr", args.pr])
+    return emit_flow("reconcile", flow_args, fallback_to=["manual-reconciliation"])
+
+
+def supported_hosts(target: Path) -> list[dict[str, Any]]:
+    home = Path.home()
+    codex_home = Path(os.environ.get("CODEX_HOME", home / ".codex"))
+    claude_home = Path(os.environ.get("CLAUDE_CONFIG_DIR", home / ".claude"))
+    hosts = [
+        {
+            "id": "codex",
+            "support_status": "primary",
+            "detected": codex_home.exists(),
+            "default_mode": "full-repo",
+            "native_skill_path": str(home / ".agents" / "skills"),
+            "plugin_path": str(target / "plugins" / "loom"),
+        },
+        {
+            "id": "claude",
+            "support_status": "adapter",
+            "detected": claude_home.exists(),
+            "default_mode": "plugin",
+            "native_skill_path": str(claude_home / "skills"),
+            "plugin_path": str(target / ".claude" / "marketplaces" / "loom-local" / "plugins" / "loom"),
+        },
+        {"id": "opencode", "support_status": "adapter-contract", "detected": False, "default_mode": "full-repo"},
+        {"id": "gemini", "support_status": "adapter-contract", "detected": False, "default_mode": "full-repo"},
+        {"id": "cursor", "support_status": "adapter-contract", "detected": False, "default_mode": "full-repo"},
+    ]
+    return hosts
+
+
+def handle_host(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="loom host")
+    parser.add_argument("action", choices=("list", "doctor", "install", "verify", "upgrade", "remove"))
+    parser.add_argument("--host", default="auto", choices=("auto", "codex", "claude", "opencode", "gemini", "cursor"))
+    parser.add_argument("--mode", default="plugin", choices=("full-repo", "plugin", "skill"))
+    parser.add_argument("--skill-id")
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--force", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    command = f"host {args.action}"
+    target = resolve_target(args.target)
+    hosts = supported_hosts(target)
+    selected = [host for host in hosts if args.host == "auto" or host["id"] == args.host]
+    if args.action == "list":
+        return emit(output(command, "pass", schema=HOST_SCHEMA, summary="Supported host adapters listed.", target=str(target), hosts=hosts, fallback_to=None))
+    detected = [host for host in selected if host.get("detected")]
+    if args.host == "auto" and len(detected) != 1:
+        return emit(output(command, "block", schema=HOST_SCHEMA, summary="Host auto-detection is ambiguous or unavailable.", target=str(target), hosts=hosts, failed_layer="host-detection", fail_closed_reason="pass --host explicitly when zero or multiple supported hosts are detected", fallback_to=["loom host list --json", "loom host doctor --host <host> --json"]))
+    host = detected[0]["id"] if args.host == "auto" else args.host
+    if args.action == "doctor":
+        warnings = []
+        if host == "codex" and args.mode == "plugin":
+            warnings.append("Codex default remains full-repo/native skills discovery; plugin mode is adapter-managed.")
+        return emit(output(command, "pass", schema=HOST_SCHEMA, summary="Host adapter contract is readable.", target=str(target), host=host, mode=args.mode, hosts=hosts, warnings=warnings, verification=["docs/adoption/host-adapter-matrix.md", "tools/host_adapter_check.py"], fallback_to=None))
+    if args.mode == "full-repo" and args.action in {"install", "upgrade", "remove"}:
+        return emit(output(command, "block", schema=HOST_SCHEMA, summary="Full-repo host lifecycle remains operator-owned.", target=str(target), host=host, mode=args.mode, mutates=args.action != "verify", failed_layer="host-lifecycle", fail_closed_reason="CLI does not mutate full-repo clone/discovery state", fallback_to=["docs/adoption/host-adapter-matrix.md", "loom host verify --host <host> --mode plugin --json"]))
+    if args.action in {"install", "upgrade", "remove"} and not args.apply:
+        return emit(output(command, "block", schema=HOST_SCHEMA, summary=f"Host {args.action} is mutating and requires --apply.", target=str(target), host=host, mode=args.mode, mutates=True, failed_layer=f"host-{args.action}", fail_closed_reason="explicit --apply is required before adapter-managed host mutation", fallback_to=["loom host verify --host <host> --json", "loom host doctor --host <host> --json"]))
+    installer_command = {"install": "add", "upgrade": "add", "verify": "verify-upgrade", "remove": "verify-upgrade"}.get(args.action, "verify-upgrade")
+    if args.action == "remove":
+        return emit(output(command, "block", schema=HOST_SCHEMA, summary="Host remove only reports verified installed surfaces in this phase.", target=str(target), host=host, mode=args.mode, mutates=False, failed_layer="host-remove", fail_closed_reason="removal requires later rollback/delete ownership contract", fallback_to=["loom host verify --host <host> --json"]))
+    subject = ["plugin"] if args.mode == "plugin" else ["skill", args.skill_id or ""]
+    if args.mode == "skill" and not args.skill_id:
+        return emit(output(command, "block", schema=HOST_SCHEMA, summary="Skill mode requires --skill-id.", failed_layer="host-input", fail_closed_reason="missing --skill-id", fallback_to=["loom skills list --json"]))
+    installer_cli = REPO_ROOT / "packages/loom-installer/dist/src/cli.js"
+    if not installer_cli.exists():
+        return emit(output(command, "block", schema=HOST_SCHEMA, summary="Installer shim is not built.", target=str(target), host=host, mode=args.mode, failed_layer="loom-installer", fail_closed_reason=f"missing built installer CLI: {installer_cli}", fallback_to=["npm test --prefix packages/loom-installer", "npm run build --prefix packages/loom-installer"]))
+    completed = run_capture(["node", str(installer_cli), installer_command, *subject, "--host", host, "--target", str(target), "--json", *(["--force"] if args.force or args.action == "upgrade" else [])])
+    delegated = parse_json_or_block(command, completed, failed_layer="loom-installer", fallback_to=["npm test --prefix packages/loom-installer", "loom host doctor --json"])
+    result = "pass" if completed.returncode == 0 else "block"
+    return emit(output(command, result, schema=HOST_SCHEMA, summary="Host command delegated to installer shim.", target=str(target), host=host, mode=args.mode, delegated_result=delegated, failed_layer=None if result == "pass" else "loom-installer", fail_closed_reason=None if result == "pass" else delegated.get("fail_closed_reason", "installer shim failed"), fallback_to=None if result == "pass" else ["loom host doctor --json"]))
+
+
+def handle_skills(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="loom skills")
+    parser.add_argument("action", choices=("list", "generate", "sync", "check", "doctor", "package", "release-check"))
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    command = f"skills {args.action}"
+    registry = read_optional_json(SKILLS_ROOT / "registry.json") or {}
+    entries = registry.get("entries") if isinstance(registry, dict) else []
+    if args.action == "list":
+        return emit(output(command, "pass", schema=SKILLS_SCHEMA, summary="Generated skills registry listed.", registry_version=registry.get("registry_version"), root_entry=registry.get("root_entry"), skills=entries, fallback_to=None))
+    if args.action in {"generate", "sync"} and not args.apply:
+        return emit(output(command, "block", schema=SKILLS_SCHEMA, summary=f"`loom {command}` mutates the generated skills surface and requires --apply.", mutates=True, failed_layer="skills-surface", fail_closed_reason="explicit --apply is required before rewriting skills/", fallback_to=["loom skills check --json"]))
+    if args.action in {"generate", "sync"}:
+        completed = run_capture([sys.executable, str(TOOLS_ROOT / "skills_surface.py"), "generate"])
+        result = "pass" if completed.returncode == 0 else "block"
+        return emit(output(command, result, schema=SKILLS_SCHEMA, summary="Generated skills surface refreshed." if result == "pass" else "Skills generation failed.", mutates=True, stdout=completed.stdout.strip(), failed_layer=None if result == "pass" else "skills-surface", fail_closed_reason=None if result == "pass" else completed.stderr.strip(), fallback_to=None if result == "pass" else ["python3 tools/skills_surface.py check"]))
+    if args.action in {"check", "doctor", "release-check"}:
+        checks = [[sys.executable, str(TOOLS_ROOT / "skills_surface.py"), "check"]]
+        if args.action == "release-check":
+            checks.extend([[sys.executable, str(TOOLS_ROOT / "host_adapter_check.py")], [sys.executable, str(TOOLS_ROOT / "version_surface_check.py")]])
+        results = []
+        for check in checks:
+            completed = run_capture(check)
+            results.append({"command": " ".join(check), "returncode": completed.returncode, "stdout": completed.stdout.strip(), "stderr": completed.stderr.strip()})
+        failures = [item for item in results if item["returncode"] != 0]
+        result = "pass" if not failures else "block"
+        return emit(output(command, result, schema=SKILLS_SCHEMA, summary="Skills surface checks passed." if result == "pass" else "Skills surface checks failed.", registry_version=registry.get("registry_version"), root_entry=registry.get("root_entry"), checks=results, failed_layer=None if result == "pass" else "skills-surface", fail_closed_reason=None if result == "pass" else "one or more skills checks failed", fallback_to=None if result == "pass" else ["loom skills generate --apply --json"]))
+    package_records = []
+    for entry in entries or []:
+        package_path = SKILLS_ROOT / entry["id"] / "loom-package.json"
+        package_records.append(read_optional_json(package_path) or {"package_id": entry["id"], "missing": str(package_path)})
+    return emit(output(command, "pass", schema=SKILLS_SCHEMA, summary="Skill package metadata collected without packing artifacts.", mutates=False, registry_version=registry.get("registry_version"), packages=package_records, fallback_to=["npm run check:release --prefix packages/loom-installer"]))
+
+
 def dispatch(command: str, forwarded_args: list[str]) -> int:
     tool_name, prefix = COMMAND_ROUTES[command]
     tool_path = TOOLS_ROOT / tool_name
@@ -911,6 +1202,29 @@ def main(argv: list[str]) -> int:
     if command == "repair" or command.startswith("repair "):
         repair_args = command.split()[1:] + forwarded if command.startswith("repair ") else forwarded
         return handle_repair(repair_args)
+    if command == "workspace" or command.startswith("workspace "):
+        workspace_args = command.split()[1:] + forwarded if command.startswith("workspace ") else forwarded
+        return handle_workspace(workspace_args)
+    if command == "issue" or command.startswith("issue "):
+        issue_args = command.split()[1:] + forwarded if command.startswith("issue ") else forwarded
+        return handle_issue(issue_args)
+    if command == "project" or command.startswith("project "):
+        project_args = command.split()[1:] + forwarded if command.startswith("project ") else forwarded
+        return handle_project(project_args)
+    if command == "pr" or command.startswith("pr "):
+        pr_args = command.split()[1:] + forwarded if command.startswith("pr ") else forwarded
+        return handle_pr(pr_args)
+    if command == "merge" or command.startswith("merge "):
+        merge_args = command.split()[1:] + forwarded if command.startswith("merge ") else forwarded
+        return handle_merge(merge_args)
+    if command == "reconcile":
+        return handle_reconcile(forwarded)
+    if command == "host" or command.startswith("host "):
+        host_args = command.split()[1:] + forwarded if command.startswith("host ") else forwarded
+        return handle_host(host_args)
+    if command == "skills" or command.startswith("skills "):
+        skills_args = command.split()[1:] + forwarded if command.startswith("skills ") else forwarded
+        return handle_skills(skills_args)
     if command in COMMAND_ROUTES:
         return dispatch(command, forwarded)
     if command in COMMAND_INDEX:

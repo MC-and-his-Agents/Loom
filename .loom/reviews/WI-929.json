@@ -1,0 +1,22 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-929",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-929 implementation is approved for the #893/#894/#895 CLI-first control, host, and skills command batch based on focused local validation.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "9b1065138d8a8c1a3eb9ac5779959e7814b4021e",
+  "reviewed_validation_summary": "Passed on branch work/893-895-cli-orchestration: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py; python3 tools/loom.py host doctor --host codex --target . --json; python3 tools/loom.py skills release-check --json; python3 tools/loom.py workspace check --target . --item WI-929 --json; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-929; python3 .loom/bin/loom_flow.py shadow-parity --target .; npm test --prefix packages/loom-installer; make check with loom_check OK over 40 source/distribution surfaces.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-929.md",
+    "recovery_entry": ".loom/progress/WI-929.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-929/spec.md",
+    "plan": ".loom/specs/WI-929/plan.md",
+    "implementation_contract": ".loom/specs/WI-929/implementation-contract.md"
+  }
+}

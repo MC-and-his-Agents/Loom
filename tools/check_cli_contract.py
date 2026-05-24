@@ -29,6 +29,32 @@ REQUIRED_COMMANDS = {
     "rollback",
     "verify",
     "host list",
+    "host doctor",
+    "host install",
+    "host verify",
+    "host upgrade",
+    "host remove",
+    "workspace create",
+    "workspace locate",
+    "workspace check",
+    "workspace retire",
+    "issue inspect",
+    "issue bind",
+    "issue reconcile",
+    "project status",
+    "project reconcile",
+    "pr inspect",
+    "pr metadata-preflight",
+    "pr gate",
+    "merge check",
+    "merge run",
+    "reconcile",
+    "skills list",
+    "skills generate",
+    "skills sync",
+    "skills check",
+    "skills doctor",
+    "skills package",
     "skills release-check",
 }
 
@@ -109,6 +135,21 @@ def main() -> int:
     for command in ("detect", "doctor", "repair plan", "repair apply"):
         if matrix[command]["status"] != "implemented":
             raise AssertionError(f"{command} must be implemented for #888")
+    for command in (
+        "workspace locate",
+        "issue inspect",
+        "project status",
+        "pr gate",
+        "merge check",
+        "reconcile",
+        "host list",
+        "host doctor",
+        "skills list",
+        "skills check",
+        "skills release-check",
+    ):
+        if matrix[command]["status"] != "implemented":
+            raise AssertionError(f"{command} must be implemented for #893/#894/#895")
 
     _, version_payload = run_json(["version", "--json"], expect=0)
     if version_payload["result"] != "pass" or not version_payload["versions"]["repo_version"]:
@@ -163,6 +204,24 @@ def main() -> int:
         _, exported = run_json(["installed-state", "export", "--target", str(valid_target), "--json"], expect=0)
         if exported["installation_graph"]["layers"] != ["runtime", "skills"]:
             raise AssertionError("installed-state export did not include graph")
+        _, hosts = run_json(["host", "list", "--target", str(valid_target), "--json"], expect=0)
+        if hosts["schema"] != "loom-host-orchestration/v1" or not any(host["id"] == "codex" for host in hosts["hosts"]):
+            raise AssertionError("host list did not emit supported host adapter inventory")
+        _, host_doctor = run_json(["host", "doctor", "--host", "codex", "--target", str(valid_target), "--json"], expect=0)
+        if host_doctor["host"] != "codex" or host_doctor["mode"] != "plugin":
+            raise AssertionError("host doctor did not freeze host/mode output")
+        status, host_install = run_json(["host", "install", "--host", "codex", "--target", str(valid_target), "--json"])
+        if status == 0 or host_install["result"] != "block" or host_install["failed_layer"] != "host-install":
+            raise AssertionError("host install did not fail closed without --apply")
+        _, skills_list = run_json(["skills", "list", "--json"], expect=0)
+        if skills_list["schema"] != "loom-skills-surface/v1" or skills_list["root_entry"] != "loom-init":
+            raise AssertionError("skills list did not expose generated skills registry")
+        status, skills_generate = run_json(["skills", "generate", "--json"])
+        if status == 0 or skills_generate["failed_layer"] != "skills-surface":
+            raise AssertionError("skills generate did not fail closed without --apply")
+        _, skills_package = run_json(["skills", "package", "--json"], expect=0)
+        if not skills_package["packages"]:
+            raise AssertionError("skills package did not emit package metadata")
 
         mixed_target = tmp / "mixed"
         mixed_target.mkdir()
