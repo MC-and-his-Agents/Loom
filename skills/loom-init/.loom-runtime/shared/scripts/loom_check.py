@@ -49,6 +49,18 @@ SOURCE_PROFILE = "source"
 CONSUMER_PROFILE = "consumer"
 AUTO_PROFILE = "auto"
 PROFILE_CHOICES = (AUTO_PROFILE, SOURCE_PROFILE, CONSUMER_PROFILE)
+SOURCE_SURFACE_FULL = "full"
+SOURCE_SURFACE_CONTRACT_ONLY = "contract-only"
+SOURCE_SURFACE_SOURCE_SELF_FIXTURE = "source-self-fixture"
+SOURCE_SURFACE_BOOTSTRAP_REGRESSION = "bootstrap-regression"
+SOURCE_SURFACE_DISTRIBUTION_REGRESSION = "distribution-regression"
+SOURCE_SURFACE_CHOICES = (
+    SOURCE_SURFACE_FULL,
+    SOURCE_SURFACE_CONTRACT_ONLY,
+    SOURCE_SURFACE_SOURCE_SELF_FIXTURE,
+    SOURCE_SURFACE_BOOTSTRAP_REGRESSION,
+    SOURCE_SURFACE_DISTRIBUTION_REGRESSION,
+)
 SOURCE_SURFACE_COUNT = 40
 SOURCE_SNAPSHOT_EXCLUDED_ROOTS = {
     ".loom/cache",
@@ -463,6 +475,7 @@ EXTERNAL_ORCHESTRATOR_FORBIDDEN_FIELDS = {
 class CheckOptions:
     root: Path
     requested_profile: str
+    source_surface: str
 
 
 @dataclass(frozen=True)
@@ -690,12 +703,18 @@ def parse_args(argv: list[str]) -> CheckOptions:
         default=AUTO_PROFILE,
         help="Check profile. `auto` detects Loom source repositories and bootstrapped consumer repositories.",
     )
+    parser.add_argument(
+        "--source-surface",
+        choices=SOURCE_SURFACE_CHOICES,
+        default=SOURCE_SURFACE_FULL,
+        help="Source profile surface to run. Defaults to full source self-check.",
+    )
     args = parser.parse_args(argv[1:])
     if args.repo_root:
         root = Path(args.repo_root).expanduser().resolve()
     else:
         root = default_repo_root()
-    return CheckOptions(root=root, requested_profile=args.profile)
+    return CheckOptions(root=root, requested_profile=args.profile, source_surface=args.source_surface)
 
 
 def default_repo_root() -> Path:
@@ -2870,13 +2889,16 @@ def require_safe_sync_plan_payload(
                 "close_issue",
                 "set_project_done",
                 "add_closeout_comment",
+                "add_blocked_by",
+                "remove_blocked_by",
                 "manual_reconciliation",
+                "sync_native_dependency",
                 "none",
             }
             if action_kind not in allowed_actions:
                 failures.append(Failure(category, f"{context} sync_plan action `{action_kind}` is outside the stable action set"))
             if key == "planned_actions":
-                if action_kind not in {"close_issue", "set_project_done", "add_closeout_comment"}:
+                if action_kind not in {"close_issue", "set_project_done", "add_closeout_comment", "add_blocked_by", "remove_blocked_by"}:
                     failures.append(Failure(category, f"{context} planned actions must be write actions only"))
                 for required in ("source_finding", "proof_locator", "write_target", "rollback_note"):
                     value = action.get(required)
@@ -2885,6 +2907,11 @@ def require_safe_sync_plan_payload(
                             failures.append(Failure(category, f"{context} planned action `{action_kind}` must include `{required}`"))
                     elif not isinstance(value, str) or not value:
                         failures.append(Failure(category, f"{context} planned action `{action_kind}` must include `{required}`"))
+                if action_kind in {"add_blocked_by", "remove_blocked_by"}:
+                    if not isinstance(action.get("proof_source"), str) or not action.get("proof_source"):
+                        failures.append(Failure(category, f"{context} native dependency action `{action_kind}` must include proof_source"))
+                    if not isinstance(action.get("verification_step"), str) or not action.get("verification_step"):
+                        failures.append(Failure(category, f"{context} native dependency action `{action_kind}` must include verification_step"))
             else:
                 if not isinstance(action.get("reason"), str) or not action.get("reason"):
                     failures.append(Failure(category, f"{context} {key}[{index}] must include a reason"))
@@ -19697,7 +19724,7 @@ def check_safe_sync_plan_fixture_contract(root: Path) -> list[Failure]:
         for action in plan.get("planned_actions", []):
             if not isinstance(action, dict):
                 continue
-            if action.get("action") not in {"close_issue", "set_project_done", "add_closeout_comment"}:
+            if action.get("action") not in {"close_issue", "set_project_done", "add_closeout_comment", "add_blocked_by", "remove_blocked_by"}:
                 failures.append(Failure(category, f"`{name or index}` planned action uses unsupported kind `{action.get('action')}`"))
     missing_cases = sorted(required_cases - seen_cases)
     if missing_cases:
@@ -20174,73 +20201,82 @@ Human-readable PR text.
     return failures
 
 
-def collect_source_failures(root: Path) -> list[Failure]:
+def collect_source_failures(root: Path, source_surface: str = SOURCE_SURFACE_FULL) -> list[Failure]:
     failures: list[Failure] = []
-    failures.extend(check_required_paths(root, "top-level-dirs", TOP_LEVEL_DIRS))
-    failures.extend(check_required_paths(root, "top-level-files", TOP_LEVEL_FILES))
-    failures.extend(check_required_paths(root, "area-readmes", AREA_READMES))
-    failures.extend(check_required_paths(root, "core-docs", CORE_DOCS))
-    failures.extend(check_command_timeout_budget())
-    failures.extend(check_loom_check_single_flight_lock())
-    failures.extend(check_loom_check_runtime_purity())
-    failures.extend(check_shared_foundation_contract(root))
-    failures.extend(
-        check_required_paths(root, "automation-frontload-templates", AUTOMATION_FRONTLOAD_TEMPLATES)
-    )
-    failures.extend(check_required_paths(root, "automation-frontload-skills", AUTOMATION_FRONTLOAD_SKILLS))
-    failures.extend(
-        check_required_paths(
-            root,
-            "automation-frontload-execution-support",
-            AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT,
+    steps: list[tuple[str, str, object]] = [
+        (SOURCE_SURFACE_CONTRACT_ONLY, "top-level-dirs", lambda: check_required_paths(root, "top-level-dirs", TOP_LEVEL_DIRS)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "top-level-files", lambda: check_required_paths(root, "top-level-files", TOP_LEVEL_FILES)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "area-readmes", lambda: check_required_paths(root, "area-readmes", AREA_READMES)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "core-docs", lambda: check_required_paths(root, "core-docs", CORE_DOCS)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "command-timeout-budget", check_command_timeout_budget),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "single-flight-lock", check_loom_check_single_flight_lock),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "runtime-purity", check_loom_check_runtime_purity),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "shared-foundation", lambda: check_shared_foundation_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "automation-frontload-templates", lambda: check_required_paths(root, "automation-frontload-templates", AUTOMATION_FRONTLOAD_TEMPLATES)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "automation-frontload-skills", lambda: check_required_paths(root, "automation-frontload-skills", AUTOMATION_FRONTLOAD_SKILLS)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "automation-frontload-execution-support", lambda: check_required_paths(root, "automation-frontload-execution-support", AUTOMATION_FRONTLOAD_EXECUTION_SUPPORT)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "root-routes", lambda: check_root_route_contracts(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "skill-manifests", lambda: check_skill_manifests(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "skill-routing", lambda: check_skill_routing(root)),
+        (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "demo-assets", lambda: check_demo_assets(root)),
+        (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "demo-fact-chain", lambda: check_demo_fact_chain(root)),
+        (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "demo-repo-local-cli", lambda: check_demo_repo_local_cli(root)),
+        (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "root-self-adoption", lambda: check_root_self_adoption_carrier(root)),
+        (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "deep-existing-bootstrap", lambda: check_deep_existing_repo_bootstrap(root)),
+        (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "daily-execution-cli", lambda: check_daily_execution_cli(root)),
+        (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "py-compile-cache-hygiene", lambda: check_py_compile_cache_hygiene(root)),
+        (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "repo-companion", lambda: check_repo_companion_interface_contracts(root)),
+        (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "repo-interop", lambda: check_repo_interop_contracts(root)),
+        (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "external-orchestrator-interop", lambda: check_external_orchestrator_interop_fixture_contract(root)),
+        (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "external-orchestrator-conformance", lambda: check_external_orchestrator_conformance_contract(root)),
+        (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "external-runtime-devendor", lambda: check_external_runtime_devendor_contract(root)),
+        (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "status-closeout-binding", lambda: check_status_closeout_binding_contract(root)),
+        (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "behavior-first-locators", lambda: check_behavior_first_locator_contracts(root)),
+        (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "adversarial-adoption", lambda: check_adversarial_adoption_fixture(root)),
+        (SOURCE_SURFACE_DISTRIBUTION_REGRESSION, "node-installer", lambda: check_node_installer(root)),
+        (SOURCE_SURFACE_DISTRIBUTION_REGRESSION, "generated-artifacts", lambda: check_generated_artifacts_untracked(root)),
+        (SOURCE_SURFACE_DISTRIBUTION_REGRESSION, "github-cli-budget", lambda: check_github_cli_budget(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "operating-layer", lambda: check_operating_layer_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "orchestration-conformance", lambda: check_orchestration_conformance_profiles(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "live-smoke-foundation", lambda: check_live_smoke_foundation_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "host-adapter-live-drift", lambda: check_host_adapter_live_drift_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "dynamic-tool-live-availability", lambda: check_dynamic_tool_live_availability_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "hook-envelope", lambda: check_hook_envelope_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "hooks-extension", lambda: check_hooks_extension_profile_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "live-validation-only-guardrail", lambda: check_live_validation_only_guardrail_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "structured-event-evidence", lambda: check_structured_event_evidence_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "deferred-roadmap-tree", lambda: check_deferred_roadmap_tree_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "execution-budget-fixture", lambda: check_execution_budget_fixture_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "execution-failure-fixture", lambda: check_execution_failure_fixture_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "retry-evidence-fixture", lambda: check_retry_evidence_fixture_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "execution-attempt", lambda: check_execution_attempt_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "build-execution", lambda: check_build_execution_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "story-intake", lambda: check_story_intake_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "core-hardcoding-guard", lambda: check_core_hardcoding_guard(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "governance-lint-negative", lambda: check_governance_lint_negative_fixture_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "complex-existing-authority-migration", lambda: check_complex_existing_authority_migration_fixture_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "safe-sync-plan", lambda: check_safe_sync_plan_fixture_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "pr-metadata-machine", lambda: check_pr_metadata_machine_preflight_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "github-profile-maturity", lambda: check_github_profile_maturity_fixture_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "loom-check-runtime-purity-contract", lambda: check_loom_check_runtime_purity_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "loom-check-profile-contract", lambda: check_loom_check_profile_contract(root)),
+        (SOURCE_SURFACE_CONTRACT_ONLY, "markdown-links", lambda: check_markdown_links(root)),
+    ]
+    for surface, name, callback in steps:
+        if source_surface not in {SOURCE_SURFACE_FULL, surface}:
+            continue
+        started = time.monotonic()
+        print(f"loom_check: start source surface={surface} step={name}", file=sys.stderr)
+        before = len(failures)
+        try:
+            failures.extend(callback())
+        except Exception as exc:
+            failures.append(Failure("source-fixture-setup", f"{name} raised {type(exc).__name__}: {exc}"))
+        elapsed = time.monotonic() - started
+        print(
+            f"loom_check: end source surface={surface} step={name} elapsed={elapsed:.2f}s failures={len(failures) - before}",
+            file=sys.stderr,
         )
-    )
-    failures.extend(check_root_route_contracts(root))
-    failures.extend(check_skill_manifests(root))
-    failures.extend(check_skill_routing(root))
-    failures.extend(check_demo_assets(root))
-    failures.extend(check_demo_fact_chain(root))
-    failures.extend(check_demo_repo_local_cli(root))
-    failures.extend(check_root_self_adoption_carrier(root))
-    failures.extend(check_deep_existing_repo_bootstrap(root))
-    failures.extend(check_daily_execution_cli(root))
-    failures.extend(check_py_compile_cache_hygiene(root))
-    failures.extend(check_repo_companion_interface_contracts(root))
-    failures.extend(check_repo_interop_contracts(root))
-    failures.extend(check_external_orchestrator_interop_fixture_contract(root))
-    failures.extend(check_external_orchestrator_conformance_contract(root))
-    failures.extend(check_external_runtime_devendor_contract(root))
-    failures.extend(check_status_closeout_binding_contract(root))
-    failures.extend(check_behavior_first_locator_contracts(root))
-    failures.extend(check_adversarial_adoption_fixture(root))
-    failures.extend(check_node_installer(root))
-    failures.extend(check_generated_artifacts_untracked(root))
-    failures.extend(check_github_cli_budget(root))
-    failures.extend(check_operating_layer_contract(root))
-    failures.extend(check_orchestration_conformance_profiles(root))
-    failures.extend(check_live_smoke_foundation_contract(root))
-    failures.extend(check_host_adapter_live_drift_contract(root))
-    failures.extend(check_dynamic_tool_live_availability_contract(root))
-    failures.extend(check_hook_envelope_contract(root))
-    failures.extend(check_hooks_extension_profile_contract(root))
-    failures.extend(check_live_validation_only_guardrail_contract(root))
-    failures.extend(check_structured_event_evidence_contract(root))
-    failures.extend(check_deferred_roadmap_tree_contract(root))
-    failures.extend(check_execution_budget_fixture_contract(root))
-    failures.extend(check_execution_failure_fixture_contract(root))
-    failures.extend(check_retry_evidence_fixture_contract(root))
-    failures.extend(check_execution_attempt_contract(root))
-    failures.extend(check_build_execution_contract(root))
-    failures.extend(check_story_intake_contract(root))
-    failures.extend(check_core_hardcoding_guard(root))
-    failures.extend(check_governance_lint_negative_fixture_contract(root))
-    failures.extend(check_complex_existing_authority_migration_fixture_contract(root))
-    failures.extend(check_safe_sync_plan_fixture_contract(root))
-    failures.extend(check_pr_metadata_machine_preflight_contract(root))
-    failures.extend(check_github_profile_maturity_fixture_contract(root))
-    failures.extend(check_loom_check_runtime_purity_contract(root))
-    failures.extend(check_loom_check_profile_contract(root))
-    failures.extend(check_markdown_links(root))
     return failures
 
 
@@ -20306,6 +20342,9 @@ def check_loom_check_profile_contract(root: Path) -> list[Failure]:
     source_text = (root / "src/skills/shared/scripts/loom_check.py").read_text(encoding="utf-8")
     if "source/distribution" not in source_text or "--profile" not in source_text:
         failures.append(Failure(category, "`loom_check.py` must document source/distribution scope and expose `--profile`"))
+    for anchor in ("--source-surface", "contract-only", "bootstrap-regression", "distribution-regression", "loom_check: start source surface="):
+        if anchor not in source_text:
+            failures.append(Failure(category, f"`loom_check.py` must expose source surface contract anchor `{anchor}`"))
     init_text = (root / "src/skills/shared/scripts/loom_init.py").read_text(encoding="utf-8")
     if "Gate CLI: `.loom/bin/loom_check.py`" in init_text:
         failures.append(Failure(category, "generated `.loom/README.md` must not present `.loom/bin/loom_check.py` as a generic Gate CLI"))
@@ -20347,19 +20386,23 @@ def check_loom_check_profile_contract(root: Path) -> list[Failure]:
     return failures
 
 
-def profile_surface_summary(profile: str) -> str:
+def profile_surface_summary(profile: str, source_surface: str = SOURCE_SURFACE_FULL) -> str:
     if profile == SOURCE_PROFILE:
+        if source_surface != SOURCE_SURFACE_FULL:
+            return f"{source_surface} source/distribution surface"
         return f"{SOURCE_SURFACE_COUNT} source/distribution surfaces"
     if profile == CONSUMER_PROFILE:
         return "consumer runtime/adoption surfaces"
     return "surfaces"
 
 
-def print_report(root: Path, failures: list[Failure], profile: str) -> None:
-    surface_summary = profile_surface_summary(profile)
+def print_report(root: Path, failures: list[Failure], profile: str, source_surface: str = SOURCE_SURFACE_FULL) -> None:
+    surface_summary = profile_surface_summary(profile, source_surface)
     if not failures:
         print(f"loom_check: OK ({root})")
         print(f"profile: {profile}")
+        if profile == SOURCE_PROFILE:
+            print(f"source_surface: {source_surface}")
         print(f"checked {surface_summary}")
         return
 
@@ -20369,6 +20412,8 @@ def print_report(root: Path, failures: list[Failure], profile: str) -> None:
 
     print(f"loom_check: FAILED ({root})")
     print(f"profile: {profile}")
+    if profile == SOURCE_PROFILE:
+        print(f"source_surface: {source_surface}")
     for category in sorted(grouped):
         print(f"- {category}")
         for detail in grouped[category]:
@@ -20401,8 +20446,8 @@ def main(argv: list[str]) -> int:
         print(str(exc), file=sys.stderr)
         return 3
     try:
-        failures = collect_source_failures(root) if profile == SOURCE_PROFILE else collect_consumer_failures(root)
-        print_report(root, failures, profile)
+        failures = collect_source_failures(root, options.source_surface) if profile == SOURCE_PROFILE else collect_consumer_failures(root)
+        print_report(root, failures, profile, options.source_surface)
         return 1 if failures else 0
     finally:
         release_single_flight_lock(lock)
