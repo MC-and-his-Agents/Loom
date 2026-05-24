@@ -1,0 +1,25 @@
+{
+  "schema_version": "loom-review-profiles/v1",
+  "profiles": {
+    "default": {
+      "model": "gpt-5.5",
+      "reasoning_effort": "medium",
+      "selection_reason": "repo-owned default implementation review profile for normal-risk changes"
+    },
+    "high-risk": {
+      "model": "gpt-5.5",
+      "reasoning_effort": "high",
+      "selection_reason": "repo-owned high-risk review profile for shared contracts, security, permissions, sandbox, or host-boundary changes"
+    },
+    "spec-review": {
+      "model": "gpt-5.5",
+      "reasoning_effort": "high",
+      "selection_reason": "repo-owned formal spec review profile"
+    },
+    "repeated-blocker": {
+      "model": "gpt-5.5",
+      "reasoning_effort": "high",
+      "selection_reason": "repo-owned repeated blocker review profile"
+    }
+  }
+}

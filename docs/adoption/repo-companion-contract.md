@@ -484,12 +484,14 @@
 - `applicability_locator`
 - `authority_locator`
 - `enforcement`
+- `machine_carrier` 可选
 
 其中：
 
 - `applicability_locator` 指向“何时需要这组 metadata”的 companion 或 repo-local 权威说明
 - `authority_locator` 指向 metadata 真正承载的 repo-native carrier、模板或权威入口
 - `enforcement` 只允许 `blocking | advisory`
+- `machine_carrier` 只声明机器读取合同，不声明 repo-specific 字段语义
 
 当前已被样本证明有价值、但仍保持 repo-specific example 的字段族包括：
 
@@ -503,7 +505,75 @@
 - 它们不得被回写成 Loom core 默认字段名
 - Loom 不为它们提供跨仓统一 taxonomy 承诺
 
-### 4.9.1 明确禁止上移的字段模式
+### 4.9.1 `machine_carrier`
+
+当 repo-specific PR metadata 会被 review、PR gate、merge-ready 或 closeout 前置动作机器消费时，`metadata_contract.fields[*].machine_carrier` 必须提供稳定 carrier 合同，避免强门禁依赖自由 Markdown 展示层。
+
+当前稳定支持的最小 carrier 是 PR body HTML comment JSON：
+
+```json
+{
+  "type": "pr_body_html_comment_json",
+  "schema_version": "loom-repo-pr-metadata/v1",
+  "marker": "loom:repo-pr-metadata",
+  "required_fields": ["contract_surface"],
+  "preflight": {
+    "required_before": ["review", "merge_ready"],
+    "failure_mode": "blocking",
+    "command_locator": ".loom/companion/pr-metadata-preflight.md"
+  },
+  "diagnostics": {
+    "block_locator": true,
+    "parse_error": true,
+    "missing_fields": true,
+    "expected_format": true,
+    "suggested_fix": true
+  },
+  "migration_mode": "advisory_legacy"
+}
+```
+
+`machine_carrier` 固定字段：
+
+- `type` 目前只允许 `pr_body_html_comment_json`
+- `schema_version` 固定为 `loom-repo-pr-metadata/v1`
+- `marker` 是 HTML comment marker，例如 `loom:repo-pr-metadata`
+- `required_fields` 是 repo-specific 字段名列表，只由目标仓库声明
+- `preflight.required_before` 只允许 `review` / `merge_ready`
+- `preflight.failure_mode` 只允许 `blocking | advisory`
+- `preflight.command_locator` 必须指向仓内可读路径
+- `diagnostics.*` 必须显式要求 `block_locator`、`parse_error`、`missing_fields`、`expected_format`、`suggested_fix`
+- `migration_mode` 只允许 `advisory_legacy | dual_read | required`，缺省等同 `advisory_legacy`
+
+PR body 中的 machine block 格式固定为：
+
+```markdown
+<!-- loom:repo-pr-metadata
+{
+  "schema_version": "loom-repo-pr-metadata/v1",
+  "metadata_contract_id": "integration_check",
+  "surface": "merge_ready",
+  "fields": {
+    "contract_surface": "checked"
+  },
+  "source": {
+    "rendered_hash": "sha256-or-repo-renderer-hash"
+  },
+  "parser_version": "repo-parser/v1"
+}
+-->
+```
+
+稳定约束：
+
+- PR body 的 Summary / Validation / Risks / Related Work 仍是人类展示层，不是 repo-specific metadata 的机器真相
+- parser 必须优先读取 HTML comment JSON machine block，不得从自由 Markdown 列表、标题或自然语言中推断 required fields
+- block 存在但 JSON 不可解析、schema 不匹配、surface 不匹配或 required field 缺失时必须 fail closed，并返回 block locator、parse error、missing fields、expected format 与 suggested fix
+- block 缺失时按 `migration_mode` 处理：`required` 阻断；`advisory_legacy` 与 `dual_read` 不让旧 PR 批量失效，但必须在 preflight 输出中暴露 legacy/advisory 状态
+- `required_fields` 中不得声明 `guardian_verdict`、`ruleset_result`、`host_action_result`、`review_decision`、`validation_status`、`closeout_result` 等 retained host action 或 Loom-authored truth 字段
+- `command_locator` 是 preflight 命令或说明的 repo-owned locator；它不能越界、不能指向宿主动作结果，也不能承载当前 run 的 parser verdict
+
+### 4.9.2 明确禁止上移的字段模式
 
 `metadata_contract` 不得承接以下字段模式：
 
@@ -526,7 +596,7 @@
 
 它们不能因为“看起来像 metadata”就被回塞到 `repo-interface.json`。
 
-### 4.9.2 与 `context_schema` 的边界
+### 4.9.3 与 `context_schema` 的边界
 
 `metadata_contract` 与 `context_schema` 的分工固定如下：
 
@@ -541,7 +611,7 @@
 - 不得在 `context_schema` 中伪装声明 repo-native metadata block 的 authority locator
 - 不得把同一字段同时当作“必传上下文字段”和“repo-local metadata result 字段”写成单一 Loom core 默认概念
 
-### 4.9.3 与 `interop.json` 的边界
+### 4.9.4 与 `interop.json` 的边界
 
 `metadata_contract` 不得声明以下 locator：
 

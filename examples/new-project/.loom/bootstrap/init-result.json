@@ -426,13 +426,13 @@
       "path": ".loom/bin/governance_surface.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/governance_surface.py",
-      "sha256": "cadad5cedd7ae0a9ec732a8545275d74dd9ae694657809fb1d2fd5dd4c5625d0"
+      "sha256": "13a0061bbca9745e275253afef8ffbd9751f9a0a593cb51a54e9ece03e88dcb9"
     },
     {
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "9793fe3e753442356b02f0b708efbaf491f14f6eea1d9400f9a740af8fb1094c"
+      "sha256": "b2cb6b8d6766cf3e4dbf965b094b95502ceee6c5e8d886747b2e84997278f212"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -456,7 +456,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "7ac80af90a2c6da9aa055a3631bf3c6e704c21ae6e5b95b6d1e5a3bb86657750"
+      "sha256": "c5b8cd18b0e4e3758e7ad08b0bff3a63335faf6272dd35125c08f02243879133"
     },
     {
       "path": ".loom/bin/loom_story_carriers.py",
@@ -995,8 +995,8 @@
     },
     "workspace_profile": {
       "schema_version": "loom-workspace-profile/v1",
-      "selected": "unknown",
-      "selection_reason": "workspace_entry is not readable",
+      "selected": "single-workspace",
+      "selection_reason": "workspace_entry points at the repository root",
       "profiles": {
         "single-workspace": {
           "summary": "Use the repository root as the Loom execution workspace.",
@@ -1014,19 +1014,17 @@
           "recommended_action": "declare the repo-specific workspace locator and keep host lifecycle ownership external"
         }
       },
-      "workspace_entry": "unknown",
-      "workspace_path": "unknown",
-      "workspace_exists": false,
+      "workspace_entry": ".",
+      "workspace_path": ".",
+      "workspace_exists": true,
       "host_worktree": {
         "ownership": "host",
         "status": "present",
         "locator": "${SOURCE_REPO_ROOT}"
       },
-      "result": "block",
-      "missing_inputs": [
-        "missing_workspace_entry"
-      ],
-      "recommended_action": "restore the Work Item workspace_entry before running workspace profile checks"
+      "result": "pass",
+      "missing_inputs": [],
+      "recommended_action": "keep workspace_entry as `.` unless isolation becomes necessary"
     },
     "gate_starter": {
       "schema_version": "loom-gate-starter/v1",
@@ -1107,8 +1105,8 @@
       },
       "workspace_profile": {
         "schema_version": "loom-workspace-profile/v1",
-        "selected": "unknown",
-        "selection_reason": "workspace_entry is not readable",
+        "selected": "single-workspace",
+        "selection_reason": "workspace_entry points at the repository root",
         "profiles": {
           "single-workspace": {
             "summary": "Use the repository root as the Loom execution workspace.",
@@ -1126,19 +1124,17 @@
             "recommended_action": "declare the repo-specific workspace locator and keep host lifecycle ownership external"
           }
         },
-        "workspace_entry": "unknown",
-        "workspace_path": "unknown",
-        "workspace_exists": false,
+        "workspace_entry": ".",
+        "workspace_path": ".",
+        "workspace_exists": true,
         "host_worktree": {
           "ownership": "host",
           "status": "present",
           "locator": "${SOURCE_REPO_ROOT}"
         },
-        "result": "block",
-        "missing_inputs": [
-          "missing_workspace_entry"
-        ],
-        "recommended_action": "restore the Work Item workspace_entry before running workspace profile checks"
+        "result": "pass",
+        "missing_inputs": [],
+        "recommended_action": "keep workspace_entry as `.` unless isolation becomes necessary"
       },
       "gate_starter": {
         "schema_version": "loom-gate-starter/v1",
@@ -1223,8 +1219,8 @@
             "authority": "loom fact chain"
           },
           "branch": {
-            "status": "missing",
-            "locator": "unknown",
+            "status": "present",
+            "locator": "${CURRENT_BRANCH}",
             "authority": "git"
           },
           "worktree": {
@@ -1249,11 +1245,9 @@
           }
         },
         "default_branch": "main",
-        "missing_inputs": [
-          "branch"
-        ],
-        "result": "block",
-        "summary": "host binding surface is readable, but required binding facts are missing or host-managed."
+        "missing_inputs": [],
+        "result": "pass",
+        "summary": "host binding surface can relate the active Work Item to branch, worktree, PR, merge commit, and closeout."
       },
       "taxonomy": {
         "spec_stale": "Approved spec no longer covers the implementation surface.",
@@ -1390,8 +1384,8 @@
             },
             {
               "id": "host_binding.branch",
-              "status": "missing",
-              "locator": "unknown",
+              "status": "present",
+              "locator": "${CURRENT_BRANCH}",
               "authority": "git"
             },
             {
@@ -1771,10 +1765,10 @@
     "result": "pass",
     "missing_inputs": [],
     "workspace": {
-      "entry": "unknown",
-      "path": "unknown",
-      "profile": "unknown",
-      "exists": false
+      "entry": ".",
+      "path": ".",
+      "profile": "single-workspace",
+      "exists": true
     },
     "operations": {
       "create": {

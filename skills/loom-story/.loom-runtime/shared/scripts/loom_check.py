@@ -30,7 +30,12 @@ import loom_flow as loom_flow_module
 import loom_status as loom_status_module
 import runtime_state as runtime_state_module
 from governance_surface import build_governance_surface
-from loom_flow import allowed_post_review_carrier_paths, repo_specific_requirements_payload, review_head_binding
+from loom_flow import (
+    allowed_post_review_carrier_paths,
+    repo_specific_requirements_payload,
+    review_head_binding,
+    review_head_binding_for_head,
+)
 from runtime_paths import repo_local_root
 
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 30.0
@@ -7154,16 +7159,20 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 "checkpoint-build",
                 "checkpoint-merge",
                 "governance-lint",
+                "pr-metadata-preflight",
             ]:
                 failures.append(
                     Failure(
                         "daily-execution-cli",
-                        "`flow merge-ready` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-build, checkpoint-merge, and governance-lint in order",
+                        "`flow merge-ready` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-build, checkpoint-merge, governance-lint, and pr-metadata-preflight in order",
                     )
                 )
             governance_step = next((step for step in steps if isinstance(step, dict) and step.get("name") == "governance-lint"), None)
             if not isinstance(governance_step, dict) or "governance_lint" not in governance_step:
                 failures.append(Failure("daily-execution-cli", "`flow merge-ready` governance-lint step must embed governance_lint evidence"))
+            metadata_step = next((step for step in steps if isinstance(step, dict) and step.get("name") == "pr-metadata-preflight"), None)
+            if not isinstance(metadata_step, dict) or "pr_metadata_preflight" not in metadata_step:
+                failures.append(Failure("daily-execution-cli", "`flow merge-ready` pr-metadata-preflight step must embed parser preflight evidence"))
             require_governance_lint_status_payload(
                 failures,
                 category="daily-execution-cli",
@@ -7554,6 +7563,13 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 engine = payload.get("engine") if isinstance(payload.get("engine"), dict) else {}
                 if engine.get("engine") != "codex" or engine.get("adapter") != "loom/default-codex-exec":
                     failures.append(Failure("daily-execution-cli", "`review run` positive chain must keep the default codex exec adapter"))
+                profile = engine.get("profile") if isinstance(engine.get("profile"), dict) else {}
+                if profile.get("model") != "gpt-5.5" or profile.get("reasoning_effort") != "medium":
+                    failures.append(Failure("daily-execution-cli", "`review run` positive chain must resolve the gpt-5.5 default profile"))
+                source = profile.get("profile_source") if isinstance(profile.get("profile_source"), dict) else {}
+                expected_source = "repo-owned-policy" if (review_target / ".loom/review-profiles.json").exists() else "loom-built-in"
+                if source.get("kind") != expected_source:
+                    failures.append(Failure("daily-execution-cli", "`review run` positive chain must record the resolved profile source"))
                 review_record_input = payload.get("review_record_input") if isinstance(payload.get("review_record_input"), dict) else {}
                 if review_record_input.get("engine_adapter") != "loom/default-codex-exec" or review_record_input.get("reviewer") != "loom/default-codex-exec":
                     failures.append(Failure("daily-execution-cli", "`review run` positive chain must keep default review_record_input adapter"))
@@ -8047,6 +8063,11 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 metadata = payload.get("engine_metadata") if isinstance(payload.get("engine_metadata"), dict) else {}
                 if metadata.get("thread_id") != "thread-stage2-live-proof":
                     failures.append(Failure("daily-execution-cli", "`review run` Codex App authoritative must expose live thread proof metadata"))
+                model_proof = metadata.get("model_proof") if isinstance(metadata.get("model_proof"), dict) else {}
+                if model_proof.get("requested_model") != "gpt-5.5" or model_proof.get("requested_reasoning") != "medium":
+                    failures.append(Failure("daily-execution-cli", "`review run` Codex App authoritative must record requested gpt-5.5 model proof"))
+                if model_proof.get("result") != "unverified" or model_proof.get("proof_source") != "raw-file-unverified":
+                    failures.append(Failure("daily-execution-cli", "`review run` Codex App raw-file proof must be structured as unverified"))
                 merge_payload, merge_error = load_command_json(
                     root,
                     [
@@ -8064,6 +8085,58 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     failures.append(Failure("daily-execution-cli", f"`merge-ready before authored app review record` failed: {merge_error}"))
                 elif merge_payload.get("result") == "pass":
                     failures.append(Failure("daily-execution-cli", "`merge-ready` must not consume raw Codex App authoritative evidence before review record is authored"))
+
+        app_unverified_high_risk_target = Path(tmp) / "review-run-codex-app-unverified-high-risk"
+        prepare_review_target(app_unverified_high_risk_target, "review run Codex App high-risk unverified model proof")
+        app_unverified_raw = app_unverified_high_risk_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
+        app_unverified_raw.parent.mkdir(parents=True, exist_ok=True)
+        app_unverified_raw.write_text(
+            json.dumps(
+                {
+                    "decision": "allow",
+                    "summary": "Raw-file review result is structurally valid but lacks actual model proof.",
+                    "findings": [],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(app_unverified_high_risk_target),
+                "--item",
+                "INIT-0001",
+                "--engine-adapter",
+                "loom/codex-app-review",
+                "--engine-profile",
+                "high-risk",
+                "--engine-override-reason",
+                "fixture requires high-risk profile to fail closed without actual model proof",
+                "--codex-app-review-app-server",
+                "stdio://stage2-live-proof",
+                "--codex-app-review-thread-id",
+                "thread-stage2-live-proof",
+                "--codex-app-review-cwd",
+                str(app_unverified_high_risk_target),
+                "--codex-app-review-raw-file",
+                ".loom/runtime/tmp/codex-app-review-normalized.json",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` Codex App high-risk unverified proof failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`review run` Codex App high-risk profile must fail closed without actual model proof"))
+        elif "actual model/reasoning proof is unverified" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
+            failures.append(Failure("daily-execution-cli", "`review run` Codex App high-risk unverified proof must expose the proof failure reason"))
 
         app_missing_target = Path(tmp) / "review-run-codex-app-missing-proof"
         prepare_review_target(app_missing_target, "review run Codex App missing proof")
@@ -8260,6 +8333,222 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             failures.append(Failure("daily-execution-cli", "`review run` profile override must block without an override reason"))
         elif "override requires" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
             failures.append(Failure("daily-execution-cli", "`review run` profile override missing reason must expose the missing reason"))
+
+        repo_policy_target = Path(tmp) / "repo-owned-profile"
+        prepare_review_target(repo_policy_target, "review run repo-owned profile")
+        repo_policy_path = repo_policy_target / ".loom/review-profiles.json"
+        repo_policy_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": "loom-review-profiles/v1",
+                    "profiles": {
+                        "default": {
+                            "model": "gpt-5.5-repo-fixture",
+                            "reasoning_effort": "high",
+                            "selection_reason": "repo-owned fixture policy raises normal review reasoning",
+                        }
+                    },
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(repo_policy_target),
+                "--item",
+                "INIT-0001",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` repo-owned profile failed: {error}"))
+        else:
+            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
+            profile = engine.get("profile") if isinstance(engine.get("profile"), dict) else {}
+            source = profile.get("profile_source") if isinstance(profile.get("profile_source"), dict) else {}
+            if profile.get("model") != "gpt-5.5-repo-fixture" or profile.get("reasoning_effort") != "high":
+                failures.append(Failure("daily-execution-cli", "`review run` repo-owned profile must override the built-in profile"))
+            if source.get("kind") != "repo-owned-policy" or source.get("locator") != ".loom/review-profiles.json":
+                failures.append(Failure("daily-execution-cli", "`review run` repo-owned profile must record repo policy as the profile source"))
+
+        invalid_repo_policy_target = Path(tmp) / "repo-owned-profile-invalid"
+        prepare_review_target(invalid_repo_policy_target, "review run invalid repo-owned profile")
+        invalid_repo_policy_path = invalid_repo_policy_target / ".loom/review-profiles.json"
+        invalid_repo_policy_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": "loom-review-profiles/v1",
+                    "profiles": {
+                        "default": {
+                            "model": "",
+                            "reasoning_effort": "medium",
+                            "selection_reason": "invalid fixture",
+                        }
+                    },
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(invalid_repo_policy_target),
+                "--item",
+                "INIT-0001",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` invalid repo-owned profile failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`review run` invalid repo-owned profile must fail closed"))
+        elif "model must be non-empty" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
+            failures.append(Failure("daily-execution-cli", "`review run` invalid repo-owned profile must expose stable validation failure"))
+
+        local_default_target = Path(tmp) / "local-config-default-ignored"
+        prepare_review_target(local_default_target, "review run local config default ignored")
+        (local_default_target / ".loom/review-profiles.json").unlink(missing_ok=True)
+        local_codex_home = Path(tmp) / "codex-home"
+        local_codex_home.mkdir(parents=True, exist_ok=True)
+        (local_codex_home / "config.toml").write_text(
+            'model = "gpt-local-fixture"\nmodel_reasoning_effort = "xhigh"\n',
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(local_default_target),
+                "--item",
+                "INIT-0001",
+            ],
+            env=prepend_path_env(fake_bin, {"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` local config default ignored failed: {error}"))
+        else:
+            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
+            profile = engine.get("profile") if isinstance(engine.get("profile"), dict) else {}
+            if profile.get("model") != "gpt-5.5" or profile.get("reasoning_effort") != "medium":
+                failures.append(Failure("daily-execution-cli", "`review run` must not read local Codex config without explicit opt-in"))
+
+        local_opt_in_target = Path(tmp) / "local-config-opt-in"
+        prepare_review_target(local_opt_in_target, "review run local config opt-in")
+        (local_opt_in_target / ".loom/review-profiles.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "loom-review-profiles/v1",
+                    "allow_local_codex_config_in_ci": True,
+                    "profiles": {},
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(local_opt_in_target),
+                "--item",
+                "INIT-0001",
+                "--engine-use-local-codex-defaults",
+                "--engine-override-reason",
+                "fixture explicitly opts into local Codex defaults",
+            ],
+            env=prepend_path_env(fake_bin, {"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` local config opt-in failed: {error}"))
+        else:
+            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
+            profile = engine.get("profile") if isinstance(engine.get("profile"), dict) else {}
+            source = profile.get("profile_source") if isinstance(profile.get("profile_source"), dict) else {}
+            if profile.get("model") != "gpt-local-fixture" or profile.get("reasoning_effort") != "xhigh":
+                failures.append(Failure("daily-execution-cli", "`review run` local config opt-in must consume local model and reasoning"))
+            if source.get("kind") != "local-codex-config-opt-in" or not isinstance(profile.get("override"), dict):
+                failures.append(Failure("daily-execution-cli", "`review run` local config opt-in must record override evidence and source"))
+
+        local_headless_target = Path(tmp) / "local-config-headless-rejected"
+        prepare_review_target(local_headless_target, "review run local config headless rejected")
+        (local_headless_target / ".loom/review-profiles.json").unlink(missing_ok=True)
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(local_headless_target),
+                "--item",
+                "INIT-0001",
+                "--engine-use-local-codex-defaults",
+                "--engine-override-reason",
+                "fixture proves headless rejects local Codex defaults by default",
+            ],
+            env=prepend_path_env(fake_bin, {"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` local config headless rejected failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`review run` local config opt-in must be rejected in headless fallback by default"))
+        elif "local Codex config opt-in is disabled" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
+            failures.append(Failure("daily-execution-cli", "`review run` local config headless rejection must expose stable failure reason"))
+
+        local_ci_target = Path(tmp) / "local-config-ci-rejected"
+        prepare_review_target(local_ci_target, "review run local config CI rejected")
+        (local_ci_target / ".loom/review-profiles.json").unlink(missing_ok=True)
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(local_ci_target),
+                "--item",
+                "INIT-0001",
+                "--engine-use-local-codex-defaults",
+                "--engine-override-reason",
+                "fixture proves CI rejects local Codex defaults by default",
+            ],
+            env=prepend_path_env(fake_bin, {"CI": "true", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
+        )
+        if error:
+            failures.append(Failure("daily-execution-cli", f"`review run` local config CI rejected failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure("daily-execution-cli", "`review run` local config opt-in must be rejected in CI by default"))
+        elif "local Codex config opt-in is disabled" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
+            failures.append(Failure("daily-execution-cli", "`review run` local config CI rejection must expose stable failure reason"))
 
         engine_missing_target = Path(tmp) / "engine-missing"
         prepare_review_target(engine_missing_target, "review run engine unavailable")
@@ -15028,6 +15317,7 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
         review_payload = load_json_file(review_shadow_target / review_path)
         if isinstance(review_payload, dict):
             review_payload["summary"] = "Carrier-only review artifact refresh."
+            review_payload["reviewed_head"] = reviewed_head
             write_json(review_shadow_target / review_path, review_payload)
             write_json(
                 review_shadow_target / ".loom/shadow/review-loom.json",
@@ -15052,8 +15342,12 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                 timeout_seconds=30,
             )
             run_command(root, ["git", "commit", "-m", "refresh review carrier evidence"], cwd=review_shadow_target, timeout_seconds=30)
+            target_head = run_command(root, ["git", "rev-parse", "HEAD"], cwd=review_shadow_target, timeout_seconds=30).stdout.strip()
             carrier_context = {
                 "target_root": review_shadow_target,
+                "item_id": "INIT-0001",
+                "review_entry": review_path,
+                "latest_validation_summary": str(review_payload.get("reviewed_validation_summary", "")),
                 "report": {
                     "fact_chain": {
                         "entry_points": {
@@ -15070,6 +15364,64 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             )
             if binding_errors or binding_payload.get("status") != "carrier-only":
                 failures.append(Failure("adversarial-adoption", "review shadow evidence tied to a review artifact must be carrier-only after review refresh"))
+            closeout_binding_payload, closeout_binding_errors = review_head_binding_for_head(
+                review_shadow_target,
+                reviewed_head=reviewed_head,
+                target_head=target_head,
+                allowed_paths=allowed_post_review_carrier_paths(carrier_context, review_path),
+            )
+            if closeout_binding_errors or closeout_binding_payload.get("status") != "carrier-only":
+                failures.append(Failure("adversarial-adoption", "closeout review backlink must accept carrier-only review refresh against the PR head"))
+            attempts_dir = review_shadow_target / ".loom/runtime/attempts/INIT-0001"
+            attempts_dir.mkdir(parents=True, exist_ok=True)
+            merge_ready_attempt = {
+                "schema_version": loom_flow_module.EXECUTION_ATTEMPT_SCHEMA,
+                "attempt_id": "INIT-0001-merge-ready-closeout-carrier-only",
+                "item_id": "INIT-0001",
+                "command": "flow",
+                "operation": "merge-ready",
+                "result": "pass",
+                "created_at": "2026-05-23T00:00:00Z",
+                "head_sha": target_head,
+                "branch": "work/closeout-carrier-only",
+                "workspace": {"entry": ".", "path": "."},
+                "failure": {
+                    "category": "none",
+                    "execution_classification": "none",
+                    "execution_summary": "latest execution attempt completed without an execution failure classification.",
+                    "missing_inputs": [],
+                    "fallback_to": None,
+                },
+                "steps": [],
+                "evidence": {
+                    "status": "present",
+                    "locator": ".loom/runtime/attempts/INIT-0001/INIT-0001-merge-ready-closeout-carrier-only.json",
+                    "latest_locator": ".loom/runtime/attempts/INIT-0001/latest.json",
+                },
+            }
+            write_json(attempts_dir / "INIT-0001-merge-ready-closeout-carrier-only.json", merge_ready_attempt)
+            write_json(attempts_dir / "latest.json", merge_ready_attempt)
+            closeout_subchecks = loom_flow_module.closeout_backlink_subchecks(
+                target_root=review_shadow_target,
+                context=carrier_context,
+                profile="closeout-contract",
+                owner="",
+                repo_name="",
+                pr_number=None,
+                pr_payload={"state": "MERGED", "headRefOid": target_head, "baseRefName": "main"},
+                merge_commit_sha=target_head,
+                merge_commit_in_target=True,
+                pr_payload_file="fixture:pr",
+                status_checks_file=None,
+                branch_protection_file=None,
+                ruleset_file=None,
+            )
+            review_subcheck = next((entry for entry in closeout_subchecks if entry.get("id") == "review_record"), {})
+            if review_subcheck.get("result") != "pass":
+                failures.append(Failure("adversarial-adoption", "closeout review backlink subcheck must pass for carrier-only review refresh"))
+            subcheck_binding = review_subcheck.get("head_binding") if isinstance(review_subcheck, dict) else None
+            if not isinstance(subcheck_binding, dict) or subcheck_binding.get("status") != "carrier-only":
+                failures.append(Failure("adversarial-adoption", "closeout review backlink subcheck must expose carrier-only head binding evidence"))
         else:
             failures.append(Failure("adversarial-adoption", "review shadow carrier fixture could not load review artifact"))
 
@@ -19302,6 +19654,217 @@ def collect_consumer_failures(root: Path) -> list[Failure]:
     return failures
 
 
+def check_pr_metadata_machine_preflight_contract(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    category = "pr-metadata-machine-preflight"
+
+    def write_json(path: Path, payload: object) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    def install_companion(
+        target: Path,
+        *,
+        migration_mode: str = "required",
+        command_locator: str = ".loom/companion/pr-metadata-preflight.md",
+        field_id: str = "integration_check",
+        required_fields: list[str] | None = None,
+    ) -> None:
+        companion = target / ".loom" / "companion"
+        companion.mkdir(parents=True, exist_ok=True)
+        (companion / "README.md").write_text("# Repo Companion\n", encoding="utf-8")
+        (companion / "metadata-contract.md").write_text("# Metadata Contract\n", encoding="utf-8")
+        if not command_locator.startswith("../"):
+            command_path = target / command_locator
+            command_path.parent.mkdir(parents=True, exist_ok=True)
+            command_path.write_text("# PR Metadata Preflight\n", encoding="utf-8")
+        write_json(
+            companion / "manifest.json",
+            {
+                "schema_version": "loom-repo-companion-manifest/v1",
+                "companion_entry": ".loom/companion/README.md",
+                "repo_interface": ".loom/companion/repo-interface.json",
+            },
+        )
+        write_json(
+            companion / "repo-interface.json",
+            {
+                "schema_version": "loom-repo-interface/v2",
+                "companion_entry": ".loom/companion/README.md",
+                "repo_specific_requirements": {"review": [], "merge_ready": [], "closeout": []},
+                "specialized_gates": [],
+                "review_instruction_locators": {
+                    "spec_review": {"locator": "loom_default", "mode": "loom_default"},
+                    "implementation_review": {"locator": "loom_default", "mode": "loom_default"},
+                },
+                "metadata_contract": {
+                    "fields": [
+                        {
+                            "id": field_id,
+                            "summary": "Repo-specific PR metadata machine block.",
+                            "applicability_locator": ".loom/companion/metadata-contract.md",
+                            "authority_locator": ".loom/companion/metadata-contract.md",
+                            "enforcement": "blocking",
+                            "machine_carrier": {
+                                "type": "pr_body_html_comment_json",
+                                "schema_version": "loom-repo-pr-metadata/v1",
+                                "marker": "loom:repo-pr-metadata",
+                                "required_fields": required_fields or ["contract_surface"],
+                                "preflight": {
+                                    "required_before": ["merge_ready"],
+                                    "failure_mode": "blocking",
+                                    "command_locator": command_locator,
+                                },
+                                "diagnostics": {
+                                    "block_locator": True,
+                                    "parse_error": True,
+                                    "missing_fields": True,
+                                    "expected_format": True,
+                                    "suggested_fix": True,
+                                },
+                                "migration_mode": migration_mode,
+                            },
+                        }
+                    ]
+                },
+                "context_schema": {"fields": []},
+                "dynamic_tool_locators": [],
+                "policy_locators": [],
+                "hook_locators": [],
+            },
+        )
+
+    def pr_payload(body: str) -> dict[str, object]:
+        return {
+            "number": 873,
+            "state": "OPEN",
+            "isDraft": False,
+            "headRefName": "work/873-pr-metadata-machine-preflight",
+            "headRefOid": "abc123",
+            "baseRefName": "main",
+            "body": body,
+        }
+
+    def run_preflight(target: Path, payload: dict[str, object]) -> dict[str, object] | None:
+        write_json(target / ".loom/tmp/pr.json", payload)
+        result, error = load_command_json(
+            root,
+            [
+                "python3",
+                "src/skills/shared/scripts/loom_flow.py",
+                "pr-metadata",
+                "preflight",
+                "--target",
+                str(target),
+                "--surface",
+                "merge_ready",
+                "--pr-payload-file",
+                ".loom/tmp/pr.json",
+            ],
+        )
+        if error:
+            failures.append(Failure(category, f"preflight command returned invalid output: {error}"))
+        return result
+
+    valid_body = """## Summary
+
+Human-readable PR text.
+
+<!-- loom:repo-pr-metadata
+{
+  "schema_version": "loom-repo-pr-metadata/v1",
+  "metadata_contract_id": "integration_check",
+  "surface": "merge_ready",
+  "fields": {
+    "contract_surface": "checked"
+  },
+  "source": {
+    "rendered_hash": "sha256:test"
+  },
+  "parser_version": "repo-parser/v1"
+}
+-->
+"""
+
+    with tempfile.TemporaryDirectory(prefix="loom-pr-metadata-preflight-") as tmp:
+        base = Path(tmp)
+
+        valid_target = base / "valid"
+        valid_target.mkdir()
+        install_companion(valid_target)
+        valid_payload = run_preflight(valid_target, pr_payload(valid_body))
+        if not isinstance(valid_payload, dict) or valid_payload.get("result") != "pass":
+            failures.append(Failure(category, "valid HTML comment JSON metadata block must pass preflight"))
+
+        malformed_target = base / "malformed"
+        malformed_target.mkdir()
+        install_companion(malformed_target)
+        malformed_body = valid_body.replace('"contract_surface": "checked"', '"contract_surface": ')
+        malformed_payload = run_preflight(malformed_target, pr_payload(malformed_body))
+        diagnostics = malformed_payload.get("diagnostics") if isinstance(malformed_payload, dict) else []
+        if not isinstance(malformed_payload, dict) or malformed_payload.get("result") != "block":
+            failures.append(Failure(category, "malformed metadata JSON must block"))
+        elif "parse_error" not in json.dumps(diagnostics, ensure_ascii=False):
+            failures.append(Failure(category, "malformed metadata JSON must expose parser diagnostics"))
+
+        missing_field_target = base / "missing-field"
+        missing_field_target.mkdir()
+        install_companion(missing_field_target)
+        missing_field_body = valid_body.replace('"contract_surface": "checked"', '"other_field": "checked"')
+        missing_field_payload = run_preflight(missing_field_target, pr_payload(missing_field_body))
+        missing_diagnostics = missing_field_payload.get("diagnostics") if isinstance(missing_field_payload, dict) else []
+        if not isinstance(missing_field_payload, dict) or missing_field_payload.get("result") != "block":
+            failures.append(Failure(category, "missing required repo-specific metadata field must block"))
+        elif "fields.contract_surface" not in json.dumps(missing_diagnostics, ensure_ascii=False):
+            failures.append(Failure(category, "missing field diagnostics must name the exact repo-specific field"))
+
+        advisory_legacy_target = base / "advisory-legacy"
+        advisory_legacy_target.mkdir()
+        install_companion(advisory_legacy_target, migration_mode="advisory_legacy")
+        advisory_payload = run_preflight(advisory_legacy_target, pr_payload("## Summary\n\nNo machine block yet.\n"))
+        if not isinstance(advisory_payload, dict) or advisory_payload.get("result") != "pass":
+            failures.append(Failure(category, "advisory legacy migration mode must not break old PR bodies"))
+
+        required_absent_target = base / "required-absent"
+        required_absent_target.mkdir()
+        install_companion(required_absent_target, migration_mode="required")
+        required_absent_payload = run_preflight(required_absent_target, pr_payload("## Summary\n\nNo machine block.\n"))
+        if not isinstance(required_absent_payload, dict) or required_absent_payload.get("result") != "block":
+            failures.append(Failure(category, "required migration mode must block absent machine blocks"))
+
+        forbidden_target = base / "forbidden-truth"
+        forbidden_target.mkdir()
+        install_companion(forbidden_target, required_fields=["guardian_verdict"])
+        forbidden_surface = loom_flow_module.build_governance_surface(forbidden_target)
+        repo_interface = forbidden_surface.get("repo_interface") if isinstance(forbidden_surface, dict) else None
+        missing_inputs = json.dumps(repo_interface.get("missing_inputs", []) if isinstance(repo_interface, dict) else [], ensure_ascii=False)
+        if not isinstance(repo_interface, dict) or repo_interface.get("availability") != "incomplete":
+            failures.append(Failure(category, "metadata machine carrier must reject forbidden host/action truth fields"))
+        elif "guardian_verdict" not in missing_inputs:
+            failures.append(Failure(category, "forbidden metadata field diagnostics must name `guardian_verdict`"))
+
+        escape_target = base / "command-locator-escape"
+        escape_target.mkdir()
+        install_companion(escape_target, command_locator="../outside-preflight.md")
+        escape_surface = loom_flow_module.build_governance_surface(escape_target)
+        escape_interface = escape_surface.get("repo_interface") if isinstance(escape_surface, dict) else None
+        escape_missing = json.dumps(escape_interface.get("missing_inputs", []) if isinstance(escape_interface, dict) else [], ensure_ascii=False)
+        if not isinstance(escape_interface, dict) or escape_interface.get("availability") != "incomplete":
+            failures.append(Failure(category, "metadata preflight command_locator path escape must fail closed"))
+        elif "outside-preflight.md" not in escape_missing:
+            failures.append(Failure(category, "unsafe command_locator diagnostics must name the escaped path"))
+
+    source_text = (root / "src/skills/shared/scripts/loom_flow.py").read_text(encoding="utf-8")
+    for anchor in (
+        "pr_metadata_preflight_payload(",
+        "\"name\": \"pr-metadata-preflight\"",
+        "PR_METADATA_PREFLIGHT_SCHEMA",
+    ):
+        if anchor not in source_text:
+            failures.append(Failure(category, f"`loom_flow.py` must retain `{anchor}`"))
+    return failures
+
+
 def collect_source_failures(root: Path) -> list[Failure]:
     failures: list[Failure] = []
     failures.extend(check_required_paths(root, "top-level-dirs", TOP_LEVEL_DIRS))
@@ -19364,6 +19927,7 @@ def collect_source_failures(root: Path) -> list[Failure]:
     failures.extend(check_governance_lint_negative_fixture_contract(root))
     failures.extend(check_complex_existing_authority_migration_fixture_contract(root))
     failures.extend(check_safe_sync_plan_fixture_contract(root))
+    failures.extend(check_pr_metadata_machine_preflight_contract(root))
     failures.extend(check_github_profile_maturity_fixture_contract(root))
     failures.extend(check_loom_check_runtime_purity_contract(root))
     failures.extend(check_loom_check_profile_contract(root))

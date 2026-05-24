@@ -23,6 +23,11 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback path
+    tomllib = None  # type: ignore[assignment]
+
 sys.dont_write_bytecode = True
 
 from fact_chain_support import (
@@ -116,6 +121,9 @@ CLOSEOUT_HEAVY_PROFILES = {
     "distribution-regression",
     "strong-profile-full-gate",
 }
+PR_METADATA_PREFLIGHT_SCHEMA = "loom-pr-metadata-preflight/v1"
+PR_METADATA_MACHINE_SCHEMA = "loom-repo-pr-metadata/v1"
+PR_METADATA_PARSER_VERSION = "loom-pr-metadata-parser/v1"
 
 PROJECT_DRIFT_KINDS = {
     "project_missing_item",
@@ -182,6 +190,8 @@ REVIEW_AUTHORITY_MIGRATION_SCHEMA = "loom-review-authority-migration/v1"
 SPEC_REVIEW_AUTHORITY_MIGRATION_SCHEMA = "loom-spec-review-authority-migration/v1"
 RETAINED_HOST_SIGNAL_SCHEMA = "loom-retained-host-signal/v1"
 CONTROLLED_MERGE_CONSUMPTION_SCHEMA = "loom-controlled-merge-consumption/v1"
+REVIEW_ENGINE_POLICY_SCHEMA = "loom-review-profiles/v1"
+REVIEW_ENGINE_POLICY_RELATIVE = ".loom/review-profiles.json"
 REVIEW_ENGINE_PROFILE_IDS = {"default", "high-risk", "spec-review", "repeated-blocker"}
 REVIEW_ENGINE_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
 REVIEW_PROMPT_DIFF_MAX_CHARS = 60_000
@@ -295,7 +305,7 @@ HOOK_ADAPTER_RESULTS = {"supported", "not_applicable", "advisory", "unsafe"}
 REVIEW_ENGINE_PROFILES: dict[str, dict[str, Any]] = {
     "default": {
         "profile_id": "default",
-        "model": "gpt-5.2",
+        "model": "gpt-5.5",
         "reasoning_effort": "medium",
         "timeout_seconds": DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS,
         "context_policy": "minimal-review-baseline",
@@ -303,7 +313,7 @@ REVIEW_ENGINE_PROFILES: dict[str, dict[str, Any]] = {
     },
     "high-risk": {
         "profile_id": "high-risk",
-        "model": "gpt-5.2",
+        "model": "gpt-5.5",
         "reasoning_effort": "high",
         "timeout_seconds": DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS,
         "context_policy": "expanded-risk-baseline",
@@ -311,7 +321,7 @@ REVIEW_ENGINE_PROFILES: dict[str, dict[str, Any]] = {
     },
     "spec-review": {
         "profile_id": "spec-review",
-        "model": "gpt-5.2",
+        "model": "gpt-5.5",
         "reasoning_effort": "high",
         "timeout_seconds": DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS,
         "context_policy": "formal-spec-suite-baseline",
@@ -319,7 +329,7 @@ REVIEW_ENGINE_PROFILES: dict[str, dict[str, Any]] = {
     },
     "repeated-blocker": {
         "profile_id": "repeated-blocker",
-        "model": "gpt-5.2",
+        "model": "gpt-5.5",
         "reasoning_effort": "high",
         "timeout_seconds": DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS,
         "context_policy": "recent-findings-and-dispositions",
@@ -556,6 +566,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     pr_gate.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
     pr_gate.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
 
+    pr_metadata = subparsers.add_parser("pr-metadata", help="Validate repo-specific PR metadata machine carriers")
+    pr_metadata.add_argument("operation", choices=("preflight",))
+    pr_metadata.add_argument("--target", required=True, help="Target repository root")
+    pr_metadata.add_argument("--surface", choices=("review", "merge_ready"), required=True, help="Gate surface that consumes the metadata preflight")
+    pr_metadata.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
+    pr_metadata.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    pr_metadata.add_argument("--pr", type=int, help="GitHub implementation PR number")
+    pr_metadata.add_argument("--head-sha", help="Expected PR head SHA")
+    pr_metadata.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
+    pr_metadata.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+
     controlled_merge = subparsers.add_parser("controlled-merge", help="Check or execute Loom-controlled PR merge")
     controlled_merge.add_argument("operation", choices=("check", "merge"))
     controlled_merge.add_argument("--target", required=True, help="Target repository root")
@@ -637,6 +658,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     review.add_argument("--engine-model", help="Optional review engine model override for review run")
     review.add_argument("--engine-reasoning", choices=tuple(sorted(REVIEW_ENGINE_REASONING_EFFORTS)), help="Optional review engine reasoning effort override for review run")
     review.add_argument("--engine-override-reason", help="Required reason when overriding review engine profile, model, or reasoning")
+    review.add_argument(
+        "--engine-use-local-codex-defaults",
+        action="store_true",
+        help="Explicitly opt in to local ~/.codex/config.toml model/reasoning defaults when repo policy allows it.",
+    )
     review.add_argument(
         "--shadow-engine-adapter",
         choices=tuple(sorted(SHADOW_REVIEW_ADAPTERS)),
@@ -849,6 +875,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     flow.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
     flow.add_argument("--issue", type=int, help="GitHub Work Item issue number for host status reads")
     flow.add_argument("--pr", type=int, help="GitHub implementation PR number for host status reads")
+    flow.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
     flow.add_argument("--project", type=int, help="GitHub Project number for Project drift reads")
     flow.add_argument("--branch", help="GitHub branch name for host binding reads")
     flow.add_argument("--project-drift-mode", choices=("advisory", "blocking"), default="advisory")
@@ -4517,6 +4544,7 @@ def closeout_backlink_subchecks(
 
     review_record, review_path, review_errors = load_review_record(target_root, item_id, context["review_entry"])
     review_missing = list(review_errors)
+    review_head_binding_payload: dict[str, Any] | None = None
     if review_record is None and not review_missing:
         review_missing.append(f"missing review artifact: {review_path}")
     if review_record is not None:
@@ -4526,8 +4554,14 @@ def closeout_backlink_subchecks(
             review_missing.append("review kind is not an implementation review")
         if review_record.get("reviewed_validation_summary") != context["latest_validation_summary"]:
             review_missing.append("reviewed_validation_summary does not match current validation summary")
-        if pr_head and review_record.get("reviewed_head") != pr_head:
-            review_missing.append("reviewed_head does not match PR head")
+        if pr_head:
+            review_head_binding_payload, review_head_errors = review_head_binding_for_head(
+                target_root,
+                reviewed_head=review_record.get("reviewed_head"),
+                target_head=pr_head,
+                allowed_paths=allowed_post_review_carrier_paths(context, review_path),
+            )
+            review_missing.extend(review_head_errors)
     subchecks.append(
         closeout_subcheck(
             check_id="review_record",
@@ -4542,6 +4576,7 @@ def closeout_backlink_subchecks(
             item_id=item_id,
             reviewed_head=review_record.get("reviewed_head") if isinstance(review_record, dict) else None,
             head_sha=pr_head,
+            head_binding=review_head_binding_payload,
             validation_summary_digest=validation_digest,
         )
     )
@@ -6077,9 +6112,24 @@ def review_head_binding(
     allowed_paths: set[str],
 ) -> tuple[dict[str, Any], list[str]]:
     current_head = git_head_sha(target_root)
+    return review_head_binding_for_head(
+        target_root,
+        reviewed_head=reviewed_head,
+        target_head=current_head,
+        allowed_paths=allowed_paths,
+    )
+
+
+def review_head_binding_for_head(
+    target_root: Path,
+    *,
+    reviewed_head: str | None,
+    target_head: str | None,
+    allowed_paths: set[str],
+) -> tuple[dict[str, Any], list[str]]:
     payload: dict[str, Any] = {
         "reviewed_head": reviewed_head,
-        "current_head": current_head,
+        "current_head": target_head,
         "status": "unknown",
         "stale": None,
         "changed_paths": [],
@@ -6087,14 +6137,14 @@ def review_head_binding(
     }
     if not isinstance(reviewed_head, str) or not reviewed_head.strip():
         return payload, ["review artifact is missing reviewed_head"]
-    if not isinstance(current_head, str) or not current_head.strip():
-        return payload, ["current HEAD is unavailable"]
-    if reviewed_head == current_head:
+    if not isinstance(target_head, str) or not target_head.strip():
+        return payload, ["target HEAD is unavailable"]
+    if reviewed_head == target_head:
         payload["status"] = "fresh"
         payload["stale"] = False
         return payload, []
 
-    changed_paths, head_errors = git_changed_paths(target_root, reviewed_head, current_head)
+    changed_paths, head_errors = git_changed_paths(target_root, reviewed_head, target_head)
     if head_errors:
         return payload, [f"review HEAD comparison failed: {detail}" for detail in head_errors]
 
@@ -6115,7 +6165,7 @@ def review_head_binding(
     payload["stale"] = True
     if not changed_paths:
         return payload, ["review artifact was recorded against a different HEAD"]
-    return payload, ["review artifact is stale for the current HEAD"]
+    return payload, ["review artifact is stale for the target HEAD"]
 
 
 def spec_review_head_binding(
@@ -8241,6 +8291,136 @@ def review_engine_profile_selection(context: dict[str, Any], review_kind: str) -
     return "default", "default implementation review profile for normal-risk changes"
 
 
+def review_profile_summary(profile: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "profile_id": profile.get("profile_id"),
+        "model": profile.get("model"),
+        "reasoning_effort": profile.get("reasoning_effort"),
+        "timeout_seconds": profile.get("timeout_seconds"),
+        "context_policy": profile.get("context_policy"),
+    }
+
+
+def validate_review_profile_fields(profile: dict[str, Any], *, context: str) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(profile.get("model"), str) or not profile["model"].strip():
+        errors.append(f"{context} model must be non-empty")
+    if profile.get("reasoning_effort") not in REVIEW_ENGINE_REASONING_EFFORTS:
+        errors.append(f"{context} reasoning_effort is outside the stable vocabulary")
+    timeout_seconds = profile.get("timeout_seconds")
+    if timeout_seconds is not None:
+        if not isinstance(timeout_seconds, int) or isinstance(timeout_seconds, bool) or timeout_seconds <= 0:
+            errors.append(f"{context} timeout_seconds must be a positive integer or null")
+    if not isinstance(profile.get("context_policy"), str) or not profile["context_policy"].strip():
+        errors.append(f"{context} context_policy must be non-empty")
+    if not isinstance(profile.get("selection_reason"), str) or not profile["selection_reason"].strip():
+        errors.append(f"{context} selection_reason must be non-empty")
+    return errors
+
+
+def load_repo_review_profile_policy(target_root: Path) -> tuple[dict[str, Any] | None, list[str]]:
+    policy_path = target_root / REVIEW_ENGINE_POLICY_RELATIVE
+    if not policy_path.exists():
+        return None, []
+    try:
+        payload = load_json_file(policy_path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return None, [f"{REVIEW_ENGINE_POLICY_RELATIVE}: invalid JSON: {exc}"]
+    if not isinstance(payload, dict):
+        return None, [f"{REVIEW_ENGINE_POLICY_RELATIVE}: policy must be a JSON object"]
+    errors: list[str] = []
+    if payload.get("schema_version") != REVIEW_ENGINE_POLICY_SCHEMA:
+        errors.append(f"{REVIEW_ENGINE_POLICY_RELATIVE}: schema_version must be `{REVIEW_ENGINE_POLICY_SCHEMA}`")
+    profiles = payload.get("profiles")
+    if not isinstance(profiles, dict):
+        errors.append(f"{REVIEW_ENGINE_POLICY_RELATIVE}: profiles must be an object")
+    else:
+        for profile_id, profile in profiles.items():
+            if profile_id not in REVIEW_ENGINE_PROFILE_IDS:
+                errors.append(f"{REVIEW_ENGINE_POLICY_RELATIVE}: unknown profile `{profile_id}`")
+                continue
+            if not isinstance(profile, dict):
+                errors.append(f"{REVIEW_ENGINE_POLICY_RELATIVE}: profile `{profile_id}` must be an object")
+                continue
+            candidate = {
+                **REVIEW_ENGINE_PROFILES[profile_id],
+                **profile,
+                "profile_id": profile_id,
+            }
+            errors.extend(validate_review_profile_fields(candidate, context=f"{REVIEW_ENGINE_POLICY_RELATIVE} profile `{profile_id}`"))
+    return (None if errors else payload), errors
+
+
+def repo_policy_allows_local_codex_config_in_ci(policy: dict[str, Any] | None) -> bool:
+    if not isinstance(policy, dict):
+        return False
+    if policy.get("allow_local_codex_config_in_ci") is True:
+        return True
+    local_config = policy.get("local_codex_config")
+    return isinstance(local_config, dict) and local_config.get("allow_ci") is True
+
+
+def apply_repo_review_profile_policy(
+    base_profile: dict[str, Any],
+    policy: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    profiles = policy.get("profiles") if isinstance(policy.get("profiles"), dict) else {}
+    profile_id = str(base_profile["profile_id"])
+    policy_profile = profiles.get(profile_id)
+    if not isinstance(policy_profile, dict):
+        return base_profile, None
+    selected = {
+        **base_profile,
+        **policy_profile,
+        "profile_id": profile_id,
+    }
+    source = {
+        "kind": "repo-owned-policy",
+        "locator": REVIEW_ENGINE_POLICY_RELATIVE,
+        "profile_id": profile_id,
+    }
+    return selected, source
+
+
+def local_codex_config_path() -> Path:
+    codex_home = non_empty_str(os.environ.get("CODEX_HOME"))
+    if codex_home:
+        return Path(codex_home).expanduser() / "config.toml"
+    return Path.home() / ".codex" / "config.toml"
+
+
+def load_local_codex_config_profile(base_profile: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any] | None, list[str]]:
+    path = local_codex_config_path()
+    if not path.exists():
+        return None, None, [f"local Codex config opt-in points to a missing file: {path}"]
+    if tomllib is None:
+        return None, None, ["local Codex config opt-in requires Python tomllib support"]
+    try:
+        payload = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError) as exc:  # type: ignore[union-attr]
+        return None, None, [f"local Codex config opt-in could not read {path}: {exc}"]
+    model = non_empty_str(payload.get("model")) if isinstance(payload, dict) else None
+    reasoning = (
+        non_empty_str(payload.get("model_reasoning_effort"))
+        or non_empty_str(payload.get("reasoning_effort"))
+        if isinstance(payload, dict)
+        else None
+    )
+    selected = dict(base_profile)
+    if model:
+        selected["model"] = model
+    if reasoning:
+        selected["reasoning_effort"] = reasoning
+    if not model and not reasoning:
+        return None, None, [f"local Codex config opt-in found no model or reasoning defaults in {path}"]
+    source = {
+        "kind": "local-codex-config-opt-in",
+        "locator": str(path),
+        "fields": sorted(field for field, value in (("model", model), ("reasoning_effort", reasoning)) if value),
+    }
+    return selected, source, []
+
+
 def resolve_review_engine_profile(
     context: dict[str, Any],
     review_kind: str,
@@ -8250,28 +8430,53 @@ def resolve_review_engine_profile(
     requested_model: str | None = None,
     requested_reasoning: str | None = None,
     override_reason: str | None = None,
+    use_local_codex_defaults: bool = False,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     if adapter not in AUTHORITATIVE_REVIEW_ADAPTERS:
         return None, [f"unsupported authoritative review adapter: {adapter}"]
     selected_profile, selection_reason = review_engine_profile_selection(context, review_kind)
     if requested_profile:
+        if requested_profile not in REVIEW_ENGINE_PROFILES:
+            return None, [f"unknown review engine profile: {requested_profile}"]
         selected_profile = requested_profile
         selection_reason = f"profile override requested `{requested_profile}`"
     base_profile = dict(REVIEW_ENGINE_PROFILES[selected_profile])
     base_profile["selection_reason"] = selection_reason
     previous_profile = dict(base_profile)
-    override_requested = any(value for value in (requested_profile, requested_model, requested_reasoning))
+    profile_source = {"kind": "loom-built-in", "locator": "src/skills/shared/scripts/loom_flow.py"}
+    policy, policy_errors = load_repo_review_profile_policy(context["target_root"])
+    if policy_errors:
+        return None, policy_errors
+    explicit_cli_override = any(value for value in (requested_profile, requested_model, requested_reasoning))
+    override_requested = explicit_cli_override or use_local_codex_defaults
     reason = override_reason.strip() if isinstance(override_reason, str) else ""
     if override_requested and not reason:
         return None, ["review engine profile override requires --engine-override-reason"]
+    if not explicit_cli_override and isinstance(policy, dict):
+        base_profile, policy_source = apply_repo_review_profile_policy(base_profile, policy)
+        if policy_source is not None:
+            profile_source = policy_source
+    if not explicit_cli_override and profile_source["kind"] == "loom-built-in" and use_local_codex_defaults:
+        ci_env_present = truthy_env("CI") or truthy_env("CODEX_CI") or truthy_env("GITHUB_ACTIONS")
+        headless_or_gate = adapter == DEFAULT_REVIEW_ADAPTER or ci_env_present
+        if headless_or_gate and not repo_policy_allows_local_codex_config_in_ci(policy):
+            return None, ["local Codex config opt-in is disabled for CI/headless/merge gate without repo policy allow_local_codex_config_in_ci"]
+        local_profile, local_source, local_errors = load_local_codex_config_profile(base_profile)
+        if local_errors:
+            return None, local_errors
+        assert local_profile is not None
+        assert local_source is not None
+        base_profile = local_profile
+        profile_source = local_source
     if requested_model:
         base_profile["model"] = requested_model.strip()
     if requested_reasoning:
         base_profile["reasoning_effort"] = requested_reasoning
-    if not isinstance(base_profile.get("model"), str) or not base_profile["model"].strip():
-        return None, ["review engine profile model must be non-empty"]
-    if base_profile.get("reasoning_effort") not in REVIEW_ENGINE_REASONING_EFFORTS:
-        return None, ["review engine profile reasoning effort is outside the stable vocabulary"]
+    if explicit_cli_override:
+        profile_source = {"kind": "explicit-cli-override", "locator": "review run CLI flags"}
+    field_errors = validate_review_profile_fields(base_profile, context="review engine profile")
+    if field_errors:
+        return None, field_errors
     resolved = {
         "schema_version": REVIEW_ENGINE_PROFILE_SCHEMA,
         "profile_id": base_profile["profile_id"],
@@ -8283,18 +8488,14 @@ def resolve_review_engine_profile(
         "context_policy": base_profile["context_policy"],
         "selection_reason": base_profile["selection_reason"],
         "override_reason": reason or None,
+        "profile_source": profile_source,
     }
-    if override_requested:
+    if explicit_cli_override or profile_source["kind"] == "local-codex-config-opt-in":
         resolved["override"] = {
-            "previous_profile": previous_profile,
-            "selected_profile": {
-                "profile_id": resolved["profile_id"],
-                "model": resolved["model"],
-                "reasoning_effort": resolved["reasoning_effort"],
-                "timeout_seconds": resolved["timeout_seconds"],
-                "context_policy": resolved["context_policy"],
-            },
+            "previous_profile": review_profile_summary(previous_profile),
+            "selected_profile": review_profile_summary(resolved),
             "reason": reason,
+            "source": profile_source,
         }
     return resolved, []
 
@@ -9002,6 +9203,98 @@ def app_server_proxy_command(app_server: str) -> list[str] | None:
     return ["codex", "app-server", "proxy", "--sock", str(socket_path)]
 
 
+def find_first_key_value(payload: Any, keys: set[str]) -> str | None:
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if key in keys:
+                text = non_empty_str(value)
+                if text:
+                    return text
+        for value in payload.values():
+            found = find_first_key_value(value, keys)
+            if found:
+                return found
+    elif isinstance(payload, list):
+        for value in payload:
+            found = find_first_key_value(value, keys)
+            if found:
+                return found
+    return None
+
+
+def extract_model_reasoning_proof(*payloads: Any) -> dict[str, str]:
+    model_keys = {"actual_model", "model", "modelSlug", "model_slug"}
+    reasoning_keys = {
+        "actual_reasoning",
+        "reasoning_effort",
+        "model_reasoning_effort",
+        "reasoningEffort",
+        "reasoning",
+    }
+    proof: dict[str, str] = {}
+    for payload in payloads:
+        if "actual_model" not in proof:
+            model = find_first_key_value(payload, model_keys)
+            if model:
+                proof["actual_model"] = model
+        if "actual_reasoning" not in proof:
+            reasoning = find_first_key_value(payload, reasoning_keys)
+            if reasoning:
+                proof["actual_reasoning"] = reasoning
+        if "actual_model" in proof and "actual_reasoning" in proof:
+            break
+    return proof
+
+
+def review_model_proof(
+    engine_profile: dict[str, Any],
+    *,
+    live_metadata: dict[str, Any],
+    source_path: Path | None,
+) -> dict[str, Any]:
+    requested_model = str(engine_profile["model"])
+    requested_reasoning = str(engine_profile["reasoning_effort"])
+    actual_model = non_empty_str(live_metadata.get("actual_model")) if live_metadata else None
+    actual_reasoning = non_empty_str(live_metadata.get("actual_reasoning")) if live_metadata else None
+    proof_source = non_empty_str(live_metadata.get("model_proof_source")) if live_metadata else None
+    if proof_source is None:
+        proof_source = "codex-app-live-response" if source_path is None else "raw-file-unverified"
+    if actual_model == requested_model and actual_reasoning == requested_reasoning:
+        result = "verified"
+        enforcement_mode = "verified"
+    elif actual_model or actual_reasoning:
+        result = "mismatch"
+        enforcement_mode = "fail-closed"
+    else:
+        result = "unverified"
+        enforcement_mode = "unverified"
+    return {
+        "schema_version": "loom-review-model-proof/v1",
+        "requested_model": requested_model,
+        "requested_reasoning": requested_reasoning,
+        "actual_model": actual_model,
+        "actual_reasoning": actual_reasoning,
+        "proof_source": proof_source,
+        "enforcement_mode": enforcement_mode,
+        "result": result,
+    }
+
+
+def review_model_proof_errors(model_proof: dict[str, Any], engine_profile: dict[str, Any]) -> list[str]:
+    if model_proof.get("result") == "verified":
+        return []
+    profile_id = str(engine_profile.get("profile_id") or "")
+    if model_proof.get("result") == "mismatch":
+        return [
+            "Codex App actual model/reasoning proof does not match the resolved review engine profile"
+        ]
+    if profile_id in {"high-risk", "spec-review", "repeated-blocker"}:
+        return [
+            f"Codex App actual model/reasoning proof is unverified for `{profile_id}` review profile"
+        ]
+    return []
+
+
 def run_codex_app_live_review(
     *,
     app_server: str,
@@ -9010,6 +9303,8 @@ def run_codex_app_live_review(
     thread_cwd: str,
     prompt_text: str,
     timeout_seconds: int | None,
+    requested_model: str,
+    requested_reasoning: str,
 ) -> tuple[str | None, dict[str, Any], list[str]]:
     command = app_server_proxy_command(app_server)
     if command is None:
@@ -9036,6 +9331,9 @@ def run_codex_app_live_review(
     metadata: dict[str, Any] = {
         "review_target": {"type": "commit", "sha": reviewed_head},
         "timeout_seconds": timeout_seconds,
+        "requested_model": requested_model,
+        "requested_reasoning": requested_reasoning,
+        "model_request_source": "resolved-review-engine-profile",
     }
     try:
         jsonrpc_send_request(process.stdin, request_id=1, method="initialize", params={"clientInfo": {"name": "loom", "version": "stage3"}, "capabilities": {}})
@@ -9118,6 +9416,8 @@ def run_codex_app_live_review(
                     "threadId": thread_id,
                     "cwd": thread_cwd,
                     "input": [{"type": "text", "text": prompt_text}],
+                    "model": requested_model,
+                    "reasoningEffort": requested_reasoning,
                     "outputSchema": load_json_file(review_engine_schema_path()),
                 },
             )
@@ -9147,6 +9447,10 @@ def run_codex_app_live_review(
                     return None, metadata, normalization_wait_errors
             if normalized is None:
                 return None, metadata, ["Codex App turn/start review did not return a Loom review result"]
+            proof = extract_model_reasoning_proof(turn_response, turn_notifications)
+            if proof:
+                metadata.update(proof)
+                metadata["model_proof_source"] = "turn-start-response"
             metadata["normalization_source"] = "turn-start-output-schema"
             raw_text = json.dumps(normalized, ensure_ascii=False, indent=2)
             return raw_text, {**metadata, "normalized": normalized}, []
@@ -9159,6 +9463,8 @@ def run_codex_app_live_review(
                 "threadId": thread_id,
                 "delivery": "inline",
                 "target": {"type": "commit", "sha": reviewed_head},
+                "model": requested_model,
+                "reasoningEffort": requested_reasoning,
             },
         )
         review_response, review_notifications, review_errors = jsonrpc_read_response(process.stdout, request_id=3, deadline=deadline)
@@ -9174,6 +9480,10 @@ def run_codex_app_live_review(
             if isinstance(turn, dict):
                 review_turn_id = non_empty_str(turn.get("id"))
                 metadata["review_turn_id"] = review_turn_id
+        proof = extract_model_reasoning_proof(review_response, review_notifications)
+        if proof:
+            metadata.update(proof)
+            metadata["model_proof_source"] = "review-start-response"
         review_text = find_exited_review_text(result) or find_exited_review_text(review_notifications)
         if not isinstance(review_text, str) or not review_text.strip():
             review_text, completion_notifications, completion_errors = jsonrpc_read_until_review_text(
@@ -9226,6 +9536,8 @@ def run_codex_app_live_review(
                         ),
                     }
                 ],
+                "model": requested_model,
+                "reasoningEffort": requested_reasoning,
                 "outputSchema": load_json_file(review_engine_schema_path()),
             },
         )
@@ -9255,6 +9567,10 @@ def run_codex_app_live_review(
                 return review_text, metadata, normalization_wait_errors
         if normalized is None:
             return review_text, metadata, ["Codex App turn/start did not return a Loom review result"]
+        proof = extract_model_reasoning_proof(turn_response, turn_notifications)
+        if proof:
+            metadata.update(proof)
+            metadata["model_proof_source"] = "normalization-turn-start-response"
         metadata["normalization_source"] = "turn-start-output-schema"
         return review_text, {**metadata, "normalized": normalized}, []
     finally:
@@ -9619,10 +9935,22 @@ def run_codex_app_review_authoritative_adapter(
             thread_cwd=str(thread_cwd),
             prompt_text=instructions_path.read_text(encoding="utf-8"),
             timeout_seconds=live_timeout_seconds,
+            requested_model=str(engine_profile["model"]),
+            requested_reasoning=str(engine_profile["reasoning_effort"]),
         )
         normalized = live_metadata.get("normalized") if isinstance(live_metadata.get("normalized"), dict) else None
         if raw_text is None:
             raw_text = ""
+
+    model_proof = review_model_proof(
+        engine_profile,
+        live_metadata=live_metadata,
+        source_path=source_path,
+    )
+    proof_errors = [] if normalization_errors or normalized is None else review_model_proof_errors(model_proof, engine_profile)
+    proof_blocked = bool(proof_errors)
+    if proof_errors:
+        normalization_errors = proof_errors
 
     if normalization_errors or normalized is None:
         if raw_text:
@@ -9637,14 +9965,25 @@ def run_codex_app_review_authoritative_adapter(
                 **selection_metadata,
                 "context_pack": relative_to_root(context_pack_path, context["target_root"]),
                 "result": "block",
-                "failure_reason": "schema_drift",
-                "summary": "Codex App authoritative review output did not satisfy the Loom review result schema.",
+                "failure_reason": "runtime_conflict" if proof_blocked else "schema_drift",
+                "summary": (
+                    "Codex App authoritative review actual model proof did not satisfy the resolved profile contract."
+                    if proof_blocked
+                    else "Codex App authoritative review output did not satisfy the Loom review result schema."
+                ),
                 "errors": normalization_errors,
                 "reviewed_head": reviewed_head,
                 "app_server": app_server,
                 "thread_id": thread_id,
                 "thread_cwd": cwd_relative,
                 "raw_source": source_relative,
+                "requested_model": model_proof["requested_model"],
+                "requested_reasoning": model_proof["requested_reasoning"],
+                "actual_model": model_proof["actual_model"],
+                "actual_reasoning": model_proof["actual_reasoning"],
+                "proof_source": model_proof["proof_source"],
+                "enforcement_mode": model_proof["enforcement_mode"],
+                "model_proof": model_proof,
                 **({"live_review": live_metadata} if live_metadata else {}),
             },
         )
@@ -9658,7 +9997,7 @@ def run_codex_app_review_authoritative_adapter(
                 "adapter": CODEX_APP_REVIEW_ADAPTER,
                 "profile": engine_profile,
                 "result": "block",
-                "failure_reason": "schema_drift",
+                "failure_reason": "runtime_conflict" if proof_blocked else "schema_drift",
                 "reviewed_head": reviewed_head,
                 "evidence": evidence,
             },
@@ -9668,6 +10007,13 @@ def run_codex_app_review_authoritative_adapter(
                 "thread_id": thread_id,
                 "thread_cwd": cwd_relative,
                 "raw_source": source_relative,
+                "requested_model": model_proof["requested_model"],
+                "requested_reasoning": model_proof["requested_reasoning"],
+                "actual_model": model_proof["actual_model"],
+                "actual_reasoning": model_proof["actual_reasoning"],
+                "proof_source": model_proof["proof_source"],
+                "enforcement_mode": model_proof["enforcement_mode"],
+                "model_proof": model_proof,
                 **({"live_review": live_metadata} if live_metadata else {}),
             },
         }
@@ -9694,6 +10040,13 @@ def run_codex_app_review_authoritative_adapter(
         "thread_id": effective_thread_id,
         "thread_cwd": cwd_relative,
         "raw_source": source_relative,
+        "requested_model": model_proof["requested_model"],
+        "requested_reasoning": model_proof["requested_reasoning"],
+        "actual_model": model_proof["actual_model"],
+        "actual_reasoning": model_proof["actual_reasoning"],
+        "proof_source": model_proof["proof_source"],
+        "enforcement_mode": model_proof["enforcement_mode"],
+        "model_proof": model_proof,
         "raw_result": relative_to_root(raw_path, context["target_root"]),
         "normalized_findings": relative_to_root(findings_path, context["target_root"]),
         "metadata": relative_to_root(metadata_path, context["target_root"]),
@@ -9726,6 +10079,7 @@ def run_codex_app_review_authoritative_adapter(
             "engine_adapter": CODEX_APP_REVIEW_ADAPTER,
             "engine_evidence": relative_to_root(raw_path, context["target_root"]),
             "engine_profile": engine_profile,
+            "engine_model_proof": model_proof,
             "context_pack": relative_to_root(context_pack_path, context["target_root"]),
             "normalized_findings": relative_to_root(findings_path, context["target_root"]),
             "budget_risk": context_pack.get("budget_risk"),
@@ -12115,6 +12469,407 @@ def pr_body_mentions_item(body: Any, item_id: str) -> bool:
     return bool(re.search(rf"(?<![A-Z0-9-]){re.escape(item_id)}(?![A-Z0-9-])", body))
 
 
+def pr_metadata_block_locator(body: str, start: int, end: int, marker: str) -> dict[str, Any]:
+    return {
+        "marker": marker,
+        "start_offset": start,
+        "end_offset": end,
+        "start_line": body.count("\n", 0, start) + 1,
+        "end_line": body.count("\n", 0, end) + 1,
+    }
+
+
+def pr_metadata_expected_format(marker: str) -> str:
+    return (
+        f"<!-- {marker}\n"
+        "{\n"
+        '  "schema_version": "loom-repo-pr-metadata/v1",\n'
+        '  "metadata_contract_id": "<repo-specific-id>",\n'
+        '  "surface": "review|merge_ready",\n'
+        '  "fields": {"<repo-field>": "<value>"},\n'
+        '  "source": {"rendered_hash": "<sha256-or-repo-renderer-hash>"},\n'
+        '  "parser_version": "loom-pr-metadata-parser/v1"\n'
+        "}\n"
+        "-->"
+    )
+
+
+def metadata_contract_raw_fields(
+    target_root: Path,
+    governance_surface: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[str], str | None]:
+    repo_interface = governance_surface.get("repo_interface")
+    if not isinstance(repo_interface, dict):
+        return [], ["governance_surface.repo_interface"], None
+    availability = repo_interface.get("availability")
+    if availability in {"absent", "companion_docs_only"}:
+        return [], [], None
+    if availability == "incomplete":
+        missing = repo_interface.get("missing_inputs")
+        return [], list(missing) if isinstance(missing, list) else ["repo companion interface"], None
+    if availability != "present":
+        return [], [f"unknown repo companion availability: {availability}"], None
+
+    locator = ".loom/companion/repo-interface.json"
+    locator_entry = repo_interface.get("repo_specific_requirements")
+    if isinstance(locator_entry, dict) and isinstance(locator_entry.get("locator"), str):
+        locator = locator_entry["locator"]
+    repo_interface_path, locator_errors = resolve_repo_relative_path(
+        target_root,
+        locator,
+        label="repo companion metadata contract locator",
+    )
+    if locator_errors:
+        return [], locator_errors, locator
+    assert repo_interface_path is not None
+    try:
+        payload = load_json_file(repo_interface_path)
+    except (FileNotFoundError, json.JSONDecodeError, OSError, ValueError) as exc:
+        return [], [f"repo companion metadata contract is unreadable: {exc}"], locator
+    metadata_contract = payload.get("metadata_contract") if isinstance(payload, dict) else None
+    fields = metadata_contract.get("fields") if isinstance(metadata_contract, dict) else None
+    if fields is None:
+        return [], [], locator
+    if not isinstance(fields, list):
+        return [], ["metadata_contract.fields must be a list"], locator
+    return [field for field in fields if isinstance(field, dict)], [], locator
+
+
+def applicable_pr_metadata_contracts(
+    fields: list[dict[str, Any]],
+    *,
+    surface: str,
+) -> list[dict[str, Any]]:
+    contracts: list[dict[str, Any]] = []
+    for field in fields:
+        machine_carrier = field.get("machine_carrier")
+        if not isinstance(machine_carrier, dict):
+            continue
+        preflight = machine_carrier.get("preflight")
+        required_before = preflight.get("required_before") if isinstance(preflight, dict) else None
+        if isinstance(required_before, list) and surface in required_before:
+            contracts.append(field)
+    return contracts
+
+
+def pr_metadata_html_comment_blocks(body: str, marker: str) -> list[dict[str, Any]]:
+    pattern = re.compile(rf"<!--\s*{re.escape(marker)}\s*(.*?)\s*-->", flags=re.DOTALL)
+    blocks: list[dict[str, Any]] = []
+    for match in pattern.finditer(body):
+        blocks.append(
+            {
+                "raw": match.group(1).strip(),
+                "locator": pr_metadata_block_locator(body, match.start(), match.end(), marker),
+            }
+        )
+    return blocks
+
+
+def pr_metadata_diagnostic(
+    *,
+    contract_id: str,
+    marker: str,
+    reason: str,
+    block_locator: dict[str, Any] | None = None,
+    parse_error: str | None = None,
+    missing_fields: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "metadata_contract_id": contract_id,
+        "block_locator": block_locator,
+        "parse_error": parse_error,
+        "missing_fields": missing_fields or [],
+        "expected_format": pr_metadata_expected_format(marker),
+        "suggested_fix": "rewrite the PR metadata HTML comment JSON block with the declared schema, surface, contract id, and required fields.",
+        "reason": reason,
+    }
+
+
+def validate_pr_metadata_envelope(
+    *,
+    envelope: Any,
+    field: dict[str, Any],
+    surface: str,
+    block_locator: dict[str, Any],
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    contract_id = str(field.get("id") or "")
+    machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
+    marker = str(machine_carrier.get("marker") or "loom:repo-pr-metadata")
+    diagnostics: list[dict[str, Any]] = []
+    if not isinstance(envelope, dict):
+        diagnostics.append(
+            pr_metadata_diagnostic(
+                contract_id=contract_id,
+                marker=marker,
+                reason="machine block JSON must decode to an object",
+                block_locator=block_locator,
+                parse_error="decoded JSON is not an object",
+            )
+        )
+        return None, diagnostics
+    if envelope.get("metadata_contract_id") != contract_id or envelope.get("surface") != surface:
+        return None, []
+
+    missing_fields: list[str] = []
+    if envelope.get("schema_version") != PR_METADATA_MACHINE_SCHEMA:
+        missing_fields.append("schema_version")
+    fields = envelope.get("fields")
+    if not isinstance(fields, dict):
+        missing_fields.append("fields")
+        fields = {}
+    source = envelope.get("source")
+    if not isinstance(source, dict) or not isinstance(source.get("rendered_hash"), str) or not source.get("rendered_hash"):
+        missing_fields.append("source.rendered_hash")
+    if not isinstance(envelope.get("parser_version"), str) or not envelope.get("parser_version"):
+        missing_fields.append("parser_version")
+    required_fields = machine_carrier.get("required_fields")
+    if isinstance(required_fields, list):
+        for required_field in required_fields:
+            if isinstance(required_field, str) and required_field.strip():
+                if required_field not in fields or fields.get(required_field) in (None, ""):
+                    missing_fields.append(f"fields.{required_field}")
+    if missing_fields:
+        diagnostics.append(
+            pr_metadata_diagnostic(
+                contract_id=contract_id,
+                marker=marker,
+                reason="machine block is missing required envelope or repo-specific fields",
+                block_locator=block_locator,
+                missing_fields=missing_fields,
+            )
+        )
+        return None, diagnostics
+    normalized = {
+        "metadata_contract_id": contract_id,
+        "surface": surface,
+        "schema_version": envelope.get("schema_version"),
+        "fields": fields,
+        "source": source,
+        "parser_version": envelope.get("parser_version"),
+        "block_locator": block_locator,
+    }
+    return normalized, []
+
+
+def pr_metadata_contract_preflight(
+    *,
+    field: dict[str, Any],
+    body: str | None,
+    surface: str,
+) -> dict[str, Any]:
+    contract_id = str(field.get("id") or "unknown")
+    machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
+    marker = str(machine_carrier.get("marker") or "loom:repo-pr-metadata")
+    migration_mode = str(machine_carrier.get("migration_mode") or "advisory_legacy")
+    required_fields = [
+        required_field
+        for required_field in machine_carrier.get("required_fields", [])
+        if isinstance(required_field, str) and required_field.strip()
+    ]
+    base = {
+        "metadata_contract_id": contract_id,
+        "surface": surface,
+        "marker": marker,
+        "required_fields": required_fields,
+        "migration_mode": migration_mode,
+        "schema_version": machine_carrier.get("schema_version"),
+        "parser_version": PR_METADATA_PARSER_VERSION,
+        "diagnostics": [],
+        "envelope": None,
+    }
+    if not isinstance(body, str):
+        diagnostic = pr_metadata_diagnostic(
+            contract_id=contract_id,
+            marker=marker,
+            reason="PR body is unavailable for metadata preflight",
+            missing_fields=["pr.body"],
+        )
+        result = "block" if migration_mode == "required" else "pass"
+        return {
+            **base,
+            "result": result,
+            "summary": (
+                "required PR metadata machine block is absent because the PR body is unavailable."
+                if result == "block"
+                else "PR body is unavailable; legacy migration mode leaves metadata preflight advisory."
+            ),
+            "missing_inputs": ["PR body metadata machine block"] if result == "block" else [],
+            "fallback_to": "update_pr_body" if result == "block" else None,
+            "diagnostics": [diagnostic],
+            "legacy_mode": result == "pass",
+        }
+
+    blocks = pr_metadata_html_comment_blocks(body, marker)
+    if not blocks:
+        diagnostic = pr_metadata_diagnostic(
+            contract_id=contract_id,
+            marker=marker,
+            reason="PR body does not contain the declared metadata machine block",
+            missing_fields=["metadata_block"],
+        )
+        result = "block" if migration_mode == "required" else "pass"
+        return {
+            **base,
+            "result": result,
+            "summary": (
+                "required PR metadata machine block is absent."
+                if result == "block"
+                else "PR metadata machine block is absent; legacy migration mode remains advisory."
+            ),
+            "missing_inputs": [f"PR metadata machine block missing: {contract_id}"] if result == "block" else [],
+            "fallback_to": "update_pr_body" if result == "block" else None,
+            "diagnostics": [diagnostic],
+            "legacy_mode": result == "pass",
+        }
+
+    diagnostics: list[dict[str, Any]] = []
+    for block in blocks:
+        try:
+            envelope = json.loads(block["raw"])
+        except json.JSONDecodeError as exc:
+            diagnostics.append(
+                pr_metadata_diagnostic(
+                    contract_id=contract_id,
+                    marker=marker,
+                    reason="metadata machine block JSON is malformed",
+                    block_locator=block["locator"],
+                    parse_error=exc.msg,
+                )
+            )
+            continue
+        normalized, envelope_diagnostics = validate_pr_metadata_envelope(
+            envelope=envelope,
+            field=field,
+            surface=surface,
+            block_locator=block["locator"],
+        )
+        diagnostics.extend(envelope_diagnostics)
+        if normalized is not None:
+            return {
+                **base,
+                "result": "pass",
+                "summary": "PR metadata machine block is parseable and contains the required repo-specific fields.",
+                "missing_inputs": [],
+                "fallback_to": None,
+                "diagnostics": diagnostics,
+                "envelope": normalized,
+                "legacy_mode": False,
+            }
+
+    if diagnostics:
+        return {
+            **base,
+            "result": "block",
+            "summary": "PR metadata machine block is present but not parseable or complete.",
+            "missing_inputs": [f"PR metadata machine block invalid: {contract_id}"],
+            "fallback_to": "update_pr_body",
+            "diagnostics": diagnostics,
+            "legacy_mode": False,
+        }
+    diagnostic = pr_metadata_diagnostic(
+        contract_id=contract_id,
+        marker=marker,
+        reason="PR metadata machine blocks did not match the expected contract id and surface",
+        missing_fields=["metadata_contract_id", "surface"],
+    )
+    result = "block" if migration_mode == "required" else "pass"
+    return {
+        **base,
+        "result": result,
+        "summary": (
+            "required PR metadata machine block for this contract and surface is absent."
+            if result == "block"
+            else "PR metadata machine block for this contract and surface is absent; legacy migration mode remains advisory."
+        ),
+        "missing_inputs": [f"PR metadata machine block missing: {contract_id}"] if result == "block" else [],
+        "fallback_to": "update_pr_body" if result == "block" else None,
+        "diagnostics": [diagnostic],
+        "legacy_mode": result == "pass",
+    }
+
+
+def pr_metadata_preflight_payload(
+    *,
+    target_root: Path,
+    surface: str,
+    owner: str | None = None,
+    repo_name: str | None = None,
+    pr_number: int | None = None,
+    head_sha: str | None = None,
+    branch_name: str | None = None,
+    pr_payload_file: str | None = None,
+    pr_payload: dict[str, Any] | None = None,
+    effective_pr: int | None = None,
+    governance_surface: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    governance_surface = governance_surface or build_governance_surface(target_root)
+    fields, contract_errors, source_locator = metadata_contract_raw_fields(target_root, governance_surface)
+    applicable_contracts = applicable_pr_metadata_contracts(fields, surface=surface)
+    missing_inputs: list[str] = []
+    if contract_errors:
+        missing_inputs.extend(str(message) for message in contract_errors)
+
+    pr_errors: list[str] = []
+    inferences: list[dict[str, Any]] = []
+    if applicable_contracts and pr_payload is None and not contract_errors:
+        detected_owner, detected_repo = detect_github_repo(target_root)
+        pr_payload, effective_pr, pr_errors, inferences = load_pr_payload_for_gate(
+            target_root=target_root,
+            owner=owner or detected_owner,
+            repo_name=repo_name or detected_repo,
+            pr_number=pr_number,
+            head_sha=head_sha,
+            branch_name=branch_name,
+            pr_payload_file=pr_payload_file,
+        )
+        missing_inputs.extend(f"pr: {message}" for message in pr_errors)
+
+    body = pr_payload.get("body") if isinstance(pr_payload, dict) else None
+    contract_results = [
+        pr_metadata_contract_preflight(field=field, body=body if isinstance(body, str) else None, surface=surface)
+        for field in applicable_contracts
+    ]
+    for contract_result in contract_results:
+        if contract_result.get("result") == "block":
+            for message in contract_result.get("missing_inputs", []):
+                if message not in missing_inputs:
+                    missing_inputs.append(str(message))
+
+    result = "pass" if not missing_inputs else "block"
+    if contract_errors:
+        summary = "repo companion metadata contract is incomplete or unreadable."
+    elif not applicable_contracts:
+        summary = "no repo-specific PR metadata machine preflight is declared for this surface."
+    elif result == "pass":
+        summary = "repo-specific PR metadata machine preflight passed or is in advisory legacy migration mode."
+    else:
+        summary = "repo-specific PR metadata machine preflight found blocking parser diagnostics."
+    return {
+        "command": "pr-metadata",
+        "operation": "preflight",
+        "schema_version": PR_METADATA_PREFLIGHT_SCHEMA,
+        "surface": surface,
+        "result": result,
+        "summary": summary,
+        "missing_inputs": missing_inputs,
+        "fallback_to": "update_pr_body" if result == "block" and not contract_errors else "adoption" if result == "block" else None,
+        "source_locator": source_locator,
+        "metadata_contracts": contract_results,
+        "diagnostics": [
+            diagnostic
+            for contract_result in contract_results
+            for diagnostic in contract_result.get("diagnostics", [])
+            if isinstance(diagnostic, dict)
+        ],
+        "pr": {
+            "number": effective_pr,
+            "head_sha": pr_payload.get("headRefOid") if isinstance(pr_payload, dict) else head_sha,
+            "has_body": isinstance(body, str),
+        },
+        "inferences": inferences,
+    }
+
+
 def load_pr_payload_for_gate(
     *,
     target_root: Path,
@@ -12189,6 +12944,8 @@ def pr_gate_failure_taxonomy(missing_inputs: list[str], gate_result: str) -> lis
             categories.add("raw_evidence_bypass")
         if "required check" in lowered or "branch protection" in lowered or "ruleset" in lowered:
             categories.add("host_enforcement_unverified")
+        if "pr metadata" in lowered:
+            categories.add("pr_metadata_preflight_failed")
     if gate_result == "fallback":
         categories.add("prior_gate_fallback")
     return sorted(categories)
@@ -12457,6 +13214,33 @@ def pr_gate_payload(
     else:
         raw_evidence_present = False
 
+    governance_surface = build_governance_surface(target_root)
+    pr_metadata_preflight = pr_metadata_preflight_payload(
+        target_root=target_root,
+        surface="merge_ready",
+        owner=owner,
+        repo_name=repo_name,
+        pr_number=effective_pr,
+        head_sha=pr_head,
+        branch_name=branch_name,
+        pr_payload_file=pr_payload_file,
+        pr_payload=pr_payload if isinstance(pr_payload, dict) else None,
+        effective_pr=effective_pr,
+        governance_surface=governance_surface,
+    )
+    if pr_metadata_preflight.get("result") == "block":
+        missing_inputs.extend(str(message) for message in pr_metadata_preflight.get("missing_inputs", []))
+    steps.append(
+        {
+            "name": "pr-metadata-preflight",
+            "result": pr_metadata_preflight["result"],
+            "summary": pr_metadata_preflight["summary"],
+            "missing_inputs": pr_metadata_preflight["missing_inputs"],
+            "fallback_to": pr_metadata_preflight["fallback_to"],
+            "pr_metadata_preflight": pr_metadata_preflight,
+        }
+    )
+
     result = "pass"
     fallback_to: str | None = None
     for step in steps:
@@ -12527,6 +13311,7 @@ def pr_gate_payload(
         },
         "review_approval": review_approval,
         "merge_checkpoint": merge_checkpoint,
+        "pr_metadata_preflight": pr_metadata_preflight,
         "governance_lint": governance_lint,
         "host_enforcement": {
             "stable_check_name": PR_MERGE_GATE_CHECK_NAME,
@@ -12547,6 +13332,22 @@ def handle_pr_gate(args: argparse.Namespace) -> int:
             target_root=target_root,
             output_relative=args.output,
             expected_item=args.item,
+            owner=args.owner,
+            repo_name=args.repo_name,
+            pr_number=args.pr,
+            head_sha=args.head_sha,
+            branch_name=args.branch,
+            pr_payload_file=args.pr_payload_file,
+        )
+    )
+
+
+def handle_pr_metadata(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    return emit(
+        pr_metadata_preflight_payload(
+            target_root=target_root,
+            surface=args.surface,
             owner=args.owner,
             repo_name=args.repo_name,
             pr_number=args.pr,
@@ -16194,6 +16995,7 @@ def handle_review(args: argparse.Namespace) -> int:
             requested_model=args.engine_model,
             requested_reasoning=args.engine_reasoning,
             override_reason=args.engine_override_reason,
+            use_local_codex_defaults=bool(args.engine_use_local_codex_defaults),
         )
         if engine_profile_errors or engine_profile is None:
             manual_review = manual_review_payload(
@@ -17395,6 +18197,7 @@ def handle_flow(args: argparse.Namespace) -> int:
     build_execution: dict[str, Any] | None = None
     governance_lint: dict[str, Any] | None = None
     retained_host_signals: dict[str, Any] | None = None
+    pr_metadata_preflight: dict[str, Any] | None = None
     governance_surface = build_governance_surface(target_root)
     upgrade_path = maturity_upgrade_path(governance_surface, target_root)
     repo_interface = governance_surface.get("repo_interface")
@@ -17504,6 +18307,17 @@ def handle_flow(args: argparse.Namespace) -> int:
                 surface="merge_ready",
                 current_head=git_head_sha(target_root),
             )
+            pr_metadata_preflight = pr_metadata_preflight_payload(
+                target_root=target_root,
+                surface="merge_ready",
+                owner=flow_owner,
+                repo_name=flow_repo_name,
+                pr_number=args.pr,
+                head_sha=None,
+                branch_name=args.branch,
+                pr_payload_file=args.pr_payload_file,
+                governance_surface=governance_surface,
+            )
             governance_lint = flow_governance_lint_status(
                 context,
                 surface="merge_ready",
@@ -17532,6 +18346,14 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "missing_inputs": governance_lint_missing_inputs(governance_lint),
                         "fallback_to": governance_lint_fallback(governance_lint),
                         "governance_lint": governance_lint,
+                    },
+                    {
+                        "name": "pr-metadata-preflight",
+                        "result": pr_metadata_preflight["result"],
+                        "summary": pr_metadata_preflight["summary"],
+                        "missing_inputs": pr_metadata_preflight["missing_inputs"],
+                        "fallback_to": pr_metadata_preflight["fallback_to"],
+                        "pr_metadata_preflight": pr_metadata_preflight,
                     },
                 ]
             )
@@ -17806,6 +18628,7 @@ def handle_flow(args: argparse.Namespace) -> int:
             "blocking_failures": blocking_failures,
             "project_drift": flow_project_drift,
             **({"governance_lint": governance_lint} if args.operation in {"pre-review", "merge-ready"} else {}),
+            **({"pr_metadata_preflight": pr_metadata_preflight} if args.operation == "merge-ready" else {}),
             **({"goal_execution_contract": goal_contract, "goal_readiness": goal_readiness} if args.operation == "resume" else {}),
             **({"governance_surface": governance_surface} if args.operation == "resume" else {}),
             **({"maturity_upgrade_path": upgrade_path} if args.operation == "resume" else {}),
@@ -18331,6 +19154,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_goal(args)
     if args.command == "pr-gate":
         return handle_pr_gate(args)
+    if args.command == "pr-metadata":
+        return handle_pr_metadata(args)
     if args.command == "controlled-merge":
         return handle_controlled_merge(args)
     if args.command == "runtime-evidence":
