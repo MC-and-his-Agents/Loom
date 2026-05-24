@@ -5,7 +5,7 @@
   "kind": "code_review",
   "summary": "WI-915 implementation is approved for the #890/#891 CLI-first adoption/profile, fact-chain, checkpoint, and gate command batch based on focused local validation.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "9f51739d82f3cff74b2f51597ed555957bbef1a5",
+  "reviewed_head": "46c1492e4032f59ad00193d224783c6797a9e5ef",
   "reviewed_validation_summary": "Passed on branch work/890-891-adoption-gates: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_flow.py shadow-parity --target .",
   "fallback_to": null,
   "findings": [],
