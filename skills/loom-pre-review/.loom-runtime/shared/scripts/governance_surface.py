@@ -882,6 +882,8 @@ def maturity_judgment_payload(
 def run_process(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(args, cwd=cwd, check=False, capture_output=True, text=True, timeout=15)
+    except FileNotFoundError as exc:
+        return subprocess.CompletedProcess(args=args, returncode=127, stdout="", stderr=str(exc))
     except subprocess.TimeoutExpired:
         return subprocess.CompletedProcess(args=args, returncode=124, stdout="", stderr="command timed out after 15s")
 
