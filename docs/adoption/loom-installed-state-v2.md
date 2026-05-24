@@ -67,6 +67,7 @@ Non-ready layers must include:
 ```
 
 The graph exists so `loom upgrade-plan`, `loom repair plan`, host adapters, skills sync, and installer shims can reason about layer ordering without reading unrelated governance files.
+Every edge endpoint must reference a known layer id. Unknown edge endpoints fail closed because repair and upgrade ordering would otherwise be ambiguous.
 
 ## CLI Semantics
 
@@ -77,6 +78,8 @@ python3 tools/loom.py installed-state export --target <repo> --json
 ```
 
 All three commands fail closed when metadata is missing, unreadable, or invalid. Missing metadata may include `legacy_surface_hints` such as `.loom/bin`, `.agents/skills`, `skills/registry.json`, plugin manifests, or old installer status files. Those hints are diagnostic input for `loom detect`, `loom doctor`, and `loom repair plan`; they are not treated as valid installed-state by themselves.
+
+`loom detect --target <repo> --json` may report legacy or mixed surfaces even when installed-state is missing. This is a diagnostic pass, not an install-state pass. `loom doctor` turns missing, invalid, legacy, or mixed surfaces into `result: block` with `fallback_to: ["loom repair plan"]`. `loom repair plan` is non-mutating. `loom repair apply` remains fail-closed until a later Work Item approves write ownership and rollback semantics.
 
 ## Work Item Consumption
 

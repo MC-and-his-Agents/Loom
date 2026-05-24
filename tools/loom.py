@@ -24,6 +24,9 @@ PLUGIN_MANIFEST = REPO_ROOT / "plugins" / "loom" / ".codex-plugin" / "plugin.jso
 
 OUTPUT_SCHEMA = "loom-cli-output/v1"
 INSTALLED_STATE_SCHEMA = "loom-installed-state/v2"
+DETECT_SCHEMA = "loom-installed-surface-detect/v1"
+DOCTOR_SCHEMA = "loom-installed-surface-doctor/v1"
+REPAIR_PLAN_SCHEMA = "loom-installed-surface-repair-plan/v1"
 
 
 COMMANDS: list[dict[str, Any]] = [
@@ -62,10 +65,34 @@ COMMANDS: list[dict[str, Any]] = [
         "json": True,
         "summary": "Export installed-state plus its installation graph for upgrade consumers.",
     },
-    {"command": "detect", "domain": "diagnostics", "status": "reserved", "json": True},
-    {"command": "doctor", "domain": "diagnostics", "status": "reserved", "json": True},
-    {"command": "repair plan", "domain": "repair", "status": "reserved", "json": True},
-    {"command": "repair apply", "domain": "repair", "status": "reserved", "json": True},
+    {
+        "command": "detect",
+        "domain": "diagnostics",
+        "status": "implemented",
+        "json": True,
+        "summary": "Detect installed Loom surfaces, legacy layouts, symlinks, and mixed installations.",
+    },
+    {
+        "command": "doctor",
+        "domain": "diagnostics",
+        "status": "implemented",
+        "json": True,
+        "summary": "Diagnose detected surfaces and installed-state readiness.",
+    },
+    {
+        "command": "repair plan",
+        "domain": "repair",
+        "status": "implemented",
+        "json": True,
+        "summary": "Emit a non-mutating repair plan for detected legacy or drifted surfaces.",
+    },
+    {
+        "command": "repair apply",
+        "domain": "repair",
+        "status": "implemented",
+        "json": True,
+        "summary": "Fail closed until a later Work Item enables mutating repair execution.",
+    },
     {"command": "install", "domain": "delivery", "status": "reserved", "json": True},
     {"command": "upgrade-plan", "domain": "delivery", "status": "reserved", "json": True},
     {"command": "upgrade", "domain": "delivery", "status": "reserved", "json": True},
@@ -311,6 +338,358 @@ def legacy_surface_hints(target: Path) -> list[dict[str, str]]:
     return hints
 
 
+def relative_to_target(path: Path, target: Path) -> str:
+    try:
+        return path.relative_to(target).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def surface(path: Path, target: Path, *, kind: str, layer: str, authority: str, migration: str, summary: str) -> dict[str, Any]:
+    return {
+        "kind": kind,
+        "layer": layer,
+        "path": relative_to_target(path, target),
+        "authority": authority,
+        "migration_status": migration,
+        "is_symlink": path.is_symlink(),
+        "summary": summary,
+    }
+
+
+def detect_surfaces(target: Path) -> list[dict[str, Any]]:
+    surfaces: list[dict[str, Any]] = []
+    state_path = installed_state_path(target)
+    if state_path is not None:
+        surfaces.append(
+            surface(
+                state_path,
+                target,
+                kind="installed-state-v2",
+                layer="installation-metadata",
+                authority="loom-cli",
+                migration="current",
+                summary="Versioned installed-state metadata is present.",
+            )
+        )
+
+    candidates = (
+        (
+            ".loom/bin",
+            "legacy-loom-bin",
+            "runtime",
+            "repo-local-runtime",
+            "legacy",
+            "Legacy bootstrapped runtime wrappers are present.",
+        ),
+        (
+            ".loom/bootstrap/manifest.json",
+            "bootstrap-manifest",
+            "runtime",
+            "repo-local-runtime",
+            "legacy",
+            "Bootstrap manifest is present without being authoritative installed-state metadata.",
+        ),
+        (
+            ".loom/companion/manifest.json",
+            "repo-companion",
+            "governance-residue",
+            "repo-companion",
+            "read-only",
+            "Repo companion residue is present and must remain repo-owned.",
+        ),
+        (
+            ".agents/skills",
+            "repo-local-agents-skills",
+            "skills",
+            "repo-local",
+            "legacy",
+            "Repo-local .agents/skills layout is present.",
+        ),
+        (
+            "skills/registry.json",
+            "full-repo-skills",
+            "skills",
+            "loom-distribution",
+            "legacy",
+            "Full-repo skills registry is present.",
+        ),
+        (
+            "plugins/loom/.codex-plugin/plugin.json",
+            "codex-plugin",
+            "plugin",
+            "codex-plugin",
+            "legacy",
+            "Codex plugin manifest is present.",
+        ),
+        (
+            "plugins/loom/.loom-install-status.json",
+            "legacy-installed-surface-status",
+            "installation-metadata",
+            "installer-shim",
+            "legacy",
+            "Legacy installer status file is present.",
+        ),
+        (
+            "packages/loom-installer/package.json",
+            "legacy-installer-package",
+            "installer",
+            "installer-shim",
+            "legacy",
+            "Legacy installer package surface is present.",
+        ),
+        (
+            "SKILL.md",
+            "single-skill",
+            "skills",
+            "single-skill",
+            "legacy",
+            "Single-skill installation surface is present.",
+        ),
+    )
+    for relative, kind, layer, authority, migration, summary in candidates:
+        path = target / relative
+        if path.exists():
+            surfaces.append(surface(path, target, kind=kind, layer=layer, authority=authority, migration=migration, summary=summary))
+
+    skill_dirs = target / "skills"
+    if skill_dirs.exists() and skill_dirs.is_dir():
+        for skill_path in sorted(skill_dirs.glob("*/SKILL.md")):
+            surfaces.append(
+                surface(
+                    skill_path,
+                    target,
+                    kind="single-skill",
+                    layer="skills",
+                    authority="skill-package",
+                    migration="legacy",
+                    summary="Standalone skill package is present under skills/.",
+                )
+            )
+
+    for entry in surfaces:
+        if entry["is_symlink"]:
+            entry["kind"] = f"symlink-{entry['kind']}"
+            entry["migration_status"] = "legacy"
+            entry["summary"] = f"Symlinked {entry['summary'][0].lower()}{entry['summary'][1:]}"
+    return surfaces
+
+
+def classify_installation(surfaces: list[dict[str, Any]]) -> tuple[str, str]:
+    if not surfaces:
+        return "uninstalled", "No Loom installation surfaces were detected."
+    has_current = any(item["kind"] == "installed-state-v2" for item in surfaces)
+    legacy = [item for item in surfaces if item.get("migration_status") == "legacy" or str(item.get("kind", "")).startswith("symlink-")]
+    authorities = {item.get("authority") for item in surfaces if item.get("authority")}
+    if has_current and not legacy:
+        return "current", "Versioned installed-state is present and no legacy surface was detected."
+    if has_current and legacy:
+        return "mixed", "Versioned installed-state and legacy surfaces are both present."
+    if len(authorities) > 1 or len(legacy) > 1:
+        return "mixed-legacy", "Multiple legacy Loom surface families are present."
+    return "legacy", "Only legacy Loom installation surfaces were detected."
+
+
+def block_target(command: str, target: Path, reason: str) -> dict[str, Any]:
+    return output(
+        command,
+        "block",
+        summary="Target cannot be inspected.",
+        target=str(target),
+        failed_layer="target",
+        fail_closed_reason=reason,
+        fallback_to=["loom help --json"],
+    )
+
+
+def detect_payload(target: Path) -> dict[str, Any]:
+    surfaces = detect_surfaces(target)
+    classification, summary = classify_installation(surfaces)
+    return output(
+        "detect",
+        "pass",
+        schema=DETECT_SCHEMA,
+        summary=summary,
+        target=str(target),
+        classification=classification,
+        surface_count=len(surfaces),
+        surfaces=surfaces,
+        installed_state_path=str(installed_state_path(target)) if installed_state_path(target) else None,
+        fallback_to=None if surfaces else ["loom install"],
+    )
+
+
+def handle_detect(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="loom detect")
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    target = resolve_target(args.target)
+    if not target.exists():
+        return emit(block_target("detect", target, "target path does not exist"))
+    return emit(detect_payload(target))
+
+
+def doctor_payload(target: Path) -> dict[str, Any]:
+    detection = detect_payload(target)
+    path, state, installed_error = load_installed_state(target)
+    validation_errors = validate_installed_state(state) if installed_error is None else []
+    checks: list[dict[str, Any]] = [
+        {
+            "name": "surface-detection",
+            "result": "pass" if detection["surface_count"] else "block",
+            "summary": detection["summary"],
+        }
+    ]
+    if installed_error is not None:
+        checks.append(
+            {
+                "name": "installed-state",
+                "result": "block",
+                "summary": installed_error["fail_closed_reason"],
+                "failed_layer": "installed-state",
+                "fallback_to": ["loom repair plan"],
+            }
+        )
+    elif validation_errors:
+        checks.append(
+            {
+                "name": "installed-state",
+                "result": "block",
+                "summary": "Installed-state metadata is present but invalid.",
+                "errors": validation_errors,
+                "failed_layer": "installed-state",
+                "fallback_to": ["loom repair plan"],
+            }
+        )
+    else:
+        checks.append(
+            {
+                "name": "installed-state",
+                "result": "pass",
+                "summary": "Installed-state metadata is valid.",
+                "installed_state_path": str(path),
+            }
+        )
+    legacy_surfaces = [item for item in detection["surfaces"] if item.get("migration_status") == "legacy" or str(item.get("kind", "")).startswith("symlink-")]
+    if legacy_surfaces:
+        checks.append(
+            {
+                "name": "legacy-surfaces",
+                "result": "block",
+                "summary": "Legacy surfaces require an explicit repair plan before upgrade or apply.",
+                "surfaces": legacy_surfaces,
+                "fallback_to": ["loom repair plan"],
+            }
+        )
+    result = "pass" if all(check["result"] == "pass" for check in checks) else "block"
+    return output(
+        "doctor",
+        result,
+        schema=DOCTOR_SCHEMA,
+        summary="Installed surface diagnostics passed." if result == "pass" else "Installed surface diagnostics found blocking repair inputs.",
+        target=str(target),
+        detection=detection,
+        checks=checks,
+        failed_layer=None if result == "pass" else "installed-surface",
+        fail_closed_reason=None if result == "pass" else "target has missing, invalid, mixed, or legacy installed surfaces",
+        fallback_to=None if result == "pass" else ["loom repair plan"],
+    )
+
+
+def handle_doctor(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="loom doctor")
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    target = resolve_target(args.target)
+    if not target.exists():
+        return emit(block_target("doctor", target, "target path does not exist"))
+    return emit(doctor_payload(target))
+
+
+def repair_actions(detection: dict[str, Any], installed_errors: list[dict[str, str]]) -> list[dict[str, Any]]:
+    actions: list[dict[str, Any]] = []
+    if installed_errors:
+        actions.append(
+            {
+                "id": "repair-installed-state-v2",
+                "kind": "write-installed-state",
+                "status": "planned",
+                "writes": [".loom/installed-state.json"],
+                "reason": "installed-state metadata is missing or invalid",
+                "command": "loom installed-state validate --target <repo> --json",
+            }
+        )
+    legacy = [
+        item for item in detection["surfaces"]
+        if item.get("migration_status") == "legacy" or str(item.get("kind", "")).startswith("symlink-")
+    ]
+    for index, item in enumerate(legacy, start=1):
+        actions.append(
+            {
+                "id": f"classify-legacy-surface-{index}",
+                "kind": "manual-migration-judgment",
+                "status": "planned",
+                "surface": item,
+                "reason": "legacy surface must be classified before Loom can apply mutating repair",
+                "command": "loom doctor --target <repo> --json",
+            }
+        )
+    return actions
+
+
+def repair_plan_payload(target: Path) -> dict[str, Any]:
+    detection = detect_payload(target)
+    _, state, installed_error = load_installed_state(target)
+    installed_errors = [{"path": "installed-state", "reason": installed_error["fail_closed_reason"]}] if installed_error else validate_installed_state(state)
+    actions = repair_actions(detection, installed_errors)
+    result = "pass" if detection["surface_count"] or actions else "block"
+    return output(
+        "repair plan",
+        result,
+        schema=REPAIR_PLAN_SCHEMA,
+        summary="Repair plan generated without mutating target state." if result == "pass" else "No installed surface exists to repair.",
+        target=str(target),
+        mutates=False,
+        detection=detection,
+        actions=actions,
+        failed_layer=None if result == "pass" else "installed-surface",
+        fail_closed_reason=None if result == "pass" else "target has no detectable Loom surface",
+        fallback_to=None if result == "pass" else ["loom install"],
+    )
+
+
+def handle_repair(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="loom repair")
+    parser.add_argument("action", choices=("plan", "apply"))
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args(argv)
+    target = resolve_target(args.target)
+    if not target.exists():
+        return emit(block_target(f"repair {args.action}", target, "target path does not exist"))
+    plan = repair_plan_payload(target)
+    if args.action == "plan":
+        return emit(plan)
+    return emit(
+        output(
+            "repair apply",
+            "block",
+            schema=REPAIR_PLAN_SCHEMA,
+            summary="Mutating repair apply is intentionally disabled until an explicit apply contract is approved.",
+            target=str(target),
+            mutates=False,
+            dry_run=args.dry_run,
+            plan=plan,
+            failed_layer="repair-apply",
+            fail_closed_reason="repair apply requires a later Work Item to approve write ownership and rollback semantics",
+            fallback_to=["loom repair plan", "loom doctor"],
+        )
+    )
+
+
 def block_installed_state(command: str, target: Path, reason: str, *, hints: list[dict[str, str]] | None = None) -> dict[str, Any]:
     return output(
         command,
@@ -372,6 +751,18 @@ def validate_installed_state(state: Any) -> list[dict[str, str]]:
             missing = sorted(set(graph_layers) - layer_ids)
             if missing:
                 errors.append({"path": "installation_graph.layers", "reason": f"unknown layer ids: {', '.join(missing)}"})
+        edges = graph.get("edges", [])
+        if isinstance(edges, list):
+            for index, edge in enumerate(edges):
+                edge_path = f"installation_graph.edges[{index}]"
+                if not isinstance(edge, dict):
+                    errors.append({"path": edge_path, "reason": "edge must be an object"})
+                    continue
+                for endpoint in ("from", "to"):
+                    if edge.get(endpoint) not in layer_ids:
+                        errors.append({"path": f"{edge_path}.{endpoint}", "reason": "edge endpoint must reference a known layer id"})
+        else:
+            errors.append({"path": "installation_graph.edges", "reason": "must be an array when present"})
     else:
         errors.append({"path": "installation_graph", "reason": "must be an object"})
     return errors
@@ -509,10 +900,17 @@ def main(argv: list[str]) -> int:
         return handle_help(forwarded)
     if command == "version":
         return handle_version(forwarded)
+    if command == "detect":
+        return handle_detect(forwarded)
+    if command == "doctor":
+        return handle_doctor(forwarded)
     if command == "installed-state":
         return handle_installed_state(forwarded)
     if command.startswith("installed-state "):
         return handle_installed_state(command.split()[1:] + forwarded)
+    if command == "repair" or command.startswith("repair "):
+        repair_args = command.split()[1:] + forwarded if command.startswith("repair ") else forwarded
+        return handle_repair(repair_args)
     if command in COMMAND_ROUTES:
         return dispatch(command, forwarded)
     if command in COMMAND_INDEX:

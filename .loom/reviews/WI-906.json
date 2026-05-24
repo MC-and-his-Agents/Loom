@@ -1,0 +1,23 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-906",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-906 implementation is approved for the #888 detect/doctor/repair slice: it implements detect, doctor, non-mutating repair plan, repair apply fail-closed behavior, legacy and mixed surface fixtures, and installed-state graph endpoint validation.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "ce12fe3f059ae41cdab8da22d44c2883815c8d75",
+  "reviewed_validation_summary": "Passed on branch work/888-detect-doctor-repair before final commit: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py; python3 tools/loom.py detect --target . --json; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-906; python3 .loom/bin/loom_flow.py shadow-parity --target .; make check with loom_check OK over 40 source/distribution surfaces.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-906.md",
+    "recovery_entry": ".loom/progress/WI-906.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-906/spec.md",
+    "plan": ".loom/specs/WI-906/plan.md",
+    "implementation_contract": ".loom/specs/WI-906/implementation-contract.md",
+    "build_checkpoint": "pass"
+  }
+}
