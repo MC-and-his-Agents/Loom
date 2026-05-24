@@ -30,7 +30,12 @@ import loom_flow as loom_flow_module
 import loom_status as loom_status_module
 import runtime_state as runtime_state_module
 from governance_surface import build_governance_surface
-from loom_flow import allowed_post_review_carrier_paths, repo_specific_requirements_payload, review_head_binding
+from loom_flow import (
+    allowed_post_review_carrier_paths,
+    repo_specific_requirements_payload,
+    review_head_binding,
+    review_head_binding_for_head,
+)
 from runtime_paths import repo_local_root
 
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 30.0
@@ -15312,6 +15317,7 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
         review_payload = load_json_file(review_shadow_target / review_path)
         if isinstance(review_payload, dict):
             review_payload["summary"] = "Carrier-only review artifact refresh."
+            review_payload["reviewed_head"] = reviewed_head
             write_json(review_shadow_target / review_path, review_payload)
             write_json(
                 review_shadow_target / ".loom/shadow/review-loom.json",
@@ -15336,8 +15342,12 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
                 timeout_seconds=30,
             )
             run_command(root, ["git", "commit", "-m", "refresh review carrier evidence"], cwd=review_shadow_target, timeout_seconds=30)
+            target_head = run_command(root, ["git", "rev-parse", "HEAD"], cwd=review_shadow_target, timeout_seconds=30).stdout.strip()
             carrier_context = {
                 "target_root": review_shadow_target,
+                "item_id": "INIT-0001",
+                "review_entry": review_path,
+                "latest_validation_summary": str(review_payload.get("reviewed_validation_summary", "")),
                 "report": {
                     "fact_chain": {
                         "entry_points": {
@@ -15354,6 +15364,64 @@ def check_adversarial_adoption_fixture(root: Path) -> list[Failure]:
             )
             if binding_errors or binding_payload.get("status") != "carrier-only":
                 failures.append(Failure("adversarial-adoption", "review shadow evidence tied to a review artifact must be carrier-only after review refresh"))
+            closeout_binding_payload, closeout_binding_errors = review_head_binding_for_head(
+                review_shadow_target,
+                reviewed_head=reviewed_head,
+                target_head=target_head,
+                allowed_paths=allowed_post_review_carrier_paths(carrier_context, review_path),
+            )
+            if closeout_binding_errors or closeout_binding_payload.get("status") != "carrier-only":
+                failures.append(Failure("adversarial-adoption", "closeout review backlink must accept carrier-only review refresh against the PR head"))
+            attempts_dir = review_shadow_target / ".loom/runtime/attempts/INIT-0001"
+            attempts_dir.mkdir(parents=True, exist_ok=True)
+            merge_ready_attempt = {
+                "schema_version": loom_flow_module.EXECUTION_ATTEMPT_SCHEMA,
+                "attempt_id": "INIT-0001-merge-ready-closeout-carrier-only",
+                "item_id": "INIT-0001",
+                "command": "flow",
+                "operation": "merge-ready",
+                "result": "pass",
+                "created_at": "2026-05-23T00:00:00Z",
+                "head_sha": target_head,
+                "branch": "work/closeout-carrier-only",
+                "workspace": {"entry": ".", "path": "."},
+                "failure": {
+                    "category": "none",
+                    "execution_classification": "none",
+                    "execution_summary": "latest execution attempt completed without an execution failure classification.",
+                    "missing_inputs": [],
+                    "fallback_to": None,
+                },
+                "steps": [],
+                "evidence": {
+                    "status": "present",
+                    "locator": ".loom/runtime/attempts/INIT-0001/INIT-0001-merge-ready-closeout-carrier-only.json",
+                    "latest_locator": ".loom/runtime/attempts/INIT-0001/latest.json",
+                },
+            }
+            write_json(attempts_dir / "INIT-0001-merge-ready-closeout-carrier-only.json", merge_ready_attempt)
+            write_json(attempts_dir / "latest.json", merge_ready_attempt)
+            closeout_subchecks = loom_flow_module.closeout_backlink_subchecks(
+                target_root=review_shadow_target,
+                context=carrier_context,
+                profile="closeout-contract",
+                owner="",
+                repo_name="",
+                pr_number=None,
+                pr_payload={"state": "MERGED", "headRefOid": target_head, "baseRefName": "main"},
+                merge_commit_sha=target_head,
+                merge_commit_in_target=True,
+                pr_payload_file="fixture:pr",
+                status_checks_file=None,
+                branch_protection_file=None,
+                ruleset_file=None,
+            )
+            review_subcheck = next((entry for entry in closeout_subchecks if entry.get("id") == "review_record"), {})
+            if review_subcheck.get("result") != "pass":
+                failures.append(Failure("adversarial-adoption", "closeout review backlink subcheck must pass for carrier-only review refresh"))
+            subcheck_binding = review_subcheck.get("head_binding") if isinstance(review_subcheck, dict) else None
+            if not isinstance(subcheck_binding, dict) or subcheck_binding.get("status") != "carrier-only":
+                failures.append(Failure("adversarial-adoption", "closeout review backlink subcheck must expose carrier-only head binding evidence"))
         else:
             failures.append(Failure("adversarial-adoption", "review shadow carrier fixture could not load review artifact"))
 
