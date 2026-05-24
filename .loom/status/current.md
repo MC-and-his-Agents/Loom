@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-987.json
 - Validation Entry: python3 tools/skills_surface.py check; make py-compile; python3 tools/loom_check.py; make check; closeout check for #835/#984
 - Closing Condition: closeout review_record subcheck accepts carrier-only review refresh against PR head, implementation drift remains fail-closed, generated surfaces are synchronized, validation passes, PR merged.
-- Current Checkpoint: admission checkpoint
-- Current Stop: Work item scaffolded and waiting for the first execution pass.
-- Next Step: Write the first recovery update for this work item.
+- Current Checkpoint: merge checkpoint
+- Current Stop: Closeout review backlink carrier-only semantics implemented; WI-987 formal spec and review evidence are refreshed; local validation passed.
+- Next Step: Commit carrier refresh, push branch, open PR #987, consume PR checks and merge gate.
 - Blockers: None recorded.
-- Latest Validation Summary: No validation recorded yet.
-- Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-987.md`.
-- Current Lane: not yet assigned
+- Latest Validation Summary: Passed: python3 tools/skills_surface.py check; make py-compile; python3 tools/loom_flow.py shadow-parity --target .; python3 tools/loom_flow.py adopt verify --target .; python3 tools/loom_flow.py checkpoint merge --target . --item WI-987; python3 tools/loom_check.py; make check.
+- Recovery Boundary: Reviewed head `da09890434847fd2b6d258d3d83496da22f9718e` includes the closeout backlink fix, WI-987 spec suite, and WI-835 terminal carrier refresh; subsequent changes are governance evidence refresh only.
+- Current Lane: closeout backlink follow-up
 
 ## Runtime Evidence
 
