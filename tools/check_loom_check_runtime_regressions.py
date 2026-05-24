@@ -46,6 +46,24 @@ def fail(message: str, failures: list[str]) -> None:
     failures.append(message)
 
 
+def current_loom_check_temp_dirs() -> set[Path]:
+    roots = {Path(tempfile.gettempdir()), Path("/tmp"), Path("/private/tmp")}
+    found: set[Path] = set()
+    for root in roots:
+        if not root.exists():
+            continue
+        for path in root.glob("loom-check-*"):
+            if path.is_dir():
+                found.add(path.resolve())
+    return found
+
+
+def check_temp_dir_cleanup(baseline: set[Path], failures: list[str]) -> None:
+    leftovers = sorted(str(path) for path in current_loom_check_temp_dirs() - baseline)
+    if leftovers:
+        fail("loom_check temporary directories must be removed after use: " + ", ".join(leftovers), failures)
+
+
 def check_cli_single_flight(loom_check, failures: list[str]) -> None:
     lock_path = loom_check.loom_check_lock_path(ROOT)
     if lock_path.exists():
@@ -151,12 +169,14 @@ def check_demo_fixture_stays_clean(failures: list[str]) -> None:
 
 def main() -> int:
     failures: list[str] = []
+    temp_dir_baseline = current_loom_check_temp_dirs()
     loom_check = load_loom_check()
     check_cli_single_flight(loom_check, failures)
     check_worktree_local_lock_paths(loom_check, failures)
     check_runtime_purity_helpers(loom_check, failures)
     check_installer_busy_output(failures)
     check_demo_fixture_stays_clean(failures)
+    check_temp_dir_cleanup(temp_dir_baseline, failures)
 
     if failures:
         print("loom_check runtime regression: FAILED")

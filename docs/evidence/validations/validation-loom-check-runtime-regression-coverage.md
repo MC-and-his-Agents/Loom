@@ -24,6 +24,7 @@ make loom-check
 - missing live target samples use unique absent temp paths instead of fixed `/tmp/loom-missing-live-target`
 - Node installer regression reports readable owner diagnostics when the package-root regression lock is busy
 - demo bootstrap fixture check runs against an isolated copy and leaves `examples/new-project` clean
+- `loom-check-*` temporary directories created by the lightweight regression path are removed before the command exits
 
 ## Boundary
 

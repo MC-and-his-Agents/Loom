@@ -326,6 +326,16 @@ class Failure:
     detail: str
 
 
+def remove_temp_tree(path: Path, *, attempts: int = 5, delay_seconds: float = 0.2) -> bool:
+    for attempt in range(attempts):
+        shutil.rmtree(path, ignore_errors=True)
+        if not path.exists():
+            return True
+        if attempt + 1 < attempts:
+            time.sleep(delay_seconds)
+    return not path.exists()
+
+
 GOVERNANCE_SURFACE_ROUTE_SKILLS = {
     "loom-adopt",
     "loom-resume",
@@ -6086,6 +6096,7 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
 
 def check_daily_execution_cli(root: Path) -> list[Failure]:
     failures: list[Failure] = []
+    flow_temp_roots: list[Path] = []
     example_target = root / "examples/new-project"
     tool_path = root / "tools/loom_flow.py"
     if not tool_path.exists() or not example_target.exists():
@@ -8650,7 +8661,10 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             if isinstance(engine, dict) and engine.get("failure_reason") != "repo_diff_detected":
                 failures.append(Failure("daily-execution-cli", "`review run` must report `repo_diff_detected` when tracked files change"))
 
+    flow_tmp_root: Path | None = None
     with tempfile.TemporaryDirectory(prefix="loom-check-flow-") as tmp:
+        flow_tmp_root = Path(tmp)
+        flow_temp_roots.append(flow_tmp_root)
         lifecycle_target = Path(tmp) / "new-project"
         shutil.copytree(example_target, lifecycle_target)
         temp_root = lifecycle_target / ".loom/flow/tmp"
@@ -8760,6 +8774,8 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         ):
             if stable_line not in progress_after_retire:
                 failures.append(Failure("daily-execution-cli", f"`workspace retire` must preserve recovery field `{stable_line}`"))
+    if flow_tmp_root is not None and flow_tmp_root.exists() and not remove_temp_tree(flow_tmp_root):
+        failures.append(Failure("daily-execution-cli", f"`flow lifecycle fixture` must remove temporary directory after use: {flow_tmp_root}"))
 
     with tempfile.TemporaryDirectory(prefix="loom-check-active-carrier-") as tmp:
         active_target = Path(tmp) / "new-project"
@@ -11590,6 +11606,9 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 )
             )
 
+    for flow_temp_root in flow_temp_roots:
+        if flow_temp_root.exists() and not remove_temp_tree(flow_temp_root, attempts=20, delay_seconds=0.25):
+            failures.append(Failure("daily-execution-cli", f"`flow lifecycle fixture` must not leave temporary directory residue: {flow_temp_root}"))
     return failures
 
 

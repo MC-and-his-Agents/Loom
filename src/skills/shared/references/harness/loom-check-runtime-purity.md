@@ -20,7 +20,7 @@
 - `consumer` profile 检查 bootstrapped consumer repo，必须只消费 consumer runtime/adoption surface，不得回退到 Loom source self-check。
 - `auto` 只负责选择 `source` 或 `consumer`，不得因为宿主环境变量或 live host proof 改变 profile。
 
-所有 profile 都必须设置唯一 `run_id`，并把运行态写入限定在当前 worktree 或本次运行拥有的唯一临时目录。
+所有 profile 都必须设置唯一 `run_id`，并把运行态写入限定在当前 worktree 或本次运行拥有的唯一临时目录。本次运行创建的 `loom-check-*` 临时目录必须在使用结束后及时清理，不得成为后续检查的隐式输入。
 
 ## 3. 并发语义
 
