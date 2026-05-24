@@ -9,6 +9,10 @@
 
 - [work-item-contract.md](./work-item-contract.md)
   - 定义唯一默认执行入口与 enforcement 合同
+- [cli-first-control-plane.md](./cli-first-control-plane.md)
+  - 定义 `loom` CLI、SKILLS、plugins、installer shim 与 `.loom/` 的职责边界和 fail-closed 规则
+- [cli-command-matrix.md](./cli-command-matrix.md)
+  - 冻结 CLI-first phase 的命令命名、状态分类与机器可读矩阵入口
 - [fact-chain-contract.md](./fact-chain-contract.md)
   - 定义静态真相、动态真相、host/control-plane mirror、retained result 与派生读面的读取优先级和 provenance 纪律
 - [execution-context.md](./execution-context.md)
