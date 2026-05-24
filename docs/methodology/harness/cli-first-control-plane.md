@@ -52,9 +52,29 @@ The CLI must fail closed when:
 - target installed-state metadata is missing, unreadable, or not `loom-installed-state/v2`;
 - installed layers have missing, unknown, or inconsistent version metadata;
 - a non-ready layer omits `failed_layer` or `fail_closed_reason`.
+- installed surface diagnostics find only legacy, mixed, symlink, or invalid surfaces;
+- mutating repair apply is requested before write ownership and rollback semantics are approved.
 
 Fallbacks must name executable next checks, not prose-only advice.
 
 ## Work Item Consumption
 
 This contract is the stable output of #898 and #900. Later Work Items may move reserved commands to `implemented`, but they must preserve the command name, JSON result shape, and fail-closed behavior unless the parent FR records an explicit contract change.
+
+## Installed Surface Diagnostics
+
+`loom detect`, `loom doctor`, and `loom repair plan` implement the #888 detection layer.
+
+`loom detect --target <repo> --json` reads only installation surfaces and classifies the target as:
+
+- `uninstalled`
+- `current`
+- `legacy`
+- `mixed`
+- `mixed-legacy`
+
+Detected surfaces are evidence, not authority by themselves. Legacy `.loom/bin`, repo-local `.agents/skills`, generated skills registries, plugin manifests, single-skill packages, installer status files, and symlinked surfaces must not be promoted to valid installed-state unless `loom-installed-state/v2` validates.
+
+`loom doctor --target <repo> --json` consumes detection plus installed-state validation. It passes only when versioned installed-state is valid and no blocking legacy surface remains.
+
+`loom repair plan --target <repo> --json` emits ordered non-mutating actions. `loom repair apply --target <repo> --json` currently fails closed and returns the plan because mutation ownership, rollback, and host adapter writes belong to later Work Items.

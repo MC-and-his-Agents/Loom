@@ -25,15 +25,16 @@ The JSON output is the canonical machine-readable matrix for tests and downstrea
 | `loom installed-state show` | implemented | Reads `loom-installed-state/v2` from the target repo. |
 | `loom installed-state validate` | implemented | Validates schema, layers, graph, and version metadata. |
 | `loom installed-state export` | implemented | Emits valid installed-state plus installation graph. |
+| `loom detect` | implemented | Detects current, legacy, symlink, single-skill, plugin, and mixed installed surfaces. |
+| `loom doctor` | implemented | Diagnoses installed-state and legacy surface readiness with fail-closed repair fallback. |
+| `loom repair plan` | implemented | Emits a non-mutating repair plan for missing, invalid, or legacy installed surfaces. |
+| `loom repair apply` | implemented | Fails closed until write ownership and rollback semantics are approved by a later Work Item. |
 
 ## Reserved Phase Commands
 
 These names are frozen for #885. Until their Work Items implement them, invoking them returns `result=block`.
 
 ```text
-loom detect
-loom doctor
-loom repair plan|apply
 loom install
 loom upgrade-plan
 loom upgrade
@@ -88,3 +89,12 @@ python3 tools/check_cli_contract.py
 ```
 
 This covers #899 and #901 by asserting that required names appear in `loom help --json`, version output is structured, and installed-state positive and negative fixtures behave consistently.
+
+For #906-#909 it also checks:
+
+- empty targets classify as `uninstalled`;
+- legacy `.loom/bin` surfaces are detected but not trusted as installed-state;
+- mixed `.agents/skills`, skills registry, and plugin manifests classify as mixed legacy surfaces;
+- valid installed-state makes `doctor` pass and `repair plan` no-op;
+- invalid graph edge endpoints fail closed;
+- `repair apply` remains a structured blocking command until mutation semantics are approved.
