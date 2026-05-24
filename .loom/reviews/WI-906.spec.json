@@ -5,7 +5,7 @@
   "kind": "spec_review",
   "summary": "WI-906 spec is approved for the #888 detection and repair-planning slice: it freezes JSON contracts, fail-closed behavior, fallback surfaces, and non-goal boundaries for installer shim, host orchestration, skills orchestration, and mutating repair apply.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "ce12fe3f059ae41cdab8da22d44c2883815c8d75",
+  "reviewed_head": "f80e8f69640ac9035c3b1e034ac3c17d288b31f8",
   "reviewed_validation_summary": "Spec suite reviewed against .loom/specs/WI-906/spec.md, plan.md, and implementation-contract.md; implementation evidence is python3 tools/check_cli_contract.py and make check on the PR branch.",
   "fallback_to": null,
   "findings": [],
