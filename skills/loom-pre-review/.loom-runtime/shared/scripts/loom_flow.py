@@ -4384,6 +4384,23 @@ def validation_summary_digest(summary: str | None) -> str | None:
     return hashlib.sha256(summary.strip().encode("utf-8")).hexdigest()
 
 
+def recovery_validation_summary_at_ref(root: Path, recovery_relative: str, ref: str) -> tuple[str | None, list[str]]:
+    result = run_git(root, ["show", f"{ref}:{recovery_relative}"])
+    if result is None:
+        return None, ["git is unavailable while reading retained recovery entry at PR head"]
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "git show failed"
+        return None, [f"retained recovery entry is unreadable at `{ref}`: {detail}"]
+    for raw_line in result.stdout.splitlines():
+        match = re.match(r"^-\s+Latest Validation Summary:\s*(.*)$", raw_line.strip())
+        if match:
+            value = match.group(1).strip()
+            if value:
+                return value, []
+            return None, [f"retained recovery entry `{recovery_relative}` has empty Latest Validation Summary at `{ref}`"]
+    return None, [f"retained recovery entry `{recovery_relative}` is missing Latest Validation Summary at `{ref}`"]
+
+
 def latest_successful_execution_attempt(
     target_root: Path,
     item_id: str,
@@ -4413,6 +4430,17 @@ def latest_successful_execution_attempt(
         return None, None, errors or [f"missing successful `{operation}` execution_attempt for `{item_id}`"]
     _, relative, payload = sorted(candidates, key=lambda entry: (entry[0], entry[1]))[-1]
     return payload, relative, []
+
+
+def missing_versioned_execution_attempt(errors: list[str], operation: str) -> bool:
+    if not errors:
+        return False
+    expected_missing_success = f"missing successful `{operation}` execution_attempt"
+    return all(
+        error.startswith("missing execution_attempt directory:")
+        or error.startswith(expected_missing_success)
+        for error in errors
+    )
 
 
 def closeout_required_status_subcheck(
@@ -4538,12 +4566,25 @@ def closeout_backlink_subchecks(
         return subchecks
 
     item_id = context["item_id"]
-    validation_digest = validation_summary_digest(context.get("latest_validation_summary"))
     pr_head = pr_payload.get("headRefOid") if isinstance(pr_payload, dict) and isinstance(pr_payload.get("headRefOid"), str) else None
     target_branch = pr_payload.get("baseRefName") if isinstance(pr_payload, dict) else None
+    validation_summary = context["latest_validation_summary"]
+    validation_summary_errors: list[str] = []
+    if pr_head and context.get("retained_item_context"):
+        recovery_relative = str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"])
+        retained_validation_summary, retained_validation_errors = recovery_validation_summary_at_ref(
+            target_root,
+            recovery_relative,
+            pr_head,
+        )
+        if retained_validation_errors:
+            validation_summary_errors.extend(retained_validation_errors)
+        elif retained_validation_summary is not None:
+            validation_summary = retained_validation_summary
+    validation_digest = validation_summary_digest(validation_summary)
 
     review_record, review_path, review_errors = load_review_record(target_root, item_id, context["review_entry"])
-    review_missing = list(review_errors)
+    review_missing = [*review_errors, *validation_summary_errors]
     review_head_binding_payload: dict[str, Any] | None = None
     if review_record is None and not review_missing:
         review_missing.append(f"missing review artifact: {review_path}")
@@ -4552,8 +4593,8 @@ def closeout_backlink_subchecks(
             review_missing.append("review decision is not allow")
         if review_record.get("kind") not in IMPLEMENTATION_REVIEW_KINDS:
             review_missing.append("review kind is not an implementation review")
-        if review_record.get("reviewed_validation_summary") != context["latest_validation_summary"]:
-            review_missing.append("reviewed_validation_summary does not match current validation summary")
+        if review_record.get("reviewed_validation_summary") != validation_summary:
+            review_missing.append("reviewed_validation_summary does not match retained validation summary")
         if pr_head:
             review_head_binding_payload, review_head_errors = review_head_binding_for_head(
                 target_root,
@@ -4581,23 +4622,58 @@ def closeout_backlink_subchecks(
         )
     )
 
+    status_subcheck = closeout_required_status_subcheck(
+        target_root=target_root,
+        profile=profile,
+        owner=owner,
+        repo_name=repo_name,
+        pr_number=pr_number,
+        pr_payload=pr_payload,
+        pr_head=pr_head,
+        pr_payload_file=pr_payload_file,
+        status_checks_file=status_checks_file,
+        branch_protection_file=branch_protection_file,
+        ruleset_file=ruleset_file,
+    )
+
     merge_ready_payload, merge_ready_locator, merge_ready_errors = latest_successful_execution_attempt(target_root, item_id, "merge-ready")
     merge_ready_missing = list(merge_ready_errors)
+    merge_ready_source = "execution_attempt"
+    merge_ready_trigger_reason = "closeout consumes retained merge-ready pass evidence instead of rerunning the full gate chain"
+    merge_ready_evidence_locator = merge_ready_locator
+    merge_ready_head = merge_ready_payload.get("head_sha") if isinstance(merge_ready_payload, dict) else None
+    merge_ready_fallback_reason: str | None = None
     if merge_ready_payload is not None and pr_head and merge_ready_payload.get("head_sha") != pr_head:
         merge_ready_missing.append("merge-ready execution_attempt head_sha does not match PR head")
+    if (
+        merge_ready_missing
+        and pr_head
+        and missing_versioned_execution_attempt(merge_ready_errors, "merge-ready")
+        and status_subcheck.get("result") == "pass"
+    ):
+        merge_ready_missing = []
+        merge_ready_source = "host_pr_checks"
+        merge_ready_trigger_reason = (
+            "closeout consumes fresh host required checks as legacy merge-ready evidence "
+            "when no versioned execution_attempt was retained"
+        )
+        merge_ready_evidence_locator = status_subcheck.get("evidence_locator") if isinstance(status_subcheck.get("evidence_locator"), str) else None
+        merge_ready_head = pr_head
+        merge_ready_fallback_reason = "missing_versioned_execution_attempt"
     subchecks.append(
         closeout_subcheck(
             check_id="merge_ready_attempt",
-            source="execution_attempt",
+            source=merge_ready_source,
             profile=profile,
             required_for_closeout=True,
-            trigger_reason="closeout consumes retained merge-ready pass evidence instead of rerunning the full gate chain",
+            trigger_reason=merge_ready_trigger_reason,
             result="pass" if not merge_ready_missing else "block",
             fallback_to=None if not merge_ready_missing else "merge-ready",
-            evidence_locator=merge_ready_locator,
+            evidence_locator=merge_ready_evidence_locator,
             missing_inputs=merge_ready_missing,
             item_id=item_id,
-            head_sha=merge_ready_payload.get("head_sha") if isinstance(merge_ready_payload, dict) else None,
+            head_sha=merge_ready_head,
+            fallback_reason=merge_ready_fallback_reason,
             validation_summary_digest=validation_digest,
         )
     )
@@ -4633,21 +4709,7 @@ def closeout_backlink_subchecks(
         )
     )
 
-    subchecks.append(
-        closeout_required_status_subcheck(
-            target_root=target_root,
-            profile=profile,
-            owner=owner,
-            repo_name=repo_name,
-            pr_number=pr_number,
-            pr_payload=pr_payload,
-            pr_head=pr_head,
-            pr_payload_file=pr_payload_file,
-            status_checks_file=status_checks_file,
-            branch_protection_file=branch_protection_file,
-            ruleset_file=ruleset_file,
-        )
-    )
+    subchecks.append(status_subcheck)
     return subchecks
 
 
@@ -6110,12 +6172,13 @@ def review_head_binding(
     *,
     reviewed_head: str | None,
     allowed_paths: set[str],
+    current_head: str | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
-    current_head = git_head_sha(target_root)
+    target_head = current_head or git_head_sha(target_root)
     return review_head_binding_for_head(
         target_root,
         reviewed_head=reviewed_head,
-        target_head=current_head,
+        target_head=target_head,
         allowed_paths=allowed_paths,
     )
 
@@ -8235,6 +8298,147 @@ def load_context(target_root: Path, output_relative: str, expected_item: str | N
         "read_entry": str(report["fact_chain"]["read_entry"]),
     }
     return context, []
+
+
+def load_retained_item_context(target_root: Path, output_relative: str, item_id: str) -> tuple[dict[str, Any], list[str]]:
+    work_item_relative = f".loom/work-items/{item_id}.md"
+    work_item_path = target_root / work_item_relative
+    if not work_item_path.exists():
+        return {}, [f"missing retained work item: {work_item_relative}"]
+
+    work_item, work_item_errors = parse_work_item(work_item_path, target_root)
+    if work_item_errors:
+        return {}, work_item_errors
+    if str(work_item.get("item_id")) != item_id:
+        return {}, [f"retained work item id mismatch: expected `{item_id}`, got `{work_item.get('item_id')}`"]
+
+    recovery_relative = str(work_item["recovery_entry"])
+    recovery_path, recovery_errors = resolve_repo_relative_path(
+        target_root,
+        recovery_relative,
+        label="retained recovery entry",
+    )
+    if recovery_errors:
+        return {}, recovery_errors
+    assert recovery_path is not None
+    if not recovery_path.exists():
+        return {}, [f"missing retained recovery entry: {recovery_relative}"]
+    recovery_entry, recovery_parse_errors = parse_recovery_entry(recovery_path, target_root, recovery_relative)
+    if recovery_parse_errors:
+        return {}, recovery_parse_errors
+    if str(recovery_entry.get("item_id")) != item_id:
+        return {}, [f"retained recovery item mismatch: expected `{item_id}`, got `{recovery_entry.get('item_id')}`"]
+
+    workspace_path, workspace_errors = resolve_workspace_path(target_root, str(work_item["workspace_entry"]))
+    if workspace_errors:
+        return {}, workspace_errors
+    if workspace_path is None:
+        return {}, [f"unable to resolve workspace entry: {work_item['workspace_entry']}"]
+
+    status_relative = ".loom/status/current.md"
+    status_path = target_root / status_relative
+    report: dict[str, Any] = {
+        "fact_chain": {
+            "read_entry": f"python3 .loom/bin/loom_init.py fact-chain --target . --item {item_id}",
+            "entry_points": {
+                "current_item_id": item_id,
+                "work_item": work_item_relative,
+                "recovery_entry": recovery_relative,
+                "status_surface": status_relative,
+            },
+        },
+        "facts": {
+            "workspace_entry": {"value": str(work_item["workspace_entry"])},
+            "validation_entry": {"value": str(work_item["validation_entry"])},
+            "review_entry": {"value": str(work_item["review_entry"])},
+            "current_checkpoint": {"value": str(recovery_entry["current_checkpoint"])},
+            "goal": {"value": str(work_item["goal"])},
+            "scope": {"value": str(work_item["scope"])},
+            "execution_path": {"value": str(work_item["execution_path"])},
+            "associated_artifacts": {"value": list(work_item.get("associated_artifacts", []))},
+            "current_stop": {"value": str(recovery_entry["current_stop"])},
+            "next_step": {"value": str(recovery_entry["next_step"])},
+            "blockers": {"value": str(recovery_entry["blockers"])},
+            "latest_validation_summary": {"value": str(recovery_entry["latest_validation_summary"])},
+            "recovery_boundary": {"value": str(recovery_entry["recovery_boundary"])},
+            "current_lane": {"value": str(recovery_entry["current_lane"])},
+            "closing_condition": {"value": str(work_item["closing_condition"])},
+        },
+        "provenance": [
+            {
+                "kind": "authored_truth",
+                "carrier": "work_item",
+                "field": "Item ID",
+                "authority": "work_item",
+                "freshness": "retained",
+                "path": work_item_relative,
+            },
+            {
+                "kind": "authored_truth",
+                "carrier": "recovery_entry",
+                "field": "Latest Validation Summary",
+                "authority": "recovery_entry",
+                "freshness": "retained",
+                "path": recovery_relative,
+            },
+        ],
+        "recovery_readiness": {
+            "result": "pass",
+            "status": "retained",
+            "summary": f"retained fact chain for `{item_id}` was loaded from authored work item and recovery carriers.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "checks": {
+                "authored_work_item": "pass",
+                "authored_recovery_entry": "pass",
+                "derived_status_surface": "not_applicable",
+                "parallel_truth": "not_applicable",
+            },
+            "authoritative_carrier": "recovery_entry",
+            "authoritative_path": recovery_relative,
+            "parallel_truth_drift": [],
+            "blocking_failures": [],
+        },
+        "blocking_failures": [],
+    }
+    context = {
+        "target_root": target_root,
+        "output_relative": output_relative,
+        "report": report,
+        "item_id": item_id,
+        "work_item_path": work_item_path,
+        "recovery_path": recovery_path,
+        "status_path": status_path,
+        "workspace_entry": str(work_item["workspace_entry"]),
+        "workspace_path": workspace_path,
+        "validation_entry": str(work_item["validation_entry"]),
+        "review_entry": str(work_item["review_entry"]),
+        "current_checkpoint_raw": str(recovery_entry["current_checkpoint"]),
+        "current_checkpoint": normalize_checkpoint(str(recovery_entry["current_checkpoint"])),
+        "goal": str(work_item["goal"]),
+        "scope": str(work_item["scope"]),
+        "execution_path": str(work_item["execution_path"]),
+        "associated_artifacts": list(work_item.get("associated_artifacts", [])),
+        "current_stop": str(recovery_entry["current_stop"]),
+        "next_step": str(recovery_entry["next_step"]),
+        "blockers": str(recovery_entry["blockers"]),
+        "latest_validation_summary": str(recovery_entry["latest_validation_summary"]),
+        "recovery_boundary": str(recovery_entry["recovery_boundary"]),
+        "current_lane": str(recovery_entry["current_lane"]),
+        "closing_condition": str(work_item["closing_condition"]),
+        "read_entry": str(report["fact_chain"]["read_entry"]),
+        "retained_item_context": True,
+    }
+    return context, []
+
+
+def closeout_expected_item_id(target_root: Path, issue_number: int | None) -> str | None:
+    if issue_number is None:
+        return None
+    item_id = f"WI-{issue_number}"
+    if (target_root / f".loom/work-items/{item_id}.md").exists():
+        return item_id
+    return None
 
 
 def review_runtime_root(context: dict[str, Any], reviewed_head: str | None = None) -> Path:
@@ -16117,7 +16321,17 @@ def closeout_payload(
 ) -> tuple[dict[str, Any], list[str]]:
     missing_inputs: list[str] = []
     effective_profile = effective_closeout_gate_profile(gate_profile)
+    expected_closeout_item = closeout_expected_item_id(target_root, issue_number)
     context, context_errors = load_context(target_root, ".loom/bootstrap/init-result.json", None)
+    if (
+        expected_closeout_item is not None
+        and (context_errors or context.get("item_id") != expected_closeout_item)
+    ):
+        context, context_errors = load_retained_item_context(
+            target_root,
+            ".loom/bootstrap/init-result.json",
+            expected_closeout_item,
+        )
     fact_chain_context: dict[str, Any] | None = context if not context_errors else None
     if context_errors:
         missing_inputs.extend(f"fact-chain: {message}" for message in context_errors)
