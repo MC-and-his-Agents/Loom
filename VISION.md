@@ -27,13 +27,16 @@ Loom 建立在以下判断上：
 5. Behavior-first 执行应成为 Loom 的外部契约。
    Work Item、spec、plan、build checkpoint、review、merge-ready 和 closeout 都应能消费行为证据与测试证据；BDD 描述外部可观察行为，TDD 驱动内部实现证据，但纯文档事项不应被强行套成单一实现仪式。
 
-6. 可复用的对象应是运行模型。
+6. Spec-driven development 可以作为执行纪律内化，但不能收窄 Loom。
+   对 formal spec、新功能、高风险变更和跨模块事项，SDD 的阶段化、产物化、模板约束和一致性分析可以成为 Loom 的强执行路径；但 adoption、resume、handoff、review、merge-ready、closeout、repo companion 和 host binding 仍属于 project operating layer 的独立能力，不应被 SDD-only 流程替代。
+
+7. 可复用的对象应是运行模型。
    大多数项目不共享产品代码，但共享许多执行问题。Loom 要复用的是这些问题的解决结构。
 
-7. 项目吞吐应围绕 `merge-ready` 收敛，而不是把 final review 当作第一次系统性发现问题的地方。
+8. 项目吞吐应围绕 `merge-ready` 收敛，而不是把 final review 当作第一次系统性发现问题的地方。
    review、guardian、CI、merge gate 与 closeout 应被拆成不同层级，并在受控流程中提前暴露问题。
 
-8. Loom 不要求自研所有底层宿主能力。
+9. Loom 不要求自研所有底层宿主能力。
    只要治理真相和编排语义由 Loom 持有，`gh`、`git worktree`、review engine、CI、project API 等都可以作为 Loom harness 的被编排对象。
 
 ## Loom 的 Operating Planes
@@ -46,6 +49,8 @@ Loom 的 operating layer 由以下 planes 协同组成：
   - 负责 repo 内执行机制与宿主能力编排，包括工作现场、恢复、review/merge/closeout、GitHub 与 host tooling 的统一调用语义
 - `Behavior and Test Evidence`
   - 负责把 BDD/TDD 双重证据循环带入 Work Item、spec、plan、build checkpoint、review、merge-ready 和 closeout
+- `Spec Discipline`
+  - 负责把 SDD 的 story/spec/plan/breakdown/evidence/analyze 思想作为 formal spec 路径的执行纪律内化，但不替代 adoption、resume、review、merge-ready、closeout 或宿主绑定
 - `Executable SKILLS`
   - 负责按场景暴露一等入口，让 agent 可以直接进入 adopt、resume、review、merge-ready、closeout 等动作
 

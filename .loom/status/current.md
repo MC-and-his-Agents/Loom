@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1005
-- Goal: Disable loom-installer active release workflow and preserve read-only legacy evidence for #1003.
-- Scope: #1005: node-installer-release sunset/no-publish judgment and release surface guardrails.
-- Execution Path: issue-scoped branch work/1005-installer-sunset in /Users/mc/dev/Loom-1005-installer-sunset
+- Item ID: WI-1013
+- Goal: Define how spec-driven development is internalized as a Loom project operating layer execution discipline without narrowing Loom into an SDD-only tool.
+- Scope: #1013 boundary docs, #1021 spec-kit evidence, #1022 positioning wording, #1023 extraction-ledger / landing-map updates, and the repo-local carriers required for PR readiness. Do not implement #1014 delivery planning, #1015 story intake, #1016 full/minimal spec suite, task carrier, gate-chain, or CLI automation content.
+- Execution Path: issue #1013 -> branch work/1013-sdd-operating-layer-boundary -> worktree /Users/mc/dev/Loom -> PR #1054.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1005.md
-- Review Entry: .loom/reviews/WI-1005.json
-- Validation Entry: python3 tools/check_release_surface.py
-- Closing Condition: PR merged with installer npm publish/tag/release disabled and no installer release advanced.
-- Current Checkpoint: PR preparation after local validation.
-- Current Stop: PR #1053 is open for #1005; initial CI exposed stale status/review carrier bindings and missing PR work item metadata, with installer sunset code unchanged.
-- Next Step: Refresh status/review carriers, update PR body with Loom Work Item binding, force-push repaired head, rerun PR gate and PR checks.
+- Recovery Entry: .loom/progress/WI-1013.md
+- Review Entry: .loom/reviews/WI-1013.json
+- Validation Entry: git diff --check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/loom.py verify --target . --json; python3 tools/loom.py doctor --target . --json
+- Closing Condition: #1021, #1022, and #1023 are covered by PR #1054; #1013 documents SDD as a Loom execution discipline, records keep/adapt/drop spec-kit evidence, and leaves #1014/#1015/#1016 able to consume the boundary without re-litigating scope.
+- Current Checkpoint: merge checkpoint
+- Current Stop: SDD boundary docs, WI-1013 carriers, PR body `Loom Work Item: WI-1013`, origin/main sync, terminal WI-1001/WI-1005 carrier cleanup, and refreshed semantic review record are committed locally for PR #1054.
+- Next Step: Push refreshed PR #1054 head, consume host checks, merge when host checks pass, then close out #1013 and child WIs.
 - Blockers: None recorded.
-- Latest Validation Summary: Passed locally: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; Ruby YAML parse for .github/workflows/*.yml; make check; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1005; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py checkpoint merge --target . --item WI-1005; python3 .loom/bin/loom_flow.py pr-gate check --target . --pr 1053 --head-sha 8557d10316877f69099b27dc9afcde64f9c0b7dc --item WI-1005. Initial PR checks failed on stale status/review carrier bindings and missing PR body Work Item metadata.
-- Recovery Boundary: Continue from /Users/mc/dev/Loom-1005-installer-sunset on branch work/1005-installer-sunset; keep scope limited to #1005 installer release workflow sunset and release-surface guardrails.
-- Current Lane: installer-sunset
+- Latest Validation Summary: Passed locally after syncing origin/main: `git diff --check`; targeted ledger/landing-map ID check for `EXT-0061` / `EXT-0062` / `EXT-0063`; targeted no-copy check for `docs/spec-kit` and `.specify`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 .loom/bin/loom_init.py fact-chain --target .`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1013 --write`.
+- Recovery Boundary: Continue only #1013 / #1021 / #1022 / #1023 boundary closeout. Do not expand into #1014, #1015, #1016, task carrier, gate-chain, or CLI implementation.
+- Current Lane: sdd-operating-layer-boundary
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: python3 tools/check_cli_contract.py; python3 tools/version_surface_check.py; npm --prefix packages/loom-installer run check:docs; make check
+- Verification Entry: git diff --check; python3 tools/loom_check.py --profile source --source-surface contract-only .
 - Lane Entry: not_applicable
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1005.md
-- Dynamic Truth: .loom/progress/WI-1005.md
+- Static Truth: .loom/work-items/WI-1013.md
+- Dynamic Truth: .loom/progress/WI-1013.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

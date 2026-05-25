@@ -6,6 +6,8 @@ Loom is an agent-first project operating layer.
 
 It gives coding agents a behavior-first execution path across adopt, resume, spec, plan, build checkpoints, review, merge-ready, handoff, and closeout. The goal is not to produce business code faster at any cost, but to keep work from stopping at "files changed" and to converge on a state where goals, behavior evidence, test evidence, review state, trunk truth, and host control plane all agree.
 
+Spec-driven development is an execution discipline inside Loom, not a narrower replacement for Loom. For formal spec, new feature, high-risk, or cross-module work, Loom can internalize SDD patterns such as staged artifacts, template-constrained specs, implementation plans, task or breakdown carriers, and cross-artifact consistency analysis. Those patterns must still feed Loom's wider operating layer: Work Item admission, recovery, review, merge-ready, controlled merge, closeout, host binding, and evidence consumption.
+
 ## How It Works
 
 Loom is now CLI-first. The `loom` command is the execution control plane: it diagnoses installed state, reads fact chains, runs verification, exposes upgrade and repair plans, and wraps scenario execution with structured fail-closed output.
@@ -27,7 +29,8 @@ The core execution model is:
 2. `loom upgrade-plan` and `loom repair plan` describe the next non-mutating action for current, legacy, or mixed installs.
 3. Scenario skills route human and agent intent into CLI-backed flows such as story, spec, build, review, merge-ready, and closeout.
 4. Work Item, spec, plan, build checkpoint, review, merge-ready, and closeout consume a dual evidence loop: behavior evidence describes the observable contract, and test evidence proves the implementation loop.
-5. Runtime evidence, review records, merge checkpoints, and closeout checks keep repository state aligned with host control.
+5. Formal spec paths can use SDD-style staged artifacts and consistency analysis, while light paths and non-implementation work can mark non-applicable pieces explicitly.
+6. Runtime evidence, review records, merge checkpoints, and closeout checks keep repository state aligned with host control.
 
 ## Install
 
@@ -140,4 +143,4 @@ An individually installed skill only exposes that skill to the host. If you need
 
 Loom is merge-readiness-centered and behavior-first. Review, validation, host state, behavior evidence, test evidence, and closeout are separate surfaces, but they must converge. If any one of them is still open, the work should not be treated as finished.
 
-Loom is not a business template, a code generator, or a replacement for GitHub, CI, review engines, or `git worktree`. It is a project operating layer with executable skills so agents can consume those host capabilities consistently.
+Loom is not a business template, a code generator, an SDD-only tool, or a replacement for GitHub, CI, review engines, or `git worktree`. It is a project operating layer with executable skills so agents can consume those host capabilities consistently.

@@ -1,0 +1,32 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1013",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1013 spec suite is approved: scope is limited to defining SDD as an internal Loom execution discipline, recording spec-kit keep/adapt/drop evidence, and preserving #1014/#1015/#1016 as follow-up consumers rather than implementing them in this PR.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "333b70a59f7d7144b42cfd1af90b81881da4eddd",
+  "reviewed_validation_summary": "Passed locally: `git diff --check`; targeted ledger/landing-map ID check for `EXT-0061` / `EXT-0062` / `EXT-0063`; targeted no-copy check for `docs/spec-kit` and `.specify`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 .loom/bin/loom_init.py fact-chain --target .`. `checkpoint admission` reads WI-1013 but still reports an existing stale active WI-1001 workspace locator outside this scope.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1014 should consume this boundary when defining delivery planning.",
+    "#1015 should consume this boundary when defining story intake.",
+    "#1016 should consume this boundary when defining the full/minimal spec suite."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1013.md",
+    "recovery_entry": ".loom/progress/WI-1013.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-1013/spec.md",
+    "plan": ".loom/specs/WI-1013/plan.md",
+    "implementation_contract": ".loom/specs/WI-1013/implementation-contract.md",
+    "github_fr": "#1013",
+    "child_work_items": [
+      "#1021",
+      "#1022",
+      "#1023"
+    ]
+  }
+}
