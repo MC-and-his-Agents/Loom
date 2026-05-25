@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-889.json
 - Validation Entry: python3 tools/check_cli_contract.py; python3 tools/version_surface_check.py; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; npm --prefix packages/loom-installer test; make check; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-889; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py pr-gate check --target . --pr 997 --head-sha <head> --item WI-889
 - Closing Condition: PR #997 合并后关闭 #889/#892/#896、#910-#914、#924-#928、#944-#947，并让 #885 消费 PR/head_sha/check/merge 证据；#897/#996 留给后续批次。
-- Current Checkpoint: admission checkpoint
-- Current Stop: Work item scaffolded and waiting for the first execution pass.
-- Next Step: Write the first recovery update for this work item.
+- Current Checkpoint: build checkpoint
+- Current Stop: PR #997 carrier is rebound to WI-889 at baseline head 8918d00; implementation contract and installer checks passed, with review/shadow carrier refresh in progress.
+- Next Step: Record WI-889 spec and implementation reviews, refresh shadow evidence, then rerun adopt verify, shadow-parity, pr-gate, and make check.
 - Blockers: None recorded.
-- Latest Validation Summary: No validation recorded yet.
-- Recovery Boundary: Work item scaffolded at `.loom/work-items/WI-889.md`.
-- Current Lane: not yet assigned
+- Latest Validation Summary: Passed on 8918d00: python3 tools/check_cli_contract.py; python3 tools/version_surface_check.py; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; npm --prefix packages/loom-installer test. make check pre-review reached only WI-889 carrier gaps: missing spec review and shadow hash drift.
+- Recovery Boundary: WI-889 owns PR #997 for #889/#892/#896, #910-#914, #924-#928, and #944-#947. It excludes #897 legacy migration validation, #996 release/npm judgment, profile finalization, bottom-layer host rewrites, repo-specific guardian replacement, and mutating rollback/delete ownership.
+- Current Lane: cli-first/delivery-scenario-shim
 
 ## Runtime Evidence
 
