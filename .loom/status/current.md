@@ -12,7 +12,7 @@
 - Validation Entry: python3 tools/check_cli_contract.py; python3 tools/version_surface_check.py; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-897; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py pr-gate check --target . --pr <PR> --head-sha <HEAD> --item WI-897; make check
 - Closing Condition: #948-#952 evidence is versioned, #897 PR is merge-ready or merged, release judgment is recorded for #996 consumption, and fact chain/PR/head_sha are consistent
 - Current Checkpoint: merge
-- Current Stop: PR #999 is open at head `7cedd042c43c40027a02893c94e94a0e269f0820`; local validation and review records are present, and PR gate is being reconciled.
+- Current Stop: PR #999 is open; local validation and review records are present, and PR gate consumes the current PR payload head SHA.
 - Next Step: Run PR gate against the current PR head and consume GitHub checks before merge.
 - Blockers: None recorded.
 - Latest Validation Summary: Reviewed head `e1351c425e5f5a89abf02418158eee71f19d4ae9` passed: `python3 tools/check_cli_contract.py`; `python3 tools/version_surface_check.py`; `npm --prefix packages/loom-installer run check:versions`; `npm --prefix packages/loom-installer run check:payload`; `npm --prefix packages/loom-installer run check:distribution`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-897`; `python3 .loom/bin/loom_flow.py shadow-parity --target .`; `python3 .loom/bin/loom_flow.py fact-chain --target .`; `make check`.
