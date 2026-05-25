@@ -11,12 +11,12 @@
 - Review Entry: .loom/reviews/WI-1006.json
 - Validation Entry: npm --prefix packages/loom-installer run check:docs
 - Closing Condition: PR merged with docs no longer presenting `loom-installer` as the current CLI, recommended install path, active release line, or CLI release evidence.
-- Current Checkpoint: local implementation before full validation.
-- Current Stop: Documentation now labels `loom-installer` as a deprecated legacy artifact and keeps `loom` CLI as the only active release line; full validation is pending.
-- Next Step: Run release/version/CLI/doc/installer checks, `make check`, Loom carrier checks, then open PR for #1006.
+- Current Checkpoint: validated after origin/main rebase
+- Current Stop: #1006 documentation migration is rebased on origin/main, PR #1056 exists, local validation passes after resolving carrier drift from merged #1013.
+- Next Step: Record refreshed WI-1006 reviews for the rebased head, force-push PR #1056, consume host checks, then merge and close #1006.
 - Blockers: None recorded.
-- Latest Validation Summary: Local checks passed for python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1006. make check ran and exposed carrier-only gaps now being repaired.
-- Recovery Boundary: Continue from /Users/mc/dev/Loom-1006-cli-docs-migration on branch work/1006-cli-docs-migration; keep scope limited to #1006 documentation migration and doc-sync/checker needle alignment.
+- Latest Validation Summary: Passed after rebase: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1006; python3 .loom/bin/loom_flow.py shadow-parity --target .; make check.
+- Recovery Boundary: Continue from /Users/mc/dev/Loom-1006-cli-docs-migration on branch work/1006-cli-docs-migration; keep scope limited to #1006 documentation migration, doc-sync/checker needle alignment, and carrier refresh required by rebase.
 - Current Lane: cli-docs-migration
 
 ## Runtime Evidence
