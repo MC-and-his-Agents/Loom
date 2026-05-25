@@ -1,0 +1,23 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-897",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-897 spec suite is approved for #897 legacy migration validation: it limits the batch to three-repo CLI-first legacy fixtures, the migration playbook, validation evidence, and a no-publish judgment handed to #996.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "316b9275df18487106f001ffcc09e9c237b15ac6",
+  "reviewed_validation_summary": "Initial validation: python3 tools/check_cli_contract.py passed after adding the legacy migration fixture contract. Full validation remains pending before PR merge.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-897.md",
+    "recovery_entry": ".loom/progress/WI-897.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-897/spec.md",
+    "plan": ".loom/specs/WI-897/plan.md",
+    "implementation_contract": ".loom/specs/WI-897/implementation-contract.md",
+    "build_checkpoint": "pending"
+  }
+}
