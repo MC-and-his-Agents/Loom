@@ -8,17 +8,26 @@ It gives coding agents a behavior-first execution path across adopt, resume, spe
 
 ## How It Works
 
-Loom remains a full-repo / plugin / SKILLS / CLI product. The default install model is full repository install plus native or host skill discovery. `SKILLS` expose scenario operations; host adapters expose install and bootstrap wiring; the CLI and fixtures provide machine checks; docs remain the repository truth for methodology, harness, adoption, templates, and evidence.
+Loom is now CLI-first. The `loom` command is the execution control plane: it diagnoses installed state, reads fact chains, runs verification, exposes upgrade and repair plans, and wraps scenario execution with structured fail-closed output.
 
-Agents start from `loom-init`, then route into the right scenario skill based on the task and repository state.
+`SKILLS` remain the agent-facing entrances. They help an agent discover the right scenario and then consume CLI/runtime output. Plugins and host adapters provide native discovery and wiring. `.loom/` remains the repository execution fact surface. The npm `loom-installer` is a compatibility shim for adapter-managed installs, single-skill helpers, and legacy bridging; it is not the primary execution layer.
+
+Agents can still start from `loom-init` when they need routing help. Once inside the work, the CLI is the stable machine interface:
+
+```bash
+python3 tools/loom.py doctor --target . --json
+python3 tools/loom.py upgrade-plan --target . --json
+python3 tools/loom.py verify --target . --json
+python3 tools/loom.py skills release-check --json
+```
 
 The core execution model is:
 
-1. `loom-init` decides whether the current work should adopt, resume, review, hand off, retire, or validate merge readiness.
-2. Scenario skills run the concrete workflow and consume the shared Loom runtime contract.
-3. Work Item, spec, plan, build checkpoint, review, merge-ready, and closeout consume a dual evidence loop: behavior evidence describes the observable contract, and test evidence proves the implementation loop.
-4. Methodology and architecture documents stay behind the skills layer, so users do not need to study Loom internals before starting.
-5. Runtime evidence, review records, merge checkpoints, and closeout checks keep repository state aligned.
+1. `loom doctor` and `loom verify` answer whether the repository is consuming a valid Loom layer.
+2. `loom upgrade-plan` and `loom repair plan` describe the next non-mutating action for current, legacy, or mixed installs.
+3. Scenario skills route human and agent intent into CLI-backed flows such as story, spec, build, review, merge-ready, and closeout.
+4. Work Item, spec, plan, build checkpoint, review, merge-ready, and closeout consume a dual evidence loop: behavior evidence describes the observable contract, and test evidence proves the implementation loop.
+5. Runtime evidence, review records, merge checkpoints, and closeout checks keep repository state aligned with host control.
 
 ## Install
 
@@ -44,7 +53,7 @@ Restart Codex after installation so native skill discovery reloads the Loom skil
 
 ### Adapter Installer
 
-The npm installer is not the Codex default path. Use it when you need an adapter-managed plugin install, single-skill helper flow, or installer verification output:
+The npm installer is not the Codex default path. It is a compatibility shim, not the default control plane. Use it when you need an adapter-managed plugin install, single-skill helper flow, legacy bridge, or installer verification output:
 
 ```bash
 npx @mc-and-his-agents/loom-installer add plugin --host codex
@@ -64,18 +73,15 @@ Requirements:
 - Node `>=20`
 - Python `>=3.10`, recommended `3.11+`
 
-The installer reports the distribution layer and version context it touched. Loom execution still runs on the Python runtime bundled with the generated skills surface.
+The installer reports the distribution layer and version context it touched. Loom execution semantics still belong to the `loom` CLI and the Python runtime bundled with the generated skills surface.
 
 ## Basic Workflow
 
-1. Start from `loom-init` when you are unsure what should happen next.
-2. Use `loom-adopt` to initialize a new repository or retrofit Loom into an existing one.
-3. Use `loom-resume` to restore context and continue the current `Work Item`.
-4. Use `loom-pre-review` to expose obvious readiness gaps before formal review.
-5. When the task hits the formal spec path, use `loom-spec-review` first to produce the `spec-approved` gate.
-6. Use `loom-review` to produce a structured review result.
-7. Use `loom-merge-ready` to validate the release boundary before merge.
-8. Use `loom-handoff` or `loom-retire` to leave the worksite in a recoverable or closed state.
+1. Run `loom doctor --target . --json` or `loom verify --target . --json` to understand the repository's current Loom layer.
+2. Run `loom upgrade-plan --target . --json` before changing installed runtime, skills, plugin, or companion surfaces.
+3. Start from `loom-init` when you need scenario routing, then use scenario skills such as `loom-adopt`, `loom-resume`, `loom-build`, `loom-review`, and `loom-merge-ready`.
+4. Use CLI-backed gates such as `loom checkpoint merge`, `loom gate pr`, and `loom gate closeout` to consume readiness evidence.
+5. Use `loom-handoff` or `loom-retire` to leave the worksite in a recoverable or closed state.
 
 Agents should not treat "there are changed files" as completion. In Loom, work is only done when goals, documents, review state, validation evidence, trunk truth, and host control plane all agree.
 

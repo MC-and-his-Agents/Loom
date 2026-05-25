@@ -8,17 +8,26 @@ Loom 是一个 agent-first project operating layer。
 
 ## 工作方式
 
-Loom 保持 full repo / plugin / SKILLS / CLI 的产品形态。默认安装模型是完整仓库安装加宿主原生或宿主适配的 skill discovery；`SKILLS` 暴露场景操作；宿主 adapter 承接安装和 bootstrap wiring；CLI 与 fixtures 提供机器校验；docs 继续作为 methodology、harness、adoption、templates 和 evidence 的仓库真相。
+Loom 现在采用 CLI-first。`loom` 命令是执行控制面：它诊断 installed state、读取 fact chain、执行验证、输出 upgrade / repair plan，并用结构化 fail-closed 输出包装场景执行。
 
-智能体从 `loom-init` 起步，再根据当前任务和仓库状态路由到合适的 scenario skill。
+`SKILLS` 仍然是 agent-facing 入口。它们帮助智能体发现正确场景，并消费 CLI/runtime 输出。Plugins 和宿主 adapter 负责原生发现与 wiring。`.loom/` 继续作为仓库执行事实表面。npm `loom-installer` 是 compatibility shim，用于 adapter 托管安装、single-skill helper 和 legacy bridge；它不是主体执行层。
+
+智能体仍可在需要路由帮助时从 `loom-init` 起步。进入执行后，CLI 是稳定的机器接口：
+
+```bash
+python3 tools/loom.py doctor --target . --json
+python3 tools/loom.py upgrade-plan --target . --json
+python3 tools/loom.py verify --target . --json
+python3 tools/loom.py skills release-check --json
+```
 
 基础执行流如下：
 
-1. `loom-init` 判断当前应当 adopt、resume、review、handoff、retire，还是检查 merge readiness。
-2. Scenario skills 执行具体工作流，并消费共享的 Loom runtime contract。
-3. Work Item、spec、plan、build checkpoint、review、merge-ready 和 closeout 共同消费双重证据循环：行为证据描述外部可观察契约，测试证据证明内部实现循环。
-4. 方法论文档下沉在 skills 层之后，用户不需要先理解治理内部结构再开始使用 Loom。
-5. Runtime evidence、review record、merge checkpoint 和 closeout check 共同维持仓库状态一致。
+1. `loom doctor` 和 `loom verify` 回答仓库当前是否正在消费有效 Loom 层。
+2. `loom upgrade-plan` 和 `loom repair plan` 为 current、legacy 或 mixed install 输出下一步非变更动作。
+3. Scenario skills 把人和智能体意图路由到 story、spec、build、review、merge-ready、closeout 等 CLI-backed flow。
+4. Work Item、spec、plan、build checkpoint、review、merge-ready 和 closeout 共同消费双重证据循环：行为证据描述外部可观察契约，测试证据证明内部实现循环。
+5. Runtime evidence、review record、merge checkpoint 和 closeout check 共同让仓库状态与宿主控制面对齐。
 
 ## 安装
 
@@ -44,7 +53,7 @@ done
 
 ### Adapter Installer
 
-npm installer 不是 Codex 默认路径。需要 adapter 托管的 plugin 安装、single-skill helper 或 installer verification output 时再使用：
+npm installer 不是 Codex 默认路径。它是 compatibility shim，不是默认控制面。需要 adapter 托管的 plugin 安装、single-skill helper、legacy bridge 或 installer verification output 时再使用：
 
 ```bash
 npx @mc-and-his-agents/loom-installer add plugin --host codex
@@ -64,18 +73,15 @@ npx loom-installer add plugin --host claude
 - Node `>=20`
 - Python `>=3.10`，推荐 `3.11+`
 
-Installer 会报告它触达的 distribution layer 和 version context；Loom 的实际执行仍然运行在生成 skills surface 随附的 Python runtime 上。
+Installer 会报告它触达的 distribution layer 和 version context；Loom 的执行语义仍属于 `loom` CLI，以及生成 skills surface 随附的 Python runtime。
 
 ## 基本工作流
 
-1. 当你不确定下一步该做什么时，从 `loom-init` 开始。
-2. 用 `loom-adopt` 初始化新仓库，或把 Loom retrofit 到既有仓库。
-3. 用 `loom-resume` 恢复上下文并继续当前 `Work Item`。
-4. 用 `loom-pre-review` 在正式 review 前暴露明显的 readiness 缺口。
-5. 命中 formal spec 路径时，先用 `loom-spec-review` 产出 `spec-approved` gate。
-6. 用 `loom-review` 产出结构化 review 结果。
-7. 用 `loom-merge-ready` 在合并前验证 release boundary。
-8. 用 `loom-handoff` 或 `loom-retire` 把现场收成可恢复或已关闭状态。
+1. 先运行 `loom doctor --target . --json` 或 `loom verify --target . --json`，判断仓库当前 Loom 层。
+2. 变更 installed runtime、skills、plugin 或 companion surface 前，先运行 `loom upgrade-plan --target . --json`。
+3. 需要场景路由时，从 `loom-init` 开始，再使用 `loom-adopt`、`loom-resume`、`loom-build`、`loom-review`、`loom-merge-ready` 等 scenario skills。
+4. 用 `loom checkpoint merge`、`loom gate pr`、`loom gate closeout` 等 CLI-backed gate 消费 readiness evidence。
+5. 用 `loom-handoff` 或 `loom-retire` 把现场收成可恢复或已关闭状态。
 
 智能体不能把“已经有改动文件”当作完成。对 Loom 来说，只有目标、文档、review 状态、验证证据、主干真相和宿主控制面全部对齐，才算真正完成。
 
