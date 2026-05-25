@@ -1,0 +1,20 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1007",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1007 spec is scoped to checker enforcement for the #1003 installer sunset: release-surface negatives, CLI release-check authority output, package check wiring, doc-sync needle, and carrier updates. It excludes publishing, npm deprecation, and workflow release behavior.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "f80c236e01c382193fe83197e7368964b19af4df",
+  "reviewed_validation_summary": "Spec review only; implementation validation pending.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1007.md",
+    "recovery_entry": ".loom/progress/WI-1007.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pending"
+  }
+}

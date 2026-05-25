@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -16,6 +17,23 @@ CLI_RELEASE = ROOT / ".github" / "workflows" / "loom-cli-release.yml"
 INSTALLER_BUMP_CHECK = ROOT / "packages" / "loom-installer" / "scripts" / "check-version-bump.mjs"
 README = ROOT / "README.md"
 README_ZH = ROOT / "README.zh-CN.md"
+CODEX_INSTALL = ROOT / "docs" / "adoption" / "codex-install.md"
+
+ACTIVE_SURFACE_DOCS = (
+    README,
+    README_ZH,
+    CLI_RELEASE_DOC,
+    VERSION_AUTHORITY,
+    CODEX_INSTALL,
+)
+
+FORBIDDEN_ACTIVE_INSTALLER_PATTERNS = (
+    re.compile(r"@mc-and-his-agents/loom-installer[^.\n]*(?:is|as|remains)[^.\n]*(?:current|active|primary)[^.\n]*(?:CLI|release line|install path)", re.IGNORECASE),
+    re.compile(r"@mc-and-his-agents/loom-installer[^.\n]*latest[^.\n]*(?:proves|publishes|is evidence for)[^.\n]*(?:loom|CLI)", re.IGNORECASE),
+    re.compile(r"loom-installer-v[^\s`)]*[^.\n]*(?:publishes|proves|is evidence for)[^.\n]*(?:loom|CLI)", re.IGNORECASE),
+    re.compile(r"npx\s+(?:@mc-and-his-agents/)?loom-installer[^.\n]*(?:is|as|remains)[^.\n]*(?:default|recommended|primary)[^.\n]*(?:Codex|install|path)", re.IGNORECASE),
+    re.compile(r"(?:default|recommended|primary)[^.\n]*(?:Codex|install|path)[^.\n]*(?:is|uses)\s+npx\s+(?:@mc-and-his-agents/)?loom-installer", re.IGNORECASE),
+)
 
 
 def require_file(path: Path, errors: list[str]) -> str:
@@ -31,6 +49,26 @@ def require_needles(path: Path, needles: tuple[str, ...], errors: list[str]) -> 
         if needle not in text:
             errors.append(f"{path.relative_to(ROOT)} must mention `{needle}`")
     return text
+
+
+def forbid_active_installer_evidence(path: Path, errors: list[str]) -> None:
+    text = require_file(path, errors)
+    if not text:
+        return
+    for pattern in FORBIDDEN_ACTIVE_INSTALLER_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            line_start = text.rfind("\n", 0, match.start()) + 1
+            line_end = text.find("\n", match.end())
+            if line_end == -1:
+                line_end = len(text)
+            line = text[line_start:line_end].lower()
+            if any(guard in line for guard in ("no check may", "must not", "do not", "is not", "not ")):
+                continue
+            snippet = " ".join(match.group(0).split())
+            errors.append(
+                f"{path.relative_to(ROOT)} must not present loom-installer as active CLI/install/release evidence: `{snippet}`"
+            )
 
 
 def main() -> int:
@@ -99,6 +137,10 @@ def main() -> int:
     )
     require_needles(README, ("Loom CLI release surface", "loom-installer deprecated legacy line"), errors)
     require_needles(README_ZH, ("Loom CLI 发布面", "loom-installer deprecated legacy line"), errors)
+    require_needles(CODEX_INSTALL, ("The npm installer is not the Codex default path",), errors)
+
+    for path in ACTIVE_SURFACE_DOCS:
+        forbid_active_installer_evidence(path, errors)
 
     forbidden_installer_behavior_needles = (
         "plugins/loom/.codex-plugin/|src/skills/|skills/",
