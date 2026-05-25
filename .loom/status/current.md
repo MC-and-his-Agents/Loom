@@ -12,10 +12,10 @@
 - Validation Entry: python3 tools/check_release_surface.py
 - Closing Condition: PR merged with `loom-cli-release` able to auto-create GitHub `v*` tag and Release on eligible `main` pushes, while tag collisions fail closed and installer publish evidence remains excluded.
 - Current Checkpoint: validated
-- Current Stop: PR #1059 is open at head 39fd280ec73a413462d7d21a5c960a7c5b72fead; local pr-gate is being rerun after refreshing spec-review and prior WI-1007 terminal state.
+- Current Stop: PR #1059 is open at head 4eef003cf6f2e1f683ab77a45e7b1f3f9b8ba5c2; local pr-gate is being rerun after refreshing code-review evidence.
 - Next Step: Consume local PR gate and GitHub checks, then merge and close #1008.
 - Blockers: None recorded.
-- Latest Validation Summary: Passed: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; ruby YAML parse for .github/workflows/loom-cli-release.yml; npm --prefix packages/loom-installer run check:release; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1008; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1008; make check. Python yaml module was unavailable locally, so Ruby stdlib YAML was used for syntax parsing.
+- Latest Validation Summary: Passed: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; ruby YAML parse for .github/workflows/loom-cli-release.yml; npm --prefix packages/loom-installer run check:release; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1008; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1008; make check. After PR #1059 opened, local pr-gate purity/spec review remediation was applied through 4eef003cf6f2e1f683ab77a45e7b1f3f9b8ba5c2. Python yaml module was unavailable locally, so Ruby stdlib YAML was used for syntax parsing.
 - Recovery Boundary: Continue from /Users/mc/dev/Loom-1008-cli-auto-release on branch work/1008-cli-auto-release; keep scope limited to #1008 CLI auto-release workflow semantics, docs/checker needles, and carriers.
 - Current Lane: cli-auto-release
 
