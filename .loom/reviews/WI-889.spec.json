@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-889",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-889 spec suite is approved for PR #997: it limits the batch to #889/#892/#896 delivery, scenario, and installer-shim CLI contracts; it keeps #897 legacy validation and #996 release judgment out of scope.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "051706a5fbff8bdaccd5bc890895d404ffe5b90c",
+  "reviewed_validation_summary": "Passed on 8918d00: python3 tools/check_cli_contract.py; python3 tools/version_surface_check.py; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; npm --prefix packages/loom-installer test. make check pre-review reached only WI-889 carrier gaps: missing spec review and shadow hash drift.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-889.md",
+    "recovery_entry": ".loom/progress/WI-889.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
