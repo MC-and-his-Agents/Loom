@@ -35,6 +35,7 @@ SKILLS_SCHEMA = "loom-skills-surface/v1"
 SCENARIO_SCHEMA = "loom-scenario-control/v1"
 PROFILE_SCHEMA = "loom-governance-profile-control/v1"
 GATE_SCHEMA = "loom-gate-control/v1"
+DELIVERY_SCHEMA = "loom-delivery-control/v1"
 
 
 COMMANDS: list[dict[str, Any]] = [
@@ -101,11 +102,11 @@ COMMANDS: list[dict[str, Any]] = [
         "json": True,
         "summary": "Fail closed until a later Work Item enables mutating repair execution.",
     },
-    {"command": "install", "domain": "delivery", "status": "reserved", "json": True},
-    {"command": "upgrade-plan", "domain": "delivery", "status": "reserved", "json": True},
-    {"command": "upgrade", "domain": "delivery", "status": "reserved", "json": True},
-    {"command": "rollback", "domain": "delivery", "status": "reserved", "json": True},
-    {"command": "verify", "domain": "delivery", "status": "reserved", "json": True},
+    {"command": "install", "domain": "delivery", "status": "implemented", "json": True},
+    {"command": "upgrade-plan", "domain": "delivery", "status": "implemented", "json": True},
+    {"command": "upgrade", "domain": "delivery", "status": "implemented", "json": True},
+    {"command": "rollback", "domain": "delivery", "status": "implemented", "json": True},
+    {"command": "verify", "domain": "delivery", "status": "implemented", "json": True},
     {"command": "init", "domain": "scenario", "status": "implemented", "json": True},
     {"command": "adopt", "domain": "scenario", "status": "implemented", "json": True},
     {"command": "route", "domain": "scenario", "status": "implemented", "json": True},
@@ -114,18 +115,18 @@ COMMANDS: list[dict[str, Any]] = [
     {"command": "profile status", "domain": "profile", "status": "implemented", "json": True},
     {"command": "profile upgrade-plan", "domain": "profile", "status": "implemented", "json": True},
     {"command": "profile upgrade", "domain": "profile", "status": "implemented", "json": True},
-    {"command": "story", "domain": "scenario", "status": "reserved", "json": True},
-    {"command": "spec", "domain": "scenario", "status": "reserved", "json": True},
-    {"command": "plan", "domain": "scenario", "status": "reserved", "json": True},
-    {"command": "build", "domain": "scenario", "status": "reserved", "json": True},
-    {"command": "pre-review", "domain": "scenario", "status": "reserved", "json": True},
+    {"command": "story", "domain": "scenario", "status": "implemented", "json": True},
+    {"command": "spec", "domain": "scenario", "status": "implemented", "json": True},
+    {"command": "plan", "domain": "scenario", "status": "implemented", "json": True},
+    {"command": "build", "domain": "scenario", "status": "implemented", "json": True},
+    {"command": "pre-review", "domain": "scenario", "status": "implemented", "json": True},
     {"command": "spec-review", "domain": "scenario", "status": "delegated", "json": True},
     {"command": "review", "domain": "scenario", "status": "delegated", "json": True},
     {"command": "merge-ready", "domain": "scenario", "status": "delegated", "json": True},
-    {"command": "closeout", "domain": "scenario", "status": "reserved", "json": True},
+    {"command": "closeout", "domain": "scenario", "status": "implemented", "json": True},
     {"command": "resume", "domain": "scenario", "status": "delegated", "json": True},
-    {"command": "handoff", "domain": "scenario", "status": "reserved", "json": True},
-    {"command": "retire", "domain": "scenario", "status": "reserved", "json": True},
+    {"command": "handoff", "domain": "scenario", "status": "implemented", "json": True},
+    {"command": "retire", "domain": "scenario", "status": "implemented", "json": True},
     {"command": "checkpoint admission", "domain": "gate", "status": "implemented", "json": True},
     {"command": "checkpoint build", "domain": "gate", "status": "implemented", "json": True},
     {"command": "checkpoint merge", "domain": "gate", "status": "implemented", "json": True},
@@ -201,6 +202,11 @@ def read_optional_json(path: Path) -> Any | None:
     if not path.exists():
         return None
     return read_json(path)
+
+
+def write_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def repo_version() -> str:
@@ -394,6 +400,72 @@ def installed_state_path(target: Path) -> Path | None:
         if path.exists():
             return path
     return None
+
+
+def build_installed_state(target: Path, *, host: str, mode: str, skill_id: str | None = None) -> dict[str, Any]:
+    versions = version_context()
+    layers: list[dict[str, Any]] = [
+        {
+            "id": "runtime",
+            "layer_type": "full-repo-runtime",
+            "installed_path": ".loom/bin",
+            "version_context": {
+                "repo_version": versions["repo_version"],
+                "runtime_core_version": versions["runtime_core_version"],
+            },
+            "runtime_state": "ready",
+            "upgrade_eligibility": "current",
+            "provides": ["loom runtime wrappers", "CLI-first control-plane entry"],
+            "consumes": [],
+        },
+        {
+            "id": "skills",
+            "layer_type": "generated-skills",
+            "installed_path": "skills",
+            "version_context": {
+                "skills_registry_version": versions["skills_registry_version"],
+                "skill_package_version": versions["skill_package_version"],
+            },
+            "runtime_state": "ready",
+            "upgrade_eligibility": "current",
+            "provides": ["scenario skills"],
+            "consumes": ["runtime"],
+        },
+    ]
+    graph_layers = ["runtime", "skills"]
+    graph_edges = [{"from": "skills", "to": "runtime", "relationship": "consumes"}]
+    if mode in {"plugin", "skill"}:
+        layer_id = "host-adapter" if mode == "plugin" else "single-skill"
+        layers.append(
+            {
+                "id": layer_id,
+                "layer_type": "host-adapter-plugin" if mode == "plugin" else "generated-single-skill",
+                "installed_path": "plugins/loom" if mode == "plugin" else f".agents/skills/{skill_id or 'loom-init'}",
+                "version_context": {
+                    "plugin_surface_version": versions["plugin_surface_version"],
+                    "host_adapter_version": versions["host_adapter_version"],
+                },
+                "runtime_state": "ready",
+                "upgrade_eligibility": "current",
+                "provides": [f"{host} {mode} discovery surface"],
+                "consumes": ["skills"],
+            }
+        )
+        graph_layers.append(layer_id)
+        graph_edges.append({"from": layer_id, "to": "skills", "relationship": "consumes"})
+    return {
+        "schema_version": INSTALLED_STATE_SCHEMA,
+        "installation_id": f"loom-{target.name or 'repo'}",
+        "target": str(target),
+        "installed_at": now_iso(),
+        "installing_command": "loom install",
+        "upgrade_eligibility": "current",
+        "layers": layers,
+        "installation_graph": {
+            "layers": graph_layers,
+            "edges": graph_edges,
+        },
+    }
 
 
 def legacy_surface_hints(target: Path) -> list[dict[str, str]]:
@@ -762,6 +834,242 @@ def handle_repair(argv: list[str]) -> int:
             fail_closed_reason="repair apply requires a later Work Item to approve write ownership and rollback semantics",
             fallback_to=["loom repair plan", "loom doctor"],
         )
+    )
+
+
+def handle_delivery(command: str, argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog=f"loom {command}")
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--host", default="codex", choices=("codex", "claude", "opencode", "gemini", "cursor"))
+    parser.add_argument("--mode", default="full-repo", choices=("full-repo", "plugin", "skill"))
+    parser.add_argument("--skill-id")
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--force", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    target = resolve_target(args.target)
+    if not target.exists():
+        return emit(block_target(command, target, "target path does not exist"))
+
+    detection = detect_payload(target)
+    path, state, installed_error = load_installed_state(target)
+    validation_errors = validate_installed_state(state) if installed_error is None else []
+    installed_ready = installed_error is None and not validation_errors
+    legacy_surfaces = [
+        item for item in detection["surfaces"]
+        if item.get("migration_status") == "legacy" or str(item.get("kind", "")).startswith("symlink-")
+    ]
+
+    if command == "install":
+        planned_state = build_installed_state(target, host=args.host, mode=args.mode, skill_id=args.skill_id)
+        state_path = target / ".loom" / "installed-state.json"
+        if not args.apply:
+            return emit(
+                output(
+                    command,
+                    "block",
+                    schema=DELIVERY_SCHEMA,
+                    summary="Install is mutating and requires --apply before writing installed-state metadata.",
+                    target=str(target),
+                    host=args.host,
+                    mode=args.mode,
+                    mutates=True,
+                    planned_writes=[relative_to_target(state_path, target)],
+                    detection=detection,
+                    failed_layer="install-apply",
+                    fail_closed_reason="explicit --apply is required before install writes installed-state",
+                    fallback_to=["loom install --target <repo> --apply --json", "loom repair plan --target <repo> --json"],
+                )
+            )
+        if installed_ready and not args.force:
+            return emit(
+                output(
+                    command,
+                    "block",
+                    schema=DELIVERY_SCHEMA,
+                    summary="Valid installed-state already exists; use upgrade-plan or --force for reinstall.",
+                    target=str(target),
+                    installed_state_path=str(path),
+                    detection=detection,
+                    failed_layer="installed-state",
+                    fail_closed_reason="current installed-state exists",
+                    fallback_to=["loom upgrade-plan --target <repo> --json", "loom install --target <repo> --apply --force --json"],
+                )
+            )
+        write_json(state_path, planned_state)
+        return emit(
+            output(
+                command,
+                "pass",
+                schema=DELIVERY_SCHEMA,
+                summary="Installed-state metadata was written.",
+                target=str(target),
+                host=args.host,
+                mode=args.mode,
+                mutates=True,
+                installed_state_path=str(state_path),
+                installed_state=planned_state,
+                detection=detection,
+                fallback_to=None,
+            )
+        )
+
+    if command == "upgrade-plan":
+        actions: list[dict[str, Any]] = []
+        if installed_error is not None or validation_errors:
+            actions.append(
+                {
+                    "id": "repair-installed-state",
+                    "kind": "repair-plan",
+                    "status": "required",
+                    "reason": installed_error["fail_closed_reason"] if installed_error else "installed-state validation failed",
+                    "command": "loom repair plan --target <repo> --json",
+                }
+            )
+        if legacy_surfaces:
+            actions.append(
+                {
+                    "id": "classify-legacy-surfaces",
+                    "kind": "manual-migration-judgment",
+                    "status": "required",
+                    "surface_count": len(legacy_surfaces),
+                    "command": "loom repair plan --target <repo> --json",
+                }
+            )
+        if installed_ready and not legacy_surfaces:
+            actions.append(
+                {
+                    "id": "installed-state-current",
+                    "kind": "no-op",
+                    "status": "current",
+                    "reason": "installed-state validates and no legacy surfaces are blocking",
+                    "command": "loom verify --target <repo> --json",
+                }
+            )
+        return emit(
+            output(
+                command,
+                "pass",
+                schema=DELIVERY_SCHEMA,
+                summary="Upgrade plan generated without mutating target state.",
+                target=str(target),
+                mutates=False,
+                installed_state_path=str(path) if path else None,
+                detection=detection,
+                installed_state_errors=validation_errors,
+                actions=actions,
+                fallback_to=None if installed_ready and not legacy_surfaces else ["loom repair plan --target <repo> --json"],
+            )
+        )
+
+    if command == "verify":
+        doctor = doctor_payload(target)
+        result = "pass" if doctor["result"] == "pass" else "block"
+        return emit(
+            output(
+                command,
+                result,
+                schema=DELIVERY_SCHEMA,
+                summary="Installed Loom delivery layers verified." if result == "pass" else "Installed Loom delivery layers are not ready.",
+                target=str(target),
+                mutates=False,
+                doctor=doctor,
+                installed_state_path=str(path) if path else None,
+                failed_layer=None if result == "pass" else "delivery-verify",
+                fail_closed_reason=None if result == "pass" else "doctor reported missing, invalid, mixed, or legacy installed surfaces",
+                fallback_to=None if result == "pass" else ["loom upgrade-plan --target <repo> --json", "loom repair plan --target <repo> --json"],
+            )
+        )
+
+    if command == "upgrade":
+        if not args.apply:
+            return emit(
+                output(
+                    command,
+                    "block",
+                    schema=DELIVERY_SCHEMA,
+                    summary="Upgrade is mutating and requires --apply.",
+                    target=str(target),
+                    mutates=True,
+                    plan=handle_delivery_payload_for_upgrade_plan(target),
+                    failed_layer="upgrade-apply",
+                    fail_closed_reason="explicit --apply is required before upgrade mutates installed-state or adapter surfaces",
+                    fallback_to=["loom upgrade-plan --target <repo> --json", "loom verify --target <repo> --json"],
+                )
+            )
+        if not installed_ready or legacy_surfaces:
+            return emit(
+                output(
+                    command,
+                    "block",
+                    schema=DELIVERY_SCHEMA,
+                    summary="Upgrade cannot apply while installed-state is invalid or legacy surfaces remain unclassified.",
+                    target=str(target),
+                    mutates=True,
+                    detection=detection,
+                    installed_state_errors=validation_errors,
+                    failed_layer="upgrade-preflight",
+                    fail_closed_reason="repair plan must be consumed before mutating upgrade",
+                    fallback_to=["loom repair plan --target <repo> --json"],
+                )
+            )
+        state["upgraded_at"] = now_iso()
+        state["upgrade_eligibility"] = "current"
+        write_json(path, state)
+        return emit(
+            output(
+                command,
+                "pass",
+                schema=DELIVERY_SCHEMA,
+                summary="Installed-state metadata was refreshed for the current Loom version surface.",
+                target=str(target),
+                mutates=True,
+                installed_state_path=str(path),
+                installed_state=state,
+                fallback_to=None,
+            )
+        )
+
+    return emit(
+        output(
+            command,
+            "block",
+            schema=DELIVERY_SCHEMA,
+            summary="Rollback requires an explicit rollback artifact and remains fail-closed in this phase.",
+            target=str(target),
+            mutates=False,
+            detection=detection,
+            failed_layer="rollback-ownership",
+            fail_closed_reason="rollback/delete ownership is not inferred from installed surface detection",
+            fallback_to=["loom upgrade-plan --target <repo> --json", "loom repair plan --target <repo> --json"],
+        )
+    )
+
+
+def handle_delivery_payload_for_upgrade_plan(target: Path) -> dict[str, Any]:
+    detection = detect_payload(target)
+    path, state, installed_error = load_installed_state(target)
+    validation_errors = validate_installed_state(state) if installed_error is None else []
+    legacy_surfaces = [
+        item for item in detection["surfaces"]
+        if item.get("migration_status") == "legacy" or str(item.get("kind", "")).startswith("symlink-")
+    ]
+    actions = []
+    if installed_error is not None or validation_errors:
+        actions.append({"id": "repair-installed-state", "status": "required"})
+    if legacy_surfaces:
+        actions.append({"id": "classify-legacy-surfaces", "status": "required", "surface_count": len(legacy_surfaces)})
+    return output(
+        "upgrade-plan",
+        "pass",
+        schema=DELIVERY_SCHEMA,
+        summary="Upgrade plan generated without mutating target state.",
+        target=str(target),
+        mutates=False,
+        installed_state_path=str(path) if path else None,
+        detection=detection,
+        installed_state_errors=validation_errors,
+        actions=actions,
     )
 
 
@@ -1210,6 +1518,101 @@ def handle_gate(argv: list[str]) -> int:
     return emit(output("gate", "block", schema=GATE_SCHEMA, summary="Unsupported gate name.", failed_layer="gate-input", fail_closed_reason=f"unsupported gate name: {gate}", fallback_to=["loom gate pre-review --target <repo> --json", "loom gate pr --target <repo> --pr <number> --json"]))
 
 
+def handle_scenario(command: str, argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog=f"loom {command}")
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--item")
+    parser.add_argument("--output")
+    parser.add_argument("--build-evidence")
+    parser.add_argument("--owner")
+    parser.add_argument("--repo", dest="repo_name")
+    parser.add_argument("--issue", type=int)
+    parser.add_argument("--pr", type=int)
+    parser.add_argument("--pr-payload-file")
+    parser.add_argument("--project", type=int)
+    parser.add_argument("--branch")
+    parser.add_argument("--project-drift-mode", choices=("advisory", "blocking"), default="advisory")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    target = resolve_target(args.target)
+    if not target.exists():
+        return emit(block_target(command, target, "target path does not exist"))
+
+    flow_operations = {
+        "story": "story",
+        "build": "build",
+        "pre-review": "pre-review",
+        "handoff": "handoff",
+        "retire": "handoff",
+    }
+    if command in flow_operations:
+        flow_args = ["flow", flow_operations[command], "--target", str(target)]
+        for flag, value in (
+            ("--item", args.item),
+            ("--output", args.output),
+            ("--build-evidence", args.build_evidence),
+            ("--owner", args.owner),
+            ("--repo", args.repo_name),
+            ("--issue", args.issue),
+            ("--pr", args.pr),
+            ("--pr-payload-file", args.pr_payload_file),
+            ("--project", args.project),
+            ("--branch", args.branch),
+            ("--project-drift-mode", args.project_drift_mode if command in {"pre-review"} else None),
+        ):
+            if value is not None:
+                flow_args.extend([flag, str(value)])
+        payload = flow_payload(command, flow_args, fallback_to=["loom status --target <repo> --json", "loom checkpoint build --target <repo> --json"])
+        payload.setdefault("schema_version", SCENARIO_SCHEMA)
+        if payload.get("command") and payload.get("command") != command:
+            payload["wrapped_command"] = payload.get("command")
+        payload["command"] = command
+        if command == "retire":
+            payload["retire_contract"] = {
+                "mutates": False,
+                "summary": "Retire currently exposes the handoff/cleanup checklist and does not delete worktrees or host objects.",
+                "fallback_to": ["loom workspace retire --target <repo> --json", "loom handoff --target <repo> --json"],
+            }
+        return emit(payload)
+
+    if command in {"spec", "plan"}:
+        item = args.item or "unknown-item"
+        relative = f".loom/specs/{item}/{'spec.md' if command == 'spec' else 'plan.md'}"
+        locator = target / relative
+        return emit(
+            output(
+                command,
+                "block" if not locator.exists() else "pass",
+                schema=SCENARIO_SCHEMA,
+                summary=f"{command} scenario locator {'exists' if locator.exists() else 'is missing'}; authoring remains caller-owned.",
+                target=str(target),
+                item=item,
+                locator=relative,
+                mutates=False,
+                failed_layer=None if locator.exists() else f"{command}-carrier",
+                fail_closed_reason=None if locator.exists() else f"missing {relative}",
+                fallback_to=None if locator.exists() else ["loom story --target <repo> --item <item> --json", "docs/methodology/templates/spec-suite.md"],
+            )
+        )
+
+    if command == "closeout":
+        flow_args = ["closeout", "check", "--target", str(target)]
+        if args.item:
+            flow_args.extend(["--item", args.item])
+        if args.issue is not None:
+            flow_args.extend(["--issue", str(args.issue)])
+        if args.pr is not None:
+            flow_args.extend(["--pr", str(args.pr)])
+        payload = flow_payload(command, flow_args, fallback_to=["loom merge check <pr> --json", "loom reconcile --issue <issue> --pr <pr> --json"])
+        payload.setdefault("schema_version", SCENARIO_SCHEMA)
+        if payload.get("command") and payload.get("command") != command:
+            payload["wrapped_command"] = payload.get("command")
+        payload["command"] = command
+        return emit(payload)
+
+    return emit(output(command, "block", schema=SCENARIO_SCHEMA, summary="Unsupported scenario command.", failed_layer="scenario-input", fail_closed_reason=command, fallback_to=["loom help --json"]))
+
+
 def dispatch(command: str, forwarded_args: list[str]) -> int:
     tool_name, prefix = COMMAND_ROUTES[command]
     tool_path = TOOLS_ROOT / tool_name
@@ -1286,6 +1689,8 @@ def main(argv: list[str]) -> int:
     if command == "repair" or command.startswith("repair "):
         repair_args = command.split()[1:] + forwarded if command.startswith("repair ") else forwarded
         return handle_repair(repair_args)
+    if command in {"install", "upgrade-plan", "upgrade", "rollback", "verify"}:
+        return handle_delivery(command, forwarded)
     if command == "workspace" or command.startswith("workspace "):
         workspace_args = command.split()[1:] + forwarded if command.startswith("workspace ") else forwarded
         return handle_workspace(workspace_args)
@@ -1328,6 +1733,8 @@ def main(argv: list[str]) -> int:
     if command == "gate" or command.startswith("gate "):
         gate_args = command.split()[1:] + forwarded if command.startswith("gate ") else forwarded
         return handle_gate(gate_args)
+    if command in {"story", "spec", "plan", "build", "pre-review", "closeout", "handoff", "retire"}:
+        return handle_scenario(command, forwarded)
     if command in COMMAND_ROUTES:
         return dispatch(command, forwarded)
     if command in COMMAND_INDEX:

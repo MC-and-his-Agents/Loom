@@ -107,6 +107,20 @@ The CLI separates:
 
 `host list` and `host doctor` are read-only. `host install` and `host upgrade` fail closed unless `--apply` is present and the built installer shim is available. `host remove` remains non-mutating in this phase and reports the missing rollback/delete ownership contract.
 
+## Delivery Commands
+
+`loom install`, `loom upgrade-plan`, `loom upgrade`, `loom rollback`, and `loom verify` implement the #889 delivery surface with `loom-delivery-control/v1`.
+
+The delivery layer is the CLI-owned install-state control plane:
+
+- `install` writes `loom-installed-state/v2` only with `--apply`; without it, the command reports the planned write and fails closed.
+- `upgrade-plan` is read-only and orders the next required action: repair installed-state, classify legacy surfaces, or verify current state.
+- `verify` consumes `doctor` so delivery readiness and installed surface diagnostics cannot drift.
+- `upgrade` requires `--apply` and refuses to mutate until installed-state validates and legacy surfaces are consumed.
+- `rollback` is intentionally fail-closed until a concrete rollback artifact and delete ownership are supplied.
+
+Installer-managed host adapter installs may still be delegated through `loom host install|upgrade|verify`; top-level delivery commands own the repository installed-state boundary and do not infer host lifecycle mutations.
+
 ## Skills Commands
 
 `loom skills list`, `loom skills generate`, `loom skills sync`, `loom skills check`, `loom skills doctor`, `loom skills package`, and `loom skills release-check` implement the #895 generated SKILLS surface with `loom-skills-surface/v1`.
@@ -141,3 +155,16 @@ The wrappers do not create a second truth source:
 - `gate closeout` maps to closeout check and never performs closeout sync.
 
 Representative fail-closed cases are part of `tools/check_cli_contract.py`: missing status carriers, missing PR/head input, missing merge PR input, and missing closeout target input all return structured `block` payloads with fallback commands.
+
+## Scenario Commands
+
+`loom story`, `loom spec`, `loom plan`, `loom build`, `loom pre-review`, `loom closeout`, `loom handoff`, and `loom retire` implement the #892 CLI-backed scenario surface with `loom-scenario-control/v1`.
+
+The CLI keeps SKILLS as entry text and routes execution into the shared runtime:
+
+- `story`, `build`, `pre-review`, and `handoff` delegate to `loom_flow.py flow`.
+- `spec` and `plan` expose the expected `.loom/specs/<item>/` locators and fail closed when the caller has not authored the carriers.
+- `closeout` delegates to the closeout check surface and does not close issues, sync Projects, or mutate PR state.
+- `retire` is non-mutating and returns a cleanup / lifecycle contract rather than deleting worktrees or host objects.
+
+This preserves the boundary that scenario SKILLS are agent-facing entrances, while the CLI owns command semantics and JSON failure shape.

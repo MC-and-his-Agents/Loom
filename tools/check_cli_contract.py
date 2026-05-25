@@ -188,6 +188,27 @@ def main() -> int:
     ):
         if matrix[command]["status"] != "implemented":
             raise AssertionError(f"{command} must be implemented for #890/#891")
+    for command in (
+        "install",
+        "upgrade-plan",
+        "upgrade",
+        "rollback",
+        "verify",
+    ):
+        if matrix[command]["status"] != "implemented":
+            raise AssertionError(f"{command} must be implemented for #910-#914")
+    for command in (
+        "story",
+        "spec",
+        "plan",
+        "build",
+        "pre-review",
+        "closeout",
+        "handoff",
+        "retire",
+    ):
+        if matrix[command]["status"] != "implemented":
+            raise AssertionError(f"{command} must be implemented for #924-#928")
 
     _, version_payload = run_json(["version", "--json"], expect=0)
     if version_payload["result"] != "pass" or not version_payload["versions"]["repo_version"]:
@@ -242,6 +263,21 @@ def main() -> int:
         _, exported = run_json(["installed-state", "export", "--target", str(valid_target), "--json"], expect=0)
         if exported["installation_graph"]["layers"] != ["runtime", "skills"]:
             raise AssertionError("installed-state export did not include graph")
+        _, upgrade_plan = run_json(["upgrade-plan", "--target", str(valid_target), "--json"], expect=0)
+        if upgrade_plan["schema"] != "loom-delivery-control/v1" or not upgrade_plan["actions"]:
+            raise AssertionError("upgrade-plan did not emit delivery control actions")
+        _, verify_payload = run_json(["verify", "--target", str(valid_target), "--json"], expect=0)
+        if verify_payload["schema"] != "loom-delivery-control/v1" or verify_payload["doctor"]["result"] != "pass":
+            raise AssertionError("verify did not consume doctor success")
+        status, install_payload = run_json(["install", "--target", str(valid_target), "--json"])
+        if status == 0 or install_payload["failed_layer"] != "install-apply":
+            raise AssertionError("install did not fail closed without --apply")
+        status, upgrade_payload = run_json(["upgrade", "--target", str(valid_target), "--json"])
+        if status == 0 or upgrade_payload["failed_layer"] != "upgrade-apply":
+            raise AssertionError("upgrade did not fail closed without --apply")
+        status, rollback_payload = run_json(["rollback", "--target", str(valid_target), "--json"])
+        if status == 0 or rollback_payload["failed_layer"] != "rollback-ownership":
+            raise AssertionError("rollback did not fail closed without rollback ownership")
         _, hosts = run_json(["host", "list", "--target", str(valid_target), "--json"], expect=0)
         if hosts["schema"] != "loom-host-orchestration/v1" or not any(host["id"] == "codex" for host in hosts["hosts"]):
             raise AssertionError("host list did not emit supported host adapter inventory")
@@ -286,6 +322,28 @@ def main() -> int:
         _, adoption_verify = run_json(["adopt", "verify", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"])
         if adoption_verify["command"] != "adopt" or adoption_verify.get("schema_version") != "loom-adoption-verify/v1":
             raise AssertionError("adopt verify did not expose adoption verification JSON")
+        _, story_payload = run_json(["story", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"], expect=0)
+        if story_payload["command"] != "story" or story_payload.get("wrapped_command") != "flow":
+            raise AssertionError("story did not wrap the flow runtime")
+        for command_name in ("spec", "plan"):
+            status, scenario_payload = run_json([command_name, "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
+            if status == 0 or scenario_payload["schema"] != "loom-scenario-control/v1" or not scenario_payload.get("fallback_to"):
+                raise AssertionError(f"{command_name} did not fail closed with a structured locator payload")
+        status, build_payload = run_json(["build", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
+        if build_payload["command"] != "build" or build_payload.get("wrapped_command") != "flow":
+            raise AssertionError("build did not wrap the flow runtime")
+        status, pre_review_payload = run_json(["pre-review", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
+        if pre_review_payload["command"] != "pre-review" or pre_review_payload.get("wrapped_command") != "flow":
+            raise AssertionError("pre-review did not wrap the flow runtime")
+        status, handoff_payload = run_json(["handoff", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
+        if handoff_payload["command"] != "handoff" or handoff_payload.get("wrapped_command") != "flow":
+            raise AssertionError("handoff did not wrap the flow runtime")
+        status, retire_payload = run_json(["retire", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
+        if retire_payload["command"] != "retire" or not retire_payload.get("retire_contract"):
+            raise AssertionError("retire did not expose structured non-mutating contract")
+        _, closeout_payload = run_json(["closeout", "--target", str(REPO_ROOT), "--json"], expect=0)
+        if closeout_payload["command"] != "closeout" or closeout_payload.get("schema_version") != "loom-scenario-control/v1":
+            raise AssertionError("closeout did not wrap the closeout check runtime")
         _, checkpoint_admission = run_json(["checkpoint", "admission", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"])
         if checkpoint_admission["command"] != "checkpoint admission" or checkpoint_admission.get("checkpoint") != "admission":
             raise AssertionError("checkpoint admission did not wrap checkpoint JSON")
