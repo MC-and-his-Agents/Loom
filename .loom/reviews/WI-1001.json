@@ -5,7 +5,7 @@
   "kind": "general_review",
   "summary": "WI-1001 implementation is approved: loom CLI release evidence now has a root VERSION plus GitHub v* release line, node-installer release judgment is limited to installer shim/package changes, and release surface checks enforce that installer latest/tags are not used as CLI publish evidence.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "1c3b2dcbce7c389544a2f3eb830d5add0737a067",
+  "reviewed_head": "bae73d1f98e43e1b501b6b749dd384be5c863835",
   "reviewed_validation_summary": "Passed locally: `python3 tools/check_release_surface.py`; `python3 tools/version_surface_check.py`; `npm --prefix packages/loom-installer run check:docs`; `npm --prefix packages/loom-installer run check:versions`; `npm --prefix packages/loom-installer run check:payload`; `npm --prefix packages/loom-installer run check:distribution`; `python3 tools/check_cli_contract.py`; `make check`; Ruby YAML parse for `.github/workflows/*.yml`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1001 --write`; `python3 .loom/bin/loom_flow.py shadow-parity --target .`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1001`. No publish was performed. Current external evidence shows `@mc-and-his-agents/loom-installer` npm `latest` is `0.1.119`, latest installer GitHub Release is `loom-installer-v0.1.119`, and existing Loom CLI GitHub Release is `v0.12.0`; this work item defines the split and expects PR/main workflow judgment before any explicit `workflow_dispatch` publish.",
   "fallback_to": null,
   "findings": [],
