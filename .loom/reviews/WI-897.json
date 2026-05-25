@@ -1,39 +1,28 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-897",
-  "decision": "fallback",
+  "decision": "allow",
   "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "316b9275df18487106f001ffcc09e9c237b15ac6",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
-      }
-    },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
+  "summary": "WI-897 implementation is approved: it adds versioned legacy migration fixtures for WebEnvoy, Syvert, and HotCP; extends CLI contract checks to verify detect/doctor/repair-plan/upgrade-plan/verify semantics; records the migration playbook and no-publish release judgment for #996 consumption.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "e1351c425e5f5a89abf02418158eee71f19d4ae9",
+  "reviewed_validation_summary": "Passed before review: python3 tools/check_cli_contract.py; python3 tools/version_surface_check.py; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-897; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py fact-chain --target .; make check.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
   "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "#996 must consume this no-publish judgment with final version, tag, release, and npm evidence before #885 closeout."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-897.md",
+    "recovery_entry": ".loom/progress/WI-897.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-897/spec.md",
+    "plan": ".loom/specs/WI-897/plan.md",
+    "implementation_contract": ".loom/specs/WI-897/implementation-contract.md",
+    "fixture": "docs/evidence/fixtures/legacy-migration-validation-fixtures.json",
+    "playbook": "docs/adoption/cli-first-legacy-migration-playbook.md",
+    "validation_record": "docs/evidence/validations/validation-legacy-migration-release-judgment.md",
+    "contract_check": "tools/check_cli_contract.py"
+  }
 }
