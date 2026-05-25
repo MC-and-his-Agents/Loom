@@ -1,0 +1,20 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1008",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1008 implementation is approved after focused validation: loom-cli-release now allows main-push auto publish for eligible CLI publish behavior, keeps PRs judgment-only, keeps workflow_dispatch as repair, fails closed on existing v* tags pointing at another commit, and preserves installer non-publish evidence boundaries.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "4eef003cf6f2e1f683ab77a45e7b1f3f9b8ba5c2",
+  "reviewed_validation_summary": "Passed: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; ruby YAML parse for .github/workflows/loom-cli-release.yml; npm --prefix packages/loom-installer run check:release; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1008; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1008; make check. After PR #1059 opened, local pr-gate purity/spec review remediation was applied through 4eef003cf6f2e1f683ab77a45e7b1f3f9b8ba5c2. Python yaml module was unavailable locally, so Ruby stdlib YAML was used for syntax parsing.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1008.md",
+    "recovery_entry": ".loom/progress/WI-1008.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass"
+  }
+}

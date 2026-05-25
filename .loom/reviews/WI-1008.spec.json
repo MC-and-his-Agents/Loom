@@ -1,0 +1,20 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1008",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1008 spec is scoped to loom-cli-release auto-publish semantics for main pushes, dispatch repair, tag-collision fail-closed behavior, release-surface documentation, checker needles, and carriers. It excludes the first actual CLI release, VERSION bump, installer publish, npm deprecation, and new distribution channels.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "39fd280ec73a413462d7d21a5c960a7c5b72fead",
+  "reviewed_validation_summary": "Spec reviewed against #1008 issue body, #1003 scope, loom-cli-release workflow implementation, release surface docs, checker needles, and subagent read-only findings.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1008.md",
+    "recovery_entry": ".loom/progress/WI-1008.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass"
+  }
+}

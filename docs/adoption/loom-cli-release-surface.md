@@ -28,26 +28,32 @@ This deliberately avoids introducing a new npm package, Homebrew formula, or sta
 
 Every merge that touches CLI/runtime release behavior must receive a `loom` CLI release judgment.
 
-CLI release behavior includes:
+CLI publish behavior includes:
 
 - `VERSION`
 - `tools/loom.py`
 - `tools/loom_*.py`
-- `tools/check_cli_contract.py`
 - `skills/shared/scripts/`
 - `src/skills/`
 - `skills/`
+
+CLI release-control behavior also receives release-surface checks but does not create a release by itself:
+
+- `tools/check_cli_contract.py`
 - `docs/adoption/loom-cli-release-surface.md`
 - `.github/workflows/loom-cli-release.yml`
 
 The judgment may be:
 
-- `publish-required`: the current `VERSION` is not published and the release operator requested a publish run.
+- `publish-required`: the current `VERSION` is not published and CLI publish behavior changed.
 - `already-published-and-released`: the `VERSION` tag and release already point at the current release commit.
 - `release-missing`: the tag exists and npm is irrelevant, but the GitHub Release is missing.
-- `no-cli-behavior-change`: the merge did not touch CLI/runtime release behavior.
+- `version-already-published-on-different-commit`: CLI publish behavior changed but the current `VERSION` tag already points at another commit; the workflow must fail instead of overwriting history.
+- `no-cli-behavior-change`: the merge did not touch CLI publish behavior.
 
-For pull requests and normal `main` pushes, the workflow records judgment only until #1008 enables automatic `loom` CLI publishing. Installer npm state is never publish evidence for this judgment.
+For pull requests, the workflow records judgment but must not create tags or releases. For `push` events on `main`, `loom-cli-release` automatically creates the GitHub `v*` tag and GitHub Release when CLI publish behavior changed and the root `VERSION` is an unpublished candidate. `workflow_dispatch` with `publish=true` remains a repair path for missing tag/release evidence, not the only publish path.
+
+The workflow must fail closed when CLI publish behavior changed but the current `VERSION` is already published on a different commit. It must never overwrite an existing tag or release. Installer npm state is never publish evidence for this judgment.
 
 ## Installer Sunset
 
