@@ -1,0 +1,24 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-998",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-998 spec suite is approved: it limits the batch to README.md and README.zh-CN.md entrypoint wording plus required carriers, keeps CLI behavior and release/version decisions out of scope, and requires #996 to consume the merged #998 evidence.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "c8cda5bf663a29858d79bbe25891c84fcb04bf80",
+  "reviewed_validation_summary": "Passed for WI-998: `python3 tools/check_cli_contract.py`; `python3 tools/version_surface_check.py`; `npm --prefix packages/loom-installer run check:docs`; `python3 .loom/bin/loom_flow.py fact-chain --target .`; `python3 .loom/bin/loom_flow.py shadow-parity --target .`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-998`; `make check`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#996 must consume the merged #998 PR, checks, and merge commit before final release judgment."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-998.md",
+    "recovery_entry": ".loom/progress/WI-998.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-998/spec.md",
+    "plan": ".loom/specs/WI-998/plan.md",
+    "implementation_contract": ".loom/specs/WI-998/implementation-contract.md"
+  }
+}

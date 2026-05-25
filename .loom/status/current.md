@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-897
-- Goal: Close #897 legacy repo migration validation and release judgment for #885 CLI-first phase
-- Scope: #897 only: WebEnvoy/Syvert/HotCP legacy validation, migration playbook, three-repo validation evidence, and release judgment handoff to #996
-- Execution Path: issue #897 -> branch work/897-legacy-validation -> formal worktree /Users/mc/dev/Loom-897-legacy-validation -> PR TBD
+- Item ID: WI-998
+- Goal: Update README entrypoints so #885 presents Loom as a CLI-first operating layer.
+- Scope: README.md and README.zh-CN.md only, plus WI-998 carriers required for PR readiness; align the public entrypoint with #885, #896, and #996 without changing CLI behavior or release versions.
+- Execution Path: issue #998 -> branch work/998-cli-first-readme -> formal worktree /Users/mc/dev/Loom-998-cli-first-readme -> PR TBD
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-897.md
-- Review Entry: .loom/reviews/WI-897.json
-- Validation Entry: python3 tools/check_cli_contract.py; python3 tools/version_surface_check.py; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-897; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py pr-gate check --target . --pr <PR> --head-sha <HEAD> --item WI-897; make check
-- Closing Condition: #948-#952 evidence is versioned, #897 PR is merge-ready or merged, release judgment is recorded for #996 consumption, and fact chain/PR/head_sha are consistent
+- Recovery Entry: .loom/progress/WI-998.md
+- Review Entry: .loom/reviews/WI-998.json
+- Validation Entry: python3 tools/check_cli_contract.py; python3 tools/version_surface_check.py; npm --prefix packages/loom-installer run check:docs; make check; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-998; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py pr-gate check --target . --pr <PR> --head-sha <HEAD> --item WI-998
+- Closing Condition: README.md and README.zh-CN.md present `loom` CLI as the primary control plane, describe loom-installer as compatibility shim / adapter-managed install / legacy bridge, #998 PR is merged, and #996 can consume the PR, checks, and merge commit.
 - Current Checkpoint: merge
-- Current Stop: PR #999 is open; local validation and review records are present, and PR gate consumes the current PR payload head SHA.
-- Next Step: Run PR gate against the current PR head and consume GitHub checks before merge.
+- Current Stop: README.md and README.zh-CN.md updates are implemented, reviewed, and locally validated; PR creation is next.
+- Next Step: Open PR for #998, run PR gate against the PR head, and consume GitHub checks before merge.
 - Blockers: None recorded.
-- Latest Validation Summary: Reviewed head `e1351c425e5f5a89abf02418158eee71f19d4ae9` passed: `python3 tools/check_cli_contract.py`; `python3 tools/version_surface_check.py`; `npm --prefix packages/loom-installer run check:versions`; `npm --prefix packages/loom-installer run check:payload`; `npm --prefix packages/loom-installer run check:distribution`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-897`; `python3 .loom/bin/loom_flow.py shadow-parity --target .`; `python3 .loom/bin/loom_flow.py fact-chain --target .`; `make check`.
-- Recovery Boundary: Continue from `/Users/mc/dev/Loom-897-legacy-validation` on branch `work/897-legacy-validation`.
-- Current Lane: legacy migration validation
+- Latest Validation Summary: Passed for WI-998: `python3 tools/check_cli_contract.py`; `python3 tools/version_surface_check.py`; `npm --prefix packages/loom-installer run check:docs`; `python3 .loom/bin/loom_flow.py fact-chain --target .`; `python3 .loom/bin/loom_flow.py shadow-parity --target .`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-998`; `make check`.
+- Recovery Boundary: Continue from `/Users/mc/dev/Loom-998-cli-first-readme` on branch `work/998-cli-first-readme`; do not change CLI behavior, installer versions, release tags, or #996 release judgment in this batch.
+- Current Lane: cli-first readme entrypoint
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: make loom-check-runtime-regression; make py-compile; python3 tools/skills_surface.py check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main; make loom-check
+- Verification Entry: python3 tools/check_cli_contract.py; python3 tools/version_surface_check.py; npm --prefix packages/loom-installer run check:docs; make check
 - Lane Entry: not_applicable
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-897.md
-- Dynamic Truth: .loom/progress/WI-897.md
+- Static Truth: .loom/work-items/WI-998.md
+- Dynamic Truth: .loom/progress/WI-998.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
