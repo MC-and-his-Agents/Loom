@@ -15,8 +15,27 @@ const behaviorPrefixes = [
 ];
 
 const behaviorPaths = [
-  'packages/loom-installer/package.json',
   'packages/loom-installer/scripts/build-payload.mjs',
+];
+
+const packageBehaviorFields = [
+  'version',
+  'bin',
+  'files',
+  'engines',
+  'publishConfig',
+  'dependencies',
+  'optionalDependencies',
+  'peerDependencies',
+  'bundledDependencies',
+  'bundleDependencies',
+];
+
+const packageBehaviorScripts = [
+  'build',
+  'prepack',
+  'prepublishOnly',
+  'test',
 ];
 
 const ignoredCompatibilityPaths = [
@@ -37,17 +56,62 @@ function readCurrentVersion() {
   return JSON.parse(readFileSync(packageJsonPath, 'utf8')).version;
 }
 
-function readBaseVersion() {
+function readCurrentPackage() {
+  return JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+}
+
+function readBasePackage() {
   try {
-    return JSON.parse(git(['show', `${baseRef}:packages/loom-installer/package.json`])).version;
+    return JSON.parse(git(['show', `${baseRef}:packages/loom-installer/package.json`]));
   } catch {
     return null;
   }
 }
 
+function readBaseVersion() {
+  return readBasePackage()?.version ?? null;
+}
+
 function changedFiles() {
   const output = git(['diff', '--name-only', `${baseRef}...HEAD`]);
   return output ? output.split('\n').filter(Boolean) : [];
+}
+
+function stableStringify(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function changedPackageField(basePackage, currentPackage, field) {
+  return stableStringify(basePackage?.[field]) !== stableStringify(currentPackage?.[field]);
+}
+
+function packageJsonBehaviorChanged() {
+  if (!changed.includes('packages/loom-installer/package.json')) {
+    return false;
+  }
+
+  const basePackage = readBasePackage();
+  if (basePackage === null) {
+    return true;
+  }
+  const currentPackage = readCurrentPackage();
+
+  if (packageBehaviorFields.some((field) => changedPackageField(basePackage, currentPackage, field))) {
+    return true;
+  }
+
+  return packageBehaviorScripts.some(
+    (script) => (basePackage.scripts?.[script] ?? null) !== (currentPackage.scripts?.[script] ?? null),
+  );
 }
 
 const changed = changedFiles();
@@ -56,7 +120,8 @@ const behaviorChanged = changed.some(
   (path) =>
     relevantChanged.includes(path) &&
     (behaviorPaths.includes(path) || behaviorPrefixes.some((prefix) => path === prefix || path.startsWith(prefix))),
-);
+)
+  || packageJsonBehaviorChanged();
 const currentVersion = readCurrentVersion();
 const baseVersion = readBaseVersion();
 

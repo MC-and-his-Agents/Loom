@@ -38,6 +38,7 @@ const requiredNeedles = [
   {
     path: 'docs/adoption/codex-install.md',
     needles: [
+      'The npm installer is not the Codex default path',
       'git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom',
       'ln -sfn "$skill" "$HOME/.agents/skills/$(basename "$skill")"',
       'loom-package.json',

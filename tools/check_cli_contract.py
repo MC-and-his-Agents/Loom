@@ -344,6 +344,19 @@ def main() -> int:
         _, skills_package = run_json(["skills", "package", "--json"], expect=0)
         if not skills_package["packages"]:
             raise AssertionError("skills package did not emit package metadata")
+        _, skills_release_check = run_json(["skills", "release-check", "--json"], expect=0)
+        release_authority = skills_release_check.get("release_authority") or {}
+        if release_authority.get("active_cli_line") != "loom":
+            raise AssertionError("skills release-check did not identify loom as the active CLI line")
+        if release_authority.get("candidate_authority") != "VERSION":
+            raise AssertionError("skills release-check did not identify VERSION as CLI candidate authority")
+        if release_authority.get("published_evidence") != ["GitHub v* tag", "GitHub Release"]:
+            raise AssertionError("skills release-check did not restrict published CLI evidence to GitHub tag/release")
+        legacy_evidence = release_authority.get("legacy_installer_evidence") or {}
+        if legacy_evidence.get("active_cli_evidence") is not False:
+            raise AssertionError("skills release-check did not mark loom-installer as non-CLI evidence")
+        if legacy_evidence.get("tag") != "loom-installer-v0.1.119":
+            raise AssertionError("skills release-check did not keep installer tag as legacy baseline evidence")
         _, route_payload = run_json(["route", "--target", str(REPO_ROOT), "--task", "adopt existing repo", "--json"], expect=0)
         if route_payload["command"] != "route" or route_payload["selected_skill"] != "loom-adopt":
             raise AssertionError("route did not expose CLI-first scenario routing")

@@ -24,7 +24,8 @@
     "check:hosts": "cd ../.. && python3 tools/host_adapter_check.py",
     "check:payload": "node ./scripts/check-payload-drift.mjs",
     "check:versions": "cd ../.. && python3 tools/version_surface_check.py",
-    "check:release": "npm run check:docs && npm run check:distribution && npm run check:hosts && npm run check:versions && npm run check:payload",
+    "check:release-surface": "cd ../.. && python3 tools/check_release_surface.py",
+    "check:release": "npm run check:docs && npm run check:distribution && npm run check:hosts && npm run check:versions && npm run check:release-surface && npm run check:payload",
     "prepack": "npm run build",
     "prepublishOnly": "npm test && npm run check:release",
     "test": "npm run build && node --test dist/test/*.test.js"

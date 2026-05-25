@@ -1442,14 +1442,33 @@ def handle_skills(argv: list[str]) -> int:
     if args.action in {"check", "doctor", "release-check"}:
         checks = [[sys.executable, str(TOOLS_ROOT / "skills_surface.py"), "check"]]
         if args.action == "release-check":
-            checks.extend([[sys.executable, str(TOOLS_ROOT / "host_adapter_check.py")], [sys.executable, str(TOOLS_ROOT / "version_surface_check.py")]])
+            checks.extend(
+                [
+                    [sys.executable, str(TOOLS_ROOT / "host_adapter_check.py")],
+                    [sys.executable, str(TOOLS_ROOT / "version_surface_check.py")],
+                    [sys.executable, str(TOOLS_ROOT / "check_release_surface.py")],
+                ]
+            )
         results = []
         for check in checks:
             completed = run_capture(check)
             results.append({"command": " ".join(check), "returncode": completed.returncode, "stdout": completed.stdout.strip(), "stderr": completed.stderr.strip()})
         failures = [item for item in results if item["returncode"] != 0]
         result = "pass" if not failures else "block"
-        return emit(output(command, result, schema=SKILLS_SCHEMA, summary="Skills surface checks passed." if result == "pass" else "Skills surface checks failed.", registry_version=registry.get("registry_version"), root_entry=registry.get("root_entry"), checks=results, failed_layer=None if result == "pass" else "skills-surface", fail_closed_reason=None if result == "pass" else "one or more skills checks failed", fallback_to=None if result == "pass" else ["loom skills generate --apply --json"]))
+        release_authority = None
+        if args.action == "release-check":
+            release_authority = {
+                "active_cli_line": "loom",
+                "candidate_authority": "VERSION",
+                "published_evidence": ["GitHub v* tag", "GitHub Release"],
+                "legacy_installer_evidence": {
+                    "package": "@mc-and-his-agents/loom-installer",
+                    "final_active_baseline": "0.1.119",
+                    "tag": "loom-installer-v0.1.119",
+                    "active_cli_evidence": False,
+                },
+            }
+        return emit(output(command, result, schema=SKILLS_SCHEMA, summary="Skills surface checks passed." if result == "pass" else "Skills surface checks failed.", registry_version=registry.get("registry_version"), root_entry=registry.get("root_entry"), checks=results, release_authority=release_authority, failed_layer=None if result == "pass" else "skills-surface", fail_closed_reason=None if result == "pass" else "one or more skills checks failed", fallback_to=None if result == "pass" else ["loom skills generate --apply --json"]))
     package_records = []
     for entry in entries or []:
         package_path = SKILLS_ROOT / entry["id"] / "loom-package.json"

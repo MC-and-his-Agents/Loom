@@ -1,0 +1,20 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1007",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1007 spec is scoped to checker enforcement for the #1003 installer sunset: release-surface negatives, CLI release-check authority output, package check wiring, doc-sync needle, and carrier updates. It excludes publishing, npm deprecation, and workflow release behavior.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "5a2ec07125dff04eb388efd14d65a5f5bf85db9d",
+  "reviewed_validation_summary": "Passed: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; npm --prefix packages/loom-installer run check:release; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1007; make check.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1007.md",
+    "recovery_entry": ".loom/progress/WI-1007.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass"
+  }
+}
