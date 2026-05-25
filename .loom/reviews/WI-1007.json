@@ -5,8 +5,8 @@
   "kind": "code_review",
   "summary": "WI-1007 implementation is approved after focused validation: release-surface checks now reject active installer evidence, skills release-check exposes CLI authority, CLI contract asserts the authority boundary, and installer package release checks run the release-surface checker.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "pending",
-  "reviewed_validation_summary": "Focused checks passed before full validation: python3 tools/check_release_surface.py; python3 tools/check_cli_contract.py; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:release-surface.",
+  "reviewed_head": "2cdc72825f15a1c5130ad237a59db6ea506f3eeb",
+  "reviewed_validation_summary": "Passed: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; npm --prefix packages/loom-installer run check:release; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1007; make check.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -15,6 +15,6 @@
     "work_item": ".loom/work-items/WI-1007.md",
     "recovery_entry": ".loom/progress/WI-1007.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pending"
+    "build_checkpoint": "pass"
   }
 }
