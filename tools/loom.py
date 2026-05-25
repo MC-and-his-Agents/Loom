@@ -32,6 +32,9 @@ WORKSPACE_SCHEMA = "loom-workspace-control/v1"
 HOST_OBJECT_SCHEMA = "loom-host-object-control/v1"
 HOST_SCHEMA = "loom-host-orchestration/v1"
 SKILLS_SCHEMA = "loom-skills-surface/v1"
+SCENARIO_SCHEMA = "loom-scenario-control/v1"
+PROFILE_SCHEMA = "loom-governance-profile-control/v1"
+GATE_SCHEMA = "loom-gate-control/v1"
 
 
 COMMANDS: list[dict[str, Any]] = [
@@ -103,14 +106,14 @@ COMMANDS: list[dict[str, Any]] = [
     {"command": "upgrade", "domain": "delivery", "status": "reserved", "json": True},
     {"command": "rollback", "domain": "delivery", "status": "reserved", "json": True},
     {"command": "verify", "domain": "delivery", "status": "reserved", "json": True},
-    {"command": "init", "domain": "scenario", "status": "delegated", "json": "mixed"},
-    {"command": "adopt", "domain": "scenario", "status": "delegated", "json": "mixed"},
-    {"command": "route", "domain": "scenario", "status": "delegated", "json": True},
-    {"command": "status", "domain": "harness", "status": "delegated", "json": True},
-    {"command": "fact-chain", "domain": "harness", "status": "delegated", "json": True},
-    {"command": "profile status", "domain": "profile", "status": "reserved", "json": True},
-    {"command": "profile upgrade-plan", "domain": "profile", "status": "reserved", "json": True},
-    {"command": "profile upgrade", "domain": "profile", "status": "reserved", "json": True},
+    {"command": "init", "domain": "scenario", "status": "implemented", "json": True},
+    {"command": "adopt", "domain": "scenario", "status": "implemented", "json": True},
+    {"command": "route", "domain": "scenario", "status": "implemented", "json": True},
+    {"command": "status", "domain": "harness", "status": "implemented", "json": True},
+    {"command": "fact-chain", "domain": "harness", "status": "implemented", "json": True},
+    {"command": "profile status", "domain": "profile", "status": "implemented", "json": True},
+    {"command": "profile upgrade-plan", "domain": "profile", "status": "implemented", "json": True},
+    {"command": "profile upgrade", "domain": "profile", "status": "implemented", "json": True},
     {"command": "story", "domain": "scenario", "status": "reserved", "json": True},
     {"command": "spec", "domain": "scenario", "status": "reserved", "json": True},
     {"command": "plan", "domain": "scenario", "status": "reserved", "json": True},
@@ -123,15 +126,15 @@ COMMANDS: list[dict[str, Any]] = [
     {"command": "resume", "domain": "scenario", "status": "delegated", "json": True},
     {"command": "handoff", "domain": "scenario", "status": "reserved", "json": True},
     {"command": "retire", "domain": "scenario", "status": "reserved", "json": True},
-    {"command": "checkpoint admission", "domain": "gate", "status": "reserved", "json": True},
-    {"command": "checkpoint build", "domain": "gate", "status": "reserved", "json": True},
-    {"command": "checkpoint merge", "domain": "gate", "status": "reserved", "json": True},
-    {"command": "gate pre-review", "domain": "gate", "status": "reserved", "json": True},
-    {"command": "gate spec-review", "domain": "gate", "status": "reserved", "json": True},
-    {"command": "gate review", "domain": "gate", "status": "reserved", "json": True},
-    {"command": "gate pr", "domain": "gate", "status": "reserved", "json": True},
-    {"command": "gate merge", "domain": "gate", "status": "reserved", "json": True},
-    {"command": "gate closeout", "domain": "gate", "status": "reserved", "json": True},
+    {"command": "checkpoint admission", "domain": "gate", "status": "implemented", "json": True},
+    {"command": "checkpoint build", "domain": "gate", "status": "implemented", "json": True},
+    {"command": "checkpoint merge", "domain": "gate", "status": "implemented", "json": True},
+    {"command": "gate pre-review", "domain": "gate", "status": "implemented", "json": True},
+    {"command": "gate spec-review", "domain": "gate", "status": "implemented", "json": True},
+    {"command": "gate review", "domain": "gate", "status": "implemented", "json": True},
+    {"command": "gate pr", "domain": "gate", "status": "implemented", "json": True},
+    {"command": "gate merge", "domain": "gate", "status": "implemented", "json": True},
+    {"command": "gate closeout", "domain": "gate", "status": "implemented", "json": True},
     {"command": "workspace create", "domain": "host-control", "status": "implemented", "json": True},
     {"command": "workspace locate", "domain": "host-control", "status": "implemented", "json": True},
     {"command": "workspace check", "domain": "host-control", "status": "implemented", "json": True},
@@ -277,10 +280,29 @@ def flow_payload(command: str, flow_args: list[str], *, fallback_to: list[str]) 
 
 def emit_flow(command: str, flow_args: list[str], *, fallback_to: list[str]) -> int:
     payload = flow_payload(command, flow_args, fallback_to=fallback_to)
+    payload.setdefault("schema_version", OUTPUT_SCHEMA)
     if payload.get("command") and payload.get("command") != command:
         payload["wrapped_command"] = payload.get("command")
     payload["command"] = command
     return emit(payload)
+
+
+def delegated_payload(command: str, tool_name: str, delegated_args: list[str], *, failed_layer: str, fallback_to: list[str]) -> dict[str, Any]:
+    completed = run_capture([sys.executable, str(TOOLS_ROOT / tool_name), *delegated_args])
+    return parse_json_or_block(command, completed, failed_layer=failed_layer, fallback_to=fallback_to)
+
+
+def emit_delegated(command: str, tool_name: str, delegated_args: list[str], *, failed_layer: str, fallback_to: list[str]) -> int:
+    payload = delegated_payload(command, tool_name, delegated_args, failed_layer=failed_layer, fallback_to=fallback_to)
+    payload.setdefault("schema_version", OUTPUT_SCHEMA)
+    if payload.get("command") and payload.get("command") != command:
+        payload["wrapped_command"] = payload.get("command")
+    payload["command"] = command
+    return emit(payload)
+
+
+def strip_json_flag(argv: list[str]) -> list[str]:
+    return [arg for arg in argv if arg != "--json"]
 
 
 def command_matrix() -> list[dict[str, Any]]:
@@ -304,8 +326,9 @@ def print_usage(stream) -> None:
         "  version [--json]\n"
         "  help [--json]\n"
         "  installed-state show|validate|export --target <repo> [--json]\n\n"
-        "delegated compatibility commands:\n"
-        "  init, adopt, route, status, fact-chain, resume, spec-review, review, merge-ready, check\n\n"
+        "scenario and gate commands:\n"
+        "  init, adopt, route, status, fact-chain, profile, checkpoint, gate\n"
+        "  resume, spec-review, review, merge-ready, check\n\n"
         "Use `loom help --json` for the full frozen command matrix, including reserved commands.\n"
     )
 
@@ -1126,6 +1149,67 @@ def handle_skills(argv: list[str]) -> int:
     return emit(output(command, "pass", schema=SKILLS_SCHEMA, summary="Skill package metadata collected without packing artifacts.", mutates=False, registry_version=registry.get("registry_version"), packages=package_records, fallback_to=["npm run check:release --prefix packages/loom-installer"]))
 
 
+def handle_init(argv: list[str]) -> int:
+    if not argv:
+        return emit(output("init", "block", schema=SCENARIO_SCHEMA, summary="Init requires an operation.", failed_layer="scenario-input", fail_closed_reason="missing init operation", fallback_to=["loom init bootstrap --target <repo> --json", "loom init verify --target <repo> --json"]))
+    return emit_delegated("init", "loom_init.py", strip_json_flag(argv), failed_layer="loom-init", fallback_to=["loom init verify --target <repo> --json", "loom doctor --target <repo> --json"])
+
+
+def handle_adopt(argv: list[str]) -> int:
+    if not argv:
+        return emit(output("adopt", "block", schema=SCENARIO_SCHEMA, summary="Adopt requires an operation.", failed_layer="adoption-input", fail_closed_reason="missing adopt operation", fallback_to=["loom adopt verify --target <repo> --item <item> --json", "loom init bootstrap --target <repo> --json"]))
+    operation = argv[0]
+    if operation != "verify":
+        return emit(output("adopt", "block", schema=SCENARIO_SCHEMA, summary="Only `loom adopt verify` is implemented for the CLI-first adoption contract.", failed_layer="adoption-input", fail_closed_reason=f"unsupported adopt operation: {operation}", fallback_to=["loom adopt verify --target <repo> --item <item> --json", "loom init bootstrap --target <repo> --json"]))
+    return emit_flow("adopt", ["adopt", "verify", *strip_json_flag(argv[1:])], fallback_to=["loom init verify --target <repo> --json", "loom profile status --target <repo> --json"])
+
+
+def handle_route(argv: list[str]) -> int:
+    return emit_delegated("route", "loom_init.py", ["route", *strip_json_flag(argv)], failed_layer="loom-route", fallback_to=["loom route --target <repo> --task <task> --json", "loom init verify --target <repo> --json"])
+
+
+def handle_status(argv: list[str]) -> int:
+    return emit_delegated("status", "loom_status.py", strip_json_flag(argv), failed_layer="loom-status", fallback_to=["loom fact-chain --target <repo> --json", "loom checkpoint admission --target <repo> --json"])
+
+
+def handle_fact_chain(argv: list[str]) -> int:
+    return emit_flow("fact-chain", ["fact-chain", *strip_json_flag(argv)], fallback_to=["loom init verify --target <repo> --json", "loom status --target <repo> --json"])
+
+
+def handle_profile(argv: list[str]) -> int:
+    if not argv:
+        return emit(output("profile", "block", schema=PROFILE_SCHEMA, summary="Profile requires an operation.", failed_layer="profile-input", fail_closed_reason="missing profile operation", fallback_to=["loom profile status --target <repo> --json", "loom profile upgrade-plan --target <repo> --json"]))
+    operation = argv[0]
+    if operation not in {"status", "upgrade-plan", "upgrade"}:
+        return emit(output("profile", "block", schema=PROFILE_SCHEMA, summary="Unsupported profile operation.", failed_layer="profile-input", fail_closed_reason=f"unsupported profile operation: {operation}", fallback_to=["loom profile status --target <repo> --json", "loom profile upgrade-plan --target <repo> --json"]))
+    return emit_flow(f"profile {operation}", ["governance-profile", operation, *strip_json_flag(argv[1:])], fallback_to=["loom profile status --target <repo> --json", "docs/adoption/github-profile-upgrade.md"])
+
+
+def handle_checkpoint(argv: list[str]) -> int:
+    if not argv:
+        return emit(output("checkpoint", "block", schema=GATE_SCHEMA, summary="Checkpoint requires a stage.", failed_layer="checkpoint-input", fail_closed_reason="missing checkpoint stage", fallback_to=["loom checkpoint admission --target <repo> --json", "loom checkpoint build --target <repo> --json", "loom checkpoint merge --target <repo> --json"]))
+    stage = argv[0]
+    if stage not in {"admission", "build", "merge"}:
+        return emit(output("checkpoint", "block", schema=GATE_SCHEMA, summary="Unsupported checkpoint stage.", failed_layer="checkpoint-input", fail_closed_reason=f"unsupported checkpoint stage: {stage}", fallback_to=["loom checkpoint admission --target <repo> --json", "loom checkpoint build --target <repo> --json", "loom checkpoint merge --target <repo> --json"]))
+    return emit_flow(f"checkpoint {stage}", ["checkpoint", stage, *strip_json_flag(argv[1:])], fallback_to=["loom status --target <repo> --json", "loom fact-chain --target <repo> --json"])
+
+
+def handle_gate(argv: list[str]) -> int:
+    if not argv:
+        return emit(output("gate", "block", schema=GATE_SCHEMA, summary="Gate requires a gate name.", failed_layer="gate-input", fail_closed_reason="missing gate name", fallback_to=["loom gate pre-review --target <repo> --json", "loom gate pr --target <repo> --pr <number> --json"]))
+    gate = argv[0]
+    rest = strip_json_flag(argv[1:])
+    if gate in {"pre-review", "spec-review", "review"}:
+        return emit_flow(f"gate {gate}", ["flow", gate, *rest], fallback_to=["loom status --target <repo> --json", f"loom {gate} --target <repo> --json"])
+    if gate == "pr":
+        return emit_flow("gate pr", ["pr-gate", "check", *rest], fallback_to=["loom pr gate <pr> --json", "loom review --target <repo> --json"])
+    if gate == "merge":
+        return emit_flow("gate merge", ["controlled-merge", "check", *rest], fallback_to=["loom checkpoint merge --target <repo> --json", "loom gate pr --target <repo> --pr <number> --json"])
+    if gate == "closeout":
+        return emit_flow("gate closeout", ["closeout", "check", *rest], fallback_to=["loom merge check <pr> --json", "loom status --target <repo> --json"])
+    return emit(output("gate", "block", schema=GATE_SCHEMA, summary="Unsupported gate name.", failed_layer="gate-input", fail_closed_reason=f"unsupported gate name: {gate}", fallback_to=["loom gate pre-review --target <repo> --json", "loom gate pr --target <repo> --pr <number> --json"]))
+
+
 def dispatch(command: str, forwarded_args: list[str]) -> int:
     tool_name, prefix = COMMAND_ROUTES[command]
     tool_path = TOOLS_ROOT / tool_name
@@ -1225,6 +1309,25 @@ def main(argv: list[str]) -> int:
     if command == "skills" or command.startswith("skills "):
         skills_args = command.split()[1:] + forwarded if command.startswith("skills ") else forwarded
         return handle_skills(skills_args)
+    if command == "init":
+        return handle_init(forwarded)
+    if command == "adopt":
+        return handle_adopt(forwarded)
+    if command == "route":
+        return handle_route(forwarded)
+    if command == "status":
+        return handle_status(forwarded)
+    if command == "fact-chain":
+        return handle_fact_chain(forwarded)
+    if command == "profile" or command.startswith("profile "):
+        profile_args = command.split()[1:] + forwarded if command.startswith("profile ") else forwarded
+        return handle_profile(profile_args)
+    if command == "checkpoint" or command.startswith("checkpoint "):
+        checkpoint_args = command.split()[1:] + forwarded if command.startswith("checkpoint ") else forwarded
+        return handle_checkpoint(checkpoint_args)
+    if command == "gate" or command.startswith("gate "):
+        gate_args = command.split()[1:] + forwarded if command.startswith("gate ") else forwarded
+        return handle_gate(gate_args)
     if command in COMMAND_ROUTES:
         return dispatch(command, forwarded)
     if command in COMMAND_INDEX:
