@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1001
-- Goal: Define and implement the Loom CLI primary release surface while freezing loom-installer into a compatibility / legacy maintenance line.
-- Scope: loom CLI distribution authority, release workflow, installer shim release boundaries, README/docs/version authority/checks/evidence; do not reopen #885 or add unrelated distribution channels.
-- Execution Path: issue #1001 -> branch work/1001-loom-cli-release -> formal worktree /Users/mc/dev/Loom-1001-loom-cli-release -> PR TBD
+- Item ID: WI-1013
+- Goal: Define how spec-driven development is internalized as a Loom project operating layer execution discipline without narrowing Loom into an SDD-only tool.
+- Scope: #1013 boundary docs, #1021 spec-kit evidence, #1022 positioning wording, #1023 extraction-ledger / landing-map updates, and the repo-local carriers required for PR readiness. Do not implement #1014 delivery planning, #1015 story intake, #1016 full/minimal spec suite, task carrier, gate-chain, or CLI automation content.
+- Execution Path: issue #1013 -> branch work/1013-sdd-operating-layer-boundary -> worktree /Users/mc/dev/Loom -> PR #1054.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1001.md
-- Review Entry: .loom/reviews/WI-1001.json
-- Validation Entry: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; make check
-- Closing Condition: #1001 PR is merged or merge-ready, release lines are separable by docs/checks/workflow evidence, release/no-publish judgment is recorded, and issue closeout consumes PR/check/release state.
-- Current Checkpoint: PR preparation after local validation.
-- Current Stop: Release split implementation and Loom carriers are validated in the formal worktree; the selected minimal `loom` CLI distribution surface is root `VERSION` plus GitHub `v*` tag and GitHub Release, while `loom-installer` remains the separate compatibility npm line.
-- Next Step: Commit, push, create the issue-scoped PR, run `pr-gate check`, and consume PR checks.
-- Blockers: None recorded.
-- Latest Validation Summary: Passed locally: `python3 tools/check_release_surface.py`; `python3 tools/version_surface_check.py`; `npm --prefix packages/loom-installer run check:docs`; `npm --prefix packages/loom-installer run check:versions`; `npm --prefix packages/loom-installer run check:payload`; `npm --prefix packages/loom-installer run check:distribution`; `python3 tools/check_cli_contract.py`; `make check`; Ruby YAML parse for `.github/workflows/*.yml`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1001 --write`; `python3 .loom/bin/loom_flow.py shadow-parity --target .`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1001`. No publish was performed. Current external evidence shows `@mc-and-his-agents/loom-installer` npm `latest` is `0.1.119`, latest installer GitHub Release is `loom-installer-v0.1.119`, and existing Loom CLI GitHub Release is `v0.12.0`; this work item defines the split and expects PR/main workflow judgment before any explicit `workflow_dispatch` publish.
-- Recovery Boundary: Continue from `/Users/mc/dev/Loom-1001-loom-cli-release` on branch `work/1001-loom-cli-release`; keep scope limited to #1001 release surface split and closeout evidence.
-- Current Lane: loom-cli-release-surface
+- Recovery Entry: .loom/progress/WI-1013.md
+- Review Entry: .loom/reviews/WI-1013.json
+- Validation Entry: git diff --check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/loom.py verify --target . --json; python3 tools/loom.py doctor --target . --json
+- Closing Condition: #1021, #1022, and #1023 are covered by PR #1054; #1013 documents SDD as a Loom execution discipline, records keep/adapt/drop spec-kit evidence, and leaves #1014/#1015/#1016 able to consume the boundary without re-litigating scope.
+- Current Checkpoint: PR opened after local validation.
+- Current Stop: SDD boundary docs and evidence mappings are committed on branch `work/1013-sdd-operating-layer-boundary`, pushed, and opened as PR #1054.
+- Next Step: Refresh semantic review records for the final carrier head, update PR body with `Loom Work Item: WI-1013`, rerun PR gate, and consume PR checks before issue closeout.
+- Blockers: PR gate was blocked while the repo-local active item still pointed to stale `WI-1001`; this carrier switches the active item to `WI-1013` for the current PR.
+- Latest Validation Summary: Passed locally: `git diff --check`; targeted ledger/landing-map ID check for `EXT-0061` / `EXT-0062` / `EXT-0063`; targeted no-copy check for `docs/spec-kit` and `.specify`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`. `python3 tools/loom.py verify --target . --json` and `python3 tools/loom.py doctor --target . --json` fail closed on existing installed-state / mixed-legacy surface repair inputs, not on the SDD boundary docs.
+- Recovery Boundary: Continue only #1013 / #1021 / #1022 / #1023 boundary closeout. Do not expand into #1014, #1015, #1016, task carrier, gate-chain, or CLI implementation.
+- Current Lane: sdd-operating-layer-boundary
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: python3 tools/check_cli_contract.py; python3 tools/version_surface_check.py; npm --prefix packages/loom-installer run check:docs; make check
+- Verification Entry: git diff --check; python3 tools/loom_check.py --profile source --source-surface contract-only .
 - Lane Entry: not_applicable
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1001.md
-- Dynamic Truth: .loom/progress/WI-1001.md
+- Static Truth: .loom/work-items/WI-1013.md
+- Dynamic Truth: .loom/progress/WI-1013.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
