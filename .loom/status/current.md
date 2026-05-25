@@ -11,9 +11,9 @@
 - Review Entry: .loom/reviews/WI-915.json
 - Validation Entry: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py; python3 tools/loom.py profile status --target . --json; python3 tools/loom.py checkpoint admission --target . --item WI-915 --json; python3 tools/loom.py gate pr --target . --item WI-915 --json
 - Closing Condition: PR 合并后关闭 #915-#923，并让 #890/#891 消费命令语义、JSON 输出、fail-closed、fallback、验证证据和 head_sha。
-- Current Checkpoint: build checkpoint
-- Current Stop: #890/#891 command wrappers, contract checks, docs, and WI carriers are ready for review.
-- Next Step: Record review carriers, open PR, run PR gate/CI, then merge after required checks pass.
+- Current Checkpoint: merge checkpoint
+- Current Stop: PR #995 is open for #890/#891 with WI-915 review, carrier, and local gate evidence bound to head 541790e150a2f6d4b0f3118870cc949e35041609.
+- Next Step: Wait for required PR checks, consume PR gate and host merge evidence, then merge after checks pass.
 - Blockers: None recorded.
 - Latest Validation Summary: Passed on branch work/890-891-adoption-gates: python3 tools/check_cli_contract.py; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-915; python3 .loom/bin/loom_flow.py shadow-parity --target .; local pr-gate purity is clean at aa5d95899dc30470a47dda7f9e6b763de2aa5b96, with remaining fallback expected until the head is pushed and a PR exists.
 - Recovery Boundary: WI-915 owns the #890/#891 batch for #915-#923 only. It does not implement unrelated profile finalization, bottom-layer GitHub/CI/review/worktree rewrites, repo-specific guardian replacement, or mutating closeout/merge execution.
