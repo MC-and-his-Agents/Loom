@@ -5,7 +5,7 @@
   "kind": "code_review",
   "summary": "WI-1011 implementation is approved: closeout evidence consumes the issue tree, PR chain, first CLI release, npm permission block, and installer non-advancement without publishing or expanding scope.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "102ef17409b48c374275d2ec06d52b527b6c638f",
+  "reviewed_head": "a5fc0123fc65ed1a4f03af9a660561d543caabc8",
   "reviewed_validation_summary": "Passed: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1011; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1011; make check.",
   "fallback_to": null,
   "findings": [],
