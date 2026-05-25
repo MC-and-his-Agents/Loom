@@ -1,0 +1,32 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1013",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "WI-1013 implementation is approved: Loom now says SDD is internalized as execution discipline rather than an SDD-only product boundary, spec-kit absorption is recorded as keep/adapt/drop evidence, and concrete spec-kit surfaces remain rejected from Loom core.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "333b70a59f7d7144b42cfd1af90b81881da4eddd",
+  "reviewed_validation_summary": "Passed locally: `git diff --check`; targeted ledger/landing-map ID check for `EXT-0061` / `EXT-0062` / `EXT-0063`; targeted no-copy check for `docs/spec-kit` and `.specify`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 .loom/bin/loom_init.py fact-chain --target .`. Earlier `python3 tools/loom.py verify --target . --json` and `python3 tools/loom.py doctor --target . --json` fail closed on existing installed-state / mixed-legacy surface repair inputs, not on the SDD boundary docs.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1014 delivery planning should reference the SDD boundary rather than redefining Loom's product boundary.",
+    "#1015 story intake should preserve SDD as an internal execution discipline.",
+    "#1016 full/minimal spec suite should adapt spec-kit staged artifacts without copying spec-kit layout."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1013.md",
+    "recovery_entry": ".loom/progress/WI-1013.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-1013/spec.md",
+    "plan": ".loom/specs/WI-1013/plan.md",
+    "implementation_contract": ".loom/specs/WI-1013/implementation-contract.md",
+    "vision": "VISION.md",
+    "readme": "README.md",
+    "spec_suite": "docs/methodology/templates/spec-suite.md",
+    "extraction_ledger": "docs/evidence/extraction-ledger.md",
+    "landing_map": "docs/evidence/landing-map.md",
+    "pull_request": "#1054"
+  }
+}
