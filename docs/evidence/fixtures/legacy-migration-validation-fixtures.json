@@ -1,0 +1,117 @@
+{
+  "schema_version": "loom-legacy-migration-validation-fixtures/v1",
+  "documented_by": [
+    "docs/adoption/cli-first-legacy-migration-playbook.md",
+    "docs/evidence/validations/validation-legacy-migration-release-judgment.md",
+    "docs/adoption/loom-installed-state-v2.md"
+  ],
+  "command_surface": [
+    "loom detect",
+    "loom doctor",
+    "loom repair plan",
+    "loom upgrade-plan",
+    "loom verify"
+  ],
+  "fixtures": [
+    {
+      "id": "webenvoy-mixed-legacy",
+      "source_repo": "WebEnvoy",
+      "source_path": "/Users/mc/dev/WebEnvoy",
+      "issue": 948,
+      "summary": "Mature deep-existing repo with repo-local runtime, bootstrap residue, repo companion, and repo-local skills.",
+      "surfaces": [
+        ".loom/bin",
+        ".loom/bootstrap/manifest.json",
+        ".loom/companion/manifest.json",
+        ".agents/skills"
+      ],
+      "expected": {
+        "classification": "mixed-legacy",
+        "surface_kinds": [
+          "legacy-loom-bin",
+          "bootstrap-manifest",
+          "repo-companion",
+          "repo-local-agents-skills"
+        ],
+        "doctor_result": "block",
+        "doctor_fallback_to": [
+          "loom repair plan"
+        ],
+        "repair_plan_mutates": false,
+        "upgrade_plan_mutates": false,
+        "upgrade_plan_required_actions": [
+          "repair-installed-state",
+          "classify-legacy-surfaces"
+        ],
+        "verify_result": "block"
+      },
+      "authority_note": "GitHub Issues/Projects, repo-native guardian, live evidence, and controlled merge remain WebEnvoy-owned inputs; Loom must not promote them to core defaults."
+    },
+    {
+      "id": "syvert-vendored-runtime-mixed-legacy",
+      "source_repo": "Syvert",
+      "source_path": "/Users/mc/dev/syvert",
+      "issue": 949,
+      "summary": "Strong-governance repo with vendored runtime compatibility, bootstrap residue, and repo companion, but no repo-local .agents skills surface.",
+      "surfaces": [
+        ".loom/bin",
+        ".loom/bootstrap/manifest.json",
+        ".loom/companion/manifest.json"
+      ],
+      "expected": {
+        "classification": "mixed-legacy",
+        "surface_kinds": [
+          "legacy-loom-bin",
+          "bootstrap-manifest",
+          "repo-companion"
+        ],
+        "doctor_result": "block",
+        "doctor_fallback_to": [
+          "loom repair plan"
+        ],
+        "repair_plan_mutates": false,
+        "upgrade_plan_mutates": false,
+        "upgrade_plan_required_actions": [
+          "repair-installed-state",
+          "classify-legacy-surfaces"
+        ],
+        "verify_result": "block"
+      },
+      "authority_note": "Syvert shadow parity and guardian residue remain repo-owned compatibility and retained-host evidence until a later migration flips authority."
+    },
+    {
+      "id": "hotcp-local-gate-mixed-legacy",
+      "source_repo": "HotCP",
+      "source_path": "/Users/mc/dev/HotCP",
+      "issue": 950,
+      "summary": "Full-bootstrap repo with repo-local runtime, bootstrap residue, repo companion, repo-local skills, hooks, and advisory local gates.",
+      "surfaces": [
+        ".loom/bin",
+        ".loom/bootstrap/manifest.json",
+        ".loom/companion/manifest.json",
+        ".agents/skills"
+      ],
+      "expected": {
+        "classification": "mixed-legacy",
+        "surface_kinds": [
+          "legacy-loom-bin",
+          "bootstrap-manifest",
+          "repo-companion",
+          "repo-local-agents-skills"
+        ],
+        "doctor_result": "block",
+        "doctor_fallback_to": [
+          "loom repair plan"
+        ],
+        "repair_plan_mutates": false,
+        "upgrade_plan_mutates": false,
+        "upgrade_plan_required_actions": [
+          "repair-installed-state",
+          "classify-legacy-surfaces"
+        ],
+        "verify_result": "block"
+      },
+      "authority_note": "HotCP local hooks and advisory gates are host-local safety inputs, not GitHub server-enforced Loom gates."
+    }
+  ]
+}

@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-889
-- Goal: 实现 #889/#892/#896 的 CLI-first delivery、scenario execution 与 installer compatibility shim 命令合同。
-- Scope: 覆盖 #889 install/upgrade/rollback、#892 CLI-backed story/spec/plan/build/pre-review/closeout/handoff/retire、#896 installer compatibility shim，以及 #910-#914/#924-#928/#944-#947 的命令合同与 fail-closed 边界；不消费 #897 legacy migration validation 或 #996 release/npm judgment。
-- Execution Path: cli-first/delivery-scenario-shim
+- Item ID: WI-897
+- Goal: Close #897 legacy repo migration validation and release judgment for #885 CLI-first phase
+- Scope: #897 only: WebEnvoy/Syvert/HotCP legacy validation, migration playbook, three-repo validation evidence, and release judgment handoff to #996
+- Execution Path: issue #897 -> branch work/897-legacy-validation -> formal worktree /Users/mc/dev/Loom-897-legacy-validation -> PR TBD
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-889.md
-- Review Entry: .loom/reviews/WI-889.json
-- Validation Entry: python3 tools/check_cli_contract.py; python3 tools/version_surface_check.py; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; npm --prefix packages/loom-installer test; make check; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-889; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py pr-gate check --target . --pr 997 --head-sha <head> --item WI-889
-- Closing Condition: PR #997 合并后关闭 #889/#892/#896、#910-#914、#924-#928、#944-#947，并让 #885 消费 PR/head_sha/check/merge 证据；#897/#996 留给后续批次。
-- Current Checkpoint: merge checkpoint
-- Current Stop: PR #997 is bound to WI-889 at local head 34b6d83. Local targeted checks, adopt verify, shadow-parity, carrier dry-run, and make check have passed.
-- Next Step: Update PR #997 body with Loom Work Item WI-889, push branch work/889-cli-delivery-chain, run PR gate against the pushed head, and wait for PR checks.
+- Recovery Entry: .loom/progress/WI-897.md
+- Review Entry: .loom/reviews/WI-897.json
+- Validation Entry: python3 tools/check_cli_contract.py; python3 tools/version_surface_check.py; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-897; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py pr-gate check --target . --pr <PR> --head-sha <HEAD> --item WI-897; make check
+- Closing Condition: #948-#952 evidence is versioned, #897 PR is merge-ready or merged, release judgment is recorded for #996 consumption, and fact chain/PR/head_sha are consistent
+- Current Checkpoint: merge
+- Current Stop: PR #999 is open; local validation and review records are present, and PR gate consumes the current PR payload head SHA.
+- Next Step: Run PR gate against the current PR head and consume GitHub checks before merge.
 - Blockers: None recorded.
-- Latest Validation Summary: Passed on 8918d00: python3 tools/check_cli_contract.py; python3 tools/version_surface_check.py; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; npm --prefix packages/loom-installer test. make check pre-review reached only WI-889 carrier gaps: missing spec review and shadow hash drift.
-- Recovery Boundary: WI-889 owns PR #997 for #889/#892/#896, #910-#914, #924-#928, and #944-#947. It excludes #897 legacy migration validation, #996 release/npm judgment, profile finalization, bottom-layer host rewrites, repo-specific guardian replacement, and mutating rollback/delete ownership.
-- Current Lane: cli-first/delivery-scenario-shim
+- Latest Validation Summary: Reviewed head `e1351c425e5f5a89abf02418158eee71f19d4ae9` passed: `python3 tools/check_cli_contract.py`; `python3 tools/version_surface_check.py`; `npm --prefix packages/loom-installer run check:versions`; `npm --prefix packages/loom-installer run check:payload`; `npm --prefix packages/loom-installer run check:distribution`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-897`; `python3 .loom/bin/loom_flow.py shadow-parity --target .`; `python3 .loom/bin/loom_flow.py fact-chain --target .`; `make check`.
+- Recovery Boundary: Continue from `/Users/mc/dev/Loom-897-legacy-validation` on branch `work/897-legacy-validation`.
+- Current Lane: legacy migration validation
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-889.md
-- Dynamic Truth: .loom/progress/WI-889.md
+- Static Truth: .loom/work-items/WI-897.md
+- Dynamic Truth: .loom/progress/WI-897.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

@@ -12,6 +12,7 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LOOM = REPO_ROOT / "tools" / "loom.py"
+LEGACY_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "legacy-migration-validation-fixtures.json"
 
 REQUIRED_COMMANDS = {
     "version",
@@ -99,6 +100,53 @@ def write_state(target: Path, payload: dict[str, Any]) -> None:
     state_dir = target / ".loom"
     state_dir.mkdir(parents=True, exist_ok=True)
     (state_dir / "installed-state.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def materialize_surface(target: Path, relative: str) -> None:
+    path = target / relative
+    if path.suffix:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"fixture_surface": relative}
+        path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        return
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def assert_legacy_fixture_contract(tmp: Path) -> None:
+    fixture_data = json.loads(LEGACY_FIXTURES.read_text(encoding="utf-8"))
+    if fixture_data.get("schema_version") != "loom-legacy-migration-validation-fixtures/v1":
+        raise AssertionError("legacy migration fixture schema drifted")
+    for fixture in fixture_data["fixtures"]:
+        target = tmp / fixture["id"]
+        target.mkdir()
+        for relative in fixture["surfaces"]:
+            materialize_surface(target, relative)
+        expected = fixture["expected"]
+        _, detected = run_json(["detect", "--target", str(target), "--json"], expect=0)
+        if detected["classification"] != expected["classification"]:
+            raise AssertionError(f"{fixture['id']} classified as {detected['classification']}")
+        detected_kinds = {surface["kind"] for surface in detected["surfaces"]}
+        missing_kinds = sorted(set(expected["surface_kinds"]) - detected_kinds)
+        if missing_kinds:
+            raise AssertionError(f"{fixture['id']} missing surface kinds: {missing_kinds}")
+
+        status, doctor = run_json(["doctor", "--target", str(target), "--json"])
+        if status == 0 or doctor["result"] != expected["doctor_result"] or doctor["fallback_to"] != expected["doctor_fallback_to"]:
+            raise AssertionError(f"{fixture['id']} doctor did not fail closed to repair plan")
+
+        _, repair_plan = run_json(["repair", "plan", "--target", str(target), "--json"], expect=0)
+        if repair_plan["mutates"] != expected["repair_plan_mutates"] or not repair_plan["actions"]:
+            raise AssertionError(f"{fixture['id']} repair plan did not expose non-mutating actions")
+
+        _, upgrade_plan = run_json(["upgrade-plan", "--target", str(target), "--json"], expect=0)
+        action_ids = {action["id"] for action in upgrade_plan["actions"]}
+        missing_actions = sorted(set(expected["upgrade_plan_required_actions"]) - action_ids)
+        if upgrade_plan["mutates"] != expected["upgrade_plan_mutates"] or missing_actions:
+            raise AssertionError(f"{fixture['id']} upgrade-plan missing actions: {missing_actions}")
+
+        status, verify = run_json(["verify", "--target", str(target), "--json"])
+        if status == 0 or verify["result"] != expected["verify_result"]:
+            raise AssertionError(f"{fixture['id']} verify did not block on legacy surfaces")
 
 
 def valid_state(target: Path) -> dict[str, Any]:
@@ -378,6 +426,7 @@ def main() -> int:
         status, bad_edge_payload = run_json(["installed-state", "validate", "--target", str(bad_edge_target), "--json"])
         if status == 0 or not any(error["path"].endswith(".to") for error in bad_edge_payload["errors"]):
             raise AssertionError("unknown graph edge endpoint did not fail closed")
+        assert_legacy_fixture_contract(tmp)
 
     print("cli contract checks passed")
     return 0
