@@ -5,7 +5,7 @@
   "kind": "spec_review",
   "summary": "WI-1001 spec suite is approved: it selects the minimal root GitHub Release channel for the loom CLI, keeps installer npm releases limited to compatibility/legacy maintenance, and explicitly avoids adding new package channels or reopening #885.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "0ccd0bead22a09588d7358c85d610bc637792a14",
+  "reviewed_head": "1c3b2dcbce7c389544a2f3eb830d5add0737a067",
   "reviewed_validation_summary": "Spec review consumed the #1001 issue body, version authority map, README release surface wording, and release workflow boundaries.",
   "fallback_to": null,
   "findings": [],
