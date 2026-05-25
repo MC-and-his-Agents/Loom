@@ -10,9 +10,9 @@ The `loom` CLI release line is the primary release line for Loom execution behav
 | --- | --- | --- |
 | Loom CLI release candidate | `VERSION` | A `v*` value that names the next root Loom CLI release candidate. |
 | Published Loom CLI release | GitHub `v*` tag and GitHub Release | The tag must point at the release commit. Release notes must describe the CLI/runtime behavior being shipped or explicitly state that no CLI behavior changed. |
-| Installer compatibility shim | `packages/loom-installer/package.json` | Published only as `@mc-and-his-agents/loom-installer` with `loom-installer-v<version>` tags. |
+| Deprecated installer legacy artifact | `packages/loom-installer/package.json` | Historical evidence only. The last active release baseline is `@mc-and-his-agents/loom-installer` `0.1.119` / `loom-installer-v0.1.119`; it is not a current publish path. |
 
-The `loom` CLI release line is not synchronized with the installer package version, plugin surface version, skill package version, runtime contract version, or schema version.
+The `loom` CLI release line is the only active CLI release line. It is not synchronized with the deprecated installer package version, plugin surface version, skill package version, runtime contract version, or schema version.
 
 ## Minimal Distribution Channel
 
@@ -47,21 +47,20 @@ The judgment may be:
 - `release-missing`: the tag exists and npm is irrelevant, but the GitHub Release is missing.
 - `no-cli-behavior-change`: the merge did not touch CLI/runtime release behavior.
 
-For pull requests and normal `main` pushes, the workflow records judgment only. Publishing requires an explicit `workflow_dispatch` run with publish enabled.
+For pull requests and normal `main` pushes, the workflow records judgment only until #1008 enables automatic `loom` CLI publishing. Installer npm state is never publish evidence for this judgment.
 
-## Installer Freeze
+## Installer Sunset
 
-`loom-installer` is a compatibility and legacy maintenance line. It is not the primary `loom` CLI release signal.
+`loom-installer` is a deprecated legacy artifact. It is not the `loom` CLI, not a recommended install path, and not the primary `loom` CLI release signal.
 
-Installer releases are limited to:
+The final active legacy baseline is:
 
-- security fixes in the installer package,
-- compatibility fixes for adapter-managed installs,
-- migration or legacy bridge fixes,
-- installer verification output fixes,
-- bootstrap breakage fixes.
+- GitHub Release / tag: `loom-installer-v0.1.119`
+- npm package: `@mc-and-his-agents/loom-installer` `0.1.119`
 
-Changes to CLI behavior, generated skills, runtime contracts, plugin discovery, or docs must not be treated as installer npm publish evidence by themselves. They require `loom` CLI release judgment instead.
+After #1005, the `node-installer-release` workflow keeps validation and read-only legacy evidence but must not publish npm, create `loom-installer-v*` tags, or create installer GitHub Releases. A later npm deprecation action may change registry metadata without advancing the package version.
+
+Changes to CLI behavior, generated skills, runtime contracts, plugin discovery, or docs must not be treated as installer npm publish evidence. They require `loom` CLI release judgment instead.
 
 ## Closeout Evidence
 
@@ -71,6 +70,6 @@ A release closeout for this line must record:
 - the relevant commit SHA,
 - GitHub `v*` tag and Release state, or the no-publish reason,
 - the `loom-cli-release` workflow run,
-- whether `@mc-and-his-agents/loom-installer` was intentionally unchanged.
+- whether `@mc-and-his-agents/loom-installer` stayed at the legacy baseline or only changed deprecation metadata.
 
 Closeout must not use `@mc-and-his-agents/loom-installer` `latest` or `loom-installer-v*` tags as proof that the `loom` CLI was published.

@@ -2,11 +2,13 @@
 
 Language: English | [中文版本](./README.zh-CN.md)
 
-Loom npm / npx adapter helper and verifier.
+Deprecated Loom npm / npx adapter helper and verifier.
 
-The default Loom install model is full repository install plus native or host skill discovery. This package remains available for adapter-managed plugin installs, single-skill helper flows, and verification output.
+The default Loom install model is full repository install plus native or host skill discovery. This package is a deprecated legacy artifact kept for historical adapter-managed plugin installs, single-skill helper flows, and verification output. Do not use it as the current Loom CLI or recommended install path.
 
-## Commands
+## Deprecated Commands
+
+These commands are legacy examples for existing consumers, not the current install path:
 
 ```bash
 npx @mc-and-his-agents/loom-installer add plugin --host codex
@@ -27,7 +29,7 @@ npx @mc-and-his-agents/loom-installer upgrade-plan plugin --host codex --json
 npx @mc-and-his-agents/loom-installer verify-upgrade plugin --host codex --json
 ```
 
-You can also pin the installer first:
+Historical pinned installer usage:
 
 ```bash
 npm install -D @mc-and-his-agents/loom-installer
@@ -58,13 +60,13 @@ Installer-managed layers also write `loom-installed-surface-status/v1` metadata.
 
 ## Release Notes
 
-Publishing only happens from `main`.
+The installer package is sunset. `main` validation can still inspect the package and legacy registry state, but it must not publish npm, create `loom-installer-v*` tags, or create installer GitHub Releases.
 
 Release model:
 
 - PRs run gates but do not publish npm.
-- `main` is the only release truth source.
+- `main` is the validation truth source for the deprecated installer artifact.
 - Loom repository releases and installer npm package versions are maintained separately.
 - `loom` CLI releases use root `VERSION` plus GitHub `v*` tags and Releases; installer `latest` is not CLI release evidence.
-- The installer compatibility line only advances for installer shim, adapter compatibility, legacy bridge, verification, security, or bootstrap fixes.
-- Create the `loom-installer-v<version>` git tag and matching GitHub Release only after npm publish succeeds.
+- The last active installer baseline is `@mc-and-his-agents/loom-installer` `0.1.119` / `loom-installer-v0.1.119`.
+- A later npm deprecation action may change registry metadata without advancing the package version.

@@ -252,26 +252,27 @@ Loom 在此层不规定包管理器、注册中心、目录布局或分发协议
 
 ## 八、Node installer 接入面
 
-Loom 当前为宿主适配固定承认一个 Node installer：
+Loom 为历史宿主适配保留一个 deprecated Node installer artifact：
 
 - npm package：`@mc-and-his-agents/loom-installer`
-- 稳定命令面：
+- Deprecated legacy command surface：
   - `npx @mc-and-his-agents/loom-installer add plugin`
   - `npx @mc-and-his-agents/loom-installer add skill <skill-id>`
 
 Node installer 的职责边界：
 
-- 负责 adapter-managed 安装、single-skill 安装与验证
+- 只为历史 adapter-managed 安装、single-skill 安装与验证保留
 - 不作为 Codex 默认安装入口
+- 不作为当前 Loom CLI、推荐安装入口或 active release line
 - 不替代 `src/skills/shared/scripts/*`、package-local `.loom-runtime/` 与各场景 skill 的 Python runtime
 - 不把单 skill 安装伪装成完整 Loom 安装
 - 对安装失败维持 fail-closed
-- main 分支是真相源
-- PR 只做门禁，不直接发布 npm
+- main 分支是 validation truth source
+- PR 和 main validation 只做门禁，不发布 npm
 - Loom 仓库主 release 与 installer npm 包版本线独立维护
-- publish 成功后再创建 `loom-installer-v<version>` git tag 与同名前缀的 GitHub Release
+- 最后一个 active installer baseline 是 `@mc-and-his-agents/loom-installer` `0.1.119` / `loom-installer-v0.1.119`
 
-Node installer 当前打包的正式安装源：
+Node installer legacy package payload 来源：
 
 - plugin payload：发布时由 `plugins/loom/.codex-plugin/` manifest 与生成后的根 `skills/` 表面构建
 - single-skill payload：发布时由生成后的根 `skills/<skill-id>` package 构建

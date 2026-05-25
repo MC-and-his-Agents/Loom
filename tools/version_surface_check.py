@@ -33,7 +33,7 @@ def main() -> int:
             "GitHub release",
             "Loom CLI release candidate",
             "Published Loom CLI release",
-            "Installer compatibility / legacy maintenance line",
+            "Deprecated installer legacy artifact",
             "plugin surface version",
             "host adapter version",
             "skill_package_version",
@@ -50,7 +50,7 @@ def main() -> int:
         for needle in (
             "The `loom` CLI release line is the primary release line",
             "GitHub `v*` tag and GitHub Release",
-            "`loom-installer` is a compatibility and legacy maintenance line",
+            "`loom-installer` is a deprecated legacy artifact",
             "must not use `@mc-and-his-agents/loom-installer` `latest`",
         ):
             if needle not in release_text:
