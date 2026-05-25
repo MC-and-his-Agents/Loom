@@ -12,10 +12,10 @@
 - Validation Entry: git diff --check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/loom.py verify --target . --json; python3 tools/loom.py doctor --target . --json
 - Closing Condition: #1021, #1022, and #1023 are covered by PR #1054; #1013 documents SDD as a Loom execution discipline, records keep/adapt/drop spec-kit evidence, and leaves #1014/#1015/#1016 able to consume the boundary without re-litigating scope.
 - Current Checkpoint: merge checkpoint
-- Current Stop: SDD boundary docs, WI-1013 carriers, semantic review records, PR body `Loom Work Item: WI-1013`, and stale WI-1001 terminal status are committed and pushed on PR #1054.
-- Next Step: Consume PR #1054 checks, merge when host checks pass, then close out #1013 and child WIs.
+- Current Stop: SDD boundary docs, WI-1013 carriers, PR body `Loom Work Item: WI-1013`, origin/main sync, terminal WI-1001/WI-1005 carrier cleanup, and refreshed semantic review record are committed locally for PR #1054.
+- Next Step: Push refreshed PR #1054 head, consume host checks, merge when host checks pass, then close out #1013 and child WIs.
 - Blockers: None recorded.
-- Latest Validation Summary: Passed locally: `git diff --check`; targeted ledger/landing-map ID check for `EXT-0061` / `EXT-0062` / `EXT-0063`; targeted no-copy check for `docs/spec-kit` and `.specify`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`. `python3 tools/loom.py verify --target . --json` and `python3 tools/loom.py doctor --target . --json` fail closed on existing installed-state / mixed-legacy surface repair inputs, not on the SDD boundary docs.
+- Latest Validation Summary: Passed locally after syncing origin/main: `git diff --check`; targeted ledger/landing-map ID check for `EXT-0061` / `EXT-0062` / `EXT-0063`; targeted no-copy check for `docs/spec-kit` and `.specify`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 .loom/bin/loom_init.py fact-chain --target .`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1013 --write`.
 - Recovery Boundary: Continue only #1013 / #1021 / #1022 / #1023 boundary closeout. Do not expand into #1014, #1015, #1016, task carrier, gate-chain, or CLI implementation.
 - Current Lane: sdd-operating-layer-boundary
 
