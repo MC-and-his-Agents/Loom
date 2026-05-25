@@ -7,7 +7,30 @@
 - `EXT-0015`
 - `EXT-0016`
 - `EXT-0017`
+- `EXT-0061`
+- `EXT-0062`
 - `#649`
+- `#1013`
+
+## 0. SDD 内化边界
+
+Spec-driven development 在 Loom 中是一条 formal spec 路径可采用的强执行纪律，不是 Loom 的全部定位。
+
+Loom 可以吸收 SDD 的以下机制：
+
+- 阶段化产物：从 story / intent 到 `spec.md`、`plan.md`、execution breakdown、evidence 与 consistency analysis 的递进关系
+- 模板约束：`spec.md` 冻结行为契约，`plan.md` 承接实现与验证策略，后续工件承接拆解、证据或一致性分析
+- 前后项消费：后续工件必须消费上游 locator 与明确映射，不能重新 authored 第二套目标
+- 跨产物分析：在 review、merge-ready 与 closeout 前暴露 spec / plan / breakdown / evidence / host state 的冲突、缺口和 stale 信号
+
+Loom 不吸收 SDD-only 边界：
+
+- 不把所有事项强制套成完整 SDD 仪式
+- 不要求纯文档、治理、adoption、resume、handoff、closeout 或宿主绑定事项必须伪装成实现需求
+- 不复制 `github/spec-kit` 的 `.specify/` 目录、`/speckit.*` 命令名、固定文件布局或 extension trust model
+- 不让 `tasks.md` 或任何单一任务文件替代 Work Item、recovery、review、merge-ready 或 closeout 真相
+
+因此，本文件当前冻结最小 formal spec 套件；full spec suite、execution breakdown、task carrier、evidence-map 与 consistency-analysis 的完整合同由后续 FR 在该边界内继续收敛。
 
 ## 1. 正式规约套件的最小边界
 

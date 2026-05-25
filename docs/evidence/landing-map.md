@@ -10,6 +10,8 @@
   - 当前进入 Loom 候选落点，待抽象与去项目化后再收敛
 - `needs_validation`
   - 当前进入待验证区，不进入默认内核
+- `drop`
+  - 当前仅保留为拒绝照搬的证据，不进入默认内核或候选落点
 
 ## Area Map
 
@@ -57,11 +59,15 @@
 - Superpowers-derived discipline 抽象边界
   - 稳定落点：`skills/distribution-and-adapter-contract.md`; `harness/automation-frontload.md`; `harness/gate-chain.md`; `harness/status-surface.md`
   - 入口消费：`skills/README.md`; `skills/loom-init/SKILL.md`
+- SDD 内化边界
+  - 稳定落点：`VISION.md`; `README.md`; `templates/spec-suite.md`
+  - 后续消费：`#1014` delivery planning; `#1015` story intake; `#1016` full/minimal spec suite
 补充约束：
 
 - `repo companion` contract 的唯一主落点固定为 `adoption/repo-companion-contract.md`
 - 历史材料中的 `companion docs` 仅作为迁移表述保留，不再作为新的正式落点名
 - 不新增 `docs/superpowers/*`，不把 Superpowers skill 文本、hooks 或文件布局复制成 Loom core；只吸收可抽象为 operating-layer contract 的执行纪律。
+- 不新增 `docs/spec-kit/*`，不把 `.specify/`、`/speckit.*`、spec-kit 固定文件布局或 extension trust model 复制成 Loom core；只吸收可抽象为 formal spec 路径执行纪律的机制。
 
 ## Item Map
 
@@ -127,3 +133,6 @@
 | EXT-0058 | `keep` | `templates/spec-suite.md`; `harness/work-item-contract.md`; `harness/checkpoint-model.md`; `harness/gate-chain.md`; `harness/status-surface.md`; `harness/closeout-gate.md`; `governance/review-model.md`; `skills/loom-init/SKILL.md` | `core` | `#439/#441/#442` 把 BDD/TDD 双重证据循环接入 Work Item、spec、plan、build checkpoint、review、merge-ready 与 closeout；纯文档事项不被强制套成实现仪式 |
 | EXT-0059 | `keep` | `harness/pr-merge-gate.md`; `harness/controlled-merge.md`; `harness/host-action-contract.md`; `shared/references/harness/pr-merge-gate.md` | `core/harness` | `#762/#763` 把 Loom 自身语义 review 未被宿主硬门禁执行的反例收成 PR-specific gate、controlled merge 与 host enforcement readback |
 | EXT-0060 | `keep` | `governance/story-intake.md`; `templates/spec-suite.md`; `skills/loom-story/SKILL.md` | `core` | HotCP 暴露的 story 业务语义确认缺口已抽象为 Story Business Confirmation；用户可轻量确认或请求修订，纯治理/维护事项可标记 `not-applicable` |
+| EXT-0061 | `keep` | `VISION.md`; `README.md`; `templates/spec-suite.md` | `core` | `#1013` 把 SDD 定义为 Loom project operating layer 内的强执行纪律之一：强化 formal spec / implementation path，但不替代 adoption、resume、review、merge-ready、closeout、repo companion 或 host binding |
+| EXT-0062 | `adapt` | `templates/spec-suite.md`; `adoption/github-profile.md`; `harness/gate-chain.md`; `harness/status-surface.md`; `skills/route-matrix.md` | `candidate` | spec-kit 的阶段化产物、模板约束、任务拆解与 analyze 思路进入 full spec suite、delivery planning、execution breakdown、evidence-map 与 consistency-analysis 候选落点；具体合同由 `#1014`-`#1016` 及后续 FR 收敛 |
+| EXT-0063 | `drop` | `archive-only` | `rejected` | spec-kit 的 `.specify/` 文件布局、`/speckit.*` 命令名、SDD-only 产品边界和 trust-based extension model 不进入 Loom core；只保留为拒绝照搬的边界证据 |
