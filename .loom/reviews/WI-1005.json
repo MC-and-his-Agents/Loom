@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1005",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1005 implementation is approved: node-installer-release no longer has package publication, installer tag, installer release, npm token, or write-permission capability, and check_release_surface.py guards against reintroduction.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "3122d1dabbad51dcd8b4ea2fdee6e13541046ce5",
+  "reviewed_validation_summary": "Passed locally: `python3 tools/check_release_surface.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_cli_contract.py`; `npm --prefix packages/loom-installer run check:docs`; `npm --prefix packages/loom-installer run check:versions`; `npm --prefix packages/loom-installer run check:payload`; `npm --prefix packages/loom-installer run check:distribution`; Ruby YAML parse for `.github/workflows/*.yml`; `make check`; `python3 .loom/bin/loom_flow.py shadow-parity --target .`. `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1005` initially blocked until WI-1005 spec carriers were added.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1005.md",
+    "recovery_entry": ".loom/progress/WI-1005.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

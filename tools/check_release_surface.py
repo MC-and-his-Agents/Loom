@@ -74,7 +74,9 @@ def main() -> int:
         (
             "name: node-installer-release",
             "PACKAGE_NAME: '@mc-and-his-agents/loom-installer'",
-            "reason=no-installer-shim-change",
+            "reason=installer-sunset-no-publish",
+            "should_publish=false",
+            "create_release=false",
         ),
         errors,
     )
@@ -103,10 +105,25 @@ def main() -> int:
         "plugins/loom/.codex-plugin/",
         "'src/skills/**'",
     )
-    release_state_section = installer_release.split("Resolve release state", 1)[-1]
+    release_state_section = installer_release.split("Resolve sunset state", 1)[-1]
     for needle in forbidden_installer_behavior_needles:
         if needle in release_state_section:
             errors.append(f"installer release state must not classify `{needle}` as installer shim behavior")
+
+    forbidden_installer_publish_needles = (
+        "npm publish",
+        "npm whoami",
+        "git tag -a",
+        "git push origin",
+        "gh release create",
+        "NODE_AUTH_TOKEN",
+        "NPM_TOKEN",
+        "contents: write",
+        "id-token: write",
+    )
+    for needle in forbidden_installer_publish_needles:
+        if needle in installer_release:
+            errors.append(f"installer release workflow must not contain active publish capability `{needle}`")
 
     for needle in ("plugins/loom/.codex-plugin/", "skills/"):
         if needle in bump_check and "ignoredCompatibilityPaths" not in bump_check:
