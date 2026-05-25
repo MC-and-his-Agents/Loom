@@ -91,13 +91,13 @@ jobs:
 
           CHANGED_FILES=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}")
           FILTERED_CHANGED=$CHANGED_FILES
-          if printf '%s\n' "$FILTERED_CHANGED" | grep -E '^(packages/loom-installer/src/|packages/loom-installer/scripts/build-payload\.mjs|packages/loom-installer/package.json|plugins/loom/\.codex-plugin/|src/skills/|skills/)' >/dev/null; then
+          if printf '%s\n' "$FILTERED_CHANGED" | grep -E '^(packages/loom-installer/src/|packages/loom-installer/scripts/build-payload\.mjs|packages/loom-installer/package.json)' >/dev/null; then
             echo "behavior_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "behavior_changed=false" >> "$GITHUB_OUTPUT"
             echo "should_publish=false" >> "$GITHUB_OUTPUT"
             echo "create_release=false" >> "$GITHUB_OUTPUT"
-            echo "reason=no-behavior-change" >> "$GITHUB_OUTPUT"
+            echo "reason=no-installer-shim-change" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 

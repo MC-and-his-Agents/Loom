@@ -75,6 +75,12 @@ Requirements:
 
 The installer reports the distribution layer and version context it touched. Loom execution semantics still belong to the `loom` CLI and the Python runtime bundled with the generated skills surface.
 
+## Release Surfaces
+
+The Loom CLI release surface is the primary release line for execution behavior. Its authority is root `VERSION` plus the GitHub `v*` tag and Release state. The `loom-installer compatibility line` remains separate and is only for adapter-managed install, legacy bridge, verification, security, or bootstrap fixes.
+
+Do not use npm `@mc-and-his-agents/loom-installer` `latest` or `loom-installer-v*` tags as evidence that the `loom` CLI was published. See [docs/adoption/loom-cli-release-surface.md](./docs/adoption/loom-cli-release-surface.md) and [docs/adoption/version-authority-map.md](./docs/adoption/version-authority-map.md).
+
 ## Basic Workflow
 
 1. Run `loom doctor --target . --json` or `loom verify --target . --json` to understand the repository's current Loom layer.

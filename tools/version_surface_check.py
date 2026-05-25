@@ -14,6 +14,8 @@ PLUGIN_MANIFEST = ROOT / "plugins" / "loom" / ".codex-plugin" / "plugin.json"
 INSTALLER_PACKAGE = ROOT / "packages" / "loom-installer" / "package.json"
 REPO_VERSION = ROOT / "VERSION"
 SKILLS_REGISTRY = ROOT / "skills" / "registry.json"
+CLI_RELEASE_SURFACE = ROOT / "docs" / "adoption" / "loom-cli-release-surface.md"
+RELEASE_SURFACE_CHECK = ROOT / "tools" / "check_release_surface.py"
 
 
 def read_json(path: Path) -> dict:
@@ -29,7 +31,9 @@ def main() -> int:
         for needle in (
             "VERSION",
             "GitHub release",
-            "installer package version",
+            "Loom CLI release candidate",
+            "Published Loom CLI release",
+            "Installer compatibility / legacy maintenance line",
             "plugin surface version",
             "host adapter version",
             "skill_package_version",
@@ -39,6 +43,20 @@ def main() -> int:
         ):
             if needle not in text:
                 errors.append(f"version authority map must mention `{needle}`")
+    if not CLI_RELEASE_SURFACE.exists():
+        errors.append("missing docs/adoption/loom-cli-release-surface.md")
+    else:
+        release_text = CLI_RELEASE_SURFACE.read_text(encoding="utf-8")
+        for needle in (
+            "The `loom` CLI release line is the primary release line",
+            "GitHub `v*` tag and GitHub Release",
+            "`loom-installer` is a compatibility and legacy maintenance line",
+            "must not use `@mc-and-his-agents/loom-installer` `latest`",
+        ):
+            if needle not in release_text:
+                errors.append(f"CLI release surface must mention `{needle}`")
+    if not RELEASE_SURFACE_CHECK.exists():
+        errors.append("missing tools/check_release_surface.py")
 
     plugin = read_json(PLUGIN_MANIFEST)
     x_loom = plugin.get("x-loom")

@@ -12,8 +12,6 @@ const baseRef = baseArgIndex >= 0 ? process.argv[baseArgIndex + 1] : 'origin/mai
 
 const behaviorPrefixes = [
   'packages/loom-installer/src/',
-  'plugins/loom/.codex-plugin/',
-  'skills/',
 ];
 
 const behaviorPaths = [
@@ -21,10 +19,10 @@ const behaviorPaths = [
   'packages/loom-installer/scripts/build-payload.mjs',
 ];
 
-const ignoredBehaviorPaths = [
-  'skills/README.md',
-  'skills/README.zh-CN.md',
-  'skills/distribution-and-adapter-contract.md',
+const ignoredCompatibilityPaths = [
+  'plugins/loom/.codex-plugin/',
+  'src/skills/',
+  'skills/',
 ];
 
 function git(args) {
@@ -53,7 +51,7 @@ function changedFiles() {
 }
 
 const changed = changedFiles();
-const relevantChanged = changed.filter((path) => !ignoredBehaviorPaths.includes(path));
+const relevantChanged = changed.filter((path) => !ignoredCompatibilityPaths.some((ignored) => path === ignored || path.startsWith(ignored)));
 const behaviorChanged = changed.some(
   (path) =>
     relevantChanged.includes(path) &&
@@ -63,7 +61,7 @@ const currentVersion = readCurrentVersion();
 const baseVersion = readBaseVersion();
 
 if (!behaviorChanged) {
-  console.log(`version bump check: OK (no installer behavior changes against ${baseRef})`);
+  console.log(`version bump check: OK (no installer shim changes against ${baseRef})`);
   process.exit(0);
 }
 

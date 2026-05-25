@@ -65,4 +65,6 @@ Release model:
 - PRs run gates but do not publish npm.
 - `main` is the only release truth source.
 - Loom repository releases and installer npm package versions are maintained separately.
+- `loom` CLI releases use root `VERSION` plus GitHub `v*` tags and Releases; installer `latest` is not CLI release evidence.
+- The installer compatibility line only advances for installer shim, adapter compatibility, legacy bridge, verification, security, or bootstrap fixes.
 - Create the `loom-installer-v<version>` git tag and matching GitHub Release only after npm publish succeeds.
