@@ -13,7 +13,7 @@ Target repository release / version truth is also separate from Loom's own distr
 | Loom CLI release candidate | `VERSION` | Declares the primary CLI-first release candidate line for the root repository. It may be ahead of the latest published GitHub release. |
 | Published Loom CLI release | GitHub `v*` tag and release | Represents published `loom` CLI / root runtime release truth. The tag must point at the release commit. |
 | Target repository release target | repo-owned or host-owned release object locator | Represents the target repository's own delivery/release truth, not Loom distribution metadata. |
-| Installer compatibility / legacy maintenance line | `packages/loom-installer/package.json` | Independent npm package line. Published with `loom-installer-v<version>` tags only for installer shim, adapter compatibility, legacy bridge, verification, security, or bootstrap fixes. It is not evidence that the `loom` CLI was published. |
+| Deprecated installer legacy artifact | `packages/loom-installer/package.json` | Historical npm package metadata only. The last active baseline is `@mc-and-his-agents/loom-installer` `0.1.119` / `loom-installer-v0.1.119`. It is not a current CLI, recommended install path, active release line, or evidence that the `loom` CLI was published. |
 | Plugin surface version | host plugin manifest, currently `plugins/loom/.codex-plugin/plugin.json` | Version of the plugin adapter surface, not the Loom repo version. |
 | Host adapter version | plugin metadata `x-loom.host_adapter_version` or adapter manifest | Version of host wiring semantics. |
 | Generated skill package version | `skills/<skill-id>/loom-package.json` `skill_package_version` | Version of the generated single-skill package surface. |
@@ -56,10 +56,11 @@ Upgrades compare the version surface relevant to the installed layer:
 - `loom` CLI release compares `VERSION` plus the GitHub `v*` tag and Release state
 - plugin install compares plugin surface and host adapter versions
 - single-skill install compares `skill_package_version`, `skill_contract_version`, `runtime_core_version`, and `source_revision`
-- installer upgrade compares npm package version only for the installer compatibility / legacy maintenance line
+- installer upgrade compares npm package version only for legacy status reporting and must not make installer `latest` the current Loom CLI version
 
 No check may infer that `VERSION`, plugin version, installer version, contract version, and schema version must be equal.
 No check may infer that a `loom-installer-v*` tag publishes the `loom` CLI.
+No check may recommend `@mc-and-his-agents/loom-installer` or `npx loom-installer` as the current Loom install path.
 No check may infer that a target repository release target is the same authority line as Loom's `VERSION`, installer version, plugin version, runtime version, or skill contract/schema version.
 
 ## Failure Rule

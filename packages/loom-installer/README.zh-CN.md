@@ -2,11 +2,13 @@
 
 语言：中文 | [English version](./README.md)
 
-Loom 的 npm / npx adapter helper 和 verifier。
+Deprecated Loom npm / npx adapter helper 和 verifier。
 
-Loom 默认安装模型是完整仓库安装加宿主原生或宿主适配的 skill discovery。这个 package 保留给 adapter 托管的 plugin 安装、single-skill helper 和 verification output。
+Loom 默认安装模型是完整仓库安装加宿主原生或宿主适配的 skill discovery。这个 package 是 deprecated legacy artifact，只为历史 adapter 托管 plugin 安装、single-skill helper 和 verification output 保留。不要把它当作当前 Loom CLI 或推荐安装路径。
 
-## Commands
+## Deprecated Commands
+
+这些命令是给既有 consumer 的 legacy 示例，不是当前安装路径：
 
 ```bash
 npx @mc-and-his-agents/loom-installer add plugin --host codex
@@ -27,7 +29,7 @@ npx @mc-and-his-agents/loom-installer upgrade-plan plugin --host codex --json
 npx @mc-and-his-agents/loom-installer verify-upgrade plugin --host codex --json
 ```
 
-也可以先固定 installer 版本：
+历史固定 installer 用法：
 
 ```bash
 npm install -D @mc-and-his-agents/loom-installer
@@ -58,13 +60,13 @@ Installer 管理的 layer 也会写入 `loom-installed-surface-status/v1` metada
 
 ## Release Notes
 
-发布只会从 `main` 进行。
+Installer package 已 sunset。`main` validation 仍可检查 package 和 legacy registry state，但不得 publish npm、创建 `loom-installer-v*` tag 或创建 installer GitHub Release。
 
 Release model：
 
 - PR 会运行 gates，但不会发布 npm。
-- `main` 是唯一 release truth source。
+- `main` 是 deprecated installer artifact 的 validation truth source。
 - Loom 仓库 release 与 installer npm package version 分开维护。
 - `loom` CLI release 使用根 `VERSION` 加 GitHub `v*` tag 和 Release；installer `latest` 不是 CLI release evidence。
-- installer compatibility line 只因 installer shim、adapter compatibility、legacy bridge、verification、安全或 bootstrap 修复而前进。
-- 只有在 npm publish 成功后，才创建 `loom-installer-v<version>` git tag 和同名前缀的 GitHub Release。
+- 最后一个 active installer baseline 是 `@mc-and-his-agents/loom-installer` `0.1.119` / `loom-installer-v0.1.119`。
+- 后续 npm deprecation action 可以只改变 registry metadata，不推进 package version。

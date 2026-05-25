@@ -12,7 +12,7 @@ Spec-driven development is an execution discipline inside Loom, not a narrower r
 
 Loom is now CLI-first. The `loom` command is the execution control plane: it diagnoses installed state, reads fact chains, runs verification, exposes upgrade and repair plans, and wraps scenario execution with structured fail-closed output.
 
-`SKILLS` remain the agent-facing entrances. They help an agent discover the right scenario and then consume CLI/runtime output. Plugins and host adapters provide native discovery and wiring. `.loom/` remains the repository execution fact surface. The npm `loom-installer` is a compatibility shim for adapter-managed installs, single-skill helpers, and legacy bridging; it is not the primary execution layer.
+`SKILLS` remain the agent-facing entrances. They help an agent discover the right scenario and then consume CLI/runtime output. Plugins and host adapters provide native discovery and wiring. `.loom/` remains the repository execution fact surface. The npm `loom-installer` package is a deprecated legacy artifact. It is not the current CLI, release line, or recommended installation path.
 
 Agents can still start from `loom-init` when they need routing help. Once inside the work, the CLI is the stable machine interface:
 
@@ -54,16 +54,16 @@ done
 
 Restart Codex after installation so native skill discovery reloads the Loom skills.
 
-### Adapter Installer
+### Deprecated Installer Artifact
 
-The npm installer is not the Codex default path. It is a compatibility shim, not the default control plane. Use it when you need an adapter-managed plugin install, single-skill helper flow, legacy bridge, or installer verification output:
+The npm installer is not the Codex default path and should not be used for new Loom installs. It remains documented only as deprecated legacy evidence for existing adapter-managed plugin installs, single-skill helper flows, legacy bridges, or historical installer verification output:
 
 ```bash
 npx @mc-and-his-agents/loom-installer add plugin --host codex
 npx @mc-and-his-agents/loom-installer add plugin --host claude
 ```
 
-You can also pin the installer first:
+Historical pinned installer usage:
 
 ```bash
 npm install -D @mc-and-his-agents/loom-installer
@@ -76,13 +76,13 @@ Requirements:
 - Node `>=20`
 - Python `>=3.10`, recommended `3.11+`
 
-The installer reports the distribution layer and version context it touched. Loom execution semantics still belong to the `loom` CLI and the Python runtime bundled with the generated skills surface.
+The installer reports the distribution layer and version context it touched for legacy consumers. Loom execution semantics belong to the `loom` CLI and the Python runtime bundled with the generated skills surface.
 
 ## Release Surfaces
 
-The Loom CLI release surface is the primary release line for execution behavior. Its authority is root `VERSION` plus the GitHub `v*` tag and Release state. The `loom-installer compatibility line` remains separate and is only for adapter-managed install, legacy bridge, verification, security, or bootstrap fixes.
+The Loom CLI release surface is the only active release line for execution behavior. Its authority is root `VERSION` plus the GitHub `v*` tag and Release state. The `loom-installer deprecated legacy line` remains separate only as historical npm/tag evidence and must not advance as a normal release path.
 
-Do not use npm `@mc-and-his-agents/loom-installer` `latest` or `loom-installer-v*` tags as evidence that the `loom` CLI was published. See [docs/adoption/loom-cli-release-surface.md](./docs/adoption/loom-cli-release-surface.md) and [docs/adoption/version-authority-map.md](./docs/adoption/version-authority-map.md).
+Do not use npm `@mc-and-his-agents/loom-installer` `latest` or `loom-installer-v*` tags as evidence that the `loom` CLI was published. The final legacy baseline is `loom-installer-v0.1.119` / npm `0.1.119` unless a later deprecation action changes only npm metadata. See [docs/adoption/loom-cli-release-surface.md](./docs/adoption/loom-cli-release-surface.md) and [docs/adoption/version-authority-map.md](./docs/adoption/version-authority-map.md).
 
 ## Basic Workflow
 
@@ -116,7 +116,7 @@ The editable skills source lives under `src/skills/`. The generated and checked-
 
 ## Advanced / Compatibility
 
-Single-skill installation remains available as an advanced compatibility path, but it is no longer the default Loom journey:
+Single-skill installation through the npm installer is deprecated legacy behavior and is not the current Loom journey:
 
 ```bash
 npx @mc-and-his-agents/loom-installer add skill loom-retire --host codex

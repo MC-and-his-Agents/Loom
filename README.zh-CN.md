@@ -10,7 +10,7 @@ Loom 是一个 agent-first project operating layer。
 
 Loom 现在采用 CLI-first。`loom` 命令是执行控制面：它诊断 installed state、读取 fact chain、执行验证、输出 upgrade / repair plan，并用结构化 fail-closed 输出包装场景执行。
 
-`SKILLS` 仍然是 agent-facing 入口。它们帮助智能体发现正确场景，并消费 CLI/runtime 输出。Plugins 和宿主 adapter 负责原生发现与 wiring。`.loom/` 继续作为仓库执行事实表面。npm `loom-installer` 是 compatibility shim，用于 adapter 托管安装、single-skill helper 和 legacy bridge；它不是主体执行层。
+`SKILLS` 仍然是 agent-facing 入口。它们帮助智能体发现正确场景，并消费 CLI/runtime 输出。Plugins 和宿主 adapter 负责原生发现与 wiring。`.loom/` 继续作为仓库执行事实表面。npm `loom-installer` package 是 deprecated legacy artifact；它不是当前 CLI、发布线或推荐安装路径。
 
 智能体仍可在需要路由帮助时从 `loom-init` 起步。进入执行后，CLI 是稳定的机器接口：
 
@@ -51,16 +51,16 @@ done
 
 安装后请重启 Codex，让原生 skills discovery 重新加载 Loom skills。
 
-### Adapter Installer
+### Deprecated Installer Artifact
 
-npm installer 不是 Codex 默认路径。它是 compatibility shim，不是默认控制面。需要 adapter 托管的 plugin 安装、single-skill helper、legacy bridge 或 installer verification output 时再使用：
+npm installer 不是 Codex 默认路径，也不应用于新的 Loom 安装。这里保留它只作为既有 adapter 托管 plugin 安装、single-skill helper、legacy bridge 或历史 installer verification output 的 deprecated legacy evidence：
 
 ```bash
 npx @mc-and-his-agents/loom-installer add plugin --host codex
 npx @mc-and-his-agents/loom-installer add plugin --host claude
 ```
 
-也可以先固定 installer 版本：
+历史固定 installer 用法：
 
 ```bash
 npm install -D @mc-and-his-agents/loom-installer
@@ -73,13 +73,13 @@ npx loom-installer add plugin --host claude
 - Node `>=20`
 - Python `>=3.10`，推荐 `3.11+`
 
-Installer 会报告它触达的 distribution layer 和 version context；Loom 的执行语义仍属于 `loom` CLI，以及生成 skills surface 随附的 Python runtime。
+Installer 会为 legacy consumer 报告它触达的 distribution layer 和 version context；Loom 的执行语义属于 `loom` CLI，以及生成 skills surface 随附的 Python runtime。
 
 ## 发布面
 
-Loom CLI 发布面是执行行为的主发布线。它的权威来源是根 `VERSION` 加 GitHub `v*` tag 和 Release 状态。`loom-installer 兼容线` 保持独立，只用于 adapter 托管安装、legacy bridge、verification、安全或 bootstrap 修复。
+Loom CLI 发布面是执行行为的唯一 active 发布线。它的权威来源是根 `VERSION` 加 GitHub `v*` tag 和 Release 状态。`loom-installer deprecated legacy line` 只作为历史 npm/tag 证据保留，不得作为常规发布路径继续前进。
 
-不要用 npm `@mc-and-his-agents/loom-installer` `latest` 或 `loom-installer-v*` tag 作为 `loom` CLI 已发布的证据。参见 [docs/adoption/loom-cli-release-surface.md](./docs/adoption/loom-cli-release-surface.md) 和 [docs/adoption/version-authority-map.md](./docs/adoption/version-authority-map.md)。
+不要用 npm `@mc-and-his-agents/loom-installer` `latest` 或 `loom-installer-v*` tag 作为 `loom` CLI 已发布的证据。最终 legacy baseline 是 `loom-installer-v0.1.119` / npm `0.1.119`，除非后续 deprecation action 只改变 npm metadata。参见 [docs/adoption/loom-cli-release-surface.md](./docs/adoption/loom-cli-release-surface.md) 和 [docs/adoption/version-authority-map.md](./docs/adoption/version-authority-map.md)。
 
 ## 基本工作流
 
@@ -113,7 +113,7 @@ Loom 当前暴露一个 root entry 和十个 scenario skills：
 
 ## 高级 / 兼容
 
-单 skill 安装仍然保留，作为兼容和高级路径，但它不再是 Loom 的主路径：
+通过 npm installer 的单 skill 安装属于 deprecated legacy behavior，不是当前 Loom 路径：
 
 ```bash
 npx @mc-and-his-agents/loom-installer add skill loom-retire --host codex

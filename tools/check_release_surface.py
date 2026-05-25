@@ -41,8 +41,8 @@ def main() -> int:
         (
             "The `loom` CLI release line is the primary release line",
             "GitHub `v*` tag and GitHub Release",
-            "Publishing requires an explicit `workflow_dispatch` run with publish enabled",
-            "`loom-installer` is a compatibility and legacy maintenance line",
+            "Installer npm state is never publish evidence for this judgment",
+            "`loom-installer` is a deprecated legacy artifact",
             "must not use `@mc-and-his-agents/loom-installer` `latest`",
         ),
         errors,
@@ -52,7 +52,7 @@ def main() -> int:
         (
             "Loom CLI release candidate",
             "Published Loom CLI release",
-            "Installer compatibility / legacy maintenance line",
+            "Deprecated installer legacy artifact",
             "No check may infer that a `loom-installer-v*` tag publishes the `loom` CLI",
         ),
         errors,
@@ -97,8 +97,8 @@ def main() -> int:
         ),
         errors,
     )
-    require_needles(README, ("Loom CLI release surface", "loom-installer compatibility line"), errors)
-    require_needles(README_ZH, ("Loom CLI 发布面", "loom-installer 兼容线"), errors)
+    require_needles(README, ("Loom CLI release surface", "loom-installer deprecated legacy line"), errors)
+    require_needles(README_ZH, ("Loom CLI 发布面", "loom-installer deprecated legacy line"), errors)
 
     forbidden_installer_behavior_needles = (
         "plugins/loom/.codex-plugin/|src/skills/|skills/",
