@@ -11,11 +11,11 @@
 - Review Entry: .loom/reviews/WI-998.json
 - Validation Entry: python3 tools/check_cli_contract.py; python3 tools/version_surface_check.py; npm --prefix packages/loom-installer run check:docs; make check; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-998; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py pr-gate check --target . --pr <PR> --head-sha <HEAD> --item WI-998
 - Closing Condition: README.md and README.zh-CN.md present `loom` CLI as the primary control plane, describe loom-installer as compatibility shim / adapter-managed install / legacy bridge, #998 PR is merged, and #996 can consume the PR, checks, and merge commit.
-- Current Checkpoint: build
-- Current Stop: README.md and README.zh-CN.md have been updated in the formal worktree; local CLI, version, doc sync, fact-chain, and shadow-parity checks pass; review is next.
-- Next Step: Record spec/general review, run full validation, then open PR.
+- Current Checkpoint: merge
+- Current Stop: README.md and README.zh-CN.md updates are implemented, reviewed, and locally validated; PR creation is next.
+- Next Step: Open PR for #998, run PR gate against the PR head, and consume GitHub checks before merge.
 - Blockers: None recorded.
-- Latest Validation Summary: Passed before review: `python3 tools/check_cli_contract.py`; `python3 tools/version_surface_check.py`; `npm --prefix packages/loom-installer run check:docs`; `python3 .loom/bin/loom_flow.py fact-chain --target .`; `python3 .loom/bin/loom_flow.py shadow-parity --target .`; `git diff --check`.
+- Latest Validation Summary: Passed for WI-998: `python3 tools/check_cli_contract.py`; `python3 tools/version_surface_check.py`; `npm --prefix packages/loom-installer run check:docs`; `python3 .loom/bin/loom_flow.py fact-chain --target .`; `python3 .loom/bin/loom_flow.py shadow-parity --target .`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-998`; `make check`.
 - Recovery Boundary: Continue from `/Users/mc/dev/Loom-998-cli-first-readme` on branch `work/998-cli-first-readme`; do not change CLI behavior, installer versions, release tags, or #996 release judgment in this batch.
 - Current Lane: cli-first readme entrypoint
 
