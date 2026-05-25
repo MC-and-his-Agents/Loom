@@ -65,4 +65,6 @@ Release model：
 - PR 会运行 gates，但不会发布 npm。
 - `main` 是唯一 release truth source。
 - Loom 仓库 release 与 installer npm package version 分开维护。
+- `loom` CLI release 使用根 `VERSION` 加 GitHub `v*` tag 和 Release；installer `latest` 不是 CLI release evidence。
+- installer compatibility line 只因 installer shim、adapter compatibility、legacy bridge、verification、安全或 bootstrap 修复而前进。
 - 只有在 npm publish 成功后，才创建 `loom-installer-v<version>` git tag 和同名前缀的 GitHub Release。

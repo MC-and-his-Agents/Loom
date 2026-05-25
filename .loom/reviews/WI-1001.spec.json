@@ -1,0 +1,22 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1001",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1001 spec suite is approved: it selects the minimal root GitHub Release channel for the loom CLI, keeps installer npm releases limited to compatibility/legacy maintenance, and explicitly avoids adding new package channels or reopening #885.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "1c3b2dcbce7c389544a2f3eb830d5add0737a067",
+  "reviewed_validation_summary": "Spec review consumed the #1001 issue body, version authority map, README release surface wording, and release workflow boundaries.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1001.md",
+    "recovery_entry": ".loom/progress/WI-1001.md",
+    "spec": ".loom/specs/WI-1001/spec.md",
+    "plan": ".loom/specs/WI-1001/plan.md",
+    "implementation_contract": ".loom/specs/WI-1001/implementation-contract.md",
+    "issue": "#1001"
+  }
+}

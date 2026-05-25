@@ -75,6 +75,12 @@ npx loom-installer add plugin --host claude
 
 Installer 会报告它触达的 distribution layer 和 version context；Loom 的执行语义仍属于 `loom` CLI，以及生成 skills surface 随附的 Python runtime。
 
+## 发布面
+
+Loom CLI 发布面是执行行为的主发布线。它的权威来源是根 `VERSION` 加 GitHub `v*` tag 和 Release 状态。`loom-installer 兼容线` 保持独立，只用于 adapter 托管安装、legacy bridge、verification、安全或 bootstrap 修复。
+
+不要用 npm `@mc-and-his-agents/loom-installer` `latest` 或 `loom-installer-v*` tag 作为 `loom` CLI 已发布的证据。参见 [docs/adoption/loom-cli-release-surface.md](./docs/adoption/loom-cli-release-surface.md) 和 [docs/adoption/version-authority-map.md](./docs/adoption/version-authority-map.md)。
+
 ## 基本工作流
 
 1. 先运行 `loom doctor --target . --json` 或 `loom verify --target . --json`，判断仓库当前 Loom 层。

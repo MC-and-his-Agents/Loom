@@ -1,0 +1,164 @@
+name: loom-cli-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Create the VERSION tag and GitHub Release when CLI release is required.'
+        required: true
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - 'VERSION'
+      - 'tools/loom.py'
+      - 'tools/loom_*.py'
+      - 'tools/check_cli_contract.py'
+      - 'tools/check_release_surface.py'
+      - 'tools/version_surface_check.py'
+      - 'skills/shared/scripts/**'
+      - 'src/skills/**'
+      - 'skills/**'
+      - 'docs/adoption/loom-cli-release-surface.md'
+      - 'docs/adoption/version-authority-map.md'
+      - 'README.md'
+      - 'README.zh-CN.md'
+      - '.github/workflows/loom-cli-release.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'VERSION'
+      - 'tools/loom.py'
+      - 'tools/loom_*.py'
+      - 'tools/check_cli_contract.py'
+      - 'tools/check_release_surface.py'
+      - 'tools/version_surface_check.py'
+      - 'skills/shared/scripts/**'
+      - 'src/skills/**'
+      - 'skills/**'
+      - 'docs/adoption/loom-cli-release-surface.md'
+      - 'docs/adoption/version-authority-map.md'
+      - 'README.md'
+      - 'README.zh-CN.md'
+      - '.github/workflows/loom-cli-release.yml'
+
+concurrency:
+  group: loom-cli-release
+  cancel-in-progress: false
+
+jobs:
+  release-judgment:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      PACKAGE_TAG_PREFIX: 'v'
+      PUBLISH_REQUESTED: ${{ github.event_name == 'workflow_dispatch' && inputs.publish == true }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check release surfaces
+        run: python3 tools/check_release_surface.py
+
+      - name: Check version surfaces
+        run: python3 tools/version_surface_check.py
+
+      - name: Check CLI contract
+        run: python3 tools/check_cli_contract.py
+
+      - name: Resolve CLI release state
+        id: state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION=$(tr -d '\n' < VERSION)
+          TAG="${VERSION}"
+          RELEASE_TITLE="Loom CLI ${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "release_title=${RELEASE_TITLE}" >> "$GITHUB_OUTPUT"
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin "${{ github.base_ref }}" --depth=1
+            CHANGED_FILES=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            CHANGED_FILES=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}")
+          else
+            CHANGED_FILES=$(git diff --name-only "HEAD^..HEAD" 2>/dev/null || true)
+          fi
+
+          if printf '%s\n' "$CHANGED_FILES" | grep -E '^(VERSION|tools/loom\\.py|tools/loom_.*\\.py|tools/check_cli_contract\\.py|skills/shared/scripts/|src/skills/|skills/|docs/adoption/loom-cli-release-surface\\.md|\\.github/workflows/loom-cli-release\\.yml)' >/dev/null; then
+            echo "behavior_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "behavior_changed=false" >> "$GITHUB_OUTPUT"
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "create_release=false" >> "$GITHUB_OUTPUT"
+            echo "reason=no-cli-behavior-change" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          TAG_EXISTS=false
+          TAG_MATCHES=false
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            TAG_EXISTS=true
+            TAG_SHA=$(git rev-list -n 1 "refs/tags/${TAG}")
+            if [ "$TAG_SHA" = "${{ github.sha }}" ]; then
+              TAG_MATCHES=true
+            fi
+          fi
+
+          RELEASE_EXISTS=false
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            RELEASE_EXISTS=true
+          fi
+
+          if [ "$TAG_EXISTS" = false ]; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "create_release=true" >> "$GITHUB_OUTPUT"
+            echo "reason=publish-required" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$TAG_MATCHES" != true ]; then
+            if [ "$PUBLISH_REQUESTED" != "true" ]; then
+              echo "should_publish=false" >> "$GITHUB_OUTPUT"
+              echo "create_release=false" >> "$GITHUB_OUTPUT"
+              echo "reason=version-already-published-on-different-commit" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "release state is inconsistent: Loom CLI tag ${TAG} does not point to ${{ github.sha }}" >&2
+            exit 1
+          fi
+
+          echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          if [ "$RELEASE_EXISTS" = true ]; then
+            echo "create_release=false" >> "$GITHUB_OUTPUT"
+            echo "reason=already-published-and-released" >> "$GITHUB_OUTPUT"
+          else
+            echo "create_release=true" >> "$GITHUB_OUTPUT"
+            echo "reason=release-missing" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create git tag
+        if: env.PUBLISH_REQUESTED == 'true' && steps.state.outputs.should_publish == 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "${{ steps.state.outputs.tag }}" -m "Release ${{ steps.state.outputs.tag }}"
+          git push origin "${{ steps.state.outputs.tag }}"
+
+      - name: Create GitHub release
+        if: env.PUBLISH_REQUESTED == 'true' && steps.state.outputs.create_release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ steps.state.outputs.tag }}" --title "${{ steps.state.outputs.release_title }}" --generate-notes
