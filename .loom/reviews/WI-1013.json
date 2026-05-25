@@ -5,8 +5,8 @@
   "kind": "general_review",
   "summary": "WI-1013 implementation is approved after syncing origin/main: SDD remains internalized as a Loom execution discipline, spec-kit keep/adapt/drop evidence is preserved, #1053/WI-1005 is terminal, and this PR still does not implement #1014/#1015/#1016.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "fddf10928da75c27a6d2a1507df41795fd808ae1",
-  "reviewed_validation_summary": "Passed locally: `git diff --check`; targeted ledger/landing-map ID check for `EXT-0061` / `EXT-0062` / `EXT-0063`; targeted no-copy check for `docs/spec-kit` and `.specify`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`. `python3 tools/loom.py verify --target . --json` and `python3 tools/loom.py doctor --target . --json` fail closed on existing installed-state / mixed-legacy surface repair inputs, not on the SDD boundary docs.",
+  "reviewed_head": "7ed9ce57a350283021d66ec0bbebad664c72839e",
+  "reviewed_validation_summary": "Passed locally after syncing origin/main: `git diff --check`; targeted ledger/landing-map ID check for `EXT-0061` / `EXT-0062` / `EXT-0063`; targeted no-copy check for `docs/spec-kit` and `.specify`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 .loom/bin/loom_init.py fact-chain --target .`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1013 --write`.",
   "fallback_to": null,
   "findings": [
     {
@@ -53,15 +53,16 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "not_applicable",
+      "status": "unavailable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
-      "budget_summary": "execution budget is not collected for this invocation.",
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github rulesets read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/rulesets\": EOF",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_host"
+        "source": "github_control_plane",
+        "error_count": 1
       }
     },
     "engine_adapter": null,
