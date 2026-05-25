@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1009
-- Goal: Execute and verify the first `loom` CLI automatic release after #1008 enabled main-push publishing.
-- Scope: #1009: choose root `VERSION`, update generated version surfaces, merge an issue-scoped PR that triggers `loom-cli-release`, and record CLI tag/release plus no-installer-publish evidence.
-- Execution Path: issue-scoped branch work/1009-first-cli-release in /Users/mc/dev/Loom-1009-first-cli-release
+- Item ID: WI-1010
+- Goal: Execute `loom-installer` npm deprecation when authorized, or record npm permission-block evidence and owner action.
+- Scope: #1010: npm deprecation status for `@mc-and-his-agents/loom-installer`, legacy baseline evidence, no installer publish, and closeout evidence for #1003.
+- Execution Path: issue-scoped branch work/1010-installer-npm-deprecate in /Users/mc/dev/Loom-1010-installer-npm-deprecate
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1009.md
-- Review Entry: .loom/reviews/WI-1009.json
-- Validation Entry: python3 tools/version_surface_check.py
-- Closing Condition: PR merged with new `v0.13.0` tag and GitHub Release pointing at the #1009 merge commit, while installer npm latest and `loom-installer-v*` releases remain unchanged.
+- Recovery Entry: .loom/progress/WI-1010.md
+- Review Entry: .loom/reviews/WI-1010.json
+- Validation Entry: npm view @mc-and-his-agents/loom-installer version deprecated --json
+- Closing Condition: npm deprecation is applied, or npm permission failure is recorded with owner action while installer latest/tag/release remain at the legacy baseline.
 - Current Checkpoint: validated
-- Current Stop: PR #1060 is open at head d5de68c7e7d676b4eea7c6ad6c74641ae6960781 with root VERSION v0.13.0 and local validation passing.
-- Next Step: Consume local pr-gate and GitHub checks, merge, then verify the v0.13.0 tag/release and installer non-advancement evidence.
-- Blockers: None recorded.
-- Latest Validation Summary: Passed: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1009; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1009; make check. A transient host-binding REST read failure was isolated by rerunning the exact host-binding command successfully before the final make check pass.
-- Recovery Boundary: Continue from /Users/mc/dev/Loom-1009-first-cli-release on branch work/1009-first-cli-release; keep scope limited to #1009 first CLI release VERSION bump, generated version surfaces, release readiness evidence, and carriers.
-- Current Lane: first-cli-release
+- Current Stop: npm deprecate permission-block evidence is committed at 86f77087ca8b3b5b2b31d8955502cc5898041184; installer latest remains 0.1.119.
+- Next Step: Open PR, consume checks, then merge and close #1010 as permission-blocked with owner action.
+- Blockers: None
+- Latest Validation Summary: Passed: npm view @mc-and-his-agents/loom-installer version deprecated --json returned 0.1.119 with no deprecation metadata; npm whoami returned E401 Unauthorized; GitHub release list still shows latest installer release loom-installer-v0.1.119; max installer tag remains loom-installer-v0.1.119; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; npm --prefix packages/loom-installer run check:release; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1010; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1010; make check.
+- Recovery Boundary: Continue from /Users/mc/dev/Loom-1010-installer-npm-deprecate on branch work/1010-installer-npm-deprecate; keep scope limited to npm deprecation/permission evidence and no-installer-publish closeout.
+- Current Lane: installer-npm-deprecate
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; npm --prefix packages/loom-installer run check:release; make check
+- Verification Entry: npm view @mc-and-his-agents/loom-installer version deprecated --json; npm whoami; python3 tools/check_release_surface.py
 - Lane Entry: not_applicable
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1009.md
-- Dynamic Truth: .loom/progress/WI-1009.md
+- Static Truth: .loom/work-items/WI-1010.md
+- Dynamic Truth: .loom/progress/WI-1010.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

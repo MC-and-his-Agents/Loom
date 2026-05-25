@@ -1,0 +1,20 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1010",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1010 spec is scoped to npm deprecation or permission-block evidence for the deprecated installer, with no installer publish/version/tag/release advancement.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "86f77087ca8b3b5b2b31d8955502cc5898041184",
+  "reviewed_validation_summary": "Spec reviewed against #1010 issue body, #1003 scope, npm latest/deprecation read, npm whoami E401 result, and installer sunset docs.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1010.md",
+    "recovery_entry": ".loom/progress/WI-1010.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass"
+  }
+}

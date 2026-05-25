@@ -1,0 +1,20 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1010",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1010 implementation is approved: npm deprecation cannot be executed from this environment because npm identity is unauthorized, and the evidence records required owner action while preserving installer non-advancement.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "e5c83d0dcc6231908b997e3b92790d6e32704ac0",
+  "reviewed_validation_summary": "Passed: npm view @mc-and-his-agents/loom-installer version deprecated --json returned 0.1.119 with no deprecation metadata; npm whoami returned E401 Unauthorized; GitHub release list still shows latest installer release loom-installer-v0.1.119; max installer tag remains loom-installer-v0.1.119; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; npm --prefix packages/loom-installer run check:release; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1010; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1010; make check.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1010.md",
+    "recovery_entry": ".loom/progress/WI-1010.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass"
+  }
+}
