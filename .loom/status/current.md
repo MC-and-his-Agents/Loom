@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1008
-- Goal: Allow the single active `loom` CLI release workflow to publish automatically after eligible `main` merges while preserving `workflow_dispatch` as a repair path.
-- Scope: #1008: `loom-cli-release` main-push auto publish semantics, tag collision failure, release-surface documentation, checker needles, and Loom carriers for this work item.
-- Execution Path: issue-scoped branch work/1008-cli-auto-release in /Users/mc/dev/Loom-1008-cli-auto-release
+- Item ID: WI-1009
+- Goal: Execute and verify the first `loom` CLI automatic release after #1008 enabled main-push publishing.
+- Scope: #1009: choose root `VERSION`, update generated version surfaces, merge an issue-scoped PR that triggers `loom-cli-release`, and record CLI tag/release plus no-installer-publish evidence.
+- Execution Path: issue-scoped branch work/1009-first-cli-release in /Users/mc/dev/Loom-1009-first-cli-release
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1008.md
-- Review Entry: .loom/reviews/WI-1008.json
-- Validation Entry: python3 tools/check_release_surface.py
-- Closing Condition: PR merged with `loom-cli-release` able to auto-create GitHub `v*` tag and Release on eligible `main` pushes, while tag collisions fail closed and installer publish evidence remains excluded.
+- Recovery Entry: .loom/progress/WI-1009.md
+- Review Entry: .loom/reviews/WI-1009.json
+- Validation Entry: python3 tools/version_surface_check.py
+- Closing Condition: PR merged with new `v0.13.0` tag and GitHub Release pointing at the #1009 merge commit, while installer npm latest and `loom-installer-v*` releases remain unchanged.
 - Current Checkpoint: validated
-- Current Stop: PR #1059 is open at head 4eef003cf6f2e1f683ab77a45e7b1f3f9b8ba5c2; local pr-gate is being rerun after refreshing code-review evidence.
-- Next Step: Consume local PR gate and GitHub checks, then merge and close #1008.
+- Current Stop: PR #1060 is open at head d5de68c7e7d676b4eea7c6ad6c74641ae6960781 with root VERSION v0.13.0 and local validation passing.
+- Next Step: Consume local pr-gate and GitHub checks, merge, then verify the v0.13.0 tag/release and installer non-advancement evidence.
 - Blockers: None recorded.
-- Latest Validation Summary: Passed: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; ruby YAML parse for .github/workflows/loom-cli-release.yml; npm --prefix packages/loom-installer run check:release; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1008; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1008; make check. After PR #1059 opened, local pr-gate purity/spec review remediation was applied through 4eef003cf6f2e1f683ab77a45e7b1f3f9b8ba5c2. Python yaml module was unavailable locally, so Ruby stdlib YAML was used for syntax parsing.
-- Recovery Boundary: Continue from /Users/mc/dev/Loom-1008-cli-auto-release on branch work/1008-cli-auto-release; keep scope limited to #1008 CLI auto-release workflow semantics, docs/checker needles, and carriers.
-- Current Lane: cli-auto-release
+- Latest Validation Summary: Passed: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1009; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1009; make check. A transient host-binding REST read failure was isolated by rerunning the exact host-binding command successfully before the final make check pass.
+- Recovery Boundary: Continue from /Users/mc/dev/Loom-1009-first-cli-release on branch work/1009-first-cli-release; keep scope limited to #1009 first CLI release VERSION bump, generated version surfaces, release readiness evidence, and carriers.
+- Current Lane: first-cli-release
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; ruby -e "require 'yaml'; YAML.load_file('.github/workflows/loom-cli-release.yml')"; npm --prefix packages/loom-installer run check:release; make check
+- Verification Entry: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; npm --prefix packages/loom-installer run check:release; make check
 - Lane Entry: not_applicable
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1008.md
-- Dynamic Truth: .loom/progress/WI-1008.md
+- Static Truth: .loom/work-items/WI-1009.md
+- Dynamic Truth: .loom/progress/WI-1009.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

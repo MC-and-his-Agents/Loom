@@ -1,0 +1,20 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1009",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1009 spec is scoped to selecting unpublished VERSION v0.13.0, updating generated version surfaces, triggering the first main-push loom CLI release, and preserving installer sunset evidence boundaries.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "964e1a21ed9712916229918243fa4acae3b35365",
+  "reviewed_validation_summary": "Spec reviewed against #1009 issue body, #1003 scope, #1008 merge evidence, current VERSION/tag/release state, release surface docs, and the committed v0.13.0 release candidate.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1009.md",
+    "recovery_entry": ".loom/progress/WI-1009.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass"
+  }
+}

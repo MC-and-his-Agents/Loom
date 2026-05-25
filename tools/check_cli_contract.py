@@ -161,7 +161,7 @@ def valid_state(target: Path) -> dict[str, Any]:
                 "layer_type": "full-repo-runtime",
                 "installed_path": ".loom/bin",
                 "version_context": {
-                    "repo_version": "v0.12.0",
+                    "repo_version": "v0.13.0",
                     "runtime_core_version": "1.0.0",
                 },
                 "runtime_state": "ready",
