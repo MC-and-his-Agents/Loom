@@ -12,10 +12,10 @@
 - Validation Entry: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; make check
 - Closing Condition: #1011 and #1003 closeout comments consume all child issue, PR, merge, check, release, npm, tag, and workspace-clean evidence.
 - Current Checkpoint: validated
-- Current Stop: #1011 closeout evidence is assembled for PR review; #1004-#1010 are closed/completed and #1009/#1010 release/npm evidence is consumable.
+- Current Stop: #1011 closeout evidence is assembled and locally validated; #1004-#1010 are closed/completed and #1009/#1010 release/npm evidence is consumable.
 - Next Step: Open PR, consume checks, merge, then post #1011 and #1003 closeout comments.
 - Blockers: None
-- Latest Validation Summary: Pending final local validation in this worktree.
+- Latest Validation Summary: Passed: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1011; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1011; make check.
 - Recovery Boundary: Continue from /Users/mc/dev/Loom-1011-1003-closeout on branch work/1011-1003-closeout; keep scope limited to #1011/#1003 closeout evidence and comments.
 - Current Lane: cli-installer-sunset-closeout
 
