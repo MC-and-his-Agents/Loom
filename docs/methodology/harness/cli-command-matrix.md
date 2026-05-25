@@ -85,9 +85,9 @@ loom gate pre-review|spec-review|review|pr|merge|closeout
 
 `status` and `fact-chain` are derived reads over the existing Loom carriers. `checkpoint` commands consume the established checkpoint payloads. `gate merge` checks host merge readiness through controlled-merge check but does not execute a merge. `gate closeout` checks closeout state but does not sync or close host objects.
 
-## Reserved Phase Commands
+## Delivery Commands
 
-These names are frozen for #885. Until their Work Items implement them, invoking them returns `result=block`.
+#889 implements the install, upgrade, rollback, and verify command family:
 
 ```text
 loom install
@@ -95,6 +95,15 @@ loom upgrade-plan
 loom upgrade
 loom rollback
 loom verify
+```
+
+`install` writes `loom-installed-state/v2` only when `--apply` is present. `upgrade-plan` is non-mutating and emits ordered repair / legacy-classification / no-op actions. `verify` consumes `doctor` so installed-state and legacy-surface readiness stay aligned. `upgrade` requires `--apply` and refuses to mutate while installed-state is invalid or legacy surfaces remain unclassified. `rollback` remains a structured fail-closed command because rollback/delete ownership cannot be inferred from installed surface detection.
+
+## Scenario Commands
+
+#892 implements the CLI-backed scenario command family:
+
+```text
 loom story
 loom spec
 loom plan
@@ -104,6 +113,12 @@ loom closeout
 loom handoff
 loom retire
 ```
+
+`story`, `build`, `pre-review`, and `handoff` wrap the existing `loom_flow.py flow` runtime and preserve structured JSON. `spec` and `plan` expose the expected `.loom/specs/<item>/` locators and fail closed when authoring carriers are absent. `closeout` wraps the closeout check surface and does not close host objects. `retire` exposes a non-mutating handoff / cleanup contract and points callers to `workspace retire` for explicit worksite lifecycle handling.
+
+## Reserved Phase Commands
+
+No command in the #889/#892/#896 implementation batch remains reserved. Later phase issues may still reserve additional names outside #885 scope.
 
 ## Delegated Compatibility Commands
 
@@ -146,3 +161,17 @@ For #929-#943 it also checks:
 - `loom skills list` emits the generated registry and root entry;
 - `loom skills generate` fails closed without `--apply`;
 - `loom skills package` emits package metadata for generated skills.
+
+For #910-#914 it also checks:
+
+- `install`, `upgrade`, and `rollback` fail closed before mutating state;
+- `upgrade-plan` emits `loom-delivery-control/v1` actions without mutation;
+- `verify` consumes `doctor` and returns the same readiness boundary.
+
+For #924-#928 it also checks:
+
+- scenario commands are implemented in `loom help --json`;
+- flow-backed scenarios wrap the shared flow runtime;
+- `spec` and `plan` fail closed with explicit carrier locators when absent;
+- `closeout` is check-only and returns structured fallback guidance;
+- `retire` exposes a non-mutating lifecycle contract.
