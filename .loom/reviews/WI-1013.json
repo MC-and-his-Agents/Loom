@@ -3,10 +3,10 @@
   "item_id": "WI-1013",
   "decision": "allow",
   "kind": "general_review",
-  "summary": "WI-1013 implementation is approved after syncing origin/main: SDD remains internalized as a Loom execution discipline, spec-kit keep/adapt/drop evidence is preserved, #1053/WI-1005 is terminal, and this PR still does not implement #1014/#1015/#1016.",
+  "summary": "WI-1013 terminal carrier closeout is approved: PR #1054 has merged, #1013/#1021/#1022/#1023 are closed completed, local status/progress now reflect the terminal state, and this PR still does not implement #1014/#1015/#1016.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "7ed9ce57a350283021d66ec0bbebad664c72839e",
-  "reviewed_validation_summary": "Passed locally after syncing origin/main: `git diff --check`; targeted ledger/landing-map ID check for `EXT-0061` / `EXT-0062` / `EXT-0063`; targeted no-copy check for `docs/spec-kit` and `.specify`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 .loom/bin/loom_init.py fact-chain --target .`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1013 --write`.",
+  "reviewed_head": "1e2f31268bd829b3377470ddd6c0fffe8e995e08",
+  "reviewed_validation_summary": "PR #1054 merged after GitHub checks passed: `py-compile`, `demo-bootstrap`, `repo-local-cli`, `root-self-governance`, `loom-check`, `loom-pr-merge-gate`, `release-judgment`, and `gate`. Local pre-merge evidence passed: `git diff --check`; targeted ledger/landing-map ID check for `EXT-0061` / `EXT-0062` / `EXT-0063`; targeted no-copy check for `docs/spec-kit` and `.specify`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 .loom/bin/loom_init.py fact-chain --target .`; `python3 .loom/bin/loom_flow.py shadow-parity --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py pr-gate check --target . --head-sha fdd0fc772e07dbd9ba3d58e64a0bdcabc7c35170 --branch work/1013-sdd-operating-layer-boundary --pr 1054`.",
   "fallback_to": null,
   "findings": [
     {
