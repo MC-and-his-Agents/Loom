@@ -12,8 +12,8 @@
 - Validation Entry: npm view @mc-and-his-agents/loom-installer version deprecated --json
 - Closing Condition: npm deprecation is applied, or npm permission failure is recorded with owner action while installer latest/tag/release remain at the legacy baseline.
 - Current Checkpoint: validated
-- Current Stop: npm deprecate is blocked locally because `npm whoami` returns E401 Unauthorized; evidence is recorded and installer latest remains 0.1.119.
-- Next Step: Commit evidence, open PR, consume checks, then merge and close #1010 as permission-blocked with owner action.
+- Current Stop: npm deprecate permission-block evidence is committed at 86f77087ca8b3b5b2b31d8955502cc5898041184; installer latest remains 0.1.119.
+- Next Step: Open PR, consume checks, then merge and close #1010 as permission-blocked with owner action.
 - Blockers: npm registry write/deprecate permission is unavailable in this environment (`npm whoami` -> E401 Unauthorized).
 - Latest Validation Summary: Passed: npm view @mc-and-his-agents/loom-installer version deprecated --json returned 0.1.119 with no deprecation metadata; npm whoami returned E401 Unauthorized; GitHub release list still shows latest installer release loom-installer-v0.1.119; max installer tag remains loom-installer-v0.1.119; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; npm --prefix packages/loom-installer run check:release; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1010; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1010; make check.
 - Recovery Boundary: Continue from /Users/mc/dev/Loom-1010-installer-npm-deprecate on branch work/1010-installer-npm-deprecate; keep scope limited to npm deprecation/permission evidence and no-installer-publish closeout.
