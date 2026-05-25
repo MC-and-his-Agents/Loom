@@ -1,0 +1,21 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1011",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1011 spec is scoped to final #1003 closeout evidence consumption without changing release behavior or publishing artifacts.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "93066b9e6705780ea0a4d053af8eefe7b323186a",
+  "reviewed_validation_summary": "Spec reviewed against #1011 issue body, #1003 completion conditions, merged child issue evidence, v0.13.0 CLI release evidence, and #1010 npm permission-block evidence.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1011.md",
+    "recovery_entry": ".loom/progress/WI-1011.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass"
+  }
+}
+

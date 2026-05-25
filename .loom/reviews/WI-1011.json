@@ -1,0 +1,21 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1011",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1011 implementation is approved: closeout evidence consumes the issue tree, PR chain, first CLI release, npm permission block, and installer non-advancement without publishing or expanding scope.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "93066b9e6705780ea0a4d053af8eefe7b323186a",
+  "reviewed_validation_summary": "Pending final local validation in this worktree.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1011.md",
+    "recovery_entry": ".loom/progress/WI-1011.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass"
+  }
+}
+
