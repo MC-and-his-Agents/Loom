@@ -11,6 +11,7 @@
 - `EXT-0062`
 - `#649`
 - `#1013`
+- `#1032`
 
 ## 0. SDD 内化边界
 
@@ -31,6 +32,20 @@ Loom 不吸收 SDD-only 边界：
 - 不让 `tasks.md` 或任何单一任务文件替代 Work Item、recovery、review、merge-ready 或 closeout 真相
 
 因此，本文件冻结 full / minimal spec suite 的合同、工件列表、模板职责、locator / provenance 规则和 source / generated 接入要求。gate-chain 与 CLI surface 只作为后续消费者或占位引用出现，不在本文件定义具体运行合同。`evidence-map` 与 `consistency-analysis` 的 #1018 合同见 [evidence-map.md](./evidence-map.md) 与 [consistency-analysis.md](./consistency-analysis.md)。Execution breakdown 与 task carrier 的当前合同分别见 [execution-breakdown.md](./execution-breakdown.md) 与 [../harness/task-carrier-contract.md](../harness/task-carrier-contract.md)。
+
+## 0.1 Story Readiness 入口规则
+
+Formal spec shaping 只能消费已确认或明确不适用的 story 语义。
+
+入口规则如下：
+
+- 若存在 story intake，`Story Readiness` 必须是 `confirmed`，或以 `not_applicable` 记录 bypass rationale、consumer boundary 与 recheck condition。
+- 若事项涉及业务语义，`Story Business Confirmation` 必须是 `confirmed`，或以 `not_applicable` 记录 bypass rationale、consumer boundary 与 recheck condition。
+- `pending` 与 `revision-requested` 是阻断状态。它们只能作为 blocking locator 记录，不能被 `spec.md` 或 `plan.md` 当成已确认语义消费。
+- `not_applicable` 不是省略字段。它必须说明为什么当前目标不需要 story 或业务确认、哪些消费者不应要求它、什么条件触发重新判断。
+- `spec.md` 与 `plan.md` 只记录 story locator、scenario id、confirmation locator 或 `not_applicable` rationale；不得复制 User Story 主体，避免形成第二事实源。
+
+因此，formal spec path 的入口不是“有一个 story 文本就能继续”，而是“story readiness 与业务确认的消费状态已经可被后续工件解释”。未满足时，流程停在 story shaping 或等待业务语义确认。
 
 ## 1. Suite Path
 
@@ -55,9 +70,9 @@ Full suite 的当前可投放工件如下：
 
 | 工件 | 职责 | Consume | Produce | Locator / provenance |
 | --- | --- | --- | --- | --- |
-| `suite-index.md` | 记录 suite path、工件清单、适用性判断和后续消费者 | Work Item / FR locator、story readiness locator、delivery planning locator 或 `not_applicable` rationale | path decision、artifact inventory、deferred / not_applicable table、#1020 接入需求 | 每个工件使用 repo-relative locator；provenance 指向触发 path decision 的 issue、PR、story 或会话记录 |
-| `spec.md` | 冻结目标、范围、可观察场景与验收标准 | story scenario locator、Story Business Confirmation locator 或 `not_applicable` rationale、suite-index path decision | scenario ids / locators、acceptance ids、behavior evidence expectation | scenario id / acceptance id 必须可被 `plan.md` 逐项引用 |
-| `plan.md` | 把 `spec.md` 场景和验收转成实现、验证与测试策略 | `spec.md` scenario / acceptance locator、suite-index path decision、constraints | validation strategy、test strategy、fresh evidence expectation | 每条 validation row 必须保留被消费的 scenario / acceptance locator |
+| `suite-index.md` | 记录 suite path、工件清单、适用性判断和后续消费者 | Work Item / FR locator、Story Readiness locator、Story Business Confirmation locator、delivery planning locator 或 `not_applicable` rationale | path decision、artifact inventory、deferred / not_applicable table、#1020 接入需求 | 每个工件使用 repo-relative locator；provenance 指向触发 path decision 的 issue、PR、story 或会话记录 |
+| `spec.md` | 冻结目标、范围、可观察场景与验收标准 | Story Readiness locator、story scenario locator、Story Business Confirmation locator 或 `not_applicable` rationale、suite-index path decision | scenario ids / locators、acceptance ids、behavior evidence expectation | scenario id / acceptance id 必须可被 `plan.md` 逐项引用 |
+| `plan.md` | 把 `spec.md` 场景和验收转成实现、验证与测试策略 | `spec.md` scenario / acceptance locator、Story Readiness / Business Confirmation consumed state、suite-index path decision、constraints | validation strategy、test strategy、fresh evidence expectation | 每条 validation row 必须保留被消费的 scenario / acceptance locator |
 | `research.md` | 记录正式实现前必须冻结的未知、约束、取舍与外部输入 | upstream issue / doc / host locator、open question locator | decision record、resolved / deferred / not_applicable unknowns | provenance 必须说明结论来自 repo truth、host truth、外部资料或会话判断 |
 | `contracts.md` | 记录本次变更承诺的接口、数据、host binding 或文档合同 | `spec.md` acceptance、`plan.md` constraints、existing contract locator | contract delta、compatibility expectation、consumer list | locator 指向被改动或被消费的合同；不得替代后续 implementation contract |
 | `readiness-checklist.md` | 在 build / review 前核对 suite 完整性 | suite-index、spec、plan、research、contracts | readiness verdict: `ready` / `blocked` / `not_applicable` | 只能表达 readiness 证据 locator，不 authored recovery 状态 |
@@ -96,7 +111,8 @@ Minimal suite 可以被 review、merge-ready 与 closeout 消费，但它必须�
 - 每个关键场景都应能映射到后续行为证据；若纯文档事项不适用，应显式说明 `not_applicable`
 - 每条验收标准应有 acceptance id，或引用可稳定消费的 locator
 - 若存在 User Story，`spec.md` 只消费 story scenario id / locator 与业务可读 GWT，不复制 story 为第二事实源
-- 若 User Story 涉及业务语义，`spec.md` 必须记录 `Story Business Confirmation` locator 或 `not_applicable` rationale；`pending` 或 `revision-requested` 不得进入 formal spec shaping
+- 若存在 User Story，`spec.md` 必须记录 `Story Readiness` confirmed locator，或带 rationale 的 `not_applicable`；`pending` 或 `revision-requested` 必须阻断 formal spec shaping
+- 若 User Story 涉及业务语义，`spec.md` 必须记录 `Story Business Confirmation` confirmed locator 或 `not_applicable` rationale；`pending` 或 `revision-requested` 不得进入 formal spec shaping
 
 ## 5. `plan.md` 最小要求
 
@@ -115,7 +131,8 @@ Minimal suite 可以被 review、merge-ready 与 closeout 消费，但它必须�
 - 每个关键行为场景应声明将由哪些 `automated`、`manual`、`structural` 或 `not_applicable` 验证覆盖
 - 每条 validation strategy 必须引用对应 scenario id / locator；每条 test strategy 必须引用对应 acceptance id / locator 或说明 `not_applicable`
 - 若场景来自 User Story，`plan.md` 应保留 story scenario id 到验证策略的映射
-- 若场景来自 User Story，`plan.md` 只能基于已确认或明确 `not_applicable` 的 story 语义规划验证，不要求用户判断实现方案或测试策略
+- 若场景来自 User Story，`plan.md` 必须保留 Story Readiness consumed state，并只能基于 `confirmed` 或明确 `not_applicable` 的 story 语义规划验证
+- 若场景涉及业务语义，`plan.md` 必须保留 Story Business Confirmation consumed state；`pending` 或 `revision-requested` 只能作为阻断 locator，不能生成验证策略
 - 能自动化的行为先写或先调整失败用例，再实现，再以通过结果作为 test evidence
 - 不能自动化的行为必须声明人工验证路径、证据 locator 与 fresh 条件
 - 纯文档或治理规则变更可以不强制 TDD，但必须说明行为证据如何由结构检查、审查记录或示例消费
@@ -130,6 +147,7 @@ Full path 中，缺少 scenario -> validation 或 acceptance -> test mapping 时
 | `spec.md` 字段 | `plan.md` 消费字段 | 要求 |
 | --- | --- | --- |
 | `suite path` | `suite path consumed` | plan 必须声明消费的是 minimal 还是 full path |
+| `Story Readiness locator` | `story readiness consumed` | 只能是 confirmed locator 或 `not_applicable` rationale；pending / revision-requested 只能作为阻断 locator 记录，不能被 plan 当成可继续信号 |
 | `story scenario locator` | `story scenario to evidence mapping` | 只引用 locator，不复制 story 文本 |
 | `Story Business Confirmation locator` | `story business confirmation consumed` | 只能是 confirmed locator 或 `not_applicable` rationale；pending / revision-requested 只能作为阻断 locator 记录，不能被 plan 当成已确认语义消费 |
 | `scenario_id` / scenario locator | `validation strategy` | 每个 scenario 映射到 `automated`、`manual`、`structural` 或 `not_applicable` |
@@ -212,7 +230,7 @@ Loom 当前不固化：
 | checkpoint / review / gate 输出 | `validation_evidence_locator` | 只说明验证证据入口 |
 | `handoff` 输出或交接说明 | `handoff_notes_locator` | 只说明交接入口 |
 
-若存在 story intake，User Story locator 与 Story Business Confirmation locator 只能作为 `spec.md` / `plan.md` 的上游来源记录，不能进入 execution ledger 替代 `acceptance_locator`、`plan_locator` 或恢复状态。
+若存在 story intake，User Story locator、Story Readiness locator 与 Story Business Confirmation locator 只能作为 `spec.md` / `plan.md` 的上游来源记录，不能进入 execution ledger 替代 `acceptance_locator`、`plan_locator` 或恢复状态。
 
 纯文档事项可在对应字段声明 `not_applicable`，但必须与 spec / plan / recovery 中的事实不冲突。
 

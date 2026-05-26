@@ -11,8 +11,8 @@
 
 ## Consumes
 
-- Story readiness locator, pending locator, or `not_applicable` rationale:
-- Story Business Confirmation locator, pending locator, or `not_applicable` rationale:
+- Story Readiness confirmed locator, blocking locator, or `not_applicable` rationale:
+- Story Business Confirmation confirmed locator, blocking locator, or `not_applicable` rationale:
 - Delivery planning / issue-tree locator, or `not_applicable` rationale:
 - Existing spec / plan locator, or `not_applicable` rationale:
 - Host issue / PR / Project locator, or `not_applicable` rationale:
@@ -21,6 +21,8 @@
 
 - Artifact inventory:
 - Path selection rationale:
+- Story readiness consumed state:
+- Story business confirmation consumed state:
 - Deferred item table:
 - `not_applicable` item table:
 - #1020 generated / skills integration requirements:

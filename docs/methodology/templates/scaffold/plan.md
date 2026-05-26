@@ -8,7 +8,8 @@
   - Spec locator:
   - Scenario ids / locators:
   - Acceptance ids / locators:
-  - Story Business Confirmation locator, pending story-readiness locator, or `not_applicable` rationale:
+  - Story Readiness consumed state:
+  - Story Business Confirmation consumed state:
 - Produces:
   - Validation strategy by scenario:
   - Test strategy by acceptance:
@@ -70,6 +71,7 @@
 - Runtime evidence:
 - Behavior evidence:
 - Story scenario to evidence mapping:
+- Story readiness consumed:
 - Story business confirmation locator or `not_applicable` rationale:
 - Scenario validation mapping:
   - S1 -> automated | manual | structural | not_applicable:
@@ -92,6 +94,7 @@
   - A4 -> test evidence | structural check | manual evidence | not_applicable:
   - A5 -> test evidence | structural check | manual evidence | not_applicable:
 - How User Story acceptance scenarios map to tests, checks, manual validation, or `not_applicable` evidence:
+  - Do not create validation strategy from `pending` or `revision-requested` Story Readiness / Business Confirmation; record the blocking locator and return to story shaping.
 
 ## Subagent Output Integration
 
@@ -111,6 +114,7 @@
 
 - [ ] Spec is stable enough to implement
 - [ ] Scope and non-goals are clear
+- [ ] Story Readiness is confirmed or explicitly `not_applicable`
 - [ ] Story business semantics are confirmed or explicitly `not_applicable`
 - [ ] Validation path is defined
 - [ ] BDD outer-loop scenarios map to validation or `not_applicable`

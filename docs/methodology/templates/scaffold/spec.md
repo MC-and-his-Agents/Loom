@@ -6,8 +6,9 @@
 - Suite index locator, or `not_applicable` rationale:
 - Consumes:
   - Work Item / FR locator:
+  - Story Readiness confirmed locator, blocking locator, or `not_applicable` rationale:
   - Story scenario locator, or `not_applicable` rationale:
-  - Story Business Confirmation locator, pending story-readiness locator, or `not_applicable` rationale:
+  - Story Business Confirmation confirmed locator, blocking locator, or `not_applicable` rationale:
 - Produces:
   - Scenario ids / locators:
   - Acceptance ids / locators:
@@ -34,7 +35,11 @@ Use these scenarios as the BDD outer loop. Each scenario should describe observa
 
 If a User Story exists, reference its scenario id or locator here instead of copying the full story into `spec.md` as a second truth source.
 
-If the User Story carries business semantics, record its Story Business Confirmation locator or `not_applicable` rationale before shaping this spec.
+If a User Story exists, Story Readiness must be `confirmed` or explicitly `not_applicable` before shaping this spec.
+
+If the User Story carries business semantics, Story Business Confirmation must be `confirmed` or explicitly `not_applicable` before shaping this spec.
+
+If Story Readiness or Story Business Confirmation is `pending` or `revision-requested`, stop here and record the blocking locator instead of continuing formal spec shaping.
 
 ### Scenario S1
 
@@ -61,6 +66,7 @@ Then
 ## Behavior Evidence
 
 - Story scenario mapping:
+- Story readiness locator or `not_applicable` rationale:
 - Story business confirmation locator or `not_applicable` rationale:
 - Scenario coverage:
   - S1 -> expected behavior evidence locator:
