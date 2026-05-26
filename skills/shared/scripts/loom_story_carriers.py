@@ -32,6 +32,9 @@ EMPTY_FIELD_MARKERS = (
     "- Business value:",
     "- Out of scope:",
     "- Decision:",
+    "- Scenario id:",
+    "- Scenario locator:",
+    "- Business Confirmation locator:",
 )
 
 
@@ -72,6 +75,19 @@ def validate_story_file(target_root: Path, story_path: Path) -> list[str]:
         errors.append(f"{relative}: copied template placeholders must be replaced before the story can pass")
     if re.search(r"^-\s*Decision:\s*(pending|revision-requested)\s*$", text, re.MULTILINE):
         errors.append(f"{relative}: story business confirmation must be confirmed or not_applicable before delivery consumption")
+    if not re.search(r"^-\s*Scenario id:\s*\S+", text, re.MULTILINE):
+        errors.append(f"{relative}: at least one scenario id is required for spec / plan consumption")
+    if not re.search(r"^-\s*Scenario locator:\s*\S+", text, re.MULTILINE):
+        errors.append(f"{relative}: at least one scenario locator is required for spec / plan consumption")
+    has_business_confirmation_locator = bool(
+        re.search(r"^-\s*Business Confirmation locator:\s*\S+", text, re.MULTILINE)
+    )
+    has_not_applicable_rationale = bool(
+        re.search(r"^-\s*Bypass rationale, if `?not_applicable`?:\s*\S+", text, re.MULTILINE)
+        or re.search(r"^-\s*Bypass rationale, if not applicable:\s*\S+", text, re.MULTILINE)
+    )
+    if not has_business_confirmation_locator and not has_not_applicable_rationale:
+        errors.append(f"{relative}: story must expose a Business Confirmation locator or not_applicable rationale")
     return errors
 
 
