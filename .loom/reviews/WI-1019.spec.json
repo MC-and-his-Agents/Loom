@@ -5,7 +5,7 @@
   "kind": "spec_review",
   "summary": "WI-1019 spec is approved: scope is limited to gate-chain consumption contracts for full suite inputs, evidence-map, consistency-analysis, fresh evidence and minimal path not_applicable rationale; it explicitly excludes redefining upstream contracts, CLI implementation, skills routing and generated runtime surface.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "b416f257cb84556dbe6a7edfdaaf725a3780f823",
+  "reviewed_head": "2cda27f92cb0cc20efce31baaf913972b1424b29",
   "reviewed_validation_summary": "Passed: `git diff --check`; focused `rg` for pre-review/review, merge-ready, closeout, not_applicable and evidence/consistency terms; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`.",
   "fallback_to": null,
   "findings": [],
