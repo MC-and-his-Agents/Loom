@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1065
-- Goal: Implement the root `loom` npm package payload and bin entry for #1063.
-- Scope: #1065: package manifest, npm bin shim, package payload checks, and local pack/install smoke only; no npm publish workflow, README hard cut, or installer release changes.
-- Execution Path: issue-scoped branch work/1065-root-loom-npm-package in /Users/mc/dev/Loom-1065-root-loom-npm-package
+- Item ID: WI-1071
+- Goal: Distinguish GitHub BLOCKED mergeability from Loom semantic merge readiness for FR #1071.
+- Scope: #1071-#1076: controlled-merge mergeStateStatus interpretation, harness contracts, source/generated/installed runtime sync, loom_check fixtures, PR validation and issue closeout only; no GitHub branch protection changes and no replacement of loom-pr-merge-gate.
+- Execution Path: issue-scoped branch work/1071-blocked-mergeability in /Users/mc/dev/Loom-1071-blocked-mergeability
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1065.md
-- Review Entry: .loom/reviews/WI-1065.json
-- Validation Entry: python3 tools/check_npm_package.py; npm run test:package; npm pack --dry-run --json --ignore-scripts; local npm install smoke; python3 tools/check_cli_contract.py; make check
-- Closing Condition: #1065 is closed after its PR merges and #1066 can consume a root npm package whose `loom` bin runs the current CLI from the packaged payload.
-- Current Checkpoint: validated
-- Current Stop: Root npm package payload and `loom` bin entry have been implemented and locally validated for #1065.
-- Next Step: Commit, open PR, consume checks, merge, and close #1065.
-- Blockers: None
-- Latest Validation Summary: Passed: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; python3 tools/check_npm_package.py; npm run test:package; npm pack --pack-destination with local npm install smoke for loom --help, loom version --json, and loom detect --target <empty-dir> --json; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1065; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1065; make check.
-- Recovery Boundary: Continue from /Users/mc/dev/Loom-1065-root-loom-npm-package on branch work/1065-root-loom-npm-package; keep scope limited to root npm package payload/bin and #1065 governance carriers.
-- Current Lane: root-loom-npm-package
+- Recovery Entry: .loom/progress/WI-1071.md
+- Review Entry: .loom/reviews/WI-1071.json
+- Validation Entry: python3 tools/py_compile_clean.py ...; python3 tools/skills_surface.py check; git diff --check; runtime/reference parity; python3 tools/loom_check.py --profile source --source-surface source-self-fixture .; python3 tools/loom_check.py --profile source --source-surface contract-only .
+- Closing Condition: #1071 and #1072-#1076 close only after PR #1081 merges and closeout consumes branch, worktree, PR head, merge commit, target branch, and issue tree evidence.
+- Current Checkpoint: validation checkpoint
+- Current Stop: Implementation, harness docs, fixtures, runtime sync, local validation, commit, push, and PR #1081 creation are complete for #1071.
+- Next Step: Refresh authored spec and implementation review records for WI-1071, update PR body with Loom Work Item binding, rerun CI checks, then proceed to controlled merge and issue closeout.
+- Blockers: PR #1081 required checks currently fail because the PR gate was reading stale WI-1065 carrier state before WI-1071 activation.
+- Latest Validation Summary: Passed before carrier activation: python3 tools/py_compile_clean.py tools/loom_flow.py tools/loom_check.py .loom/bin/loom_flow.py .loom/bin/loom_check.py skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_check.py; python3 tools/skills_surface.py check; git diff --check; runtime/reference parity; python3 tools/loom_check.py --profile source --source-surface source-self-fixture .; after latest main fast-forward: python3 tools/loom_check.py --profile source --source-surface contract-only .
+- Recovery Boundary: Continue from /Users/mc/dev/Loom-1071-blocked-mergeability on branch work/1071-blocked-mergeability; keep scope limited to #1071-#1076 controlled-merge BLOCKED interpretation and closeout.
+- Current Lane: blocked-mergeability-interpretation
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1065.md
-- Dynamic Truth: .loom/progress/WI-1065.md
+- Static Truth: .loom/work-items/WI-1071.md
+- Dynamic Truth: .loom/progress/WI-1071.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
