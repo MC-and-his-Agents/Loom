@@ -1,0 +1,20 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1068",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "CLI-only checker hardening stays within #1068 scope: release surface docs now fail closed on separate SKILLS/plugin/installer install surfaces, and the root npm package check now requires CLI-managed payload files while rejecting deprecated installer manifest references.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "8043c5e73e4481d3c386cbe86346d8124d418655",
+  "reviewed_validation_summary": "Passed `python3 tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_cli_contract.py`; `npm run test:package`; `npm run pack:dry-run`; installer `check:docs`, `check:versions`, `check:payload`, and `check:distribution`; `fact-chain`; `shadow-parity`; `adopt verify`; and full `make check`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1068.md",
+    "recovery_entry": ".loom/progress/WI-1068.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "make check passed on branch work/1068-cli-only-surface-checks"
+  }
+}

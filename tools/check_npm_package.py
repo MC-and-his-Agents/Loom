@@ -47,6 +47,16 @@ FORBIDDEN_PREFIXES = (
     "examples/",
     "packages/loom-installer/",
 )
+FORBIDDEN_MANIFEST_STRINGS = (
+    "@mc-and-his-agents/loom-installer",
+    "loom-installer",
+    "packages/loom-installer",
+)
+REQUIRED_MANIFEST_FILES = (
+    "skills",
+    "src/skills",
+    "plugins/loom/.codex-plugin/plugin.json",
+)
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -95,8 +105,19 @@ def main() -> int:
         fail(f"bin loom must point at {EXPECTED_BIN}")
     if package.get("publishConfig", {}).get("access") != "public":
         fail("publishConfig.access must be public")
-    if "@mc-and-his-agents/loom-installer" in json.dumps(package, sort_keys=True):
-        fail("root package manifest must not depend on loom-installer")
+    manifest_text = json.dumps(package, sort_keys=True)
+    for forbidden in FORBIDDEN_MANIFEST_STRINGS:
+        if forbidden in manifest_text:
+            fail(f"root package manifest must not reference deprecated installer surface: {forbidden}")
+    manifest_files = package.get("files")
+    if not isinstance(manifest_files, list):
+        fail("package files must explicitly enumerate the root CLI payload")
+    missing_manifest_files = sorted(item for item in REQUIRED_MANIFEST_FILES if item not in manifest_files)
+    if missing_manifest_files:
+        fail(f"package files must include CLI-managed payload surfaces: {missing_manifest_files}")
+    forbidden_manifest_files = sorted(item for item in manifest_files if isinstance(item, str) and item.startswith(FORBIDDEN_PREFIXES))
+    if forbidden_manifest_files:
+        fail(f"package files must not include forbidden repository/internal surfaces: {forbidden_manifest_files}")
 
     missing_sources = sorted(path for path in REQUIRED_FILES if not (REPO_ROOT / path).exists())
     if missing_sources:
@@ -119,6 +140,7 @@ def main() -> int:
         "bin": "loom",
         "payload_file_count": len(pack_files),
         "required_files": sorted(REQUIRED_FILES),
+        "required_manifest_files": sorted(REQUIRED_MANIFEST_FILES),
         "forbidden_prefixes": list(FORBIDDEN_PREFIXES),
     }, indent=2))
     return 0
