@@ -15,7 +15,7 @@
 - Current Stop: PR #1098 已创建，WI-1031 carrier/spec/review evidence 已补齐，等待最终 PR gate 和 CI。
 - Next Step: 推送当前分支，等待 GitHub checks，通过后 merge/closeout。
 - Blockers: None
-- Latest Validation Summary: after rebase onto origin/main, git diff --check; python3 tools/skills_surface.py check; python3 tools/loom_flow.py reconciliation audit --target . --issue 1031 --project 4 pass. Implementation review refreshed at 16b9c9a63882671aa9e2dfebe3472433730473ee.
+- Latest Validation Summary: after rebase onto origin/main 3558659, git diff --check; python3 tools/skills_surface.py check; python3 tools/loom_flow.py reconciliation audit --target . --issue 1031 --project 4; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py pass. Spec review refreshed at 300198377bcb38edb2d91297061375523f9ac324.
 - Recovery Boundary: Resume only in /Users/mc/dev/Loom-1031-loom-story-boundary on branch work/1031-loom-story-boundary; do not continue #1031 from /Users/mc/dev/Loom.
 - Current Lane: merge-ready preparation
 
