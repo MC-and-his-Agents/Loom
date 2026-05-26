@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1031",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1031 formal spec is approved after rebase onto origin/main 3558659: scope remains limited to loom-story formal spec 前置边界, consumes #1029/#1030, excludes #1032 spec-suite entry rules, and defines fail-closed pending/revision-requested plus rationale-backed not_applicable semantics.",
+  "reviewer": "codex",
+  "reviewed_head": "96ee6ae1e7d424dce359fed0c0dc5ab66aacbe8f",
+  "reviewed_validation_summary": "after rebase onto origin/main 3558659 and terminalizing inherited WI-1069 progress carrier, git diff --check; python3 tools/skills_surface.py check; python3 tools/loom_flow.py reconciliation audit --target . --issue 1031 --project 4; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py pass.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1031.md",
+    "recovery_entry": ".loom/progress/WI-1031.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

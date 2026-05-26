@@ -57,11 +57,12 @@ The judgment may be:
 - `npm-version-missing`: the tag points at the current release commit, but the matching npm package version is missing.
 - `tag-release-missing-npm-version-exists`: the npm package version exists, but the matching GitHub tag and release evidence are missing.
 - `version-already-published-on-different-commit`: CLI publish behavior changed but the current `VERSION` tag already points at another commit; the workflow must fail instead of overwriting history.
+- `release-judgment-only`: CLI publish behavior changed on an event that is not allowed to publish; the workflow records the judgment and must not create tags, publish npm, or create releases.
 - `no-cli-behavior-change`: the merge did not touch CLI publish behavior.
 
 For pull requests, the workflow records judgment and runs npm package dry-run checks but must not create tags, publish npm, or create releases. For `push` events on `main`, `loom-cli-release` automatically creates the GitHub `v*` tag, publishes `@mc-and-his-agents/loom` to npm, and creates the GitHub Release when CLI publish behavior changed and the root `VERSION` is an unpublished candidate. `workflow_dispatch` with `publish=true` remains a repair path for missing tag, npm, or release evidence, not the only publish path.
 
-The workflow must fail closed when CLI publish behavior changed but the current `VERSION` is already published on a different commit, when `package.json` does not match `VERSION`, or when the `NPM_TOKEN` secret is missing for an npm publish. It must never overwrite an existing tag, npm version, or release. Installer npm state is never publish evidence for this judgment.
+When publishing is allowed or explicitly requested, the workflow must fail closed when CLI publish behavior changed but the current `VERSION` is already published on a different commit, when `package.json` does not match `VERSION`, or when the `NPM_TOKEN` secret is missing for an npm publish. It must never overwrite an existing tag, npm version, or release. Installer npm state is never publish evidence for this judgment.
 
 ## Installer Sunset
 
