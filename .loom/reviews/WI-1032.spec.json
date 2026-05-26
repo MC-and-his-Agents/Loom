@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1032",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1032 formal spec is approved: scope is limited to spec-suite story readiness entrance rules, consumes completed #1029/#1030/#1031, blocks pending/revision-requested story semantics from formal spec shaping, and keeps generated runtime/gate-chain work out of scope.",
+  "reviewer": "codex",
+  "reviewed_head": "9bd8a3fa2e9f3f14bb2b0831d3c065210ff84276",
+  "reviewed_validation_summary": "git diff --check passed; focused rg confirmed Story Readiness / Business Confirmation / pending / revision-requested / not_applicable coverage in docs and carriers; python3 tools/loom_flow.py reconciliation audit --target . --issue 1032 --project 4 --branch work/1032-story-readiness-spec-suite passed after native blocked-by sync; python3 tools/loom_check.py --profile source --source-surface contract-only . passed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1032.md",
+    "recovery_entry": ".loom/progress/WI-1032.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
