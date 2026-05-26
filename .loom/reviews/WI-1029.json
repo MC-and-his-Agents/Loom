@@ -3,10 +3,10 @@
   "item_id": "WI-1029",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review refreshed after main sync, carrier terminalization, and release surface bump; no blocking findings for WI-1029 story intake contract changes, with downstream consumption left to #1030, #1031, and #1032.",
+  "summary": "Implementation review refreshed after rebase onto origin/main 1dffa6a; no blocking findings for WI-1029 story intake contract changes, with downstream consumption left to #1030, #1031, and #1032.",
   "reviewer": "codex-main-thread",
-  "reviewed_head": "2f32fd0b39ad31f50fb4c09816012f290f527d25",
-  "reviewed_validation_summary": "Passed after rebase to origin/main and v0.13.4 release surface refresh: git diff --check; python3 tools/skills_surface.py check; make loom-demo-new-project-check; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/check_cli_contract.py; python3 tools/check_npm_package.py; python3 tools/loom_flow.py checkpoint build --target . --item WI-1029; python3 tools/loom_check.py --profile source --source-surface contract-only .",
+  "reviewed_head": "4e8bf1b076976c75fa94da89380b60d5af326118",
+  "reviewed_validation_summary": "Passed after rebase to origin/main 1dffa6a: git diff --check; python3 tools/skills_surface.py check; make loom-demo-new-project-check; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/check_cli_contract.py; python3 tools/check_npm_package.py. Checkpoint build/merge correctly required refreshed review records before final gate.",
   "fallback_to": null,
   "findings": [
     {
