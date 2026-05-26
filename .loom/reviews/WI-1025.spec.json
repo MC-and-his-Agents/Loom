@@ -5,7 +5,7 @@
   "kind": "spec_review",
   "summary": "WI-1025 spec suite is approved: scope is limited to the issue-tree-plan contract, scaffold, README registration, and repo-local carriers while leaving PR slicing, GitHub mapping, skills routing, task carrier, gate-chain, and CLI automation to downstream Work Items.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "996c165ee7ae4a2af3d448a4a55ea82ec7f1be40",
+  "reviewed_head": "62eddd4f539b7a385739077db08b8f482ad2d9b9",
   "reviewed_validation_summary": "Passed: `git diff --check`; focused `rg` checks for issue-tree required fields and forbidden-use statements; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 .loom/bin/loom_init.py verify --target .`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1025 --dry-run`.",
   "fallback_to": null,
   "findings": [],
