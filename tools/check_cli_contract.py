@@ -335,6 +335,22 @@ def main() -> int:
         status, host_install = run_json(["host", "install", "--host", "codex", "--target", str(valid_target), "--json"])
         if status == 0 or host_install["result"] != "block" or host_install["failed_layer"] != "host-install":
             raise AssertionError("host install did not fail closed without --apply")
+        managed_target = tmp / "managed-host"
+        managed_target.mkdir()
+        _, managed_install = run_json(["host", "install", "--host", "codex", "--target", str(managed_target), "--apply", "--json"], expect=0)
+        managed_writes = set(managed_install.get("managed_writes", []))
+        for expected_write in ("skills", "plugins/loom/.codex-plugin/plugin.json", "plugins/loom/skills", ".loom/installed-state.json"):
+            if expected_write not in managed_writes:
+                raise AssertionError(f"host install did not write {expected_write}")
+        _, managed_verify = run_json(["host", "verify", "--host", "codex", "--target", str(managed_target), "--json"], expect=0)
+        if managed_verify["result"] != "pass" or any(check["status"] != "pass" for check in managed_verify["checks"]):
+            raise AssertionError("host verify did not validate CLI-managed plugin/SKILLS payload")
+        _, managed_skills = run_json(["skills", "check", "--target", str(managed_target), "--json"], expect=0)
+        if managed_skills["result"] != "pass":
+            raise AssertionError("skills check did not validate CLI-managed target payload")
+        _, managed_detect = run_json(["detect", "--target", str(managed_target), "--json"], expect=0)
+        if managed_detect["classification"] != "current":
+            raise AssertionError("CLI-managed host install was not classified as current")
         _, skills_list = run_json(["skills", "list", "--json"], expect=0)
         if skills_list["schema"] != "loom-skills-surface/v1" or skills_list["root_entry"] != "loom-init":
             raise AssertionError("skills list did not expose generated skills registry")

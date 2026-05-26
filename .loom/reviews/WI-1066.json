@@ -1,0 +1,20 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1066",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1066 implementation is approved so far: root loom CLI now installs and verifies Codex plugin/SKILLS payloads without delegating to loom-installer, and CLI contract smoke covers install/verify/current detection.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "e384dacc336269d77991b721e1267a03a0d95a20",
+  "reviewed_validation_summary": "Passed: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py; python3 tools/check_npm_package.py; npm run test:package; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1066; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1066; make check. External state: npm @mc-and-his-agents/loom is still unpublished E404 as expected before #1069/#1070; npm @mc-and-his-agents/loom-installer latest remains 0.1.119 and deprecated.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1066.md",
+    "recovery_entry": ".loom/progress/WI-1066.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "local-validation"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1027",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "WI-1027 implementation is approved for PR once validation passes: the GitHub profile mapping defines host object authority boundaries, locator/provenance, forbidden uses, Project Status semantics, native parent/sub-issue and blocked-by/blocks synchronization, and closeout evidence consumption without implementing automation. Rebase closeout also terminalized the already-merged WI-1066 carrier and bumped the Loom CLI release candidate to v0.13.1 because packaged skills reference surfaces changed.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "6560eda44801a0995ea59f8443270437b825f7ba",
+  "reviewed_validation_summary": "Passed: `git diff --check`; focused `rg` checks for Phase / FR / Work Item / Project / PR mapping, Project forbidden use, locator/provenance, Project Status, completed truth, and closeout; `python3 .loom/bin/loom_init.py verify --target .`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1027 --write`; `python3 tools/skills_surface.py check`; `python3 tools/check_npm_package.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_release_surface.py`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1028 skills routing remains pending.",
+    "#1017 task carrier contract remains pending.",
+    "#1019 gate-chain implementation remains pending."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1027.md",
+    "recovery_entry": ".loom/progress/WI-1027.md",
+    "status_surface": ".loom/status/current.md",
+    "github_profile": "docs/adoption/github-profile.md",
+    "skills_reference": "skills/shared/references/adoption/github-profile.md",
+    "source_skills_reference": "src/skills/shared/references/adoption/github-profile.md",
+    "build_checkpoint": "pass"
+  }
+}
