@@ -4,11 +4,16 @@ Language: English | [中文版本](./README.zh-CN.md)
 
 Deprecated Loom npm / npx adapter helper and verifier.
 
-The default Loom install model is full repository install plus native or host skill discovery. This package is a deprecated legacy artifact kept for historical adapter-managed plugin installs, single-skill helper flows, and verification output. Do not use it as the current Loom CLI or recommended install path.
+The default Loom install model is the root `loom` CLI package,
+`@mc-and-his-agents/loom`, which installs, synchronizes, and verifies host
+plugin/SKILLS payloads. This package is a deprecated legacy artifact kept only
+for historical compatibility evidence and verification output. Do not use it as
+the current Loom CLI or recommended install path.
 
-## Deprecated Commands
+## Historical Commands
 
-These commands are legacy examples for existing consumers, not the current install path:
+These commands are retained only for existing legacy consumers and evidence
+records. They are not a current install path:
 
 ```bash
 npx @mc-and-his-agents/loom-installer add plugin --host codex

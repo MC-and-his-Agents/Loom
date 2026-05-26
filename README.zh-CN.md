@@ -10,7 +10,7 @@ Loom 是一个 agent-first project operating layer。
 
 Loom 现在采用 CLI-first。`loom` 命令是执行控制面：它诊断 installed state、读取 fact chain、执行验证、输出 upgrade / repair plan，并用结构化 fail-closed 输出包装场景执行。
 
-`SKILLS` 仍然是 agent-facing 入口。它们帮助智能体发现正确场景，并消费 CLI/runtime 输出。Plugins 和宿主 adapter 负责原生发现与 wiring。`.loom/` 继续作为仓库执行事实表面。npm `loom-installer` package 是 deprecated legacy artifact；它不是当前 CLI、发布线或推荐安装路径。
+`SKILLS` 仍然是 agent-facing 入口，但用户不再把它们作为独立安装面安装。根 `loom` CLI 负责安装、同步和验证生成 skills 与宿主 plugin payload。Plugins 和宿主 adapter 在 CLI 管理下负责原生发现与 wiring。`.loom/` 继续作为仓库执行事实表面。npm `loom-installer` package 是 deprecated legacy artifact；它不是当前 CLI、发布线或推荐安装路径。
 
 智能体仍可在需要路由帮助时从 `loom-init` 起步。进入执行后，CLI 是稳定的机器接口：
 
@@ -31,49 +31,41 @@ python3 tools/loom.py skills release-check --json
 
 ## 安装
 
-### Codex 原生 Skills 发现
+### Root CLI
 
-可以直接这样告诉 Codex：
-
-```text
-Fetch and follow instructions from https://raw.githubusercontent.com/MC-and-his-Agents/Loom/refs/heads/main/docs/adoption/codex-install.md
-```
-
-也可以手动安装：
+安装根 Loom CLI：
 
 ```bash
-git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom
-mkdir -p ~/.agents/skills
-for skill in ~/.codex/loom/skills/loom-*; do
-  ln -sfn "$skill" "$HOME/.agents/skills/$(basename "$skill")"
-done
+npm install -g @mc-and-his-agents/loom
 ```
 
-安装后请重启 Codex，让原生 skills discovery 重新加载 Loom skills。
-
-### Deprecated Installer Artifact
-
-npm installer 不是 Codex 默认路径，也不应用于新的 Loom 安装。这里保留它只作为既有 adapter 托管 plugin 安装、single-skill helper、legacy bridge 或历史 installer verification output 的 deprecated legacy evidence：
+为目标仓库安装并验证 Codex 宿主 payload：
 
 ```bash
-npx @mc-and-his-agents/loom-installer add plugin --host codex
-npx @mc-and-his-agents/loom-installer add plugin --host claude
+loom host install --host codex --mode plugin --target . --apply --json
+loom host verify --host codex --mode plugin --target . --json
+loom skills check --target . --json
+loom doctor --target . --json
 ```
 
-历史固定 installer 用法：
-
-```bash
-npm install -D @mc-and-his-agents/loom-installer
-npx loom-installer add plugin --host codex
-npx loom-installer add plugin --host claude
-```
+`npx @mc-and-his-agents/loom ...` 只能作为临时运行同一个根 `loom` CLI 的方式。
 
 要求：
 
 - Node `>=20`
-- Python `>=3.10`，推荐 `3.11+`
+- Python `>=3.11`
 
-Installer 会为 legacy consumer 报告它触达的 distribution layer 和 version context；Loom 的执行语义属于 `loom` CLI，以及生成 skills surface 随附的 Python runtime。
+`loom-installer` 不属于 primary install journey。它只作为 legacy consumer 的 deprecated historical evidence 保留。
+
+### Advanced / Compatibility
+
+历史 native skills-library clone 路径不是新用户的 primary install path：
+
+```bash
+git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom
+```
+
+请改用根 `loom` CLI。已有 skills-library clone 只应视为 CLI 可以验证、修复或替换的 compatibility source；用户不应把 SKILLS 或 plugins 当作独立安装面安装。
 
 ## 发布面
 
@@ -109,18 +101,7 @@ Loom 当前暴露一个 root entry 和十个 scenario skills：
 | `loom-merge-ready` | 验证 merge readiness。 |
 | `loom-retire` | 在不丢弃用户改动的前提下清理并退场。 |
 
-可编辑 skills 源码真相位于 `src/skills/`。生成且提交的安装表面位于 [skills/](./skills/)。每个 `skills/<skill-id>` 都是带 `loom-package.json` 和 `.loom-runtime/` 的自包含 single-skill package。Canonical Codex plugin manifest 位于 [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/)。
-
-## 高级 / 兼容
-
-通过 npm installer 的单 skill 安装属于 deprecated legacy behavior，不是当前 Loom 路径：
-
-```bash
-npx @mc-and-his-agents/loom-installer add skill loom-retire --host codex
-npx @mc-and-his-agents/loom-installer add skill loom-retire --host claude
-```
-
-单独安装的 skill 只会向宿主暴露该 skill 本身。如果你需要 `loom-init` 路由能力和完整 scenario surface，请安装完整仓库和完整生成 skills surface。
+可编辑 skills 源码真相位于 `src/skills/`。生成且提交的 payload 表面位于 [skills/](./skills/)。每个 `skills/<skill-id>` 都是带 `loom-package.json` 和 `.loom-runtime/` 的自包含 skill payload，由根 CLI 管理。Canonical Codex plugin manifest 位于 [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/)，并通过 `loom host ...` 安装或验证。
 
 ## 维护者文档
 

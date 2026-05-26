@@ -8,7 +8,7 @@
   },
   "run": {
     "target": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance",
-    "scenario": "复杂既有仓库",
+    "scenario": "\u590d\u6742\u65e2\u6709\u4ed3\u5e93",
     "scenario_key": "complex-existing",
     "integration_mode": "companion",
     "recovery_mode": "standard"
@@ -29,8 +29,8 @@
     "adoption_intent_source": "preserved-root-bootstrap"
   },
   "project_judgment": {
-    "scenario": "复杂既有仓库",
-    "intensity": "强化",
+    "scenario": "\u590d\u6742\u65e2\u6709\u4ed3\u5e93",
+    "intensity": "\u5f3a\u5316",
     "primary_structural_problem": "the repo needs execution support, recovery, and status carriers instead of more ad hoc guidance",
     "why_this_path": "the repo shows execution-support pressure, so the bootstrap must materialize recovery and status carriers immediately"
   },
@@ -151,7 +151,7 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "dd8bbd3a89a34f25bc266f54b540808b28bf6475349ee9aee3c1f8dd5096214a"
+      "sha256": "ad8072d99c299449b9db28ed92221059da159fda6dfccc2fa3e5d8b2940390bd"
     },
     {
       "path": ".loom/bin/loom_status.py",
