@@ -34,6 +34,12 @@ closeout gate 用来回答两件事：
 - `host-binding inspect` 的 `binding_chain` 与 `dependency_graph`
 - merged PR 是否已进入 `origin/main`
 - project 中对应 issue 的状态
+- suite path decision 与 full suite artifact locators，或 minimal path
+  `not_applicable` rationale
+- evidence-map locator、classification、freshness、scope、PR head、merge commit
+  与 target branch backlink
+- consistency-analysis locator、blocking/advisory/stale/missing/conflict/
+  `not_applicable` 分类，以及未处理 gap 的 remediation direction
 - merge-ready 消费过的 behavior evidence / test evidence 摘要
 - 主干包含合并结果后仍可回链的 fresh verification evidence
 - 可选 `/goal completion` evidence；调用方提供时只作为一致性输入消费，不作为完成真相源
@@ -97,6 +103,16 @@ closeout 消费 behavior/test evidence 的语义如下：
 
 - 它不重新执行 BDD/TDD 判断，只校验 merge-ready 放行所消费的证据仍可回链当前 merged result
 - 普通 closeout 默认消费 `review record -> merge-ready execution_attempt -> PR head -> host required checks -> merge commit -> target branch -> reconciliation audit`
+- full path 下，closeout 还必须消费 evidence-map 与 consistency-analysis 的
+  retained locator；若 retained locator 不可读、与 PR head / merge commit /
+  target branch 不一致，或仍含 blocking consistency gap，必须返回 `block`
+- minimal path 下，closeout 可以消费 `not_applicable` rationale 作为合法缺省，
+  但 rationale 必须带 source locator、consumer boundary、recheck condition，并且
+  与 spec / plan / recovery / merged result 不冲突；否则按 missing closeout basis
+  处理
+- consistency-analysis 中的 advisory gap 可以进入 closeout 输出摘要，但不得遮蔽
+  source locator、freshness 或后续 remediation；blocking gap、stale evidence、
+  head drift、host state conflict、deferred-as-completed 必须阻断
 - host PR checks evidence 只证明当前 head 的检查状态和 freshness，不替代 Loom review record 或 reconciliation audit；当 versioned `merge-ready` execution_attempt 未被 retained runtime 写入版本控制时，可作为 legacy merge-ready freshness fallback，但必须在 subcheck 中标记 `source=host_pr_checks` 与 `fallback_reason=missing_versioned_execution_attempt`
 - review record 必须 `decision == allow`、kind 属于 implementation review，并且 `reviewed_validation_summary` 与当前 validation summary 一致；`reviewed_head` 必须覆盖 PR head，若 review 后到 PR head 的差异只包含 review / recovery / status / owned runtime evidence carriers，可作为 `carrier-only` head binding 消费
 - merge-ready evidence 优先来自同一 Work Item 的 successful `merge-ready` execution attempt，且 `head_sha` 与 PR head 一致；若 retained execution_attempt 存在但 stale、invalid 或 head mismatch，不得回退到 host checks
@@ -104,6 +120,19 @@ closeout 消费 behavior/test evidence 的语义如下：
 - 若 closeout 发现主干、issue、project 或 evidence locator 无法互相回链，必须返回 `block`
 - 若 subagent 输出没有被整合到 review record、验证摘要或 merge-ready basis，closeout 不得把它作为 `absorbed` 或 `closed_out` 依据
 - 若提供 `/goal completion` evidence，closeout 必须校验它的 Work Item 与 `head_sha` 仍绑定当前 closeout 上下文；mismatch 返回 `block`，valid 也只表示该 evidence 可消费，不表示 closeout 已完成
+
+Closeout reconciliation 对 full suite evidence 的消费顺序固定为：
+
+1. 先消费 PR / merge commit / target branch / issue / Project / dependency
+   graph 的 host basis。
+2. 再消费 review record 与 merge-ready execution attempt 中 retained 的
+   suite、evidence-map、consistency-analysis backlink。
+3. 再判断 evidence-map 是否仍覆盖 merged result。
+4. 最后消费 `reconciliation audit` 的 refreshed result。
+
+任一步无法回链时，closeout 只能返回 `block`，并指向 `merge`、
+`reconciliation-sync` 或 `manual-reconciliation`。PR merged、issue closed、
+Project Done、CI success 或 host checks green 都不能单独证明 `closed_out`。
 
 closeout truth 与 workspace retire 必须分层：
 
