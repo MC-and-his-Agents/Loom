@@ -1,0 +1,49 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1019",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "WI-1019 implementation is approved for PR: the harness gate-chain contracts now define pre-review, review, merge checkpoint, merge-ready and closeout consumption of full suite locators, evidence-map, consistency-analysis, fresh evidence and minimal path not_applicable rationale without modifying CLI, skills routing or generated runtime surface.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "560e530f3b37132d13f96f0fef4f89893114b2bc",
+  "reviewed_validation_summary": "Passed: `git diff --check`; focused `rg` for pre-review/review, merge-ready, closeout, not_applicable and evidence/consistency terms; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`.",
+  "fallback_to": null,
+  "findings": [
+    {
+      "id": "compat-follow-up-1",
+      "summary": "#1020 should synchronize skills/GitHub profile/generated-surface consumption of these gate-chain contracts.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Projected from compatibility `follow_ups`."
+      }
+    }
+  ],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1020 should synchronize skills/GitHub profile/generated-surface consumption of these gate-chain contracts."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1019.md",
+    "recovery_entry": ".loom/progress/WI-1019.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
