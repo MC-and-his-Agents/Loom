@@ -3,9 +3,9 @@
   "item_id": "WI-1026",
   "decision": "allow",
   "kind": "general_review",
-  "summary": "WI-1026 implementation is approved for PR: the PR slicing contract and scaffold define when Work Items may share one PR, when they must split, and which evidence is required for PR body linkage, review, merge-ready, and closeout without implementing gate logic.",
+  "summary": "WI-1026 implementation is approved for PR: the PR slicing contract and scaffold define when Work Items may share one PR, when they must split, and which evidence is required for PR body linkage, review, merge-ready, and closeout without implementing gate logic. The inherited WI-1025 recovery carrier is also corrected to its GitHub closed/Done state so workspace purity remains true before #1026 merge.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "0eec40f9172c308eb58469bdd316b01a90eabc33",
+  "reviewed_head": "193efec8454ccccf75c26be6c8ede125df51087b",
   "reviewed_validation_summary": "Passed: `git diff --check`; focused `rg` checks for PR slicing fields, scope purity, multi-Work-Item evidence, PR body linkage, review evidence, and merge-ready references; `python3 .loom/bin/loom_init.py verify --target .`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1026 --write`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`.",
   "fallback_to": null,
   "findings": [],
@@ -22,6 +22,7 @@
     "pr_slicing_contract": "docs/methodology/templates/pr-slicing.md",
     "pr_slicing_scaffold": "docs/methodology/templates/scaffold/pr-slicing.md",
     "build_checkpoint": "pass",
-    "pull_request": "#1082"
+    "pull_request": "#1082",
+    "inherited_carrier_repair": ".loom/progress/WI-1025.md"
   }
 }
