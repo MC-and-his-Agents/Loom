@@ -5,7 +5,7 @@
   "kind": "code_review",
   "summary": "code review allow: 本变更仅更新 spec-suite 文档入口规则、scaffold 模板和 WI-1032 Loom 载体；范围、依赖与验证证据一致，未发现阻断问题。",
   "reviewer": "codex",
-  "reviewed_head": "a43dc048574d8a85b9d9cc861b5eb4e940f65ac0",
+  "reviewed_head": "d0e3314517acb92c4d9e35561122e917b4728e05",
   "reviewed_validation_summary": "git diff --check passed; focused rg confirmed Story Readiness / Business Confirmation / pending / revision-requested / not_applicable coverage in docs and carriers; python3 tools/loom_flow.py reconciliation audit --target . --issue 1032 --project 4 --branch work/1032-story-readiness-spec-suite passed after native blocked-by sync; python3 tools/loom_check.py --profile source --source-surface contract-only . passed.",
   "fallback_to": null,
   "findings": [],
