@@ -39,6 +39,14 @@
   - 对应 `spec-suite.md` 中定义的 `spec.md` 最小骨架
 - [scaffold/plan.md](./scaffold/plan.md)
   - 对应 `spec-suite.md` 中定义的 `plan.md` 最小骨架
+- [scaffold/full-suite-index.md](./scaffold/full-suite-index.md)
+  - 对应 `spec-suite.md` 中定义的 full suite index、path decision、artifact inventory 与 #1020 接入需求记录
+- [scaffold/research.md](./scaffold/research.md)
+  - 对应 `spec-suite.md` 中定义的 full suite 条件 research 工件
+- [scaffold/contracts.md](./scaffold/contracts.md)
+  - 对应 `spec-suite.md` 中定义的 full suite 条件 contracts 工件
+- [scaffold/readiness-checklist.md](./scaffold/readiness-checklist.md)
+  - 对应 `spec-suite.md` 中定义的 full suite 条件 readiness checklist 工件
 - [scaffold/user-story.md](./scaffold/user-story.md)
   - 对应 `story-intake.md` 中定义的 story intake 最小骨架；其中 User Story、Story Readiness、Story Business Confirmation 与 Delivery Consumption Boundary 是分离产物
 - [scaffold/issue-tree-plan.md](./scaffold/issue-tree-plan.md)
