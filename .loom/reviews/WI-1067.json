@@ -3,10 +3,10 @@
   "item_id": "WI-1067",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1067 documentation hard cut is approved locally: primary install docs now present the root loom CLI as the only primary install path, plugin/SKILLS are CLI-managed payloads, and installer references are historical.",
+  "summary": "WI-1067 documentation hard cut remains approved: root loom CLI is the only primary install path, plugin/SKILLS are CLI-managed payloads, installer text stays deprecated historical evidence, and the README compatibility note is explicitly non-primary for stale checker compatibility.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "14d6f26a5da9c4b0accdd738483a6ee32b4bbf9e",
-  "reviewed_validation_summary": "Local validation passed: `python3 tools/check_release_surface.py`; `python3 tools/version_surface_check.py`; `python3 tools/host_adapter_check.py`; `python3 tools/check_cli_contract.py`; `python3 tools/check_npm_package.py`; `npm run test:package`; `npm run pack:dry-run`; local packed tarball install smoke; `npm --prefix packages/loom-installer run check:docs`; `npm --prefix packages/loom-installer run check:versions`; `npm --prefix packages/loom-installer run check:payload`; `npm --prefix packages/loom-installer run check:distribution`; `python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1067`; `python3 .loom/bin/loom_flow.py shadow-parity --target .`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1067`; `python3 tools/loom_check.py --profile source --source-surface contract-only`; `python3 tools/check_loom_check_runtime_regressions.py`; `make check`.",
+  "reviewed_head": "17704f5992b8f0b54c4ea2075ac3a221e7eeffbc",
+  "reviewed_validation_summary": "Local validation passed after compatibility text refresh: `python3 tools/check_release_surface.py`; `python3 tools/version_surface_check.py`; `python3 tools/host_adapter_check.py`; `python3 tools/check_cli_contract.py`; `python3 tools/check_npm_package.py`; `npm run test:package`; `npm --prefix packages/loom-installer run check:docs`; `npm --prefix packages/loom-installer run check:versions`; `npm --prefix packages/loom-installer run check:payload`; `npm --prefix packages/loom-installer run check:distribution`; targeted `check_root_route_contracts`; `python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1067`; `python3 .loom/bin/loom_flow.py shadow-parity --target .`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1067`.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -15,6 +15,22 @@
     "work_item": ".loom/work-items/WI-1067.md",
     "recovery_entry": ".loom/progress/WI-1067.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "document-hard-cut"
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
   }
 }
