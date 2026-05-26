@@ -54,7 +54,7 @@ Loom 默认把审查职责分成四类角色：
 回答：
 
 - formal spec 是否足够清楚并允许进入实现承诺
-- 若 formal spec 消费 User Story，Story Business Confirmation 是否已 `confirmed` 或明确 `not-applicable`
+- 若 formal spec 消费 User Story，Story Business Confirmation 是否已 `confirmed` 或明确 `not_applicable`
 - 共享边界、风险与回滚边界是否已被 reviewer 接受
 
 默认主责：作者 + spec reviewer。

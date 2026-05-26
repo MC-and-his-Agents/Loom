@@ -10,16 +10,17 @@
 - `readiness_contract`
   - `schema_version: loom-story-readiness/v1`
   - decision、rationale、story_locator、checks、missing_inputs、fallback_to
+  - decision 只允许 `confirmed`、`pending`、`revision-requested`、`not_applicable`
 - `business_confirmation_contract`
   - `schema_version: loom-story-business-confirmation/v1`
   - decision、confirmation_scope、confirmation_source、revision_request、bypass_rationale
-  - decision 只允许 `pending`、`confirmed`、`revision-requested`、`not-applicable`
+  - decision 只允许 `pending`、`confirmed`、`revision-requested`、`not_applicable`
   - 用户直接回复「确认」即可记录为 `confirmed`
   - `revision-requested` 必须回到 story shaping，不得直接进入 spec / plan
 - `delivery_consumption_contract`
   - story scenario 到 `spec.md` behavior contract 的映射
   - story scenario 到 `plan.md` validation strategy 的映射
-  - spec / plan 只消费已 `confirmed` 或明确 `not-applicable` 的 story 语义
+  - spec / plan 只消费已 `confirmed` 或明确 `not_applicable` 的 story 语义
   - `Work Item` 仍是唯一执行入口
 - `missing_inputs`
   - 当前阻断 story shaping 的缺口；无阻断时为空数组
@@ -43,4 +44,4 @@ User Story 主体不得包含：
 
 Story Readiness 只判断 story 是否足够进入 spec / plan，不判断产品目标或商业战略是否正确。
 
-Story Business Confirmation 只让用户确认业务语义，不要求用户判断技术方案、实现细节、测试策略、review 质量或代码质量。纯治理、维护、格式、链接修复等不涉及业务语义的事项应使用 `not-applicable` 并记录 bypass rationale。
+Story Business Confirmation 只让用户确认业务语义，不要求用户判断技术方案、实现细节、测试策略、review 质量或代码质量。纯治理、维护、格式、链接修复等不涉及业务语义的事项应使用 `not_applicable` 并记录 bypass rationale。
