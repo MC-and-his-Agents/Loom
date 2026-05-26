@@ -1,0 +1,71 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1029",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1029 spec is approved: it limits the work to story intake authority vocabulary, Business Confirmation boundary, runtime contract summary, and generated surface sync while leaving #1030 scaffold, #1031 skill routing, and #1032 spec-suite entry rules separate.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "e46665fb0fa1b4fd44a032bdc68ff0dd743bb7eb",
+  "reviewed_validation_summary": "Passed: git diff --check; focused rg for story readiness/business confirmation vocabulary; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; spec and implementation review records allow.",
+  "fallback_to": null,
+  "findings": [
+    {
+      "id": "compat-follow-up-1",
+      "summary": "#1030 must update user-story scaffold fields to consume this vocabulary.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Projected from compatibility `follow_ups`."
+      }
+    },
+    {
+      "id": "compat-follow-up-2",
+      "summary": "#1031 must update loom-story skill instructions and input signals to consume this vocabulary.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Projected from compatibility `follow_ups`."
+      }
+    },
+    {
+      "id": "compat-follow-up-3",
+      "summary": "#1032 must wire the confirmed/not_applicable rule into spec-suite entry consumption.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Projected from compatibility `follow_ups`."
+      }
+    }
+  ],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1030 must update user-story scaffold fields to consume this vocabulary.",
+    "#1031 must update loom-story skill instructions and input signals to consume this vocabulary.",
+    "#1032 must wire the confirmed/not_applicable rule into spec-suite entry consumption."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1029.md",
+    "recovery_entry": ".loom/progress/WI-1029.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

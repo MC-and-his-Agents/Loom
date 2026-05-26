@@ -23,7 +23,7 @@ PLACEHOLDER_MARKERS = (
     "a clear product or system starting point",
     "the actor uses the target capability",
     "the intended outcome is observable",
-    "pending | confirmed | revision-requested | not-applicable",
+    "pending | confirmed | revision-requested | not_applicable",
 )
 EMPTY_FIELD_MARKERS = (
     "- Actor:",
@@ -71,7 +71,7 @@ def validate_story_file(target_root: Path, story_path: Path) -> list[str]:
     if has_empty_fields or any(marker in text for marker in PLACEHOLDER_MARKERS):
         errors.append(f"{relative}: copied template placeholders must be replaced before the story can pass")
     if re.search(r"^-\s*Decision:\s*(pending|revision-requested)\s*$", text, re.MULTILINE):
-        errors.append(f"{relative}: story business confirmation must be confirmed or not-applicable before delivery consumption")
+        errors.append(f"{relative}: story business confirmation must be confirmed or not_applicable before delivery consumption")
     return errors
 
 

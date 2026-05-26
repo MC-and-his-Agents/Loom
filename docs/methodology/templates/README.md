@@ -12,6 +12,8 @@
 
 - [spec-suite.md](./spec-suite.md)
   - `EXT-0015` `EXT-0016` `EXT-0017`
+- [story-intake.md](./story-intake.md)
+  - `#1015` `#1029`
 - [delivery-planning.md](./delivery-planning.md)
   - `#1014` `#1024`
 - [issue-tree-plan.md](./issue-tree-plan.md)

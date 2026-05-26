@@ -2,7 +2,7 @@
 
 本文件定义 Loom 的 Story-to-Delivery Intake 合同。
 
-它承接 `#649`，把 vision、roadmap、host issue、notes 或多轮产品讨论收束为可被正式交付链消费的 User Story、Story Readiness 与 Story Business Confirmation 结果。
+它承接 `#649`、`#1015`、`#1029`，把 vision、roadmap、host issue、notes 或多轮产品讨论收束为可被正式交付链消费的 User Story、Story Readiness 与 Story Business Confirmation 结果。
 
 ## 1. 边界
 
@@ -85,13 +85,13 @@ Story Readiness 是独立结果，不写回 User Story 主体。
 
 允许结果：
 
-- `ready`
-  - 可进入 formal spec / plan shaping
-- `needs-shaping`
-  - 需要补 actor、outcome、value、scenario 或 scope 信息
-- `blocked`
-  - 缺少关键 context 或存在无法自行裁决的产品/权限/数据风险
-- `not-applicable`
+- `confirmed`
+  - story 已有足够业务语义，可进入 formal spec / plan shaping
+- `pending`
+  - story 缺少业务确认、关键输入或可判断场景；不得进入 formal spec / plan shaping
+- `revision-requested`
+  - 用户或 reviewer 要求修改 story；必须回到 story shaping，不得直接进入 `spec.md` / `plan.md`
+- `not_applicable`
   - 当前事项不需要 story 层，必须给出 bypass rationale
 
 Readiness 至少检查：
@@ -125,12 +125,12 @@ Story Business Confirmation 是独立确认点，不写回 User Story 主体，�
   - 用户已确认业务语义；用户直接回复「确认」即可表达该结果
 - `revision-requested`
   - 用户给出修订意见；流程必须回到 Story 修订，不得直接进入 `spec.md` / `plan.md`
-- `not-applicable`
+- `not_applicable`
   - 当前事项不涉及业务语义确认，例如纯治理、维护、格式、链接修复或载体整理；必须给出 bypass rationale
 
 执行者向用户请求确认时，只能要求确认上述业务语义，不要求用户判断技术方案、实现细节、测试策略、review 质量或代码质量。
 
-若确认结果为 `pending` 或 `revision-requested`，后续 formal spec / plan shaping 必须等待 story 修订或确认完成。若结果为 `not-applicable`，后续工件只消费 bypass rationale，不制造无意义的人为确认负担。
+若确认结果为 `pending` 或 `revision-requested`，后续 formal spec / plan shaping 必须等待 story 修订或确认完成。若结果为 `not_applicable`，后续工件只消费 bypass rationale，不制造无意义的人为确认负担。
 
 ## 6. 到 Delivery Funnel 的消费关系
 
@@ -141,7 +141,7 @@ Story 不能直接进入 implementation。进入正式交付仍以 `Work Item` �
 1. Product context 形成 User Story。
 2. Story Readiness 判断是否可进入 formal spec / plan。
 3. 对涉及业务语义的事项，Story Business Confirmation 等待用户确认；用户给出修订意见时回到 Story 修订。
-4. `spec.md` 消费已确认或明确 `not-applicable` 的 story scenarios，形成可观察 behavior contract。
+4. `spec.md` 消费已确认或明确 `not_applicable` 的 story scenarios，形成可观察 behavior contract。
 5. `plan.md` 把 accepted scenarios 映射到 tests、checks、manual validation 或 `not_applicable` evidence。
 6. review、merge-ready 与 closeout 消费 spec / plan / evidence 的结果，不反向改写 User Story。
 

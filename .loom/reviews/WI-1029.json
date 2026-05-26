@@ -1,0 +1,71 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1029",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "WI-1029 implementation is approved for PR: the story intake authority contract, runtime contract summary, carrier validation, loom_check fixtures, review-model consumer wording, and generated skills runtime surfaces consistently use confirmed/pending/revision-requested/not_applicable without taking over #1030, #1031, or #1032.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "e46665fb0fa1b4fd44a032bdc68ff0dd743bb7eb",
+  "reviewed_validation_summary": "Passed: git diff --check; focused rg for story readiness/business confirmation vocabulary; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; spec and implementation review records allow.",
+  "fallback_to": null,
+  "findings": [
+    {
+      "id": "compat-follow-up-1",
+      "summary": "#1030 remains responsible for user-story scaffold field updates.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Projected from compatibility `follow_ups`."
+      }
+    },
+    {
+      "id": "compat-follow-up-2",
+      "summary": "#1031 remains responsible for loom-story skill instruction/input-signal updates.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Projected from compatibility `follow_ups`."
+      }
+    },
+    {
+      "id": "compat-follow-up-3",
+      "summary": "#1032 remains responsible for spec-suite entry consumption.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Projected from compatibility `follow_ups`."
+      }
+    }
+  ],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1030 remains responsible for user-story scaffold field updates.",
+    "#1031 remains responsible for loom-story skill instruction/input-signal updates.",
+    "#1032 remains responsible for spec-suite entry consumption."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1029.md",
+    "recovery_entry": ".loom/progress/WI-1029.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

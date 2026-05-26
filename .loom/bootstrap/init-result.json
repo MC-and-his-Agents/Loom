@@ -8,7 +8,7 @@
   },
   "run": {
     "target": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance",
-    "scenario": "\u590d\u6742\u65e2\u6709\u4ed3\u5e93",
+    "scenario": "复杂既有仓库",
     "scenario_key": "complex-existing",
     "integration_mode": "companion",
     "recovery_mode": "standard"
@@ -29,8 +29,8 @@
     "adoption_intent_source": "preserved-root-bootstrap"
   },
   "project_judgment": {
-    "scenario": "\u590d\u6742\u65e2\u6709\u4ed3\u5e93",
-    "intensity": "\u5f3a\u5316",
+    "scenario": "复杂既有仓库",
+    "intensity": "强化",
     "primary_structural_problem": "the repo needs execution support, recovery, and status carriers instead of more ad hoc guidance",
     "why_this_path": "the repo shows execution-support pressure, so the bootstrap must materialize recovery and status carriers immediately"
   },
@@ -76,9 +76,9 @@
     "mode": "work-item + recovery-entry + derived status-surface",
     "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
     "entry_points": {
-      "current_item_id": "WI-1018",
-      "work_item": ".loom/work-items/WI-1018.md",
-      "recovery_entry": ".loom/progress/WI-1018.md",
+      "current_item_id": "WI-1029",
+      "work_item": ".loom/work-items/WI-1029.md",
+      "recovery_entry": ".loom/progress/WI-1029.md",
       "status_surface": ".loom/status/current.md"
     }
   },

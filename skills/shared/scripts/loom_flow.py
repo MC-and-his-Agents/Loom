@@ -982,7 +982,7 @@ def story_flow_payload(
         },
         "readiness_contract": {
             "schema_version": "loom-story-readiness/v1",
-            "decisions": ["ready", "needs-shaping", "blocked", "not-applicable"],
+            "decisions": ["confirmed", "pending", "revision-requested", "not_applicable"],
             "required_fields": ["decision", "rationale", "story_locator", "checks", "missing_inputs", "fallback_to"],
             "checks": [
                 "actor_specificity",
@@ -996,7 +996,7 @@ def story_flow_payload(
         },
         "business_confirmation_contract": {
             "schema_version": "loom-story-business-confirmation/v1",
-            "decisions": ["pending", "confirmed", "revision-requested", "not-applicable"],
+            "decisions": ["pending", "confirmed", "revision-requested", "not_applicable"],
             "required_fields": [
                 "decision",
                 "confirmation_scope",
