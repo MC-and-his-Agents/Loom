@@ -3,10 +3,10 @@
   "item_id": "WI-1069",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Pending final review after validation.",
+  "summary": "The loom CLI release workflow now validates npm package payloads on PRs, resolves npm registry state before publish, fails closed when NPM_TOKEN is missing for real publishes, and preserves the #1069 boundary by avoiding VERSION changes or installer publishing.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "pending",
-  "reviewed_validation_summary": "pending",
+  "reviewed_head": "c625cf998189a46e04eeec9f938b5c507053d64f",
+  "reviewed_validation_summary": "Passed `ruby` YAML parse for `.github/workflows/loom-cli-release.yml`; `python3 tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_cli_contract.py`; `npm run test:package`; `npm run pack:dry-run`; installer `check:docs`, `check:versions`, `check:payload`, and `check:distribution`; `fact-chain`; `shadow-parity`; `adopt verify`; and full `make check`. `npm view @mc-and-his-agents/loom` currently returns E404, so #1069 adds automation only and does not publish npm.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -15,6 +15,6 @@
     "work_item": ".loom/work-items/WI-1069.md",
     "recovery_entry": ".loom/progress/WI-1069.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pending"
+    "build_checkpoint": "make check passed on latest origin/main from branch work/1069-npm-cli-publish-workflow"
   }
 }
