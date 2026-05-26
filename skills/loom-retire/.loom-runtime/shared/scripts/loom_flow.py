@@ -13605,15 +13605,21 @@ def pr_gate_payload(
                 "head_binding": review_record.get("head_binding"),
                 "missing_inputs": review_errors,
             }
-        if merge_checkpoint.get("result") in {"block", "fallback"}:
+        terminal_closed_checkpoint = (
+            merge_checkpoint.get("result") == "fallback"
+            and merge_checkpoint.get("fallback_to") == "closed"
+            and not merge_checkpoint.get("missing_inputs")
+        )
+        if merge_checkpoint.get("result") in {"block", "fallback"} and not terminal_closed_checkpoint:
             missing_inputs.extend(str(message) for message in merge_checkpoint.get("missing_inputs", []))
         steps.append(
             {
                 "name": "checkpoint-merge",
-                "result": merge_checkpoint.get("result"),
+                "result": "pass" if terminal_closed_checkpoint else merge_checkpoint.get("result"),
                 "summary": merge_checkpoint.get("summary"),
                 "missing_inputs": merge_checkpoint.get("missing_inputs", []),
                 "fallback_to": merge_checkpoint.get("fallback_to"),
+                "terminal_closed_checkpoint": terminal_closed_checkpoint,
             }
         )
 
