@@ -1,0 +1,26 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1025",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "WI-1025 implementation is approved for PR: the issue-tree-plan contract and scaffold define a planning artifact for Phase / FR / Work Item hierarchy, dependencies, deferred/not_applicable decisions, and host carrier mapping without turning the template into execution or review truth.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "996c165ee7ae4a2af3d448a4a55ea82ec7f1be40",
+  "reviewed_validation_summary": "Passed: `git diff --check`; focused `rg` checks for issue-tree required fields and forbidden-use statements; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 .loom/bin/loom_init.py verify --target .`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1025 --dry-run`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1026 PR slicing strategy remains pending.",
+    "#1027 GitHub mapping remains pending.",
+    "#1028 skills routing remains pending."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1025.md",
+    "recovery_entry": ".loom/progress/WI-1025.md",
+    "status_surface": ".loom/status/current.md",
+    "issue_tree_plan_contract": "docs/methodology/templates/issue-tree-plan.md",
+    "issue_tree_plan_scaffold": "docs/methodology/templates/scaffold/issue-tree-plan.md",
+    "build_checkpoint": "pass"
+  }
+}
