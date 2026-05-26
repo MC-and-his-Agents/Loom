@@ -11,7 +11,7 @@
 - Review Entry: .loom/reviews/WI-1025.json
 - Validation Entry: git diff --check; rg -n "issue-tree|phase boundary|FR list|Work Item list|deferred|not_applicable|host carrier" docs/methodology docs/adoption skills src .loom; rg -n "不承载执行进度|review.*结论|merge-ready|closeout" docs/methodology docs/adoption skills src .loom; python3 tools/loom_check.py --profile source --source-surface contract-only .
 - Closing Condition: #1025 has an issue-tree-plan contract and scaffold covering phase boundary, FR list, Work Item list, dependencies, deferred/not_applicable, host carrier mapping, and PR slicing placeholder without carrying execution progress or review conclusions.
-- Current Checkpoint: build
+- Current Checkpoint: merge
 - Current Stop: Issue-tree-plan contract and scaffold drafted, locally validated, and bound to PR #1080.
 - Next Step: Consume PR checks, then merge and close out #1025 if green.
 - Blockers: None recorded.
