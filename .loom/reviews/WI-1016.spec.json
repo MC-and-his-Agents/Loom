@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1016",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1016 formal spec is approved at the current carrier-bound head: scope remains docs/methodology full/minimal spec suite contract and scaffold updates, generated / skills sync stays deferred to #1020, and task carrier/evidence-map/consistency-analysis/gate-chain/CLI/route-matrix/scenario SKILL/generated runtime work remains out of scope.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "6d73e8e9a0ffe2066b07ca2493e677b04f803add",
+  "reviewed_validation_summary": "Passed: `git diff --check`; focused `rg` checks for full/minimal suite, consume/produce/locator/provenance, not_applicable/deferred, scenario/acceptance mapping; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`. PR #1086 checks passed except `loom-pr-merge-gate`, which required binding this WI carrier and review record.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1016.md",
+    "recovery_entry": ".loom/progress/WI-1016.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
