@@ -5,7 +5,7 @@
   "kind": "code_review",
   "summary": "WI-1067 documentation hard cut is approved locally: primary install docs now present the root loom CLI as the only primary install path, plugin/SKILLS are CLI-managed payloads, and installer references are historical.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "757a1d29b73521369c1e3f0f6b99f621ef2a4d3a",
+  "reviewed_head": "10cb426dab6b37ae76581f1f18a05e557ba28f6e",
   "reviewed_validation_summary": "Local validation passed: `python3 tools/check_release_surface.py`; `python3 tools/version_surface_check.py`; `python3 tools/host_adapter_check.py`; `python3 tools/check_cli_contract.py`; `python3 tools/check_npm_package.py`; `npm run test:package`; `npm run pack:dry-run`; local packed tarball install smoke; `npm --prefix packages/loom-installer run check:docs`; `npm --prefix packages/loom-installer run check:versions`; `npm --prefix packages/loom-installer run check:payload`; `npm --prefix packages/loom-installer run check:distribution`; `python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1067`; `python3 .loom/bin/loom_flow.py shadow-parity --target .`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1067`; `python3 tools/loom_check.py --profile source --source-surface contract-only`; `python3 tools/check_loom_check_runtime_regressions.py`; `make check`.",
   "fallback_to": null,
   "findings": [],
