@@ -5,7 +5,7 @@
   "kind": "spec_review",
   "summary": "WI-1069 is bounded to root loom CLI npm publish workflow automation, with no VERSION bump, first publish, or installer reactivation.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "2da801b01b215766208a4516f564874f7902e801",
+  "reviewed_head": "9815b382e759ac0c47c0f8bce68ac5dcb7dc362b",
   "reviewed_validation_summary": "Spec, plan, and implementation contract reviewed before implementation on branch work/1069-npm-cli-publish-workflow.",
   "fallback_to": null,
   "findings": [],
