@@ -5,7 +5,7 @@
   "kind": "code_review",
   "summary": "WI-1065 implementation is approved: the root npm package exposes `@mc-and-his-agents/loom`, bin `loom`, an explicit package payload, package smoke tests, and local install evidence without depending on or advancing loom-installer.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "1460c18f314c90411c446e1664b2d0d0b6af4f6d",
+  "reviewed_head": "306b43790b68fc46d9a102f256c5394848859cc6",
   "reviewed_validation_summary": "Passed: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; python3 tools/check_npm_package.py; npm run test:package; npm pack --pack-destination with local npm install smoke for loom --help, loom version --json, and loom detect --target <empty-dir> --json; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1065; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1065; make check.",
   "fallback_to": null,
   "findings": [],
