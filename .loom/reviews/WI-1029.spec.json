@@ -3,10 +3,10 @@
   "item_id": "WI-1029",
   "decision": "allow",
   "kind": "spec_review",
-  "summary": "Spec review refreshed after rebase onto origin/main 1dffa6a; story intake contract scope remains coherent and bounded to WI-1029 while downstream scaffold, skill, and spec-suite consumption stay assigned to #1030, #1031, and #1032.",
+  "summary": "Spec review refreshed after rebase onto origin/main 802aa75 and terminal carrier cleanup; story intake contract scope remains coherent and bounded to WI-1029 while downstream scaffold, skill, and spec-suite consumption stay assigned to #1030, #1031, and #1032.",
   "reviewer": "codex-main-thread",
-  "reviewed_head": "4e8bf1b076976c75fa94da89380b60d5af326118",
-  "reviewed_validation_summary": "Passed after rebase to origin/main 1dffa6a: git diff --check; python3 tools/skills_surface.py check; make loom-demo-new-project-check; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/check_cli_contract.py; python3 tools/check_npm_package.py. Checkpoint build/merge correctly required refreshed review records before final gate.",
+  "reviewed_head": "f800f111d041d6556db0cb24ebbbdf6c1367fe6a",
+  "reviewed_validation_summary": "Passed after rebase to origin/main 802aa75 and release bump to `v0.13.5`: git diff --check; python3 tools/skills_surface.py check; make loom-demo-new-project-check; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/check_cli_contract.py; python3 tools/check_npm_package.py. Local PR gate passed at f800f111d041d6556db0cb24ebbbdf6c1367fe6a; this refresh replaces an unreachable pre-rebase reviewed head.",
   "fallback_to": null,
   "findings": [
     {

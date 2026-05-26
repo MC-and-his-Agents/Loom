@@ -3,9 +3,9 @@
   "item_id": "WI-1029",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review refreshed after WI-1040 terminal carrier cleanup on PR #1091; no blocking findings for WI-1029 story intake contract changes, with downstream consumption left to #1030, #1031, and #1032.",
+  "summary": "Implementation review refreshed after WI-1029 spec review head refresh on PR #1091; no blocking findings for WI-1029 story intake contract changes, with downstream consumption left to #1030, #1031, and #1032.",
   "reviewer": "codex-main-thread",
-  "reviewed_head": "0dde0e71be67c8a28cc815ae881fc5f9ed1d2aa9",
+  "reviewed_head": "db0ebca995300d9317a075c7210147235b742477",
   "reviewed_validation_summary": "Passed after release bump to `v0.13.5`: git diff --check; python3 tools/skills_surface.py check; make loom-demo-new-project-check; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/check_cli_contract.py; python3 tools/check_npm_package.py.",
   "fallback_to": null,
   "findings": [
