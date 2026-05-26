@@ -1,0 +1,29 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1027",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1027 spec suite is approved: scope is limited to GitHub host mapping for Phase, FR, Work Item, Project item, implementation PR, native relationships, Project Status semantics, and synchronized reference surfaces while leaving automation, skills routing, task carrier contracts, gate-chain behavior, and CLI commands to downstream Work Items.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "be93bf89a410b516ac645f0c3365ee05c8ef5727",
+  "reviewed_validation_summary": "Passed: `git diff --check`; focused `rg` checks for Phase / FR / Work Item / Project / PR mapping, Project forbidden use, locator/provenance, Project Status, completed truth, and closeout; `python3 .loom/bin/loom_init.py verify --target .`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1027 --write`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1028 should consume GitHub mapping when updating skills routing.",
+    "#1017 should consume the host boundary when defining task carrier contracts.",
+    "#1052 remains responsible for CLI automation planning."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1027.md",
+    "recovery_entry": ".loom/progress/WI-1027.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-1027/spec.md",
+    "plan": ".loom/specs/WI-1027/plan.md",
+    "implementation_contract": ".loom/specs/WI-1027/implementation-contract.md",
+    "github_fr": "#1014",
+    "github_work_item": "#1027",
+    "upstream_work_items": "#1024, #1025, #1026"
+  }
+}
