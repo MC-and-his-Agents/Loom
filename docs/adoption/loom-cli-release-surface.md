@@ -24,6 +24,11 @@ The current minimal `loom` CLI distribution channel is the root GitHub release:
 
 This deliberately avoids introducing a new npm package, Homebrew formula, or standalone binary before there is a separate work item for that channel.
 
+#1063 introduces that separate npm channel work. Its frozen install and package
+contract is [cli-only-install-contract.md](./cli-only-install-contract.md): the
+root `loom` CLI is the only primary user-facing install surface, and the target
+npm package is `@mc-and-his-agents/loom` with `loom` as the bin name.
+
 ## Release Judgment
 
 Every merge that touches CLI/runtime release behavior must receive a `loom` CLI release judgment.

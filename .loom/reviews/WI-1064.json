@@ -1,0 +1,20 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1064",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1064 implementation is approved: the change freezes the CLI-only install and root npm package contract while keeping package implementation, npm publishing, and README hard cut work in later children.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "008aeb164f783c96f1f34bb26bf8ef04bb848f5a",
+  "reviewed_validation_summary": "Initial review after authoring contract carriers; final validation will update the recovery entry and PR gate evidence.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1064.md",
+    "recovery_entry": ".loom/progress/WI-1064.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass"
+  }
+}
