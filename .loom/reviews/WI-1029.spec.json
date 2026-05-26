@@ -3,10 +3,10 @@
   "item_id": "WI-1029",
   "decision": "allow",
   "kind": "spec_review",
-  "summary": "WI-1029 spec is approved: it limits the work to story intake authority vocabulary, Business Confirmation boundary, runtime contract summary, and generated surface sync while leaving #1030 scaffold, #1031 skill routing, and #1032 spec-suite entry rules separate.",
-  "reviewer": "codex-main-agent",
-  "reviewed_head": "e46665fb0fa1b4fd44a032bdc68ff0dd743bb7eb",
-  "reviewed_validation_summary": "Passed: git diff --check; focused rg for story readiness/business confirmation vocabulary; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; spec and implementation review records allow.",
+  "summary": "Spec review refreshed after main sync, carrier terminalization, and release surface bump; story intake contract scope remains coherent and bounded to WI-1029 while downstream scaffold, skill, and spec-suite consumption stay assigned to #1030, #1031, and #1032.",
+  "reviewer": "codex-main-thread",
+  "reviewed_head": "64f623e8cc9538662919a27539a06152564ab607",
+  "reviewed_validation_summary": "Passed after rebase to origin/main and v0.13.4 release surface refresh: git diff --check; python3 tools/skills_surface.py check; make loom-demo-new-project-check; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/check_cli_contract.py; python3 tools/check_npm_package.py; python3 tools/loom_flow.py checkpoint build --target . --item WI-1029; python3 tools/loom_check.py --profile source --source-surface contract-only .",
   "fallback_to": null,
   "findings": [
     {

@@ -15,7 +15,7 @@
 - Current Stop: PR #1091 gate blockers were diagnosed and local fixes are validated; review records are being refreshed against the latest head.
 - Next Step: Commit refreshed review records, push, and wait for PR #1091 checks.
 - Blockers: None recorded.
-- Latest Validation Summary: Passed: git diff --check; focused rg for story readiness/business confirmation vocabulary; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/loom_flow.py checkpoint build --target . --item WI-1029; make loom-demo-new-project-check; python3 tools/check_cli_contract.py.
+- Latest Validation Summary: Passed after rebase to origin/main and v0.13.4 release surface refresh: git diff --check; python3 tools/skills_surface.py check; make loom-demo-new-project-check; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/check_cli_contract.py; python3 tools/check_npm_package.py; python3 tools/loom_flow.py checkpoint build --target . --item WI-1029; python3 tools/loom_check.py --profile source --source-surface contract-only .
 - Recovery Boundary: WI-1029 owns story intake contract vocabulary and runtime contract summary only; #1030 scaffold, #1031 loom-story instructions, and #1032 spec-suite entry remain separate.
 - Current Lane: review
 
