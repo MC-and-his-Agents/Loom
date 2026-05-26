@@ -12,10 +12,10 @@
 - Validation Entry: git diff --check; focused rg; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .
 - Closing Condition: #1030 PR merged, issue closed, Project Done, and #1015 progress updated
 - Current Checkpoint: Scaffold and runtime check updates implemented.
-- Current Stop: Validation passed; preparing checkpoint, review record, commit, push, and PR.
-- Next Step: Build checkpoint, review record, commit, push, and open PR.
+- Current Stop: PR #1094 is open; CI repair is implemented locally after first failed check run.
+- Next Step: Refresh implementation review, push CI repair, wait for PR checks, then proceed to merge-ready/merge if checks pass.
 - Blockers: None
-- Latest Validation Summary: `git diff --check`; `python3 -m py_compile src/skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_story_carriers.py`; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .` all pass.
+- Latest Validation Summary: `git diff --check`; `python3 -m py_compile src/skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_story_carriers.py`; `python3 tools/skills_surface.py check`; `python3 tools/check_npm_package.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_release_surface.py`; `make loom-demo-new-project-check`; `node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main`; `make loom-check` all pass.
 - Recovery Boundary: Resume in `/Users/mc/dev/Loom-1030-user-story-scenario-locator`; do not continue #1030 implementation from `/Users/mc/dev/Loom`.
 - Current Lane: merge-ready preparation
 
@@ -24,7 +24,7 @@
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: git diff --check; rg -n "planning|issue-tree|route matrix|loom-init|loom-story|build|review" skills src docs .loom; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1028 --write; python3 tools/skills_surface.py check; python3 tools/check_npm_package.py; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/loom_check.py --profile source --source-surface contract-only .
+- Verification Entry: git diff --check; python3 -m py_compile src/skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_story_carriers.py; python3 tools/skills_surface.py check; python3 tools/check_npm_package.py; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; make loom-demo-new-project-check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main; make loom-check
 - Lane Entry: not_applicable
 
 ## Sources
