@@ -5,8 +5,8 @@
   "kind": "spec_review",
   "summary": "WI-1040 spec suite is approved: the spec, plan, and implementation contract cover the tasks.md/GitHub carrier replacement boundary, validation mapping, non-goals, forbidden surfaces, and #1020 follow-up without changing skills routing or generated runtime surface.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "b0ef4821438e2004f50eaa5a6927e1d2d9bf2f7b",
-  "reviewed_validation_summary": "Passed locally: `git diff --check`; focused `rg` for `tasks.md`, Project done, task done, behavior evidence, test evidence, and forbidden replacement boundaries; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`.",
+  "reviewed_head": "f7c57687b58415279591102d7e1441f81819ad9d",
+  "reviewed_validation_summary": "Passed after syncing `origin/main` through #1081 merge commit `6c2340763635e9849184a3bd8d241beb783231fe`: `git diff --check`; focused `rg` for `tasks.md`, Project done, task done, behavior evidence, test evidence, Work Item truth, task carrier, execution breakdown, external tracker, checklist, full/minimal spec suite and suite-index boundaries; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py verify --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py purity-check --target . --item WI-1040`; root-self-governance local equivalent (`governance-profile status`, `runtime-parity validate`, `adopt verify`); `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`. The approval remains scoped to the #1017 contract; post-review drift is main-sync/#1081 runtime and terminal carrier-only state, with #1020 integration still deferred.",
   "fallback_to": null,
   "findings": [
     {
