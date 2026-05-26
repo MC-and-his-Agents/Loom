@@ -11,11 +11,11 @@
 - Review Entry: .loom/reviews/WI-1029.json
 - Validation Entry: git diff --check; rg focused story-intake; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .
 - Closing Condition: #1029 PR merged, issue closed, Project Done, and #1015 progress updated
-- Current Checkpoint: review refreshed after main sync
-- Current Stop: PR #1091 branch was rebased onto `origin/main` `1dffa6a`; local static checks pass and review records now bind to implementation head `4e8bf1b076976c75fa94da89380b60d5af326118`.
-- Next Step: Commit refreshed review records, push with force-with-lease, then run PR gate against the pushed head.
+- Current Checkpoint: release surface refreshed after main sync
+- Current Stop: PR #1091 branch is rebased onto `origin/main` `1dffa6a`; WI-1067 is terminalized; CLI release surface is bumped to unpublished `v0.13.5`.
+- Next Step: Refresh implementation review for head `a2034cf076ba913d0ef626ee9cd8a2149eafafc6`, push, and wait for PR checks.
 - Blockers: None recorded.
-- Latest Validation Summary: Passed after rebase to origin/main `1dffa6a`: git diff --check; python3 tools/skills_surface.py check; make loom-demo-new-project-check; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/check_cli_contract.py; python3 tools/check_npm_package.py. Checkpoint build/merge correctly required refreshed review records before final gate.
+- Latest Validation Summary: Passed after release bump to `v0.13.5`: git diff --check; python3 tools/skills_surface.py check; make loom-demo-new-project-check; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/check_cli_contract.py; python3 tools/check_npm_package.py.
 - Recovery Boundary: WI-1029 owns story intake contract vocabulary and runtime contract summary only; #1030 scaffold, #1031 loom-story instructions, and #1032 spec-suite entry remain separate.
 - Current Lane: review
 
