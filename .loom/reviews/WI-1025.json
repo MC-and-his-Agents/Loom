@@ -5,7 +5,7 @@
   "kind": "general_review",
   "summary": "WI-1025 implementation is approved for PR: the issue-tree-plan contract and scaffold define a planning artifact for Phase / FR / Work Item hierarchy, dependencies, deferred/not_applicable decisions, and host carrier mapping without turning the template into execution or review truth. The inherited WI-1065 recovery carrier is also corrected to its GitHub closed/Done state so workspace purity remains true before #1025 merge.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "fffd9fb66222cfc2d60ae87cf232f670655ae419",
+  "reviewed_head": "5545450c4812c55279eb8b53a380854576c44f3d",
   "reviewed_validation_summary": "Passed before WI-1065 carrier repair: `git diff --check`; focused `rg` checks for issue-tree required fields and forbidden-use statements; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 .loom/bin/loom_init.py verify --target .`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1025 --dry-run`. After WI-1065 carrier repair: `python3 .loom/bin/loom_flow.py pr-gate check --target . --head-sha fffd9fb66222cfc2d60ae87cf232f670655ae419 --branch work/1025-issue-tree-plan-template --pr 1080` showed workspace purity clean and only blocked on stale review plus unpushed PR head.",
   "fallback_to": null,
   "findings": [],
