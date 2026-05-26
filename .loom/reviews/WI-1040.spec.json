@@ -1,0 +1,49 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1040",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1040 spec suite is approved: the spec, plan, and implementation contract cover the tasks.md/GitHub carrier replacement boundary, validation mapping, non-goals, forbidden surfaces, and #1020 follow-up without changing skills routing or generated runtime surface.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "f7c57687b58415279591102d7e1441f81819ad9d",
+  "reviewed_validation_summary": "Passed after syncing `origin/main` through #1081 merge commit `6c2340763635e9849184a3bd8d241beb783231fe`: `git diff --check`; focused `rg` for `tasks.md`, Project done, task done, behavior evidence, test evidence, Work Item truth, task carrier, execution breakdown, external tracker, checklist, full/minimal spec suite and suite-index boundaries; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py verify --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py purity-check --target . --item WI-1040`; root-self-governance local equivalent (`governance-profile status`, `runtime-parity validate`, `adopt verify`); `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`. The approval remains scoped to the #1017 contract; post-review drift is main-sync/#1081 runtime and terminal carrier-only state, with #1020 integration still deferred.",
+  "fallback_to": null,
+  "findings": [
+    {
+      "id": "compat-follow-up-1",
+      "summary": "Implementation review should confirm contract docs preserve Work Item and recovery truth boundaries.",
+      "severity": "warn",
+      "rebuttal": null,
+      "disposition": {
+        "status": "deferred",
+        "summary": "Projected from compatibility `follow_ups`."
+      }
+    }
+  ],
+  "blocking_issues": [],
+  "follow_ups": [
+    "Implementation review should confirm contract docs preserve Work Item and recovery truth boundaries."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1040.md",
+    "recovery_entry": ".loom/progress/WI-1040.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

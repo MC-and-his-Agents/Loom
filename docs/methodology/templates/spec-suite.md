@@ -30,7 +30,7 @@ Loom 不吸收 SDD-only 边界：
 - 不复制 `github/spec-kit` 的 `.specify/` 目录、`/speckit.*` 命令名、固定文件布局或 extension trust model
 - 不让 `tasks.md` 或任何单一任务文件替代 Work Item、recovery、review、merge-ready 或 closeout 真相
 
-因此，本文件冻结 full / minimal spec suite 的合同、工件列表、模板职责、locator / provenance 规则和 source / generated 接入要求。execution breakdown、task carrier、evidence-map、consistency-analysis、gate-chain 与 CLI surface 只作为后续消费者或占位引用出现，不在本文件定义具体运行合同。
+因此，本文件冻结 full / minimal spec suite 的合同、工件列表、模板职责、locator / provenance 规则和 source / generated 接入要求。evidence-map、consistency-analysis、gate-chain 与 CLI surface 只作为后续消费者或占位引用出现，不在本文件定义具体运行合同。Execution breakdown 与 task carrier 的当前合同分别见 [execution-breakdown.md](./execution-breakdown.md) 与 [../harness/task-carrier-contract.md](../harness/task-carrier-contract.md)。
 
 ## 1. Suite Path
 
@@ -119,6 +119,7 @@ Minimal suite 可以被 review、merge-ready 与 closeout 消费，但它必须�
 - 能自动化的行为先写或先调整失败用例，再实现，再以通过结果作为 test evidence
 - 不能自动化的行为必须声明人工验证路径、证据 locator 与 fresh 条件
 - 纯文档或治理规则变更可以不强制 TDD，但必须说明行为证据如何由结构检查、审查记录或示例消费
+- 若 `plan.md` 的 phase 需要被拆成可追踪执行单元，应由 execution breakdown 消费 `plan.md`，并回链 spec scenario、plan phase 与 validation strategy；execution breakdown 不反向替代 `plan.md`
 
 Full path 中，缺少 scenario -> validation 或 acceptance -> test mapping 时，不得进入 build / review；minimal path 中，缺映射必须以 `not_applicable` rationale、替代验证入口和 recheck condition 解释。
 
@@ -207,6 +208,7 @@ Loom 当前不固化：
 | --- | --- | --- |
 | `spec.md` 的验收标准与行为证据 | `acceptance_locator` | 只说明验收和行为证据入口 |
 | `plan.md` 的阶段、验证方式与测试策略 | `plan_locator` | 只说明执行计划入口 |
+| execution breakdown unit 与 task carrier mapping | `breakdown_locator` / carrier locator | 只说明 `plan.md` 拆分后的执行单元与承接载体 |
 | checkpoint / review / gate 输出 | `validation_evidence_locator` | 只说明验证证据入口 |
 | `handoff` 输出或交接说明 | `handoff_notes_locator` | 只说明交接入口 |
 

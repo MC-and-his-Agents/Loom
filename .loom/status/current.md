@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1068
-- Goal: Strengthen checkers so the #1063 CLI-only install and release surface cannot regress after the #1067 documentation hard cut.
-- Scope: #1068: checker-only guardrails for CLI-only install, root npm package payload, CLI-managed plugin/SKILLS payloads, and deprecated `loom-installer` evidence boundaries. No npm publish workflow, first npm release, installer publish reactivation, or broad CLI behavior rewrite.
-- Execution Path: issue-scoped branch work/1068-cli-only-surface-checks in /Users/mc/dev/Loom-1068-cli-only-surface-checks
+- Item ID: WI-1040
+- Goal: Clarify `tasks.md`, GitHub issue/project/checklist, and external tracker replacement boundaries as task carriers.
+- Scope: #1040 replacement relationship only; consume #1037-#1039. Do not redefine task carrier core types, implement GitHub Project automation, define evidence-map, change gate-chain, skills routing, or generated skills runtime surface.
+- Execution Path: issue #1040 -> branch work/1017-execution-breakdown-task-carrier -> worktree /Users/mc/dev/Loom-1017-execution-breakdown-task-carrier -> PR #1090.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1068.md
-- Review Entry: .loom/reviews/WI-1068.json
-- Validation Entry: python3 tools/check_release_surface.py; python3 tools/check_npm_package.py; python3 tools/check_cli_contract.py; npm run test:package; npm run pack:dry-run; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1068; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1068; make check
-- Closing Condition: #1068 is closed after its PR merges and #1069 can consume checkers that fail closed if primary docs, package payload, or release evidence drift away from the single root `loom` CLI install surface.
-- Current Checkpoint: checker-hardening
-- Current Stop: Local validation passed for CLI-only checker hardening, including release surface guards, root npm package payload guards, installer compatibility checks, Loom carrier checks, and full `make check`.
-- Next Step: Commit and push the #1068 branch, open PR, run `pr-gate`, wait for PR checks, then merge and close #1068 with evidence for #1069.
-- Blockers: None
-- Latest Validation Summary: Passed `python3 tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_cli_contract.py`; `npm run test:package`; `npm run pack:dry-run`; installer `check:docs`, `check:versions`, `check:payload`, and `check:distribution`; `fact-chain`; `shadow-parity`; `adopt verify`; and full `make check`.
-- Recovery Boundary: Continue from /Users/mc/dev/Loom-1068-cli-only-surface-checks on branch work/1068-cli-only-surface-checks; keep scope limited to checker hardening and WI-1068 governance carriers.
-- Current Lane: cli-only-surface-checks
+- Recovery Entry: .loom/progress/WI-1040.md
+- Review Entry: .loom/reviews/WI-1040.json
+- Validation Entry: git diff --check; rg -n "tasks.md|Project done|task done|behavior evidence|test evidence|不替代" docs skills src .loom; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .
+- Closing Condition: `tasks.md` is defined as optional carrier, GitHub issue/project/checklist can carry task state but cannot replace Work Item, and task done / Project Done cannot replace behavior evidence, test evidence, review, merge-ready, or closeout.
+- Current Checkpoint: validated
+- Current Stop: `tasks.md`, GitHub issue/sub-issue, Project item, checklist, and external tracker boundaries are drafted in the task carrier contract and GitHub profile, and validated locally.
+- Next Step: Include #1040 and #1017 evidence in the PR, then close out GitHub child issues after merge.
+- Blockers: None recorded.
+- Latest Validation Summary: Passed after syncing `origin/main` through #1093 merge commit `2da801b01b215766208a4516f564874f7902e801` and terminalizing the merged WI-1068 carrier: `git diff --check`; focused `rg` for execution breakdown, task carrier, Work Item truth, `tasks.md`, GitHub issue/sub-issue, Project item, checklist, external tracker, Project Done, task done, behavior/test evidence, #1018 and #1020 boundaries; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py verify --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py purity-check --target . --item WI-1040`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py carrier refresh --target . --dry-run`; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`. The approval remains scoped to the #1017 contract; #1020 integration is recorded but not implemented.
+- Recovery Boundary: #1040 owns carrier replacement boundaries only. Do not implement evidence-map, GitHub automation, gate-chain, skills routing, or generated runtime surface.
+- Current Lane: #1017 mainline checkpoint 4 of 4.
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: python3 tools/check_release_surface.py; python3 tools/check_npm_package.py; python3 tools/check_cli_contract.py; npm run test:package; npm run pack:dry-run; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1068; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1068; make check
+- Verification Entry: git diff --check; focused rg for execution breakdown, task carrier, Work Item truth, tasks.md, GitHub Project/checklist/external tracker boundaries, behavior evidence, and test evidence; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .
 - Lane Entry: not_applicable
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1068.md
-- Dynamic Truth: .loom/progress/WI-1068.md
+- Static Truth: .loom/work-items/WI-1040.md
+- Dynamic Truth: .loom/progress/WI-1040.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

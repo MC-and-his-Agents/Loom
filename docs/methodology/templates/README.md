@@ -16,6 +16,8 @@
   - `#1014` `#1024`
 - [issue-tree-plan.md](./issue-tree-plan.md)
   - `#1014` `#1025`
+- [execution-breakdown.md](./execution-breakdown.md)
+  - `#1017` `#1037`
 - [pr-slicing.md](./pr-slicing.md)
   - `#1014` `#1026`
 - [spec-template.md](./spec-template.md)
