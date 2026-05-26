@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1019",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1019 spec is approved: scope is limited to gate-chain consumption contracts for full suite inputs, evidence-map, consistency-analysis, fresh evidence and minimal path not_applicable rationale; it explicitly excludes redefining upstream contracts, CLI implementation, skills routing and generated runtime surface.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "96f2c032d768f7a4e94a0d1c59ebda04b4ed68cf",
+  "reviewed_validation_summary": "Passed: `git diff --check`; focused `rg` for pre-review/review, merge-ready, closeout, not_applicable and evidence/consistency terms; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1019.md",
+    "recovery_entry": ".loom/progress/WI-1019.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
