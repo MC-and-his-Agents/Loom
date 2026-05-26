@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1016
-- Goal: Define Loom full/minimal spec suite layering and templates for #1016.
-- Scope: Docs/methodology templates only: spec-suite contract, docs scaffold templates, spec.md to plan.md mapping, locator/provenance and #1020 generated handoff. Do not define task carrier, evidence-map, consistency-analysis, gate-chain, CLI, route matrix, scenario SKILL.md, or generated skills runtime surface.
-- Execution Path: issue #1016 -> branch work/1016-spec-suite -> worktree /Users/mc/dev/Loom-1016-spec-suite.
+- Item ID: WI-1071
+- Goal: Distinguish GitHub BLOCKED mergeability from Loom semantic merge readiness for FR #1071.
+- Scope: #1071-#1076: controlled-merge mergeStateStatus interpretation, harness contracts, source/generated/installed runtime sync, loom_check fixtures, PR validation and issue closeout only; no GitHub branch protection changes and no replacement of loom-pr-merge-gate.
+- Execution Path: issue-scoped branch work/1071-blocked-mergeability in /Users/mc/dev/Loom-1071-blocked-mergeability
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1016.md
-- Review Entry: .loom/reviews/WI-1016.json
-- Validation Entry: git diff --check; focused rg for suite/mapping terms; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .
-- Closing Condition: #1016 full/minimal spec suite docs contract and docs scaffold are merge-ready in PR #1086; #1033-#1035 have completion evidence; #1036 generated sync is recorded as deferred to #1020 and not completed by this PR.
-- Current Checkpoint: implementation
-- Current Stop: #1016 docs contract and scaffold changes are implemented in PR #1086 and local validation passed.
-- Next Step: Record review, consume PR checks, and close out #1016 after merge.
-- Blockers: None recorded.
-- Latest Validation Summary: Passed: `git diff --check`; focused `rg` checks for full/minimal suite, consume/produce/locator/provenance, not_applicable/deferred, scenario/acceptance mapping; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`. PR #1086 checks passed except `loom-pr-merge-gate`, which required binding this WI carrier and review record.
-- Recovery Boundary: #1016 owns docs/methodology spec-suite contract and docs scaffold changes only. Generated / skills integration is deferred to #1020 and not completed by this Work Item.
-- Current Lane: spec-suite-contract
+- Recovery Entry: .loom/progress/WI-1071.md
+- Review Entry: .loom/reviews/WI-1071.json
+- Validation Entry: python3 tools/py_compile_clean.py ...; python3 tools/skills_surface.py check; git diff --check; runtime/reference parity; python3 tools/loom_check.py --profile source --source-surface source-self-fixture .; python3 tools/loom_check.py --profile source --source-surface contract-only .
+- Closing Condition: #1071 and #1072-#1076 close only after PR #1081 merges and closeout consumes branch, worktree, PR head, merge commit, target branch, and issue tree evidence.
+- Current Checkpoint: merge checkpoint
+- Current Stop: WI-1071 is refreshed after main sync, WI-1028 terminal closeout, and release surface bump to unpublished `v0.13.3`; minimal merge-ready validation passed locally and PR #1081 must consume the new head checks.
+- Next Step: Push refreshed carrier commits, consume PR #1081 required checks and `loom-pr-merge-gate`, then run controlled merge and close #1071-#1076 with merge evidence.
+- Blockers: None
+- Latest Validation Summary: Passed at current head after merging origin/main, terminalizing WI-1028, and bumping release surface to unpublished `v0.13.3`: git diff --check; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/check_npm_package.py; git ls-remote --tags origin 'refs/tags/v0.13.3'. Prior focused source-self-fixture pass after fixture/provenance refresh remains valid for the BLOCKED regression and installed pre-merge chain; no new full fixture run was started for this minimal merge-ready refresh.
+- Recovery Boundary: Continue from /Users/mc/dev/Loom-1071-blocked-mergeability on branch work/1071-blocked-mergeability; keep scope limited to #1071-#1076 controlled-merge BLOCKED interpretation and closeout.
+- Current Lane: blocked-mergeability-interpretation
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: git diff --check; rg -n "planning|issue-tree|route matrix|loom-init|loom-story|build|review" skills src docs .loom; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1028 --write; python3 tools/skills_surface.py check; python3 tools/check_npm_package.py; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/loom_check.py --profile source --source-surface contract-only .
+- Verification Entry: python3 tools/check_npm_package.py; npm run test:package; npm pack --dry-run --json --ignore-scripts; local npm install smoke; python3 tools/check_cli_contract.py; make check
 - Lane Entry: not_applicable
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1016.md
-- Dynamic Truth: .loom/progress/WI-1016.md
+- Static Truth: .loom/work-items/WI-1071.md
+- Dynamic Truth: .loom/progress/WI-1071.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

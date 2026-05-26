@@ -10210,20 +10210,32 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
                     return relative
 
-                def pr_gate_fixture(target: Path, *, number: int = 1) -> str:
+                def pr_gate_fixture(target: Path, *, number: int = 1, merge_state_status: str | None = None, host_review_state: str | None = None) -> str:
+                    payload = {
+                        "number": number,
+                        "state": "OPEN",
+                        "isDraft": False,
+                        "headRefName": "feature/pr-gate",
+                        "baseRefName": "main",
+                        "headRefOid": current_head(target),
+                        "body": "## Related Work\n\n- Loom Work Item: INIT-0001\n",
+                        "url": f"https://github.example/owner/repo/pull/{number}",
+                    }
+                    if merge_state_status:
+                        payload["mergeStateStatus"] = merge_state_status
+                    if host_review_state:
+                        payload["reviewDecision"] = host_review_state
+                        payload["latestReviews"] = [
+                            {
+                                "state": host_review_state,
+                                "authorAssociation": "OWNER",
+                                "author": {"login": "single-author-maintainer"},
+                            }
+                        ]
                     return write_json_fixture(
                         target,
-                        ".loom/tmp/pr-gate/pr.json",
-                        {
-                            "number": number,
-                            "state": "OPEN",
-                            "isDraft": False,
-                            "headRefName": "feature/pr-gate",
-                            "baseRefName": "main",
-                            "headRefOid": current_head(target),
-                            "body": "## Related Work\n\n- Loom Work Item: INIT-0001\n",
-                            "url": f"https://github.example/owner/repo/pull/{number}",
-                        },
+                        f".loom/tmp/pr-gate/pr-{number}.json",
+                        payload,
                     )
 
                 pr_fixture = pr_gate_fixture(positive_target)
@@ -10330,6 +10342,88 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must prove loom-pr-merge-gate is required"))
                     if not isinstance(merge, dict) or merge.get("attempted") is not False or merge.get("dry_run") is not True:
                         failures.append(Failure("daily-execution-cli", "`installed controlled-merge check` must not call gh pr merge"))
+
+                blocked_policy_pr_fixture = pr_gate_fixture(
+                    positive_target,
+                    number=21,
+                    merge_state_status="BLOCKED",
+                    host_review_state="COMMENTED",
+                )
+                controlled_blocked_policy_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "controlled-merge",
+                        "check",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                        "--pr",
+                        "21",
+                        "--pr-payload-file",
+                        blocked_policy_pr_fixture,
+                        "--branch-protection-file",
+                        protection_fixture,
+                        "--status-checks-file",
+                        status_fixture,
+                    ],
+                )
+                if error:
+                    failures.append(Failure("daily-execution-cli", f"`installed controlled-merge` BLOCKED policy fixture failed: {error}"))
+                elif controlled_blocked_policy_payload.get("result") != "pass":
+                    failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must allow GitHub BLOCKED when authored Loom approval and required checks pass"))
+                else:
+                    drift_readback = controlled_blocked_policy_payload.get("drift_readback")
+                    mergeability = (
+                        drift_readback.get("subchecks", {}).get("mergeability")
+                        if isinstance(drift_readback, dict)
+                        else None
+                    )
+                    pr_gate = controlled_blocked_policy_payload.get("pr_gate")
+                    approval_boundary = pr_gate.get("approval_boundary") if isinstance(pr_gate, dict) else None
+                    if not isinstance(mergeability, dict) or mergeability.get("result") != "pass" or mergeability.get("interpretation") != "delegated_host_policy":
+                        failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must report GitHub BLOCKED as delegated host policy evidence"))
+                    if not isinstance(approval_boundary, dict) or approval_boundary.get("github_review_comments_satisfy_approval") is not False:
+                        failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must keep author COMMENTED host review evidence outside approval truth"))
+
+                for hard_status in ("DIRTY", "DRAFT"):
+                    hard_status_fixture = pr_gate_fixture(positive_target, number=30 if hard_status == "DIRTY" else 31, merge_state_status=hard_status)
+                    hard_status_payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                            "controlled-merge",
+                            "check",
+                            "--target",
+                            str(positive_target),
+                            "--item",
+                            "INIT-0001",
+                            "--pr",
+                            "30" if hard_status == "DIRTY" else "31",
+                            "--pr-payload-file",
+                            hard_status_fixture,
+                            "--branch-protection-file",
+                            protection_fixture,
+                            "--status-checks-file",
+                            status_fixture,
+                        ],
+                    )
+                    if error:
+                        failures.append(Failure("daily-execution-cli", f"`installed controlled-merge` {hard_status} fixture failed: {error}"))
+                    elif hard_status_payload.get("result") != "block":
+                        failures.append(Failure("daily-execution-cli", f"`installed controlled-merge` must block GitHub {hard_status} mergeability"))
+                    else:
+                        drift_readback = hard_status_payload.get("drift_readback")
+                        mergeability = (
+                            drift_readback.get("subchecks", {}).get("mergeability")
+                            if isinstance(drift_readback, dict)
+                            else None
+                        )
+                        if not isinstance(mergeability, dict) or mergeability.get("result") != "block" or mergeability.get("interpretation") != "hard_block":
+                            failures.append(Failure("daily-execution-cli", f"`installed controlled-merge` must report GitHub {hard_status} as hard-block mergeability"))
 
                 missing_gate_protection = write_json_fixture(
                     positive_target,

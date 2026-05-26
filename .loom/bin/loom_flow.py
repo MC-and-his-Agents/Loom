@@ -8,16 +8,25 @@ import hashlib
 import json
 import os
 import re
+import select
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
+import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback path
+    tomllib = None  # type: ignore[assignment]
 
 sys.dont_write_bytecode = True
 
@@ -88,6 +97,45 @@ RUNTIME_EVIDENCE_FIELDS = (
     "lane_entry",
 )
 
+HOST_BINDING_INSPECTOR_SCHEMA = "loom-host-binding-inspection/v1"
+HOST_BINDING_CHAIN_SCHEMA = "loom-host-binding-chain/v1"
+HOST_DEPENDENCY_GRAPH_SCHEMA = "loom-host-dependency-graph/v1"
+PROJECT_DRIFT_SCHEMA = "loom-project-drift/v1"
+GOAL_EXECUTION_CONTRACT_SCHEMA = "loom-goal-execution-contract/v1"
+GOAL_READINESS_SCHEMA = "loom-goal-readiness/v1"
+GOAL_COMPLETION_SCHEMA = "loom-goal-completion/v1"
+GOVERNANCE_LINT_RESULT_SCHEMA = "loom-governance-lint-result/v1"
+GOVERNANCE_LINT_STATUS_SCHEMA = "loom-governance-lint-status/v1"
+CLOSEOUT_GATE_PROFILES = (
+    "auto",
+    "closeout-contract",
+    "source-self-fixture",
+    "bootstrap-regression",
+    "distribution-regression",
+    "strong-profile-full-gate",
+)
+CLOSEOUT_LIGHT_PROFILE = "closeout-contract"
+CLOSEOUT_HEAVY_PROFILES = {
+    "source-self-fixture",
+    "bootstrap-regression",
+    "distribution-regression",
+    "strong-profile-full-gate",
+}
+PR_METADATA_PREFLIGHT_SCHEMA = "loom-pr-metadata-preflight/v1"
+PR_METADATA_MACHINE_SCHEMA = "loom-repo-pr-metadata/v1"
+PR_METADATA_PARSER_VERSION = "loom-pr-metadata-parser/v1"
+
+PROJECT_DRIFT_KINDS = {
+    "project_missing_item",
+    "project_status_mismatch",
+    "project_unreadable",
+    "project_stale_mirror",
+    "missing_native_edge",
+    "unexpected_native_edge",
+    "stale_native_edge",
+    "open_blocker_executable_conflict",
+}
+
 RECOVERY_FIELD_LABELS = {
     "current_checkpoint": "Current Checkpoint",
     "current_stop": "Current Stop",
@@ -111,6 +159,7 @@ WORK_ITEM_FIELD_LABELS = {
 
 REVIEW_DECISIONS = {"allow", "block", "fallback"}
 REVIEW_KINDS = {"general_review", "code_review", "spec_review"}
+IMPLEMENTATION_REVIEW_KINDS = {"general_review", "code_review"}
 REVIEW_FINDING_SEVERITIES = {"warn", "block"}
 REVIEW_FINDING_DISPOSITION_STATUSES = {"accepted", "rejected", "deferred"}
 DEFAULT_REVIEW_ENGINE = "codex"
@@ -123,14 +172,52 @@ SHADOW_REVIEW_ADAPTERS = {CODEX_APP_REVIEW_SHADOW_ADAPTER}
 CODEX_APP_REVIEW_ENDPOINT_ENV = "LOOM_CODEX_APP_REVIEW_ENDPOINT"
 CODEX_APP_REVIEW_THREAD_ID_ENV = "LOOM_CODEX_APP_REVIEW_THREAD_ID"
 CODEX_APP_REVIEW_CWD_ENV = "LOOM_CODEX_APP_REVIEW_CWD"
+CODEX_APP_REVIEW_SESSION_FILE_ENV = "LOOM_CODEX_APP_REVIEW_SESSION_FILE"
 CODEX_THREAD_ID_ENV = "CODEX_THREAD_ID"
+CODEX_SESSION_ID_ENV = "CODEX_SESSION_ID"
+CODEX_APP_REVIEW_NEW_THREAD_IDS = {"new", "new-thread", "start"}
+CODEX_APP_REVIEW_LIVE_TIMEOUT_SECONDS = 900
+LOOM_RUNTIME_ENV_KEYS = (
+    "LOOM_SOURCE_REPO_ROOT",
+    "LOOM_INSTALLED_SKILLS_ROOT",
+    "LOOM_PACKAGE_SKILL_ID",
+    "LOOM_RUNTIME_SCENE",
+)
 DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS: int | None = None
 REVIEW_ENGINE_PROFILE_SCHEMA = "loom-review-engine-profile/v1"
+ADOPTED_REVIEW_ENGINE_ADAPTER_SCHEMA = "loom-adopted-review-engine-adapter/v1"
+REVIEW_AUTHORITY_MIGRATION_SCHEMA = "loom-review-authority-migration/v1"
+SPEC_REVIEW_AUTHORITY_MIGRATION_SCHEMA = "loom-spec-review-authority-migration/v1"
+RETAINED_HOST_SIGNAL_SCHEMA = "loom-retained-host-signal/v1"
+CONTROLLED_MERGE_CONSUMPTION_SCHEMA = "loom-controlled-merge-consumption/v1"
+REVIEW_ENGINE_POLICY_SCHEMA = "loom-review-profiles/v1"
+REVIEW_ENGINE_POLICY_RELATIVE = ".loom/review-profiles.json"
 REVIEW_ENGINE_PROFILE_IDS = {"default", "high-risk", "spec-review", "repeated-blocker"}
 REVIEW_ENGINE_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
+REVIEW_PROMPT_DIFF_MAX_CHARS = 60_000
+REVIEW_PROMPT_DIFF_PATHS = (
+    ".loom/bootstrap/init-result.json",
+    ".loom/progress",
+    ".loom/reviews",
+    ".loom/specs",
+    ".loom/status/current.md",
+    ".loom/work-items",
+    "docs/methodology/harness/review-execution.md",
+    "src/skills/loom-review/SKILL.md",
+    "src/skills/loom-spec-review/SKILL.md",
+    "src/skills/shared/scripts/loom_check.py",
+    "src/skills/shared/scripts/loom_flow.py",
+    "skills/loom-review/SKILL.md",
+    "skills/loom-spec-review/SKILL.md",
+    "skills/shared/scripts/loom_check.py",
+    "skills/shared/scripts/loom_flow.py",
+)
 PR_MERGE_GATE_SCHEMA = "loom-pr-merge-gate/v1"
 CONTROLLED_MERGE_SCHEMA = "loom-controlled-merge/v1"
 PR_MERGE_GATE_CHECK_NAME = "loom-pr-merge-gate"
+HOST_MERGEABILITY_HARD_BLOCK_STATUSES = {"DIRTY", "DRAFT"}
+HOST_MERGEABILITY_DELEGATED_STATUSES = {"BLOCKED"}
+MERGE_GATE_RESULT_SCHEMAS = {"loom-flow-merge-ready/v1", "loom-merge-gate/v1"}
 LIVE_SMOKE_SCHEMA = "loom-live-smoke/v1"
 HOST_ADAPTER_LIVE_DRIFT_SCHEMA = "loom-host-adapter-live-drift/v1"
 DYNAMIC_TOOL_LIVE_AVAILABILITY_SCHEMA = "loom-dynamic-tool-live-availability/v1"
@@ -220,7 +307,7 @@ HOOK_ADAPTER_RESULTS = {"supported", "not_applicable", "advisory", "unsafe"}
 REVIEW_ENGINE_PROFILES: dict[str, dict[str, Any]] = {
     "default": {
         "profile_id": "default",
-        "model": "gpt-5.2",
+        "model": "gpt-5.5",
         "reasoning_effort": "medium",
         "timeout_seconds": DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS,
         "context_policy": "minimal-review-baseline",
@@ -228,7 +315,7 @@ REVIEW_ENGINE_PROFILES: dict[str, dict[str, Any]] = {
     },
     "high-risk": {
         "profile_id": "high-risk",
-        "model": "gpt-5.2",
+        "model": "gpt-5.5",
         "reasoning_effort": "high",
         "timeout_seconds": DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS,
         "context_policy": "expanded-risk-baseline",
@@ -236,7 +323,7 @@ REVIEW_ENGINE_PROFILES: dict[str, dict[str, Any]] = {
     },
     "spec-review": {
         "profile_id": "spec-review",
-        "model": "gpt-5.2",
+        "model": "gpt-5.5",
         "reasoning_effort": "high",
         "timeout_seconds": DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS,
         "context_policy": "formal-spec-suite-baseline",
@@ -244,7 +331,7 @@ REVIEW_ENGINE_PROFILES: dict[str, dict[str, Any]] = {
     },
     "repeated-blocker": {
         "profile_id": "repeated-blocker",
-        "model": "gpt-5.2",
+        "model": "gpt-5.5",
         "reasoning_effort": "high",
         "timeout_seconds": DEFAULT_REVIEW_ENGINE_TIMEOUT_SECONDS,
         "context_policy": "recent-findings-and-dispositions",
@@ -308,9 +395,24 @@ ADOPTION_DECISION_QUESTIONS: dict[str, str] = {
     "repo_interop": "Which retained host action results, repo-native carriers, and shadow parity surfaces should Loom read?",
     "github_controlled_merge": "Which GitHub-controlled merge evidence proves the host merge boundary is ready without Loom taking over the host action?",
     "repo_specific_residue": "Which repo-specific residue must stay repo-owned instead of becoming Loom core?",
+    "spec_review_instruction_locator": "Where does the adopted repository declare repo-owned spec review instructions without making Loom guess a filename?",
+    "implementation_review_instruction_locator": "Where does the adopted repository declare repo-owned implementation review instructions without making Loom guess a filename?",
     "authority_boundary": "Where is the authority-of-truth for repo-native results, overrides, and fallback decisions?",
     "guardian_integration_contract": "Which guardian or integration-contract verdicts should be read as repo-native evidence rather than promoted into Loom core?",
 }
+
+ADOPTION_DECISION_ORDER: list[str] = [
+    "fr_work_item_layer",
+    "closeout_reconciliation_read",
+    "repo_interface",
+    "repo_interop",
+    "github_controlled_merge",
+    "repo_specific_residue",
+    "spec_review_instruction_locator",
+    "implementation_review_instruction_locator",
+    "authority_boundary",
+    "guardian_integration_contract",
+]
 
 ADOPTION_DECISION_SOURCES: dict[str, str] = {
     "fr_work_item_layer": "docs/adoption/github-profile-upgrade.md",
@@ -319,6 +421,8 @@ ADOPTION_DECISION_SOURCES: dict[str, str] = {
     "repo_interop": "docs/adoption/repo-interop-contract.md",
     "github_controlled_merge": "docs/adoption/github-profile.md",
     "repo_specific_residue": "docs/adoption/repo-companion-contract.md",
+    "spec_review_instruction_locator": "docs/adoption/repo-companion-contract.md",
+    "implementation_review_instruction_locator": "docs/adoption/repo-companion-contract.md",
     "authority_boundary": "docs/adoption/repo-interop-contract.md",
     "guardian_integration_contract": "docs/adoption/repo-interop-contract.md",
 }
@@ -328,8 +432,10 @@ ADOPTION_DECISION_WRITE_TARGETS: dict[str, list[str]] = {
     "closeout_reconciliation_read": [".loom/companion/interop.json"],
     "repo_interface": [".loom/companion/manifest.json", ".loom/companion/repo-interface.json"],
     "repo_interop": [".loom/companion/interop.json"],
-    "github_controlled_merge": [],
+    "github_controlled_merge": ["github:branch_protection.required_checks", "github:pull_request.merge_method"],
     "repo_specific_residue": [".loom/companion/README.md", ".loom/companion/repo-interface.json"],
+    "spec_review_instruction_locator": [".loom/companion/repo-interface.json:review_instruction_locators.spec_review"],
+    "implementation_review_instruction_locator": [".loom/companion/repo-interface.json:review_instruction_locators.implementation_review"],
     "authority_boundary": [".loom/companion/interop.json"],
     "guardian_integration_contract": [".loom/companion/interop.json"],
 }
@@ -417,16 +523,47 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     carrier.add_argument("--dry-run", action="store_true", default=True, help="Preview refresh actions without writing files; this is the default")
     carrier.add_argument("--write", dest="dry_run", action="store_false", help="Write Loom-owned carrier metadata refreshes")
 
-    host_binding = subparsers.add_parser("host-binding", help="Validate host issue, PR, branch, and SHA bindings")
-    host_binding.add_argument("operation", choices=("validate",))
+    host_binding = subparsers.add_parser("host-binding", help="Validate or inspect host issue, PR, branch, SHA, Project, and dependency bindings")
+    host_binding.add_argument("operation", choices=("validate", "inspect"))
     host_binding.add_argument("--target", required=True, help="Target repository root")
     host_binding.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
     host_binding.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    host_binding.add_argument("--phase", type=int, help="GitHub Phase issue number")
+    host_binding.add_argument("--fr", type=int, help="GitHub FR issue number")
     host_binding.add_argument("--issue", type=int, help="GitHub Work Item issue number")
     host_binding.add_argument("--pr", type=int, help="GitHub implementation PR number")
+    host_binding.add_argument("--project", type=int, help="GitHub Project number")
     host_binding.add_argument("--branch", help="GitHub branch name")
     host_binding.add_argument("--head-sha", help="Implementation head SHA to validate")
     host_binding.add_argument("--base-sha", help="Base SHA used for diff validation")
+
+    github_intake = subparsers.add_parser("github-intake", help="Read GitHub issue or Project entrypoints without writing host state")
+    github_intake.add_argument("operation", choices=("issue",))
+    github_intake.add_argument("--target", required=True, help="Target repository root")
+    github_intake.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
+    github_intake.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    github_intake.add_argument("--issue", type=int, required=True, help="GitHub issue number to classify")
+    github_intake.add_argument("--project", type=int, help="GitHub Project number for Project item/drift reads")
+    github_intake.add_argument("--phase", type=int, help="Expected parent Phase issue number")
+    github_intake.add_argument("--fr", type=int, help="Expected parent FR issue number")
+    github_intake.add_argument("--pr", type=int, help="Known implementation PR number")
+    github_intake.add_argument("--branch", help="Known implementation branch name")
+    github_intake.add_argument("--head-sha", help="Known implementation head SHA")
+
+    goal = subparsers.add_parser("goal", help="Derive or validate Loom /goal execution contracts")
+    goal.add_argument("operation", choices=("derive", "validate"))
+    goal.add_argument("--target", required=True, help="Target repository root")
+    goal.add_argument("--item", help="Expected current item id")
+    goal.add_argument(
+        "--output",
+        default=".loom/bootstrap/init-result.json",
+        help="Init-result path relative to the target root",
+    )
+    goal.add_argument("--goal-file", help="Optional repo-relative goal execution contract JSON")
+    goal.add_argument("--issue", type=int, help="Expected source issue number")
+    goal.add_argument("--pr", type=int, help="Expected PR number")
+    goal.add_argument("--branch", help="Expected branch name")
+    goal.add_argument("--head-sha", help="Expected head SHA")
 
     pr_gate = subparsers.add_parser("pr-gate", help="Evaluate PR-specific semantic approval before host merge")
     pr_gate.add_argument("operation", choices=("check",))
@@ -443,6 +580,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     pr_gate.add_argument("--head-sha", help="Expected PR head SHA")
     pr_gate.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
     pr_gate.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+
+    pr_metadata = subparsers.add_parser("pr-metadata", help="Validate repo-specific PR metadata machine carriers")
+    pr_metadata.add_argument("operation", choices=("preflight",))
+    pr_metadata.add_argument("--target", required=True, help="Target repository root")
+    pr_metadata.add_argument("--surface", choices=("review", "merge_ready"), required=True, help="Gate surface that consumes the metadata preflight")
+    pr_metadata.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
+    pr_metadata.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    pr_metadata.add_argument("--pr", type=int, help="GitHub implementation PR number")
+    pr_metadata.add_argument("--head-sha", help="Expected PR head SHA")
+    pr_metadata.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
+    pr_metadata.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
 
     controlled_merge = subparsers.add_parser("controlled-merge", help="Check or execute Loom-controlled PR merge")
     controlled_merge.add_argument("operation", choices=("check", "merge"))
@@ -464,6 +612,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     controlled_merge.add_argument("--status-checks-file", help="Optional repo-relative statusCheckRollup JSON fixture")
     controlled_merge.add_argument("--branch-protection-file", help="Optional repo-relative branch protection JSON fixture")
     controlled_merge.add_argument("--ruleset-file", help="Optional repo-relative branch rules/ruleset JSON fixture")
+    controlled_merge.add_argument("--pr-gate-result-file", help="Optional repo-relative retained pr-gate result JSON")
+    controlled_merge.add_argument("--merge-gate-result-file", help="Optional repo-relative retained merge-gate or merge-ready result JSON")
 
     state = subparsers.add_parser(
         "state-check",
@@ -523,6 +673,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     review.add_argument("--engine-model", help="Optional review engine model override for review run")
     review.add_argument("--engine-reasoning", choices=tuple(sorted(REVIEW_ENGINE_REASONING_EFFORTS)), help="Optional review engine reasoning effort override for review run")
     review.add_argument("--engine-override-reason", help="Required reason when overriding review engine profile, model, or reasoning")
+    review.add_argument(
+        "--engine-use-local-codex-defaults",
+        action="store_true",
+        help="Explicitly opt in to local ~/.codex/config.toml model/reasoning defaults when repo policy allows it.",
+    )
     review.add_argument(
         "--shadow-engine-adapter",
         choices=tuple(sorted(SHADOW_REVIEW_ADAPTERS)),
@@ -592,10 +747,21 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     closeout.add_argument("--phase", type=int, help="GitHub Phase issue number")
     closeout.add_argument("--fr", type=int, help="GitHub FR issue number")
     closeout.add_argument("--branch", help="GitHub branch name bound to the work item")
+    closeout.add_argument("--goal-completion", help="Optional repo-relative /goal completion evidence JSON")
     closeout.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
     closeout.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
     closeout.add_argument("--comment", help="Optional closeout comment for issue sync")
-    closeout.add_argument("--skip-gate", action="store_true", help="Skip local loom_check execution during closeout")
+    closeout.add_argument(
+        "--gate-profile",
+        choices=CLOSEOUT_GATE_PROFILES,
+        default="auto",
+        help="Closeout local gate profile; auto uses the lightweight closeout contract unless a heavier profile is explicit.",
+    )
+    closeout.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+    closeout.add_argument("--status-checks-file", help="Optional repo-relative statusCheckRollup JSON fixture")
+    closeout.add_argument("--branch-protection-file", help="Optional repo-relative branch protection JSON fixture")
+    closeout.add_argument("--ruleset-file", help="Optional repo-relative branch rules/ruleset JSON fixture")
+    closeout.add_argument("--skip-gate", action="store_true", help="Skip explicit heavyweight local gate execution during closeout")
 
     reconciliation = subparsers.add_parser("reconciliation", help="Audit Loom GitHub drift before closeout reconciliation")
     reconciliation.add_argument("operation", choices=("audit", "sync"))
@@ -610,7 +776,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     reconciliation.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
     reconciliation.add_argument("--comment", help="Optional closeout comment for issue sync")
     reconciliation.add_argument("--comment-file", help="Read closeout comment body from a file")
-    reconciliation.add_argument("--dry-run", action="store_true", help="Preview reconciliation sync actions without writing GitHub state")
+    reconciliation.add_argument("--dry-run", action="store_true", default=True, help="Preview reconciliation sync actions without writing GitHub state; this is the default")
+    reconciliation.add_argument("--apply", dest="dry_run", action="store_false", help="Apply the audited safe sync plan to GitHub control-plane state")
 
     shadow = subparsers.add_parser("shadow-parity", help="Compare Loom and repo-native parity surfaces without changing merge gates")
     shadow.add_argument("--target", required=True, help="Target repository root")
@@ -656,6 +823,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     governance_profile.add_argument("operation", choices=("status", "upgrade-plan", "upgrade", "binding"))
     governance_profile.add_argument("--target", required=True, help="Target repository root")
+    governance_profile.add_argument("--host", choices=("github",), default="github", help="Host profile to evaluate")
     governance_profile.add_argument("--to", choices=("standard", "strong"), help="Target maturity for governance-profile upgrade")
     governance_profile.add_argument("--dry-run", action="store_true", default=True, help="Preview upgrade actions without writing files; this is the default")
     governance_profile.add_argument("--apply", dest="dry_run", action="store_false", help="Apply Loom-owned scaffold writes")
@@ -718,6 +886,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Init-result path relative to the target root",
     )
     flow.add_argument("--build-evidence", help="Optional build evidence JSON path relative to the target root")
+    flow.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
+    flow.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    flow.add_argument("--issue", type=int, help="GitHub Work Item issue number for host status reads")
+    flow.add_argument("--pr", type=int, help="GitHub implementation PR number for host status reads")
+    flow.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+    flow.add_argument("--project", type=int, help="GitHub Project number for Project drift reads")
+    flow.add_argument("--branch", help="GitHub branch name for host binding reads")
+    flow.add_argument("--project-drift-mode", choices=("advisory", "blocking"), default="advisory")
 
     return parser.parse_args(argv)
 
@@ -726,6 +902,18 @@ def emit(payload: dict[str, Any]) -> int:
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     result = payload.get("result")
     return 0 if result == "pass" else 1
+
+
+def dedupe_strings(values: list[str]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        normalized = str(value)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(normalized)
+    return deduped
 
 
 def runtime_state_payload(target_root: Path) -> dict[str, Any]:
@@ -752,7 +940,7 @@ def story_flow_payload(
             {
                 "name": "story-contract",
                 "result": "pass",
-                "summary": "User Story and Story Readiness contracts are separated from delivery state.",
+                "summary": "User Story, Story Readiness, and Story Business Confirmation contracts are separated from delivery state.",
                 "missing_inputs": [],
                 "fallback_to": None,
             }
@@ -770,6 +958,7 @@ def story_flow_payload(
                 "outcome",
                 "business_value",
                 "acceptance_scenarios",
+                "out_of_scope",
                 "provenance",
             ],
             "forbidden_fields": [
@@ -805,10 +994,34 @@ def story_flow_payload(
             ],
             "authority_boundary": "readiness judges entry into spec / plan, not product strategy correctness.",
         },
+        "business_confirmation_contract": {
+            "schema_version": "loom-story-business-confirmation/v1",
+            "decisions": ["pending", "confirmed", "revision-requested", "not-applicable"],
+            "required_fields": [
+                "decision",
+                "confirmation_scope",
+                "confirmation_source",
+                "revision_request",
+                "bypass_rationale",
+            ],
+            "confirmation_scope": [
+                "actor",
+                "capability",
+                "outcome",
+                "business_value",
+                "acceptance_scenarios",
+                "out_of_scope",
+            ],
+            "user_fast_path": "plain `确认` records confirmed when the visible story is the confirmation subject",
+            "revision_rule": "revision-requested returns to story shaping before spec / plan consumption",
+            "not_applicable_rule": "pure governance, maintenance, formatting, link repair, or carrier-only changes may bypass with rationale",
+            "authority_boundary": "confirmation covers business semantics only, not technical solution, test strategy, review quality, or code quality.",
+        },
         "delivery_consumption_contract": {
             "execution_entry": "Work Item",
-            "spec_consumes": "story scenario id / locator as behavior contract input",
-            "plan_consumes": "story scenario id mapped to tests, checks, manual validation, or not_applicable evidence",
+            "spec_consumes": "confirmed or not_applicable story scenario id / locator as behavior contract input",
+            "plan_consumes": "confirmed or not_applicable story scenario id mapped to tests, checks, manual validation, or not_applicable evidence",
+            "blocks_on_confirmation": ["pending", "revision-requested"],
             "forbidden": "story must not author recovery, review, PR, merge-ready, or closeout state",
         },
         "contract": {
@@ -3044,12 +3257,18 @@ def live_smoke_run_payload(
 def adoption_validation_commands(target_root: Path) -> list[str]:
     target = command_target(target_root)
     return [
-        f"python3 tools/loom_flow.py governance-profile upgrade-plan --target {target}",
+        f"python3 tools/loom_flow.py governance-profile upgrade-plan --target {target} --host github",
         f"python3 tools/loom_flow.py adopt verify --target {target}",
     ]
 
 
 def adoption_decision_reasoning(decision_id: str, detail: dict[str, Any]) -> str:
+    if decision_id == "github_controlled_merge":
+        return "GitHub remains the merge authority; Loom only reads required checks, PR merge state, merge commit, and closeout basis before delegating host merge."
+    if decision_id == "spec_review_instruction_locator":
+        return "Deep existing repositories must declare their own spec review instruction locator so Loom does not infer repo-specific filenames or review policy."
+    if decision_id == "implementation_review_instruction_locator":
+        return "Deep existing repositories must declare their own implementation review instruction locator so Loom can consume repo-owned guidance without moving it into core."
     if decision_id == "guardian_integration_contract":
         return "Guardian and integration-contract verdicts are repo-native evidence; Loom may read them through interop but must not promote their rules into core."
     if decision_id == "authority_boundary":
@@ -3067,7 +3286,9 @@ def adoption_judgment_status(decision_id: str, missing: set[str]) -> str:
         return "blocked" if not ADOPTION_DECISION_WRITE_TARGETS.get(decision_id) else "missing"
     if decision_id == "repo_specific_residue" and "repo_interface" in missing:
         return "missing"
-    if decision_id in {"authority_boundary", "guardian_integration_contract"} and "repo_interop" in missing:
+    if decision_id in {"spec_review_instruction_locator", "implementation_review_instruction_locator"} and "repo_interface" in missing:
+        return "missing"
+    if decision_id in {"authority_boundary", "guardian_integration_contract", "closeout_reconciliation_read"} and "repo_interop" in missing:
         return "missing"
     return "answered"
 
@@ -3092,7 +3313,7 @@ def adoption_decisions_payload(
     )
     detail_by_id = {row.get("id"): row for row in details if isinstance(row, dict)}
     missing_set = {str(item) for item in missing}
-    ordered_ids = list(dict.fromkeys([*missing, "repo_specific_residue", "authority_boundary", "guardian_integration_contract"]))
+    ordered_ids = list(dict.fromkeys([*missing, *ADOPTION_DECISION_ORDER]))
     judgments: list[dict[str, Any]] = []
     for raw_id in ordered_ids:
         decision_id = str(raw_id)
@@ -3337,6 +3558,7 @@ def companion_generation_payload(
 def repo_specific_default_fallback(surface: str) -> str:
     return {
         "spec_review": "build",
+        "pre_review": "build",
         "review": "build",
         "merge_ready": "merge",
         "closeout": "merge",
@@ -3634,6 +3856,12 @@ def repo_specific_requirements_payload(
     requirements = payload.get("repo_specific_requirements") if isinstance(payload, dict) else None
     entries = requirements.get(surface) if isinstance(requirements, dict) else None
     if not isinstance(entries, list):
+        if surface == "pre_review":
+            return {
+                **empty_payload,
+                "source_locator": declared_locator,
+                "summary": "no repo companion requirements are declared for the pre-review surface.",
+            }
         return {
             **empty_payload,
             "result": "block",
@@ -4108,7 +4336,7 @@ def run_git(root: Path, args: list[str]) -> subprocess.CompletedProcess[str] | N
 
 def run_process(args: list[str], cwd: Path, *, timeout_seconds: float | None = None) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
-    for key in ("LOOM_SOURCE_REPO_ROOT", "LOOM_INSTALLED_SKILLS_ROOT", "LOOM_RUNTIME_SCENE"):
+    for key in LOOM_RUNTIME_ENV_KEYS:
         env.pop(key, None)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     return subprocess.run(
@@ -4140,6 +4368,376 @@ def closeout_gate_command(target_root: Path) -> tuple[list[str], str]:
     if repo_gate.exists():
         return ["python3", ".loom/bin/loom_check.py", "."], "repo_local_loom_check"
     return ["python3", str(shared_script(__file__, "loom_check.py")), str(target_root)], "shared_loom_check"
+
+
+def effective_closeout_gate_profile(profile: str | None) -> str:
+    return CLOSEOUT_LIGHT_PROFILE if profile in {None, "auto"} else profile
+
+
+def closeout_subcheck(
+    *,
+    check_id: str,
+    source: str,
+    profile: str,
+    required_for_closeout: bool,
+    trigger_reason: str,
+    result: str,
+    fallback_to: str | None = None,
+    evidence_locator: str | None = None,
+    missing_inputs: list[str] | None = None,
+    **evidence: Any,
+) -> dict[str, Any]:
+    payload = {
+        "id": check_id,
+        "source": source,
+        "profile": profile,
+        "required_for_closeout": required_for_closeout,
+        "trigger_reason": trigger_reason,
+        "result": result,
+        "fallback_to": fallback_to,
+        "missing_inputs": missing_inputs or [],
+    }
+    if evidence_locator is not None:
+        payload["evidence_locator"] = evidence_locator
+    for key, value in evidence.items():
+        if value is not None:
+            payload[key] = value
+    return payload
+
+
+def validation_summary_digest(summary: str | None) -> str | None:
+    if not isinstance(summary, str) or not summary.strip():
+        return None
+    return hashlib.sha256(summary.strip().encode("utf-8")).hexdigest()
+
+
+def recovery_validation_summary_at_ref(root: Path, recovery_relative: str, ref: str) -> tuple[str | None, list[str]]:
+    result = run_git(root, ["show", f"{ref}:{recovery_relative}"])
+    if result is None:
+        return None, ["git is unavailable while reading retained recovery entry at PR head"]
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "git show failed"
+        return None, [f"retained recovery entry is unreadable at `{ref}`: {detail}"]
+    for raw_line in result.stdout.splitlines():
+        match = re.match(r"^-\s+Latest Validation Summary:\s*(.*)$", raw_line.strip())
+        if match:
+            value = match.group(1).strip()
+            if value:
+                return value, []
+            return None, [f"retained recovery entry `{recovery_relative}` has empty Latest Validation Summary at `{ref}`"]
+    return None, [f"retained recovery entry `{recovery_relative}` is missing Latest Validation Summary at `{ref}`"]
+
+
+def latest_successful_execution_attempt(
+    target_root: Path,
+    item_id: str,
+    operation: str,
+) -> tuple[dict[str, Any] | None, str | None, list[str]]:
+    attempts_dir = execution_attempt_directory(target_root, item_id)
+    if not attempts_dir.exists():
+        return None, None, [f"missing execution_attempt directory: {relative_to_root(attempts_dir, target_root)}"]
+    candidates: list[tuple[float, str, dict[str, Any]]] = []
+    errors: list[str] = []
+    for path in sorted(attempts_dir.glob("*.json")):
+        relative = relative_to_root(path, target_root)
+        try:
+            payload = load_json_file(path)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            errors.append(f"invalid execution_attempt `{relative}`: {exc}")
+            continue
+        if not isinstance(payload, dict):
+            errors.append(f"execution_attempt `{relative}` must be a JSON object")
+            continue
+        if payload.get("schema_version") != EXECUTION_ATTEMPT_SCHEMA:
+            continue
+        if payload.get("operation") != operation or payload.get("result") != "pass":
+            continue
+        candidates.append((path.stat().st_mtime, relative, payload))
+    if not candidates:
+        return None, None, errors or [f"missing successful `{operation}` execution_attempt for `{item_id}`"]
+    _, relative, payload = sorted(candidates, key=lambda entry: (entry[0], entry[1]))[-1]
+    return payload, relative, []
+
+
+def missing_versioned_execution_attempt(errors: list[str], operation: str) -> bool:
+    if not errors:
+        return False
+    expected_missing_success = f"missing successful `{operation}` execution_attempt"
+    return all(
+        error.startswith("missing execution_attempt directory:")
+        or error.startswith(expected_missing_success)
+        for error in errors
+    )
+
+
+def closeout_required_status_subcheck(
+    *,
+    target_root: Path,
+    profile: str,
+    owner: str,
+    repo_name: str,
+    pr_number: int | None,
+    pr_payload: dict[str, Any] | None,
+    pr_head: str | None,
+    pr_payload_file: str | None,
+    status_checks_file: str | None,
+    branch_protection_file: str | None,
+    ruleset_file: str | None,
+) -> dict[str, Any]:
+    missing_inputs: list[str] = []
+    source = "host_pr_checks"
+    base_ref = pr_payload.get("baseRefName") if isinstance(pr_payload, dict) else None
+    if pr_number is None:
+        missing_inputs.append("pr")
+    if not isinstance(pr_head, str) or not pr_head:
+        missing_inputs.append("pr head SHA")
+    if not isinstance(base_ref, str) or not base_ref:
+        missing_inputs.append("pr baseRefName")
+
+    protection_payload, protection_errors = load_optional_json_fixture(
+        target_root,
+        branch_protection_file,
+        label="branch protection fixture",
+    )
+    if protection_payload is None and not protection_errors and owner and repo_name and isinstance(base_ref, str) and base_ref:
+        protection_payload, protection_errors = gh_rest_json(
+            target_root,
+            f"repos/{owner}/{repo_name}/branches/{quote(base_ref, safe='')}/protection",
+        )
+    missing_inputs.extend(f"branch protection: {message}" for message in protection_errors)
+
+    ruleset_payload, ruleset_errors = load_optional_json_fixture(
+        target_root,
+        ruleset_file,
+        label="branch rules/ruleset fixture",
+    )
+    if ruleset_payload is None and not ruleset_errors and owner and repo_name and isinstance(base_ref, str) and base_ref:
+        ruleset_payload, ruleset_errors = github_public_rest_list(
+            f"repos/{owner}/{repo_name}/rules/branches/{quote(base_ref, safe='')}",
+        )
+    missing_inputs.extend(f"branch rules/ruleset: {message}" for message in ruleset_errors)
+
+    status_payload, status_errors = load_optional_json_fixture(
+        target_root,
+        status_checks_file,
+        label="status checks fixture",
+    )
+    if status_payload is None and not status_errors and pr_number is not None:
+        status_payload, status_errors = gh_json(
+            target_root,
+            ["pr", "view", str(pr_number), "--json", "statusCheckRollup"],
+        )
+    missing_inputs.extend(f"status checks: {message}" for message in status_errors)
+
+    protection_contexts = required_status_contexts_from_protection(protection_payload)
+    ruleset_contexts = required_status_contexts_from_branch_rules(ruleset_payload)
+    required_contexts = sorted(set(protection_contexts + ruleset_contexts))
+    required_checks = required_check_status_payload(
+        status_payload.get("statusCheckRollup") if isinstance(status_payload, dict) else status_payload,
+        required_contexts,
+    )
+    if protection_payload is None and ruleset_payload is None:
+        missing_inputs.append("branch protection or ruleset readback is unavailable")
+    for key in ("missing", "pending", "failing"):
+        for context in required_checks[key]:
+            missing_inputs.append(f"required check `{context}` is {key}")
+
+    evidence_locator = status_checks_file or (f"github:pr/{pr_number}/statusCheckRollup" if pr_number is not None else None)
+    return closeout_subcheck(
+        check_id="host_pr_checks",
+        source=source,
+        profile=profile,
+        required_for_closeout=True,
+        trigger_reason="closeout must prove host required checks were fresh for the retained PR head",
+        result="pass" if not missing_inputs else "block",
+        fallback_to=None if not missing_inputs else "pr-gate",
+        evidence_locator=evidence_locator,
+        missing_inputs=missing_inputs,
+        head_sha=pr_head,
+        required_checks=required_checks,
+        required_contexts=required_contexts,
+        pr_payload_locator=pr_payload_file,
+    )
+
+
+def closeout_backlink_subchecks(
+    *,
+    target_root: Path,
+    context: dict[str, Any] | None,
+    profile: str,
+    owner: str,
+    repo_name: str,
+    pr_number: int | None,
+    pr_payload: dict[str, Any] | None,
+    merge_commit_sha: str | None,
+    merge_commit_in_target: bool | None,
+    pr_payload_file: str | None,
+    status_checks_file: str | None,
+    branch_protection_file: str | None,
+    ruleset_file: str | None,
+) -> list[dict[str, Any]]:
+    subchecks: list[dict[str, Any]] = []
+    if context is None:
+        subchecks.append(
+            closeout_subcheck(
+                check_id="fact_chain",
+                source="fact_chain",
+                profile=profile,
+                required_for_closeout=True,
+                trigger_reason="closeout contract needs a readable Work Item fact chain",
+                result="block",
+                fallback_to="admission",
+                missing_inputs=["fact-chain"],
+            )
+        )
+        return subchecks
+
+    item_id = context["item_id"]
+    pr_head = pr_payload.get("headRefOid") if isinstance(pr_payload, dict) and isinstance(pr_payload.get("headRefOid"), str) else None
+    target_branch = pr_payload.get("baseRefName") if isinstance(pr_payload, dict) else None
+    validation_summary = context["latest_validation_summary"]
+    validation_summary_errors: list[str] = []
+    if pr_head and context.get("retained_item_context"):
+        recovery_relative = str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"])
+        retained_validation_summary, retained_validation_errors = recovery_validation_summary_at_ref(
+            target_root,
+            recovery_relative,
+            pr_head,
+        )
+        if retained_validation_errors:
+            validation_summary_errors.extend(retained_validation_errors)
+        elif retained_validation_summary is not None:
+            validation_summary = retained_validation_summary
+    validation_digest = validation_summary_digest(validation_summary)
+
+    review_record, review_path, review_errors = load_review_record(target_root, item_id, context["review_entry"])
+    review_missing = [*review_errors, *validation_summary_errors]
+    review_head_binding_payload: dict[str, Any] | None = None
+    if review_record is None and not review_missing:
+        review_missing.append(f"missing review artifact: {review_path}")
+    if review_record is not None:
+        if review_record.get("decision") != "allow":
+            review_missing.append("review decision is not allow")
+        if review_record.get("kind") not in IMPLEMENTATION_REVIEW_KINDS:
+            review_missing.append("review kind is not an implementation review")
+        if review_record.get("reviewed_validation_summary") != validation_summary:
+            review_missing.append("reviewed_validation_summary does not match retained validation summary")
+        if pr_head:
+            review_head_binding_payload, review_head_errors = review_head_binding_for_head(
+                target_root,
+                reviewed_head=review_record.get("reviewed_head"),
+                target_head=pr_head,
+                allowed_paths=allowed_post_review_carrier_paths(context, review_path),
+            )
+            review_missing.extend(review_head_errors)
+    subchecks.append(
+        closeout_subcheck(
+            check_id="review_record",
+            source="review_record",
+            profile=profile,
+            required_for_closeout=True,
+            trigger_reason="closeout consumes authored implementation review approval instead of raw review evidence",
+            result="pass" if not review_missing else "block",
+            fallback_to=None if not review_missing else "review",
+            evidence_locator=review_path,
+            missing_inputs=review_missing,
+            item_id=item_id,
+            reviewed_head=review_record.get("reviewed_head") if isinstance(review_record, dict) else None,
+            head_sha=pr_head,
+            head_binding=review_head_binding_payload,
+            validation_summary_digest=validation_digest,
+        )
+    )
+
+    status_subcheck = closeout_required_status_subcheck(
+        target_root=target_root,
+        profile=profile,
+        owner=owner,
+        repo_name=repo_name,
+        pr_number=pr_number,
+        pr_payload=pr_payload,
+        pr_head=pr_head,
+        pr_payload_file=pr_payload_file,
+        status_checks_file=status_checks_file,
+        branch_protection_file=branch_protection_file,
+        ruleset_file=ruleset_file,
+    )
+
+    merge_ready_payload, merge_ready_locator, merge_ready_errors = latest_successful_execution_attempt(target_root, item_id, "merge-ready")
+    merge_ready_missing = list(merge_ready_errors)
+    merge_ready_source = "execution_attempt"
+    merge_ready_trigger_reason = "closeout consumes retained merge-ready pass evidence instead of rerunning the full gate chain"
+    merge_ready_evidence_locator = merge_ready_locator
+    merge_ready_head = merge_ready_payload.get("head_sha") if isinstance(merge_ready_payload, dict) else None
+    merge_ready_fallback_reason: str | None = None
+    if merge_ready_payload is not None and pr_head and merge_ready_payload.get("head_sha") != pr_head:
+        merge_ready_missing.append("merge-ready execution_attempt head_sha does not match PR head")
+    if (
+        merge_ready_missing
+        and pr_head
+        and missing_versioned_execution_attempt(merge_ready_errors, "merge-ready")
+        and status_subcheck.get("result") == "pass"
+    ):
+        merge_ready_missing = []
+        merge_ready_source = "host_pr_checks"
+        merge_ready_trigger_reason = (
+            "closeout consumes fresh host required checks as legacy merge-ready evidence "
+            "when no versioned execution_attempt was retained"
+        )
+        merge_ready_evidence_locator = status_subcheck.get("evidence_locator") if isinstance(status_subcheck.get("evidence_locator"), str) else None
+        merge_ready_head = pr_head
+        merge_ready_fallback_reason = "missing_versioned_execution_attempt"
+    subchecks.append(
+        closeout_subcheck(
+            check_id="merge_ready_attempt",
+            source=merge_ready_source,
+            profile=profile,
+            required_for_closeout=True,
+            trigger_reason=merge_ready_trigger_reason,
+            result="pass" if not merge_ready_missing else "block",
+            fallback_to=None if not merge_ready_missing else "merge-ready",
+            evidence_locator=merge_ready_evidence_locator,
+            missing_inputs=merge_ready_missing,
+            item_id=item_id,
+            head_sha=merge_ready_head,
+            fallback_reason=merge_ready_fallback_reason,
+            validation_summary_digest=validation_digest,
+        )
+    )
+
+    pr_missing: list[str] = []
+    if pr_payload is None:
+        pr_missing.append("pr payload")
+    else:
+        if pr_payload.get("state") != "MERGED":
+            pr_missing.append("pr is not merged")
+        if not pr_head:
+            pr_missing.append("PR head SHA is unavailable")
+        if not isinstance(target_branch, str) or not target_branch:
+            pr_missing.append("pr baseRefName is missing")
+        if not merge_commit_sha:
+            pr_missing.append("merge commit SHA is unavailable")
+        if merge_commit_in_target is not True:
+            pr_missing.append("target branch does not contain merge commit")
+    subchecks.append(
+        closeout_subcheck(
+            check_id="pr_merge_backlink",
+            source="github_pr",
+            profile=profile,
+            required_for_closeout=True,
+            trigger_reason="closeout must link PR head, merge commit, and target branch containment",
+            result="pass" if not pr_missing else "block",
+            fallback_to=None if not pr_missing else "merge",
+            evidence_locator=pr_payload_file or (f"github:pr/{pr_number}" if pr_number is not None else None),
+            missing_inputs=pr_missing,
+            head_sha=pr_head,
+            merge_commit_sha=merge_commit_sha,
+            target_branch=target_branch,
+        )
+    )
+
+    subchecks.append(status_subcheck)
+    return subchecks
 
 
 def git_branch(root: Path) -> str | None:
@@ -4224,6 +4822,12 @@ def read_repo_relative_text_file(root: Path, path_str: str, *, label: str) -> tu
 def write_json_file(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def write_runtime_text_artifact(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    normalized = "\n".join(line.rstrip(" \t") for line in text.splitlines()).rstrip("\n") + "\n"
+    path.write_text(normalized, encoding="utf-8")
 
 
 def utc_now_iso() -> str:
@@ -4868,6 +5472,26 @@ def gh_rest_json(root: Path, path: str) -> tuple[dict[str, Any] | None, list[str
     return None, errors + [f"public REST fallback: {message}" for message in fallback_errors]
 
 
+def gh_rest_list(root: Path, path: str) -> tuple[list[dict[str, Any]], list[str]]:
+    raw_payload, errors = gh_json(root, ["api", path])
+    if raw_payload is not None:
+        return [], [f"gh api {path} returned an object where a list was expected"]
+    result = run_process(["gh", "api", path], root, timeout_seconds=20)
+    if result.returncode == 0:
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            return [], [f"invalid JSON from gh api {path}: {exc.msg}"]
+        if not isinstance(payload, list):
+            return [], [f"gh api {path} did not return a list"]
+        return [entry for entry in payload if isinstance(entry, dict)], []
+    fallback_payload, fallback_errors = github_public_rest_list(path)
+    if fallback_payload:
+        return fallback_payload, []
+    detail = result.stderr.strip() or result.stdout.strip() or "gh api failed"
+    return [], [detail, *[f"public REST fallback: {message}" for message in fallback_errors]]
+
+
 def github_public_rest_json(path: str) -> tuple[dict[str, Any] | None, list[str]]:
     url = f"https://api.github.com/{path.lstrip('/')}"
     headers = {
@@ -4937,6 +5561,7 @@ def github_pr_state(payload: dict[str, Any]) -> str:
 
 
 def normalize_rest_issue(payload: dict[str, Any]) -> dict[str, Any]:
+    labels = payload.get("labels")
     return {
         "id": payload.get("node_id"),
         "databaseId": payload.get("id"),
@@ -4945,6 +5570,13 @@ def normalize_rest_issue(payload: dict[str, Any]) -> dict[str, Any]:
         "title": payload.get("title"),
         "body": payload.get("body"),
         "url": payload.get("html_url"),
+        "labels": [
+            str(label.get("name"))
+            for label in labels
+            if isinstance(label, dict) and isinstance(label.get("name"), str)
+        ]
+        if isinstance(labels, list)
+        else [],
     }
 
 
@@ -4994,6 +5626,389 @@ def github_branch_payload(root: Path, owner: str, repo_name: str, branch_name: s
     }, []
 
 
+def normalize_dependency_issue(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": payload.get("node_id") or payload.get("id"),
+        "number": payload.get("number"),
+        "state": github_issue_state(payload.get("state")),
+        "title": payload.get("title"),
+        "url": payload.get("html_url") or payload.get("url"),
+    }
+
+
+def github_native_dependency_capability(root: Path, owner: str, repo_name: str, issue_number: int) -> dict[str, Any]:
+    query = """
+    query($owner: String!, $repo: String!, $issue: Int!) {
+      issueType: __type(name: "Issue") {
+        fields { name }
+      }
+      mutationType: __schema {
+        mutationType {
+          fields { name }
+        }
+      }
+      repository(owner: $owner, name: $repo) {
+        issue(number: $issue) {
+          id
+          blockedBy(first: 1) { totalCount }
+          blocking(first: 1) { totalCount }
+        }
+      }
+    }
+    """
+    payload, errors = gh_graphql(root, query, {"owner": owner, "repo": repo_name, "issue": issue_number})
+    if errors or payload is None:
+        text = " ".join(errors).lower()
+        if any(token in text for token in ("could not resolve to an issue", "field 'blockedby'", "field 'blocking'", "undefinedfield")):
+            status = "unsupported"
+        elif any(token in text for token in ("permission", "forbidden", "resource not accessible", "403")):
+            status = "permission_denied"
+        else:
+            status = "unreadable"
+        return {
+            "status": status,
+            "read": False,
+            "write": False,
+            "fields": [],
+            "mutations": [],
+            "errors": errors,
+        }
+    issue_type = payload.get("issueType") if isinstance(payload.get("issueType"), dict) else {}
+    fields = [
+        str(field.get("name"))
+        for field in issue_type.get("fields", [])
+        if isinstance(field, dict) and isinstance(field.get("name"), str)
+    ]
+    schema = payload.get("mutationType") if isinstance(payload.get("mutationType"), dict) else {}
+    mutation_type = schema.get("mutationType") if isinstance(schema.get("mutationType"), dict) else {}
+    mutations = [
+        str(field.get("name"))
+        for field in mutation_type.get("fields", [])
+        if isinstance(field, dict) and isinstance(field.get("name"), str)
+    ]
+    read_supported = {"blockedBy", "blocking"}.issubset(set(fields))
+    write_supported = {"addBlockedBy", "removeBlockedBy"}.issubset(set(mutations))
+    issue = payload.get("repository", {}).get("issue") if isinstance(payload.get("repository"), dict) else None
+    read_ok = read_supported and isinstance(issue, dict) and isinstance(issue.get("id"), str)
+    status = "read-write" if read_ok and write_supported else "read-only" if read_ok else "unsupported"
+    return {
+        "status": status,
+        "read": read_ok,
+        "write": read_ok and write_supported,
+        "fields": sorted(field for field in fields if field in {"blockedBy", "blocking", "issueDependenciesSummary"}),
+        "mutations": sorted(mutation for mutation in mutations if mutation in {"addBlockedBy", "removeBlockedBy"}),
+        "errors": [],
+    }
+
+
+def normalize_graphql_dependency_issue(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": payload.get("id"),
+        "number": payload.get("number"),
+        "state": github_issue_state(payload.get("state")),
+        "title": payload.get("title"),
+        "url": payload.get("url"),
+    }
+
+
+def github_issue_dependencies_graphql(root: Path, owner: str, repo_name: str, issue_number: int) -> tuple[dict[str, Any] | None, list[str]]:
+    query = """
+    query($owner: String!, $repo: String!, $issue: Int!) {
+      repository(owner: $owner, name: $repo) {
+        issue(number: $issue) {
+          id
+          blockedBy(first: 100) {
+            nodes { id number state title url }
+          }
+          blocking(first: 100) {
+            nodes { id number state title url }
+          }
+        }
+      }
+    }
+    """
+    payload, errors = gh_graphql(root, query, {"owner": owner, "repo": repo_name, "issue": issue_number})
+    if errors or payload is None:
+        return None, errors
+    issue = payload.get("repository", {}).get("issue") if isinstance(payload.get("repository"), dict) else None
+    if not isinstance(issue, dict):
+        return None, [f"GitHub issue #{issue_number} dependency query returned no issue"]
+    checks: list[dict[str, Any]] = []
+    all_edges: list[dict[str, Any]] = []
+    for direction, field in (("blocked_by", "blockedBy"), ("blocking", "blocking")):
+        connection = issue.get(field) if isinstance(issue.get(field), dict) else {}
+        nodes = connection.get("nodes") if isinstance(connection.get("nodes"), list) else []
+        source_locator = f"graphql:repository.issue.{field}"
+        checks.append(
+            {
+                "direction": direction,
+                "endpoint": source_locator,
+                "status": "present",
+                "errors": [],
+                "provenance": {
+                    "source_layer": "host_control_mirror",
+                    "source_owner": "github",
+                    "source_locator": source_locator,
+                    "freshness": "fresh",
+                },
+            }
+        )
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            normalized = normalize_graphql_dependency_issue(node)
+            number = normalized.get("number")
+            if not isinstance(number, int):
+                continue
+            all_edges.append(
+                {
+                    "source_issue": issue_number if direction == "blocked_by" else number,
+                    "blocking_issue": number if direction == "blocked_by" else issue_number,
+                    "direction": direction,
+                    "blocker_state": str(normalized.get("state") or "UNKNOWN").lower(),
+                    "source_of_truth": "github_native_edge",
+                    "host_mirror_status": "matched",
+                    "native": "present",
+                    "issue": normalized,
+                    "provenance": checks[-1]["provenance"],
+                }
+            )
+    return {"availability": "present", "checks": checks, "native_edges": all_edges}, []
+
+
+def github_issue_dependencies_payload(root: Path, owner: str, repo_name: str, issue_number: int) -> dict[str, Any]:
+    capability = github_native_dependency_capability(root, owner, repo_name, issue_number)
+    if capability.get("read") is True:
+        graphql_payload, graphql_errors = github_issue_dependencies_graphql(root, owner, repo_name, issue_number)
+        if graphql_payload is not None:
+            graphql_payload["capability"] = capability
+            return graphql_payload
+        capability = {**capability, "status": "unreadable", "errors": graphql_errors}
+    if capability.get("status") in {"unsupported", "permission_denied"}:
+        return {
+            "availability": capability.get("status"),
+            "capability": capability,
+            "checks": [
+                {
+                    "direction": "all",
+                    "endpoint": "graphql:repository.issue.blockedBy/blocking",
+                    "status": "unreadable",
+                    "errors": capability.get("errors", []),
+                    "provenance": {
+                        "source_layer": "host_control_mirror",
+                        "source_owner": "github",
+                        "source_locator": "graphql:repository.issue.blockedBy/blocking",
+                        "freshness": "unreadable",
+                    },
+                }
+            ],
+            "native_edges": [],
+        }
+    checks: list[dict[str, Any]] = []
+    all_edges: list[dict[str, Any]] = []
+    unsupported = False
+    permission_denied = False
+    for direction, endpoint in (
+        ("blocked_by", "blocked_by"),
+        ("blocking", "blocking"),
+    ):
+        path = f"repos/{owner}/{repo_name}/issues/{issue_number}/dependencies/{endpoint}"
+        issues, errors = gh_rest_list(root, path)
+        status = "present"
+        if errors:
+            status = "unreadable"
+            text = " ".join(errors).lower()
+            unsupported = unsupported or any(token in text for token in ("404", "410", "not found", "gone"))
+            permission_denied = permission_denied or any(token in text for token in ("403", "permission", "resource not accessible"))
+        checks.append(
+            {
+                "direction": direction,
+                "endpoint": path,
+                "status": status,
+                "errors": errors,
+                "provenance": {
+                    "source_layer": "host_control_mirror",
+                    "source_owner": "github",
+                    "source_locator": path,
+                    "freshness": "fresh" if status == "present" else "unreadable",
+                },
+            }
+        )
+        for issue in issues:
+            normalized = normalize_dependency_issue(issue)
+            number = normalized.get("number")
+            if not isinstance(number, int):
+                continue
+            all_edges.append(
+                {
+                    "source_issue": issue_number if direction == "blocked_by" else number,
+                    "blocking_issue": number if direction == "blocked_by" else issue_number,
+                    "direction": direction,
+                    "blocker_state": str(normalized.get("state") or "UNKNOWN").lower(),
+                    "source_of_truth": "github_native_edge",
+                    "host_mirror_status": "matched",
+                    "native": "present",
+                    "issue": normalized,
+                    "provenance": checks[-1]["provenance"],
+                }
+            )
+    availability = "present"
+    if unsupported:
+        availability = "unsupported"
+    elif permission_denied:
+        availability = "permission_denied"
+    elif any(check["status"] == "unreadable" for check in checks):
+        availability = "unreadable"
+    return {
+        "availability": availability,
+        "capability": capability,
+        "checks": checks,
+        "native_edges": all_edges,
+    }
+
+
+def parse_authored_dependency_edges(issue_body: Any, issue_number: int | None) -> list[dict[str, Any]]:
+    if not isinstance(issue_body, str) or issue_number is None:
+        return []
+    edges: list[dict[str, Any]] = []
+    seen: set[tuple[int, int, str]] = set()
+    patterns = (
+        ("blocked_by", r"(?im)(?:blocked\s+by|blocked_by|depends\s+on|dependency|依赖|前置)[^\n#]*(?:#)(\d+)"),
+        ("blocking", r"(?im)(?:blocks|blocking|阻塞)[^\n#]*(?:#)(\d+)"),
+    )
+    for relation, pattern in patterns:
+        for match in re.finditer(pattern, issue_body):
+            other = int(match.group(1))
+            source = issue_number if relation == "blocked_by" else other
+            blocker = other if relation == "blocked_by" else issue_number
+            key = (source, blocker, relation)
+            if key in seen or source == blocker:
+                continue
+            seen.add(key)
+            edges.append(
+                {
+                    "source_issue": source,
+                    "blocking_issue": blocker,
+                    "direction": relation,
+                    "blocker_state": "unknown",
+                    "source_of_truth": "issue_body_dependency_section",
+                    "host_mirror_status": "requires_native_compare",
+                    "native": "unknown",
+                    "provenance": {
+                        "source_layer": "authored_truth",
+                        "source_owner": "github_issue_body",
+                        "source_locator": f"issue #{issue_number}",
+                        "freshness": "fresh",
+                    },
+                }
+            )
+    return edges
+
+
+def dependency_edge_key(edge: dict[str, Any]) -> tuple[int | None, int | None]:
+    source = edge.get("source_issue")
+    blocker = edge.get("blocking_issue")
+    return (source if isinstance(source, int) else None, blocker if isinstance(blocker, int) else None)
+
+
+def dependency_graph_payload(
+    *,
+    issue_number: int | None,
+    issue_payload: dict[str, Any] | None,
+    native_dependency_payload: dict[str, Any] | None,
+) -> dict[str, Any]:
+    authored_edges = parse_authored_dependency_edges(issue_payload.get("body") if isinstance(issue_payload, dict) else None, issue_number)
+    native_edges = (
+        list(native_dependency_payload.get("native_edges", []))
+        if isinstance(native_dependency_payload, dict)
+        else []
+    )
+    native_by_key = {dependency_edge_key(edge): edge for edge in native_edges}
+    authored_by_key = {dependency_edge_key(edge): edge for edge in authored_edges}
+    findings: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
+
+    availability = (
+        native_dependency_payload.get("availability")
+        if isinstance(native_dependency_payload, dict)
+        else "not_requested"
+    )
+    for edge in authored_edges:
+        key = dependency_edge_key(edge)
+        native = native_by_key.get(key)
+        merged = dict(edge)
+        if native is None:
+            merged["host_mirror_status"] = "missing_native_edge" if availability == "present" else availability
+            merged["native"] = "missing" if availability == "present" else availability
+            findings.append(
+                {
+                    "category": "drift",
+                    "kind": "missing_native_edge",
+                    "severity": "fix-needed" if availability == "present" else "warn",
+                    "subject": f"dependency edge {key[0]} blocked by {key[1]}",
+                    "evidence": {"edge": merged, "native_availability": availability},
+                    "fallback_to": "manual-reconciliation",
+                }
+            )
+        else:
+            merged = {**native, "source_of_truth": edge.get("source_of_truth"), "host_mirror_status": "matched"}
+        edges.append(merged)
+
+    for edge in native_edges:
+        key = dependency_edge_key(edge)
+        if key not in authored_by_key:
+            stale_closed_blocker = edge.get("direction") == "blocked_by" and edge.get("blocker_state") == "closed"
+            drift_kind = "stale_native_edge" if stale_closed_blocker else "unexpected_native_edge"
+            unexpected = {**edge, "host_mirror_status": drift_kind}
+            edges.append(unexpected)
+            findings.append(
+                {
+                    "category": "drift",
+                    "kind": drift_kind,
+                    "severity": "fix-needed",
+                    "subject": f"dependency edge {key[0]} blocked by {key[1]}",
+                    "evidence": {"edge": unexpected},
+                    "fallback_to": "reconciliation-sync" if stale_closed_blocker else "manual-reconciliation",
+                }
+            )
+        if edge.get("direction") == "blocked_by" and edge.get("blocker_state") == "open":
+            findings.append(
+                {
+                    "category": "gate_failure",
+                    "kind": "open_blocker_executable_conflict",
+                    "severity": "block",
+                    "subject": f"issue #{issue_number} blocked by #{edge.get('blocking_issue')}",
+                    "evidence": {"edge": edge},
+                    "fallback_to": "manual-reconciliation",
+                }
+            )
+    if availability in {"unsupported", "permission_denied", "unreadable"}:
+        findings.append(
+            {
+                "category": "drift",
+                "kind": "native_dependency_unreadable",
+                "severity": "warn",
+                "subject": f"issue #{issue_number} dependency graph",
+                "evidence": {"availability": availability},
+                "fallback_to": "manual-reconciliation",
+            }
+        )
+    return {
+        "schema_version": HOST_DEPENDENCY_GRAPH_SCHEMA,
+        "source_issue": {
+            "number": issue_number,
+            "state": issue_payload.get("state") if isinstance(issue_payload, dict) else None,
+        },
+        "availability": availability,
+        "capability": native_dependency_payload.get("capability") if isinstance(native_dependency_payload, dict) else None,
+        "edges": edges,
+        "native_edges": native_edges,
+        "authored_edges": authored_edges,
+        "findings": findings,
+        "checks": native_dependency_payload.get("checks", []) if isinstance(native_dependency_payload, dict) else [],
+    }
+
+
 def gh_json_list(root: Path, args: list[str], key: str) -> tuple[list[dict[str, Any]], list[str]]:
     payload, errors = gh_json(root, args)
     if errors or payload is None:
@@ -5033,7 +6048,7 @@ def graphql_budget_guard(scope: str, errors: list[str] | None = None) -> dict[st
 
 
 def git_dirty_entries(root: Path) -> list[dict[str, str]]:
-    result = run_git(root, ["status", "--porcelain=v1"])
+    result = run_git(root, ["status", "--porcelain=v1", "--untracked-files=all"])
     if result is None or result.returncode != 0:
         return []
 
@@ -5363,11 +6378,27 @@ def review_head_binding(
     *,
     reviewed_head: str | None,
     allowed_paths: set[str],
+    current_head: str | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
-    current_head = git_head_sha(target_root)
+    target_head = current_head or git_head_sha(target_root)
+    return review_head_binding_for_head(
+        target_root,
+        reviewed_head=reviewed_head,
+        target_head=target_head,
+        allowed_paths=allowed_paths,
+    )
+
+
+def review_head_binding_for_head(
+    target_root: Path,
+    *,
+    reviewed_head: str | None,
+    target_head: str | None,
+    allowed_paths: set[str],
+) -> tuple[dict[str, Any], list[str]]:
     payload: dict[str, Any] = {
         "reviewed_head": reviewed_head,
-        "current_head": current_head,
+        "current_head": target_head,
         "status": "unknown",
         "stale": None,
         "changed_paths": [],
@@ -5375,14 +6406,14 @@ def review_head_binding(
     }
     if not isinstance(reviewed_head, str) or not reviewed_head.strip():
         return payload, ["review artifact is missing reviewed_head"]
-    if not isinstance(current_head, str) or not current_head.strip():
-        return payload, ["current HEAD is unavailable"]
-    if reviewed_head == current_head:
+    if not isinstance(target_head, str) or not target_head.strip():
+        return payload, ["target HEAD is unavailable"]
+    if reviewed_head == target_head:
         payload["status"] = "fresh"
         payload["stale"] = False
         return payload, []
 
-    changed_paths, head_errors = git_changed_paths(target_root, reviewed_head, current_head)
+    changed_paths, head_errors = git_changed_paths(target_root, reviewed_head, target_head)
     if head_errors:
         return payload, [f"review HEAD comparison failed: {detail}" for detail in head_errors]
 
@@ -5403,7 +6434,7 @@ def review_head_binding(
     payload["stale"] = True
     if not changed_paths:
         return payload, ["review artifact was recorded against a different HEAD"]
-    return payload, ["review artifact is stale for the current HEAD"]
+    return payload, ["review artifact is stale for the target HEAD"]
 
 
 def spec_review_head_binding(
@@ -5628,6 +6659,288 @@ def implementation_review_status_payload(context: dict[str, Any]) -> dict[str, A
         "fallback_to": fallback_to,
         "record": review_record,
         "head_binding": head_binding,
+    }
+
+
+def review_authority_migration_payload(
+    *,
+    review_payload: dict[str, Any] | None,
+    review_kind: str,
+    authority_before: str,
+    authority_after: str,
+) -> dict[str, Any]:
+    record = review_payload.get("record") if isinstance(review_payload, dict) else None
+    head_binding = review_payload.get("head_binding") if isinstance(review_payload, dict) else None
+    missing_inputs: list[str] = []
+    if not isinstance(review_payload, dict):
+        missing_inputs.append("review authority payload")
+    else:
+        missing_inputs.extend(str(message) for message in review_payload.get("missing_inputs", []) if message)
+    if not isinstance(record, dict):
+        missing_inputs.append("loom review record")
+    elif record.get("decision") != "allow":
+        missing_inputs.append("loom review record decision is not allow")
+    if isinstance(head_binding, dict) and head_binding.get("stale") is True:
+        missing_inputs.append("loom review record head binding is stale")
+    if isinstance(review_payload, dict) and review_payload.get("host_verdict_role") == "independent_blocker":
+        missing_inputs.append("host verdict remains an independent blocker")
+    if review_kind == "spec_review":
+        schema = SPEC_REVIEW_AUTHORITY_MIGRATION_SCHEMA
+        unique_authority = "loom spec review record"
+        if isinstance(review_payload, dict):
+            record_spec_locator = review_payload.get("record_spec_locator")
+            current_spec_locator = review_payload.get("current_spec_locator")
+            if isinstance(record, dict):
+                record_spec_locator = record_spec_locator or record.get("spec_locator") or record.get("spec_path")
+            if record_spec_locator and current_spec_locator and record_spec_locator != current_spec_locator:
+                missing_inputs.append("loom spec review record locator does not match current spec locator")
+    else:
+        schema = REVIEW_AUTHORITY_MIGRATION_SCHEMA
+        unique_authority = "loom review record"
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "schema_version": schema,
+        "result": result,
+        "summary": (
+            f"{unique_authority} is the only current-head verdict authority."
+            if result == "pass"
+            else f"{unique_authority} is not yet safe to consume as the only verdict authority."
+        ),
+        "missing_inputs": list(dict.fromkeys(missing_inputs)),
+        "fallback_to": None if result == "pass" else "review",
+        "review_kind": review_kind,
+        "authority_before": authority_before,
+        "authority_after": authority_after,
+        "unique_verdict_authority": unique_authority,
+        "host_status": "compatibility_mirror_or_rollback_only",
+        "no_dual_authority": result == "pass",
+        "fail_closed_conditions": [
+            "missing-record",
+            "malformed-record",
+            "stale-head",
+            "target-mismatch",
+            "schema-drift",
+            "contradictory-host-verdict",
+            "dual-independent-blocker",
+        ],
+        "rollback": "restore the host-native verdict as the only blocker and mark the Loom record advisory until a fresh migration record is authored.",
+        "record_locator": review_payload.get("path") if isinstance(review_payload, dict) else None,
+        "head_binding": head_binding if isinstance(head_binding, dict) else None,
+    }
+
+
+def adopted_review_engine_adapter_payload(
+    *,
+    adapter_selection: dict[str, Any],
+    engine_profile: dict[str, Any] | None,
+    review_kind: str,
+    reviewed_head: str,
+    engine_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    selected_adapter = adapter_selection.get("adapter")
+    missing_inputs: list[str] = []
+    if selected_adapter not in AUTHORITATIVE_REVIEW_ADAPTERS:
+        missing_inputs.append(f"unsupported authoritative review adapter: {selected_adapter}")
+    if engine_profile is None:
+        missing_inputs.append("resolved review engine profile")
+    if isinstance(adapter_selection.get("missing_host_proof"), list) and selected_adapter == CODEX_APP_REVIEW_ADAPTER:
+        missing_inputs.extend(str(message) for message in adapter_selection["missing_host_proof"])
+    if isinstance(engine_payload, dict):
+        missing_inputs.extend(str(message) for message in engine_payload.get("missing_inputs", []) if message)
+        if engine_payload.get("result") != "pass":
+            missing_inputs.append(str(engine_payload.get("engine", {}).get("failure_reason") or "review engine did not pass"))
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "schema_version": ADOPTED_REVIEW_ENGINE_ADAPTER_SCHEMA,
+        "result": result,
+        "summary": (
+            "adopted-repo review engine adapter can produce normalized review record input."
+            if result == "pass"
+            else "adopted-repo review engine adapter is blocked before authority consumption."
+        ),
+        "missing_inputs": list(dict.fromkeys(missing_inputs)),
+        "fallback_to": None if result == "pass" else "review",
+        "review_kind": review_kind,
+        "adapter": selected_adapter,
+        "selection_source": adapter_selection.get("selection_source"),
+        "fallback_reason": adapter_selection.get("fallback_reason"),
+        "reviewed_head": reviewed_head,
+        "engine_profile": engine_profile,
+        "proof": adapter_selection.get("binding_summary"),
+        "normalized_output": {
+            "target": "review_record_input",
+            "present": isinstance(engine_payload, dict) and isinstance(engine_payload.get("review_record_input"), dict),
+            "locator": (
+                engine_payload.get("review_record_input", {}).get("normalized_findings")
+                if isinstance(engine_payload, dict) and isinstance(engine_payload.get("review_record_input"), dict)
+                else None
+            ),
+        },
+        "authority_phase": "execution_adapter_only",
+        "fail_closed_conditions": [
+            "proof-missing",
+            "proof-conflict",
+            "cwd-target-mismatch",
+            "head-mismatch",
+            "schema-drift",
+            "output-missing",
+            "tracked-file-mutation",
+        ],
+    }
+
+
+def retained_host_signals_payload(
+    *,
+    target_root: Path,
+    governance_surface: dict[str, Any],
+    surface: str,
+    current_head: str | None,
+) -> dict[str, Any]:
+    repo_interop = governance_surface.get("repo_interop")
+    availability = repo_interop.get("availability") if isinstance(repo_interop, dict) else "absent"
+    if availability in {None, "absent"}:
+        return {
+            "schema_version": RETAINED_HOST_SIGNAL_SCHEMA,
+            "surface": surface,
+            "result": "pass",
+            "summary": "no retained host signals are declared for this surface.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "signals": [],
+        }
+    if availability != "present":
+        return {
+            "schema_version": RETAINED_HOST_SIGNAL_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "repo interop is incomplete, so retained host signals cannot be consumed.",
+            "missing_inputs": list(repo_interop.get("missing_inputs", [])) if isinstance(repo_interop, dict) else ["repo interop"],
+            "fallback_to": "adoption",
+            "signals": [],
+        }
+
+    interop_path = target_root / ".loom/companion/interop.json"
+    missing_inputs: list[str] = []
+    signals: list[dict[str, Any]] = []
+    try:
+        interop_payload = load_json_file(interop_path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return {
+            "schema_version": RETAINED_HOST_SIGNAL_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "repo interop is present but unreadable.",
+            "missing_inputs": [f".loom/companion/interop.json: {exc}"],
+            "fallback_to": "adoption",
+            "signals": [],
+        }
+    host_adapters = interop_payload.get("host_adapters") if isinstance(interop_payload, dict) else None
+    if not isinstance(host_adapters, list):
+        return {
+            "schema_version": RETAINED_HOST_SIGNAL_SCHEMA,
+            "surface": surface,
+            "result": "block",
+            "summary": "repo interop is missing host_adapters.",
+            "missing_inputs": ["repo interop host_adapters"],
+            "fallback_to": "adoption",
+            "signals": [],
+        }
+
+    for index, entry in enumerate(host_adapters):
+        if not isinstance(entry, dict):
+            continue
+        surfaces = entry.get("surfaces")
+        if not isinstance(surfaces, list) or surface not in surfaces:
+            continue
+        signal_missing: list[str] = []
+        locator = str(entry.get("locator") or "")
+        requirement = entry.get("requirement")
+        resolved_path, locator_errors = resolve_repo_relative_path(
+            target_root,
+            locator,
+            label=f"retained host signal {entry.get('id') or index}",
+        )
+        signal_missing.extend(locator_errors)
+        payload: dict[str, Any] | None = None
+        freshness = "unknown"
+        observed_result = None
+        if resolved_path is None or locator_errors:
+            freshness = "unreadable"
+        elif not resolved_path.exists() or resolved_path.is_dir():
+            freshness = "missing"
+            signal_missing.append(f"retained host signal locator is missing: {locator}")
+        else:
+            try:
+                loaded = load_json_file(resolved_path)
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                freshness = "unreadable"
+                signal_missing.append(f"retained host signal `{locator}` is unreadable: {exc}")
+            else:
+                if not isinstance(loaded, dict):
+                    freshness = "schema_drift"
+                    signal_missing.append(f"retained host signal `{locator}` must be a JSON object")
+                else:
+                    payload = loaded
+                    observed_result = (
+                        loaded.get("result")
+                        or loaded.get("decision")
+                        or loaded.get("status")
+                        or loaded.get("verdict")
+                    )
+                    bound_head = loaded.get("head_sha") or loaded.get("reviewed_head") or loaded.get("head")
+                    if isinstance(bound_head, str) and current_head and bound_head != current_head:
+                        freshness = "stale"
+                        signal_missing.append(f"retained host signal `{locator}` is bound to stale head `{bound_head}`")
+                    elif loaded.get("schema_version") not in {None, RETAINED_HOST_SIGNAL_SCHEMA}:
+                        freshness = "schema_drift"
+                        signal_missing.append(f"retained host signal `{locator}` schema drift")
+                    else:
+                        freshness = "current"
+                    if observed_result not in {"pass", "allow", "success", "ok", True}:
+                        signal_missing.append(f"retained host signal `{entry.get('id') or locator}` is not passing")
+        blocking = requirement == "required" and bool(signal_missing)
+        if blocking:
+            missing_inputs.extend(signal_missing)
+        signals.append(
+            {
+                "schema_version": RETAINED_HOST_SIGNAL_SCHEMA,
+                "id": entry.get("id") or f"host-adapter-{index + 1}",
+                "summary": entry.get("summary"),
+                "surface": surface,
+                "locator": locator,
+                "requirement": requirement,
+                "owner": entry.get("owner"),
+                "result": "block" if blocking else "pass" if not signal_missing else "warn",
+                "observed_result": observed_result,
+                "freshness": freshness,
+                "missing_inputs": signal_missing,
+                "fallback_to": entry.get("fallback_to") or "merge_ready",
+                "provenance": {
+                    "interop_locator": ".loom/companion/interop.json",
+                    "payload_schema": payload.get("schema_version") if isinstance(payload, dict) else None,
+                },
+            }
+        )
+
+    return {
+        "schema_version": RETAINED_HOST_SIGNAL_SCHEMA,
+        "surface": surface,
+        "result": "pass" if not missing_inputs else "block",
+        "summary": (
+            "retained host signals are readable and current."
+            if not missing_inputs
+            else "required retained host signals are missing, stale, failing, or schema-drifted."
+        ),
+        "missing_inputs": list(dict.fromkeys(missing_inputs)),
+        "fallback_to": None if not missing_inputs else "merge_ready",
+        "signals": signals,
+        "fail_closed_conditions": [
+            "missing-applicable-signal",
+            "failed-signal",
+            "stale-signal",
+            "schema-drift",
+            "head-mismatch",
+        ],
     }
 
 
@@ -6090,6 +7403,12 @@ def build_review_flow_payload(
             "path": review_path,
             "record": review_record,
         }
+        review_authority = review_authority_migration_payload(
+            review_payload=review_payload,
+            review_kind="spec_review",
+            authority_before="repo-owned spec review gate or guardian compatibility verdict",
+            authority_after="loom spec review record",
+        )
         extra_steps: list[dict[str, Any]] = []
     else:
         review_path = context["review_entry"]
@@ -6100,6 +7419,12 @@ def build_review_flow_payload(
             expected_kind=implementation_review_kind(context),
             gate_name="implementation_review",
             required=True,
+        )
+        review_authority = review_authority_migration_payload(
+            review_payload=review_payload,
+            review_kind=implementation_review_kind(context),
+            authority_before="host guardian or repo-native implementation review verdict",
+            authority_after="loom review record",
         )
         spec_gate = spec_review_gate_payload(context)
         extra_steps = [
@@ -6232,6 +7557,7 @@ def build_review_flow_payload(
         **(
             {
                 "spec_review": review_payload,
+                "spec_review_authority_migration": review_authority,
             }
             if operation == "spec-review"
             else {
@@ -6240,6 +7566,7 @@ def build_review_flow_payload(
                     "record": review_record,
                 },
                 "spec_review": spec_gate,
+                "review_authority_migration": review_authority,
             }
         ),
         "repo_specific_requirements": repo_specific_requirements,
@@ -6294,7 +7621,7 @@ def run_default_review_engine(
         review_path=review_path,
         context_pack=context_pack,
     )
-    prompt_path.write_text(prompt_text, encoding="utf-8")
+    write_runtime_text_artifact(prompt_path, prompt_text)
 
     effective_kind = review_kind or default_review_kind(context)
     raw_timeout_seconds = engine_profile.get("timeout_seconds")
@@ -6699,7 +8026,10 @@ def judgment_closure_payload(
             if not isinstance(target, str):
                 missing_inputs.append(f"judgment `{judgment.get('id')}` has non-string write target")
                 continue
-            path, errors = resolve_repo_relative_path(target_root, target, label=f"judgment `{judgment.get('id')}` write target")
+            if target.startswith("github:"):
+                continue
+            target_locator = target.split(":", 1)[0] if ":" in target else target
+            path, errors = resolve_repo_relative_path(target_root, target_locator, label=f"judgment `{judgment.get('id')}` write target")
             missing_inputs.extend(errors)
             if path is not None and not path.exists():
                 missing_inputs.append(f"judgment `{judgment.get('id')}` write target missing: {target}")
@@ -7036,6 +8366,47 @@ def dirty_runtime_evidence_paths(target_root: Path) -> list[str]:
     return evidence
 
 
+def declared_current_item_dirty_paths(context: dict[str, Any]) -> set[str]:
+    target_root = context["target_root"]
+    report = context["report"]
+    entry_points = report.get("fact_chain", {}).get("entry_points", {})
+    candidates = {
+        context.get("output_relative"),
+        context.get("review_entry"),
+    }
+    if isinstance(entry_points, dict):
+        candidates.update(
+            entry_points.get(key)
+            for key in ("work_item", "recovery_entry", "status_surface")
+        )
+    candidates.update(
+        artifact
+        for artifact in context.get("associated_artifacts", [])
+        if isinstance(artifact, str)
+    )
+
+    declared: set[str] = set()
+    for index, candidate in enumerate(sorted(str(value) for value in candidates if value), start=1):
+        path, errors = resolve_repo_relative_path(
+            target_root,
+            candidate,
+            label=f"declared current item artifact[{index}]",
+        )
+        if errors or path is None:
+            continue
+        declared.add(path.relative_to(target_root).as_posix())
+    return declared
+
+
+def path_matches_declared_current_item(path: str, declared_paths: set[str]) -> bool:
+    normalized = path.rstrip("/")
+    return any(
+        normalized == declared.rstrip("/")
+        or normalized.startswith(f"{declared.rstrip('/')}/")
+        for declared in declared_paths
+    )
+
+
 def declared_scope_paths(scope_text: str) -> list[str]:
     candidates: list[str] = []
     for raw in re.findall(r"`([^`]+)`", scope_text):
@@ -7135,6 +8506,147 @@ def load_context(target_root: Path, output_relative: str, expected_item: str | N
     return context, []
 
 
+def load_retained_item_context(target_root: Path, output_relative: str, item_id: str) -> tuple[dict[str, Any], list[str]]:
+    work_item_relative = f".loom/work-items/{item_id}.md"
+    work_item_path = target_root / work_item_relative
+    if not work_item_path.exists():
+        return {}, [f"missing retained work item: {work_item_relative}"]
+
+    work_item, work_item_errors = parse_work_item(work_item_path, target_root)
+    if work_item_errors:
+        return {}, work_item_errors
+    if str(work_item.get("item_id")) != item_id:
+        return {}, [f"retained work item id mismatch: expected `{item_id}`, got `{work_item.get('item_id')}`"]
+
+    recovery_relative = str(work_item["recovery_entry"])
+    recovery_path, recovery_errors = resolve_repo_relative_path(
+        target_root,
+        recovery_relative,
+        label="retained recovery entry",
+    )
+    if recovery_errors:
+        return {}, recovery_errors
+    assert recovery_path is not None
+    if not recovery_path.exists():
+        return {}, [f"missing retained recovery entry: {recovery_relative}"]
+    recovery_entry, recovery_parse_errors = parse_recovery_entry(recovery_path, target_root, recovery_relative)
+    if recovery_parse_errors:
+        return {}, recovery_parse_errors
+    if str(recovery_entry.get("item_id")) != item_id:
+        return {}, [f"retained recovery item mismatch: expected `{item_id}`, got `{recovery_entry.get('item_id')}`"]
+
+    workspace_path, workspace_errors = resolve_workspace_path(target_root, str(work_item["workspace_entry"]))
+    if workspace_errors:
+        return {}, workspace_errors
+    if workspace_path is None:
+        return {}, [f"unable to resolve workspace entry: {work_item['workspace_entry']}"]
+
+    status_relative = ".loom/status/current.md"
+    status_path = target_root / status_relative
+    report: dict[str, Any] = {
+        "fact_chain": {
+            "read_entry": f"python3 .loom/bin/loom_init.py fact-chain --target . --item {item_id}",
+            "entry_points": {
+                "current_item_id": item_id,
+                "work_item": work_item_relative,
+                "recovery_entry": recovery_relative,
+                "status_surface": status_relative,
+            },
+        },
+        "facts": {
+            "workspace_entry": {"value": str(work_item["workspace_entry"])},
+            "validation_entry": {"value": str(work_item["validation_entry"])},
+            "review_entry": {"value": str(work_item["review_entry"])},
+            "current_checkpoint": {"value": str(recovery_entry["current_checkpoint"])},
+            "goal": {"value": str(work_item["goal"])},
+            "scope": {"value": str(work_item["scope"])},
+            "execution_path": {"value": str(work_item["execution_path"])},
+            "associated_artifacts": {"value": list(work_item.get("associated_artifacts", []))},
+            "current_stop": {"value": str(recovery_entry["current_stop"])},
+            "next_step": {"value": str(recovery_entry["next_step"])},
+            "blockers": {"value": str(recovery_entry["blockers"])},
+            "latest_validation_summary": {"value": str(recovery_entry["latest_validation_summary"])},
+            "recovery_boundary": {"value": str(recovery_entry["recovery_boundary"])},
+            "current_lane": {"value": str(recovery_entry["current_lane"])},
+            "closing_condition": {"value": str(work_item["closing_condition"])},
+        },
+        "provenance": [
+            {
+                "kind": "authored_truth",
+                "carrier": "work_item",
+                "field": "Item ID",
+                "authority": "work_item",
+                "freshness": "retained",
+                "path": work_item_relative,
+            },
+            {
+                "kind": "authored_truth",
+                "carrier": "recovery_entry",
+                "field": "Latest Validation Summary",
+                "authority": "recovery_entry",
+                "freshness": "retained",
+                "path": recovery_relative,
+            },
+        ],
+        "recovery_readiness": {
+            "result": "pass",
+            "status": "retained",
+            "summary": f"retained fact chain for `{item_id}` was loaded from authored work item and recovery carriers.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "checks": {
+                "authored_work_item": "pass",
+                "authored_recovery_entry": "pass",
+                "derived_status_surface": "not_applicable",
+                "parallel_truth": "not_applicable",
+            },
+            "authoritative_carrier": "recovery_entry",
+            "authoritative_path": recovery_relative,
+            "parallel_truth_drift": [],
+            "blocking_failures": [],
+        },
+        "blocking_failures": [],
+    }
+    context = {
+        "target_root": target_root,
+        "output_relative": output_relative,
+        "report": report,
+        "item_id": item_id,
+        "work_item_path": work_item_path,
+        "recovery_path": recovery_path,
+        "status_path": status_path,
+        "workspace_entry": str(work_item["workspace_entry"]),
+        "workspace_path": workspace_path,
+        "validation_entry": str(work_item["validation_entry"]),
+        "review_entry": str(work_item["review_entry"]),
+        "current_checkpoint_raw": str(recovery_entry["current_checkpoint"]),
+        "current_checkpoint": normalize_checkpoint(str(recovery_entry["current_checkpoint"])),
+        "goal": str(work_item["goal"]),
+        "scope": str(work_item["scope"]),
+        "execution_path": str(work_item["execution_path"]),
+        "associated_artifacts": list(work_item.get("associated_artifacts", [])),
+        "current_stop": str(recovery_entry["current_stop"]),
+        "next_step": str(recovery_entry["next_step"]),
+        "blockers": str(recovery_entry["blockers"]),
+        "latest_validation_summary": str(recovery_entry["latest_validation_summary"]),
+        "recovery_boundary": str(recovery_entry["recovery_boundary"]),
+        "current_lane": str(recovery_entry["current_lane"]),
+        "closing_condition": str(work_item["closing_condition"]),
+        "read_entry": str(report["fact_chain"]["read_entry"]),
+        "retained_item_context": True,
+    }
+    return context, []
+
+
+def closeout_expected_item_id(target_root: Path, issue_number: int | None) -> str | None:
+    if issue_number is None:
+        return None
+    item_id = f"WI-{issue_number}"
+    if (target_root / f".loom/work-items/{item_id}.md").exists():
+        return item_id
+    return None
+
+
 def review_runtime_root(context: dict[str, Any], reviewed_head: str | None = None) -> Path:
     head = (reviewed_head or git_head_sha(context["target_root"]) or "unknown-head").strip() or "unknown-head"
     safe_head = re.sub(r"[^A-Za-z0-9_.-]", "-", head)
@@ -7189,6 +8701,136 @@ def review_engine_profile_selection(context: dict[str, Any], review_kind: str) -
     return "default", "default implementation review profile for normal-risk changes"
 
 
+def review_profile_summary(profile: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "profile_id": profile.get("profile_id"),
+        "model": profile.get("model"),
+        "reasoning_effort": profile.get("reasoning_effort"),
+        "timeout_seconds": profile.get("timeout_seconds"),
+        "context_policy": profile.get("context_policy"),
+    }
+
+
+def validate_review_profile_fields(profile: dict[str, Any], *, context: str) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(profile.get("model"), str) or not profile["model"].strip():
+        errors.append(f"{context} model must be non-empty")
+    if profile.get("reasoning_effort") not in REVIEW_ENGINE_REASONING_EFFORTS:
+        errors.append(f"{context} reasoning_effort is outside the stable vocabulary")
+    timeout_seconds = profile.get("timeout_seconds")
+    if timeout_seconds is not None:
+        if not isinstance(timeout_seconds, int) or isinstance(timeout_seconds, bool) or timeout_seconds <= 0:
+            errors.append(f"{context} timeout_seconds must be a positive integer or null")
+    if not isinstance(profile.get("context_policy"), str) or not profile["context_policy"].strip():
+        errors.append(f"{context} context_policy must be non-empty")
+    if not isinstance(profile.get("selection_reason"), str) or not profile["selection_reason"].strip():
+        errors.append(f"{context} selection_reason must be non-empty")
+    return errors
+
+
+def load_repo_review_profile_policy(target_root: Path) -> tuple[dict[str, Any] | None, list[str]]:
+    policy_path = target_root / REVIEW_ENGINE_POLICY_RELATIVE
+    if not policy_path.exists():
+        return None, []
+    try:
+        payload = load_json_file(policy_path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return None, [f"{REVIEW_ENGINE_POLICY_RELATIVE}: invalid JSON: {exc}"]
+    if not isinstance(payload, dict):
+        return None, [f"{REVIEW_ENGINE_POLICY_RELATIVE}: policy must be a JSON object"]
+    errors: list[str] = []
+    if payload.get("schema_version") != REVIEW_ENGINE_POLICY_SCHEMA:
+        errors.append(f"{REVIEW_ENGINE_POLICY_RELATIVE}: schema_version must be `{REVIEW_ENGINE_POLICY_SCHEMA}`")
+    profiles = payload.get("profiles")
+    if not isinstance(profiles, dict):
+        errors.append(f"{REVIEW_ENGINE_POLICY_RELATIVE}: profiles must be an object")
+    else:
+        for profile_id, profile in profiles.items():
+            if profile_id not in REVIEW_ENGINE_PROFILE_IDS:
+                errors.append(f"{REVIEW_ENGINE_POLICY_RELATIVE}: unknown profile `{profile_id}`")
+                continue
+            if not isinstance(profile, dict):
+                errors.append(f"{REVIEW_ENGINE_POLICY_RELATIVE}: profile `{profile_id}` must be an object")
+                continue
+            candidate = {
+                **REVIEW_ENGINE_PROFILES[profile_id],
+                **profile,
+                "profile_id": profile_id,
+            }
+            errors.extend(validate_review_profile_fields(candidate, context=f"{REVIEW_ENGINE_POLICY_RELATIVE} profile `{profile_id}`"))
+    return (None if errors else payload), errors
+
+
+def repo_policy_allows_local_codex_config_in_ci(policy: dict[str, Any] | None) -> bool:
+    if not isinstance(policy, dict):
+        return False
+    if policy.get("allow_local_codex_config_in_ci") is True:
+        return True
+    local_config = policy.get("local_codex_config")
+    return isinstance(local_config, dict) and local_config.get("allow_ci") is True
+
+
+def apply_repo_review_profile_policy(
+    base_profile: dict[str, Any],
+    policy: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    profiles = policy.get("profiles") if isinstance(policy.get("profiles"), dict) else {}
+    profile_id = str(base_profile["profile_id"])
+    policy_profile = profiles.get(profile_id)
+    if not isinstance(policy_profile, dict):
+        return base_profile, None
+    selected = {
+        **base_profile,
+        **policy_profile,
+        "profile_id": profile_id,
+    }
+    source = {
+        "kind": "repo-owned-policy",
+        "locator": REVIEW_ENGINE_POLICY_RELATIVE,
+        "profile_id": profile_id,
+    }
+    return selected, source
+
+
+def local_codex_config_path() -> Path:
+    codex_home = non_empty_str(os.environ.get("CODEX_HOME"))
+    if codex_home:
+        return Path(codex_home).expanduser() / "config.toml"
+    return Path.home() / ".codex" / "config.toml"
+
+
+def load_local_codex_config_profile(base_profile: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any] | None, list[str]]:
+    path = local_codex_config_path()
+    if not path.exists():
+        return None, None, [f"local Codex config opt-in points to a missing file: {path}"]
+    if tomllib is None:
+        return None, None, ["local Codex config opt-in requires Python tomllib support"]
+    try:
+        payload = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError) as exc:  # type: ignore[union-attr]
+        return None, None, [f"local Codex config opt-in could not read {path}: {exc}"]
+    model = non_empty_str(payload.get("model")) if isinstance(payload, dict) else None
+    reasoning = (
+        non_empty_str(payload.get("model_reasoning_effort"))
+        or non_empty_str(payload.get("reasoning_effort"))
+        if isinstance(payload, dict)
+        else None
+    )
+    selected = dict(base_profile)
+    if model:
+        selected["model"] = model
+    if reasoning:
+        selected["reasoning_effort"] = reasoning
+    if not model and not reasoning:
+        return None, None, [f"local Codex config opt-in found no model or reasoning defaults in {path}"]
+    source = {
+        "kind": "local-codex-config-opt-in",
+        "locator": str(path),
+        "fields": sorted(field for field, value in (("model", model), ("reasoning_effort", reasoning)) if value),
+    }
+    return selected, source, []
+
+
 def resolve_review_engine_profile(
     context: dict[str, Any],
     review_kind: str,
@@ -7198,28 +8840,53 @@ def resolve_review_engine_profile(
     requested_model: str | None = None,
     requested_reasoning: str | None = None,
     override_reason: str | None = None,
+    use_local_codex_defaults: bool = False,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     if adapter not in AUTHORITATIVE_REVIEW_ADAPTERS:
         return None, [f"unsupported authoritative review adapter: {adapter}"]
     selected_profile, selection_reason = review_engine_profile_selection(context, review_kind)
     if requested_profile:
+        if requested_profile not in REVIEW_ENGINE_PROFILES:
+            return None, [f"unknown review engine profile: {requested_profile}"]
         selected_profile = requested_profile
         selection_reason = f"profile override requested `{requested_profile}`"
     base_profile = dict(REVIEW_ENGINE_PROFILES[selected_profile])
     base_profile["selection_reason"] = selection_reason
     previous_profile = dict(base_profile)
-    override_requested = any(value for value in (requested_profile, requested_model, requested_reasoning))
+    profile_source = {"kind": "loom-built-in", "locator": "src/skills/shared/scripts/loom_flow.py"}
+    policy, policy_errors = load_repo_review_profile_policy(context["target_root"])
+    if policy_errors:
+        return None, policy_errors
+    explicit_cli_override = any(value for value in (requested_profile, requested_model, requested_reasoning))
+    override_requested = explicit_cli_override or use_local_codex_defaults
     reason = override_reason.strip() if isinstance(override_reason, str) else ""
     if override_requested and not reason:
         return None, ["review engine profile override requires --engine-override-reason"]
+    if not explicit_cli_override and isinstance(policy, dict):
+        base_profile, policy_source = apply_repo_review_profile_policy(base_profile, policy)
+        if policy_source is not None:
+            profile_source = policy_source
+    if not explicit_cli_override and profile_source["kind"] == "loom-built-in" and use_local_codex_defaults:
+        ci_env_present = truthy_env("CI") or truthy_env("CODEX_CI") or truthy_env("GITHUB_ACTIONS")
+        headless_or_gate = adapter == DEFAULT_REVIEW_ADAPTER or ci_env_present
+        if headless_or_gate and not repo_policy_allows_local_codex_config_in_ci(policy):
+            return None, ["local Codex config opt-in is disabled for CI/headless/merge gate without repo policy allow_local_codex_config_in_ci"]
+        local_profile, local_source, local_errors = load_local_codex_config_profile(base_profile)
+        if local_errors:
+            return None, local_errors
+        assert local_profile is not None
+        assert local_source is not None
+        base_profile = local_profile
+        profile_source = local_source
     if requested_model:
         base_profile["model"] = requested_model.strip()
     if requested_reasoning:
         base_profile["reasoning_effort"] = requested_reasoning
-    if not isinstance(base_profile.get("model"), str) or not base_profile["model"].strip():
-        return None, ["review engine profile model must be non-empty"]
-    if base_profile.get("reasoning_effort") not in REVIEW_ENGINE_REASONING_EFFORTS:
-        return None, ["review engine profile reasoning effort is outside the stable vocabulary"]
+    if explicit_cli_override:
+        profile_source = {"kind": "explicit-cli-override", "locator": "review run CLI flags"}
+    field_errors = validate_review_profile_fields(base_profile, context="review engine profile")
+    if field_errors:
+        return None, field_errors
     resolved = {
         "schema_version": REVIEW_ENGINE_PROFILE_SCHEMA,
         "profile_id": base_profile["profile_id"],
@@ -7231,18 +8898,14 @@ def resolve_review_engine_profile(
         "context_policy": base_profile["context_policy"],
         "selection_reason": base_profile["selection_reason"],
         "override_reason": reason or None,
+        "profile_source": profile_source,
     }
-    if override_requested:
+    if explicit_cli_override or profile_source["kind"] == "local-codex-config-opt-in":
         resolved["override"] = {
-            "previous_profile": previous_profile,
-            "selected_profile": {
-                "profile_id": resolved["profile_id"],
-                "model": resolved["model"],
-                "reasoning_effort": resolved["reasoning_effort"],
-                "timeout_seconds": resolved["timeout_seconds"],
-                "context_policy": resolved["context_policy"],
-            },
+            "previous_profile": review_profile_summary(previous_profile),
+            "selected_profile": review_profile_summary(resolved),
             "reason": reason,
+            "source": profile_source,
         }
     return resolved, []
 
@@ -7256,6 +8919,13 @@ def review_focus_paths(context: dict[str, Any]) -> list[str]:
     scope_paths = declared_scope_paths(context["scope"])
     if scope_paths:
         return scope_paths
+    artifact_paths = [
+        artifact.strip()
+        for artifact in context.get("associated_artifacts", [])
+        if isinstance(artifact, str) and artifact.strip()
+    ]
+    if artifact_paths:
+        return artifact_paths
     return [relative_to_root(context["workspace_path"], context["target_root"])]
 
 
@@ -7340,6 +9010,8 @@ def codex_app_endpoint_socket_path(app_server: str | None) -> Path | None:
     endpoint = non_empty_str(app_server)
     if endpoint is None:
         return None
+    if endpoint == "stdio://":
+        return None
     if endpoint.startswith("unix://"):
         path_text = endpoint.removeprefix("unix://")
     elif endpoint.startswith("/"):
@@ -7351,25 +9023,248 @@ def codex_app_endpoint_socket_path(app_server: str | None) -> Path | None:
     return Path(path_text).expanduser()
 
 
+def codex_app_endpoint_is_stdio(app_server: str | None) -> bool:
+    return non_empty_str(app_server) == "stdio://"
+
+
+def codex_app_review_requests_new_thread(thread_id: str | None) -> bool:
+    value = non_empty_str(thread_id)
+    return value.lower() in CODEX_APP_REVIEW_NEW_THREAD_IDS if value else False
+
+
 def codex_app_endpoint_is_live_capable(app_server: str | None) -> bool:
+    if codex_app_endpoint_is_stdio(app_server):
+        return True
     socket_path = codex_app_endpoint_socket_path(app_server)
     return socket_path is not None and socket_path.exists()
 
 
-def codex_app_review_bindings_from_args_env(args: argparse.Namespace) -> dict[str, str | None]:
-    app_server = non_empty_str(args.codex_app_review_app_server) or non_empty_str(os.environ.get(CODEX_APP_REVIEW_ENDPOINT_ENV))
-    thread_id = (
-        non_empty_str(args.codex_app_review_thread_id)
-        or non_empty_str(os.environ.get(CODEX_APP_REVIEW_THREAD_ID_ENV))
-        or (non_empty_str(os.environ.get(CODEX_THREAD_ID_ENV)) if app_server else None)
+def default_codex_app_control_socket() -> Path | None:
+    candidates: list[Path] = []
+    home = Path.home()
+    candidates.append(home / ".codex/app-server-control/app-server-control.sock")
+    try:
+        uid = os.getuid()
+    except AttributeError:
+        uid = None
+    if uid is not None:
+        candidates.append(Path(tempfile.gettempdir()) / "codex-ipc" / f"ipc-{uid}.sock")
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def discover_codex_app_endpoint() -> tuple[str | None, dict[str, Any]]:
+    socket_path = default_codex_app_control_socket()
+    if socket_path is None:
+        return None, {
+            "source": "default-control-socket",
+            "result": "missing",
+            "searched": [
+                str(Path.home() / ".codex/app-server-control/app-server-control.sock"),
+                str(Path(tempfile.gettempdir()) / "codex-ipc" / f"ipc-{os.getuid()}.sock")
+                if hasattr(os, "getuid")
+                else None,
+            ],
+        }
+    return f"unix://{socket_path}", {
+        "source": "default-control-socket",
+        "result": "found",
+        "locator": str(socket_path),
+    }
+
+
+def load_codex_session_meta(path: Path) -> dict[str, Any] | None:
+    try:
+        with path.open(encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if entry.get("type") != "session_meta":
+                    continue
+                payload = entry.get("payload")
+                return payload if isinstance(payload, dict) else None
+    except OSError:
+        return None
+    return None
+
+
+def codex_session_file_for_id(session_id: str, *, updated_at: str | None = None) -> Path | None:
+    sessions_root = Path.home() / ".codex/sessions"
+    if not sessions_root.exists():
+        return None
+    pattern = f"rollout-*{session_id}.jsonl"
+    search_roots: list[Path] = []
+    timestamp = non_empty_str(updated_at)
+    if timestamp:
+        date_match = re.match(r"^(\d{4})-(\d{2})-(\d{2})", timestamp)
+        if date_match:
+            year, month, day = date_match.groups()
+            dated_root = sessions_root / year / month / day
+            if dated_root.exists():
+                search_roots.append(dated_root)
+    if not search_roots:
+        search_roots.append(sessions_root)
+    try:
+        matches: list[Path] = []
+        for search_root in search_roots:
+            matches.extend(search_root.rglob(pattern))
+        matches = sorted(matches, key=lambda path: path.stat().st_mtime, reverse=True)
+    except OSError:
+        return None
+    return matches[0] if matches else None
+
+
+def discover_codex_app_session_meta(target_root: Path) -> tuple[dict[str, str | None], dict[str, Any]]:
+    session_file_text = non_empty_str(os.environ.get(CODEX_APP_REVIEW_SESSION_FILE_ENV))
+    session_id = non_empty_str(os.environ.get(CODEX_SESSION_ID_ENV)) or non_empty_str(os.environ.get(CODEX_THREAD_ID_ENV))
+    candidates: list[Path] = []
+    if session_file_text:
+        candidates.append(Path(session_file_text).expanduser())
+    if session_id:
+        session_path = codex_session_file_for_id(session_id)
+        if session_path is not None:
+            candidates.append(session_path)
+
+    index_path = Path.home() / ".codex/session_index.jsonl"
+    if not candidates and index_path.exists():
+        try:
+            lines = index_path.read_text(encoding="utf-8").splitlines()[-20:]
+        except OSError:
+            lines = []
+        for line in reversed(lines):
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            indexed_id = non_empty_str(entry.get("id") if isinstance(entry, dict) else None)
+            if not indexed_id:
+                continue
+            updated_at = non_empty_str(entry.get("updated_at")) if isinstance(entry, dict) else None
+            session_path = codex_session_file_for_id(indexed_id, updated_at=updated_at)
+            if session_path is not None:
+                candidates.append(session_path)
+
+    seen: set[Path] = set()
+    inspected: list[str] = []
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            resolved = candidate
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        inspected.append(str(resolved))
+        meta = load_codex_session_meta(resolved)
+        if not isinstance(meta, dict):
+            continue
+        cwd = non_empty_str(meta.get("cwd"))
+        thread_id = non_empty_str(meta.get("id"))
+        originator = non_empty_str(meta.get("originator"))
+        if not cwd or not thread_id:
+            continue
+        try:
+            cwd_path = Path(cwd).expanduser().resolve()
+        except OSError:
+            continue
+        if cwd_path != target_root:
+            continue
+        return (
+            {"thread_id": thread_id, "thread_cwd": str(cwd_path)},
+            {
+                "source": "codex-session-meta",
+                "result": "found",
+                "session_file": str(resolved),
+                "originator": originator,
+            },
+        )
+    return (
+        {"thread_id": None, "thread_cwd": None},
+        {
+            "source": "codex-session-meta",
+            "result": "missing",
+            "inspected": inspected[:10],
+            "target_root": str(target_root),
+        },
     )
-    thread_cwd = non_empty_str(args.codex_app_review_cwd) or non_empty_str(os.environ.get(CODEX_APP_REVIEW_CWD_ENV))
+
+
+def codex_app_missing_host_proof(bindings: dict[str, Any]) -> list[str]:
+    missing: list[str] = []
+    if not non_empty_str(bindings.get("app_server")):
+        missing.append("app-server endpoint locator")
+    if not non_empty_str(bindings.get("thread_id")):
+        missing.append("thread id")
+    if not non_empty_str(bindings.get("thread_cwd")):
+        missing.append("thread cwd proof")
+    return missing
+
+
+def codex_app_review_bindings_from_args_env(args: argparse.Namespace, target_root: Path) -> dict[str, Any]:
+    proof_sources: dict[str, str] = {}
+    discovery: dict[str, Any] = {}
+
+    app_server = non_empty_str(args.codex_app_review_app_server)
+    if app_server:
+        proof_sources["app_server"] = "cli"
+    if not app_server:
+        app_server = non_empty_str(os.environ.get(CODEX_APP_REVIEW_ENDPOINT_ENV))
+        if app_server:
+            proof_sources["app_server"] = CODEX_APP_REVIEW_ENDPOINT_ENV
+    if not app_server:
+        app_server, endpoint_discovery = discover_codex_app_endpoint()
+        discovery["app_server"] = endpoint_discovery
+        if app_server:
+            proof_sources["app_server"] = "default-control-socket"
+
+    thread_id = non_empty_str(args.codex_app_review_thread_id)
+    if thread_id:
+        proof_sources["thread_id"] = "cli"
+    if not thread_id:
+        thread_id = non_empty_str(os.environ.get(CODEX_APP_REVIEW_THREAD_ID_ENV))
+        if thread_id:
+            proof_sources["thread_id"] = CODEX_APP_REVIEW_THREAD_ID_ENV
+    if not thread_id and app_server:
+        thread_id = non_empty_str(os.environ.get(CODEX_THREAD_ID_ENV)) or non_empty_str(os.environ.get(CODEX_SESSION_ID_ENV))
+        if thread_id:
+            proof_sources["thread_id"] = f"{CODEX_THREAD_ID_ENV}/{CODEX_SESSION_ID_ENV}"
+
+    thread_cwd = non_empty_str(args.codex_app_review_cwd)
+    if thread_cwd:
+        proof_sources["thread_cwd"] = "cli"
+    if not thread_cwd:
+        thread_cwd = non_empty_str(os.environ.get(CODEX_APP_REVIEW_CWD_ENV))
+        if thread_cwd:
+            proof_sources["thread_cwd"] = CODEX_APP_REVIEW_CWD_ENV
+
+    if (not thread_id or not thread_cwd) and app_server:
+        session_bindings, session_discovery = discover_codex_app_session_meta(target_root)
+        discovery["session_meta"] = session_discovery
+        if not thread_id and session_bindings.get("thread_id"):
+            thread_id = session_bindings["thread_id"]
+            proof_sources["thread_id"] = "codex-session-meta"
+        if not thread_cwd and session_bindings.get("thread_cwd"):
+            thread_cwd = session_bindings["thread_cwd"]
+            proof_sources["thread_cwd"] = "codex-session-meta"
+
     raw_file = non_empty_str(args.codex_app_review_raw_file)
+    if raw_file:
+        proof_sources["raw_file"] = "cli"
+    missing_host_proof = codex_app_missing_host_proof(
+        {"app_server": app_server, "thread_id": thread_id, "thread_cwd": thread_cwd}
+    )
     return {
         "app_server": app_server,
         "thread_id": thread_id,
         "thread_cwd": thread_cwd,
         "raw_file": raw_file,
+        "proof_sources": proof_sources,
+        "host_discovery": discovery,
+        "missing_host_proof": missing_host_proof,
     }
 
 
@@ -7417,7 +9312,13 @@ def select_review_adapter(
     *,
     reviewed_head: str,
 ) -> dict[str, Any]:
-    bindings = codex_app_review_bindings_from_args_env(args)
+    bindings = codex_app_review_bindings_from_args_env(args, target_root)
+    binding_values = {
+        "app_server": bindings.get("app_server"),
+        "thread_id": bindings.get("thread_id"),
+        "thread_cwd": bindings.get("thread_cwd"),
+        "raw_file": bindings.get("raw_file"),
+    }
     explicit_adapter = non_empty_str(args.engine_adapter)
     if explicit_adapter:
         return {
@@ -7425,44 +9326,54 @@ def select_review_adapter(
             "selection_source": "explicit-cli",
             "fallback_reason": None,
             **bindings,
-            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **bindings),
-        }
-
-    if truthy_env("CI") or truthy_env("CODEX_CI"):
-        return {
-            "adapter": DEFAULT_REVIEW_ADAPTER,
-            "selection_source": "headless-fallback",
-            "fallback_reason": "ci-or-codex-ci",
-            **bindings,
-            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **bindings),
+            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **binding_values),
         }
 
     app_server = bindings["app_server"]
     thread_id = bindings["thread_id"]
     thread_cwd = bindings["thread_cwd"]
     raw_file = bindings["raw_file"]
-    if not app_server or not thread_id or not thread_cwd:
+    missing_host_proof = codex_app_missing_host_proof(bindings)
+    ci_env_present = truthy_env("CI") or truthy_env("CODEX_CI")
+    if not missing_host_proof:
+        if not raw_file and not codex_app_endpoint_is_live_capable(app_server):
+            return {
+                "adapter": DEFAULT_REVIEW_ADAPTER,
+                "selection_source": "host-proof-fallback",
+                "fallback_reason": "app-server-unavailable",
+                **bindings,
+                "ci_env_present": ci_env_present,
+                "missing_host_proof": ["live app-server endpoint or raw review file"],
+                "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **binding_values),
+            }
+        return {
+            "adapter": CODEX_APP_REVIEW_ADAPTER,
+            "selection_source": "codex-app-host-default",
+            "fallback_reason": None,
+            **bindings,
+            "ci_env_present": ci_env_present,
+            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **binding_values),
+        }
+
+    if ci_env_present:
         return {
             "adapter": DEFAULT_REVIEW_ADAPTER,
-            "selection_source": "host-proof-fallback",
-            "fallback_reason": "missing-codex-app-host-proof",
+            "selection_source": "headless-fallback",
+            "fallback_reason": "ci-or-codex-ci",
             **bindings,
-            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **bindings),
+            "ci_env_present": True,
+            "missing_host_proof": missing_host_proof,
+            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **binding_values),
         }
-    if not raw_file and not codex_app_endpoint_is_live_capable(app_server):
-        return {
-            "adapter": DEFAULT_REVIEW_ADAPTER,
-            "selection_source": "host-proof-fallback",
-            "fallback_reason": "app-server-unavailable",
-            **bindings,
-            "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **bindings),
-        }
+
     return {
-        "adapter": CODEX_APP_REVIEW_ADAPTER,
-        "selection_source": "codex-app-host-default",
-        "fallback_reason": None,
+        "adapter": DEFAULT_REVIEW_ADAPTER,
+        "selection_source": "host-proof-fallback",
+        "fallback_reason": "missing-codex-app-host-proof",
         **bindings,
-        "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **bindings),
+        "ci_env_present": False,
+        "missing_host_proof": missing_host_proof,
+        "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **binding_values),
     }
 
 
@@ -7479,20 +9390,63 @@ def review_adapter_selection_metadata(selection: dict[str, Any], *, reviewed_hea
         else None,
         "reviewed_head": reviewed_head,
         "thread_target_binding": selection.get("binding_summary"),
+        "proof_sources": selection.get("proof_sources") if isinstance(selection.get("proof_sources"), dict) else {},
+        "host_discovery": selection.get("host_discovery") if isinstance(selection.get("host_discovery"), dict) else {},
+        "missing_host_proof": selection.get("missing_host_proof")
+        if isinstance(selection.get("missing_host_proof"), list)
+        else [],
+        "ci_env_present": bool(selection.get("ci_env_present")),
     }
 
 
 def jsonrpc_send_request(stdin: Any, *, request_id: int, method: str, params: dict[str, Any]) -> None:
-    stdin.write(json.dumps({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}) + "\n")
+    stdin.write(json.dumps({"id": request_id, "method": method, "params": params}) + "\n")
     stdin.flush()
 
 
-def jsonrpc_read_response(stdout: Any, *, request_id: int) -> tuple[dict[str, Any] | None, list[dict[str, Any]], list[str]]:
-    notifications: list[dict[str, Any]] = []
-    while True:
+def jsonrpc_send_notification(stdin: Any, *, method: str, params: dict[str, Any] | None = None) -> None:
+    payload: dict[str, Any] = {"method": method}
+    if params is not None:
+        payload["params"] = params
+    stdin.write(json.dumps(payload) + "\n")
+    stdin.flush()
+
+
+def jsonrpc_readline(stdout: Any, *, deadline: float | None, close_error: str, timeout_error: str) -> tuple[str | None, str | None]:
+    if deadline is None:
         line = stdout.readline()
         if not line:
-            return None, notifications, [f"app-server closed before response id {request_id}"]
+            return None, close_error
+        return line, None
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return None, timeout_error
+    readable, _, _ = select.select([stdout], [], [], remaining)
+    if not readable:
+        return None, timeout_error
+    line = stdout.readline()
+    if not line:
+        return None, close_error
+    return line, None
+
+
+def jsonrpc_read_response(
+    stdout: Any,
+    *,
+    request_id: int,
+    deadline: float | None,
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]], list[str]]:
+    notifications: list[dict[str, Any]] = []
+    while True:
+        line, line_error = jsonrpc_readline(
+            stdout,
+            deadline=deadline,
+            close_error=f"app-server closed before response id {request_id}",
+            timeout_error=f"Codex App review timed out before response id {request_id}",
+        )
+        if line_error:
+            return None, notifications, [line_error]
+        assert line is not None
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:
@@ -7502,6 +9456,108 @@ def jsonrpc_read_response(stdout: Any, *, request_id: int) -> tuple[dict[str, An
         if payload.get("id") == request_id:
             return payload, notifications, []
         notifications.append(payload)
+
+
+def jsonrpc_read_until_review_text(
+    stdout: Any,
+    *,
+    turn_id: str | None,
+    deadline: float | None,
+) -> tuple[str | None, list[dict[str, Any]], list[str]]:
+    notifications: list[dict[str, Any]] = []
+    while True:
+        line, line_error = jsonrpc_readline(
+            stdout,
+            deadline=deadline,
+            close_error="app-server closed before Codex App review completed",
+            timeout_error="Codex App review timed out before review text was produced",
+        )
+        if line_error:
+            return None, notifications, [line_error]
+        assert line is not None
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        notifications.append(payload)
+        review_text = find_exited_review_text(payload)
+        if isinstance(review_text, str) and review_text.strip():
+            return review_text, notifications, []
+        if payload.get("method") == "turn/completed":
+            params = payload.get("params")
+            if not isinstance(params, dict):
+                continue
+            if turn_id and params.get("turnId") not in {turn_id, None}:
+                continue
+            return None, notifications, []
+
+
+def jsonrpc_read_until_normalized_review(
+    stdout: Any,
+    *,
+    turn_id: str | None,
+    deadline: float | None,
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]], list[str]]:
+    notifications: list[dict[str, Any]] = []
+    while True:
+        line, line_error = jsonrpc_readline(
+            stdout,
+            deadline=deadline,
+            close_error="app-server closed before Codex App normalization completed",
+            timeout_error="Codex App review timed out before normalized review was produced",
+        )
+        if line_error:
+            return None, notifications, [line_error]
+        assert line is not None
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        notifications.append(payload)
+        normalized = find_normalized_review_payload(payload)
+        if normalized is not None:
+            return normalized, notifications, []
+        if payload.get("method") == "turn/completed":
+            params = payload.get("params")
+            if not isinstance(params, dict):
+                continue
+            if turn_id and params.get("turnId") not in {turn_id, None}:
+                continue
+            return None, notifications, ["Codex App turn/start did not return a Loom review result"]
+
+
+def terminate_process_group(process: subprocess.Popen[str]) -> None:
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    except OSError:
+        try:
+            process.terminate()
+        except OSError:
+            return
+    try:
+        process.wait(timeout=5)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return
+    except OSError:
+        try:
+            process.kill()
+        except OSError:
+            return
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
 
 
 def find_exited_review_text(payload: Any) -> str | None:
@@ -7524,6 +9580,17 @@ def find_normalized_review_payload(payload: Any) -> dict[str, Any] | None:
     normalized, errors = normalize_engine_review_result(payload, relative="app-server turn/start output")
     if normalized is not None and not errors:
         return normalized
+    if isinstance(payload, str):
+        text = payload.strip()
+        if not text or not text.startswith("{"):
+            return None
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            return None
+        if parsed is payload:
+            return None
+        return find_normalized_review_payload(parsed)
     if isinstance(payload, dict):
         for value in payload.values():
             found = find_normalized_review_payload(value)
@@ -7538,10 +9605,104 @@ def find_normalized_review_payload(payload: Any) -> dict[str, Any] | None:
 
 
 def app_server_proxy_command(app_server: str) -> list[str] | None:
+    if codex_app_endpoint_is_stdio(app_server):
+        return ["codex", "app-server", "--listen", "stdio://"]
     socket_path = codex_app_endpoint_socket_path(app_server)
     if socket_path is None:
         return None
     return ["codex", "app-server", "proxy", "--sock", str(socket_path)]
+
+
+def find_first_key_value(payload: Any, keys: set[str]) -> str | None:
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if key in keys:
+                text = non_empty_str(value)
+                if text:
+                    return text
+        for value in payload.values():
+            found = find_first_key_value(value, keys)
+            if found:
+                return found
+    elif isinstance(payload, list):
+        for value in payload:
+            found = find_first_key_value(value, keys)
+            if found:
+                return found
+    return None
+
+
+def extract_model_reasoning_proof(*payloads: Any) -> dict[str, str]:
+    model_keys = {"actual_model", "model", "modelSlug", "model_slug"}
+    reasoning_keys = {
+        "actual_reasoning",
+        "reasoning_effort",
+        "model_reasoning_effort",
+        "reasoningEffort",
+        "reasoning",
+    }
+    proof: dict[str, str] = {}
+    for payload in payloads:
+        if "actual_model" not in proof:
+            model = find_first_key_value(payload, model_keys)
+            if model:
+                proof["actual_model"] = model
+        if "actual_reasoning" not in proof:
+            reasoning = find_first_key_value(payload, reasoning_keys)
+            if reasoning:
+                proof["actual_reasoning"] = reasoning
+        if "actual_model" in proof and "actual_reasoning" in proof:
+            break
+    return proof
+
+
+def review_model_proof(
+    engine_profile: dict[str, Any],
+    *,
+    live_metadata: dict[str, Any],
+    source_path: Path | None,
+) -> dict[str, Any]:
+    requested_model = str(engine_profile["model"])
+    requested_reasoning = str(engine_profile["reasoning_effort"])
+    actual_model = non_empty_str(live_metadata.get("actual_model")) if live_metadata else None
+    actual_reasoning = non_empty_str(live_metadata.get("actual_reasoning")) if live_metadata else None
+    proof_source = non_empty_str(live_metadata.get("model_proof_source")) if live_metadata else None
+    if proof_source is None:
+        proof_source = "codex-app-live-response" if source_path is None else "raw-file-unverified"
+    if actual_model == requested_model and actual_reasoning == requested_reasoning:
+        result = "verified"
+        enforcement_mode = "verified"
+    elif actual_model or actual_reasoning:
+        result = "mismatch"
+        enforcement_mode = "fail-closed"
+    else:
+        result = "unverified"
+        enforcement_mode = "unverified"
+    return {
+        "schema_version": "loom-review-model-proof/v1",
+        "requested_model": requested_model,
+        "requested_reasoning": requested_reasoning,
+        "actual_model": actual_model,
+        "actual_reasoning": actual_reasoning,
+        "proof_source": proof_source,
+        "enforcement_mode": enforcement_mode,
+        "result": result,
+    }
+
+
+def review_model_proof_errors(model_proof: dict[str, Any], engine_profile: dict[str, Any]) -> list[str]:
+    if model_proof.get("result") == "verified":
+        return []
+    profile_id = str(engine_profile.get("profile_id") or "")
+    if model_proof.get("result") == "mismatch":
+        return [
+            "Codex App actual model/reasoning proof does not match the resolved review engine profile"
+        ]
+    if profile_id in {"high-risk", "spec-review", "repeated-blocker"}:
+        return [
+            f"Codex App actual model/reasoning proof is unverified for `{profile_id}` review profile"
+        ]
+    return []
 
 
 def run_codex_app_live_review(
@@ -7551,50 +9712,215 @@ def run_codex_app_live_review(
     reviewed_head: str,
     thread_cwd: str,
     prompt_text: str,
+    timeout_seconds: int | None,
+    requested_model: str,
+    requested_reasoning: str,
 ) -> tuple[str | None, dict[str, Any], list[str]]:
     command = app_server_proxy_command(app_server)
     if command is None:
         return None, {}, [f"unsupported Codex App review endpoint: {app_server}"]
+    deadline = time.monotonic() + timeout_seconds if timeout_seconds is not None else None
     try:
+        env = os.environ.copy()
+        for key in LOOM_RUNTIME_ENV_KEYS:
+            env.pop(key, None)
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
         process = subprocess.Popen(
             command,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            env=env,
+            start_new_session=True,
         )
     except OSError as exc:
         return None, {}, [f"Codex App review endpoint is unavailable: {exc}"]
     assert process.stdin is not None
     assert process.stdout is not None
-    metadata: dict[str, Any] = {"review_target": {"type": "commit", "sha": reviewed_head}}
+    metadata: dict[str, Any] = {
+        "review_target": {"type": "commit", "sha": reviewed_head},
+        "timeout_seconds": timeout_seconds,
+        "requested_model": requested_model,
+        "requested_reasoning": requested_reasoning,
+        "model_request_source": "resolved-review-engine-profile",
+    }
     try:
         jsonrpc_send_request(process.stdin, request_id=1, method="initialize", params={"clientInfo": {"name": "loom", "version": "stage3"}, "capabilities": {}})
-        initialize_response, _, initialize_errors = jsonrpc_read_response(process.stdout, request_id=1)
+        initialize_response, _, initialize_errors = jsonrpc_read_response(process.stdout, request_id=1, deadline=deadline)
         if initialize_errors:
             return None, metadata, initialize_errors
         if isinstance(initialize_response, dict) and isinstance(initialize_response.get("error"), dict):
             return None, metadata, [f"Codex App initialize failed: {initialize_response['error']}"]
+        jsonrpc_send_notification(process.stdin, method="initialized")
+
+        new_thread_requested = codex_app_review_requests_new_thread(thread_id)
+        if new_thread_requested:
+            jsonrpc_send_request(
+                process.stdin,
+                request_id=2,
+                method="thread/start",
+                params={
+                    "cwd": thread_cwd,
+                    "approvalPolicy": "never",
+                    "sandbox": "danger-full-access",
+                    "baseInstructions": "Loom Codex App review host proof thread.",
+                    "ephemeral": False,
+                },
+            )
+            start_response, _, start_errors = jsonrpc_read_response(process.stdout, request_id=2, deadline=deadline)
+            if start_errors:
+                return None, metadata, start_errors
+            if isinstance(start_response, dict) and isinstance(start_response.get("error"), dict):
+                return None, metadata, [f"Codex App thread/start failed: {start_response['error']}"]
+            start_result = start_response.get("result") if isinstance(start_response, dict) else None
+            thread = start_result.get("thread") if isinstance(start_result, dict) else None
+            if not isinstance(thread, dict) or not non_empty_str(thread.get("id")):
+                return None, metadata, ["Codex App thread/start did not return a thread id"]
+            thread_id = str(thread["id"])
+            metadata["started_thread_id"] = thread_id
+            metadata["started_thread_cwd"] = thread.get("cwd")
+            metadata["started_thread_source"] = thread.get("source")
+            metadata["started_thread_cli_version"] = thread.get("cliVersion")
+            resumed_cwd = non_empty_str(thread.get("cwd"))
+        else:
+            jsonrpc_send_request(
+                process.stdin,
+                request_id=2,
+                method="thread/resume",
+                params={
+                    "threadId": thread_id,
+                    "cwd": thread_cwd,
+                },
+            )
+            resume_response, _, resume_errors = jsonrpc_read_response(process.stdout, request_id=2, deadline=deadline)
+            if resume_errors:
+                return None, metadata, resume_errors
+            if isinstance(resume_response, dict) and isinstance(resume_response.get("error"), dict):
+                return None, metadata, [f"Codex App thread/resume failed: {resume_response['error']}"]
+            resume_result = resume_response.get("result") if isinstance(resume_response, dict) else None
+            thread = resume_result.get("thread") if isinstance(resume_result, dict) else None
+            if isinstance(thread, dict):
+                metadata["resumed_thread_cwd"] = thread.get("cwd")
+                metadata["resumed_thread_source"] = thread.get("source")
+                metadata["resumed_thread_cli_version"] = thread.get("cliVersion")
+            resumed_cwd = non_empty_str(thread.get("cwd")) if isinstance(thread, dict) else None
+        if resumed_cwd:
+            try:
+                resumed_cwd_path = Path(resumed_cwd).expanduser().resolve()
+                expected_cwd_path = Path(thread_cwd).expanduser().resolve()
+            except OSError as exc:
+                return None, metadata, [f"Codex App thread cwd proof could not be resolved: {exc}"]
+            if resumed_cwd_path != expected_cwd_path:
+                return None, metadata, [
+                    f"Codex App thread cwd `{resumed_cwd_path}` does not match expected review cwd `{expected_cwd_path}`"
+                ]
+        metadata["effective_thread_id"] = thread_id
+
+        if new_thread_requested:
+            jsonrpc_send_request(
+                process.stdin,
+                request_id=3,
+                method="turn/start",
+                params={
+                    "threadId": thread_id,
+                    "cwd": thread_cwd,
+                    "input": [{"type": "text", "text": prompt_text}],
+                    "model": requested_model,
+                    "reasoningEffort": requested_reasoning,
+                    "outputSchema": load_json_file(review_engine_schema_path()),
+                },
+            )
+            turn_response, turn_notifications, turn_errors = jsonrpc_read_response(process.stdout, request_id=3, deadline=deadline)
+            if turn_errors:
+                return None, metadata, turn_errors
+            if isinstance(turn_response, dict) and isinstance(turn_response.get("error"), dict):
+                return None, metadata, [f"Codex App turn/start review failed: {turn_response['error']}"]
+            turn_result = turn_response.get("result") if isinstance(turn_response, dict) else None
+            review_turn_id: str | None = None
+            if isinstance(turn_result, dict):
+                turn = turn_result.get("turn")
+                if isinstance(turn, dict):
+                    review_turn_id = non_empty_str(turn.get("id"))
+                    metadata["review_turn_id"] = review_turn_id
+            normalized = find_normalized_review_payload(turn_result)
+            if normalized is None:
+                normalized = find_normalized_review_payload(turn_notifications)
+            if normalized is None:
+                normalized, normalization_notifications, normalization_wait_errors = jsonrpc_read_until_normalized_review(
+                    process.stdout,
+                    turn_id=review_turn_id,
+                    deadline=deadline,
+                )
+                turn_notifications.extend(normalization_notifications)
+                if normalization_wait_errors:
+                    return None, metadata, normalization_wait_errors
+            if normalized is None:
+                return None, metadata, ["Codex App turn/start review did not return a Loom review result"]
+            proof = extract_model_reasoning_proof(turn_response, turn_notifications)
+            if proof:
+                metadata.update(proof)
+                metadata["model_proof_source"] = "turn-start-response"
+            metadata["normalization_source"] = "turn-start-output-schema"
+            raw_text = json.dumps(normalized, ensure_ascii=False, indent=2)
+            return raw_text, {**metadata, "normalized": normalized}, []
 
         jsonrpc_send_request(
             process.stdin,
-            request_id=2,
+            request_id=3,
             method="review/start",
             params={
                 "threadId": thread_id,
                 "delivery": "inline",
                 "target": {"type": "commit", "sha": reviewed_head},
+                "model": requested_model,
+                "reasoningEffort": requested_reasoning,
             },
         )
-        review_response, review_notifications, review_errors = jsonrpc_read_response(process.stdout, request_id=2)
+        review_response, review_notifications, review_errors = jsonrpc_read_response(process.stdout, request_id=3, deadline=deadline)
         if review_errors:
             return None, metadata, review_errors
         if isinstance(review_response, dict) and isinstance(review_response.get("error"), dict):
             return None, metadata, [f"Codex App review/start failed: {review_response['error']}"]
         result = review_response.get("result") if isinstance(review_response, dict) else None
+        review_turn_id: str | None = None
         if isinstance(result, dict):
             metadata["review_thread_id"] = result.get("reviewThreadId")
+            turn = result.get("turn")
+            if isinstance(turn, dict):
+                review_turn_id = non_empty_str(turn.get("id"))
+                metadata["review_turn_id"] = review_turn_id
+        proof = extract_model_reasoning_proof(review_response, review_notifications)
+        if proof:
+            metadata.update(proof)
+            metadata["model_proof_source"] = "review-start-response"
         review_text = find_exited_review_text(result) or find_exited_review_text(review_notifications)
+        if not isinstance(review_text, str) or not review_text.strip():
+            review_text, completion_notifications, completion_errors = jsonrpc_read_until_review_text(
+                process.stdout,
+                turn_id=review_turn_id,
+                deadline=deadline,
+            )
+            review_notifications.extend(completion_notifications)
+            if completion_errors:
+                return None, metadata, completion_errors
+        if not isinstance(review_text, str) or not review_text.strip():
+            jsonrpc_send_request(
+                process.stdin,
+                request_id=4,
+                method="thread/read",
+                params={
+                    "threadId": metadata.get("review_thread_id") or thread_id,
+                    "includeTurns": True,
+                },
+            )
+            thread_response, thread_notifications, thread_errors = jsonrpc_read_response(process.stdout, request_id=4, deadline=deadline)
+            review_notifications.extend(thread_notifications)
+            if thread_errors:
+                return None, metadata, thread_errors
+            if isinstance(thread_response, dict) and isinstance(thread_response.get("error"), dict):
+                return None, metadata, [f"Codex App thread/read failed: {thread_response['error']}"]
+            review_text = find_exited_review_text(thread_response)
         if not isinstance(review_text, str) or not review_text.strip():
             return None, metadata, ["Codex App review/start did not return exitedReviewMode.review"]
 
@@ -7605,7 +9931,7 @@ def run_codex_app_live_review(
 
         jsonrpc_send_request(
             process.stdin,
-            request_id=3,
+            request_id=5,
             method="turn/start",
             params={
                 "threadId": metadata.get("review_thread_id") or thread_id,
@@ -7620,26 +9946,45 @@ def run_codex_app_live_review(
                         ),
                     }
                 ],
+                "model": requested_model,
+                "reasoningEffort": requested_reasoning,
                 "outputSchema": load_json_file(review_engine_schema_path()),
             },
         )
-        turn_response, turn_notifications, turn_errors = jsonrpc_read_response(process.stdout, request_id=3)
+        turn_response, turn_notifications, turn_errors = jsonrpc_read_response(process.stdout, request_id=5, deadline=deadline)
         if turn_errors:
             return review_text, metadata, turn_errors
         if isinstance(turn_response, dict) and isinstance(turn_response.get("error"), dict):
             return review_text, metadata, [f"Codex App turn/start normalization failed: {turn_response['error']}"]
-        normalized = find_normalized_review_payload(turn_response.get("result") if isinstance(turn_response, dict) else None)
+        turn_result = turn_response.get("result") if isinstance(turn_response, dict) else None
+        normalization_turn_id: str | None = None
+        if isinstance(turn_result, dict):
+            turn = turn_result.get("turn")
+            if isinstance(turn, dict):
+                normalization_turn_id = non_empty_str(turn.get("id"))
+                metadata["normalization_turn_id"] = normalization_turn_id
+        normalized = find_normalized_review_payload(turn_result)
         if normalized is None:
             normalized = find_normalized_review_payload(turn_notifications)
         if normalized is None:
+            normalized, normalization_notifications, normalization_wait_errors = jsonrpc_read_until_normalized_review(
+                process.stdout,
+                turn_id=normalization_turn_id,
+                deadline=deadline,
+            )
+            turn_notifications.extend(normalization_notifications)
+            if normalization_wait_errors:
+                return review_text, metadata, normalization_wait_errors
+        if normalized is None:
             return review_text, metadata, ["Codex App turn/start did not return a Loom review result"]
+        proof = extract_model_reasoning_proof(turn_response, turn_notifications)
+        if proof:
+            metadata.update(proof)
+            metadata["model_proof_source"] = "normalization-turn-start-response"
         metadata["normalization_source"] = "turn-start-output-schema"
         return review_text, {**metadata, "normalized": normalized}, []
     finally:
-        try:
-            process.terminate()
-        except OSError:
-            pass
+        terminate_process_group(process)
 
 
 def shadow_adapter_slug(adapter: str) -> str:
@@ -7882,7 +10227,8 @@ def run_codex_app_review_authoritative_adapter(
     }
     runtime_root.mkdir(parents=True, exist_ok=True)
     write_json_file(context_pack_path, context_pack)
-    instructions_path.write_text(
+    write_runtime_text_artifact(
+        instructions_path,
         build_default_review_prompt(
             context=context,
             build_payload=build_payload,
@@ -7890,7 +10236,6 @@ def run_codex_app_review_authoritative_adapter(
             review_path=review_path,
             context_pack=context_pack,
         ),
-        encoding="utf-8",
     )
 
     missing_inputs: list[str] = []
@@ -7987,16 +10332,35 @@ def run_codex_app_review_authoritative_adapter(
                 relative=source_relative or str(raw_file),
             )
     else:
+        raw_timeout_seconds = engine_profile.get("timeout_seconds")
+        live_timeout_seconds = (
+            int(raw_timeout_seconds)
+            if raw_timeout_seconds is not None
+            else CODEX_APP_REVIEW_LIVE_TIMEOUT_SECONDS
+        )
         raw_text, live_metadata, normalization_errors = run_codex_app_live_review(
             app_server=str(app_server),
             thread_id=str(thread_id),
             reviewed_head=reviewed_head,
             thread_cwd=str(thread_cwd),
             prompt_text=instructions_path.read_text(encoding="utf-8"),
+            timeout_seconds=live_timeout_seconds,
+            requested_model=str(engine_profile["model"]),
+            requested_reasoning=str(engine_profile["reasoning_effort"]),
         )
         normalized = live_metadata.get("normalized") if isinstance(live_metadata.get("normalized"), dict) else None
         if raw_text is None:
             raw_text = ""
+
+    model_proof = review_model_proof(
+        engine_profile,
+        live_metadata=live_metadata,
+        source_path=source_path,
+    )
+    proof_errors = [] if normalization_errors or normalized is None else review_model_proof_errors(model_proof, engine_profile)
+    proof_blocked = bool(proof_errors)
+    if proof_errors:
+        normalization_errors = proof_errors
 
     if normalization_errors or normalized is None:
         if raw_text:
@@ -8011,14 +10375,25 @@ def run_codex_app_review_authoritative_adapter(
                 **selection_metadata,
                 "context_pack": relative_to_root(context_pack_path, context["target_root"]),
                 "result": "block",
-                "failure_reason": "schema_drift",
-                "summary": "Codex App authoritative review output did not satisfy the Loom review result schema.",
+                "failure_reason": "runtime_conflict" if proof_blocked else "schema_drift",
+                "summary": (
+                    "Codex App authoritative review actual model proof did not satisfy the resolved profile contract."
+                    if proof_blocked
+                    else "Codex App authoritative review output did not satisfy the Loom review result schema."
+                ),
                 "errors": normalization_errors,
                 "reviewed_head": reviewed_head,
                 "app_server": app_server,
                 "thread_id": thread_id,
                 "thread_cwd": cwd_relative,
                 "raw_source": source_relative,
+                "requested_model": model_proof["requested_model"],
+                "requested_reasoning": model_proof["requested_reasoning"],
+                "actual_model": model_proof["actual_model"],
+                "actual_reasoning": model_proof["actual_reasoning"],
+                "proof_source": model_proof["proof_source"],
+                "enforcement_mode": model_proof["enforcement_mode"],
+                "model_proof": model_proof,
                 **({"live_review": live_metadata} if live_metadata else {}),
             },
         )
@@ -8032,7 +10407,7 @@ def run_codex_app_review_authoritative_adapter(
                 "adapter": CODEX_APP_REVIEW_ADAPTER,
                 "profile": engine_profile,
                 "result": "block",
-                "failure_reason": "schema_drift",
+                "failure_reason": "runtime_conflict" if proof_blocked else "schema_drift",
                 "reviewed_head": reviewed_head,
                 "evidence": evidence,
             },
@@ -8042,12 +10417,22 @@ def run_codex_app_review_authoritative_adapter(
                 "thread_id": thread_id,
                 "thread_cwd": cwd_relative,
                 "raw_source": source_relative,
+                "requested_model": model_proof["requested_model"],
+                "requested_reasoning": model_proof["requested_reasoning"],
+                "actual_model": model_proof["actual_model"],
+                "actual_reasoning": model_proof["actual_reasoning"],
+                "proof_source": model_proof["proof_source"],
+                "enforcement_mode": model_proof["enforcement_mode"],
+                "model_proof": model_proof,
                 **({"live_review": live_metadata} if live_metadata else {}),
             },
         }
 
     raw_path.write_text(raw_text, encoding="utf-8")
     write_json_file(findings_path, {"findings": normalized["findings"]})
+    effective_thread_id = (
+        non_empty_str(live_metadata.get("effective_thread_id")) if live_metadata else None
+    ) or thread_id
     metadata = {
         "schema_version": "loom-review-engine-metadata/v1",
         "engine": CODEX_APP_REVIEW_ENGINE,
@@ -8062,13 +10447,20 @@ def run_codex_app_review_authoritative_adapter(
         "kind": review_kind,
         "validation_summary": context["latest_validation_summary"],
         "app_server": app_server,
-        "thread_id": thread_id,
+        "thread_id": effective_thread_id,
         "thread_cwd": cwd_relative,
         "raw_source": source_relative,
+        "requested_model": model_proof["requested_model"],
+        "requested_reasoning": model_proof["requested_reasoning"],
+        "actual_model": model_proof["actual_model"],
+        "actual_reasoning": model_proof["actual_reasoning"],
+        "proof_source": model_proof["proof_source"],
+        "enforcement_mode": model_proof["enforcement_mode"],
+        "model_proof": model_proof,
         "raw_result": relative_to_root(raw_path, context["target_root"]),
         "normalized_findings": relative_to_root(findings_path, context["target_root"]),
         "metadata": relative_to_root(metadata_path, context["target_root"]),
-        "review_thread_id": live_metadata.get("review_thread_id") if live_metadata else (thread_id if source_path is not None else None),
+        "review_thread_id": live_metadata.get("review_thread_id") if live_metadata else (effective_thread_id if source_path is not None else None),
         **({"live_review": {key: value for key, value in live_metadata.items() if key != "normalized"}} if live_metadata else {}),
         "authority_boundary": "normalized review_record_input only; raw Codex App output remains runtime evidence",
     }
@@ -8097,6 +10489,7 @@ def run_codex_app_review_authoritative_adapter(
             "engine_adapter": CODEX_APP_REVIEW_ADAPTER,
             "engine_evidence": relative_to_root(raw_path, context["target_root"]),
             "engine_profile": engine_profile,
+            "engine_model_proof": model_proof,
             "context_pack": relative_to_root(context_pack_path, context["target_root"]),
             "normalized_findings": relative_to_root(findings_path, context["target_root"]),
             "budget_risk": context_pack.get("budget_risk"),
@@ -8140,6 +10533,71 @@ def manual_review_payload(
     }
 
 
+def review_prompt_change_snapshot(context: dict[str, Any]) -> list[str]:
+    root = context["target_root"]
+    base_result = run_git(root, ["merge-base", "HEAD", "origin/main"])
+    if base_result.returncode != 0:
+        return [
+            "Change Evidence Snapshot：",
+            "- Base: unavailable; `git merge-base HEAD origin/main` failed.",
+            f"- Error: {(base_result.stderr.strip() or base_result.stdout.strip() or 'unknown')[:240]}",
+            "- Focused Diff Excerpt:",
+            "```diff",
+            "unavailable: origin/main could not be resolved in this review fixture.",
+            "```",
+        ]
+
+    base_sha = base_result.stdout.strip()
+    head_sha = git_head_sha(root) or "unknown-head"
+    focused_diff_args = ["--", *REVIEW_PROMPT_DIFF_PATHS]
+    stat_result = run_git(root, ["diff", "--stat", f"{base_sha}..HEAD", *focused_diff_args])
+    names_result = run_git(root, ["diff", "--name-only", "--no-renames", f"{base_sha}..HEAD", *focused_diff_args])
+    diff_result = run_git(
+        root,
+        [
+            "diff",
+            "--no-ext-diff",
+            "--unified=12",
+            f"{base_sha}..HEAD",
+            *focused_diff_args,
+        ],
+    )
+
+    stat_text = stat_result.stdout.strip() if stat_result.returncode == 0 else f"unavailable: {stat_result.stderr.strip() or stat_result.stdout.strip()}"
+    names = [line.strip() for line in names_result.stdout.splitlines() if line.strip()] if names_result.returncode == 0 else []
+    name_lines = [f"- {path}" for path in names[:80]]
+    if len(names) > 80:
+        name_lines.append(f"- ... ({len(names) - 80} more paths omitted)")
+    if not name_lines:
+        name_lines = ["- not_applicable: no changed paths were detected against origin/main."]
+
+    diff_text = diff_result.stdout if diff_result.returncode == 0 else f"unavailable: {diff_result.stderr.strip() or diff_result.stdout.strip()}"
+    diff_text = diff_text.strip()
+    if len(diff_text) > REVIEW_PROMPT_DIFF_MAX_CHARS:
+        diff_text = (
+            diff_text[:REVIEW_PROMPT_DIFF_MAX_CHARS]
+            + f"\n\n[diff excerpt truncated at {REVIEW_PROMPT_DIFF_MAX_CHARS} characters]"
+        )
+    if not diff_text:
+        diff_text = "not_applicable: no focused diff was available."
+
+    return [
+        "Change Evidence Snapshot：",
+        f"- Base: {base_sha}",
+        f"- Head: {head_sha}",
+        "- Changed Paths:",
+        *name_lines,
+        "- Diff Stat:",
+        "```text",
+        stat_text or "not_applicable",
+        "```",
+        "- Focused Diff Excerpt:",
+        "```diff",
+        diff_text,
+        "```",
+    ]
+
+
 def build_default_review_prompt(
     *,
     context: dict[str, Any],
@@ -8179,17 +10637,21 @@ def build_default_review_prompt(
     ]
     if not repeated_lines:
         repeated_lines = ["- absent: no repeated blocker candidate detected."]
+    change_snapshot_lines = review_prompt_change_snapshot(context)
     return "\n".join(
         [
             "你是 Loom 默认 formal reviewer。",
             "请基于当前仓库工作树做正式语义审查，并只输出符合 schema 的 JSON 结果。",
             "优先阅读当前事项直接相关的文件与差异，不要做整仓广播式探索。",
+            "若宿主工具不可用或 outputSchema 限制工具调用，请使用本 prompt 中的 Change Evidence Snapshot 与 Runtime Evidence 形成结论，不要仅因未运行工具而 fallback。",
+            "不要重跑 full `tools/loom_check.py .`、`make check`、merge-ready、PR gate 或其他长耗时全量门禁；这些属于调用方提供的验证摘要与后续 gate 职责。只有当前输入互相矛盾时，才运行局部、低成本、可解释的 focused check。",
             "",
             "Loom 审查边界：",
             "- 你负责 reviewer rubric：判断方向、边界、语义正确性、风险与验证充分性。",
             "- 你不是 merge gate；不要输出 safe_to_merge、guardian verdict 或宿主按钮决策。",
             "- 你的输出只是 review evidence；最终正式真相会被回写到单一 review record。",
             "- 若阻断项成立，decision 设为 `block`；若当前输入不足以形成正式结论，decision 设为 `fallback`。",
+            "- 运行 Python 验证命令时必须设置 `PYTHONDONTWRITEBYTECODE=1`；如果验证过程产生 `__pycache__` 或 `.pyc`，先删除这些运行副作用并重跑对应检查，不要把 reviewer 自己产生的缓存污染当作实现缺陷。",
             *(
                 [
                     "- 当前任务是 spec review；必须优先判断 formal spec 是否完整、边界是否清晰、接受条件是否足以支撑后续实现 review。",
@@ -8235,6 +10697,11 @@ def build_default_review_prompt(
             "Repeated Blocker Candidates:",
             *repeated_lines,
             "- 请将发现分类为 new、unresolved 或 repeated/root-cause candidate；不要在没有证据时把 repeat 自动升级成 hard gate。",
+            "- 若既有 review record 的 reviewed_head 落后于当前 HEAD，请只把它当作历史输入；本次 review run 正在生成替代 evidence，不能仅因既有 record stale 而 block，除非存在未解决 finding、验证漂移或当前差异本身未被审查覆盖。",
+            "- 本次 review run 的 normalized 输出就是将被写入 `review_record_input` 的候选正式结论；不要要求 `.loom/reviews/<item>.json` 在本次 review run 结束前已经刷新到当前 HEAD。",
+            "- 如果当前 prompt 的 Head、Change Evidence Snapshot、Runtime Evidence 和验证摘要足以审查当前差异，请直接对当前 HEAD 给出 allow/block/fallback；只有这些当前输入本身缺失、互相矛盾或无法覆盖当前差异时，才把 current-head evidence gap 作为 blocker。",
+            "",
+            *change_snapshot_lines,
             "",
             "Findings 写作要求：",
             "- 每条 finding 必须包含 `id`、`summary`、`severity`、`rebuttal`、`disposition`。",
@@ -8476,6 +10943,13 @@ def purity_report_from_context(context: dict[str, Any], fact_chain_errors: list[
     owned_dirty, foreign_dirty = dirty_paths_by_owner(target_root)
     evidence_dirty = dirty_runtime_evidence_paths(target_root)
     foreign_dirty = [path for path in foreign_dirty if path not in evidence_dirty]
+    declared_current_item_paths = declared_current_item_dirty_paths(context)
+    declared_dirty = sorted(
+        path
+        for path in foreign_dirty
+        if path_matches_declared_current_item(path, declared_current_item_paths)
+    )
+    foreign_dirty = [path for path in foreign_dirty if path not in declared_dirty]
     if foreign_dirty:
         preview = ", ".join(sorted(foreign_dirty)[:5])
         hard_failures.append(f"workspace contains untriaged residual changes: {preview}")
@@ -8485,6 +10959,9 @@ def purity_report_from_context(context: dict[str, Any], fact_chain_errors: list[
     if evidence_dirty:
         preview = ", ".join(sorted(evidence_dirty)[:5])
         report_only.append(f"runtime review evidence is present and does not block purity on its own: {preview}")
+    if declared_dirty:
+        preview = ", ".join(declared_dirty[:5])
+        report_only.append(f"current Work Item declares dirty artifacts and they do not block purity on their own: {preview}")
 
     scope_paths = declared_scope_paths(context["scope"])
     out_of_scope_changes: list[str] = []
@@ -8719,6 +11196,14 @@ def checkpoint_payload(stage: str, context: dict[str, Any]) -> dict[str, Any]:
                 result = "block"
         else:
             decision = review_record["decision"]
+            review_kind = review_record.get("kind")
+            if review_kind not in IMPLEMENTATION_REVIEW_KINDS:
+                missing_inputs.append(
+                    "implementation review kind must be general_review or code_review; "
+                    f"`{review_kind}` cannot satisfy implementation approval"
+                )
+                if result == "pass":
+                    result = "block"
             if review_record.get("reviewed_validation_summary") != context["latest_validation_summary"]:
                 missing_inputs.append("review artifact does not match the latest validation summary")
                 if result == "pass":
@@ -9167,6 +11652,162 @@ def report_blocking_messages(report: dict[str, Any]) -> list[str]:
             if isinstance(message, str) and message not in messages:
                 messages.append(message)
     return messages
+
+
+def governance_lint_kind_from_failure(failure: dict[str, Any]) -> str:
+    text = " ".join(
+        str(failure.get(field, ""))
+        for field in ("category", "kind", "surface", "message", "summary")
+    ).lower()
+    if "companion" in text or "interop" in text:
+        return "companion_boundary_bypass"
+    if "hardcod" in text:
+        return "core_hardcoding_leak"
+    if "stale" in text or "freshness" in text or "head" in text:
+        return "evidence_stale"
+    return "fact_chain_broken"
+
+
+def flow_governance_lint_status(
+    context: dict[str, Any],
+    *,
+    surface: str,
+    repo_specific_requirements: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    bindings = {
+        "item_id": context["item_id"],
+        "head_sha": git_head_sha(context["target_root"]),
+        "scope": context["scope"],
+        "reviewed_head_sha": None,
+        "pr_ref": None,
+    }
+    blocking_results: list[dict[str, Any]] = []
+    advisory_results: list[dict[str, Any]] = []
+    repo_specific_results: list[dict[str, Any]] = []
+    for index, failure in enumerate(report_blocking_failures(context["report"]), start=1):
+        if not isinstance(failure, dict):
+            continue
+        kind = governance_lint_kind_from_failure(failure)
+        summary = str(
+            failure.get("message")
+            or failure.get("summary")
+            or failure.get("kind")
+            or "fact-chain blocking failure"
+        )
+        blocking_results.append(
+            {
+                "schema_version": GOVERNANCE_LINT_RESULT_SCHEMA,
+                "id": f"fact_chain_blocking_{index}",
+                "kind": kind,
+                "strength": "blocking",
+                "surface": surface,
+                "subject": failure.get("carrier") or failure.get("field") or "fact_chain",
+                "summary": summary,
+                "mapped_failure": {
+                    "category": failure.get("category") or "drift",
+                    "kind": failure.get("kind") or kind,
+                },
+                "provenance": {
+                    "source_layer": "fact_chain",
+                    "source_owner": "loom",
+                    "source_locator": failure.get("path") or failure.get("locator"),
+                    "source_binding": failure.get("field") or failure.get("carrier") or "fact_chain",
+                    "freshness": failure.get("freshness") or "stale",
+                },
+                "bindings": bindings,
+                "evidence_freshness": failure.get("freshness") or "stale",
+                "fallback_to": failure.get("fallback_to") or "admission",
+            }
+        )
+
+    if isinstance(repo_specific_requirements, dict):
+        source_locator = repo_specific_requirements.get("source_locator")
+        for field in ("blocking_requirements", "advisory_requirements"):
+            entries = repo_specific_requirements.get(field)
+            if not isinstance(entries, list):
+                continue
+            for index, entry in enumerate(entries, start=1):
+                if not isinstance(entry, dict):
+                    continue
+                enforcement = entry.get("enforcement")
+                result = {
+                    "schema_version": GOVERNANCE_LINT_RESULT_SCHEMA,
+                    "id": f"repo_specific_{field}_{index}",
+                    "kind": "companion_boundary_bypass",
+                    "strength": "repo_specific",
+                    "surface": surface,
+                    "subject": "repo_companion_requirement",
+                    "summary": str(entry.get("summary") or entry.get("id") or "repo companion requirement"),
+                    "mapped_failure": {
+                        "category": "gate_failure",
+                        "kind": "repo_specific_requirement",
+                    },
+                    "provenance": {
+                        "source_layer": "repo_companion",
+                        "source_owner": "repo",
+                        "source_locator": source_locator,
+                        "source_binding": entry.get("id") or "repo_specific_requirements",
+                        "freshness": "current",
+                    },
+                    "bindings": bindings,
+                    "evidence_freshness": "current",
+                    "fallback_to": repo_specific_requirements.get("fallback_to") or repo_specific_default_fallback(surface),
+                    "enforcement": enforcement,
+                }
+                repo_specific_results.append(result)
+                if enforcement == "blocking":
+                    blocking_results.append(result)
+                elif enforcement == "advisory":
+                    advisory_results.append(result)
+
+    result = "block" if blocking_results else "pass"
+    return {
+        "schema_version": GOVERNANCE_LINT_STATUS_SCHEMA,
+        "surface": surface,
+        "result": result,
+        "result_summary": (
+            "Governance Lint blocks this surface because derived lint evidence found blocking failures."
+            if result == "block"
+            else "Governance Lint found no blocking derived lint evidence for this surface."
+        ),
+        "blocking_results": blocking_results,
+        "advisory_results": advisory_results,
+        "repo_specific_results": repo_specific_results,
+        "not_applicable_results": [],
+        "mapped_failures": [entry["mapped_failure"] for entry in blocking_results],
+        "provenance": [
+            entry["provenance"]
+            for entry in [*blocking_results, *advisory_results, *repo_specific_results]
+        ],
+    }
+
+
+def governance_lint_missing_inputs(payload: dict[str, Any]) -> list[str]:
+    messages: list[str] = []
+    entries = payload.get("blocking_results")
+    if not isinstance(entries, list):
+        return messages
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        summary = entry.get("summary") or entry.get("kind") or "blocking lint result"
+        message = f"governance lint {entry.get('kind', 'unknown')}: {summary}"
+        if message not in messages:
+            messages.append(message)
+    return messages
+
+
+def governance_lint_fallback(payload: dict[str, Any]) -> str | None:
+    entries = payload.get("blocking_results")
+    if not isinstance(entries, list):
+        return None
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        fallback_to = entry.get("fallback_to")
+        if isinstance(fallback_to, str) and fallback_to:
+            return fallback_to
+    return None
 
 
 def fact_chain_error_contract(
@@ -9897,8 +12538,245 @@ def host_binding_validate_payload(
     }
 
 
+def binding_node(
+    *,
+    role: str,
+    locator: str | None,
+    freshness: str,
+    source_layer: str,
+    source_owner: str,
+    value: dict[str, Any] | None = None,
+    errors: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "role": role,
+        "locator": locator,
+        "freshness": freshness,
+        "value": value,
+        "errors": list(errors or []),
+        "provenance": [
+            {
+                "source_layer": source_layer,
+                "source_owner": source_owner,
+                "source_locator": locator,
+                "freshness": freshness,
+            }
+        ],
+    }
+
+
+def host_binding_inspection_payload(
+    *,
+    target_root: Path,
+    owner: str | None,
+    repo_name: str | None,
+    phase_number: int | None,
+    fr_number: int | None,
+    issue_number: int | None,
+    pr_number: int | None,
+    project_number: int | None,
+    branch_name: str | None,
+    head_sha: str | None,
+    base_sha: str | None,
+) -> dict[str, Any]:
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    owner = owner or detected_owner
+    repo_name = repo_name or detected_repo
+    missing_inputs: list[str] = []
+    findings: list[dict[str, Any]] = []
+    if not owner or not repo_name:
+        missing_inputs.append("owner/repo")
+
+    binding_payload = github_binding_payload(
+        target_root=target_root,
+        owner=owner,
+        repo_name=repo_name,
+        phase_number=phase_number,
+        fr_number=fr_number,
+        issue_number=issue_number,
+        pr_number=pr_number,
+        branch_name=branch_name,
+        sync=False,
+        dry_run=True,
+        require_complete_chain=False,
+    )
+    binding = binding_payload.get("binding") if isinstance(binding_payload.get("binding"), dict) else {}
+    objects = binding.get("objects") if isinstance(binding, dict) else {}
+    if not isinstance(objects, dict):
+        objects = {}
+
+    issue_payload: dict[str, Any] | None = None
+    issue_errors: list[str] = []
+    if owner and repo_name and issue_number is not None:
+        issue_payload, issue_errors = github_issue_payload(target_root, owner, repo_name, issue_number)
+        missing_inputs.extend(f"work_item: {message}" for message in issue_errors)
+
+    native_dependencies = (
+        github_issue_dependencies_payload(target_root, owner, repo_name, issue_number)
+        if owner and repo_name and issue_number is not None
+        else {"availability": "not_requested", "checks": [], "native_edges": []}
+    )
+    dependency_graph = dependency_graph_payload(
+        issue_number=issue_number,
+        issue_payload=issue_payload,
+        native_dependency_payload=native_dependencies,
+    )
+    findings.extend(dependency_graph.get("findings", []))
+
+    project_item: dict[str, Any] | None = None
+    project_errors: list[str] = []
+    if project_number is not None and owner:
+        project_context, project_errors = project_status_context(target_root, owner, project_number)
+        if not project_errors:
+            project_item = find_project_item(project_context["items"], issue_number, "issue") if issue_number is not None else None
+        else:
+            missing_inputs.extend(f"project: {message}" for message in project_errors)
+
+    def object_node(role: str, fallback_locator: str | None = None) -> dict[str, Any]:
+        value = objects.get(role)
+        if isinstance(value, dict):
+            status = value.get("status")
+            errors = value.get("errors") if isinstance(value.get("errors"), list) else []
+            freshness = "fresh" if status in {"present", "host-managed", "profile-defined"} else "missing"
+            if errors:
+                freshness = "unreadable"
+            locator = (
+                str(value.get("url"))
+                if isinstance(value.get("url"), str)
+                else str(value.get("name"))
+                if isinstance(value.get("name"), str)
+                else fallback_locator
+            )
+            return binding_node(
+                role=role,
+                locator=locator,
+                freshness=freshness,
+                source_layer="host_control_mirror",
+                source_owner="github",
+                value=value,
+                errors=[str(error) for error in errors],
+            )
+        return binding_node(
+            role=role,
+            locator=fallback_locator,
+            freshness="missing",
+            source_layer="host_control_mirror",
+            source_owner="github",
+            value=None,
+        )
+
+    nodes = {
+        "phase": object_node("phase", f"issue #{phase_number}" if phase_number else None),
+        "fr": object_node("fr", f"issue #{fr_number}" if fr_number else None),
+        "work_item": object_node("work_item", f"issue #{issue_number}" if issue_number else None),
+        "branch": object_node("branch", branch_name),
+        "target_branch": object_node("target_branch", branch_name),
+        "implementation_pr": object_node("implementation_pr", f"PR #{pr_number}" if pr_number else None),
+        "pr": object_node("implementation_pr", f"PR #{pr_number}" if pr_number else None),
+        "merge_commit": object_node("merge_commit"),
+        "project_item": binding_node(
+            role="project_item",
+            locator=f"Project #{project_number}" if project_number is not None else None,
+            freshness="fresh" if project_item is not None else ("unreadable" if project_errors else "missing"),
+            source_layer="host_control_mirror",
+            source_owner="github_project",
+            value=project_item,
+            errors=project_errors,
+        ),
+    }
+    if head_sha:
+        branch_head = nodes["branch"].get("value", {}).get("head_sha") if isinstance(nodes["branch"].get("value"), dict) else None
+        if branch_head and branch_head != head_sha:
+            nodes["branch"]["freshness"] = "conflict"
+            findings.append(
+                {
+                    "category": "drift",
+                    "kind": "conflicting_binding",
+                    "severity": "block",
+                    "subject": "branch head SHA",
+                    "evidence": {"expected_head_sha": head_sha, "branch_head_sha": branch_head},
+                    "fallback_to": "github-profile-binding",
+                }
+            )
+    for role, node in nodes.items():
+        freshness = node.get("freshness")
+        if freshness in {"missing", "unreadable", "conflict"} and role in {"work_item", "branch", "pr", "project_item"}:
+            kind = "unreadable_host_signal" if freshness == "unreadable" else "conflicting_binding" if freshness == "conflict" else "missing_binding"
+            findings.append(
+                {
+                    "category": "drift" if kind != "missing_binding" else "gate_failure",
+                    "kind": kind,
+                    "severity": "block" if role in {"work_item", "pr"} else "warn",
+                    "subject": role,
+                    "evidence": {"node": node},
+                    "fallback_to": "github-profile-binding",
+                }
+            )
+    binding_findings = binding.get("findings") if isinstance(binding, dict) else []
+    if isinstance(binding_findings, list):
+        findings.extend(finding for finding in binding_findings if isinstance(finding, dict))
+
+    blocking_findings = [finding for finding in findings if finding.get("severity") == "block"]
+    result = "pass" if not missing_inputs and not blocking_findings else "block"
+    return {
+        "command": "host-binding",
+        "operation": "inspect",
+        "schema_version": HOST_BINDING_INSPECTOR_SCHEMA,
+        "result": result,
+        "summary": (
+            "host binding inspector found a consumable binding chain."
+            if result == "pass"
+            else "host binding inspector found missing, stale, unreadable, or conflicting host signals."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": None if result == "pass" else "github-profile-binding",
+        "repository": {"owner": owner, "name": repo_name},
+        "inputs": {
+            "phase": phase_number,
+            "fr": fr_number,
+            "issue": issue_number,
+            "pr": pr_number,
+            "project": project_number,
+            "branch": branch_name,
+            "head_sha": head_sha,
+            "base_sha": base_sha,
+        },
+        "binding_chain": {
+            "schema_version": HOST_BINDING_CHAIN_SCHEMA,
+            "nodes": nodes,
+            "edges": binding.get("chain", []) if isinstance(binding, dict) else [],
+        },
+        "dependency_graph": dependency_graph,
+        "provenance": [
+            {
+                "source_layer": "host_control_mirror",
+                "source_owner": "github",
+                "source_locator": f"{owner}/{repo_name}" if owner and repo_name else None,
+                "freshness": "fresh" if not missing_inputs else "unreadable",
+            }
+        ],
+        "findings": findings,
+    }
+
+
 def handle_host_binding(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
+    if args.operation == "inspect":
+        return emit(
+            host_binding_inspection_payload(
+                target_root=target_root,
+                owner=args.owner,
+                repo_name=args.repo_name,
+                phase_number=args.phase,
+                fr_number=args.fr,
+                issue_number=args.issue,
+                pr_number=args.pr,
+                project_number=args.project,
+                branch_name=args.branch,
+                head_sha=args.head_sha,
+                base_sha=args.base_sha,
+            )
+        )
     return emit(
         host_binding_validate_payload(
             target_root=target_root,
@@ -9909,6 +12787,23 @@ def handle_host_binding(args: argparse.Namespace) -> int:
             branch_name=args.branch,
             head_sha=args.head_sha,
             base_sha=args.base_sha,
+        )
+    )
+
+
+def handle_goal(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    return emit(
+        goal_payload(
+            target_root=target_root,
+            output_relative=args.output,
+            expected_item=args.item,
+            operation=args.operation,
+            goal_file=args.goal_file,
+            issue_number=args.issue,
+            pr_number=args.pr,
+            branch_name=args.branch,
+            head_sha=args.head_sha,
         )
     )
 
@@ -9984,6 +12879,407 @@ def pr_body_mentions_item(body: Any, item_id: str) -> bool:
     return bool(re.search(rf"(?<![A-Z0-9-]){re.escape(item_id)}(?![A-Z0-9-])", body))
 
 
+def pr_metadata_block_locator(body: str, start: int, end: int, marker: str) -> dict[str, Any]:
+    return {
+        "marker": marker,
+        "start_offset": start,
+        "end_offset": end,
+        "start_line": body.count("\n", 0, start) + 1,
+        "end_line": body.count("\n", 0, end) + 1,
+    }
+
+
+def pr_metadata_expected_format(marker: str) -> str:
+    return (
+        f"<!-- {marker}\n"
+        "{\n"
+        '  "schema_version": "loom-repo-pr-metadata/v1",\n'
+        '  "metadata_contract_id": "<repo-specific-id>",\n'
+        '  "surface": "review|merge_ready",\n'
+        '  "fields": {"<repo-field>": "<value>"},\n'
+        '  "source": {"rendered_hash": "<sha256-or-repo-renderer-hash>"},\n'
+        '  "parser_version": "loom-pr-metadata-parser/v1"\n'
+        "}\n"
+        "-->"
+    )
+
+
+def metadata_contract_raw_fields(
+    target_root: Path,
+    governance_surface: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[str], str | None]:
+    repo_interface = governance_surface.get("repo_interface")
+    if not isinstance(repo_interface, dict):
+        return [], ["governance_surface.repo_interface"], None
+    availability = repo_interface.get("availability")
+    if availability in {"absent", "companion_docs_only"}:
+        return [], [], None
+    if availability == "incomplete":
+        missing = repo_interface.get("missing_inputs")
+        return [], list(missing) if isinstance(missing, list) else ["repo companion interface"], None
+    if availability != "present":
+        return [], [f"unknown repo companion availability: {availability}"], None
+
+    locator = ".loom/companion/repo-interface.json"
+    locator_entry = repo_interface.get("repo_specific_requirements")
+    if isinstance(locator_entry, dict) and isinstance(locator_entry.get("locator"), str):
+        locator = locator_entry["locator"]
+    repo_interface_path, locator_errors = resolve_repo_relative_path(
+        target_root,
+        locator,
+        label="repo companion metadata contract locator",
+    )
+    if locator_errors:
+        return [], locator_errors, locator
+    assert repo_interface_path is not None
+    try:
+        payload = load_json_file(repo_interface_path)
+    except (FileNotFoundError, json.JSONDecodeError, OSError, ValueError) as exc:
+        return [], [f"repo companion metadata contract is unreadable: {exc}"], locator
+    metadata_contract = payload.get("metadata_contract") if isinstance(payload, dict) else None
+    fields = metadata_contract.get("fields") if isinstance(metadata_contract, dict) else None
+    if fields is None:
+        return [], [], locator
+    if not isinstance(fields, list):
+        return [], ["metadata_contract.fields must be a list"], locator
+    return [field for field in fields if isinstance(field, dict)], [], locator
+
+
+def applicable_pr_metadata_contracts(
+    fields: list[dict[str, Any]],
+    *,
+    surface: str,
+) -> list[dict[str, Any]]:
+    contracts: list[dict[str, Any]] = []
+    for field in fields:
+        machine_carrier = field.get("machine_carrier")
+        if not isinstance(machine_carrier, dict):
+            continue
+        preflight = machine_carrier.get("preflight")
+        required_before = preflight.get("required_before") if isinstance(preflight, dict) else None
+        if isinstance(required_before, list) and surface in required_before:
+            contracts.append(field)
+    return contracts
+
+
+def pr_metadata_html_comment_blocks(body: str, marker: str) -> list[dict[str, Any]]:
+    pattern = re.compile(rf"<!--\s*{re.escape(marker)}\s*(.*?)\s*-->", flags=re.DOTALL)
+    blocks: list[dict[str, Any]] = []
+    for match in pattern.finditer(body):
+        blocks.append(
+            {
+                "raw": match.group(1).strip(),
+                "locator": pr_metadata_block_locator(body, match.start(), match.end(), marker),
+            }
+        )
+    return blocks
+
+
+def pr_metadata_diagnostic(
+    *,
+    contract_id: str,
+    marker: str,
+    reason: str,
+    block_locator: dict[str, Any] | None = None,
+    parse_error: str | None = None,
+    missing_fields: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "metadata_contract_id": contract_id,
+        "block_locator": block_locator,
+        "parse_error": parse_error,
+        "missing_fields": missing_fields or [],
+        "expected_format": pr_metadata_expected_format(marker),
+        "suggested_fix": "rewrite the PR metadata HTML comment JSON block with the declared schema, surface, contract id, and required fields.",
+        "reason": reason,
+    }
+
+
+def validate_pr_metadata_envelope(
+    *,
+    envelope: Any,
+    field: dict[str, Any],
+    surface: str,
+    block_locator: dict[str, Any],
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    contract_id = str(field.get("id") or "")
+    machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
+    marker = str(machine_carrier.get("marker") or "loom:repo-pr-metadata")
+    diagnostics: list[dict[str, Any]] = []
+    if not isinstance(envelope, dict):
+        diagnostics.append(
+            pr_metadata_diagnostic(
+                contract_id=contract_id,
+                marker=marker,
+                reason="machine block JSON must decode to an object",
+                block_locator=block_locator,
+                parse_error="decoded JSON is not an object",
+            )
+        )
+        return None, diagnostics
+    if envelope.get("metadata_contract_id") != contract_id or envelope.get("surface") != surface:
+        return None, []
+
+    missing_fields: list[str] = []
+    if envelope.get("schema_version") != PR_METADATA_MACHINE_SCHEMA:
+        missing_fields.append("schema_version")
+    fields = envelope.get("fields")
+    if not isinstance(fields, dict):
+        missing_fields.append("fields")
+        fields = {}
+    source = envelope.get("source")
+    if not isinstance(source, dict) or not isinstance(source.get("rendered_hash"), str) or not source.get("rendered_hash"):
+        missing_fields.append("source.rendered_hash")
+    if not isinstance(envelope.get("parser_version"), str) or not envelope.get("parser_version"):
+        missing_fields.append("parser_version")
+    required_fields = machine_carrier.get("required_fields")
+    if isinstance(required_fields, list):
+        for required_field in required_fields:
+            if isinstance(required_field, str) and required_field.strip():
+                if required_field not in fields or fields.get(required_field) in (None, ""):
+                    missing_fields.append(f"fields.{required_field}")
+    if missing_fields:
+        diagnostics.append(
+            pr_metadata_diagnostic(
+                contract_id=contract_id,
+                marker=marker,
+                reason="machine block is missing required envelope or repo-specific fields",
+                block_locator=block_locator,
+                missing_fields=missing_fields,
+            )
+        )
+        return None, diagnostics
+    normalized = {
+        "metadata_contract_id": contract_id,
+        "surface": surface,
+        "schema_version": envelope.get("schema_version"),
+        "fields": fields,
+        "source": source,
+        "parser_version": envelope.get("parser_version"),
+        "block_locator": block_locator,
+    }
+    return normalized, []
+
+
+def pr_metadata_contract_preflight(
+    *,
+    field: dict[str, Any],
+    body: str | None,
+    surface: str,
+) -> dict[str, Any]:
+    contract_id = str(field.get("id") or "unknown")
+    machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
+    marker = str(machine_carrier.get("marker") or "loom:repo-pr-metadata")
+    migration_mode = str(machine_carrier.get("migration_mode") or "advisory_legacy")
+    required_fields = [
+        required_field
+        for required_field in machine_carrier.get("required_fields", [])
+        if isinstance(required_field, str) and required_field.strip()
+    ]
+    base = {
+        "metadata_contract_id": contract_id,
+        "surface": surface,
+        "marker": marker,
+        "required_fields": required_fields,
+        "migration_mode": migration_mode,
+        "schema_version": machine_carrier.get("schema_version"),
+        "parser_version": PR_METADATA_PARSER_VERSION,
+        "diagnostics": [],
+        "envelope": None,
+    }
+    if not isinstance(body, str):
+        diagnostic = pr_metadata_diagnostic(
+            contract_id=contract_id,
+            marker=marker,
+            reason="PR body is unavailable for metadata preflight",
+            missing_fields=["pr.body"],
+        )
+        result = "block" if migration_mode == "required" else "pass"
+        return {
+            **base,
+            "result": result,
+            "summary": (
+                "required PR metadata machine block is absent because the PR body is unavailable."
+                if result == "block"
+                else "PR body is unavailable; legacy migration mode leaves metadata preflight advisory."
+            ),
+            "missing_inputs": ["PR body metadata machine block"] if result == "block" else [],
+            "fallback_to": "update_pr_body" if result == "block" else None,
+            "diagnostics": [diagnostic],
+            "legacy_mode": result == "pass",
+        }
+
+    blocks = pr_metadata_html_comment_blocks(body, marker)
+    if not blocks:
+        diagnostic = pr_metadata_diagnostic(
+            contract_id=contract_id,
+            marker=marker,
+            reason="PR body does not contain the declared metadata machine block",
+            missing_fields=["metadata_block"],
+        )
+        result = "block" if migration_mode == "required" else "pass"
+        return {
+            **base,
+            "result": result,
+            "summary": (
+                "required PR metadata machine block is absent."
+                if result == "block"
+                else "PR metadata machine block is absent; legacy migration mode remains advisory."
+            ),
+            "missing_inputs": [f"PR metadata machine block missing: {contract_id}"] if result == "block" else [],
+            "fallback_to": "update_pr_body" if result == "block" else None,
+            "diagnostics": [diagnostic],
+            "legacy_mode": result == "pass",
+        }
+
+    diagnostics: list[dict[str, Any]] = []
+    for block in blocks:
+        try:
+            envelope = json.loads(block["raw"])
+        except json.JSONDecodeError as exc:
+            diagnostics.append(
+                pr_metadata_diagnostic(
+                    contract_id=contract_id,
+                    marker=marker,
+                    reason="metadata machine block JSON is malformed",
+                    block_locator=block["locator"],
+                    parse_error=exc.msg,
+                )
+            )
+            continue
+        normalized, envelope_diagnostics = validate_pr_metadata_envelope(
+            envelope=envelope,
+            field=field,
+            surface=surface,
+            block_locator=block["locator"],
+        )
+        diagnostics.extend(envelope_diagnostics)
+        if normalized is not None:
+            return {
+                **base,
+                "result": "pass",
+                "summary": "PR metadata machine block is parseable and contains the required repo-specific fields.",
+                "missing_inputs": [],
+                "fallback_to": None,
+                "diagnostics": diagnostics,
+                "envelope": normalized,
+                "legacy_mode": False,
+            }
+
+    if diagnostics:
+        return {
+            **base,
+            "result": "block",
+            "summary": "PR metadata machine block is present but not parseable or complete.",
+            "missing_inputs": [f"PR metadata machine block invalid: {contract_id}"],
+            "fallback_to": "update_pr_body",
+            "diagnostics": diagnostics,
+            "legacy_mode": False,
+        }
+    diagnostic = pr_metadata_diagnostic(
+        contract_id=contract_id,
+        marker=marker,
+        reason="PR metadata machine blocks did not match the expected contract id and surface",
+        missing_fields=["metadata_contract_id", "surface"],
+    )
+    result = "block" if migration_mode == "required" else "pass"
+    return {
+        **base,
+        "result": result,
+        "summary": (
+            "required PR metadata machine block for this contract and surface is absent."
+            if result == "block"
+            else "PR metadata machine block for this contract and surface is absent; legacy migration mode remains advisory."
+        ),
+        "missing_inputs": [f"PR metadata machine block missing: {contract_id}"] if result == "block" else [],
+        "fallback_to": "update_pr_body" if result == "block" else None,
+        "diagnostics": [diagnostic],
+        "legacy_mode": result == "pass",
+    }
+
+
+def pr_metadata_preflight_payload(
+    *,
+    target_root: Path,
+    surface: str,
+    owner: str | None = None,
+    repo_name: str | None = None,
+    pr_number: int | None = None,
+    head_sha: str | None = None,
+    branch_name: str | None = None,
+    pr_payload_file: str | None = None,
+    pr_payload: dict[str, Any] | None = None,
+    effective_pr: int | None = None,
+    governance_surface: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    governance_surface = governance_surface or build_governance_surface(target_root)
+    fields, contract_errors, source_locator = metadata_contract_raw_fields(target_root, governance_surface)
+    applicable_contracts = applicable_pr_metadata_contracts(fields, surface=surface)
+    missing_inputs: list[str] = []
+    if contract_errors:
+        missing_inputs.extend(str(message) for message in contract_errors)
+
+    pr_errors: list[str] = []
+    inferences: list[dict[str, Any]] = []
+    if applicable_contracts and pr_payload is None and not contract_errors:
+        detected_owner, detected_repo = detect_github_repo(target_root)
+        pr_payload, effective_pr, pr_errors, inferences = load_pr_payload_for_gate(
+            target_root=target_root,
+            owner=owner or detected_owner,
+            repo_name=repo_name or detected_repo,
+            pr_number=pr_number,
+            head_sha=head_sha,
+            branch_name=branch_name,
+            pr_payload_file=pr_payload_file,
+        )
+        missing_inputs.extend(f"pr: {message}" for message in pr_errors)
+
+    body = pr_payload.get("body") if isinstance(pr_payload, dict) else None
+    contract_results = [
+        pr_metadata_contract_preflight(field=field, body=body if isinstance(body, str) else None, surface=surface)
+        for field in applicable_contracts
+    ]
+    for contract_result in contract_results:
+        if contract_result.get("result") == "block":
+            for message in contract_result.get("missing_inputs", []):
+                if message not in missing_inputs:
+                    missing_inputs.append(str(message))
+
+    result = "pass" if not missing_inputs else "block"
+    if contract_errors:
+        summary = "repo companion metadata contract is incomplete or unreadable."
+    elif not applicable_contracts:
+        summary = "no repo-specific PR metadata machine preflight is declared for this surface."
+    elif result == "pass":
+        summary = "repo-specific PR metadata machine preflight passed or is in advisory legacy migration mode."
+    else:
+        summary = "repo-specific PR metadata machine preflight found blocking parser diagnostics."
+    return {
+        "command": "pr-metadata",
+        "operation": "preflight",
+        "schema_version": PR_METADATA_PREFLIGHT_SCHEMA,
+        "surface": surface,
+        "result": result,
+        "summary": summary,
+        "missing_inputs": missing_inputs,
+        "fallback_to": "update_pr_body" if result == "block" and not contract_errors else "adoption" if result == "block" else None,
+        "source_locator": source_locator,
+        "metadata_contracts": contract_results,
+        "diagnostics": [
+            diagnostic
+            for contract_result in contract_results
+            for diagnostic in contract_result.get("diagnostics", [])
+            if isinstance(diagnostic, dict)
+        ],
+        "pr": {
+            "number": effective_pr,
+            "head_sha": pr_payload.get("headRefOid") if isinstance(pr_payload, dict) else head_sha,
+            "has_body": isinstance(body, str),
+        },
+        "inferences": inferences,
+    }
+
+
 def load_pr_payload_for_gate(
     *,
     target_root: Path,
@@ -10042,6 +13338,8 @@ def pr_gate_failure_taxonomy(missing_inputs: list[str], gate_result: str) -> lis
             categories.add("review_missing")
         if "schema_version" in lowered or "invalid review" in lowered:
             categories.add("review_schema_invalid")
+        if "implementation review kind" in lowered or "cannot satisfy implementation approval" in lowered:
+            categories.add("review_not_approved")
         if "decision is blocking" in lowered or "decision is fallback" in lowered or "not approved" in lowered:
             categories.add("review_not_approved")
         if "stale" in lowered or "implementation drift" in lowered:
@@ -10056,9 +13354,130 @@ def pr_gate_failure_taxonomy(missing_inputs: list[str], gate_result: str) -> lis
             categories.add("raw_evidence_bypass")
         if "required check" in lowered or "branch protection" in lowered or "ruleset" in lowered:
             categories.add("host_enforcement_unverified")
+        if "pr metadata" in lowered:
+            categories.add("pr_metadata_preflight_failed")
     if gate_result == "fallback":
         categories.add("prior_gate_fallback")
     return sorted(categories)
+
+
+def approval_boundary_payload(*, raw_evidence_present: bool) -> dict[str, Any]:
+    return {
+        "authored_truth": "work_item.review_entry",
+        "raw_review_evidence_satisfies_approval": False,
+        "shadow_evidence_satisfies_approval": False,
+        "runtime_review_evidence_satisfies_approval": False,
+        "pr_body_summary_satisfies_approval": False,
+        "ci_success_satisfies_approval": False,
+        "github_review_comments_satisfy_approval": False,
+        "raw_evidence_present": raw_evidence_present,
+        "required_authored_review_kinds": sorted(IMPLEMENTATION_REVIEW_KINDS),
+    }
+
+
+def approval_boundary_lint_status(
+    *,
+    context: dict[str, Any],
+    pr_head: str | None,
+    review_approval: dict[str, Any],
+    raw_evidence_present: bool,
+    failure_taxonomy: list[str],
+) -> dict[str, Any]:
+    blocking_results: list[dict[str, Any]] = []
+    not_applicable_results: list[dict[str, Any]] = []
+    status = review_approval.get("status")
+    review_kind = review_approval.get("kind")
+    reviewed_head = review_approval.get("reviewed_head")
+    stale_taxonomy = {"review_stale", "head_binding_drift", "validation_summary_drift"} & set(failure_taxonomy)
+    base_result = {
+        "schema_version": GOVERNANCE_LINT_RESULT_SCHEMA,
+        "id": "authored_review_approval_boundary",
+        "kind": "approval_bypass",
+        "surface": "merge_ready",
+        "subject": "work_item.review_entry",
+        "mapped_failure": {
+            "category": "gate_failure",
+            "kind": "approval_bypass",
+        },
+        "provenance": {
+            "source_layer": "authored_truth",
+            "source_owner": "loom",
+            "source_locator": context.get("review_entry"),
+            "source_binding": "work_item.review_entry",
+            "freshness": "fresh" if status == "approved" else "missing" if status == "missing" else "stale",
+        },
+        "bindings": {
+            "item_id": context.get("item_id"),
+            "head_sha": pr_head,
+            "scope": context.get("scope"),
+            "reviewed_head_sha": reviewed_head,
+            "pr_ref": None,
+        },
+        "fallback_to": "review record / approval gate",
+    }
+    if stale_taxonomy:
+        blocking_results.append(
+            {
+                **base_result,
+                "id": "authored_review_evidence_freshness",
+                "kind": "evidence_stale",
+                "strength": "blocking",
+                "summary": "authored review approval exists but no longer binds to the current head or validation summary",
+                "mapped_failure": {
+                    "category": "stale",
+                    "kind": "evidence_stale",
+                },
+                "provenance": {
+                    **base_result["provenance"],
+                    "freshness": "stale",
+                },
+                "evidence_freshness": "stale",
+                "fallback_to": "validation / evidence refresh",
+            }
+        )
+    elif status == "approved":
+        not_applicable_results.append(
+            {
+                **base_result,
+                "strength": "not_applicable",
+                "summary": "Authored implementation review approval is present; raw, shadow, PR body, CI, and GitHub review evidence remain evidence-only.",
+                "evidence_freshness": "fresh",
+            }
+        )
+    else:
+        reasons = []
+        if raw_evidence_present:
+            reasons.append("raw or runtime review evidence is present")
+        if review_kind and review_kind not in IMPLEMENTATION_REVIEW_KINDS:
+            reasons.append(f"review kind `{review_kind}` is not an implementation approval kind")
+        if "raw_evidence_bypass" in failure_taxonomy:
+            reasons.append("raw evidence cannot satisfy semantic approval")
+        if not reasons:
+            reasons.append("fresh authored implementation review approval is absent")
+        blocking_results.append(
+            {
+                **base_result,
+                "strength": "blocking",
+                "summary": "; ".join(reasons),
+                "evidence_freshness": "missing" if status == "missing" else "stale",
+            }
+        )
+    return {
+        "schema_version": GOVERNANCE_LINT_STATUS_SCHEMA,
+        "surface": "merge_ready",
+        "result": "block" if blocking_results else "pass",
+        "result_summary": (
+            "approval bypass lint blocks merge-ready because authored implementation review approval is absent or invalid."
+            if blocking_results
+            else "approval bypass lint found no raw/shadow/PR/CI/GitHub evidence promoted to semantic approval."
+        ),
+        "blocking_results": blocking_results,
+        "advisory_results": [],
+        "repo_specific_results": [],
+        "not_applicable_results": not_applicable_results,
+        "mapped_failures": [entry["mapped_failure"] for entry in blocking_results],
+        "provenance": [entry["provenance"] for entry in [*blocking_results, *not_applicable_results]],
+    }
 
 
 def pr_gate_payload(
@@ -10162,15 +13581,25 @@ def pr_gate_payload(
                 "status": "missing",
                 "path": review_path,
                 "decision": None,
+                "kind": None,
                 "reviewed_head": None,
                 "head_binding": None,
                 "missing_inputs": review_errors or [f"missing review artifact: {review_path}"],
             }
         else:
+            review_kind = review_record.get("kind")
+            approval_status = (
+                "approved"
+                if review_record.get("decision") == "allow"
+                and not review_errors
+                and review_kind in IMPLEMENTATION_REVIEW_KINDS
+                else "not_approved"
+            )
             review_approval = {
-                "status": "approved" if review_record.get("decision") == "allow" and not review_errors else "not_approved",
+                "status": approval_status,
                 "path": review_path,
                 "decision": review_record.get("decision"),
+                "kind": review_kind,
                 "reviewed_head": review_record.get("reviewed_head"),
                 "reviewed_validation_summary": review_record.get("reviewed_validation_summary"),
                 "head_binding": review_record.get("head_binding"),
@@ -10195,6 +13624,33 @@ def pr_gate_payload(
     else:
         raw_evidence_present = False
 
+    governance_surface = build_governance_surface(target_root)
+    pr_metadata_preflight = pr_metadata_preflight_payload(
+        target_root=target_root,
+        surface="merge_ready",
+        owner=owner,
+        repo_name=repo_name,
+        pr_number=effective_pr,
+        head_sha=pr_head,
+        branch_name=branch_name,
+        pr_payload_file=pr_payload_file,
+        pr_payload=pr_payload if isinstance(pr_payload, dict) else None,
+        effective_pr=effective_pr,
+        governance_surface=governance_surface,
+    )
+    if pr_metadata_preflight.get("result") == "block":
+        missing_inputs.extend(str(message) for message in pr_metadata_preflight.get("missing_inputs", []))
+    steps.append(
+        {
+            "name": "pr-metadata-preflight",
+            "result": pr_metadata_preflight["result"],
+            "summary": pr_metadata_preflight["summary"],
+            "missing_inputs": pr_metadata_preflight["missing_inputs"],
+            "fallback_to": pr_metadata_preflight["fallback_to"],
+            "pr_metadata_preflight": pr_metadata_preflight,
+        }
+    )
+
     result = "pass"
     fallback_to: str | None = None
     for step in steps:
@@ -10212,6 +13668,29 @@ def pr_gate_payload(
     failure_taxonomy = pr_gate_failure_taxonomy(missing_inputs, result)
     if raw_evidence_present and review_approval.get("status") != "approved" and "raw_evidence_bypass" not in failure_taxonomy:
         failure_taxonomy.append("raw_evidence_bypass")
+    approval_boundary = approval_boundary_payload(raw_evidence_present=raw_evidence_present)
+    governance_lint = (
+        approval_boundary_lint_status(
+            context=context,
+            pr_head=pr_head,
+            review_approval=review_approval,
+            raw_evidence_present=raw_evidence_present,
+            failure_taxonomy=sorted(failure_taxonomy),
+        )
+        if context
+        else {
+            "schema_version": GOVERNANCE_LINT_STATUS_SCHEMA,
+            "surface": "merge_ready",
+            "result": "block",
+            "result_summary": "approval bypass lint cannot run until the Work Item fact chain is readable.",
+            "blocking_results": [],
+            "advisory_results": [],
+            "repo_specific_results": [],
+            "not_applicable_results": [],
+            "mapped_failures": [],
+            "provenance": [],
+        }
+    )
     return {
         "command": "pr-gate",
         "operation": "check",
@@ -10234,6 +13713,9 @@ def pr_gate_payload(
             "head_sha": pr_head,
             "url": pr_payload.get("url") if isinstance(pr_payload, dict) else None,
             "work_item_from_body": body_item,
+            "mergeStateStatus": pr_payload.get("mergeStateStatus") if isinstance(pr_payload, dict) else None,
+            "reviewDecision": pr_payload.get("reviewDecision") if isinstance(pr_payload, dict) else None,
+            "latestReviews": pr_payload.get("latestReviews") if isinstance(pr_payload, dict) else None,
         },
         "work_item": {
             "id": context.get("item_id") if context else effective_item,
@@ -10242,18 +13724,14 @@ def pr_gate_payload(
         },
         "review_approval": review_approval,
         "merge_checkpoint": merge_checkpoint,
+        "pr_metadata_preflight": pr_metadata_preflight,
+        "governance_lint": governance_lint,
         "host_enforcement": {
             "stable_check_name": PR_MERGE_GATE_CHECK_NAME,
             "status": "not_checked",
             "reason": "pr-gate check proves PR-local semantic approval; controlled-merge checks host required status.",
         },
-        "approval_boundary": {
-            "authored_truth": "work_item.review_entry",
-            "raw_review_evidence_satisfies_approval": False,
-            "shadow_evidence_satisfies_approval": False,
-            "ci_success_satisfies_approval": False,
-            "raw_evidence_present": raw_evidence_present,
-        },
+        "approval_boundary": approval_boundary,
         "failure_taxonomy": sorted(failure_taxonomy),
         "steps": steps,
         "inferences": inferences,
@@ -10267,6 +13745,22 @@ def handle_pr_gate(args: argparse.Namespace) -> int:
             target_root=target_root,
             output_relative=args.output,
             expected_item=args.item,
+            owner=args.owner,
+            repo_name=args.repo_name,
+            pr_number=args.pr,
+            head_sha=args.head_sha,
+            branch_name=args.branch,
+            pr_payload_file=args.pr_payload_file,
+        )
+    )
+
+
+def handle_pr_metadata(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    return emit(
+        pr_metadata_preflight_payload(
+            target_root=target_root,
+            surface=args.surface,
             owner=args.owner,
             repo_name=args.repo_name,
             pr_number=args.pr,
@@ -10350,6 +13844,252 @@ def required_check_status_payload(status_rollup: Any, required_contexts: list[st
     }
 
 
+def load_retained_result_file(target_root: Path, fixture: str | None, *, label: str) -> tuple[dict[str, Any] | None, list[str]]:
+    payload, errors = load_optional_json_fixture(target_root, fixture, label=label)
+    if errors:
+        return None, errors
+    if payload is None:
+        return None, [f"{label} is required"]
+    if not isinstance(payload, dict):
+        return None, [f"{label} must expose a JSON object"]
+    return payload, []
+
+
+def retained_pr_gate_consumption(
+    *,
+    retained: dict[str, Any] | None,
+    locator: str | None,
+    current_pr: dict[str, Any],
+    expected_item: str | None,
+    pr_number: int,
+) -> dict[str, Any]:
+    missing_inputs: list[str] = []
+    retained_pr = retained.get("pr") if isinstance(retained, dict) and isinstance(retained.get("pr"), dict) else {}
+    retained_work_item = (
+        retained.get("work_item")
+        if isinstance(retained, dict) and isinstance(retained.get("work_item"), dict)
+        else {}
+    )
+    review_approval = (
+        retained.get("review_approval")
+        if isinstance(retained, dict) and isinstance(retained.get("review_approval"), dict)
+        else {}
+    )
+    merge_checkpoint = (
+        retained.get("merge_checkpoint")
+        if isinstance(retained, dict) and isinstance(retained.get("merge_checkpoint"), dict)
+        else {}
+    )
+    retained_head = retained_pr.get("head_sha")
+    current_head = current_pr.get("headRefOid")
+    retained_item = retained_work_item.get("id")
+
+    if not isinstance(retained, dict):
+        missing_inputs.append("retained pr-gate result is unreadable")
+    else:
+        if retained.get("schema_version") != PR_MERGE_GATE_SCHEMA:
+            missing_inputs.append(f"retained pr-gate schema_version must be `{PR_MERGE_GATE_SCHEMA}`")
+        if retained.get("result") != "pass":
+            missing_inputs.append("retained pr-gate result must be pass")
+        if retained_pr.get("number") != pr_number:
+            missing_inputs.append("retained pr-gate PR number does not match current PR")
+        if not isinstance(retained_head, str) or not retained_head:
+            missing_inputs.append("retained pr-gate PR head is missing")
+        elif isinstance(current_head, str) and current_head and retained_head != current_head:
+            missing_inputs.append("retained pr-gate PR head does not match current PR head")
+        if expected_item and retained_item != expected_item:
+            missing_inputs.append("retained pr-gate Work Item does not match expected item")
+        if review_approval.get("status") != "approved" or review_approval.get("decision") != "allow":
+            missing_inputs.append("retained pr-gate does not carry authored allow review approval")
+        if review_approval.get("kind") not in IMPLEMENTATION_REVIEW_KINDS:
+            missing_inputs.append("retained pr-gate review kind cannot satisfy implementation approval")
+        if merge_checkpoint.get("result") not in {None, "pass"}:
+            missing_inputs.append("retained pr-gate merge checkpoint is not pass")
+
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "source": "retained",
+        "locator": locator,
+        "schema_version": retained.get("schema_version") if isinstance(retained, dict) else None,
+        "result": result,
+        "summary": (
+            "retained pr-gate result is fresh for the current PR head."
+            if result == "pass"
+            else "retained pr-gate result is missing, stale, or not an approval result."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": None if result == "pass" else "pr-gate",
+        "freshness": "fresh" if result == "pass" else "stale",
+        "bindings": {
+            "pr": pr_number,
+            "work_item": retained_item,
+            "retained_head_sha": retained_head,
+            "current_head_sha": current_head,
+            "review_entry": retained_work_item.get("review_entry"),
+            "reviewed_head": review_approval.get("reviewed_head"),
+            "reviewed_validation_summary": review_approval.get("reviewed_validation_summary"),
+        },
+    }
+
+
+def merge_gate_latest_validation_summary(payload: dict[str, Any]) -> str | None:
+    value = payload.get("latest_validation_summary")
+    if isinstance(value, str) and value.strip():
+        return value
+    merge_checkpoint = payload.get("merge_checkpoint") if isinstance(payload.get("merge_checkpoint"), dict) else None
+    if isinstance(merge_checkpoint, dict):
+        recovery = merge_checkpoint.get("recovery") if isinstance(merge_checkpoint.get("recovery"), dict) else None
+        if isinstance(recovery, dict) and isinstance(recovery.get("latest_validation_summary"), str):
+            return recovery["latest_validation_summary"]
+    recovery = payload.get("recovery") if isinstance(payload.get("recovery"), dict) else None
+    if isinstance(recovery, dict) and isinstance(recovery.get("latest_validation_summary"), str):
+        return recovery["latest_validation_summary"]
+    return None
+
+
+def retained_merge_gate_consumption(
+    *,
+    retained: dict[str, Any] | None,
+    locator: str | None,
+    expected_item: str | None,
+    pr_gate: dict[str, Any],
+) -> dict[str, Any]:
+    missing_inputs: list[str] = []
+    item = retained.get("item") if isinstance(retained, dict) and isinstance(retained.get("item"), dict) else {}
+    retained_item = item.get("id")
+    merge_checkpoint = (
+        retained.get("merge_checkpoint")
+        if isinstance(retained, dict) and isinstance(retained.get("merge_checkpoint"), dict)
+        else retained
+        if isinstance(retained, dict) and retained.get("command") == "checkpoint" and retained.get("checkpoint") == "merge"
+        else {}
+    )
+    review_approval = pr_gate.get("review_approval") if isinstance(pr_gate.get("review_approval"), dict) else {}
+    reviewed_validation_summary = review_approval.get("reviewed_validation_summary")
+    retained_validation_summary = merge_gate_latest_validation_summary(retained) if isinstance(retained, dict) else None
+
+    if not isinstance(retained, dict):
+        missing_inputs.append("retained merge-gate result is unreadable")
+    else:
+        schema_version = retained.get("schema_version")
+        command = retained.get("command")
+        operation = retained.get("operation")
+        checkpoint = retained.get("checkpoint")
+        is_merge_ready = command == "flow" and operation == "merge-ready"
+        is_checkpoint_merge = command == "checkpoint" and checkpoint == "merge"
+        if schema_version is not None and schema_version not in MERGE_GATE_RESULT_SCHEMAS:
+            missing_inputs.append("retained merge-gate schema_version is not recognized")
+        if not is_merge_ready and not is_checkpoint_merge:
+            missing_inputs.append("retained merge-gate result must be flow merge-ready or checkpoint merge")
+        if retained.get("result") != "pass":
+            missing_inputs.append("retained merge-gate result must be pass")
+        if expected_item and retained_item and retained_item != expected_item:
+            missing_inputs.append("retained merge-gate Work Item does not match expected item")
+        if not isinstance(merge_checkpoint, dict) or merge_checkpoint.get("result") != "pass":
+            missing_inputs.append("retained merge-gate merge checkpoint is not pass")
+        if (
+            isinstance(reviewed_validation_summary, str)
+            and reviewed_validation_summary
+            and isinstance(retained_validation_summary, str)
+            and retained_validation_summary
+            and reviewed_validation_summary != retained_validation_summary
+        ):
+            missing_inputs.append("retained merge-gate validation summary drifts from retained pr-gate review")
+
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "source": "retained",
+        "locator": locator,
+        "schema_version": retained.get("schema_version") if isinstance(retained, dict) else None,
+        "result": result,
+        "summary": (
+            "retained merge-gate result is fresh for the retained pr-gate approval."
+            if result == "pass"
+            else "retained merge-gate result is missing, stale, or not a passing merge gate."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": None if result == "pass" else "merge-ready",
+        "freshness": "fresh" if result == "pass" else "stale",
+        "bindings": {
+            "work_item": retained_item,
+            "retained_validation_summary": retained_validation_summary,
+            "reviewed_validation_summary": reviewed_validation_summary,
+            "merge_checkpoint_result": merge_checkpoint.get("result") if isinstance(merge_checkpoint, dict) else None,
+        },
+    }
+
+
+def current_pr_drift_readback(
+    *,
+    current_pr: dict[str, Any],
+    pr_number: int,
+    expected_head: str | None,
+    merge_method: str,
+    pr_gate_consumption: dict[str, Any],
+    merge_gate_consumption: dict[str, Any] | None,
+    required_checks: dict[str, Any],
+    host_enforcement: dict[str, Any],
+) -> dict[str, Any]:
+    head_sha = current_pr.get("headRefOid")
+    mergeability = host_mergeability_readback(current_pr.get("mergeStateStatus"))
+    return {
+        "mode": "drift-only",
+        "summary": "controlled merge reused retained gate results and re-read only current PR and host merge-control drift surfaces.",
+        "subchecks": {
+            "current_pr_head": {
+                "result": "pass" if not expected_head or expected_head == head_sha else "block",
+                "expected_head_sha": expected_head,
+                "current_head_sha": head_sha,
+                "pr": pr_number,
+            },
+            "retained_pr_gate": pr_gate_consumption,
+            "retained_merge_gate": merge_gate_consumption,
+            "required_checks": required_checks,
+            "host_enforcement": host_enforcement,
+            "mergeability": mergeability,
+            "merge_method": {
+                "result": "pass",
+                "method": merge_method,
+            },
+        },
+    }
+
+
+def host_mergeability_readback(mergeability: Any) -> dict[str, Any]:
+    status = str(mergeability).upper() if isinstance(mergeability, str) and mergeability else None
+    if status in HOST_MERGEABILITY_HARD_BLOCK_STATUSES:
+        return {
+            "result": "block",
+            "status": status,
+            "interpretation": "hard_block",
+            "summary": f"host mergeability is `{status}` and must be repaired before controlled merge delegation.",
+        }
+    if status in HOST_MERGEABILITY_DELEGATED_STATUSES:
+        return {
+            "result": "pass",
+            "status": status,
+            "interpretation": "delegated_host_policy",
+            "summary": (
+                "host mergeability is `BLOCKED`; Loom treats it as a host policy signal after authored "
+                "review approval, required checks, PR head, and host enforcement readback pass. `gh pr merge` "
+                "remains the final host delegation point."
+            ),
+        }
+    if status:
+        return {
+            "result": "pass",
+            "status": status,
+            "interpretation": "host_readback",
+            "summary": f"host mergeability is `{status}`.",
+        }
+    return {
+        "result": "pass",
+        "status": None,
+        "interpretation": "not_present",
+        "summary": "host mergeability is not present in the PR fixture/readback.",
+    }
+
+
 def controlled_merge_payload(
     *,
     target_root: Path,
@@ -10366,26 +14106,134 @@ def controlled_merge_payload(
     status_checks_file: str | None,
     branch_protection_file: str | None,
     ruleset_file: str | None,
+    pr_gate_result_file: str | None,
+    merge_gate_result_file: str | None,
 ) -> dict[str, Any]:
     detected_owner, detected_repo = detect_github_repo(target_root)
     owner = owner or detected_owner
     repo_name = repo_name or detected_repo
-    pr_gate = pr_gate_payload(
-        target_root=target_root,
-        output_relative=output_relative,
-        expected_item=expected_item,
-        owner=owner,
-        repo_name=repo_name,
-        pr_number=pr_number,
-        head_sha=head_sha,
-        branch_name=None,
-        pr_payload_file=pr_payload_file,
-    )
-    missing_inputs = [f"pr-gate: {message}" for message in pr_gate.get("missing_inputs", [])]
-    result = pr_gate.get("result")
-    fallback_to = pr_gate.get("fallback_to")
+    retained_results: dict[str, Any] = {
+        "pr_gate": {"source": "live", "locator": None, "consumption": None},
+        "merge_gate": {"source": "live", "locator": None, "consumption": None},
+    }
+    if pr_gate_result_file:
+        pr_payload_raw, effective_pr, pr_errors, _inferences = load_pr_payload_for_gate(
+            target_root=target_root,
+            owner=owner,
+            repo_name=repo_name,
+            pr_number=pr_number,
+            head_sha=head_sha,
+            branch_name=None,
+            pr_payload_file=pr_payload_file,
+        )
+        pr_payload = pr_payload_raw if isinstance(pr_payload_raw, dict) else {}
+        missing_inputs = [f"current PR readback: {message}" for message in pr_errors]
+        if effective_pr != pr_number:
+            missing_inputs.append("current PR readback does not match requested PR")
+        if not pr_payload:
+            missing_inputs.append("current PR readback is unavailable")
+        else:
+            if pr_payload.get("state") != "OPEN":
+                missing_inputs.append(f"current PR state must be OPEN before controlled merge: {pr_payload.get('state')}")
+            if pr_payload.get("isDraft") is True:
+                missing_inputs.append("current PR is draft")
+            current_head = pr_payload.get("headRefOid")
+            if head_sha and current_head and head_sha != current_head:
+                missing_inputs.append("current PR head does not match --head-sha")
+        retained_pr_gate, retained_pr_gate_errors = load_retained_result_file(
+            target_root,
+            pr_gate_result_file,
+            label="retained pr-gate result",
+        )
+        missing_inputs.extend(f"retained pr-gate: {message}" for message in retained_pr_gate_errors)
+        pr_gate = retained_pr_gate or {
+            "command": "pr-gate",
+            "operation": "check",
+            "schema_version": PR_MERGE_GATE_SCHEMA,
+            "result": "block",
+            "missing_inputs": retained_pr_gate_errors,
+            "fallback_to": "pr-gate",
+            "pr": {"number": pr_number, "head_sha": pr_payload.get("headRefOid")},
+            "work_item": {"id": expected_item},
+            "review_approval": {},
+            "merge_checkpoint": {},
+        }
+        result = pr_gate.get("result") if pr_gate.get("result") in {"pass", "block", "fallback"} else "block"
+        fallback_to = pr_gate.get("fallback_to")
+        pr_gate_consumption = retained_pr_gate_consumption(
+            retained=retained_pr_gate,
+            locator=pr_gate_result_file,
+            current_pr=pr_payload,
+            expected_item=expected_item,
+            pr_number=pr_number,
+        )
+        retained_results["pr_gate"] = {
+            "source": "retained",
+            "locator": pr_gate_result_file,
+            "consumption": pr_gate_consumption,
+        }
+        if pr_gate_consumption["result"] != "pass":
+            result = "block"
+            fallback_to = pr_gate_consumption["fallback_to"]
+            missing_inputs.extend(f"retained pr-gate: {message}" for message in pr_gate_consumption["missing_inputs"])
+    else:
+        pr_gate = pr_gate_payload(
+            target_root=target_root,
+            output_relative=output_relative,
+            expected_item=expected_item,
+            owner=owner,
+            repo_name=repo_name,
+            pr_number=pr_number,
+            head_sha=head_sha,
+            branch_name=None,
+            pr_payload_file=pr_payload_file,
+        )
+        missing_inputs = [f"pr-gate: {message}" for message in pr_gate.get("missing_inputs", [])]
+        result = pr_gate.get("result")
+        fallback_to = pr_gate.get("fallback_to")
+        pr_payload = pr_gate.get("pr") if isinstance(pr_gate.get("pr"), dict) else {}
+        retained_results["pr_gate"]["consumption"] = {
+            "source": "live",
+            "result": pr_gate.get("result"),
+            "summary": "controlled merge evaluated pr-gate inline because no retained pr-gate result locator was provided.",
+            "missing_inputs": pr_gate.get("missing_inputs", []),
+            "fallback_to": pr_gate.get("fallback_to"),
+            "freshness": "fresh" if pr_gate.get("result") == "pass" else "stale",
+        }
 
-    pr_payload = pr_gate.get("pr") if isinstance(pr_gate.get("pr"), dict) else {}
+    merge_gate_consumption: dict[str, Any] | None = None
+    if merge_gate_result_file:
+        retained_merge_gate, retained_merge_gate_errors = load_retained_result_file(
+            target_root,
+            merge_gate_result_file,
+            label="retained merge-gate result",
+        )
+        missing_inputs.extend(f"retained merge-gate: {message}" for message in retained_merge_gate_errors)
+        merge_gate_consumption = retained_merge_gate_consumption(
+            retained=retained_merge_gate,
+            locator=merge_gate_result_file,
+            expected_item=expected_item,
+            pr_gate=pr_gate,
+        )
+        retained_results["merge_gate"] = {
+            "source": "retained",
+            "locator": merge_gate_result_file,
+            "consumption": merge_gate_consumption,
+        }
+        if merge_gate_consumption["result"] != "pass":
+            result = "block"
+            fallback_to = merge_gate_consumption["fallback_to"]
+            missing_inputs.extend(f"retained merge-gate: {message}" for message in merge_gate_consumption["missing_inputs"])
+    else:
+        merge_gate_consumption = {
+            "source": "inline-pr-gate",
+            "result": pr_gate.get("merge_checkpoint", {}).get("result") if isinstance(pr_gate.get("merge_checkpoint"), dict) else None,
+            "summary": "controlled merge reused the merge checkpoint embedded in the current pr-gate evaluation.",
+            "missing_inputs": pr_gate.get("merge_checkpoint", {}).get("missing_inputs", []) if isinstance(pr_gate.get("merge_checkpoint"), dict) else [],
+            "fallback_to": pr_gate.get("merge_checkpoint", {}).get("fallback_to") if isinstance(pr_gate.get("merge_checkpoint"), dict) else None,
+        }
+        retained_results["merge_gate"]["consumption"] = merge_gate_consumption
+
     base_ref = pr_payload.get("baseRefName") if isinstance(pr_payload, dict) else None
 
     protection_payload, protection_errors = load_optional_json_fixture(
@@ -10442,6 +14290,18 @@ def controlled_merge_payload(
         for key in ("missing", "pending", "failing"):
             for context in required_checks[key]:
                 missing_inputs.append(f"required check `{context}` is {labels[key]}")
+    host_enforcement = {
+        "stable_check_name": PR_MERGE_GATE_CHECK_NAME,
+        "required_contexts": required_contexts,
+        "required": PR_MERGE_GATE_CHECK_NAME in required_contexts,
+        "branch_protection_readable": protection_payload is not None,
+        "branch_protection_required_contexts": protection_contexts,
+        "ruleset_readable": ruleset_payload is not None,
+        "ruleset_required_contexts": ruleset_contexts,
+    }
+    mergeability = host_mergeability_readback(pr_payload.get("mergeStateStatus") if isinstance(pr_payload, dict) else None)
+    if mergeability["result"] == "block":
+        missing_inputs.append(str(mergeability["summary"]))
 
     merge_result: dict[str, Any] = {
         "attempted": False,
@@ -10469,6 +14329,56 @@ def controlled_merge_payload(
             result = "block"
             fallback_to = "merge"
             missing_inputs.append(completed.stderr.strip() or completed.stdout.strip() or "gh pr merge failed")
+    drift_readback = current_pr_drift_readback(
+        current_pr=pr_payload if isinstance(pr_payload, dict) else {},
+        pr_number=pr_number,
+        expected_head=head_sha or pr_gate.get("pr", {}).get("head_sha") if isinstance(pr_gate.get("pr"), dict) else head_sha,
+        merge_method=merge_method,
+        pr_gate_consumption=retained_results["pr_gate"]["consumption"],
+        merge_gate_consumption=merge_gate_consumption,
+        required_checks=required_checks,
+        host_enforcement=host_enforcement,
+    )
+
+    merge_ready_consumption_missing: list[str] = []
+    if pr_gate.get("result") != "pass":
+        merge_ready_consumption_missing.append("fresh Loom merge-ready / PR merge gate allow result")
+    if required_checks["result"] != "pass":
+        merge_ready_consumption_missing.append("required checks readback")
+    pr_head = (
+        pr_payload.get("headRefOid") or pr_payload.get("headRefName")
+        if isinstance(pr_payload, dict)
+        else None
+    )
+    if head_sha and isinstance(pr_payload, dict):
+        actual_head = pr_payload.get("headRefOid") or pr_payload.get("head_sha")
+        if isinstance(actual_head, str) and actual_head and actual_head != head_sha:
+            merge_ready_consumption_missing.append("PR head drift after Loom merge-ready allow result")
+    controlled_merge_consumption = {
+        "schema_version": CONTROLLED_MERGE_CONSUMPTION_SCHEMA,
+        "result": "pass" if not merge_ready_consumption_missing else "block",
+        "summary": (
+            "controlled merge wrapper consumed Loom merge-ready allow result and host readback."
+            if not merge_ready_consumption_missing
+            else "controlled merge wrapper cannot consume Loom merge-ready allow result safely."
+        ),
+        "missing_inputs": merge_ready_consumption_missing,
+        "fallback_to": None if not merge_ready_consumption_missing else "merge_ready",
+        "source_authority": "loom merge-ready result",
+        "wrapper_role": "host_action_adapter",
+        "merge_ready_required": True,
+        "head_sha": head_sha,
+        "observed_pr_head": pr_head,
+        "merge_method": merge_method,
+        "required_checks_snapshot": required_checks,
+        "fail_closed_conditions": [
+            "missing-allow-result",
+            "stale-head",
+            "target-mismatch",
+            "required-checks-drift",
+            "malformed-merge-ready-result",
+        ],
+    }
 
     return {
         "command": "controlled-merge",
@@ -10486,16 +14396,11 @@ def controlled_merge_payload(
         "fallback_to": fallback_to,
         "repository": {"owner": owner, "name": repo_name},
         "pr_gate": pr_gate,
+        "retained_results": retained_results,
+        "drift_readback": drift_readback,
         "required_checks": required_checks,
-        "host_enforcement": {
-            "stable_check_name": PR_MERGE_GATE_CHECK_NAME,
-            "required_contexts": required_contexts,
-            "required": PR_MERGE_GATE_CHECK_NAME in required_contexts,
-            "branch_protection_readable": protection_payload is not None,
-            "branch_protection_required_contexts": protection_contexts,
-            "ruleset_readable": ruleset_payload is not None,
-            "ruleset_required_contexts": ruleset_contexts,
-        },
+        "host_enforcement": host_enforcement,
+        "controlled_merge_consumption": controlled_merge_consumption,
         "merge": merge_result,
     }
 
@@ -10518,6 +14423,8 @@ def handle_controlled_merge(args: argparse.Namespace) -> int:
             status_checks_file=args.status_checks_file,
             branch_protection_file=args.branch_protection_file,
             ruleset_file=args.ruleset_file,
+            pr_gate_result_file=args.pr_gate_result_file,
+            merge_gate_result_file=args.merge_gate_result_file,
         )
     )
 
@@ -10584,7 +14491,7 @@ def host_lifecycle_payload(context: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def governance_profile_payload(target_root: Path, operation: str) -> dict[str, Any]:
+def governance_profile_payload(target_root: Path, operation: str, *, host: str = "github") -> dict[str, Any]:
     governance_surface = build_governance_surface(target_root)
     control_plane = governance_surface.get("governance_control_plane")
     maturity = control_plane.get("maturity") if isinstance(control_plane, dict) else None
@@ -10592,6 +14499,7 @@ def governance_profile_payload(target_root: Path, operation: str) -> dict[str, A
         return {
             "command": "governance-profile",
             "operation": operation,
+            "host": host,
             "result": "block",
             "summary": "governance profile maturity could not be read from the unified control plane.",
             "missing_inputs": ["governance_control_plane.maturity"],
@@ -10650,6 +14558,7 @@ def governance_profile_payload(target_root: Path, operation: str) -> dict[str, A
     return {
         "command": "governance-profile",
         "operation": operation,
+        "host": host,
         "result": result,
         "summary": summary,
         "missing_inputs": missing_inputs,
@@ -10724,17 +14633,19 @@ def governance_profile_upgrade_payload(
     target_level: str | None,
     dry_run: bool,
     force: bool,
+    host: str = "github",
 ) -> dict[str, Any]:
     if target_level is None:
         return {
             "command": "governance-profile",
             "operation": "upgrade",
+            "host": host,
             "result": "block",
             "summary": "governance profile upgrade requires `--to standard` or `--to strong`.",
             "missing_inputs": ["to"],
             "fallback_to": "adoption",
         }
-    base = governance_profile_payload(target_root, "upgrade-plan")
+    base = governance_profile_payload(target_root, "upgrade-plan", host=host)
     maturity = base.get("maturity") if isinstance(base.get("maturity"), dict) else {}
     workspace_profile = base.get("workspace_profile")
     gate_starter = base.get("gate_starter")
@@ -10760,6 +14671,7 @@ def governance_profile_upgrade_payload(
     return {
         "command": "governance-profile",
         "operation": "upgrade",
+        "host": host,
         "schema_version": "loom-governance-upgrade/v1",
         "result": result,
         "summary": (
@@ -10786,6 +14698,35 @@ def governance_profile_upgrade_payload(
         "adoption_decisions": decisions,
         "guided_adoption_plan": guided_plan,
         "companion_generation": generation,
+    }
+
+
+def native_dependency_capability_for_args(
+    target_root: Path,
+    *,
+    owner: str | None,
+    repo_name: str | None,
+    issue_number: int | None,
+) -> dict[str, Any]:
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    owner = owner or detected_owner
+    repo_name = repo_name or detected_repo
+    if not owner or not repo_name or issue_number is None:
+        return {
+            "status": "unverified",
+            "read": False,
+            "write": False,
+            "reason": "owner/repo and --issue are required to verify native dependency capability.",
+        }
+    return github_native_dependency_capability(target_root, owner, repo_name, issue_number)
+
+
+def native_dependency_upgrade_plan_payload() -> dict[str, str]:
+    return {
+        "read": "query GitHub issue blockedBy/blocking before resume, merge-ready, and closeout.",
+        "judge": "treat native dependencies as host mirror and compare with issue/repo-authored dependency truth.",
+        "write": "generate dry-run addBlockedBy/removeBlockedBy actions only from mechanical proof.",
+        "verify": "re-read blockedBy/blocking after any approved host sync.",
     }
 
 
@@ -11068,14 +15009,21 @@ def github_binding_payload(
 def handle_governance_profile(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
     if args.operation == "upgrade":
-        return emit(
-            governance_profile_upgrade_payload(
-                target_root=target_root,
-                target_level=args.to,
-                dry_run=args.dry_run,
-                force=args.force,
-            )
+        payload = governance_profile_upgrade_payload(
+            target_root=target_root,
+            target_level=args.to,
+            dry_run=args.dry_run,
+            force=args.force,
+            host=args.host,
         )
+        payload["native_dependency_capability"] = native_dependency_capability_for_args(
+            target_root,
+            owner=args.owner,
+            repo_name=args.repo_name,
+            issue_number=args.issue,
+        )
+        payload["native_dependency_upgrade_plan"] = native_dependency_upgrade_plan_payload()
+        return emit(payload)
     if args.operation == "binding":
         return emit(
             github_binding_payload(
@@ -11091,7 +15039,15 @@ def handle_governance_profile(args: argparse.Namespace) -> int:
                 dry_run=args.dry_run,
             )
         )
-    return emit(governance_profile_payload(target_root, args.operation))
+    payload = governance_profile_payload(target_root, args.operation, host=args.host)
+    payload["native_dependency_capability"] = native_dependency_capability_for_args(
+        target_root,
+        owner=args.owner,
+        repo_name=args.repo_name,
+        issue_number=args.issue,
+    )
+    payload["native_dependency_upgrade_plan"] = native_dependency_upgrade_plan_payload()
+    return emit(payload)
 
 
 def handle_host_lifecycle(args: argparse.Namespace) -> int:
@@ -11472,6 +15428,20 @@ def reconciliation_audit_payload(
                 parent = issue_payload.get("parent")
                 if isinstance(parent, dict):
                     parent_payload = parent
+            native_dependencies = github_issue_dependencies_payload(target_root, owner, repo_name, issue_number)
+            dependency_graph = dependency_graph_payload(
+                issue_number=issue_number,
+                issue_payload=issue_payload,
+                native_dependency_payload=native_dependencies,
+            )
+            for finding in dependency_graph.get("findings", []):
+                if isinstance(finding, dict) and finding.get("kind") in {
+                    "missing_native_edge",
+                    "stale_native_edge",
+                    "open_blocker_executable_conflict",
+                    "native_dependency_unreadable",
+                }:
+                    findings.append(finding)
 
     pr_payload: dict[str, Any] | None = None
     merge_commit_sha: str | None = None
@@ -11747,52 +15717,241 @@ def reconciliation_audit_payload(
     )
 
 
-def reconciliation_sync_plan(audit_payload: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    plan: list[dict[str, Any]] = []
+def reconciliation_action_source(finding: dict[str, Any], index: int) -> dict[str, Any]:
+    return {
+        "index": index,
+        "kind": finding.get("kind"),
+        "severity": finding.get("severity"),
+        "subject": finding.get("subject"),
+        "evidence": finding.get("evidence") if isinstance(finding.get("evidence"), dict) else {},
+        "proof_locator": f"audit.findings[{index}].evidence",
+    }
+
+
+def reconciliation_planned_action(
+    *,
+    action: str,
+    finding: dict[str, Any],
+    finding_index: int,
+    subject: object,
+    write_target: dict[str, Any],
+    rollback_note: str,
+    **extra: Any,
+) -> dict[str, Any]:
+    return {
+        "kind": finding.get("kind"),
+        "subject": subject,
+        "action": action,
+        "source_finding": reconciliation_action_source(finding, finding_index),
+        "proof_locator": f"audit.findings[{finding_index}].evidence",
+        "write_target": write_target,
+        "rollback_note": rollback_note,
+        **extra,
+    }
+
+
+def reconciliation_skipped_action(
+    *,
+    action: str,
+    finding: dict[str, Any],
+    finding_index: int,
+    subject: object,
+    reason: str,
+    manual: bool = False,
+    **extra: Any,
+) -> dict[str, Any]:
+    return {
+        "kind": finding.get("kind"),
+        "subject": subject,
+        "action": action,
+        "reason": reason,
+        "source_finding": reconciliation_action_source(finding, finding_index),
+        "proof_locator": f"audit.findings[{finding_index}].evidence",
+        "manual": manual,
+        **extra,
+    }
+
+
+def reconciliation_sync_plan(audit_payload: dict[str, Any], *, include_closeout_comment: bool = False) -> dict[str, Any]:
+    planned_actions: list[dict[str, Any]] = []
     skipped_actions: list[dict[str, Any]] = []
+    manual_actions: list[dict[str, Any]] = []
     findings = audit_payload.get("findings")
+    proof = {
+        "audit_result": audit_payload.get("result"),
+        "audit_operation": audit_payload.get("operation"),
+        "finding_count": len(findings) if isinstance(findings, list) else 0,
+        "planned_action_count": 0,
+        "skipped_action_count": 0,
+        "manual_action_count": 0,
+    }
     if not isinstance(findings, list):
-        return plan, skipped_actions
-    for finding in findings:
+        return {
+            "schema_version": "loom-safe-sync-plan/v1",
+            "result": "block",
+            "planned_actions": planned_actions,
+            "skipped_actions": skipped_actions,
+            "manual_actions": [
+                {
+                    "action": "manual_reconciliation",
+                    "reason": "audit payload does not expose findings as a list",
+                    "manual": True,
+                }
+            ],
+            "proof": proof,
+        }
+    for index, finding in enumerate(findings):
         if not isinstance(finding, dict):
             continue
         severity = finding.get("severity")
         kind = finding.get("kind")
         subject = finding.get("subject")
         evidence = finding.get("evidence")
+        if severity == "block":
+            manual_actions.append(
+                reconciliation_skipped_action(
+                    action="manual_reconciliation",
+                    finding=finding,
+                    finding_index=index,
+                    subject=subject,
+                    reason="block findings must be resolved manually before reconciliation sync can write host state",
+                    manual=True,
+                )
+            )
+            continue
+        if severity == "warn":
+            skipped_actions.append(
+                reconciliation_skipped_action(
+                    action="none",
+                    finding=finding,
+                    finding_index=index,
+                    subject=subject,
+                    reason="warn findings are retained as evidence and do not trigger host writes",
+                )
+            )
+            continue
         if severity != "fix-needed":
             continue
+        if kind in {"missing_native_edge", "stale_native_edge"}:
+            edge = evidence.get("edge") if isinstance(evidence, dict) else None
+            if not isinstance(edge, dict):
+                skipped_actions.append(
+                    reconciliation_skipped_action(
+                        action="sync_native_dependency",
+                        finding=finding,
+                        finding_index=index,
+                        subject=subject,
+                        reason="dependency drift is missing edge proof",
+                    )
+                )
+                continue
+            source_issue = edge.get("source_issue")
+            blocking_issue = edge.get("blocking_issue")
+            edge_proof = edge.get("provenance") if isinstance(edge.get("provenance"), dict) else {}
+            proof_owner = edge_proof.get("source_owner")
+            proof_locator = edge_proof.get("source_locator")
+            proof_is_mechanical = proof_owner in {"github_issue_body", "repo_authored_dependency"}
+            if kind == "stale_native_edge":
+                proof_is_mechanical = edge.get("source_of_truth") == "github_native_edge" and edge.get("blocker_state") == "closed"
+                proof_locator = proof_locator or f"issue #{blocking_issue}"
+            if not all(isinstance(value, int) for value in (source_issue, blocking_issue)) or not proof_is_mechanical:
+                skipped_actions.append(
+                    reconciliation_skipped_action(
+                        action="sync_native_dependency",
+                        finding=finding,
+                        finding_index=index,
+                        subject=subject,
+                        reason="native dependency write requires mechanical proof from repo-authored or issue-authored dependency truth",
+                    )
+                )
+                continue
+            action = "add_blocked_by" if kind == "missing_native_edge" else "remove_blocked_by"
+            mutation = "addBlockedBy" if kind == "missing_native_edge" else "removeBlockedBy"
+            planned_actions.append(
+                reconciliation_planned_action(
+                    action=action,
+                    finding=finding,
+                    finding_index=index,
+                    subject=subject,
+                    write_target={
+                        "host": "github",
+                        "type": "native_dependency",
+                        "mutation": mutation,
+                        "issue_number": source_issue,
+                        "blocking_issue_number": blocking_issue,
+                    },
+                    rollback_note=(
+                        f"run removeBlockedBy for issue #{source_issue} blocked by #{blocking_issue} if the add is reverted."
+                        if action == "add_blocked_by"
+                        else f"run addBlockedBy for issue #{source_issue} blocked by #{blocking_issue} if the removal is reverted."
+                    ),
+                    issue_number=source_issue,
+                    blocking_issue_number=blocking_issue,
+                    proof_source=proof_locator,
+                    verification_step=f"read GitHub native dependency edge issue #{source_issue} blocked by #{blocking_issue}",
+                )
+            )
+            continue
         if kind in {"merged_but_open", "absorbed_but_open"}:
-            plan.append(
-                {
-                    "kind": kind,
-                    "subject": subject,
-                    "action": "close_issue",
-                    "issue_number": audit_payload.get("issue", {}).get("number"),
-                }
+            issue_number = audit_payload.get("issue", {}).get("number")
+            if not isinstance(issue_number, int):
+                skipped_actions.append(
+                    reconciliation_skipped_action(
+                        action="close_issue",
+                        finding=finding,
+                        finding_index=index,
+                        subject=subject,
+                        reason="cannot close issue because audit proof is missing issue.number",
+                    )
+                )
+                continue
+            if include_closeout_comment:
+                planned_actions.append(
+                    reconciliation_planned_action(
+                        action="add_closeout_comment",
+                        finding=finding,
+                        finding_index=index,
+                        subject=subject,
+                        write_target={"host": "github", "type": "issue_comment", "issue_number": issue_number},
+                        rollback_note="delete the closeout comment from the GitHub issue if the sync is reverted.",
+                        issue_number=issue_number,
+                    )
+                )
+            planned_actions.append(
+                reconciliation_planned_action(
+                    action="close_issue",
+                    finding=finding,
+                    finding_index=index,
+                    subject=subject,
+                    write_target={"host": "github", "type": "issue", "issue_number": issue_number, "field": "state"},
+                    rollback_note="reopen the GitHub issue if the closeout basis is later invalidated.",
+                    issue_number=issue_number,
+                )
             )
             continue
         if kind == "project_drift":
             project = audit_payload.get("project")
             if not isinstance(project, dict):
                 skipped_actions.append(
-                    {
-                        "kind": kind,
-                        "subject": subject,
-                        "action": "set_project_status",
-                        "reason": "project_drift is missing project context",
-                    }
+                    reconciliation_skipped_action(
+                        action="set_project_done",
+                        finding=finding,
+                        finding_index=index,
+                        subject=subject,
+                        reason="project_drift is missing project context",
+                    )
                 )
                 continue
             drifts = evidence.get("drifts") if isinstance(evidence, dict) else None
             if not isinstance(drifts, list):
                 skipped_actions.append(
-                    {
-                        "kind": kind,
-                        "subject": subject,
-                        "action": "set_project_status",
-                        "reason": "project_drift is missing drift details",
-                    }
+                    reconciliation_skipped_action(
+                        action="set_project_done",
+                        finding=finding,
+                        finding_index=index,
+                        subject=subject,
+                        reason="project_drift is missing drift details",
+                    )
                 )
                 continue
             for drift in drifts:
@@ -11802,13 +15961,15 @@ def reconciliation_sync_plan(audit_payload: dict[str, Any]) -> tuple[list[dict[s
                 reason = str(drift.get("reason", ""))
                 expected_done = drift.get("expected_done")
                 if expected_done is not True:
-                    skipped_actions.append(
-                        {
-                            "kind": kind,
-                            "subject": drift_subject,
-                            "action": "set_project_status",
-                            "reason": f"requires manual reconciliation: {reason}",
-                        }
+                    manual_actions.append(
+                        reconciliation_skipped_action(
+                            action="set_project_done",
+                            finding=finding,
+                            finding_index=index,
+                            subject=drift_subject,
+                            reason=f"requires manual reconciliation: {reason}",
+                            manual=True,
+                        )
                     )
                     continue
                 item_key = None
@@ -11819,12 +15980,13 @@ def reconciliation_sync_plan(audit_payload: dict[str, Any]) -> tuple[list[dict[s
                 item = project.get(item_key) if item_key else None
                 if not isinstance(item, dict):
                     skipped_actions.append(
-                        {
-                            "kind": kind,
-                            "subject": drift_subject,
-                            "action": "set_project_status",
-                            "reason": "cannot be synced because the project item is missing",
-                        }
+                        reconciliation_skipped_action(
+                            action="set_project_done",
+                            finding=finding,
+                            finding_index=index,
+                            subject=drift_subject,
+                            reason="cannot be synced because the project item is missing",
+                        )
                     )
                     continue
                 item_id = item.get("id")
@@ -11833,25 +15995,36 @@ def reconciliation_sync_plan(audit_payload: dict[str, Any]) -> tuple[list[dict[s
                 done_option_id = project.get("done_option_id")
                 if not all(isinstance(value, str) and value for value in (item_id, project_id, status_field_id, done_option_id)):
                     skipped_actions.append(
-                        {
-                            "kind": kind,
-                            "subject": drift_subject,
-                            "action": "set_project_status",
-                            "reason": "is missing project status identifiers",
-                        }
+                        reconciliation_skipped_action(
+                            action="set_project_done",
+                            finding=finding,
+                            finding_index=index,
+                            subject=drift_subject,
+                            reason="is missing project status identifiers",
+                        )
                     )
                     continue
-                plan.append(
-                    {
-                        "kind": kind,
-                        "subject": drift_subject,
-                        "action": "set_project_done",
-                        "project_number": project.get("number"),
-                        "project_id": project_id,
-                        "item_id": item_id,
-                        "status_field_id": status_field_id,
-                        "done_option_id": done_option_id,
-                    }
+                planned_actions.append(
+                    reconciliation_planned_action(
+                        action="set_project_done",
+                        finding=finding,
+                        finding_index=index,
+                        subject=drift_subject,
+                        write_target={
+                            "host": "github",
+                            "type": "project_item",
+                            "project_number": project.get("number"),
+                            "item_id": item_id,
+                            "field": "Status",
+                            "value": "Done",
+                        },
+                        rollback_note="set the Project item Status back to its prior value if the closeout basis is invalidated.",
+                        project_number=project.get("number"),
+                        project_id=project_id,
+                        item_id=item_id,
+                        status_field_id=status_field_id,
+                        done_option_id=done_option_id,
+                    )
                 )
             continue
         if kind == "parent_drift":
@@ -11859,32 +16032,49 @@ def reconciliation_sync_plan(audit_payload: dict[str, Any]) -> tuple[list[dict[s
             parent_number = parent.get("number") if isinstance(parent, dict) else None
             if parent_number is None:
                 skipped_actions.append(
-                    {
-                        "kind": kind,
-                        "subject": subject,
-                        "action": "close_issue",
-                        "reason": "parent_drift is missing parent issue context",
-                    }
+                    reconciliation_skipped_action(
+                        action="close_issue",
+                        finding=finding,
+                        finding_index=index,
+                        subject=subject,
+                        reason="parent_drift is missing parent issue context",
+                    )
                 )
                 continue
-            plan.append(
-                {
-                    "kind": kind,
-                    "subject": subject,
-                    "action": "close_issue",
-                    "issue_number": parent_number,
-                }
+            planned_actions.append(
+                reconciliation_planned_action(
+                    action="close_issue",
+                    finding=finding,
+                    finding_index=index,
+                    subject=subject,
+                    write_target={"host": "github", "type": "issue", "issue_number": parent_number, "field": "state"},
+                    rollback_note="reopen the parent issue if a child gap is later found unresolved.",
+                    issue_number=parent_number,
+                )
             )
             continue
-        skipped_actions.append(
-            {
-                "kind": kind,
-                "subject": subject,
-                "action": "unsupported",
-                "reason": f"unsupported reconciliation finding `{kind}`",
-            }
+        manual_actions.append(
+            reconciliation_skipped_action(
+                action="manual_reconciliation",
+                finding=finding,
+                finding_index=index,
+                subject=subject,
+                reason=f"unsupported reconciliation finding `{kind}`",
+                manual=True,
+            )
         )
-    return plan, skipped_actions
+    proof["planned_action_count"] = len(planned_actions)
+    proof["skipped_action_count"] = len(skipped_actions)
+    proof["manual_action_count"] = len(manual_actions)
+    result = "block" if manual_actions or skipped_actions else "pass"
+    return {
+        "schema_version": "loom-safe-sync-plan/v1",
+        "result": result,
+        "planned_actions": planned_actions,
+        "skipped_actions": skipped_actions,
+        "manual_actions": manual_actions,
+        "proof": proof,
+    }
 
 
 def closeout_reconciliation_result(
@@ -12133,6 +16323,504 @@ def runtime_parity_payload(
     }
 
 
+def project_drift_payload(
+    *,
+    target_root: Path,
+    owner: str | None,
+    repo_name: str | None,
+    issue_number: int | None,
+    pr_number: int | None,
+    project_number: int | None,
+    mode: str = "advisory",
+) -> dict[str, Any]:
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    owner = owner or detected_owner
+    repo_name = repo_name or detected_repo
+    missing_inputs: list[str] = []
+    findings: list[dict[str, Any]] = []
+    project_payload: dict[str, Any] | None = None
+    issue_payload: dict[str, Any] | None = None
+    pr_payload: dict[str, Any] | None = None
+    dependency_graph: dict[str, Any] | None = None
+
+    if project_number is None:
+        return {
+            "schema_version": PROJECT_DRIFT_SCHEMA,
+            "result": "pass",
+            "mode": mode,
+            "summary": "Project drift read is not applicable because no Project number was provided.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "project": None,
+            "dependency_drift": None,
+            "findings": [],
+            "provenance": [],
+        }
+    if not owner or not repo_name:
+        missing_inputs.append("owner/repo")
+    if owner and repo_name and issue_number is not None:
+        issue_payload, issue_errors = github_issue_payload(target_root, owner, repo_name, issue_number)
+        missing_inputs.extend(f"issue: {message}" for message in issue_errors)
+        native_dependencies = github_issue_dependencies_payload(target_root, owner, repo_name, issue_number)
+        dependency_graph = dependency_graph_payload(
+            issue_number=issue_number,
+            issue_payload=issue_payload,
+            native_dependency_payload=native_dependencies,
+        )
+        for finding in dependency_graph.get("findings", []):
+            if not isinstance(finding, dict):
+                continue
+            kind = str(finding.get("kind"))
+            if kind in {"missing_native_edge", "unexpected_native_edge"}:
+                findings.append({**finding, "drift_kind": kind})
+            if kind == "open_blocker_executable_conflict":
+                findings.append({**finding, "drift_kind": "open_blocker_executable_conflict"})
+    if owner and repo_name and pr_number is not None:
+        pr_payload, pr_errors = github_pr_payload(target_root, owner, repo_name, pr_number)
+        missing_inputs.extend(f"pr: {message}" for message in pr_errors)
+    if owner:
+        project_context, project_errors = project_status_context(target_root, owner, project_number)
+        if project_errors:
+            findings.append(
+                {
+                    "category": "drift",
+                    "kind": "project_unreadable",
+                    "drift_kind": "project_unreadable",
+                    "severity": "block" if mode == "blocking" else "warn",
+                    "subject": f"Project #{project_number}",
+                    "evidence": {"errors": project_errors},
+                    "fallback_to": "manual-reconciliation",
+                }
+            )
+        else:
+            items = project_context["items"]
+            issue_item = find_project_item(items, issue_number, "issue") if issue_number is not None else None
+            pr_item = find_project_item(items, pr_number, "pr") if pr_number is not None else None
+            project_payload = {
+                "number": project_number,
+                "project_id": project_context["project_id"],
+                "status_field_id": project_context["status_field_id"],
+                "done_option_id": project_context["done_option_id"],
+                "issue_item": issue_item,
+                "pr_item": pr_item,
+            }
+            if issue_number is not None and issue_item is None:
+                findings.append(
+                    {
+                        "category": "drift",
+                        "kind": "project_missing_item",
+                        "drift_kind": "project_missing_item",
+                        "severity": "block" if mode == "blocking" else "warn",
+                        "subject": f"issue #{issue_number}",
+                        "evidence": {"project": project_number},
+                        "fallback_to": "manual-reconciliation",
+                    }
+                )
+            for label, item, payload in (("issue", issue_item, issue_payload), ("pr", pr_item, pr_payload)):
+                if item is None:
+                    continue
+                status = item.get("status")
+                expected_done = False
+                subject_number = None
+                if isinstance(payload, dict):
+                    subject_number = payload.get("number")
+                    if label == "issue":
+                        expected_done = payload.get("state") == "CLOSED"
+                    if label == "pr":
+                        expected_done = payload.get("state") == "MERGED"
+                if expected_done and status != "Done":
+                    findings.append(
+                        {
+                            "category": "drift",
+                            "kind": "project_status_mismatch",
+                            "drift_kind": "project_status_mismatch",
+                            "severity": "block" if mode == "blocking" else "warn",
+                            "subject": f"{label} #{subject_number or 'unknown'}",
+                            "evidence": {"expected_status": "Done", "actual_status": status},
+                            "fallback_to": "manual-reconciliation",
+                        }
+                    )
+                if not expected_done and status == "Done":
+                    findings.append(
+                        {
+                            "category": "drift",
+                            "kind": "project_stale_mirror",
+                            "drift_kind": "project_stale_mirror",
+                            "severity": "block" if mode == "blocking" else "warn",
+                            "subject": f"{label} #{subject_number or 'unknown'}",
+                            "evidence": {"expected_done": False, "actual_status": status},
+                            "fallback_to": "manual-reconciliation",
+                        }
+                    )
+    blocking = [finding for finding in findings if finding.get("severity") == "block"]
+    result = "block" if blocking or missing_inputs else "pass"
+    return {
+        "schema_version": PROJECT_DRIFT_SCHEMA,
+        "result": result,
+        "mode": mode,
+        "summary": (
+            "Project drift read found no blocking Project or dependency drift."
+            if result == "pass"
+            else "Project drift read found Project or dependency drift that must be reconciled."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": None if result == "pass" else "manual-reconciliation",
+        "project": project_payload,
+        "dependency_drift": dependency_graph,
+        "findings": findings,
+        "provenance": [
+            {
+                "source_layer": "host_control_mirror",
+                "source_owner": "github_project",
+                "source_locator": f"Project #{project_number}",
+                "freshness": "fresh" if not missing_inputs else "unreadable",
+            }
+        ],
+    }
+
+
+def github_intake_object_type(issue_payload: dict[str, Any] | None) -> str:
+    if not isinstance(issue_payload, dict):
+        return "unknown"
+    labels = set(issue_payload.get("labels", [])) if isinstance(issue_payload.get("labels"), list) else set()
+    title = str(issue_payload.get("title") or "").lower()
+    if "phase" in labels or title.startswith("phase:"):
+        return "phase"
+    if "fr" in labels or title.startswith("fr:"):
+        return "fr"
+    if "work-item" in labels or title.startswith("work-item:") or title.startswith("bug:"):
+        return "work_item"
+    return "unknown"
+
+
+def github_intake_route(object_type: str, issue_payload: dict[str, Any] | None, dependency_graph: dict[str, Any]) -> str:
+    state = issue_payload.get("state") if isinstance(issue_payload, dict) else None
+    if any(finding.get("kind") == "open_blocker_executable_conflict" for finding in dependency_graph.get("findings", []) if isinstance(finding, dict)):
+        return "manual-reconciliation"
+    if state == "CLOSED":
+        return "closeout"
+    if object_type == "work_item":
+        return "loom-resume"
+    if object_type in {"phase", "fr"}:
+        return "loom-story"
+    return "manual-reconciliation"
+
+
+def github_intake_payload(
+    *,
+    target_root: Path,
+    owner: str | None,
+    repo_name: str | None,
+    issue_number: int,
+    project_number: int | None,
+    phase_number: int | None,
+    fr_number: int | None,
+    pr_number: int | None,
+    branch_name: str | None,
+    head_sha: str | None,
+) -> dict[str, Any]:
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    owner = owner or detected_owner
+    repo_name = repo_name or detected_repo
+    missing_inputs: list[str] = []
+    provenance = [
+        {
+            "source_layer": "host_control_mirror",
+            "source_owner": "github",
+            "source_locator": f"issue #{issue_number}",
+            "freshness": "fresh",
+        }
+    ]
+    if not owner or not repo_name:
+        missing_inputs.append("owner/repo")
+        owner = owner or "unknown"
+        repo_name = repo_name or "unknown"
+
+    issue_payload: dict[str, Any] | None = None
+    issue_errors: list[str] = []
+    if owner != "unknown" and repo_name != "unknown":
+        issue_payload, issue_errors = github_issue_payload(target_root, owner, repo_name, issue_number)
+        missing_inputs.extend(f"issue: {message}" for message in issue_errors)
+
+    native_dependencies = (
+        github_issue_dependencies_payload(target_root, owner, repo_name, issue_number)
+        if owner != "unknown" and repo_name != "unknown" and issue_payload is not None
+        else {"availability": "not_requested", "checks": [], "native_edges": []}
+    )
+    dependency_graph = dependency_graph_payload(
+        issue_number=issue_number,
+        issue_payload=issue_payload,
+        native_dependency_payload=native_dependencies,
+    )
+    object_type = github_intake_object_type(issue_payload)
+    route = github_intake_route(object_type, issue_payload, dependency_graph)
+
+    binding = host_binding_inspection_payload(
+        target_root=target_root,
+        owner=owner if owner != "unknown" else None,
+        repo_name=repo_name if repo_name != "unknown" else None,
+        phase_number=phase_number,
+        fr_number=fr_number,
+        issue_number=issue_number,
+        pr_number=pr_number,
+        project_number=project_number,
+        branch_name=branch_name,
+        head_sha=head_sha,
+        base_sha=None,
+    )
+    project_drift = project_drift_payload(
+        target_root=target_root,
+        owner=owner if owner != "unknown" else None,
+        repo_name=repo_name if repo_name != "unknown" else None,
+        issue_number=issue_number,
+        pr_number=pr_number,
+        project_number=project_number,
+        mode="blocking",
+    )
+    for message in binding.get("missing_inputs", []):
+        if message not in missing_inputs:
+            missing_inputs.append(f"binding: {message}")
+    if object_type == "unknown":
+        missing_inputs.append("object_type")
+    for finding in dependency_graph.get("findings", []):
+        if not isinstance(finding, dict):
+            continue
+        if finding.get("severity") == "block":
+            missing_inputs.append(str(finding.get("subject") or finding.get("kind")))
+        if finding.get("kind") == "native_dependency_unreadable":
+            missing_inputs.append("native dependency capability")
+    if project_number is not None and project_drift.get("result") == "block":
+        for message in project_drift.get("missing_inputs", []):
+            if message not in missing_inputs:
+                missing_inputs.append(f"project: {message}")
+        for finding in project_drift.get("findings", []):
+            if isinstance(finding, dict):
+                missing_inputs.append(str(finding.get("subject") or finding.get("kind")))
+
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "command": "github-intake",
+        "operation": "issue",
+        "schema_version": "loom-github-intake/v1",
+        "result": result,
+        "summary": (
+            "GitHub issue intake produced a read-only route for Loom execution."
+            if result == "pass"
+            else "GitHub issue intake found host-control gaps that must be reconciled before execution."
+        ),
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "fallback_to": None if result == "pass" else route,
+        "object_type": object_type,
+        "route": route,
+        "issue": issue_payload,
+        "bindings": binding,
+        "dependency_graph": dependency_graph,
+        "project_drift": project_drift,
+        "provenance": provenance,
+    }
+
+
+def handle_github_intake(args: argparse.Namespace) -> int:
+    target_root = Path(args.target).expanduser().resolve()
+    runtime_state = runtime_state_payload(target_root)
+    if runtime_state["result"] != "pass":
+        return emit(
+            runtime_state_block_payload(
+                command="github-intake",
+                operation=args.operation,
+                runtime_state=runtime_state,
+                summary="GitHub intake is blocked because the Loom runtime state is inconsistent.",
+            )
+        )
+    return emit(
+        github_intake_payload(
+            target_root=target_root,
+            owner=args.owner,
+            repo_name=args.repo_name,
+            issue_number=args.issue,
+            project_number=args.project,
+            phase_number=args.phase,
+            fr_number=args.fr,
+            pr_number=args.pr,
+            branch_name=args.branch,
+            head_sha=args.head_sha,
+        )
+    )
+
+
+def goal_execution_contract(context: dict[str, Any]) -> dict[str, Any]:
+    current_branch = run_git(context["target_root"], ["branch", "--show-current"])
+    branch = current_branch.stdout.strip() if current_branch is not None and current_branch.returncode == 0 else None
+    head_sha = git_head_sha(context["target_root"])
+    return {
+        "schema_version": GOAL_EXECUTION_CONTRACT_SCHEMA,
+        "objective": context["goal"],
+        "source_issue": None,
+        "work_item": {
+            "id": context["item_id"],
+            "locator": str(context["report"]["fact_chain"]["entry_points"]["work_item"]),
+        },
+        "scope": [context["scope"]],
+        "non_goals": [],
+        "source_locators": [
+            str(context["report"]["fact_chain"]["entry_points"]["work_item"]),
+            str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"]),
+        ],
+        "branch": branch,
+        "formal_worktree": context["workspace_entry"],
+        "pr": None,
+        "head_sha": head_sha,
+        "expected_validation": [context["validation_entry"]],
+        "stop_conditions": [context["closing_condition"]],
+        "return_path": "flow resume -> review -> merge-ready -> closeout",
+        "derived_from": "work_item_goal",
+        "derivation_source": str(context["report"]["fact_chain"]["entry_points"]["work_item"]),
+    }
+
+
+def validate_goal_execution_contract(
+    contract: dict[str, Any],
+    context: dict[str, Any],
+    *,
+    issue_number: int | None = None,
+    pr_number: int | None = None,
+    branch_name: str | None = None,
+    head_sha: str | None = None,
+) -> dict[str, Any]:
+    failures: list[dict[str, Any]] = []
+    if contract.get("schema_version") != GOAL_EXECUTION_CONTRACT_SCHEMA:
+        failures.append({"class": "missing", "field": "schema_version", "expected": GOAL_EXECUTION_CONTRACT_SCHEMA})
+    work_item = contract.get("work_item")
+    if not isinstance(work_item, dict) or work_item.get("id") != context["item_id"]:
+        failures.append({"class": "scope_mismatch", "field": "work_item", "expected": context["item_id"], "actual": work_item})
+    if issue_number is not None and contract.get("source_issue") not in {issue_number, f"#{issue_number}", f"issue #{issue_number}"}:
+        failures.append({"class": "scope_mismatch", "field": "source_issue", "expected": issue_number, "actual": contract.get("source_issue")})
+    current_branch = run_git(context["target_root"], ["branch", "--show-current"])
+    actual_branch = current_branch.stdout.strip() if current_branch is not None and current_branch.returncode == 0 else None
+    expected_branch = branch_name or actual_branch
+    if expected_branch and contract.get("branch") not in {expected_branch, None}:
+        failures.append({"class": "unbound_workspace", "field": "branch", "expected": expected_branch, "actual": contract.get("branch")})
+    expected_head = head_sha or git_head_sha(context["target_root"])
+    if expected_head and contract.get("head_sha") not in {expected_head, None}:
+        failures.append({"class": "stale", "field": "head_sha", "expected": expected_head, "actual": contract.get("head_sha")})
+    if pr_number is not None and contract.get("pr") not in {pr_number, f"#{pr_number}", f"PR #{pr_number}", None}:
+        failures.append({"class": "scope_mismatch", "field": "pr", "expected": pr_number, "actual": contract.get("pr")})
+    validation = contract.get("expected_validation")
+    if not isinstance(validation, list) or not validation:
+        failures.append({"class": "unverifiable_validation", "field": "expected_validation"})
+    source_locators = contract.get("source_locators")
+    if not isinstance(source_locators, list) or not source_locators:
+        failures.append({"class": "missing", "field": "source_locators"})
+    result = "pass" if not failures else "block"
+    return {
+        "schema_version": GOAL_READINESS_SCHEMA,
+        "result": result,
+        "summary": "goal execution contract is aligned with the current work item." if result == "pass" else "goal execution contract is missing, stale, or mismatched.",
+        "missing_inputs": [f"{failure['class']}:{failure['field']}" for failure in failures],
+        "fallback_to": None if result == "pass" else "admission",
+        "failure_classifications": failures,
+    }
+
+
+def goal_payload(
+    *,
+    target_root: Path,
+    output_relative: str,
+    expected_item: str | None,
+    operation: str,
+    goal_file: str | None = None,
+    issue_number: int | None = None,
+    pr_number: int | None = None,
+    branch_name: str | None = None,
+    head_sha: str | None = None,
+) -> dict[str, Any]:
+    context, errors = load_context(target_root, output_relative, expected_item)
+    if errors:
+        return {
+            "command": "goal",
+            "operation": operation,
+            "result": "block",
+            "summary": "goal command could not read a valid Loom fact chain.",
+            "missing_inputs": [f"fact-chain: {message}" for message in errors],
+            "fallback_to": "admission",
+            **fact_chain_error_contract(errors, output_relative=output_relative),
+        }
+    contract = goal_execution_contract(context)
+    if goal_file:
+        loaded, load_errors = load_optional_json_fixture(target_root, goal_file, label="goal execution contract")
+        if load_errors:
+            return {
+                "command": "goal",
+                "operation": operation,
+                "result": "block",
+                "summary": "goal command could not read the requested goal contract.",
+                "missing_inputs": load_errors,
+                "fallback_to": "admission",
+                "goal_execution_contract": contract,
+            }
+        if isinstance(loaded, dict):
+            contract = loaded
+    readiness = validate_goal_execution_contract(
+        contract,
+        context,
+        issue_number=issue_number,
+        pr_number=pr_number,
+        branch_name=branch_name,
+        head_sha=head_sha,
+    )
+    return {
+        "command": "goal",
+        "operation": operation,
+        "result": readiness["result"],
+        "summary": "goal execution contract was derived and validated." if readiness["result"] == "pass" else readiness["summary"],
+        "missing_inputs": readiness["missing_inputs"],
+        "fallback_to": readiness["fallback_to"],
+        "goal_execution_contract": contract,
+        "goal_readiness": readiness,
+    }
+
+
+def goal_completion_payload(target_root: Path, completion_file: str | None, context: dict[str, Any] | None) -> dict[str, Any]:
+    if not completion_file:
+        return {
+            "schema_version": GOAL_COMPLETION_SCHEMA,
+            "status": "missing",
+            "result": "not_applicable",
+            "summary": "/goal completion evidence was not provided and was not required by this closeout invocation.",
+            "missing_inputs": [],
+            "fallback_to": None,
+        }
+    payload, errors = load_optional_json_fixture(target_root, completion_file, label="goal completion evidence")
+    if errors or not isinstance(payload, dict):
+        return {
+            "schema_version": GOAL_COMPLETION_SCHEMA,
+            "status": "unreadable",
+            "result": "block",
+            "summary": "/goal completion evidence is unreadable.",
+            "missing_inputs": errors or ["goal completion must be a JSON object"],
+            "fallback_to": "closeout",
+        }
+    missing: list[str] = []
+    if payload.get("schema_version") not in {GOAL_COMPLETION_SCHEMA, GOAL_EXECUTION_CONTRACT_SCHEMA}:
+        missing.append("schema_version")
+    if context is not None:
+        work_item = payload.get("work_item")
+        item_id = work_item.get("id") if isinstance(work_item, dict) else payload.get("item_id")
+        if item_id not in {context["item_id"], None}:
+            missing.append("work_item mismatch")
+        if payload.get("head_sha") not in {git_head_sha(target_root), None}:
+            missing.append("head_sha mismatch")
+    return {
+        "schema_version": GOAL_COMPLETION_SCHEMA,
+        "status": "valid" if not missing else "mismatch",
+        "result": "pass" if not missing else "block",
+        "summary": "/goal completion evidence is bound to the closeout context." if not missing else "/goal completion evidence does not match the closeout context.",
+        "missing_inputs": missing,
+        "fallback_to": None if not missing else "closeout",
+        "completion": payload,
+    }
+
+
 def closeout_payload(
     *,
     target_root: Path,
@@ -12145,9 +16833,26 @@ def closeout_payload(
     owner: str,
     repo_name: str,
     skip_gate: bool,
+    goal_completion_file: str | None = None,
+    gate_profile: str = "auto",
+    pr_payload_file: str | None = None,
+    status_checks_file: str | None = None,
+    branch_protection_file: str | None = None,
+    ruleset_file: str | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     missing_inputs: list[str] = []
+    effective_profile = effective_closeout_gate_profile(gate_profile)
+    expected_closeout_item = closeout_expected_item_id(target_root, issue_number)
     context, context_errors = load_context(target_root, ".loom/bootstrap/init-result.json", None)
+    if (
+        expected_closeout_item is not None
+        and (context_errors or context.get("item_id") != expected_closeout_item)
+    ):
+        context, context_errors = load_retained_item_context(
+            target_root,
+            ".loom/bootstrap/init-result.json",
+            expected_closeout_item,
+        )
     fact_chain_context: dict[str, Any] | None = context if not context_errors else None
     if context_errors:
         missing_inputs.extend(f"fact-chain: {message}" for message in context_errors)
@@ -12172,17 +16877,55 @@ def closeout_payload(
         else "unknown"
     )
     closeout_findings: list[dict[str, Any]] = []
-    gate: dict[str, Any] = {"skipped": skip_gate}
-    if not skip_gate:
+    gate: dict[str, Any] = {
+        "skipped": skip_gate and effective_profile in CLOSEOUT_HEAVY_PROFILES,
+        "profile": effective_profile,
+        "requested_profile": gate_profile,
+        "source": "closeout_contract",
+        "trigger_reason": "ordinary closeout defaults to retained evidence backlink checks",
+        "required_for_closeout": True,
+        "subchecks": [],
+    }
+    if effective_profile in CLOSEOUT_HEAVY_PROFILES and not skip_gate:
         gate_command, gate_source = closeout_gate_command(target_root)
         gate_result = run_process(gate_command, target_root)
         gate["source"] = gate_source
+        gate["trigger_reason"] = f"`{effective_profile}` explicitly requires the heavier local gate"
+        gate["required_for_closeout"] = effective_profile == "strong-profile-full-gate"
         gate["command"] = " ".join(gate_command)
         gate["exit_code"] = gate_result.returncode
         gate["stdout"] = gate_result.stdout.strip()
         gate["stderr"] = gate_result.stderr.strip()
+        gate["subchecks"].append(
+            closeout_subcheck(
+                check_id=effective_profile,
+                source=gate_source,
+                profile=effective_profile,
+                required_for_closeout=gate["required_for_closeout"],
+                trigger_reason=gate["trigger_reason"],
+                result="pass" if gate_result.returncode == 0 else "block",
+                fallback_to=None if gate_result.returncode == 0 else "merge",
+                evidence_locator=gate["command"],
+                missing_inputs=[] if gate_result.returncode == 0 else [f"loom_check:{gate_source}"],
+            )
+        )
         if gate_result.returncode != 0:
             missing_inputs.append(f"loom_check:{gate_source}")
+    elif effective_profile in CLOSEOUT_HEAVY_PROFILES and skip_gate:
+        gate["source"] = "skipped_heavy_gate"
+        gate["trigger_reason"] = f"`{effective_profile}` was requested but --skip-gate suppressed heavyweight execution"
+        gate["required_for_closeout"] = False
+        gate["subchecks"].append(
+            closeout_subcheck(
+                check_id=effective_profile,
+                source="skipped_heavy_gate",
+                profile=effective_profile,
+                required_for_closeout=False,
+                trigger_reason=gate["trigger_reason"],
+                result="pass",
+                fallback_to=None,
+            )
+        )
 
     reconciliation_payload: dict[str, Any] | None = None
     closeout_fallback: str | None = None
@@ -12210,6 +16953,7 @@ def closeout_payload(
 
     issue_payload: dict[str, Any] | None = None
     issue_id: str | None = None
+    dependency_graph: dict[str, Any] | None = None
     if issue_number is not None:
         issue_payload, issue_errors = github_issue_payload(target_root, owner, repo_name, issue_number)
         if issue_errors:
@@ -12218,11 +16962,48 @@ def closeout_payload(
             raw_issue_id = issue_payload.get("id")
             if isinstance(raw_issue_id, str) and raw_issue_id:
                 issue_id = raw_issue_id
+            native_dependencies = github_issue_dependencies_payload(target_root, owner, repo_name, issue_number)
+            dependency_graph = dependency_graph_payload(
+                issue_number=issue_number,
+                issue_payload=issue_payload,
+                native_dependency_payload=native_dependencies,
+            )
+            for finding in dependency_graph.get("findings", []):
+                if not isinstance(finding, dict):
+                    continue
+                if finding.get("kind") in {"open_blocker_executable_conflict", "stale_native_edge"}:
+                    missing_inputs.append(str(finding.get("subject") or finding.get("kind")))
+                    closeout_findings.append(
+                        {
+                            **finding,
+                            "why_blocking": (
+                                "closeout is blocked because an open native dependency blocker remains."
+                                if finding.get("kind") == "open_blocker_executable_conflict"
+                                else "closeout is blocked because the native dependency mirror is stale."
+                            ),
+                            "fallback_to": finding.get("fallback_to") or "manual-reconciliation",
+                        }
+                    )
+                elif finding.get("kind") == "native_dependency_unreadable":
+                    closeout_findings.append({**finding, "severity": "warn"})
 
     pr_payload: dict[str, Any] | None = None
     merge_commit_sha: str | None = None
+    merge_commit_in_target: bool | None = None
     if pr_number is not None:
-        pr_payload, pr_errors = github_pr_payload(target_root, owner, repo_name, pr_number)
+        fixture_pr_payload, fixture_pr_errors = load_optional_json_fixture(
+            target_root,
+            pr_payload_file,
+            label="PR payload fixture",
+        )
+        if fixture_pr_errors:
+            pr_payload = None
+            pr_errors = fixture_pr_errors
+        elif isinstance(fixture_pr_payload, dict):
+            pr_payload = fixture_pr_payload
+            pr_errors = []
+        else:
+            pr_payload, pr_errors = github_pr_payload(target_root, owner, repo_name, pr_number)
         if pr_errors:
             missing_inputs.extend(f"pr: {message}" for message in pr_errors)
         elif pr_payload is not None:
@@ -12236,10 +17017,33 @@ def closeout_payload(
             if merge_commit_sha:
                 base_ref = pr_payload.get("baseRefName")
                 if isinstance(base_ref, str) and base_ref:
-                    if not contains_merged_commit(target_root, merge_commit_sha, base_ref):
+                    merge_commit_in_target = contains_merged_commit(target_root, merge_commit_sha, base_ref)
+                    if not merge_commit_in_target:
                         missing_inputs.append(f"origin/{base_ref} does not contain the merged PR commit")
                 else:
                     missing_inputs.append("pr baseRefName is missing")
+
+    if pr_number is not None:
+        backlink_subchecks = closeout_backlink_subchecks(
+            target_root=target_root,
+            context=fact_chain_context,
+            profile=CLOSEOUT_LIGHT_PROFILE,
+            owner=owner,
+            repo_name=repo_name,
+            pr_number=pr_number,
+            pr_payload=pr_payload,
+            merge_commit_sha=merge_commit_sha,
+            merge_commit_in_target=merge_commit_in_target,
+            pr_payload_file=pr_payload_file,
+            status_checks_file=status_checks_file,
+            branch_protection_file=branch_protection_file,
+            ruleset_file=ruleset_file,
+        )
+        gate["subchecks"].extend(backlink_subchecks)
+        for subcheck in backlink_subchecks:
+            if subcheck.get("required_for_closeout") is True and subcheck.get("result") == "block":
+                for message in subcheck.get("missing_inputs", []):
+                    missing_inputs.append(f"{subcheck.get('id')}: {message}")
 
     project_payload: dict[str, Any] | None = None
     if project_number is not None:
@@ -12362,9 +17166,23 @@ def closeout_payload(
         else "closeout state is not yet consistent across gate, GitHub issue/PR, project, and main."
     )
     fallback_to = None if result == "pass" else "merge"
+    blocking_subcheck = next(
+        (
+            subcheck
+            for subcheck in gate.get("subchecks", [])
+            if isinstance(subcheck, dict)
+            and subcheck.get("required_for_closeout") is True
+            and subcheck.get("result") == "block"
+        ),
+        None,
+    )
     if result == "block" and closeout_summary_override is not None:
         summary = closeout_summary_override
         fallback_to = closeout_fallback
+    elif result == "block" and isinstance(blocking_subcheck, dict):
+        fallback_value = blocking_subcheck.get("fallback_to")
+        fallback_to = fallback_value if isinstance(fallback_value, str) and fallback_value else fallback_to
+        summary = f"closeout retained evidence backlink failed at `{blocking_subcheck.get('id')}`."
     elif result == "block" and closeout_findings:
         primary_finding = closeout_findings[0]
         summary = str(primary_finding.get("why_blocking") or summary)
@@ -12378,6 +17196,12 @@ def closeout_payload(
         summary = repo_specific_requirements["summary"]
         fallback_to = repo_specific_requirements["fallback_to"]
         missing_inputs.extend(repo_specific_requirements["missing_inputs"])
+    goal_completion = goal_completion_payload(target_root, goal_completion_file, fact_chain_context)
+    if goal_completion_file and goal_completion["result"] == "block":
+        result = "block"
+        summary = goal_completion["summary"]
+        fallback_to = goal_completion["fallback_to"]
+        missing_inputs.extend(f"goal_completion: {message}" for message in goal_completion.get("missing_inputs", []))
     return (
         {
             "command": "closeout",
@@ -12392,6 +17216,8 @@ def closeout_payload(
             "pr": pr_payload,
             "project": project_payload,
             "repo_specific_requirements": repo_specific_requirements,
+            "dependency_graph": dependency_graph,
+            "goal_completion": goal_completion,
             "target_release": target_release,
             "findings": closeout_findings,
             **(
@@ -12451,6 +17277,12 @@ def handle_closeout(args: argparse.Namespace) -> int:
         owner=owner,
         repo_name=repo_name,
         skip_gate=args.skip_gate,
+        goal_completion_file=args.goal_completion,
+        gate_profile=args.gate_profile,
+        pr_payload_file=args.pr_payload_file,
+        status_checks_file=args.status_checks_file,
+        branch_protection_file=args.branch_protection_file,
+        ruleset_file=args.ruleset_file,
     )
     if errors:
         return emit(
@@ -12560,6 +17392,7 @@ def handle_closeout(args: argparse.Namespace) -> int:
         owner=owner,
         repo_name=repo_name,
         skip_gate=args.skip_gate,
+        goal_completion_file=args.goal_completion,
     )
     if errors:
         sync_missing.extend(errors)
@@ -12661,19 +17494,28 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
         return emit(payload)
 
     if payload.get("result") == "block":
+        sync_plan = reconciliation_sync_plan(payload, include_closeout_comment=bool(comment_body))
         return emit(
             {
                 **payload,
                 "operation": "sync",
                 "summary": "reconciliation sync stopped because audit returned block findings or missing inputs.",
+                "sync_plan": sync_plan,
                 "applied_actions": [],
-                "skipped_actions": [],
+                "skipped_actions": sync_plan["skipped_actions"],
+                "manual_actions": sync_plan["manual_actions"],
                 "remaining_findings": list(payload.get("findings", [])),
+                "audit": payload,
+                "refreshed_audit": payload,
+                "dry_run": args.dry_run,
                 "runtime_state": runtime_state,
             }
         )
 
-    applied_actions, skipped_actions = reconciliation_sync_plan(payload)
+    sync_plan = reconciliation_sync_plan(payload, include_closeout_comment=bool(comment_body))
+    planned_actions = sync_plan["planned_actions"]
+    skipped_actions = list(sync_plan["skipped_actions"])
+    manual_actions = list(sync_plan["manual_actions"])
     remaining_findings = [
         finding
         for finding in payload.get("findings", [])
@@ -12682,11 +17524,11 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
     sync_missing: list[str] = []
 
     if args.dry_run:
-        dry_run_actions = [{**action, "dry_run": True} for action in applied_actions]
+        dry_run_actions = [{**action, "dry_run": True} for action in planned_actions]
         has_unresolved_fix_needed = any(
             isinstance(finding, dict) and finding.get("severity") == "fix-needed"
             for finding in payload.get("findings", [])
-        ) and bool(skipped_actions)
+        ) and (bool(skipped_actions) or bool(manual_actions))
         return emit(
             {
                 **payload,
@@ -12697,9 +17539,14 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
                     if not has_unresolved_fix_needed
                     else "reconciliation sync dry-run found fix-needed drift that still requires manual reconciliation."
                 ),
-                "applied_actions": dry_run_actions,
+                "sync_plan": {**sync_plan, "planned_actions": dry_run_actions},
+                "applied_actions": [],
+                "planned_actions": dry_run_actions,
                 "skipped_actions": skipped_actions,
+                "manual_actions": manual_actions,
                 "remaining_findings": list(payload.get("findings", [])),
+                "audit": payload,
+                "refreshed_audit": payload,
                 "dry_run": True,
                 "fallback_to": None if not has_unresolved_fix_needed else "manual-reconciliation",
                 "runtime_state": runtime_state,
@@ -12707,47 +17554,58 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
         )
 
     executed_actions: list[dict[str, Any]] = []
-    for action in applied_actions:
+    for action in planned_actions:
         step_kind = action.get("action")
         subject = action.get("subject")
+        if not isinstance(action.get("source_finding"), dict) or not isinstance(action.get("write_target"), dict) or not isinstance(action.get("proof_locator"), str):
+            sync_missing.append(f"{subject} is missing safe sync proof for `{step_kind}`")
+            skipped_actions.append(
+                {
+                    **action,
+                    "reason": "missing safe sync proof, write target, or source finding",
+                }
+            )
+            continue
+        if step_kind == "add_closeout_comment":
+            issue_number = action.get("issue_number")
+            if not isinstance(issue_number, int):
+                sync_missing.append(f"{subject} is missing an issue number for closeout comment sync")
+                skipped_actions.append(
+                    {
+                        **action,
+                        "reason": "missing issue number for closeout comment sync",
+                    }
+                )
+                continue
+            if not comment_body:
+                sync_missing.append(f"{subject} has an add_closeout_comment plan action without comment body")
+                skipped_actions.append({**action, "reason": "missing closeout comment body"})
+                continue
+            comment_result = run_process(
+                [
+                    "gh",
+                    "issue",
+                    "comment",
+                    str(issue_number),
+                    "--repo",
+                    f"{owner}/{repo_name}",
+                    "--body",
+                    comment_body,
+                ],
+                target_root,
+            )
+            if comment_result.returncode != 0:
+                sync_missing.append(comment_result.stderr.strip() or f"failed to comment on issue #{issue_number}")
+                skipped_actions.append({**action, "reason": f"failed to comment on issue #{issue_number}"})
+                continue
+            executed_actions.append(action)
+            continue
         if step_kind == "close_issue":
             issue_number = action.get("issue_number")
             if not isinstance(issue_number, int):
                 sync_missing.append(f"{subject} is missing an issue number for reconciliation sync")
-                skipped_actions.append(
-                    {
-                        "kind": action.get("kind"),
-                        "subject": subject,
-                        "action": step_kind,
-                        "reason": "missing issue number for reconciliation sync",
-                    }
-                )
+                skipped_actions.append({**action, "reason": "missing issue number for reconciliation sync"})
                 continue
-            if comment_body and issue_number == args.issue:
-                comment_result = run_process(
-                    [
-                        "gh",
-                        "issue",
-                        "comment",
-                        str(issue_number),
-                        "--repo",
-                        f"{owner}/{repo_name}",
-                        "--body",
-                        comment_body,
-                    ],
-                    target_root,
-                )
-                if comment_result.returncode != 0:
-                    sync_missing.append(comment_result.stderr.strip() or f"failed to comment on issue #{issue_number}")
-                    skipped_actions.append(
-                        {
-                            "kind": action.get("kind"),
-                            "subject": subject,
-                            "action": step_kind,
-                            "reason": f"failed to comment on issue #{issue_number}",
-                        }
-                    )
-                    continue
             close_result = run_process(
                 ["gh", "issue", "close", str(issue_number), "--repo", f"{owner}/{repo_name}"],
                 target_root,
@@ -12756,9 +17614,7 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
                 sync_missing.append(close_result.stderr.strip() or f"failed to close issue #{issue_number}")
                 skipped_actions.append(
                     {
-                        "kind": action.get("kind"),
-                        "subject": subject,
-                        "action": step_kind,
+                        **action,
                         "reason": close_result.stderr.strip() or f"failed to close issue #{issue_number}",
                     }
                 )
@@ -12777,9 +17633,7 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
                 sync_missing.extend(step_errors)
                 skipped_actions.append(
                     {
-                        "kind": action.get("kind"),
-                        "subject": subject,
-                        "action": step_kind,
+                        **action,
                         "reason": "; ".join(step_errors),
                     }
                 )
@@ -12789,9 +17643,7 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
         sync_missing.append(f"{subject} uses unsupported sync action `{step_kind}`")
         skipped_actions.append(
             {
-                "kind": action.get("kind"),
-                "subject": subject,
-                "action": step_kind,
+                **action,
                 "reason": f"unsupported sync action `{step_kind}`",
             }
         )
@@ -12829,10 +17681,14 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
             "summary": summary,
             "missing_inputs": list(dict.fromkeys(sync_missing + list(refreshed_payload.get("missing_inputs", [])))),
             "fallback_to": fallback_to,
+            "sync_plan": sync_plan,
             "applied_actions": executed_actions,
             "skipped_actions": skipped_actions,
+            "manual_actions": manual_actions,
             "remaining_findings": remaining_findings,
             "audit": payload,
+            "refreshed_audit": refreshed_payload,
+            "dry_run": False,
             "runtime_state": runtime_state,
         }
     )
@@ -12900,6 +17756,7 @@ def handle_review(args: argparse.Namespace) -> int:
             requested_model=args.engine_model,
             requested_reasoning=args.engine_reasoning,
             override_reason=args.engine_override_reason,
+            use_local_codex_defaults=bool(args.engine_use_local_codex_defaults),
         )
         if engine_profile_errors or engine_profile is None:
             manual_review = manual_review_payload(
@@ -12907,6 +17764,12 @@ def handle_review(args: argparse.Namespace) -> int:
                 findings_file=None,
                 kind=review_kind,
                 review_record_path=review_path,
+            )
+            adopted_adapter = adopted_review_engine_adapter_payload(
+                adapter_selection=adapter_selection,
+                engine_profile=None,
+                review_kind=review_kind,
+                reviewed_head=current_head,
             )
             return emit(
                 {
@@ -12927,6 +17790,7 @@ def handle_review(args: argparse.Namespace) -> int:
                         "evidence": None,
                     },
                     "engine_metadata": review_adapter_selection_metadata(adapter_selection, reviewed_head=current_head),
+                    "adopted_review_engine_adapter": adopted_adapter,
                     "manual_review": manual_review,
                 }
             )
@@ -12938,6 +17802,12 @@ def handle_review(args: argparse.Namespace) -> int:
                 findings_file=None,
                 kind=review_kind,
                 review_record_path=review_path,
+            )
+            adopted_adapter = adopted_review_engine_adapter_payload(
+                adapter_selection=adapter_selection,
+                engine_profile=engine_profile,
+                review_kind=review_kind,
+                reviewed_head=current_head,
             )
             return emit(
                 {
@@ -12968,6 +17838,7 @@ def handle_review(args: argparse.Namespace) -> int:
                         "evidence": None,
                     },
                     "engine_metadata": review_adapter_selection_metadata(adapter_selection, reviewed_head=current_head),
+                    "adopted_review_engine_adapter": adopted_adapter,
                     "manual_review": manual_review,
                 }
             )
@@ -13014,6 +17885,13 @@ def handle_review(args: argparse.Namespace) -> int:
             review_record_path=review_path,
         )
         result = engine_payload["result"]
+        adopted_adapter = adopted_review_engine_adapter_payload(
+            adapter_selection=adapter_selection,
+            engine_profile=engine_profile,
+            review_kind=review_kind,
+            reviewed_head=current_head,
+            engine_payload=engine_payload,
+        )
         summary = (
             engine_payload["summary"]
             if result == "pass"
@@ -13040,6 +17918,7 @@ def handle_review(args: argparse.Namespace) -> int:
                 "current_checkpoint": flow_payload.get("current_checkpoint"),
                 "engine": engine_payload["engine"],
                 **({"engine_metadata": engine_payload["engine_metadata"]} if isinstance(engine_payload.get("engine_metadata"), dict) else {}),
+                "adopted_review_engine_adapter": adopted_adapter,
                 **({"shadow_engine": shadow_engine_payload} if isinstance(shadow_engine_payload, dict) else {}),
                 "manual_review": manual_review,
                 **({"review_record_input": review_record_input} if isinstance(review_record_input, dict) else {}),
@@ -14077,10 +18956,37 @@ def handle_flow(args: argparse.Namespace) -> int:
 
     review_payload: dict[str, Any] | None = None
     build_execution: dict[str, Any] | None = None
+    governance_lint: dict[str, Any] | None = None
+    retained_host_signals: dict[str, Any] | None = None
+    pr_metadata_preflight: dict[str, Any] | None = None
     governance_surface = build_governance_surface(target_root)
     upgrade_path = maturity_upgrade_path(governance_surface, target_root)
     repo_interface = governance_surface.get("repo_interface")
     repo_specific_requirements: dict[str, Any] | None = None
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    flow_owner = args.owner or detected_owner
+    flow_repo_name = args.repo_name or detected_repo
+    flow_project_drift = project_drift_payload(
+        target_root=target_root,
+        owner=flow_owner,
+        repo_name=flow_repo_name,
+        issue_number=args.issue,
+        pr_number=args.pr,
+        project_number=args.project,
+        mode=args.project_drift_mode if args.operation == "merge-ready" else "advisory",
+    )
+    goal_contract = goal_execution_contract(context) if args.operation == "resume" else None
+    goal_readiness = (
+        validate_goal_execution_contract(
+            goal_contract,
+            context,
+            issue_number=args.issue,
+            pr_number=args.pr,
+            branch_name=args.branch,
+        )
+        if isinstance(goal_contract, dict)
+        else None
+    )
 
     if args.operation in {"resume", "handoff"}:
         locate_payload = base_workspace_payload(context, "locate")
@@ -14156,6 +19062,28 @@ def handle_flow(args: argparse.Namespace) -> int:
                 target_root=target_root,
                 surface="merge_ready",
             )
+            retained_host_signals = retained_host_signals_payload(
+                target_root=target_root,
+                governance_surface=governance_surface,
+                surface="merge_ready",
+                current_head=git_head_sha(target_root),
+            )
+            pr_metadata_preflight = pr_metadata_preflight_payload(
+                target_root=target_root,
+                surface="merge_ready",
+                owner=flow_owner,
+                repo_name=flow_repo_name,
+                pr_number=args.pr,
+                head_sha=None,
+                branch_name=args.branch,
+                pr_payload_file=args.pr_payload_file,
+                governance_surface=governance_surface,
+            )
+            governance_lint = flow_governance_lint_status(
+                context,
+                surface="merge_ready",
+                repo_specific_requirements=repo_specific_requirements,
+            )
             steps.extend(
                 [
                     {
@@ -14171,6 +19099,22 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "summary": merge_payload["summary"],
                         "missing_inputs": merge_payload["missing_inputs"],
                         "fallback_to": merge_payload["fallback_to"],
+                    },
+                    {
+                        "name": "governance-lint",
+                        "result": governance_lint["result"],
+                        "summary": governance_lint["result_summary"],
+                        "missing_inputs": governance_lint_missing_inputs(governance_lint),
+                        "fallback_to": governance_lint_fallback(governance_lint),
+                        "governance_lint": governance_lint,
+                    },
+                    {
+                        "name": "pr-metadata-preflight",
+                        "result": pr_metadata_preflight["result"],
+                        "summary": pr_metadata_preflight["summary"],
+                        "missing_inputs": pr_metadata_preflight["missing_inputs"],
+                        "fallback_to": pr_metadata_preflight["fallback_to"],
+                        "pr_metadata_preflight": pr_metadata_preflight,
                     },
                 ]
             )
@@ -14215,6 +19159,17 @@ def handle_flow(args: argparse.Namespace) -> int:
             }
         else:
             admission_payload = checkpoint_payload("admission", context)
+            if args.operation == "pre-review":
+                repo_specific_requirements = repo_specific_requirements_payload(
+                    repo_interface,
+                    target_root=target_root,
+                    surface="pre_review",
+                )
+                governance_lint = flow_governance_lint_status(
+                    context,
+                    surface="pre_review",
+                    repo_specific_requirements=repo_specific_requirements,
+                )
             locate_payload = base_workspace_payload(context, "locate")
             locate_result = "pass" if not locate_payload["purity"]["hard_failures"] else "block"
             locate_step = {
@@ -14238,6 +19193,104 @@ def handle_flow(args: argparse.Namespace) -> int:
                 }
             )
             steps.append(locate_step)
+            if args.operation == "pre-review" and isinstance(governance_lint, dict):
+                steps.append(
+                    {
+                        "name": "governance-lint",
+                        "result": governance_lint["result"],
+                        "summary": governance_lint["result_summary"],
+                        "missing_inputs": governance_lint_missing_inputs(governance_lint),
+                        "fallback_to": governance_lint_fallback(governance_lint),
+                        "governance_lint": governance_lint,
+                    }
+                )
+
+    if args.operation in {"resume", "pre-review", "merge-ready"} and args.project is not None:
+        project_step_result = (
+            "block"
+            if args.operation == "merge-ready" and flow_project_drift.get("mode") == "blocking" and flow_project_drift.get("result") == "block"
+            else "pass"
+        )
+        steps.append(
+            {
+                "name": "project-drift",
+                "result": project_step_result,
+                "summary": flow_project_drift["summary"],
+                "missing_inputs": flow_project_drift.get("missing_inputs", []) if project_step_result == "block" else [],
+                "fallback_to": flow_project_drift.get("fallback_to") if project_step_result == "block" else None,
+                "project_drift": flow_project_drift,
+            }
+        )
+    if args.operation in {"resume", "merge-ready"} and args.issue is not None:
+        detected_owner, detected_repo = detect_github_repo(target_root)
+        dependency_owner = args.owner or detected_owner
+        dependency_repo = args.repo_name or detected_repo
+        dependency_missing: list[str] = []
+        issue_payload_for_dependency: dict[str, Any] | None = None
+        dependency_graph: dict[str, Any] = {
+            "schema_version": HOST_DEPENDENCY_GRAPH_SCHEMA,
+            "availability": "not_requested",
+            "edges": [],
+            "findings": [],
+        }
+        if not dependency_owner or not dependency_repo:
+            dependency_missing.append("owner/repo")
+        else:
+            issue_payload_for_dependency, issue_errors = github_issue_payload(
+                target_root,
+                dependency_owner,
+                dependency_repo,
+                args.issue,
+            )
+            dependency_missing.extend(f"issue: {message}" for message in issue_errors)
+            if issue_payload_for_dependency is not None:
+                dependency_graph = dependency_graph_payload(
+                    issue_number=args.issue,
+                    issue_payload=issue_payload_for_dependency,
+                    native_dependency_payload=github_issue_dependencies_payload(
+                        target_root,
+                        dependency_owner,
+                        dependency_repo,
+                        args.issue,
+                    ),
+                )
+        dependency_blocking = [
+            finding
+            for finding in dependency_graph.get("findings", [])
+            if isinstance(finding, dict)
+            and (
+                finding.get("severity") == "block"
+                or (args.operation == "merge-ready" and finding.get("kind") == "stale_native_edge")
+            )
+        ]
+        dependency_step_result = "block" if dependency_missing or dependency_blocking else "pass"
+        steps.append(
+            {
+                "name": "native-dependency",
+                "result": dependency_step_result,
+                "summary": (
+                    "native dependency mirror is readable and has no open blocker for this issue."
+                    if dependency_step_result == "pass"
+                    else "native dependency mirror has blockers or unreadable host signals."
+                ),
+                "missing_inputs": [
+                    *dependency_missing,
+                    *[str(finding.get("subject") or finding.get("kind")) for finding in dependency_blocking],
+                ],
+                "fallback_to": "manual-reconciliation" if dependency_step_result == "block" else None,
+                "dependency_graph": dependency_graph,
+            }
+        )
+    if args.operation == "resume" and isinstance(goal_readiness, dict):
+        steps.append(
+            {
+                "name": "goal-bootstrap",
+                "result": goal_readiness["result"],
+                "summary": goal_readiness["summary"],
+                "missing_inputs": goal_readiness["missing_inputs"],
+                "fallback_to": goal_readiness["fallback_to"],
+            }
+        )
 
     result = "pass"
     fallback_to: str | None = None
@@ -14250,6 +19303,20 @@ def handle_flow(args: argparse.Namespace) -> int:
         if step_result == "block" and result == "pass":
             result = "block"
             fallback_to = step.get("fallback_to")
+    if (
+        args.operation in {"pre-review", "merge-ready"}
+        and isinstance(governance_lint, dict)
+        and governance_lint.get("result") == "block"
+    ):
+        result = "block"
+        fallback_to = governance_lint_fallback(governance_lint) or fallback_to
+    if (
+        args.operation == "merge-ready"
+        and isinstance(retained_host_signals, dict)
+        and retained_host_signals.get("result") == "block"
+    ):
+        result = "block"
+        fallback_to = retained_host_signals.get("fallback_to") or fallback_to
     if result != "block" and isinstance(repo_specific_requirements, dict) and repo_specific_requirements["result"] == "block":
         result = "block"
         fallback_to = fallback_to or repo_specific_requirements["fallback_to"]
@@ -14306,6 +19373,10 @@ def handle_flow(args: argparse.Namespace) -> int:
                     missing_inputs.append(message)
     if isinstance(repo_specific_requirements, dict) and repo_specific_requirements["result"] == "block":
         for message in repo_specific_requirements.get("missing_inputs", []):
+            if message not in missing_inputs:
+                missing_inputs.append(message)
+    if args.operation == "merge-ready" and isinstance(retained_host_signals, dict) and retained_host_signals.get("result") == "block":
+        for message in retained_host_signals.get("missing_inputs", []):
             if message not in missing_inputs:
                 missing_inputs.append(message)
     if args.operation == "resume":
@@ -14376,6 +19447,10 @@ def handle_flow(args: argparse.Namespace) -> int:
             "recovery_readiness": recovery_readiness,
             "execution_ledger": execution_ledger,
             "blocking_failures": blocking_failures,
+            "project_drift": flow_project_drift,
+            **({"governance_lint": governance_lint} if args.operation in {"pre-review", "merge-ready"} else {}),
+            **({"pr_metadata_preflight": pr_metadata_preflight} if args.operation == "merge-ready" else {}),
+            **({"goal_execution_contract": goal_contract, "goal_readiness": goal_readiness} if args.operation == "resume" else {}),
             **({"governance_surface": governance_surface} if args.operation == "resume" else {}),
             **({"maturity_upgrade_path": upgrade_path} if args.operation == "resume" else {}),
             **({"adoption_guidance": adoption_guidance} if args.operation == "resume" else {}),
@@ -14502,6 +19577,32 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "checks": state_payload["checks"],
                     },
                     "runtime_evidence": runtime_fields,
+                    "admission_checkpoint": {
+                        "result": admission_payload["result"],
+                        "summary": admission_payload["summary"],
+                        "missing_inputs": admission_payload["missing_inputs"],
+                        "fallback_to": admission_payload["fallback_to"],
+                    },
+                    "repo_specific_requirements": repo_specific_requirements,
+                    "current_checkpoint": {
+                        "raw": context["current_checkpoint_raw"],
+                        "normalized": context["current_checkpoint"],
+                    },
+                    "current_lane": context["current_lane"],
+                }
+                if args.operation == "pre-review"
+                else {}
+            ),
+            **(
+                {
+                    "state_check": {
+                        "result": state_payload["result"],
+                        "summary": state_payload["summary"],
+                        "missing_inputs": state_payload["missing_inputs"],
+                        "fallback_to": state_payload["fallback_to"],
+                        "checks": state_payload["checks"],
+                    },
+                    "runtime_evidence": runtime_fields,
                     "build_checkpoint": {
                         "result": build_payload["result"],
                         "summary": build_payload["summary"],
@@ -14517,6 +19618,15 @@ def handle_flow(args: argparse.Namespace) -> int:
                     },
                     "budget_risk": merge_payload.get("budget_risk"),
                     "spec_review": merge_payload.get("spec_review"),
+                    "retained_host_signals": retained_host_signals,
+                    "merge_ready_authority": {
+                        "authority_after": "loom merge-ready result",
+                        "host_signal_role": "retained_input_only",
+                        "no_dual_authority": bool(
+                            isinstance(retained_host_signals, dict)
+                            and retained_host_signals.get("result") == "pass"
+                        ),
+                    },
                     "current_checkpoint": {
                         "raw": context["current_checkpoint_raw"],
                         "normalized": context["current_checkpoint"],
@@ -14861,8 +19971,14 @@ def main(argv: list[str] | None = None) -> int:
         return handle_carrier(args)
     if args.command == "host-binding":
         return handle_host_binding(args)
+    if args.command == "github-intake":
+        return handle_github_intake(args)
+    if args.command == "goal":
+        return handle_goal(args)
     if args.command == "pr-gate":
         return handle_pr_gate(args)
+    if args.command == "pr-metadata":
+        return handle_pr_metadata(args)
     if args.command == "controlled-merge":
         return handle_controlled_merge(args)
     if args.command == "runtime-evidence":

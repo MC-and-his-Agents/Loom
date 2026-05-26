@@ -65,6 +65,9 @@ GitHub profile 的 strong governance 默认要求：
 - merge method 与当前 profile 不一致
 - branch protection 或 active ruleset 仍禁止当前 merge 行为
 - branch protection 与 active ruleset 读面都不可用，无法证明 `pr merge gate` 是宿主强制 check
+- host mergeability 为 `DIRTY` 或 `DRAFT`
+
+GitHub `mergeStateStatus == BLOCKED` 是粗粒度宿主策略信号，不自动等价于 Loom semantic readiness 失败。若 fresh authored review approval、`loom-pr-merge-gate` required 且成功、required checks 全绿、PR head 无 drift、branch protection / ruleset readback 可解释，`controlled merge` 可以把 `BLOCKED` 作为 drift-only readback evidence 继续进入 host merge delegation；最终是否能合入仍由 `gh pr merge` 的宿主返回承接并记录。`BLOCKED` 不能替代 authored review approval，也不能让 raw guardian、GitHub review comment 或 CI 成为 approval truth。
 
 ## 6. retained gate result 消费
 
@@ -94,7 +97,7 @@ retained `merge-gate` result 必须满足：
 - host mergeability
 - merge method
 
-任一 identity、head、validation、required check、branch protection / ruleset、mergeability 或 merge method drift 都必须 `block`，或回到 `pr-gate` / `merge-ready` / `review`。retained result 不能替代 host enforcement readback，也不能让 raw review / shadow evidence 成为 approval truth。
+任一 identity、head、validation、required check、branch protection / ruleset、hard-block mergeability 或 merge method drift 都必须 `block`，或回到 `pr-gate` / `merge-ready` / `review`。hard-block mergeability 只包括 `DIRTY` 与 `DRAFT`；`BLOCKED` 必须解释为 host policy signal，只有在 Loom gate 与 host readback 其余条件均已通过时才可继续进入受控宿主委托。retained result 不能替代 host enforcement readback，也不能让 raw review / shadow evidence 成为 approval truth。
 
 ## 7. merge 后交接
 
