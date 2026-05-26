@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+const repoVersion = readFileSync(new URL("../VERSION", import.meta.url), "utf8").trim();
 
 function runLoom(args) {
   return spawnSync(process.execPath, ["bin/loom.mjs", ...args], {
@@ -30,5 +31,5 @@ test("loom bin reports the root VERSION", () => {
   assert.equal(completed.status, 0, completed.stderr);
   const payload = JSON.parse(completed.stdout);
   assert.equal(payload.result, "pass");
-  assert.equal(payload.versions.repo_version, "v0.13.0");
+  assert.equal(payload.versions.repo_version, repoVersion);
 });
