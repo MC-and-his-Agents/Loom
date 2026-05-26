@@ -3,9 +3,9 @@
   "item_id": "WI-1016",
   "decision": "allow",
   "kind": "general_review",
-  "summary": "WI-1016 docs-only implementation is approved for PR #1086: full/minimal spec suite layering, docs scaffold templates, spec-to-plan mapping, locator/provenance rules, and #1020 generated handoff are in scope; no route matrix, scenario skill, generated runtime, task carrier, evidence-map, consistency-analysis, gate-chain, or CLI contract was modified.",
+  "summary": "Docs-only #1016 implementation review refreshed at current head: full/minimal spec suite contract, template responsibilities, locator/provenance rules, spec-to-plan mapping, not_applicable/deferred semantics, and #1020 generated handoff remain in scope; no generated runtime or route-matrix surfaces changed.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "cdf5d8c6d7ef0bb7b398ad7a37ca34946d06c2f4",
+  "reviewed_head": "e45d90f0705b279cc9c2f2659e623f30470c5277",
   "reviewed_validation_summary": "Passed: `git diff --check`; focused `rg` checks for full/minimal suite, consume/produce/locator/provenance, not_applicable/deferred, scenario/acceptance mapping; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`. PR #1086 checks passed except `loom-pr-merge-gate`, which required binding this WI carrier and review record.",
   "fallback_to": null,
   "findings": [],
@@ -18,16 +18,15 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "unavailable",
+      "status": "not_applicable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
-      "budget_summary": "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom\": EOF",
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_control_plane",
-        "error_count": 1
+        "source": "github_host"
       }
     },
     "engine_adapter": null,
