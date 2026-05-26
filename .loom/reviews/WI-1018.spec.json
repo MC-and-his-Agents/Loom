@@ -5,7 +5,7 @@
   "kind": "spec_review",
   "summary": "Spec review for WI-1018: minimal formal spec suite defines #1018 evidence-map and consistency-analysis contract boundaries, keeps #1016/#1017 unstable inputs candidate/optional/deferred/not_applicable, and defers #1019/#1020 integration.",
   "reviewer": "codex",
-  "reviewed_head": "90bfdcc7b64ebcea1cd1c894be7d41210701823f",
+  "reviewed_head": "65441933aec8ce096ca99c307700a68af877860c",
   "reviewed_validation_summary": "Passed: git diff --check; focused rg checks for evidence-map / consistency-analysis / blocking / advisory / stale / missing / conflict / not_applicable / source locator / freshness / HEAD / host state / #1019 / #1020 boundaries; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .",
   "fallback_to": null,
   "findings": [],
