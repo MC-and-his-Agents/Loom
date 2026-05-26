@@ -5,7 +5,7 @@
   "kind": "code_review",
   "summary": "WI-1071 closeout carrier unblocker is approved: #1071/#1072-#1076 are already closed after PR #1081 merged, and this change only terminalizes the stale Loom carrier so later Work Items are not blocked by an already-closed active binding.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "b3ed9dd8497957629cb7f5acb4c180f5bc67a9e9",
+  "reviewed_head": "b2a64a533a52438b8e663d0a70d5cc1d83833882",
   "reviewed_validation_summary": "Passed for the closeout carrier unblocker at PR #1092 head `1f19416d7a147a672cb349fa5a81d77806c5c03f`: PR #1081 merged with head `f4f85de7dc2d1d896ddd8e7334535294bdda74dc`; merge commit `6c2340763635e9849184a3bd8d241beb783231fe`; #1071 closeout comment https://github.com/MC-and-his-Agents/Loom/issues/1071#issuecomment-4541740151 records #1072-#1076 closed and the final controlled-merge semantics; terminal closed checkpoints now pass `pr-gate` instead of re-blocking already-closed host work; `python3 tools/skills_surface.py check`; `python3 tools/check_demo_bootstrap_fixture.py`; `python3 tools/py_compile_clean.py skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/loom_flow.py`; `python3 .loom/bin/loom_flow.py shadow-parity --target .`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1071`; `make check`.",
   "fallback_to": null,
   "findings": [],
