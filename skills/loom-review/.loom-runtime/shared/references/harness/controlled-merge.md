@@ -61,8 +61,11 @@ GitHub profile 的 strong governance 默认要求：
 - required checks 未全绿
 - merge method 与当前 profile 不一致
 - branch protection 仍禁止当前 merge 行为
+- host mergeability 为 `DIRTY` 或 `DRAFT`
 
 ## 6. retained result 与 drift-only 消费
+
+`DIRTY` 与 `DRAFT` mergeability 是 hard-block host gate failure。GitHub `BLOCKED` 是粗粒度 host policy signal，不自动等价于 Loom semantic readiness 失败；当 authored review approval、`loom-pr-merge-gate`、required checks、PR head binding 与 branch protection / ruleset readback 均通过时，`GitHub controlled merge` 可以把它作为 drift-only evidence 继续委托 `gh pr merge`。
 
 `GitHub controlled merge` 可以消费 fresh retained `pr-gate` / `merge-gate` result locator，但只把它们当作前序 gate result。retained `pr-gate` 必须是 `loom-pr-merge-gate/v1`、`result == pass`，并且 Work Item、PR number、PR head、authored review approval 与 validation summary 仍绑定当前 PR。retained `merge-gate` 必须来自 `flow merge-ready` 或 `checkpoint merge`，且 merge checkpoint 为 pass。
 
