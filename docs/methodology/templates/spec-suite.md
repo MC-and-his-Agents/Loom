@@ -30,7 +30,7 @@ Loom 不吸收 SDD-only 边界：
 - 不复制 `github/spec-kit` 的 `.specify/` 目录、`/speckit.*` 命令名、固定文件布局或 extension trust model
 - 不让 `tasks.md` 或任何单一任务文件替代 Work Item、recovery、review、merge-ready 或 closeout 真相
 
-因此，本文件当前冻结最小 formal spec 套件；full spec suite、execution breakdown、task carrier、evidence-map 与 consistency-analysis 的完整合同由后续 FR 在该边界内继续收敛。
+因此，本文件当前冻结最小 formal spec 套件；full spec suite、execution breakdown 与 task carrier 的完整合同由后续 FR 在该边界内继续收敛。`evidence-map` 与 `consistency-analysis` 的 #1018 合同见 [evidence-map.md](./evidence-map.md) 与 [consistency-analysis.md](./consistency-analysis.md)，并且只能把未稳定的 #1016 / #1017 输入作为 `candidate`、`optional`、`deferred` 或 `not_applicable` 消费。
 
 ## 1. 正式规约套件的最小边界
 

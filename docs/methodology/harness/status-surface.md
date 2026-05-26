@@ -203,6 +203,51 @@ Approval / sandbox policy 也只能派生读取：
 `fresh verification evidence` 只能由 `present` 且绑定当前对象的 behavior evidence / test evidence 组合派生。
 若验证结果来自较早 `HEAD`、较早范围、过时恢复摘要，或来自未整合的 subagent 输出，状态面必须显示为 `stale` 或 `missing`，不得显示为 fresh。
 
+## 4.3 Evidence-map / consistency-analysis 展示
+
+状态面可以展示 `evidence-map` 与 `consistency-analysis` 派生结论，但只作为 derived surface。
+
+最小展示字段：
+
+- `evidence_map`
+  - `locator`
+  - `work_item`
+  - `scope`
+  - `head_sha`
+  - `pr`
+  - `behavior_evidence`
+  - `test_evidence`
+  - `fresh_verification_evidence`
+  - `not_applicable_entries`
+- `consistency_analysis`
+  - `locator`
+  - `result`
+  - `blocking_consistency_gaps`
+  - `advisory_consistency_gaps`
+  - `not_applicable_gaps`
+  - `remediation_summary`
+
+每个展示项必须能下钻到：
+
+- source locator
+- provenance
+- freshness
+- Work Item / scope / `HEAD` / PR 或 host state 绑定
+- consumer boundary
+
+状态面不得 authored evidence row、consistency finding、blocking decision 或 remediation result。若 `consistency-analysis` finding 缺 source locator、freshness 或绑定信息，状态面必须把该 finding 标记为不可消费，而不是补写第二份状态。
+
+展示分类固定消费 [../templates/consistency-analysis.md](../templates/consistency-analysis.md)：
+
+- `blocking`
+- `advisory`
+- `stale`
+- `missing`
+- `conflict`
+- `not_applicable`
+
+`not_applicable` 必须保留 rationale、consumer boundary 和 recheck condition；字段缺失不能被展示为 `not_applicable`。`deferred` 事项如果被显示为 completed / closed_out / Done，必须展示为 blocking consistency gap `deferred_as_completed`。
+
 ## 5. Execution Ledger 派生展示
 
 状态面可以展示 execution ledger 的派生结论，但不得 authored ledger 字段。

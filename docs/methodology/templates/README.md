@@ -18,6 +18,10 @@
   - `#1014` `#1025`
 - [pr-slicing.md](./pr-slicing.md)
   - `#1014` `#1026`
+- [evidence-map.md](./evidence-map.md)
+  - `#1018` `#1041`
+- [consistency-analysis.md](./consistency-analysis.md)
+  - `#1018` `#1042` `#1044`
 - [spec-template.md](./spec-template.md)
   - `#290`
 - [implementation-contract-template.md](./implementation-contract-template.md)
@@ -45,6 +49,10 @@
   - 对应 `issue-tree-plan.md` 中定义的 issue tree planning 最小骨架
 - [scaffold/pr-slicing.md](./scaffold/pr-slicing.md)
   - 对应 `pr-slicing.md` 中定义的 PR slicing 最小骨架
+- [scaffold/evidence-map.md](./scaffold/evidence-map.md)
+  - 对应 `evidence-map.md` 中定义的 evidence-map 最小骨架
+- [scaffold/consistency-analysis.md](./scaffold/consistency-analysis.md)
+  - 对应 `consistency-analysis.md` 中定义的 consistency-analysis 最小骨架
 - [scaffold/release-closeout.md](./scaffold/release-closeout.md)
   - 对应 `release-closeout-template.md` 中定义的 target release closeout 最小骨架
 
