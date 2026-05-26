@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1030",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1030 spec remains approved after rebase onto latest main. Scope is limited to user-story scaffold locator fields, story carrier validation, contract-only checks, and generated skills surface synchronization; it excludes loom-story routing and spec-suite entry rules.",
+  "reviewer": "codex main-thread spec review",
+  "reviewed_head": "a10b896691354186db2122aaaecb39ac348c19a1",
+  "reviewed_validation_summary": "`git diff --check`; `python3 -m py_compile src/skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_story_carriers.py`; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .` all pass.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1030.md",
+    "recovery_entry": ".loom/progress/WI-1030.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

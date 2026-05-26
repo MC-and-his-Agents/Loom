@@ -18977,6 +18977,10 @@ def require_story_flow_contract_summary(
         failures.append(Failure(category, f"{context} must keep Work Item as delivery consumption entry"))
     elif set(delivery_contract.get("blocks_on_confirmation", [])) != {"pending", "revision-requested"}:
         failures.append(Failure(category, f"{context} delivery consumption must block pending or revision-requested story confirmation"))
+    elif "scenario locator" not in str(delivery_contract.get("scenario_locator_output", "")):
+        failures.append(Failure(category, f"{context} delivery consumption must expose scenario locator output"))
+    elif "Business Confirmation locator" not in str(delivery_contract.get("business_confirmation_locator_output", "")):
+        failures.append(Failure(category, f"{context} delivery consumption must expose Business Confirmation locator output"))
     if any(key in payload for key in ("story", "readiness", "delivery_consumption")):
         failures.append(Failure(category, f"{context} must not expose actual story/readiness payload keys from contract-summary mode"))
 
@@ -19004,8 +19008,10 @@ def check_story_intake_contract(root: Path) -> list[Failure]:
         "docs/methodology/templates/scaffold/user-story.md": [
             "Actor",
             "Capability",
+            "Scenario locator",
             "Story Readiness",
             "Story Business Confirmation",
+            "Business Confirmation locator",
             "Delivery Consumption Boundary",
         ],
         "skills/route-matrix.md": [
@@ -19207,6 +19213,11 @@ def check_story_intake_contract(root: Path) -> list[Failure]:
             "- Schema marker: loom-story-readiness/v1\n"
             "- Decision: confirmed\n"
             "- Rationale: concrete enough for fixture validation\n\n"
+            "## Acceptance Scenarios\n\n"
+            "### Scenario S1\n\n"
+            "- Scenario id: S1\n"
+            "- Scenario locator: .loom/stories/WI-100.md#scenario-s1\n"
+            "- Dimension: happy_path\n\n"
             "## Story Business Confirmation\n\n"
             "- Schema marker: loom-story-business-confirmation/v1\n"
             "- Decision: not_applicable\n"

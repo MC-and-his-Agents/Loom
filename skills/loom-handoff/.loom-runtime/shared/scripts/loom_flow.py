@@ -1021,8 +1021,10 @@ def story_flow_payload(
             "execution_entry": "Work Item",
             "spec_consumes": "confirmed or not_applicable story scenario id / locator as behavior contract input",
             "plan_consumes": "confirmed or not_applicable story scenario id mapped to tests, checks, manual validation, or not_applicable evidence",
+            "scenario_locator_output": "story scaffold exports stable scenario ids and scenario locators for spec.md / plan.md locator-only consumption",
+            "business_confirmation_locator_output": "story scaffold exports a confirmed Story Business Confirmation locator or not_applicable rationale",
             "blocks_on_confirmation": ["pending", "revision-requested"],
-            "forbidden": "story must not author recovery, review, PR, merge-ready, or closeout state",
+            "forbidden": "story must not author recovery, review, PR, merge-ready, closeout, or formal spec / plan state",
         },
         "contract": {
             "story_intake": "docs/methodology/governance/story-intake.md",

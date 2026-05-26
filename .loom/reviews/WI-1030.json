@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1030",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1030 scaffold locator update remains merge-ready after rebase onto latest main: user-story scaffold exports scenario locators and Business Confirmation locator/not_applicable rationale, story carrier validation covers the new fields, generated skills surface and demo bootstrap fixture are synchronized, root shadow evidence is fresh, CLI version surface is bumped to v0.13.6 for release checks, and local validation after rebase passes.",
+  "reviewer": "codex main-thread review",
+  "reviewed_head": "827db2c12cf7003dff86baaf20d0463ad444f906",
+  "reviewed_validation_summary": "`git diff --check`; `python3 -m py_compile src/skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_story_carriers.py`; `python3 tools/skills_surface.py check`; `python3 tools/check_npm_package.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_release_surface.py`; `make loom-demo-new-project-check`; `node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main`; `make loom-check` all pass.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1030.md",
+    "recovery_entry": ".loom/progress/WI-1030.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
