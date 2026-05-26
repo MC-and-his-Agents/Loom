@@ -159,7 +159,7 @@ v0.7 只冻结 declaration-time locator contract。
 - dynamic tool availability locator 留在 `.loom/companion/repo-interface.json`
 - approval / sandbox policy read locator 留在 `.loom/companion/repo-interface.json`
 
-`controlled-merge check|merge` 也可以通过显式 CLI locator 消费本次 PR 的 retained `pr-gate` / `merge-gate` result。该消费仍沿用同一 locator 纪律：路径必须 repo-relative、可读、不能越界，且 envelope 必须能回链 Work Item、PR、head、review approval、validation summary 与 merge checkpoint。fresh retained result 只允许跳过重复语义审查读取；当前 PR head、required checks、branch protection / active ruleset、mergeability 与 merge method 必须重新 read back，并以 `drift_readback.mode = drift-only` 输出。
+`controlled-merge check|merge` 也可以通过显式 CLI locator 消费本次 PR 的 retained `pr-gate` / `merge-gate` result。该消费仍沿用同一 locator 纪律：路径必须 repo-relative、可读、不能越界，且 envelope 必须能回链 Work Item、PR、head、review approval、validation summary 与 merge checkpoint。fresh retained result 只允许跳过重复语义审查读取；当前 PR head、required checks、branch protection / active ruleset、mergeability 与 merge method 必须重新 read back，并以 `drift_readback.mode = drift-only` 输出。mergeability readback 中 `DIRTY` 与 `DRAFT` 是 hard-block host gate failure；GitHub `BLOCKED` 是 delegated host policy signal，只有在 Loom authored approval、required checks、head binding 与 host enforcement readback 其余条件均通过时才允许进入 `gh pr merge` 委托。
 
 明确排除：
 

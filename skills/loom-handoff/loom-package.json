@@ -3,7 +3,7 @@
   "package_type": "single-skill",
   "package_id": "loom-handoff",
   "display_name": "Loom Handoff",
-  "repo_version": "v0.13.2",
+  "repo_version": "v0.13.4",
   "source_repository": "https://github.com/MC-and-his-Agents/Loom",
   "source_revision": "repository-working-tree",
   "skill_package_version": "1.0.0",

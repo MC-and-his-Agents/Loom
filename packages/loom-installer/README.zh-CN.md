@@ -4,11 +4,11 @@
 
 Deprecated Loom npm / npx adapter helper 和 verifier。
 
-Loom 默认安装模型是完整仓库安装加宿主原生或宿主适配的 skill discovery。这个 package 是 deprecated legacy artifact，只为历史 adapter 托管 plugin 安装、single-skill helper 和 verification output 保留。不要把它当作当前 Loom CLI 或推荐安装路径。
+Loom 默认安装模型是根 `loom` CLI package：`@mc-and-his-agents/loom`。它负责安装、同步和验证宿主 plugin/SKILLS payload。这个 package 是 deprecated legacy artifact，只为历史兼容证据和 verification output 保留。不要把它当作当前 Loom CLI 或推荐安装路径。
 
 ## Deprecated Commands
 
-这些命令是给既有 consumer 的 legacy 示例，不是当前安装路径：
+这些命令只为既有 legacy consumer 和证据记录保留，不是当前安装路径：
 
 ```bash
 npx @mc-and-his-agents/loom-installer add plugin --host codex

@@ -85,6 +85,7 @@ Loom 当前只冻结三组顶层分类：
 - PR 指向的 issue 与当前 `Work Item` 不一致
 - merge commit 无法回链当前 PR
 - required checks / mergeability / branch protection 读取结果互相冲突
+- GitHub `BLOCKED` 与 Loom gate/readback 结论不一致且无法解释为宿主策略信号
 
 ### 4.3 `reconciliation_drift`
 
@@ -124,6 +125,9 @@ closeout 阶段发现的控制面对齐漂移。
 - PR 仍是 draft
 - required checks 未全部通过
 - branch protection / merge method 不满足当前 profile
+- host mergeability 为 `DIRTY` 或 `DRAFT`
+
+GitHub `BLOCKED` 不单独构成 `host_gate_failure`。它必须结合 authored review approval、`loom-pr-merge-gate`、required checks、PR head binding 与 branch protection / ruleset readback 解释；这些前置均通过时，它只是 delegated host policy signal，由 `controlled merge` 委托 `gh pr merge` 承接最终宿主结果。
 
 ### 5.4 `evidence_failure`
 

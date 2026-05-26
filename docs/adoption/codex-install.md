@@ -1,65 +1,54 @@
 # Installing Loom for Codex
 
-Enable Loom skills in Codex via native skill discovery. Clone the repository and symlink each generated public Loom skill package.
+Use the root `loom` CLI as the only primary install entry. The CLI installs,
+synchronizes, and verifies the generated SKILLS payload and Codex plugin payload
+for the target repository.
 
 ## Prerequisites
 
-- Git
-- Python `>=3.10`, recommended `3.11+`
+- Node `>=20`
+- Python `>=3.11`
 
 ## Installation
 
-1. Clone Loom:
+1. Install the root CLI:
 
    ```bash
-   git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom
+   npm install -g @mc-and-his-agents/loom
    ```
 
-2. Create skill symlinks:
+2. Install the Codex host payload into the target repository:
 
    ```bash
-   mkdir -p ~/.agents/skills
-   for skill in ~/.codex/loom/skills/loom-*; do
-     ln -sfn "$skill" "$HOME/.agents/skills/$(basename "$skill")"
-   done
+   loom host install --host codex --mode plugin --target . --apply --json
    ```
 
-3. Restart Codex.
+3. Verify the installed payload:
 
-Codex should start from `loom-init` after discovery reloads. The npm installer is not the Codex default path and is deprecated legacy behavior, not the current install recommendation.
+   ```bash
+   loom host verify --host codex --mode plugin --target . --json
+   loom skills check --target . --json
+   loom doctor --target . --json
+   ```
 
-This installs Loom's own generated skill surface. It does not define which `.loom` files an adopted target repository should commit. Target repository `.loom` carrier visibility is defined in [loom-surfaces-version-control.md](./loom-surfaces-version-control.md).
+Codex should start from `loom-init` after host discovery reloads. The plugin and
+SKILLS directories are CLI-managed payloads, not separate user install surfaces.
 
-## Verify
-
-```bash
-ls -la ~/.agents/skills/loom-init
-ls ~/.agents/skills/loom-init/SKILL.md
-ls ~/.agents/skills/loom-init/loom-package.json
-```
+This installs Loom's generated skill and plugin payloads for the target
+repository. It does not define which `.loom` files an adopted target repository
+should commit. Target repository `.loom` carrier visibility is defined in
+[loom-surfaces-version-control.md](./loom-surfaces-version-control.md).
 
 ## Update
 
 ```bash
-cd ~/.codex/loom && git pull
+npm update -g @mc-and-his-agents/loom
+loom host install --host codex --mode plugin --target . --apply --force --json
+loom host verify --host codex --mode plugin --target . --json
 ```
 
-The skills update through the symlink.
+## Compatibility
 
-Run this from a Loom checkout when validating the generated install surface:
-
-```bash
-make skills-check
-```
-
-## Uninstall
-
-```bash
-rm ~/.agents/skills/loom-*
-```
-
-Optionally delete the clone:
-
-```bash
-rm -rf ~/.codex/loom
-```
+The npm installer is not the Codex default path. `@mc-and-his-agents/loom-installer`
+is a deprecated historical artifact. It is not the Codex install path and must
+not be used as evidence that the root `loom` CLI was installed or published.

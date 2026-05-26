@@ -215,6 +215,8 @@ REVIEW_PROMPT_DIFF_PATHS = (
 PR_MERGE_GATE_SCHEMA = "loom-pr-merge-gate/v1"
 CONTROLLED_MERGE_SCHEMA = "loom-controlled-merge/v1"
 PR_MERGE_GATE_CHECK_NAME = "loom-pr-merge-gate"
+HOST_MERGEABILITY_HARD_BLOCK_STATUSES = {"DIRTY", "DRAFT"}
+HOST_MERGEABILITY_DELEGATED_STATUSES = {"BLOCKED"}
 MERGE_GATE_RESULT_SCHEMAS = {"loom-flow-merge-ready/v1", "loom-merge-gate/v1"}
 LIVE_SMOKE_SCHEMA = "loom-live-smoke/v1"
 HOST_ADAPTER_LIVE_DRIFT_SCHEMA = "loom-host-adapter-live-drift/v1"
@@ -13603,15 +13605,21 @@ def pr_gate_payload(
                 "head_binding": review_record.get("head_binding"),
                 "missing_inputs": review_errors,
             }
-        if merge_checkpoint.get("result") in {"block", "fallback"}:
+        terminal_closed_checkpoint = (
+            merge_checkpoint.get("result") == "fallback"
+            and merge_checkpoint.get("fallback_to") == "closed"
+            and not merge_checkpoint.get("missing_inputs")
+        )
+        if merge_checkpoint.get("result") in {"block", "fallback"} and not terminal_closed_checkpoint:
             missing_inputs.extend(str(message) for message in merge_checkpoint.get("missing_inputs", []))
         steps.append(
             {
                 "name": "checkpoint-merge",
-                "result": merge_checkpoint.get("result"),
+                "result": "pass" if terminal_closed_checkpoint else merge_checkpoint.get("result"),
                 "summary": merge_checkpoint.get("summary"),
                 "missing_inputs": merge_checkpoint.get("missing_inputs", []),
                 "fallback_to": merge_checkpoint.get("fallback_to"),
+                "terminal_closed_checkpoint": terminal_closed_checkpoint,
             }
         )
 
@@ -13711,6 +13719,9 @@ def pr_gate_payload(
             "head_sha": pr_head,
             "url": pr_payload.get("url") if isinstance(pr_payload, dict) else None,
             "work_item_from_body": body_item,
+            "mergeStateStatus": pr_payload.get("mergeStateStatus") if isinstance(pr_payload, dict) else None,
+            "reviewDecision": pr_payload.get("reviewDecision") if isinstance(pr_payload, dict) else None,
+            "latestReviews": pr_payload.get("latestReviews") if isinstance(pr_payload, dict) else None,
         },
         "work_item": {
             "id": context.get("item_id") if context else effective_item,
@@ -14026,12 +14037,7 @@ def current_pr_drift_readback(
     host_enforcement: dict[str, Any],
 ) -> dict[str, Any]:
     head_sha = current_pr.get("headRefOid")
-    mergeability = current_pr.get("mergeStateStatus")
-    mergeability_result = "pass"
-    mergeability_summary = "host mergeability is not present in the PR fixture/readback."
-    if isinstance(mergeability, str) and mergeability:
-        mergeability_result = "block" if mergeability in {"DIRTY", "BLOCKED", "DRAFT"} else "pass"
-        mergeability_summary = f"host mergeability is `{mergeability}`."
+    mergeability = host_mergeability_readback(current_pr.get("mergeStateStatus"))
     return {
         "mode": "drift-only",
         "summary": "controlled merge reused retained gate results and re-read only current PR and host merge-control drift surfaces.",
@@ -14046,16 +14052,47 @@ def current_pr_drift_readback(
             "retained_merge_gate": merge_gate_consumption,
             "required_checks": required_checks,
             "host_enforcement": host_enforcement,
-            "mergeability": {
-                "result": mergeability_result,
-                "status": mergeability,
-                "summary": mergeability_summary,
-            },
+            "mergeability": mergeability,
             "merge_method": {
                 "result": "pass",
                 "method": merge_method,
             },
         },
+    }
+
+
+def host_mergeability_readback(mergeability: Any) -> dict[str, Any]:
+    status = str(mergeability).upper() if isinstance(mergeability, str) and mergeability else None
+    if status in HOST_MERGEABILITY_HARD_BLOCK_STATUSES:
+        return {
+            "result": "block",
+            "status": status,
+            "interpretation": "hard_block",
+            "summary": f"host mergeability is `{status}` and must be repaired before controlled merge delegation.",
+        }
+    if status in HOST_MERGEABILITY_DELEGATED_STATUSES:
+        return {
+            "result": "pass",
+            "status": status,
+            "interpretation": "delegated_host_policy",
+            "summary": (
+                "host mergeability is `BLOCKED`; Loom treats it as a host policy signal after authored "
+                "review approval, required checks, PR head, and host enforcement readback pass. `gh pr merge` "
+                "remains the final host delegation point."
+            ),
+        }
+    if status:
+        return {
+            "result": "pass",
+            "status": status,
+            "interpretation": "host_readback",
+            "summary": f"host mergeability is `{status}`.",
+        }
+    return {
+        "result": "pass",
+        "status": None,
+        "interpretation": "not_present",
+        "summary": "host mergeability is not present in the PR fixture/readback.",
     }
 
 
@@ -14268,9 +14305,9 @@ def controlled_merge_payload(
         "ruleset_readable": ruleset_payload is not None,
         "ruleset_required_contexts": ruleset_contexts,
     }
-    mergeability = pr_payload.get("mergeStateStatus") if isinstance(pr_payload, dict) else None
-    if isinstance(mergeability, str) and mergeability in {"DIRTY", "BLOCKED", "DRAFT"}:
-        missing_inputs.append(f"host mergeability is `{mergeability}`")
+    mergeability = host_mergeability_readback(pr_payload.get("mergeStateStatus") if isinstance(pr_payload, dict) else None)
+    if mergeability["result"] == "block":
+        missing_inputs.append(str(mergeability["summary"]))
 
     merge_result: dict[str, Any] = {
         "attempted": False,
