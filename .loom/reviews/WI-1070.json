@@ -6,7 +6,7 @@
   "summary": "The release prep advances root loom CLI surfaces to v0.13.7, refreshes generated skill package metadata, and adds WI-1070 carriers without reactivating loom-installer or adding another distribution surface.",
   "reviewer": "codex-main-agent",
   "reviewed_head": "7656f6f5dcb6f0b1208786a19a3a23519c6d51f6",
-  "reviewed_validation_summary": "`python3 tools/check_release_surface.py`, `python3 tools/version_surface_check.py`, `python3 tools/check_npm_package.py`, `python3 tools/check_cli_contract.py`, `python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1070`, `npm run test:package`, `npm run pack:dry-run`, `python3 .loom/bin/loom_flow.py shadow-parity --target .`, installer `check:docs`, `check:versions`, `check:payload`, and `check:distribution` passed. First `make check` failed only because these WI-1070 review carriers were missing; rerun required after this review commit.",
+  "reviewed_validation_summary": "`python3 tools/check_release_surface.py`, `python3 tools/version_surface_check.py`, `python3 tools/check_npm_package.py`, `python3 tools/check_cli_contract.py`, `python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1070`, `npm run test:package`, `npm run pack:dry-run`, `python3 .loom/bin/loom_flow.py shadow-parity --target .`, `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1070`, installer `check:docs`, `check:versions`, `check:payload`, and `check:distribution`, and full `make check` passed.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
