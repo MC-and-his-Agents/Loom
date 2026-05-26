@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1018",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "Review of WI-1018 after syncing PR #1090 / #1017 mainline: evidence-map and consistency-analysis contracts remain scoped, #1016 suite inputs are locator-only, #1017 inputs are consumed only through candidate/optional/deferred/not_applicable boundaries, status surface remains derived, WI-1040 is terminalized from GitHub closeout evidence, and final validation passed.",
+  "reviewer": "codex",
+  "reviewed_head": "9c3b40feb24f63af1b7b0bbf89f1dcd709249fdc",
+  "reviewed_validation_summary": "Passed: git diff --check; focused rg checks for evidence-map / consistency-analysis / blocking / advisory / stale / missing / conflict / not_applicable / source locator / freshness / HEAD / host state / #1019 / #1020 boundaries; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1018.md",
+    "recovery_entry": ".loom/progress/WI-1018.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "unavailable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

@@ -30,7 +30,7 @@ Loom 不吸收 SDD-only 边界：
 - 不复制 `github/spec-kit` 的 `.specify/` 目录、`/speckit.*` 命令名、固定文件布局或 extension trust model
 - 不让 `tasks.md` 或任何单一任务文件替代 Work Item、recovery、review、merge-ready 或 closeout 真相
 
-因此，本文件冻结 full / minimal spec suite 的合同、工件列表、模板职责、locator / provenance 规则和 source / generated 接入要求。evidence-map、consistency-analysis、gate-chain 与 CLI surface 只作为后续消费者或占位引用出现，不在本文件定义具体运行合同。Execution breakdown 与 task carrier 的当前合同分别见 [execution-breakdown.md](./execution-breakdown.md) 与 [../harness/task-carrier-contract.md](../harness/task-carrier-contract.md)。
+因此，本文件冻结 full / minimal spec suite 的合同、工件列表、模板职责、locator / provenance 规则和 source / generated 接入要求。gate-chain 与 CLI surface 只作为后续消费者或占位引用出现，不在本文件定义具体运行合同。`evidence-map` 与 `consistency-analysis` 的 #1018 合同见 [evidence-map.md](./evidence-map.md) 与 [consistency-analysis.md](./consistency-analysis.md)。Execution breakdown 与 task carrier 的当前合同分别见 [execution-breakdown.md](./execution-breakdown.md) 与 [../harness/task-carrier-contract.md](../harness/task-carrier-contract.md)。
 
 ## 1. Suite Path
 
