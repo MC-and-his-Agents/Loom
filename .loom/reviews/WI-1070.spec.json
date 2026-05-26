@@ -1,0 +1,22 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1070",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1070 is bounded to advancing the root loom CLI to an unpublished release version, letting the merged loom-cli-release workflow perform the first npm publish, and consuming post-merge npm/tag/release/installer evidence for #1063 closeout.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "79c3c061189e06df212a9f06f788f3e69250915a",
+  "reviewed_validation_summary": "Spec, plan, and implementation contract reviewed against #1070 and #1063 scope. The contract keeps publishing in the merged workflow, excludes installer reactivation and extra distribution surfaces, and requires post-merge npm, tag, GitHub Release, workflow, and installer non-advancement evidence.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "issue": "#1070",
+    "parent": "#1063",
+    "previous_work": "#1069",
+    "spec": ".loom/specs/WI-1070/spec.md",
+    "plan": ".loom/specs/WI-1070/plan.md",
+    "implementation_contract": ".loom/specs/WI-1070/implementation-contract.md"
+  }
+}

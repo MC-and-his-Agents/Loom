@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1032
-- Goal: 将 story readiness 接入 spec suite 入口规则
-- Scope: #1032 spec-suite 文档入口规则、docs 层 spec/plan/full-suite-index scaffold 的 story readiness 与 business confirmation consumed state
-- Execution Path: issue #1032 -> branch work/1032-story-readiness-spec-suite -> worktree /Users/mc/dev/Loom-1032-story-readiness-spec-suite
+- Item ID: WI-1070
+- Goal: Execute the first root `loom` CLI npm release and close out #1063 with release evidence.
+- Scope: #1070 first npm publish for `@mc-and-his-agents/loom`, root VERSION/package version advance to an unpublished v* release, npm install smoke, GitHub tag/Release/workflow evidence, installer non-advancement evidence, and #1063 closeout evidence. No installer reactivation, new package name, Homebrew, standalone binary, or broader profile rewrite.
+- Execution Path: issue #1070 -> branch work/1070-first-npm-cli-release -> worktree /Users/mc/dev/Loom-1070-first-npm-cli-release
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1032.md
-- Review Entry: .loom/reviews/WI-1032.json
-- Validation Entry: git diff --check; focused rg; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/loom_flow.py reconciliation audit --target . --issue 1032 --project 4
-- Closing Condition: #1032 PR merged, issue closed, Project Done, and #1015 progress updated
-- Current Checkpoint: closed
-- Current Stop: PR #1099 merged into `main` as `2992715cea7599d4d5774983c1350e926f2d6fe1`; #1032 is closed and no longer owns an active workspace.
-- Next Step: None; WI-1032 is terminal and should not bind unrelated worktrees.
+- Recovery Entry: .loom/progress/WI-1070.md
+- Review Entry: .loom/reviews/WI-1070.json
+- Validation Entry: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/check_cli_contract.py; npm run test:package; npm run pack:dry-run; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1070; python3 .loom/bin/loom_flow.py shadow-parity --target .; make check; merge commit checks; loom-cli-release workflow; npm install smoke
+- Closing Condition: #1070 and #1063 close after PR merge, merge commit checks, `loom-cli-release` creates the new v* tag/GitHub Release and publishes matching `@mc-and-his-agents/loom` npm version, npm install smoke passes, and installer npm/tag state remains sunset/non-advancing.
+- Current Checkpoint: first-npm-cli-release-prep
+- Current Stop: Preparing a new unpublished root Loom CLI release version so the merged `loom-cli-release` workflow can create the v* tag, GitHub Release, and first `@mc-and-his-agents/loom` npm package publication.
+- Next Step: Open PR, pass local and remote checks, merge, then consume `loom-cli-release` run, npm registry, tag, release, installer non-advancement, and #1063 closeout evidence.
 - Blockers: None
-- Latest Validation Summary: git diff --check passed; focused rg confirmed Story Readiness / Business Confirmation / pending / revision-requested / not_applicable coverage in docs and carriers; python3 tools/loom_flow.py reconciliation audit --target . --issue 1032 --project 4 --branch work/1032-story-readiness-spec-suite passed after native blocked-by sync; python3 tools/loom_check.py --profile source --source-surface contract-only . passed.
-- Recovery Boundary: Terminal carrier retained for #1032 evidence only; do not resume as an active workspace.
-- Current Lane: closed
+- Latest Validation Summary: `python3 tools/check_release_surface.py`, `python3 tools/version_surface_check.py`, `python3 tools/check_npm_package.py`, `python3 tools/check_cli_contract.py`, `python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1070`, `npm run test:package`, `npm run pack:dry-run`, `python3 .loom/bin/loom_flow.py shadow-parity --target .`, `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1070`, installer `check:docs`, `check:versions`, `check:payload`, and `check:distribution`, and full `make check` passed for v0.13.7 release prep.
+- Recovery Boundary: Continue from `/Users/mc/dev/Loom-1070-first-npm-cli-release` on branch `work/1070-first-npm-cli-release`; do not publish manually outside the merged `loom-cli-release` workflow unless workflow evidence proves a permission-only blocker.
+- Current Lane: first-npm-cli-release
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: git diff --check; focused rg; contract-only loom_check; reconciliation audit.
-- Lane Entry: story-readiness-spec-suite-entry
+- Verification Entry: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/check_cli_contract.py; npm run test:package; npm run pack:dry-run; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1070; python3 .loom/bin/loom_flow.py shadow-parity --target .; make check; merge commit checks; loom-cli-release workflow; npm install smoke
+- Lane Entry: not_applicable
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1032.md
-- Dynamic Truth: .loom/progress/WI-1032.md
+- Static Truth: .loom/work-items/WI-1070.md
+- Dynamic Truth: .loom/progress/WI-1070.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
