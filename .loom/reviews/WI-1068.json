@@ -6,7 +6,7 @@
   "summary": "CLI-only checker hardening stays within #1068 scope: release surface docs now fail closed on separate SKILLS/plugin/installer install surfaces, and the root npm package check now requires CLI-managed payload files while rejecting deprecated installer manifest references.",
   "reviewer": "codex-main-agent",
   "reviewed_head": "b2f10de71c76dab0f8189b9019e90daeab6f7542",
-  "reviewed_validation_summary": "Passed local validation: check_release_surface, check_npm_package, version_surface_check, check_cli_contract, npm package smoke, dry-run pack, installer docs/version/payload/distribution checks, fact-chain, shadow-parity, adopt verify, and full make check.",
+  "reviewed_validation_summary": "Passed `python3 tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_cli_contract.py`; `npm run test:package`; `npm run pack:dry-run`; installer `check:docs`, `check:versions`, `check:payload`, and `check:distribution`; `fact-chain`; `shadow-parity`; `adopt verify`; and full `make check`.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],

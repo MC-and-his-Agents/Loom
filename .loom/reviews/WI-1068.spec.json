@@ -5,7 +5,7 @@
   "kind": "spec_review",
   "summary": "WI-1068 is bounded to checker hardening for CLI-only install and release surfaces, with no npm publish workflow or installer reactivation.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "1dffa6a6e96ed0628521e3d553b1fa6f9bac917e",
+  "reviewed_head": "b2f10de71c76dab0f8189b9019e90daeab6f7542",
   "reviewed_validation_summary": "Spec, plan, and implementation contract reviewed before implementation on branch work/1068-cli-only-surface-checks.",
   "fallback_to": null,
   "findings": [],
