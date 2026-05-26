@@ -44,12 +44,12 @@ description: Turn product context, vision, roadmap, host issues, notes, or discu
   - out of scope
   - provenance / context locators
 - Story Readiness
-  - decision: `ready | needs-shaping | blocked | not-applicable`
+  - decision: `confirmed | pending | revision-requested | not_applicable`
   - rationale
   - missing inputs
   - spec / plan entry expectation
 - Story Business Confirmation
-  - decision: `pending | confirmed | revision-requested | not-applicable`
+  - decision: `pending | confirmed | revision-requested | not_applicable`
   - confirmation scope: actor、capability、outcome、business value、acceptance scenarios、out of scope
   - revision request 或 bypass rationale
   - confirmation source
@@ -68,8 +68,10 @@ User Story 主体不得包含 delivery handoff、spec locator、plan locator、r
 - negative path、edge case、alternative path、security/permission、environment/interruption 是否按风险覆盖或标记 `not_applicable`
 - story 是否过大，需要拆成多个 Work Item 或 FR
   - 若需要拆分，交给 `loom-init` 的 delivery planning 路由输出 issue-tree plan；不要在 story 主体里直接写执行树
+- 若 story readiness 为 `pending`，说明缺少哪些输入或业务确认，并停在 story shaping
+- 若用户给出修订意见，记录 `revision-requested`，必须回到 story shaping，不得直接进入 spec / plan
 - 若 story 涉及业务语义，是否已经请求用户确认；用户直接说「确认」即可记录 `confirmed`
-- 若用户给出修订意见，必须回到 story shaping，不得直接进入 spec / plan
+- 若 story 不适用，记录 `not_applicable` 和 bypass rationale，不得只省略 story 结果
 
 ## 5. Delivery Boundary
 
@@ -77,7 +79,9 @@ User Story 主体不得包含 delivery handoff、spec locator、plan locator、r
 
 - `spec.md` 消费 story scenarios 形成 behavior contract
 - `plan.md` 将 scenarios 映射到 tests、checks、manual validation 或 `not_applicable` evidence
-- `pending` 或 `revision-requested` 的 Story Business Confirmation 阻止进入 formal spec / plan；`not-applicable` 必须说明纯治理、维护、格式或链接类 bypass rationale
+- Story Readiness 与 Story Business Confirmation 都必须是 `confirmed` 或明确 `not_applicable`，formal spec / plan 才能消费 story 语义
+- `pending` 或 `revision-requested` 必须 fail closed：停止 formal spec shaping，回到 story shaping 或等待用户业务语义确认
+- `not_applicable` 必须说明纯治理、维护、格式或链接类 bypass rationale，后续 spec / plan 只能消费该 rationale，不得制造空确认
 - `Work Item` 仍是唯一执行入口
 - issue tree、Phase / FR / Work Item / PR 切分、blocked-by/blocks 与 host carrier mapping 由 `loom-init` 的 delivery planning 路由承接
 

@@ -21,4 +21,8 @@
 - 目标 capability / problem
 - 期望 outcome 或 value signal
 
-若缺少产品上下文，返回 `needs-shaping` 或 `blocked`，不要编造 product truth。
+若缺少产品上下文、业务确认或关键场景，返回 `pending` 并列出 missing inputs，不要编造 product truth。
+
+若用户要求修改 story，返回 `revision-requested` 并回到 story shaping，不得继续进入 `spec.md` / `plan.md`。
+
+若事项不涉及业务语义，例如纯治理、维护、格式、链接修复或载体整理，返回 `not_applicable` 并记录 bypass rationale；不要把缺少 story 当成隐式通过。
