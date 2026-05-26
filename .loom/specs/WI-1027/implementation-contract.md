@@ -41,4 +41,5 @@
 - `rg -n "Phase|FR|Work Item|Project item|implementation PR|唯一默认执行入口" docs/adoption docs/methodology skills src .loom`
 - `rg -n "Project.*不替代|FR.*不直接|locator|provenance" docs/adoption docs/methodology skills src .loom`
 - `rg -n "Project Status|Todo|In Progress|Done|completed truth|closeout" docs/adoption docs/methodology skills src .loom`
+- `python3 tools/skills_surface.py check`
 - `python3 tools/loom_check.py --profile source --source-surface contract-only .`

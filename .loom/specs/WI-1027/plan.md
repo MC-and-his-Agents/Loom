@@ -32,7 +32,7 @@ Deliver the GitHub host mapping contract for #1027 without implementing GitHub a
 
 ## Validation
 
-- Automated checks: `python3 tools/loom_check.py --profile source --source-surface contract-only .`.
+- Automated checks: `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`.
 - Manual checks: `git diff --check`; focused `rg` checks from #1027.
 - Runtime evidence: `.loom/progress/WI-1027.md`; `.loom/reviews/WI-1027.spec.json`; `.loom/reviews/WI-1027.json`.
 - Behavior evidence: GitHub profile contract contains required mapping fields and forbidden-use statements.
