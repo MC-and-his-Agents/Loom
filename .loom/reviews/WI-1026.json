@@ -5,7 +5,7 @@
   "kind": "general_review",
   "summary": "WI-1026 implementation is approved for PR: the PR slicing contract and scaffold define when Work Items may share one PR, when they must split, and which evidence is required for PR body linkage, review, merge-ready, and closeout without implementing gate logic.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "42d7ea1f08387c8d3707c8f21242625a84d658f2",
+  "reviewed_head": "0eec40f9172c308eb58469bdd316b01a90eabc33",
   "reviewed_validation_summary": "Passed: `git diff --check`; focused `rg` checks for PR slicing fields, scope purity, multi-Work-Item evidence, PR body linkage, review evidence, and merge-ready references; `python3 .loom/bin/loom_init.py verify --target .`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1026 --write`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`.",
   "fallback_to": null,
   "findings": [],
@@ -21,6 +21,7 @@
     "status_surface": ".loom/status/current.md",
     "pr_slicing_contract": "docs/methodology/templates/pr-slicing.md",
     "pr_slicing_scaffold": "docs/methodology/templates/scaffold/pr-slicing.md",
-    "build_checkpoint": "pass"
+    "build_checkpoint": "pass",
+    "pull_request": "#1082"
   }
 }

@@ -5,7 +5,7 @@
   "kind": "spec_review",
   "summary": "WI-1026 spec suite is approved: scope is limited to the PR slicing contract, scaffold, README registration, and repo-local carriers while leaving PR gate/merge-ready implementation, GitHub mapping, skills routing, task carrier, and CLI automation to downstream Work Items.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "42d7ea1f08387c8d3707c8f21242625a84d658f2",
+  "reviewed_head": "0eec40f9172c308eb58469bdd316b01a90eabc33",
   "reviewed_validation_summary": "Passed: `git diff --check`; focused `rg` checks for PR slicing fields, scope purity, multi-Work-Item evidence, PR body linkage, review evidence, and merge-ready references; `python3 .loom/bin/loom_init.py verify --target .`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1026 --write`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`.",
   "fallback_to": null,
   "findings": [],
@@ -24,6 +24,7 @@
     "implementation_contract": ".loom/specs/WI-1026/implementation-contract.md",
     "github_fr": "#1014",
     "github_work_item": "#1026",
+    "pull_request": "#1082",
     "upstream_work_items": "#1024, #1025"
   }
 }
