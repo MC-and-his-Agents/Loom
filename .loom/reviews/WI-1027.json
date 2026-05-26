@@ -5,7 +5,7 @@
   "kind": "general_review",
   "summary": "WI-1027 implementation is approved for PR once validation passes: the GitHub profile mapping defines host object authority boundaries, locator/provenance, forbidden uses, Project Status semantics, native parent/sub-issue and blocked-by/blocks synchronization, and closeout evidence consumption without implementing automation.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "5f6fe7820e3288e78e2f22aba61930e4b06ac6bf",
+  "reviewed_head": "0d81541fdb4decc88cebbeb6f7894d9f67d619d1",
   "reviewed_validation_summary": "Passed: `git diff --check`; focused `rg` checks for Phase / FR / Work Item / Project / PR mapping, Project forbidden use, locator/provenance, Project Status, completed truth, and closeout; `python3 .loom/bin/loom_init.py verify --target .`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1027 --write`; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`.",
   "fallback_to": null,
   "findings": [],

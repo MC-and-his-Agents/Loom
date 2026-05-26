@@ -5,7 +5,7 @@
   "kind": "spec_review",
   "summary": "WI-1027 spec suite is approved: scope is limited to GitHub host mapping for Phase, FR, Work Item, Project item, implementation PR, native relationships, Project Status semantics, and synchronized reference surfaces while leaving automation, skills routing, task carrier contracts, gate-chain behavior, and CLI commands to downstream Work Items.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "be93bf89a410b516ac645f0c3365ee05c8ef5727",
+  "reviewed_head": "0d81541fdb4decc88cebbeb6f7894d9f67d619d1",
   "reviewed_validation_summary": "Passed: `git diff --check`; focused `rg` checks for Phase / FR / Work Item / Project / PR mapping, Project forbidden use, locator/provenance, Project Status, completed truth, and closeout; `python3 .loom/bin/loom_init.py verify --target .`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1027 --write`; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`.",
   "fallback_to": null,
   "findings": [],
