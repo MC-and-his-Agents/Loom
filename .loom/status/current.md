@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1064
-- Goal: Freeze the CLI-only install surface and root `loom` npm package contract for #1063.
-- Scope: #1064: decision and contract only; no package implementation, npm publish workflow, README hard cut, or first release.
-- Execution Path: issue-scoped branch work/1064-cli-only-install-contract in /Users/mc/dev/Loom-1064-cli-only-install-contract
+- Item ID: WI-1024
+- Goal: Define the delivery planning contract so Loom can turn roadmap, story, product context, or governance goals into Phase / FR / Work Item / PR planning without replacing execution truth.
+- Scope: #1024 delivery planning contract only; create the methodology contract and repo-local carriers required for review. Do not implement the issue-tree-plan template (#1025), PR slicing strategy (#1026), GitHub mapping (#1027), skills routing (#1028), task carrier contracts, gate-chain changes, or CLI automation.
+- Execution Path: issue #1024 -> branch work/1024-delivery-planning-contract -> worktree /Users/mc/dev/Loom -> PR #1078.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1064.md
-- Review Entry: .loom/reviews/WI-1064.json
-- Validation Entry: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; make check
-- Closing Condition: #1064 is closed after its PR merges and #1065-#1070 can cite docs/adoption/cli-only-install-contract.md as their frozen install/package contract.
-- Current Checkpoint: validated
-- Current Stop: CLI-only install contract has been authored and locally validated for #1064.
-- Next Step: Commit, open PR, consume checks, merge, and close #1064.
-- Blockers: None
-- Latest Validation Summary: Passed: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1064; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1064; make check.
-- Recovery Boundary: Continue from /Users/mc/dev/Loom-1064-cli-only-install-contract on branch work/1064-cli-only-install-contract; keep scope limited to contract/docs/governance carriers for #1064.
-- Current Lane: cli-only-install-contract
+- Recovery Entry: .loom/progress/WI-1024.md
+- Review Entry: .loom/reviews/WI-1024.json
+- Validation Entry: git diff --check; rg -n "delivery planning|Phase|FR|Work Item|PR plan|不替代" docs/methodology docs/adoption skills src .loom; python3 tools/loom_check.py --profile source --source-surface contract-only .
+- Closing Condition: #1024 has a delivery planning contract defining inputs, outputs, applicability, non-goals, locator/provenance/freshness rules, and consumer boundaries for #1025-#1028.
+- Current Checkpoint: review-ready
+- Current Stop: Delivery planning contract drafted, validated, and PR #1078 checks are passing before rebase.
+- Next Step: Finish rebase onto current main, rerun validation, push, and consume PR checks.
+- Blockers: None recorded.
+- Latest Validation Summary: Passed locally before rebase: `git diff --check`; `rg -n "delivery planning|Phase|FR|Work Item|PR plan|不替代" docs/methodology docs/adoption skills src .loom`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; root-self-governance local equivalent passed after review binding and shadow parity refresh. PR #1078 checks passed before rebase: `py-compile`, `demo-bootstrap`, `repo-local-cli`, `root-self-governance`, and `loom-check`.
+- Recovery Boundary: #1024 delivery planning contract only. Do not expand into #1025 issue-tree-plan template, #1026 PR slicing strategy, #1027 GitHub mapping, #1028 skills routing, task carrier, gate-chain, or CLI automation.
+- Current Lane: delivery-planning-contract
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; make check
+- Verification Entry: git diff --check; rg -n "delivery planning|Phase|FR|Work Item|PR plan|不替代" docs/methodology docs/adoption skills src .loom; python3 tools/loom_check.py --profile source --source-surface contract-only .
 - Lane Entry: not_applicable
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1064.md
-- Dynamic Truth: .loom/progress/WI-1064.md
+- Static Truth: .loom/work-items/WI-1024.md
+- Dynamic Truth: .loom/progress/WI-1024.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
