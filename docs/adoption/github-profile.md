@@ -90,6 +90,16 @@ GitHub profile 至少应能表达：
 - Project view、checklist、`tasks.md` 或外部 tracker 只能补充组织视图或 task carrier，不能替代 parent/sub-issue 与 `blocked-by/blocks`。
 - 若 GitHub 原生关系暂时无法表达，issue comment 必须记录缺口、等价 locator 和重新同步条件。
 
+GitHub task carrier 边界：
+
+- GitHub issue / sub-issue 可以作为 execution breakdown unit 的 `github_issue` carrier，但只有被明确 author 为 `Work Item` 的 issue 才能进入正式执行。
+- Project item 可以作为 `github_project_item` carrier，只提供视图、排序、筛选和 normalized status。
+- Issue / PR / Markdown checklist 可以作为 `checklist_item` carrier，只表示局部步骤追踪。
+- Repo-local `tasks.md` 可以作为 `repo_tasks_md` carrier，但不是 GitHub profile 或 Loom core 的必选工件。
+- 外部 tracker 可以作为 `external_tracker` carrier；GitHub profile 只消费其 locator 和 provenance。
+- Carrier state 必须映射到 `pending`、`in_progress`、`done`、`blocked`、`deferred` 或 `not_applicable`，并回链 `Work Item`、breakdown unit、spec scenario、plan phase 与 validation strategy。
+- Carrier `done`、Project `Done`、checklist checked、issue closed 或 PR merged 都不等于 behavior evidence、test evidence、review pass、merge-ready pass 或 closeout。
+
 Project `Status` 是宿主视图字段：
 
 - `Todo`: 已规划或已加入 Project，但尚未进入正式执行现场。

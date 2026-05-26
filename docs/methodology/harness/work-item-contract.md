@@ -51,6 +51,7 @@
 - 上游 User Story locator，若当前事项由 story intake 形成
 - Story Business Confirmation locator 或 `not_applicable` rationale，若当前事项由 story intake 形成
 - 关联工件
+- execution breakdown locator 或 `not_applicable` rationale，若当前 `Work Item` 的 `plan.md` 被拆成可追踪执行单元
 - 工作现场入口
 - 恢复主入口
 - review 入口
@@ -60,6 +61,8 @@
 一个 `Work Item` 只承接一个清晰执行目标，不得混装多个无关事项。
 
 若该事项进入 `/goal` 驱动的执行会话，主 `/goal` 必须从同一 `Work Item goal` 派生。`/goal` 只绑定当前执行上下文，不替代 `Work Item` 本身，也不得回写 review、merge 或 closeout 结论。
+
+若该事项使用 execution breakdown，`Work Item` 只保存 breakdown locator 或 `not_applicable` rationale。Breakdown unit 和 task carrier 可以辅助追踪 `plan.md` 的拆分执行，但不得替代 `Work Item` goal、scope、execution path、workspace entry、recovery entry、validation entry 或 closing condition。
 
 ## 4. enforcement 规则
 
@@ -124,10 +127,12 @@ Loom 不冻结文件名，但要求这些入口从第一轮开始即可被机械
 - `/goal` 与 delegated goal 是从 `Work Item goal` 派生的 execution contract，不是新的治理真相源
 - checkpoint、停点、下一步、阻断项属于恢复主入口
 - `Work Item` 可以 authored locator，不得 authored review 或 closeout 结论本身
+- `Work Item` 可以 authored execution breakdown locator；breakdown 与 task carrier 不得 authored recovery 动态字段
 - 统一状态控制面展示的 `item` 字段必须从 `Work Item` 派生
 
 ## 8. 非目标
 
 - 不把 `exec-plan` 提升为执行入口本身
+- 不把 execution breakdown、task carrier、Project item、checklist 或 `tasks.md` 提升为执行入口本身
 - 不让 PR 模板或会话记录代替 `Work Item`
 - 不为不同宿主再各自定义一套“谁可以开始执行”的规则

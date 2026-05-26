@@ -103,6 +103,8 @@ Host carrier mapping 只描述承接方式，不改变 Loom truth。
 - checklist、`tasks.md` 或外部 tracker 只能作为 task carrier 或组织视图。
 - 任何 host carrier 都不能替代 Work Item、recovery、review、merge-ready 或 closeout。
 
+Issue-tree plan 只规划哪些 host object 承接拆解结果。进入 `plan.md` 执行后，具体 execution breakdown unit 的 task carrier 类型、状态、locator、provenance 与 `tasks.md` 替代关系由 [../harness/task-carrier-contract.md](../harness/task-carrier-contract.md) 约束。
+
 ## 7. Freshness
 
 出现以下情况时，issue-tree plan 变为 stale，必须重新核对：
@@ -117,6 +119,7 @@ Host carrier mapping 只描述承接方式，不改变 Loom truth。
 
 - `spec.md` 只消费当前 Work Item 或 FR 边界，不复制完整 issue-tree plan。
 - `plan.md` 只消费当前 Work Item 的执行计划，不重新拆树。
+- execution breakdown 消费 `plan.md` 的 phase / validation strategy，并把执行单元映射到 task carrier；它不反向重定义 issue-tree plan。
 - PR slicing 合同消费 `work_item_list` 与 `pr_slicing_placeholder`。
 - GitHub mapping 合同消费 `host_carrier_mapping`。
 - Review、merge-ready 和 closeout 只把 issue-tree plan 当作上游范围证据，不能把它当作通过结论。
