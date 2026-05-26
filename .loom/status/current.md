@@ -11,10 +11,10 @@
 - Review Entry: .loom/reviews/WI-1071.json
 - Validation Entry: python3 tools/py_compile_clean.py ...; python3 tools/skills_surface.py check; git diff --check; runtime/reference parity; python3 tools/loom_check.py --profile source --source-surface source-self-fixture .; python3 tools/loom_check.py --profile source --source-surface contract-only .
 - Closing Condition: #1071 and #1072-#1076 close only after PR #1081 merges and closeout consumes branch, worktree, PR head, merge commit, target branch, and issue tree evidence.
-- Current Checkpoint: validation checkpoint
-- Current Stop: Implementation, harness docs, fixtures, runtime sync, local validation, commit, push, and PR #1081 creation are complete for #1071.
-- Next Step: Refresh authored spec and implementation review records for WI-1071, update PR body with Loom Work Item binding, rerun CI checks, then proceed to controlled merge and issue closeout.
-- Blockers: PR #1081 required checks currently fail because the PR gate was reading stale WI-1065 carrier state before WI-1071 activation.
+- Current Checkpoint: build checkpoint
+- Current Stop: Implementation, harness docs, fixtures, runtime sync, local validation, governance carrier baseline, and PR #1081 creation are complete for #1071.
+- Next Step: Record authored spec and implementation review records for WI-1071, update PR body with Loom Work Item binding, rerun CI checks, then proceed to controlled merge and issue closeout.
+- Blockers: None
 - Latest Validation Summary: Passed before carrier activation: python3 tools/py_compile_clean.py tools/loom_flow.py tools/loom_check.py .loom/bin/loom_flow.py .loom/bin/loom_check.py skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_check.py; python3 tools/skills_surface.py check; git diff --check; runtime/reference parity; python3 tools/loom_check.py --profile source --source-surface source-self-fixture .; after latest main fast-forward: python3 tools/loom_check.py --profile source --source-surface contract-only .
 - Recovery Boundary: Continue from /Users/mc/dev/Loom-1071-blocked-mergeability on branch work/1071-blocked-mergeability; keep scope limited to #1071-#1076 controlled-merge BLOCKED interpretation and closeout.
 - Current Lane: blocked-mergeability-interpretation
