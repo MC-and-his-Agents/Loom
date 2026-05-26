@@ -14,6 +14,7 @@
 | --- | --- | --- | --- |
 | 初始化 / retrofit | 初始化、新项目接入、既有仓库 retrofit、引入 Loom | `loom-adopt` | `loom-init/scripts/loom-init.py bootstrap\|verify\|fact-chain` |
 | 恢复执行 | 接手当前事项、恢复上下文、问下一步、继续推进 | `loom-resume` | `loom-resume/scripts/loom-resume.py flow resume` |
+| delivery planning / issue-tree plan | 规划 issue tree、拆 Phase / FR / Work Item、PR 切分建议、依赖 / blocked-by 关系、把 story / roadmap / governance goal 转成执行树；用户明确要求“先规划不要创建” | `loom-init` 输出 planning 结果 | 无专用 CLI；消费 `docs/methodology/templates/delivery-planning.md`、`docs/methodology/templates/issue-tree-plan.md`、`docs/methodology/templates/pr-slicing.md` 与 GitHub profile mapping |
 | 执行 / build | 实现当前事项、执行 build、implementation round、集成 subagent 输出、检查 repeated blocker | `loom-build` | `loom-build/scripts/loom-build.py flow build` |
 | story intake | vision、roadmap、notes、host issue、产品讨论转 User Story；story readiness；story business confirmation；业务语义确认或修订；actor specificity；scenario coverage | `loom-story` | `loom-story/scripts/loom-story.py flow story` |
 | review 前统一检查 | review 前检查、进入 review、确认是否可 review、确认 gate chain 是否已到 review gate | `loom-pre-review` | `loom-pre-review/scripts/loom-pre-review.py flow pre-review` |
@@ -31,6 +32,8 @@
   - 唯一正式执行入口
 - `User Story`
   - 上游 product-value 输入；只能被 `spec.md` / `plan.md` 消费，不替代执行入口或恢复状态；业务语义确认只覆盖 actor、capability、outcome、business value、acceptance scenarios 与 out of scope
+- `delivery planning`
+  - 将 story、roadmap、product context 或 governance goal 拆成 `Phase / FR / Work Item / PR` 规划；输出 issue-tree plan 或规划判断，不替代 `Work Item`、recovery、review、merge-ready 或 closeout
 - `spec gate`
   - formal spec 路径的唯一放行结果
 - `gate chain`
@@ -70,7 +73,36 @@
 - 只回答 locator 与职责边界，不复制实时停点、下一步、阻断项、验证摘要
 - 若需要回答 gate 进度，统一通过 `review_merge_surface` 或 `status control plane` 读取，不在 `governance_surface` 并行维护 authored gate 状态
 
-## 5. fallback 语义
+## 5. Planning 边界
+
+`delivery planning` 是 `loom-init` 的路由结果，不是 build、review 或 merge-ready 的前置硬门禁。
+
+进入 planning 的信号：
+
+- 用户要求拆 issue tree、Phase、FR、Work Item、PR 计划或依赖关系
+- 当前目标还没有稳定的执行单元，需要判断应该拆成几个 FR / Work Item / PR
+- story、roadmap、产品上下文或治理目标需要转成可执行 issue tree
+- 用户明确要求“先规划”“不要创建”“规划后续 issue / PR”
+
+不要进入 planning 的信号：
+
+- 当前已经有单一明确 Work Item 且用户要求实现，进入 `loom-build`
+- 用户要求 formal spec review，进入 `loom-spec-review`
+- 用户要求 implementation/code review，进入 `loom-review`
+- 用户要求 merge-ready 或合并前检查，进入 `loom-merge-ready`
+- 用户只是在整理 actor、capability、outcome、business value 或 acceptance scenarios，进入 `loom-story`
+
+planning 输出只能包含：
+
+- 是否需要 Phase，以及复用还是新建
+- FR / Work Item / PR 切分建议
+- `blocked-by/blocks` 依赖规划
+- deferred / not_applicable 判断
+- host carrier mapping，包括 GitHub parent/sub-issue、Project item、blocked-by/blocks 与 PR locator
+
+planning 输出不能声明某个 Work Item 已完成，不能替代 `spec.md` / `plan.md`，不能替代 review、merge-ready、closeout，也不能直接改写 GitHub，除非用户明确要求执行创建或更新动作。
+
+## 6. fallback 语义
 
 出现以下任一情况时，root skill 不做猜测，直接回退到 `loom-init`：
 

@@ -38,6 +38,8 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
   - 路由到 `loom-resume`
 - review 前检查 / 进入 review 前预检
   - 路由到 `loom-pre-review`
+- issue tree / delivery planning / Phase、FR、Work Item、PR 切分与依赖规划
+  - 留在 `loom-init`，输出 planning 结果；不要误路由到 build、review 或 merge-ready
 - formal spec review / spec 是否通过 / `spec gate`
   - 路由到 `loom-spec-review`
 - 正式 review / 语义审查 / review 结论
@@ -52,6 +54,21 @@ description: Loom 的 root entry。负责初始化新项目或既有仓库，并
 如果信号不足或同时命中多个场景，不要猜测。回退到 `loom-init`，并要求最小补充信号。
 
 完整场景路由规则见 [../route-matrix.md](.loom-runtime/route-matrix.md)。
+
+## Planning Boundary
+
+当用户要求规划 issue tree、拆 Phase / FR / Work Item、安排 PR 切分、梳理 blocked-by/blocks，或把 story / roadmap / governance goal 转成执行树时，`loom-init` 应输出 planning 结果。
+
+planning 结果消费以下合同：
+
+- `docs/methodology/templates/delivery-planning.md`
+- `docs/methodology/templates/issue-tree-plan.md`
+- `docs/methodology/templates/pr-slicing.md`
+- `skills/shared/references/adoption/github-profile.md`
+
+planning 只回答“应该怎么拆”和“应该落到哪些 host carrier”。它不能宣布实现完成，不能替代 `Work Item`、`spec.md`、`plan.md`、review、merge-ready 或 closeout，也不能在用户只要求规划时直接创建 GitHub issue / PR。
+
+如果目标已经收敛为单一明确 Work Item 且用户要求实现，进入 `loom-build`。如果用户要求 formal spec review，进入 `loom-spec-review`。如果用户要求 implementation review，进入 `loom-review`。
 
 ## Installed Entry Surface
 

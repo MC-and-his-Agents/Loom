@@ -19,6 +19,8 @@ description: Turn product context, vision, roadmap, host issues, notes, or discu
 - 需要把 story acceptance scenarios 映射到后续 `spec.md` / `plan.md`
 - 需要检查 actor specificity 或 scenario coverage
 
+如果用户要求把 story、roadmap 或治理目标拆成 Phase / FR / Work Item / PR，或要求规划 issue tree、依赖关系、blocked-by/blocks，应回到 `loom-init` 的 delivery planning 路由。`loom-story` 只负责 story shaping，不输出 issue-tree plan。
+
 如果任务已经是实现当前 Work Item，应进入 `loom-build`。如果任务已经要求 formal spec review，应进入 `loom-spec-review`。
 
 ## 2. 固定入口
@@ -65,6 +67,7 @@ User Story 主体不得包含 delivery handoff、spec locator、plan locator、r
 - happy path 是否存在
 - negative path、edge case、alternative path、security/permission、environment/interruption 是否按风险覆盖或标记 `not_applicable`
 - story 是否过大，需要拆成多个 Work Item 或 FR
+  - 若需要拆分，交给 `loom-init` 的 delivery planning 路由输出 issue-tree plan；不要在 story 主体里直接写执行树
 - 若 story 涉及业务语义，是否已经请求用户确认；用户直接说「确认」即可记录 `confirmed`
 - 若用户给出修订意见，必须回到 story shaping，不得直接进入 spec / plan
 
@@ -76,6 +79,7 @@ User Story 主体不得包含 delivery handoff、spec locator、plan locator、r
 - `plan.md` 将 scenarios 映射到 tests、checks、manual validation 或 `not_applicable` evidence
 - `pending` 或 `revision-requested` 的 Story Business Confirmation 阻止进入 formal spec / plan；`not-applicable` 必须说明纯治理、维护、格式或链接类 bypass rationale
 - `Work Item` 仍是唯一执行入口
+- issue tree、Phase / FR / Work Item / PR 切分、blocked-by/blocks 与 host carrier mapping 由 `loom-init` 的 delivery planning 路由承接
 
 输入信号与输出合同见：
 
