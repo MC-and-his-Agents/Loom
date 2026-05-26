@@ -1,0 +1,20 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1065",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1065 spec is scoped to the root npm package manifest, payload, bin shim, and local pack/install smoke without publishing, README hard cut, or plugin/SKILLS mutation work.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "6b6469234657149522d54ba8b519b5b5bf9722a1",
+  "reviewed_validation_summary": "Spec reviewed against #1065, #1064 CLI-only install contract, current tools/loom.py command surface, and native #1063 dependency order.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1065.md",
+    "recovery_entry": ".loom/progress/WI-1065.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pending"
+  }
+}

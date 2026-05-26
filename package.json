@@ -1,0 +1,51 @@
+{
+  "name": "@mc-and-his-agents/loom",
+  "version": "0.13.0",
+  "description": "CLI-first Loom control-plane entry for agent-first project operating layers.",
+  "type": "module",
+  "bin": {
+    "loom": "bin/loom.mjs"
+  },
+  "files": [
+    "bin/loom.mjs",
+    "tools",
+    "skills",
+    "plugins/loom/.codex-plugin/plugin.json",
+    "src/skills",
+    "docs/adoption/cli-only-install-contract.md",
+    "docs/adoption/loom-cli-release-surface.md",
+    "docs/adoption/version-authority-map.md",
+    "docs/adoption/codex-install.md",
+    "docs/methodology/harness/cli-command-matrix.md",
+    "VERSION",
+    "README.md",
+    "README.zh-CN.md",
+    "VISION.md",
+    "AGENTS.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20",
+    "python": ">=3.11"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "check:package": "python3 tools/check_npm_package.py",
+    "test:package": "node --test test/npm-package-smoke.test.mjs",
+    "pack:dry-run": "npm pack --dry-run --json --ignore-scripts"
+  },
+  "keywords": [
+    "loom",
+    "cli",
+    "agents",
+    "skills",
+    "codex"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MC-and-his-Agents/Loom.git"
+  }
+}
