@@ -15,7 +15,7 @@
 - Current Stop: Issue-tree-plan contract and scaffold drafted, locally validated, and bound to PR #1080.
 - Next Step: Consume PR checks, then merge and close out #1025 if green.
 - Blockers: None recorded.
-- Latest Validation Summary: Passed: `git diff --check`; focused `rg` checks for issue-tree required fields and forbidden-use statements; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 .loom/bin/loom_init.py verify --target .`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1025 --dry-run`.
+- Latest Validation Summary: Passed before WI-1065 carrier repair: `git diff --check`; focused `rg` checks for issue-tree required fields and forbidden-use statements; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 .loom/bin/loom_init.py verify --target .`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1025 --dry-run`. After WI-1065 carrier repair: `python3 .loom/bin/loom_flow.py pr-gate check --target . --head-sha fffd9fb66222cfc2d60ae87cf232f670655ae419 --branch work/1025-issue-tree-plan-template --pr 1080` showed workspace purity clean and only blocked on stale review plus unpushed PR head.
 - Recovery Boundary: #1025 issue-tree-plan template only. Do not expand into #1026 PR slicing strategy, #1027 GitHub mapping, #1028 skills routing, task carrier contracts, gate-chain, or CLI automation.
 - Current Lane: issue-tree-plan-template
 
