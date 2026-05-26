@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1069
-- Goal: Add automated npm publishing for the root `loom` CLI package while keeping GitHub `v*` tag, GitHub Release, and npm registry state consistent.
-- Scope: #1069: `loom-cli-release` workflow publish automation, npm dry-run/precondition checks, `NPM_TOKEN` fail-closed behavior, release-surface documentation, and checker enforcement. No VERSION bump, first real npm publish, installer release reactivation, or #1070 closeout.
-- Execution Path: issue-scoped branch work/1069-npm-cli-publish-workflow in /Users/mc/dev/Loom-1069-npm-cli-publish-workflow
+- Item ID: WI-1031
+- Goal: 更新 loom-story skill 的 formal spec 前置边界
+- Scope: #1031 loom-story skill instructions and references for Story Readiness / Business Confirmation formal spec gating
+- Execution Path: issue #1031 -> branch work/1031-loom-story-boundary -> worktree /Users/mc/dev/Loom-1031-loom-story-boundary
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1069.md
-- Review Entry: .loom/reviews/WI-1069.json
-- Validation Entry: ruby YAML parse for `.github/workflows/loom-cli-release.yml`; python3 tools/check_release_surface.py; python3 tools/check_npm_package.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; npm run test:package; npm run pack:dry-run; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1069; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1069; make check
-- Closing Condition: #1069 is closed after its PR merges and #1070 can consume a merge-checked workflow that validates npm package payloads, fails closed without `NPM_TOKEN` for real publishes, and reconciles `VERSION`, GitHub `v*` tag, GitHub Release, and `@mc-and-his-agents/loom` npm version state.
-- Current Checkpoint: npm-publish-workflow
-- Current Stop: Local validation passed on latest `origin/main` for `loom-cli-release` npm publish automation: Node setup, root npm package checks, dry-run pack, npm registry state resolution, `NPM_TOKEN` fail-closed publish, and GitHub tag/release/npm consistency decisions.
-- Next Step: Bind review evidence, push PR, wait for PR checks, then merge and close #1069 with evidence for #1070.
+- Recovery Entry: .loom/progress/WI-1031.md
+- Review Entry: .loom/reviews/WI-1031.json
+- Validation Entry: git diff --check; focused rg; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/loom_flow.py reconciliation audit --target . --issue 1031 --project 4
+- Closing Condition: #1031 PR merged, issue closed, Project Done, and #1015 progress updated
+- Current Checkpoint: loom-story formal spec 前置边界已实现并生成 runtime surface。
+- Current Stop: PR #1098 已创建，WI-1031 carrier/spec/review evidence 已补齐，等待最终 PR gate 和 CI。
+- Next Step: 推送当前分支，等待 GitHub checks，通过后 merge/closeout。
 - Blockers: None
-- Latest Validation Summary: Passed `ruby` YAML parse for `.github/workflows/loom-cli-release.yml`; `python3 tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_cli_contract.py`; `npm run test:package`; `npm run pack:dry-run`; installer `check:docs`, `check:versions`, `check:payload`, and `check:distribution`; `fact-chain`; `shadow-parity`; `adopt verify`; and full `make check`. `npm view @mc-and-his-agents/loom` currently returns E404, so #1069 adds automation only and does not publish npm.
-- Recovery Boundary: Continue from /Users/mc/dev/Loom-1069-npm-cli-publish-workflow on branch work/1069-npm-cli-publish-workflow; keep scope limited to npm publish workflow automation and WI-1069 governance carriers.
-- Current Lane: npm-cli-publish-workflow
+- Latest Validation Summary: after rebase onto origin/main, git diff --check; python3 tools/skills_surface.py check; python3 tools/loom_flow.py reconciliation audit --target . --issue 1031 --project 4 pass. Implementation review refreshed at 16b9c9a63882671aa9e2dfebe3472433730473ee.
+- Recovery Boundary: Resume only in /Users/mc/dev/Loom-1031-loom-story-boundary on branch work/1031-loom-story-boundary; do not continue #1031 from /Users/mc/dev/Loom.
+- Current Lane: merge-ready preparation
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: ruby YAML parse for `.github/workflows/loom-cli-release.yml`; python3 tools/check_release_surface.py; python3 tools/check_npm_package.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; npm run test:package; npm run pack:dry-run; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1069; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1069; make check
-- Lane Entry: not_applicable
+- Verification Entry: git diff --check; focused rg; skills surface; contract-only loom_check; version/release checks; reconciliation audit.
+- Lane Entry: merge-ready preparation
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1069.md
-- Dynamic Truth: .loom/progress/WI-1069.md
+- Static Truth: .loom/work-items/WI-1031.md
+- Dynamic Truth: .loom/progress/WI-1031.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
