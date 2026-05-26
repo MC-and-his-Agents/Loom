@@ -5,7 +5,7 @@
   "kind": "general_review",
   "summary": "WI-1025 implementation is approved for PR: the issue-tree-plan contract and scaffold define a planning artifact for Phase / FR / Work Item hierarchy, dependencies, deferred/not_applicable decisions, and host carrier mapping without turning the template into execution or review truth.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "996c165ee7ae4a2af3d448a4a55ea82ec7f1be40",
+  "reviewed_head": "2f76a961c5356d1e366df2cedf1877ee6e204afb",
   "reviewed_validation_summary": "Passed: `git diff --check`; focused `rg` checks for issue-tree required fields and forbidden-use statements; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 .loom/bin/loom_init.py verify --target .`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1025 --dry-run`.",
   "fallback_to": null,
   "findings": [],
