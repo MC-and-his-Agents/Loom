@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1029
-- Goal: 强化 story intake 合同与 readiness verdict
-- Scope: #1029 story intake 合同、readiness verdict、Business Confirmation 与 formal spec 上游边界
-- Execution Path: issue #1029 -> branch work/1029-story-intake-contract -> worktree /Users/mc/dev/Loom-1029-story-intake-contract
+- Item ID: WI-1019
+- Goal: Connect full spec suite consumption into the review / merge-ready gate chain.
+- Scope: #1019 gate-chain consumption contracts only. Define how pre-review, review, merge checkpoint, merge-ready and closeout consume full suite locators, evidence-map, consistency-analysis, fresh evidence and minimal path `not_applicable` rationale. Do not redefine #1016 full suite, #1017 task carrier, #1018 evidence-map / consistency-analysis, implement CLI, modify skills routing, or modify generated skills runtime surface.
+- Execution Path: issue #1019 -> branch work/1019-gate-chain-consumption -> worktree /Users/mc/dev/Loom-1019-gate-chain-consumption.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1029.md
-- Review Entry: .loom/reviews/WI-1029.json
-- Validation Entry: git diff --check; rg focused story-intake; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .
-- Closing Condition: #1029 PR merged, issue closed, Project Done, and #1015 progress updated
-- Current Checkpoint: release surface refreshed after main sync
-- Current Stop: PR #1091 branch is rebased onto `origin/main` `802aa75`; WI-1067 is terminalized; CLI release surface is bumped to unpublished `v0.13.5`.
-- Next Step: Refresh implementation review for the latest rebased head, push, and wait for PR checks.
+- Recovery Entry: .loom/progress/WI-1019.md
+- Review Entry: .loom/reviews/WI-1019.json
+- Validation Entry: git diff --check; focused rg for pre-review/review, merge-ready, closeout, not_applicable and evidence/consistency terms; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .
+- Closing Condition: #1019 and child Work Items have completion evidence; gate-chain consumption contract can be consumed by #1020 and later CLI planning; validation passes; #1020 scope is not implemented early.
+- Current Checkpoint: review
+- Current Stop: Gate-chain consumption contract is implemented locally, validated, committed, pushed and opened as PR #1089.
+- Next Step: Record GitHub evidence comments for #1045-#1048, #1019 and #1020, then consume PR checks.
 - Blockers: None recorded.
-- Latest Validation Summary: Passed after release bump to `v0.13.5`: git diff --check; python3 tools/skills_surface.py check; make loom-demo-new-project-check; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/check_cli_contract.py; python3 tools/check_npm_package.py.
-- Recovery Boundary: WI-1029 owns story intake contract vocabulary and runtime contract summary only; #1030 scaffold, #1031 loom-story instructions, and #1032 spec-suite entry remain separate.
-- Current Lane: review
+- Latest Validation Summary: Passed: `git diff --check`; focused `rg` for pre-review/review, merge-ready, closeout, not_applicable and evidence/consistency terms; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`.
+- Recovery Boundary: #1019 owns gate-chain consumption contracts and blocking semantics only. Do not redefine #1016 full suite, #1017 task carrier, #1018 evidence-map / consistency-analysis, implement CLI, modify skills routing, or modify generated skills runtime surface. #1020 owns skills/GitHub profile/generated-surface integration.
+- Current Lane: gate-chain-consumption
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: git diff --check; rg -n "planning|issue-tree|route matrix|loom-init|loom-story|build|review" skills src docs .loom; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1028 --write; python3 tools/skills_surface.py check; python3 tools/check_npm_package.py; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/loom_check.py --profile source --source-surface contract-only .
+- Verification Entry: git diff --check; focused rg for pre-review/review, merge-ready, closeout, not_applicable and evidence/consistency terms; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .
 - Lane Entry: not_applicable
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1029.md
-- Dynamic Truth: .loom/progress/WI-1029.md
+- Static Truth: .loom/work-items/WI-1019.md
+- Dynamic Truth: .loom/progress/WI-1019.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
