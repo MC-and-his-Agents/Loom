@@ -57,6 +57,16 @@ loom doctor --target . --json
 
 `loom-installer` 不属于 primary install journey。它只作为 legacy consumer 的 deprecated historical evidence 保留。
 
+### Advanced / Compatibility
+
+历史 native skills-library clone 路径不是新用户的 primary install path：
+
+```bash
+git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom
+```
+
+请改用根 `loom` CLI。已有 skills-library clone 只应视为 CLI 可以验证、修复或替换的 compatibility source；用户不应把 SKILLS 或 plugins 当作独立安装面安装。
+
 ## 发布面
 
 Loom CLI 发布面是执行行为的唯一 active 发布线。它的权威来源是根 `VERSION` 加 GitHub `v*` tag 和 Release 状态。`loom-installer deprecated legacy line` 只作为历史 npm/tag 证据保留，不得作为常规发布路径继续前进。

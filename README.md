@@ -60,6 +60,16 @@ Requirements:
 
 `loom-installer` is not part of the primary install journey. It is retained only as deprecated historical evidence for legacy consumers.
 
+### Advanced / Compatibility
+
+The historical native skills-library clone path is not the primary install path for new users:
+
+```bash
+git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom
+```
+
+Use the root `loom` CLI instead. Any existing skills-library clone should be treated as a compatibility source that the CLI can verify, repair, or replace; users should not install SKILLS or plugins as independent surfaces.
+
 ## Release Surfaces
 
 The Loom CLI release surface is the only active release line for execution behavior. Its authority is root `VERSION` plus the GitHub `v*` tag and Release state. The `loom-installer deprecated legacy line` remains separate only as historical npm/tag evidence and must not advance as a normal release path.
