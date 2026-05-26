@@ -5,7 +5,7 @@
   "kind": "spec_review",
   "summary": "WI-1066 spec is scoped to CLI-managed Codex plugin/SKILLS install and verification without npm publishing, README hard cut, or installer release changes.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "2d20055434131788e4e15007348ad8ac6b6a17ac",
+  "reviewed_head": "366ca3a9c096ae1b6f2ceaa7573429e932cdeb7d",
   "reviewed_validation_summary": "Spec reviewed against #1066, #1064 CLI-only install contract, #1065 root npm package payload/bin, current tools/loom.py host/skills command surface, and native #1063 dependency order.",
   "fallback_to": null,
   "findings": [],
@@ -15,6 +15,6 @@
     "work_item": ".loom/work-items/WI-1066.md",
     "recovery_entry": ".loom/progress/WI-1066.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pending"
+    "build_checkpoint": "local-validation"
   }
 }

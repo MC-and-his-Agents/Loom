@@ -5,8 +5,8 @@
   "kind": "code_review",
   "summary": "WI-1066 implementation is approved so far: root loom CLI now installs and verifies Codex plugin/SKILLS payloads without delegating to loom-installer, and CLI contract smoke covers install/verify/current detection.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "2d20055434131788e4e15007348ad8ac6b6a17ac",
-  "reviewed_validation_summary": "Passed so far: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py; python3 tools/check_npm_package.py; temp-dir smoke for host install, host verify, skills check, and detect current classification.",
+  "reviewed_head": "366ca3a9c096ae1b6f2ceaa7573429e932cdeb7d",
+  "reviewed_validation_summary": "Passed: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py; python3 tools/check_npm_package.py; npm run test:package; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; npm installer docs/versions/payload/distribution checks; fact-chain; shadow-parity; adopt verify; make check.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -15,6 +15,6 @@
     "work_item": ".loom/work-items/WI-1066.md",
     "recovery_entry": ".loom/progress/WI-1066.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pending"
+    "build_checkpoint": "local-validation"
   }
 }
