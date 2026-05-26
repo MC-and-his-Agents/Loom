@@ -46,7 +46,7 @@ Then
 - Story scenario mapping: not_applicable; this is a methodology/template contract.
 - Story business confirmation locator or `not_applicable` rationale: not_applicable; no product story semantics are changed.
 - Scenario coverage: contract sections and scaffold fields cover same-PR, split-PR, PR body, review, merge-ready, and closeout expectations.
-- Expected evidence locator: PR for #1026 and #1026 completion comment.
+- Expected evidence locator: PR #1082 and #1026 completion comment.
 - Freshness rule: stale if issue-tree plan, Work Item scope, blocked-by/blocks, Project Status, PR head, or gate-chain multi-Work-Item support changes.
 - Execution ledger acceptance locator: `.loom/specs/WI-1026/spec.md`.
 

@@ -27,7 +27,7 @@ Deliver the PR slicing methodology contract and scaffold template for #1026 with
 ## Constraints
 
 - Architectural or governance constraints: PR slicing is a planning/execution-boundary artifact, not execution truth.
-- Workspace / rollout constraints: branch `work/1026-pr-slicing-strategy`, PR pending.
+- Workspace / rollout constraints: branch `work/1026-pr-slicing-strategy`, PR #1082.
 - Purity or scope constraints: do not edit PR gate, merge-ready, GitHub mapping, skills routing, task carrier, or CLI behavior.
 
 ## Validation
