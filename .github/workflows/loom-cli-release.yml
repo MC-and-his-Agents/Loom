@@ -11,9 +11,12 @@ on:
   pull_request:
     paths:
       - 'VERSION'
+      - 'package.json'
+      - 'bin/loom.mjs'
       - 'tools/loom.py'
       - 'tools/loom_*.py'
       - 'tools/check_cli_contract.py'
+      - 'tools/check_npm_package.py'
       - 'tools/check_release_surface.py'
       - 'tools/version_surface_check.py'
       - 'skills/shared/scripts/**'
@@ -29,9 +32,12 @@ on:
       - main
     paths:
       - 'VERSION'
+      - 'package.json'
+      - 'bin/loom.mjs'
       - 'tools/loom.py'
       - 'tools/loom_*.py'
       - 'tools/check_cli_contract.py'
+      - 'tools/check_npm_package.py'
       - 'tools/check_release_surface.py'
       - 'tools/version_surface_check.py'
       - 'skills/shared/scripts/**'
@@ -52,8 +58,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
     env:
       PACKAGE_TAG_PREFIX: 'v'
+      NPM_PACKAGE_NAME: '@mc-and-his-agents/loom'
       PUBLISH_REQUESTED: ${{ github.event_name == 'workflow_dispatch' && inputs.publish == true }}
       AUTO_PUBLISH_ALLOWED: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     steps:
@@ -67,6 +75,12 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
       - name: Check release surfaces
         run: python3 tools/check_release_surface.py
 
@@ -76,6 +90,12 @@ jobs:
       - name: Check CLI contract
         run: python3 tools/check_cli_contract.py
 
+      - name: Check npm package contract
+        run: python3 tools/check_npm_package.py
+
+      - name: Dry-run npm package payload
+        run: npm pack --dry-run --json --ignore-scripts
+
       - name: Resolve CLI release state
         id: state
         env:
@@ -84,15 +104,24 @@ jobs:
           set -euo pipefail
           VERSION=$(tr -d '\n' < VERSION)
           TAG="${VERSION}"
+          NPM_VERSION="${VERSION#v}"
           RELEASE_TITLE="Loom CLI ${VERSION}"
           PUBLISH_ALLOWED=false
           if [ "$AUTO_PUBLISH_ALLOWED" = "true" ] || [ "$PUBLISH_REQUESTED" = "true" ]; then
             PUBLISH_ALLOWED=true
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "npm_package=${NPM_PACKAGE_NAME}" >> "$GITHUB_OUTPUT"
+          echo "npm_version=${NPM_VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "release_title=${RELEASE_TITLE}" >> "$GITHUB_OUTPUT"
           echo "publish_allowed=${PUBLISH_ALLOWED}" >> "$GITHUB_OUTPUT"
+
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          if [ "$PACKAGE_VERSION" != "$NPM_VERSION" ]; then
+            echo "release state is inconsistent: package.json version ${PACKAGE_VERSION} does not match VERSION ${VERSION}" >&2
+            exit 1
+          fi
 
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             git fetch origin "${{ github.base_ref }}" --depth=1
@@ -103,12 +132,13 @@ jobs:
             CHANGED_FILES=$(git diff --name-only "HEAD^..HEAD" 2>/dev/null || true)
           fi
 
-          if [ "$PUBLISH_REQUESTED" = "true" ] || printf '%s\n' "$CHANGED_FILES" | grep -E '^(VERSION|tools/loom\\.py|tools/loom_.*\\.py|skills/shared/scripts/|src/skills/|skills/)' >/dev/null; then
+          if [ "$PUBLISH_REQUESTED" = "true" ] || printf '%s\n' "$CHANGED_FILES" | grep -E '^(VERSION|package\\.json|bin/loom\\.mjs|tools/loom\\.py|tools/loom_.*\\.py|skills/shared/scripts/|src/skills/|skills/)' >/dev/null; then
             echo "cli_publish_behavior_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "cli_publish_behavior_changed=false" >> "$GITHUB_OUTPUT"
             echo "should_publish=false" >> "$GITHUB_OUTPUT"
             echo "create_release=false" >> "$GITHUB_OUTPUT"
+            echo "npm_publish=false" >> "$GITHUB_OUTPUT"
             echo "reason=no-cli-behavior-change" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -128,28 +158,51 @@ jobs:
             RELEASE_EXISTS=true
           fi
 
-          if [ "$TAG_EXISTS" = false ]; then
-            echo "should_publish=true" >> "$GITHUB_OUTPUT"
-            echo "create_release=true" >> "$GITHUB_OUTPUT"
-            echo "reason=publish-required" >> "$GITHUB_OUTPUT"
-            exit 0
+          NPM_VERSION_EXISTS=false
+          NPM_LATEST=$(npm view "${NPM_PACKAGE_NAME}" version 2>/dev/null || true)
+          if npm view "${NPM_PACKAGE_NAME}@${NPM_VERSION}" version >/dev/null 2>&1; then
+            NPM_VERSION_EXISTS=true
           fi
+          echo "npm_latest=${NPM_LATEST}" >> "$GITHUB_OUTPUT"
 
-          if [ "$TAG_MATCHES" != true ]; then
+          if [ "$TAG_MATCHES" != true ] && [ "$TAG_EXISTS" = true ]; then
             echo "should_publish=false" >> "$GITHUB_OUTPUT"
             echo "create_release=false" >> "$GITHUB_OUTPUT"
+            echo "npm_publish=false" >> "$GITHUB_OUTPUT"
             echo "reason=version-already-published-on-different-commit" >> "$GITHUB_OUTPUT"
             echo "release state is inconsistent: Loom CLI tag ${TAG} does not point to ${{ github.sha }}; bump VERSION to a new unpublished v* before publishing CLI behavior" >&2
             exit 1
           fi
 
-          echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          if [ "$TAG_EXISTS" = false ]; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "create_release=true" >> "$GITHUB_OUTPUT"
+            if [ "$NPM_VERSION_EXISTS" = true ]; then
+              echo "npm_publish=false" >> "$GITHUB_OUTPUT"
+              echo "reason=tag-release-missing-npm-version-exists" >> "$GITHUB_OUTPUT"
+            else
+              echo "npm_publish=true" >> "$GITHUB_OUTPUT"
+              echo "reason=publish-required" >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
+
+          echo "should_publish=true" >> "$GITHUB_OUTPUT"
           if [ "$RELEASE_EXISTS" = true ]; then
             echo "create_release=false" >> "$GITHUB_OUTPUT"
-            echo "reason=already-published-and-released" >> "$GITHUB_OUTPUT"
           else
             echo "create_release=true" >> "$GITHUB_OUTPUT"
-            echo "reason=release-missing" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "$NPM_VERSION_EXISTS" = true ]; then
+            echo "npm_publish=false" >> "$GITHUB_OUTPUT"
+            if [ "$RELEASE_EXISTS" = true ]; then
+              echo "reason=already-published-and-released" >> "$GITHUB_OUTPUT"
+            else
+              echo "reason=release-missing" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "npm_publish=true" >> "$GITHUB_OUTPUT"
+            echo "reason=npm-version-missing" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create git tag
@@ -157,8 +210,25 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git tag -a "${{ steps.state.outputs.tag }}" -m "Release ${{ steps.state.outputs.tag }}"
-          git push origin "${{ steps.state.outputs.tag }}"
+          if git rev-parse -q --verify "refs/tags/${{ steps.state.outputs.tag }}" >/dev/null; then
+            echo "tag ${{ steps.state.outputs.tag }} already exists on this commit"
+          else
+            git tag -a "${{ steps.state.outputs.tag }}" -m "Release ${{ steps.state.outputs.tag }}"
+            git push origin "${{ steps.state.outputs.tag }}"
+          fi
+
+      - name: Publish npm package
+        if: steps.state.outputs.publish_allowed == 'true' && steps.state.outputs.npm_publish == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "NPM_TOKEN secret is required to publish ${{ steps.state.outputs.npm_package }}@${{ steps.state.outputs.npm_version }}" >&2
+            exit 1
+          fi
+          npm whoami
+          npm publish --access public --provenance
 
       - name: Create GitHub release
         if: steps.state.outputs.publish_allowed == 'true' && steps.state.outputs.create_release == 'true'
