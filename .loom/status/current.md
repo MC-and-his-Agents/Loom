@@ -11,20 +11,20 @@
 - Review Entry: .loom/reviews/WI-1030.json
 - Validation Entry: git diff --check; focused rg; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .
 - Closing Condition: #1030 PR merged, issue closed, Project Done, and #1015 progress updated
-- Current Checkpoint: Scaffold and runtime check updates implemented.
-- Current Stop: PR #1094 is open; CI repair is implemented locally after first failed check run.
-- Next Step: Refresh implementation review, push CI repair, wait for PR checks, then proceed to merge-ready/merge if checks pass.
+- Current Checkpoint: closed
+- Current Stop: PR #1094 merged #1030 at merge commit `1246d596e921ca76882cda6967d6075aa09f530d`; GitHub issue #1030 is closed.
+- Next Step: not_applicable
 - Blockers: None
-- Latest Validation Summary: `git diff --check`; `python3 -m py_compile src/skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_story_carriers.py`; `python3 tools/skills_surface.py check`; `python3 tools/check_npm_package.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_release_surface.py`; `make loom-demo-new-project-check`; `node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main`; `make loom-check` all pass.
-- Recovery Boundary: Resume in `/Users/mc/dev/Loom-1030-user-story-scenario-locator`; do not continue #1030 implementation from `/Users/mc/dev/Loom`.
-- Current Lane: merge-ready preparation
+- Latest Validation Summary: PR #1094 merged with final head `8fd1e3ba0e7b5b33729771a4b4ea0968c5290312`; merge commit `1246d596e921ca76882cda6967d6075aa09f530d`; GitHub issue #1030 is closed.
+- Recovery Boundary: Terminal #1030 carrier retained for downstream consumption; it must not remain an active workspace binding for later Work Items.
+- Current Lane: not_applicable
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: git diff --check; python3 -m py_compile src/skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_story_carriers.py; python3 tools/skills_surface.py check; python3 tools/check_npm_package.py; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; make loom-demo-new-project-check; node packages/loom-installer/scripts/check-version-bump.mjs --base origin/main; make loom-check
+- Verification Entry: PR #1094 merged with final head `8fd1e3ba0e7b5b33729771a4b4ea0968c5290312`; merge commit `1246d596e921ca76882cda6967d6075aa09f530d`; GitHub issue #1030 is closed.
 - Lane Entry: not_applicable
 
 ## Sources
