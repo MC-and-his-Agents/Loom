@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1011
-- Goal: Close #1003 by consuming the single `loom` CLI release line and `loom-installer` sunset evidence.
-- Scope: #1011: final closeout for #1003, including child issue status, PR/head/merge/check evidence, CLI release evidence, npm installer deprecate or permission-block evidence, and installer non-advancement.
-- Execution Path: issue-scoped branch work/1011-1003-closeout in /Users/mc/dev/Loom-1011-1003-closeout
+- Item ID: WI-1064
+- Goal: Freeze the CLI-only install surface and root `loom` npm package contract for #1063.
+- Scope: #1064: decision and contract only; no package implementation, npm publish workflow, README hard cut, or first release.
+- Execution Path: issue-scoped branch work/1064-cli-only-install-contract in /Users/mc/dev/Loom-1064-cli-only-install-contract
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1011.md
-- Review Entry: .loom/reviews/WI-1011.json
+- Recovery Entry: .loom/progress/WI-1064.md
+- Review Entry: .loom/reviews/WI-1064.json
 - Validation Entry: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; make check
-- Closing Condition: #1011 and #1003 closeout comments consume all child issue, PR, merge, check, release, npm, tag, and workspace-clean evidence.
+- Closing Condition: #1064 is closed after its PR merges and #1065-#1070 can cite docs/adoption/cli-only-install-contract.md as their frozen install/package contract.
 - Current Checkpoint: validated
-- Current Stop: #1011 closeout evidence is assembled and locally validated; #1004-#1010 are closed/completed and #1009/#1010 release/npm evidence is consumable.
-- Next Step: Open PR, consume checks, merge, then post #1011 and #1003 closeout comments.
+- Current Stop: CLI-only install contract has been authored and locally validated for #1064.
+- Next Step: Commit, open PR, consume checks, merge, and close #1064.
 - Blockers: None
-- Latest Validation Summary: Passed: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1011; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1011; make check.
-- Recovery Boundary: Continue from /Users/mc/dev/Loom-1011-1003-closeout on branch work/1011-1003-closeout; keep scope limited to #1011/#1003 closeout evidence and comments.
-- Current Lane: cli-installer-sunset-closeout
+- Latest Validation Summary: Passed: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1064; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1064; make check.
+- Recovery Boundary: Continue from /Users/mc/dev/Loom-1064-cli-only-install-contract on branch work/1064-cli-only-install-contract; keep scope limited to contract/docs/governance carriers for #1064.
+- Current Lane: cli-only-install-contract
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1011.md
-- Dynamic Truth: .loom/progress/WI-1011.md
+- Static Truth: .loom/work-items/WI-1064.md
+- Dynamic Truth: .loom/progress/WI-1064.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

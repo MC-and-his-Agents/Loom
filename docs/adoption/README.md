@@ -28,6 +28,7 @@
 - 目标仓库 release / version 合同：[target-repo-version-contract.md](./target-repo-version-contract.md)
 - `.loom` surfaces 版本控制策略：[loom-surfaces-version-control.md](./loom-surfaces-version-control.md)
 - 统一安装体验：[unified-install-experience.md](./unified-install-experience.md)
+- CLI-only 安装合同：[cli-only-install-contract.md](./cli-only-install-contract.md)
 - 宿主适配矩阵：`host-adapter-matrix.md`
 - 单 skill 安装合同：[single-skill-contract.md](./single-skill-contract.md)
 - 已安装 Loom status 与升级演练：[installed-loom-status.md](./installed-loom-status.md)

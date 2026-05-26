@@ -1,0 +1,20 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1064",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1064 spec is scoped to freezing the CLI-only install and root npm package contract without implementing packaging, publishing, or README hard cut work.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "b7abb94efae52493c6d668fd83deac5f7f9ee40c",
+  "reviewed_validation_summary": "Spec reviewed against #1063, #1064, native sub-issue dependency order, #1003 closeout state, current install/release/version docs, and WI-1011 terminal carrier cleanup.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1064.md",
+    "recovery_entry": ".loom/progress/WI-1064.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass"
+  }
+}
