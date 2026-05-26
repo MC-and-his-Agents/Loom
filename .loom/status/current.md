@@ -12,10 +12,10 @@
 - Validation Entry: git diff --check; rg -n "PR slicing|scope purity|single PR|multiple Work Item|review risk|依赖顺序" docs .github skills src .loom; rg -n "Loom Work Item|PR body|merge-ready|review evidence" docs .github skills src .loom; python3 tools/loom_check.py --profile source --source-surface contract-only .
 - Closing Condition: #1026 has a PR slicing contract and scaffold covering same-PR conditions, split-PR conditions, single-PR multi-Work-Item evidence, PR body linkage, review risk, merge-ready consumption, and closeout consumption without implementing gate logic.
 - Current Checkpoint: build
-- Current Stop: PR slicing contract and scaffold drafted locally; validation and review records pending.
-- Next Step: Run focused validation, refresh review records, open PR, consume checks, merge, and close out #1026.
+- Current Stop: PR slicing contract and scaffold drafted and locally validated; review records and PR are pending.
+- Next Step: Refresh review records, open PR, consume checks, merge, and close out #1026.
 - Blockers: None recorded.
-- Latest Validation Summary: Pending.
+- Latest Validation Summary: Passed: `git diff --check`; focused `rg` checks for PR slicing fields, scope purity, multi-Work-Item evidence, PR body linkage, review evidence, and merge-ready references; `python3 .loom/bin/loom_init.py verify --target .`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1026 --write`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`.
 - Recovery Boundary: #1026 PR slicing strategy only. Do not expand into #1019 gate-chain implementation, #1027 GitHub mapping, #1028 skills routing, #1017 task carrier contracts, or CLI automation.
 - Current Lane: pr-slicing-strategy
 
