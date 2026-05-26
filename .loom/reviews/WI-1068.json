@@ -1,0 +1,20 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1068",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Pending final review after validation.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "pending",
+  "reviewed_validation_summary": "pending",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1068.md",
+    "recovery_entry": ".loom/progress/WI-1068.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pending"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1068",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1068 is bounded to checker hardening for CLI-only install and release surfaces, with no npm publish workflow or installer reactivation.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "1dffa6a6e96ed0628521e3d553b1fa6f9bac917e",
+  "reviewed_validation_summary": "Spec, plan, and implementation contract reviewed before implementation on branch work/1068-cli-only-surface-checks.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "issue": "#1068",
+    "parent": "#1063",
+    "previous_work": "#1064 #1065 #1066 #1067"
+  }
+}
