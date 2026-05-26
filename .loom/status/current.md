@@ -11,11 +11,11 @@
 - Review Entry: .loom/reviews/WI-1024.json
 - Validation Entry: git diff --check; rg -n "delivery planning|Phase|FR|Work Item|PR plan|不替代" docs/methodology docs/adoption skills src .loom; python3 tools/loom_check.py --profile source --source-surface contract-only .
 - Closing Condition: #1024 has a delivery planning contract defining inputs, outputs, applicability, non-goals, locator/provenance/freshness rules, and consumer boundaries for #1025-#1028.
-- Current Checkpoint: review-ready
-- Current Stop: Delivery planning contract drafted, validated, and PR #1078 checks are passing before rebase.
-- Next Step: Finish rebase onto current main, rerun validation, push, and consume PR checks.
+- Current Checkpoint: merge
+- Current Stop: Delivery planning contract drafted, rebased onto current main, locally validated, and bound to PR #1078.
+- Next Step: Push the rebased branch, consume PR checks, then merge and close out #1024 if green.
 - Blockers: None recorded.
-- Latest Validation Summary: Passed locally before rebase: `git diff --check`; `rg -n "delivery planning|Phase|FR|Work Item|PR plan|不替代" docs/methodology docs/adoption skills src .loom`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; root-self-governance local equivalent passed after review binding and shadow parity refresh. PR #1078 checks passed before rebase: `py-compile`, `demo-bootstrap`, `repo-local-cli`, `root-self-governance`, and `loom-check`.
+- Latest Validation Summary: Passed after rebase: `git diff --check`; focused `rg`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; root-self-governance local equivalent (`loom_init verify`, `governance-profile status`, `runtime-parity validate`, `adopt verify`, `carrier refresh --dry-run`).
 - Recovery Boundary: #1024 delivery planning contract only. Do not expand into #1025 issue-tree-plan template, #1026 PR slicing strategy, #1027 GitHub mapping, #1028 skills routing, task carrier, gate-chain, or CLI automation.
 - Current Lane: delivery-planning-contract
 
