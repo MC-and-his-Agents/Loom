@@ -5,7 +5,7 @@
   "kind": "general_review",
   "summary": "WI-1019 implementation is approved for PR: the harness gate-chain contracts now define pre-review, review, merge checkpoint, merge-ready and closeout consumption of full suite locators, evidence-map, consistency-analysis, fresh evidence and minimal path not_applicable rationale without modifying CLI, skills routing or generated runtime surface.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "e7f3d4b10679474dc3736d118875b385516a227b",
+  "reviewed_head": "7dff8ae83f9d85ca50e82ee2793301a7d2ad011c",
   "reviewed_validation_summary": "Passed: `git diff --check`; focused `rg` for pre-review/review, merge-ready, closeout, not_applicable and evidence/consistency terms; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --blocking`; `python3 tools/loom_flow.py pr-gate check --target . --item WI-1019 --pr 1089 --head-sha $(git rev-parse HEAD) --branch work/1019-gate-chain-consumption`.",
   "fallback_to": null,
   "findings": [
