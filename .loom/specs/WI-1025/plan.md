@@ -27,7 +27,7 @@ Deliver the issue-tree-plan methodology contract and scaffold template for #1025
 ## Constraints
 
 - Architectural or governance constraints: issue-tree plan is a planning artifact, not execution truth.
-- Workspace / rollout constraints: branch `work/1025-issue-tree-plan-template`, PR pending.
+- Workspace / rollout constraints: branch `work/1025-issue-tree-plan-template`, PR #1080.
 - Purity or scope constraints: do not edit PR slicing, GitHub mapping, skills routing, task carrier, gate-chain, or CLI behavior.
 
 ## Validation

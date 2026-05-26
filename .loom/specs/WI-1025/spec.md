@@ -46,7 +46,7 @@ Then
 - Story scenario mapping: not_applicable; this is a methodology/template contract.
 - Story business confirmation locator or `not_applicable` rationale: not_applicable; no product story semantics are changed.
 - Scenario coverage: contract sections and scaffold fields cover the expected planning outputs and forbidden uses.
-- Expected evidence locator: PR pending and #1025 completion comment.
+- Expected evidence locator: PR #1080 and #1025 completion comment.
 - Freshness rule: stale if issue-tree-plan output no longer matches delivery planning, parent/sub-issue relations, blocked-by/blocks, Project status, or PR slicing decisions.
 - Execution ledger acceptance locator: `.loom/specs/WI-1025/spec.md`.
 
