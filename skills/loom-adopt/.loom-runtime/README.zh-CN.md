@@ -14,6 +14,7 @@
 当前 `skills/` 层消费的是新的强治理控制面，固定约束如下：
 
 - `Work Item` 是唯一正式执行入口
+- delivery planning 可以在执行前输出 issue-tree plan，但不替代 `Work Item`、spec、review、merge-ready 或 closeout 真相
 - 命中 formal spec 的事项，必须先通过 `spec gate`
 - 执行放行链固定收敛为 `spec gate -> build gate -> review gate -> merge gate`
 - `status control plane` 只读取并汇总事实链与宿主控制面，不新增 authored 真相
@@ -49,6 +50,7 @@ Loom 支持两种入口模式：
 
 路由只决定场景 skill，不替代稳定控制面：
 
+- planning 输出只停留在 issue-tree plan / host carrier mapping，除非用户明确要求创建或更新宿主对象
 - 执行入口仍然绑定在 `Work Item`
 - gate 仍然绑定在共享 `gate chain`
 - 状态读取仍然绑定在共享 `status control plane`

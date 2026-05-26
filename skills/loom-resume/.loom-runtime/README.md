@@ -14,6 +14,7 @@ By default, start from `loom-init`. It is the unique root entry for Loom and is 
 The `skills/` layer consumes the current strong-governance control plane with these fixed constraints:
 
 - `Work Item` is the only formal execution entry
+- delivery planning can produce an issue-tree plan before execution, but it does not replace `Work Item`, spec, review, merge-ready, or closeout truth
 - tasks that hit the formal spec path must pass the `spec gate` first
 - the release chain converges on `spec gate -> build gate -> review gate -> merge gate`
 - `status control plane` only reads and summarizes fact-chain and host control-plane truth, and does not author a second source of truth
@@ -49,6 +50,7 @@ If task signals are incomplete, ambiguous, or missing required execution inputs,
 
 Routing only decides the scene skill. It does not replace the stable control plane:
 
+- planning output stays on issue-tree plan / host carrier mapping until the user asks to create or update host objects
 - execution entry stays on `Work Item`
 - gates stay on the shared `gate chain`
 - status reads stay on the shared `status control plane`
