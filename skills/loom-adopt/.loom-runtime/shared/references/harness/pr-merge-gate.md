@@ -22,6 +22,6 @@ Host enforcement is proven only by live branch protection or active ruleset read
 
 The `loom-pr-merge-gate/v1` output may be retained as a pr-gate result locator. A consumer may reuse it only when the current PR still has the same Work Item, PR number, head SHA, authored review approval, reviewed validation summary, and passing merge checkpoint. Missing, unreadable, stale, or non-pass retained results must block or fall back to `pr-gate` / `review`.
 
-`controlled-merge` may consume a fresh retained pr-gate result, but it must still re-read current PR head, required checks, branch protection or active ruleset, mergeability, and merge method as drift-only readback. Retained results never replace host enforcement readback.
+`controlled-merge` may consume a fresh retained pr-gate result, but it must still re-read current PR head, required checks, branch protection or active ruleset, mergeability, and merge method as drift-only readback. Retained results never replace host enforcement readback. GitHub `BLOCKED` mergeability is delegated host policy evidence after Loom approval and checks pass; GitHub review comments, including author `COMMENTED`, remain evidence-only and never satisfy approval truth.
 
 The stock GitHub workflow checks out the verified PR head. That preserves head binding, but repos with untrusted external PRs must make an explicit host-trust decision or replace the workflow body with pinned tooling before requiring the check.

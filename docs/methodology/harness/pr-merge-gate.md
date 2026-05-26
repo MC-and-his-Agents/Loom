@@ -159,6 +159,8 @@ The default GitHub workflow runs on `pull_request` and checks out the PR head SH
 
 When it consumes a retained `pr-gate` result, it must still perform drift-only readback for the current PR head, required checks, branch protection or active ruleset, mergeability, and merge method. The retained result only avoids re-reading the full semantic review and merge-ready decision.
 
+In that drift-only readback, GitHub `BLOCKED` mergeability is not semantic approval truth and is not by itself a Loom readiness failure. It can be carried as a host policy signal only after the authored review record, `loom-pr-merge-gate`, required checks, PR head binding, and host enforcement readback have passed. GitHub review comments, including an author `COMMENTED` state, remain evidence-only and must not satisfy approval.
+
 Bare `gh pr merge` bypasses Loom's semantic review approval bridge unless the host required check is already enforced. It should be treated as a bypass risk for Loom-governed PRs.
 
 ## 8. Non-goals
