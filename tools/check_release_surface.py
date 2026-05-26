@@ -18,13 +18,19 @@ INSTALLER_BUMP_CHECK = ROOT / "packages" / "loom-installer" / "scripts" / "check
 README = ROOT / "README.md"
 README_ZH = ROOT / "README.zh-CN.md"
 CODEX_INSTALL = ROOT / "docs" / "adoption" / "codex-install.md"
+CLI_ONLY_CONTRACT = ROOT / "docs" / "adoption" / "cli-only-install-contract.md"
+UNIFIED_INSTALL = ROOT / "docs" / "adoption" / "unified-install-experience.md"
+HOST_ADAPTER_MATRIX = ROOT / "docs" / "adoption" / "host-adapter-matrix.md"
 
 ACTIVE_SURFACE_DOCS = (
     README,
     README_ZH,
+    CLI_ONLY_CONTRACT,
     CLI_RELEASE_DOC,
     VERSION_AUTHORITY,
     CODEX_INSTALL,
+    UNIFIED_INSTALL,
+    HOST_ADAPTER_MATRIX,
 )
 
 FORBIDDEN_ACTIVE_INSTALLER_PATTERNS = (
@@ -33,6 +39,33 @@ FORBIDDEN_ACTIVE_INSTALLER_PATTERNS = (
     re.compile(r"loom-installer-v[^\s`)]*[^.\n]*(?:publishes|proves|is evidence for)[^.\n]*(?:loom|CLI)", re.IGNORECASE),
     re.compile(r"npx\s+(?:@mc-and-his-agents/)?loom-installer[^.\n]*(?:is|as|remains)[^.\n]*(?:default|recommended|primary)[^.\n]*(?:Codex|install|path)", re.IGNORECASE),
     re.compile(r"(?:default|recommended|primary)[^.\n]*(?:Codex|install|path)[^.\n]*(?:is|uses)\s+npx\s+(?:@mc-and-his-agents/)?loom-installer", re.IGNORECASE),
+)
+
+FORBIDDEN_SEPARATE_INSTALL_SURFACE_PATTERNS = (
+    re.compile(r"(?:SKILLS|skills/|plugins?/loom|host plugins?)[^.\n]*(?:is|are|as|remain)[^.\n]*(?:primary|default|recommended)[^.\n]*(?:install|installation|surface|path)", re.IGNORECASE),
+    re.compile(r"(?:primary|default|recommended)[^.\n]*(?:install|installation|surface|path)[^.\n]*(?:SKILLS|skills/|plugins?/loom|host plugins?)", re.IGNORECASE),
+    re.compile(r"(?:install|use)\s+(?:SKILLS|skills/|plugins?/loom|host plugins?)[^.\n]*(?:directly|separately|independently|as separate)", re.IGNORECASE),
+    re.compile(r"(?:npm install|npx)\s+(?:-g\s+)?(?:@mc-and-his-agents/)?loom-installer", re.IGNORECASE),
+)
+
+NEGATED_CONTEXT_MARKERS = (
+    "no check may",
+    "must not",
+    "do not",
+    "is not",
+    "are not",
+    "not ",
+    "not a",
+    "not the",
+    "not part",
+    "without",
+    "deprecated",
+    "historical",
+    "legacy",
+    "unsupported",
+    "cli-managed",
+    "managed payload",
+    "root `loom` cli",
 )
 
 
@@ -63,7 +96,7 @@ def forbid_active_installer_evidence(path: Path, errors: list[str]) -> None:
             if line_end == -1:
                 line_end = len(text)
             line = text[line_start:line_end].lower()
-            if any(guard in line for guard in ("no check may", "must not", "do not", "is not", "not ")):
+            if any(guard in line for guard in NEGATED_CONTEXT_MARKERS):
                 continue
             snippet = " ".join(match.group(0).split())
             errors.append(
@@ -71,9 +104,59 @@ def forbid_active_installer_evidence(path: Path, errors: list[str]) -> None:
             )
 
 
+def forbid_separate_install_surfaces(path: Path, errors: list[str]) -> None:
+    text = require_file(path, errors)
+    if not text:
+        return
+    for pattern in FORBIDDEN_SEPARATE_INSTALL_SURFACE_PATTERNS:
+        for match in pattern.finditer(text):
+            line_start = text.rfind("\n", 0, match.start()) + 1
+            line_end = text.find("\n", match.end())
+            if line_end == -1:
+                line_end = len(text)
+            line = text[line_start:line_end].lower()
+            if any(guard in line for guard in NEGATED_CONTEXT_MARKERS):
+                continue
+            snippet = " ".join(match.group(0).split())
+            errors.append(
+                f"{path.relative_to(ROOT)} must not present SKILLS, plugins, or loom-installer as separate install surfaces: `{snippet}`"
+            )
+
+
+def assert_pattern_guards(errors: list[str]) -> None:
+    negative_examples = (
+        "SKILLS are managed by the root loom CLI and are not a separate install surface.",
+        "Host plugins are CLI-managed payloads, not primary install paths.",
+        "`loom-installer` is a deprecated historical artifact, not the current install path.",
+    )
+    positive_examples = (
+        "SKILLS are the recommended install surface for Loom.",
+        "The primary install path uses plugins/loom directly.",
+        "Run npx @mc-and-his-agents/loom-installer to install Loom.",
+    )
+    for example in negative_examples:
+        lowered = example.lower()
+        if any(pattern.search(example) and not any(marker in lowered for marker in NEGATED_CONTEXT_MARKERS) for pattern in FORBIDDEN_SEPARATE_INSTALL_SURFACE_PATTERNS):
+            errors.append(f"CLI-only install guard false-positive fixture failed: {example}")
+    for example in positive_examples:
+        lowered = example.lower()
+        if not any(pattern.search(example) and not any(marker in lowered for marker in NEGATED_CONTEXT_MARKERS) for pattern in FORBIDDEN_SEPARATE_INSTALL_SURFACE_PATTERNS):
+            errors.append(f"CLI-only install guard failed to reject fixture: {example}")
+
+
 def main() -> int:
     errors: list[str] = []
 
+    require_needles(
+        CLI_ONLY_CONTRACT,
+        (
+            "The only primary user-facing install surface for Loom is the root `loom` CLI",
+            "Host plugins are host adapter payloads managed by the `loom` CLI",
+            "`SKILLS` are executable scenario payloads managed, synchronized, and verified",
+            "`loom-installer` must not gain a new migration journey",
+        ),
+        errors,
+    )
     require_needles(
         CLI_RELEASE_DOC,
         (
@@ -141,12 +224,16 @@ def main() -> int:
         ),
         errors,
     )
-    require_needles(README, ("Loom CLI release surface", "loom-installer deprecated legacy line"), errors)
-    require_needles(README_ZH, ("Loom CLI 发布面", "loom-installer deprecated legacy line"), errors)
-    require_needles(CODEX_INSTALL, ("The npm installer is not the Codex default path",), errors)
+    require_needles(README, ("Loom CLI release surface", "loom-installer deprecated legacy line", "users do not install them as a separate surface"), errors)
+    require_needles(README_ZH, ("Loom CLI 发布面", "loom-installer deprecated legacy line", "用户不再把它们作为独立安装面安装"), errors)
+    require_needles(CODEX_INSTALL, ("The npm installer is not the Codex default path", "The plugin and\nSKILLS directories are CLI-managed payloads"), errors)
+    require_needles(UNIFIED_INSTALL, ("use `loom host install` to install host plugin/SKILLS payloads", "Historical: `@mc-and-his-agents/loom-installer` references retained only for deprecated evidence"), errors)
+    require_needles(HOST_ADAPTER_MATRIX, ("CLI-managed `skills/` and `plugins/loom/` payloads", "update root CLI, then rerun"), errors)
 
     for path in ACTIVE_SURFACE_DOCS:
         forbid_active_installer_evidence(path, errors)
+        forbid_separate_install_surfaces(path, errors)
+    assert_pattern_guards(errors)
 
     forbidden_installer_behavior_needles = (
         "plugins/loom/.codex-plugin/|src/skills/|skills/",

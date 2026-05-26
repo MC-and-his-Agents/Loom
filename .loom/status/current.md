@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1067
-- Goal: Hard-cut README and primary install/adoption docs to the CLI-only install entry for #1063.
-- Scope: #1067: root `loom` CLI is the only primary install path; plugins and SKILLS are CLI-managed payloads; `loom-installer` may appear only as deprecated historical/evidence text. Minimal static doc-sync/checker needles may be updated only to stop requiring old documentation text. No #1068 checker hardening, npm publish workflow, first npm release, or installer release changes.
-- Execution Path: issue-scoped branch work/1067-cli-only-doc-hard-cut in /Users/mc/dev/Loom-1067-cli-only-doc-hard-cut
+- Item ID: WI-1068
+- Goal: Strengthen checkers so the #1063 CLI-only install and release surface cannot regress after the #1067 documentation hard cut.
+- Scope: #1068: checker-only guardrails for CLI-only install, root npm package payload, CLI-managed plugin/SKILLS payloads, and deprecated `loom-installer` evidence boundaries. No npm publish workflow, first npm release, installer publish reactivation, or broad CLI behavior rewrite.
+- Execution Path: issue-scoped branch work/1068-cli-only-surface-checks in /Users/mc/dev/Loom-1068-cli-only-surface-checks
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1067.md
-- Review Entry: .loom/reviews/WI-1067.json
-- Validation Entry: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; python3 tools/check_npm_package.py; npm run test:package; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1067; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1067; make check
-- Closing Condition: #1067 is closed after its PR merges and #1068 can consume primary docs that no longer present installer, plugin, or SKILLS as separate install surfaces.
-- Current Checkpoint: document-hard-cut
-- Current Stop: Primary README/adoption docs are hard-cut to root `loom` CLI install with CLI-managed plugin/SKILLS payloads; README compatibility text is explicitly non-primary and release-neutral.
-- Next Step: Push refreshed #1067 head, wait for PR checks, then merge and close #1067 with PR/check evidence for #1068.
+- Recovery Entry: .loom/progress/WI-1068.md
+- Review Entry: .loom/reviews/WI-1068.json
+- Validation Entry: python3 tools/check_release_surface.py; python3 tools/check_npm_package.py; python3 tools/check_cli_contract.py; npm run test:package; npm run pack:dry-run; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1068; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1068; make check
+- Closing Condition: #1068 is closed after its PR merges and #1069 can consume checkers that fail closed if primary docs, package payload, or release evidence drift away from the single root `loom` CLI install surface.
+- Current Checkpoint: checker-hardening
+- Current Stop: Local validation passed for CLI-only checker hardening, including release surface guards, root npm package payload guards, installer compatibility checks, Loom carrier checks, and full `make check`.
+- Next Step: Commit and push the #1068 branch, open PR, run `pr-gate`, wait for PR checks, then merge and close #1068 with evidence for #1069.
 - Blockers: None
-- Latest Validation Summary: Local validation passed after rebase onto main `c3d87cce44a842011f8b2c2898d97dd172d0eaab` at #1067 head `62e5fed3ad2df0e72e5bd1dd8fa6404c093b2e71`: `python3 tools/check_release_surface.py`; `python3 tools/version_surface_check.py`; `python3 tools/host_adapter_check.py`; `python3 tools/check_cli_contract.py`; `python3 tools/check_npm_package.py`; `npm run test:package`; `npm run pack:dry-run`; `npm --prefix packages/loom-installer run check:docs`; `npm --prefix packages/loom-installer run check:versions`; `npm --prefix packages/loom-installer run check:payload`; `npm --prefix packages/loom-installer run check:distribution`; `python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1067`; `python3 .loom/bin/loom_flow.py shadow-parity --target .`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1067`; `make check`.
-- Recovery Boundary: Continue from /Users/mc/dev/Loom-1067-cli-only-doc-hard-cut on branch work/1067-cli-only-doc-hard-cut; keep scope limited to #1067 docs plus release-neutral stale doc/checker compatibility text.
-- Current Lane: cli-only-doc-hard-cut
+- Latest Validation Summary: Passed `python3 tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_cli_contract.py`; `npm run test:package`; `npm run pack:dry-run`; installer `check:docs`, `check:versions`, `check:payload`, and `check:distribution`; `fact-chain`; `shadow-parity`; `adopt verify`; and full `make check`.
+- Recovery Boundary: Continue from /Users/mc/dev/Loom-1068-cli-only-surface-checks on branch work/1068-cli-only-surface-checks; keep scope limited to checker hardening and WI-1068 governance carriers.
+- Current Lane: cli-only-surface-checks
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_cli_contract.py; python3 tools/check_npm_package.py; npm run test:package; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1067; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1067; make check
+- Verification Entry: python3 tools/check_release_surface.py; python3 tools/check_npm_package.py; python3 tools/check_cli_contract.py; npm run test:package; npm run pack:dry-run; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1068; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1068; make check
 - Lane Entry: not_applicable
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1067.md
-- Dynamic Truth: .loom/progress/WI-1067.md
+- Static Truth: .loom/work-items/WI-1068.md
+- Dynamic Truth: .loom/progress/WI-1068.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
