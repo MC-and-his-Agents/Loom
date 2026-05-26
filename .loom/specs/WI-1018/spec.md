@@ -11,7 +11,7 @@ Define Loom-owned `evidence-map` and `consistency-analysis` contracts for #1018 
   - `consistency-analysis` input, output, classification, freshness, and remediation contract.
   - Blocking consistency gap classification.
   - Status surface display boundary for derived evidence / consistency conclusions.
-  - #1016 / #1017 unstable inputs marked candidate / optional / deferred / not_applicable.
+  - #1016 suite inputs consumed by locator only, and #1017 unstable inputs marked candidate / optional / deferred / not_applicable.
 - Out of scope:
   - Full suite artifact list.
   - Task carrier truth.
@@ -32,11 +32,11 @@ Then it can identify behavior evidence, test evidence, fresh verification eviden
 
 ### Scenario 2
 
-Given #1016 full suite and #1017 task carrier contracts are not yet stable
+Given #1016 suite contracts are stable in `spec-suite.md` and #1017 task carrier contracts are not yet stable
 
 When `evidence-map` or `consistency-analysis` references their inputs
 
-Then those inputs are represented only as candidate, optional, deferred, or not_applicable and do not redefine #1016 or #1017.
+Then #1016 inputs are consumed only by locator and applicability status, while #1017 inputs are represented only as candidate, optional, deferred, or not_applicable and do not redefine #1016 or #1017.
 
 ### Scenario 3
 
@@ -52,7 +52,7 @@ Then it can distinguish blocking from advisory findings and route remediation wi
 - Story business confirmation locator or `not_applicable` rationale: not_applicable; methodology contract work, no product story semantics.
 - Scenario coverage: `docs/methodology/templates/evidence-map.md`; `docs/methodology/templates/consistency-analysis.md`; `docs/methodology/harness/status-surface.md`.
 - Expected evidence locator: PR #1088 and #1018/#1041-#1044 completion comments.
-- Freshness rule: stale if #1016/#1017 stable outputs, current HEAD, PR head, or host state contradict the candidate / optional / deferred / not_applicable boundaries recorded here.
+- Freshness rule: stale if #1016 suite locators, future #1017 stable outputs, current HEAD, PR head, or host state contradict the locator / candidate / optional / deferred / not_applicable boundaries recorded here.
 - Execution ledger acceptance locator: `.loom/specs/WI-1018/spec.md`.
 - `not_applicable` rationale, if this is not a behavior-bearing change: contract-only methodology work; observable behavior is downstream review / merge-ready / closeout consumption.
 
@@ -60,7 +60,7 @@ Then it can distinguish blocking from advisory findings and route remediation wi
 
 - Failure modes:
   - Treating evidence-map as evidence truth.
-  - Treating candidate #1016/#1017 inputs as required truth.
+  - Treating locator-only #1016 inputs or candidate #1017 inputs as independently authored required truth.
   - Implementing #1019 gate-chain inside #1018.
   - Modifying skills routing or generated runtime surface before #1020.
 - Operational boundaries:
@@ -76,4 +76,3 @@ Then it can distinguish blocking from advisory findings and route remediation wi
 - [x] Blocking consistency gap classification covers missing scenario mapping, stale evidence, host state conflict, and deferred-as-completed.
 - [x] Status surface display remains derived and does not authored second truth.
 - [x] #1020 integration remains deferred.
-

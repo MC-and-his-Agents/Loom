@@ -28,7 +28,7 @@ Deliver #1018 contract documentation and scaffolds for evidence-map and consiste
 
 - Architectural or governance constraints:
   - Source docs are the authority for this PR.
-  - #1016/#1017 unstable inputs stay candidate / optional / deferred / not_applicable.
+  - #1016 suite inputs are consumed by locator only; #1017 unstable inputs stay candidate / optional / deferred / not_applicable.
   - #1019 consumes outputs later; #1018 does not implement gate-chain.
   - #1020 consumes skills / GitHub profile / generated surface later.
 - Workspace / rollout constraints:
@@ -93,7 +93,7 @@ Deliver #1018 contract documentation and scaffolds for evidence-map and consiste
 - Blocking inputs:
   - #1018 issue body and current source docs.
 - Required coordination:
-  - #1016/#1017 remain candidate / optional / deferred / not_applicable until stable.
+  - #1016 suite truth remains owned by `spec-suite.md`; #1017 remains candidate / optional / deferred / not_applicable until stable.
   - #1019 and #1020 consume this PR after merge.
 - Rollback boundary:
   - Revert PR #1088 contract docs and WI-1018 carriers.
@@ -107,4 +107,3 @@ Deliver #1018 contract documentation and scaffolds for evidence-map and consiste
 - [x] BDD outer-loop scenarios map to validation or `not_applicable`
 - [x] TDD inner-loop expectations map to test evidence
 - [x] Risks and dependencies are explicit
-

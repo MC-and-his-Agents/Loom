@@ -23,15 +23,15 @@
 | Work Item / FR locator | required | item id、scope、branch、workspace、PR |
 | `spec.md` | required | scenario / acceptance locators |
 | `plan.md` | required | validation / test strategy locators |
-| suite path decision | candidate until #1016 merges | suite-index locator 或 minimal path `not_applicable` rationale |
-| conditional full suite artifacts | optional / conditional until #1016 merges | research / contracts / readiness locators 或 not_applicable |
+| suite path decision | consumed from [spec-suite.md](./spec-suite.md) | suite-index locator 或 minimal path `not_applicable` rationale |
+| conditional full suite artifacts | optional / conditional per [spec-suite.md](./spec-suite.md) | research / contracts / readiness locators 或 not_applicable |
 | execution breakdown / task carrier | candidate until #1017 stabilizes | candidate / optional / deferred / not_applicable locators only |
 | evidence-map | required for this analysis | evidence rows、source locators、freshness rules |
 | review record | required after review exists | reviewed head、validation summary、decision、consumed inputs |
 | current `HEAD` / PR head | required when branch / PR exists | current head, reviewed head, PR head, merge commit |
 | host state | required when host objects exist | issue state、PR state、checks、Project、merge status |
 
-未稳定输入不得被升级成 required truth。若当前事项需要它们，analysis 输出 `candidate_input_gap` 或 `deferred_input`，并把接入需求记录给 #1020 或对应 owning FR。
+未稳定输入不得被升级成 required truth。#1016 suite 输入只能通过 [spec-suite.md](./spec-suite.md) 的 locator 和适用性判断消费；#1017 task carrier 输入在稳定前只能作为 candidate / optional / deferred / not_applicable。若当前事项需要未稳定输入，analysis 输出 `candidate_input_gap` 或 `deferred_input`，并把接入需求记录给 #1020 或对应 owning FR。
 
 ## 3. 输出 Envelope
 
@@ -138,7 +138,7 @@
 | `deferred_as_completed` | review, merge-ready, closeout | deferred item 被当作 completed / closed_out / done 消费 | 移出 completed summary，绑定 follow-up 或重新纳入 scope |
 | `missing_source_locator` | review, merge-ready, status_surface | blocking 结论没有 source locator 或 provenance | 补 locator，或把结论降为不可消费 |
 | `parallel_truth` | review, merge-ready, closeout | status surface、PR body、task carrier 或 Project status authored 第二份 truth | 回到 owning truth carrier，删除或重标派生字段 |
-| `candidate_input_treated_as_required` | review, merge-ready | #1016 / #1017 未稳定输入被当成 required truth | 改成 candidate / optional / deferred / not_applicable，并记录给 owning FR 或 #1020 |
+| `candidate_input_treated_as_required` | review, merge-ready | 未稳定输入被当成 required truth，例如 #1017 task carrier | 改成 candidate / optional / deferred / not_applicable，并记录给 owning FR 或 #1020 |
 
 Advisory gap examples:
 

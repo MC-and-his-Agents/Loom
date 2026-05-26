@@ -22,7 +22,7 @@
 - `evidence-map` is an index and binding contract, not evidence truth.
 - `consistency-analysis` outputs findings and remediation direction, not automatic repairs.
 - Status surface displays derived evidence / consistency conclusions only.
-- #1016 full suite additions are candidate / optional / conditional until #1016 merges.
+- #1016 full suite inputs are consumed through `docs/methodology/templates/spec-suite.md` locators only.
 - #1017 execution breakdown / task carrier inputs are candidate / optional / deferred / not_applicable until #1017 stabilizes.
 - #1019 owns gate-chain consumption.
 - #1020 owns skills, GitHub profile, and generated surface integration.
@@ -41,4 +41,3 @@
 - focused `rg` checks
 - `python3 tools/skills_surface.py check`
 - `python3 tools/loom_check.py --profile source --source-surface contract-only .`
-

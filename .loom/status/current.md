@@ -16,7 +16,7 @@
 - Next Step: Consume PR #1088 checks, then merge and close out #1018/#1041-#1044 after PR evidence is absorbed.
 - Blockers: None recorded
 - Latest Validation Summary: Passed: git diff --check; focused rg checks for evidence-map / consistency-analysis / blocking / advisory / stale / missing / conflict / not_applicable / source locator / freshness / HEAD / host state / #1019 / #1020 boundaries; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .
-- Recovery Boundary: #1018 / #1041-#1044 evidence-map and consistency-analysis contract only. Do not define full suite artifact list, task carrier truth, gate-chain implementation, skills routing, generated runtime surface, or CLI command surface. #1016/#1017 unstable inputs remain candidate / optional / deferred / not_applicable. #1020 consumes integration later. WI-1028 carrier change is terminalization only to remove stale active binding.
+- Recovery Boundary: #1018 / #1041-#1044 evidence-map and consistency-analysis contract only. Do not define full suite artifact list, task carrier truth, gate-chain implementation, skills routing, generated runtime surface, or CLI command surface. #1016 suite inputs are consumed by locator only; #1017 unstable inputs remain candidate / optional / deferred / not_applicable. #1020 consumes integration later. WI-1028 carrier change is terminalization only to remove stale active binding.
 - Current Lane: evidence-consistency-contract
 
 ## Runtime Evidence

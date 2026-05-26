@@ -35,14 +35,14 @@
 | Work Item / FR locator | required | 绑定目标、范围、分支、PR 和后续 closeout 回链 |
 | `spec.md` | required | 提供 scenario / acceptance locator 与 behavior evidence expectation |
 | `plan.md` | required | 提供 validation strategy / test strategy 与 fresh evidence expectation |
-| suite path decision | candidate until #1016 merges | 若存在 `suite-index.md`，只消费 path decision、artifact inventory 和 not_applicable 表；若不存在，记录 `candidate` 或 `not_applicable` |
-| `research.md` / `contracts.md` / `readiness-checklist.md` | optional / conditional until #1016 merges | 只在对应 locator 已存在且适用时消费；未稳定时不得当作 blocking missing |
+| suite path decision | consumed from [spec-suite.md](./spec-suite.md) | 若存在 `suite-index.md`，只消费 path decision、artifact inventory 和 not_applicable 表；若不存在，记录 minimal path 的 `not_applicable` rationale |
+| `research.md` / `contracts.md` / `readiness-checklist.md` | optional / conditional per [spec-suite.md](./spec-suite.md) | 只在对应 locator 已存在且适用时消费；合法 `not_applicable` 不得当作 blocking missing |
 | execution breakdown / task carrier locators | candidate until #1017 stabilizes | 只能记录 candidate locator、optional carrier 或 `not_applicable` rationale；不得定义 task carrier truth |
 | review record | optional before review, required after review consumption | 只消费 reviewed head、validation summary、decision 与 consumed evidence locators |
 | merge-ready attempt or retained merge checkpoint | optional before merge-ready, required for closeout consumption | 只消费 successful result、head binding 与 evidence freshness |
 | host state | required when PR / issue / Project exists | 只消费 branch、PR、checks、Project、issue、merge commit 等 host mirror signals |
 
-未稳定的 #1016 / #1017 输入必须写成 `candidate`、`optional`、`deferred` 或 `not_applicable`，不得反向定义 full suite 工件列表或 task carrier truth。后续 skills / generated surface / GitHub profile 接入需求记录给 #1020。
+`evidence-map` 只消费 #1016 已稳定的 suite path locator 和适用性判断，不反向定义 full suite 工件列表。未稳定的 #1017 输入必须写成 `candidate`、`optional`、`deferred` 或 `not_applicable`，不得定义 task carrier truth。后续 skills / generated surface / GitHub profile 接入需求记录给 #1020。
 
 ## 3. Evidence 类型
 
@@ -146,4 +146,3 @@ Status surface 只能展示 `evidence-map` 派生结论。它不得在状态面�
 - `not_applicable` 与 `deferred` 的区分
 - status surface 只展示派生结论的边界
 - source docs / generated skills surface 的引用同步和 drift check
-
