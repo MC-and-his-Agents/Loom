@@ -5,7 +5,7 @@
   "kind": "general_review",
   "summary": "WI-1040 and the #1017 execution breakdown/task carrier batch are approved for PR: the new contracts define plan.md breakdown units, carrier type/status/provenance, Work Item and recovery truth protection, tasks.md/GitHub replacement boundaries, and #1020 integration requirements without modifying skills routing, generated runtime surface, evidence-map, gate-chain, or CLI behavior.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "f7c57687b58415279591102d7e1441f81819ad9d",
+  "reviewed_head": "33e7baebfe413b558569c7e12c08aab5d73407e0",
   "reviewed_validation_summary": "Passed after syncing `origin/main` through #1081 merge commit `6c2340763635e9849184a3bd8d241beb783231fe`: `git diff --check`; focused `rg` for `tasks.md`, Project done, task done, behavior evidence, test evidence, Work Item truth, task carrier, execution breakdown, external tracker, checklist, full/minimal spec suite and suite-index boundaries; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py verify --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py purity-check --target . --item WI-1040`; root-self-governance local equivalent (`governance-profile status`, `runtime-parity validate`, `adopt verify`); `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`. The approval remains scoped to the #1017 contract; post-review drift is main-sync/#1081 runtime and terminal carrier-only state, with #1020 integration still deferred.",
   "fallback_to": null,
   "findings": [
