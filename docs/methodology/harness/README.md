@@ -43,6 +43,8 @@
   - 定义 Governance Lint / Operating Lint 的 result strength、core lint kind、repo-specific 边界与 derived-evidence 消费纪律
 - [execution-chain.md](./execution-chain.md)
   - 定义从初始化产物到 merge checkpoint 放行的最小执行链路
+- [task-carrier-contract.md](./task-carrier-contract.md)
+  - 定义 execution breakdown unit 如何由 GitHub issue、Project item、checklist、`tasks.md`、external tracker 或 `not_applicable` 承接，并保护 `Work Item` truth
 - [gate-chain.md](./gate-chain.md)
   - 定义 implementation review、`merge-ready`、`controlled merge`、`closeout` 的强前置消费链
 - `checkpoint-model.md`

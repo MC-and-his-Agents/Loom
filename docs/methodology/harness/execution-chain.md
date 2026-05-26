@@ -26,8 +26,8 @@ Loom 的 harness 不是若干孤立规则，而是一条从初始化产物到 `a
 | 阶段 | 必需输入 | 最小输出 | 唯一主入口 | 不满足时的回退去向 |
 | --- | --- | --- | --- | --- |
 | 初始化产物就位 | 初始化场景、能力选择、首批事项 | 可进入执行的 work item、恢复入口、验证入口、工作现场入口 | [work-item-contract.md](./work-item-contract.md) | 回到 [harness-design.md](../../architecture/harness-design.md) 补初始化与装配 |
-| 正式进入执行 | 当前事项、范围、执行路径、checkpoint 状态 | 单一正式执行单元被明确绑定 | [work-item-contract.md](./work-item-contract.md) | 退回 work item 补范围、目标或关闭条件 |
-| 每轮读取 | work item、恢复主入口、工作现场、最近验证摘要、BDD 场景与 TDD 计划 | 本轮单一推进单元、当前上下文基线 | [execution-context.md](./execution-context.md) | 退回恢复主入口或状态面补齐事实 |
+| 正式进入执行 | 当前事项、范围、执行路径、checkpoint 状态、execution breakdown locator 或 `not_applicable` rationale | 单一正式执行单元被明确绑定 | [work-item-contract.md](./work-item-contract.md) | 退回 work item 补范围、目标或关闭条件 |
+| 每轮读取 | work item、恢复主入口、工作现场、最近验证摘要、BDD 场景、TDD 计划、当前 breakdown unit / task carrier locator | 本轮单一推进单元、当前上下文基线 | [execution-context.md](./execution-context.md) | 退回恢复主入口或状态面补齐事实 |
 | 隔离现场推进 | 上下文基线、工作现场、纯度约束、subagent ownership | 与当前事项一致的执行结果、可整合的 subagent output | [workspace-model.md](./workspace-model.md) | 退回现场治理，清理纯度或范围越界问题 |
 | 每轮回写 | 本轮执行结果、验证记录、阻断项、subagent output integration | 最新停点、下一步、验证摘要、回退边界、重复阻断信号 | [recovery-model.md](./recovery-model.md) | 回到恢复入口补齐回写，不得只停留在会话里 |
 | 验证汇总 | 自动检查结果、人工验证、运行证据入口、behavior evidence、test evidence | 最近验证摘要、fresh verification evidence、未决阻断项、是否可进 checkpoint | [status-surface.md](./status-surface.md) | 回到验证入口继续补验证或声明 `not_applicable` |
@@ -52,6 +52,7 @@ Loom 的 harness 不是若干孤立规则，而是一条从初始化产物到 `a
 
 - 每轮执行只推进一个清晰单元，不在同一轮并行吞入多个无关目标
 - 每个阶段都必须有唯一主入口；补充材料不得并行替代主入口
+- execution breakdown 与 task carrier 只能补充 `plan.md` 拆分和 locator，不得替代 `Work Item` 或 recovery 主入口
 - merge checkpoint 只承接放行，不承担第一次高质量语义判断
 - 本文件不替代各组件的字段级合同；字段级规则仍以被引用组件文档为准
 - BDD/TDD 证据必须在链路中被消费或显式标记 `not_applicable`，不得只停留在会话描述里
