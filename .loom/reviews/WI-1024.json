@@ -1,0 +1,26 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1024",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "WI-1024 implementation is approved for PR: the new delivery planning contract defines the planning layer, keeps Work Item and gate truth authoritative, and limits this batch to #1024.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "73666d80723e7e4816ef2e6f1f951c232f222ff7",
+  "reviewed_validation_summary": "Passed after rebase: `git diff --check`; focused `rg`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; root-self-governance local equivalent (`loom_init verify`, `governance-profile status`, `runtime-parity validate`, `adopt verify`, `carrier refresh --dry-run`).",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1025 issue-tree-plan template remains pending.",
+    "#1026 PR slicing strategy remains pending.",
+    "#1027 GitHub mapping remains pending.",
+    "#1028 skills routing remains pending."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1024.md",
+    "recovery_entry": ".loom/progress/WI-1024.md",
+    "status_surface": ".loom/status/current.md",
+    "delivery_planning_contract": "docs/methodology/templates/delivery-planning.md",
+    "build_checkpoint": "pass"
+  }
+}
