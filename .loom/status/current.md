@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1028
-- Goal: Update skills routing so Loom recognizes delivery planning and issue-tree planning scenes before build, review, merge-ready, or story-only shaping.
-- Scope: #1028 skills routing boundary only; update route matrix, loom-init, loom-story, and synchronized generated skills surface. Consume #1024 delivery planning, #1025 issue-tree-plan, #1026 PR slicing, and #1027 GitHub mapping. Do not redefine those contracts, implement GitHub API automation, implement CLI commands, or change review/merge-ready truth.
-- Execution Path: issue #1028 -> branch work/1028-planning-routing -> worktree /Users/mc/dev/Loom-1028-planning-routing.
+- Item ID: WI-1018
+- Goal: Define Loom evidence-map and consistency-analysis contracts for #1018.
+- Scope: #1018 evidence-map / consistency-analysis contract only: evidence-map template, consistency-analysis input/output/classification/freshness/remediation contract, status surface display boundary, and blocking consistency gap classification. Do not define full suite artifact list, task carrier truth, gate-chain implementation, skills routing, generated runtime surface, or CLI command surface.
+- Execution Path: issue #1018 -> branch work/1018-evidence-consistency-contract -> worktree /Users/mc/dev/Loom-1018-evidence-consistency-contract -> PR #1088
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1028.md
-- Review Entry: .loom/reviews/WI-1028.json
-- Validation Entry: git diff --check; rg -n "planning|issue-tree|route matrix|loom-init|loom-story|build|review" skills src docs .loom; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1028 --write; python3 tools/skills_surface.py check; python3 tools/check_npm_package.py; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/loom_check.py --profile source --source-surface contract-only .
-- Closing Condition: #1028 defines skills routing for delivery planning signals, clarifies when `loom-init` outputs issue-tree planning instead of routing to build/review/merge-ready/story-only shaping, synchronizes generated skills surface, and records closeout evidence back to #1028 and #1014.
-- Current Checkpoint: implementation
-- Current Stop: Skills routing planning boundary and generated surface sync are implemented locally and validated.
-- Next Step: Record review, open PR, consume checks, merge, and close out #1028.
-- Blockers: None recorded.
-- Latest Validation Summary: Passed: `git diff --check`; focused `rg` checks for planning / issue-tree / route matrix / loom-init / loom-story / build / review routing; `python3 .loom/bin/loom_init.py verify --target .`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1028 --write`; `python3 tools/skills_surface.py check`; `python3 tools/check_npm_package.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_release_surface.py`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`.
-- Recovery Boundary: #1028 owns skills routing for delivery planning signals only. Do not redefine #1024 delivery planning, #1025 issue-tree-plan, #1026 PR slicing, #1027 GitHub mapping, task carriers, gate-chain behavior, GitHub API automation, or CLI automation.
-- Current Lane: planning-routing
+- Recovery Entry: .loom/progress/WI-1018.md
+- Review Entry: .loom/reviews/WI-1018.json
+- Validation Entry: git diff --check; focused rg checks for evidence-map / consistency-analysis / blocking / advisory / stale / missing / conflict / not_applicable / source locator / freshness / HEAD / host state / #1019 / #1020 boundaries; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .
+- Closing Condition: #1018 and #1041-#1044 have evidence-map and consistency-analysis contract evidence, PR #1088 consumes the contracts, validation passes, and #1020 integration remains deferred.
+- Current Checkpoint: build
+- Current Stop: Evidence-map and consistency-analysis contracts drafted, validated, committed, pushed, and opened as PR #1088; stale WI-1028 carrier terminalized as an explicit WI-1018 artifact to keep this workspace single-active.
+- Next Step: Consume PR #1088 checks, keep #1020 integration deferred, then merge and close out #1018/#1041-#1044 after PR evidence is absorbed.
+- Blockers: None recorded
+- Latest Validation Summary: Passed: git diff --check; focused rg checks for evidence-map / consistency-analysis / blocking / advisory / stale / missing / conflict / not_applicable / source locator / freshness / HEAD / host state / #1019 / #1020 boundaries; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .
+- Recovery Boundary: #1018 / #1041-#1044 evidence-map and consistency-analysis contract only. Do not define full suite artifact list, task carrier truth, gate-chain implementation, skills routing, generated runtime surface, or CLI command surface. #1016/#1017 unstable inputs remain candidate / optional / deferred / not_applicable. #1020 consumes integration later. WI-1028 carrier change is terminalization only to remove stale active binding.
+- Current Lane: evidence-consistency-contract
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: git diff --check; rg -n "planning|issue-tree|route matrix|loom-init|loom-story|build|review" skills src docs .loom; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1028 --write; python3 tools/skills_surface.py check; python3 tools/check_npm_package.py; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/loom_check.py --profile source --source-surface contract-only .
+- Verification Entry: git diff --check; focused rg checks for evidence-map / consistency-analysis / blocking / advisory / stale / missing / conflict / not_applicable / source locator / freshness / HEAD / host state / #1019 / #1020 boundaries; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .
 - Lane Entry: not_applicable
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1028.md
-- Dynamic Truth: .loom/progress/WI-1028.md
+- Static Truth: .loom/work-items/WI-1018.md
+- Dynamic Truth: .loom/progress/WI-1018.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
