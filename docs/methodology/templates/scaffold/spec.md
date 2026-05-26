@@ -1,5 +1,23 @@
 # Spec
 
+## Suite Contract
+
+- Suite path: minimal | full
+- Suite index locator, or `not_applicable` rationale:
+- Consumes:
+  - Work Item / FR locator:
+  - Story scenario locator, or `not_applicable` rationale:
+  - Story Business Confirmation locator, pending story-readiness locator, or `not_applicable` rationale:
+- Produces:
+  - Scenario ids / locators:
+  - Acceptance ids / locators:
+  - Behavior evidence expectation:
+- Locator:
+  - Spec locator:
+- Provenance:
+  - Source issue / PR / doc / conversation locator:
+  - Freshness rule:
+
 ## Goal
 
 - What problem does this change solve?
@@ -18,7 +36,7 @@ If a User Story exists, reference its scenario id or locator here instead of cop
 
 If the User Story carries business semantics, record its Story Business Confirmation locator or `not_applicable` rationale before shaping this spec.
 
-### Scenario 1
+### Scenario S1
 
 Given
 - a clear starting state
@@ -29,7 +47,7 @@ When
 Then
 - the expected observable outcome happens
 
-### Scenario 2
+### Scenario S2
 
 Given
 - an important variant or edge condition
@@ -45,6 +63,8 @@ Then
 - Story scenario mapping:
 - Story business confirmation locator or `not_applicable` rationale:
 - Scenario coverage:
+  - S1 -> expected behavior evidence locator:
+  - S2 -> expected behavior evidence locator:
 - Expected evidence locator:
 - Freshness rule:
 - Execution ledger acceptance locator:
@@ -58,8 +78,8 @@ Then
 
 ## Acceptance Criteria
 
-- [ ] Target outcome is observable
-- [ ] Key scenarios are covered
-- [ ] Important boundary behavior is defined
-- [ ] Validation evidence is identified
-- [ ] Behavior evidence can be consumed by review, merge-ready, and closeout
+- [ ] A1: Target outcome is observable
+- [ ] A2: Key scenarios are covered
+- [ ] A3: Important boundary behavior is defined
+- [ ] A4: Validation evidence is identified
+- [ ] A5: Behavior evidence can be consumed by review, merge-ready, and closeout
