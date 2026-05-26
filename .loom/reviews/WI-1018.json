@@ -3,10 +3,10 @@
   "item_id": "WI-1018",
   "decision": "allow",
   "kind": "general_review",
-  "summary": "Review of WI-1018 after latest main merge: evidence-map and consistency-analysis contracts remain scoped, #1016 suite inputs are locator-only, #1017 unstable inputs stay candidate/optional/deferred/not_applicable, status surface remains derived, and final validation passed.",
+  "summary": "Review of WI-1018 after syncing PR #1090 / #1017 mainline: evidence-map and consistency-analysis contracts remain scoped, #1016 suite inputs are locator-only, #1017 inputs are consumed only through candidate/optional/deferred/not_applicable boundaries, status surface remains derived, WI-1040 is terminalized from GitHub closeout evidence, and final validation passed.",
   "reviewer": "codex",
-  "reviewed_head": "8f63bbc9f6b6c3ce7f8953bac9d52a51715200b5",
-  "reviewed_validation_summary": "Passed: git diff --check; focused rg checks for evidence-map / consistency-analysis / blocking / advisory / stale / missing / conflict / not_applicable / source locator / freshness / HEAD / host state / #1019 / #1020 boundaries; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .",
+  "reviewed_head": "5fcbae7f0acef018b13c7acfd7607ba0815ef0d2",
+  "reviewed_validation_summary": "Passed after syncing origin/main through PR #1090: git diff --check; focused rg checks for evidence-map / consistency-analysis / blocking / advisory / stale / missing / conflict / not_applicable / source locator / freshness / HEAD / host state / #1019 / #1020 boundaries; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1018; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -22,12 +22,11 @@
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
-      "budget_summary": "github rulesets read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/rulesets\": EOF",
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_control_plane",
-        "error_count": 1
+        "source": "github_host"
       }
     },
     "engine_adapter": null,
