@@ -14,15 +14,16 @@ The `loom` CLI release line is the primary release line for Loom execution behav
 
 The `loom` CLI release line is the only active CLI release line. It is not synchronized with the deprecated installer package version, plugin surface version, skill package version, runtime contract version, or schema version.
 
-## Minimal Distribution Channel
+## Distribution Channel
 
-The current minimal `loom` CLI distribution channel is the root GitHub release:
+The primary user-facing `loom` CLI distribution channel is the root npm package
+plus matching GitHub release evidence:
 
 - `VERSION` declares the candidate version.
+- `package.json` publishes `@mc-and-his-agents/loom` with `loom` as the bin name.
 - A GitHub `v*` tag identifies the published source revision.
-- The GitHub Release is the release evidence for `tools/loom.py`, `tools/loom_*.py`, `.loom/bin/`, generated `skills/`, and the CLI-backed runtime contracts committed in the repository.
-
-This deliberately avoids introducing a new npm package, Homebrew formula, or standalone binary before there is a separate work item for that channel.
+- The GitHub Release is the release evidence for `tools/loom.py`, `tools/loom_*.py`, `.loom/bin/`, generated `skills/`, plugins, and the CLI-backed runtime contracts committed in the repository.
+- npm registry state for `@mc-and-his-agents/loom` is the install-channel evidence for the root CLI package.
 
 #1063 introduces that separate npm channel work. Its frozen install and package
 contract is [cli-only-install-contract.md](./cli-only-install-contract.md): the
@@ -80,6 +81,7 @@ A release closeout for this line must record:
 - `VERSION`,
 - the relevant commit SHA,
 - GitHub `v*` tag and Release state, or the no-publish reason,
+- npm `@mc-and-his-agents/loom` version and dist-tag state, or the no-publish reason,
 - the `loom-cli-release` workflow run,
 - whether `@mc-and-his-agents/loom-installer` stayed at the legacy baseline or only changed deprecation metadata.
 

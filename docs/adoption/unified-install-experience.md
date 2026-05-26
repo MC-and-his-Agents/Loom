@@ -1,32 +1,34 @@
 # Unified Install Experience
 
-This document is the user-facing distribution target for Loom Phase #496.
+This document is the user-facing distribution target for Loom.
 
 ## Default Model
 
-Loom defaults to a Superpowers-style install model:
+Loom defaults to a single root CLI install model:
 
-- clone the full Loom repository
-- let each host discover the generated root `skills/` surface through its native mechanism
+- install `@mc-and-his-agents/loom`
+- use `loom host install` to install host plugin/SKILLS payloads
+- use `loom host verify`, `loom skills check`, and `loom doctor` to verify the target repository
 - start from `loom-init`
-- keep host-specific wiring in adapter surfaces
+- keep host-specific wiring in CLI-managed adapter surfaces
 
-The default path is not `@mc-and-his-agents/loom-installer` for Codex. The installer remains an adapter helper, single-skill helper, and verifier.
+The default path is not `@mc-and-his-agents/loom-installer` for Codex or any
+other primary install journey. The installer remains deprecated historical
+evidence only.
 
 Install path status:
 
-- Default: full repository install plus native or host skill discovery.
-- Advanced: install one generated `skills/<skill-id>` package as a single skill.
-- Adapter-managed: use `@mc-and-his-agents/loom-installer` or a host plugin when the host needs orchestration.
-- Deprecated: historical docs that present generated installer payloads or plugin-only setup as the source truth.
-- Unsupported: presenting a single-skill install as the full Loom scenario surface.
+- Default: root `loom` CLI install plus CLI-managed host plugin/SKILLS payloads.
+- Managed payload: generated `skills/` and `plugins/` surfaces installed or verified by `loom`.
+- Historical: `@mc-and-his-agents/loom-installer` references retained only for deprecated evidence and compatibility records.
+- Unsupported: presenting plugin install, SKILLS install, single-skill install, or installer commands as an independent primary Loom install surface.
 
 ## Source And Generated Surfaces
 
 - `src/skills/` is the only editable source truth for Loom skills.
-- `skills/` is a checked-in generated install surface.
-- `skills/<skill-id>` is directly consumable by host-native skill discovery.
-- `skills/<skill-id>` is also a self-contained single-skill package.
+- `skills/` is a checked-in generated payload surface.
+- `skills/<skill-id>` is directly consumable by host-native skill discovery after the root CLI installs or synchronizes it.
+- `skills/<skill-id>` is also a self-contained skill payload.
 - `skills/<skill-id>/loom-package.json` is the machine-readable package metadata location.
 - `skills/<skill-id>/.loom-runtime/` is the package-internal runtime closure.
 
@@ -42,11 +44,15 @@ Verify it with:
 make skills-check
 ```
 
-This install surface is distinct from target repository `.loom` governance carriers. When Loom adopts a target repository, stable `.loom` carriers must follow [loom-surfaces-version-control.md](./loom-surfaces-version-control.md); installers and adapters must not hide them with a blanket `.loom/` ignore.
+This payload surface is distinct from target repository `.loom` governance
+carriers. When Loom adopts a target repository, stable `.loom` carriers must
+follow [loom-surfaces-version-control.md](./loom-surfaces-version-control.md);
+CLI-managed host payloads must not hide them with a blanket `.loom/` ignore.
 
-## Full Repo Install
+## CLI-Managed Install
 
-Full repo install is the default user journey. It exposes the complete Loom scenario surface:
+The root CLI install is the default user journey. It exposes the complete Loom
+scenario surface through CLI-managed host payloads:
 
 - root entry: `loom-init`
 - scenario skills: `loom-adopt`, `loom-resume`, `loom-pre-review`, `loom-spec-review`, `loom-review`, `loom-merge-ready`, `loom-handoff`, `loom-retire`
@@ -55,11 +61,20 @@ Full repo install is the default user journey. It exposes the complete Loom scen
 
 Users should not need to understand `src/skills/`, `.loom-runtime/`, or adapter implementation details before starting.
 
-Full repo install does not mean every host uses the same filesystem path. It means each host exposes the same generated `skills/` surface, preserves `loom-init` as the default entry, and keeps host-specific discovery, bootstrap, tool mapping, and verification in adapter-owned surfaces.
+This replaces the old full repo wording as the primary user journey. Repository
+source remains the development truth, but user install guidance goes through the
+root CLI and its managed payloads.
+
+CLI-managed install does not mean every host uses the same filesystem path. It
+means each host exposes the same generated `skills/` surface, preserves
+`loom-init` as the default entry, and keeps host-specific discovery, bootstrap,
+tool mapping, and verification behind `loom host ...` and `loom skills ...`
+commands.
 
 ## Single-Skill Install
 
-Single-skill install is a supported advanced path. It installs exactly one `skills/<skill-id>` directory and exposes only that named skill.
+Single-skill payloads remain a package shape for compatibility and generic skill
+consumers. They are not a primary Loom install path.
 
 Single-skill install must:
 
@@ -70,14 +85,16 @@ Single-skill install must:
 
 Single-skill install must not claim that the full Loom scenario surface is installed.
 
-Single-skill install remains valid for targeted use, compatibility with generic skill installers, and hosts that intentionally expose only one Loom capability. It is not a replacement for full repo install.
+Single-skill payload consumption remains valid for compatibility with generic
+skill tooling and hosts that intentionally expose only one Loom capability. It
+is not a replacement for root CLI install.
 
 ## User Semantics
 
 Across Codex, Claude Code, OpenCode, Gemini, and Cursor, the user-facing experience should remain consistent:
 
 - install entry is clear
-- `loom-init` is the default starting point for full repo installs
+- `loom-init` is the default starting point for CLI-managed installs
 - scene skills are discoverable
 - bootstrap or session-start guidance points to Loom entry semantics
 - tool mapping remains adapter-owned and mostly invisible
