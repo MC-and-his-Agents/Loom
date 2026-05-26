@@ -1,0 +1,19 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1067",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1067 scope is bounded to documentation hard cut: root loom CLI as the primary install path, CLI-managed plugin/SKILLS payloads, and installer references only as deprecated evidence.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "abad62b362cb425f2c8a5e57adda4f3a9bd4bfc1",
+  "reviewed_validation_summary": "Spec and plan reviewed before implementation; #1064-#1066 are closed or merged and #1067 owns docs only.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "issue": "#1067",
+    "parent": "#1063",
+    "previous_work": "#1064 #1065 #1066"
+  }
+}

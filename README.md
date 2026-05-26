@@ -12,7 +12,7 @@ Spec-driven development is an execution discipline inside Loom, not a narrower r
 
 Loom is now CLI-first. The `loom` command is the execution control plane: it diagnoses installed state, reads fact chains, runs verification, exposes upgrade and repair plans, and wraps scenario execution with structured fail-closed output.
 
-`SKILLS` remain the agent-facing entrances. They help an agent discover the right scenario and then consume CLI/runtime output. Plugins and host adapters provide native discovery and wiring. `.loom/` remains the repository execution fact surface. The npm `loom-installer` package is a deprecated legacy artifact. It is not the current CLI, release line, or recommended installation path.
+`SKILLS` remain the agent-facing entrances, but users do not install them as a separate surface. The root `loom` CLI installs, synchronizes, and verifies the generated skills and host plugin payloads. Plugins and host adapters provide native discovery and wiring under CLI management. `.loom/` remains the repository execution fact surface. The npm `loom-installer` package is a deprecated legacy artifact. It is not the current CLI, release line, or recommended installation path.
 
 Agents can still start from `loom-init` when they need routing help. Once inside the work, the CLI is the stable machine interface:
 
@@ -34,49 +34,31 @@ The core execution model is:
 
 ## Install
 
-### Codex Native Skill Discovery
+### Root CLI
 
-You can tell Codex:
-
-```text
-Fetch and follow instructions from https://raw.githubusercontent.com/MC-and-his-Agents/Loom/refs/heads/main/docs/adoption/codex-install.md
-```
-
-Or install Loom manually:
+Install the root Loom CLI:
 
 ```bash
-git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom
-mkdir -p ~/.agents/skills
-for skill in ~/.codex/loom/skills/loom-*; do
-  ln -sfn "$skill" "$HOME/.agents/skills/$(basename "$skill")"
-done
+npm install -g @mc-and-his-agents/loom
 ```
 
-Restart Codex after installation so native skill discovery reloads the Loom skills.
-
-### Deprecated Installer Artifact
-
-The npm installer is not the Codex default path and should not be used for new Loom installs. It remains documented only as deprecated legacy evidence for existing adapter-managed plugin installs, single-skill helper flows, legacy bridges, or historical installer verification output:
+Install and verify the Codex host payload for a target repository:
 
 ```bash
-npx @mc-and-his-agents/loom-installer add plugin --host codex
-npx @mc-and-his-agents/loom-installer add plugin --host claude
+loom host install --host codex --mode plugin --target . --apply --json
+loom host verify --host codex --mode plugin --target . --json
+loom skills check --target . --json
+loom doctor --target . --json
 ```
 
-Historical pinned installer usage:
-
-```bash
-npm install -D @mc-and-his-agents/loom-installer
-npx loom-installer add plugin --host codex
-npx loom-installer add plugin --host claude
-```
+Use `npx @mc-and-his-agents/loom ...` only as an ephemeral way to run the same root `loom` CLI.
 
 Requirements:
 
 - Node `>=20`
-- Python `>=3.10`, recommended `3.11+`
+- Python `>=3.11`
 
-The installer reports the distribution layer and version context it touched for legacy consumers. Loom execution semantics belong to the `loom` CLI and the Python runtime bundled with the generated skills surface.
+`loom-installer` is not part of the primary install journey. It is retained only as deprecated historical evidence for legacy consumers.
 
 ## Release Surfaces
 
@@ -112,18 +94,7 @@ Loom exposes one root entry and ten scenario skills:
 | `loom-merge-ready` | Validates merge readiness. |
 | `loom-retire` | Cleans up and exits without discarding user changes. |
 
-The editable skills source lives under `src/skills/`. The generated and checked-in install surface lives under [skills/](./skills/). Each `skills/<skill-id>` directory is a self-contained single-skill package with `loom-package.json` and `.loom-runtime/`. The canonical Codex plugin manifest lives under [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/).
-
-## Advanced / Compatibility
-
-Single-skill installation through the npm installer is deprecated legacy behavior and is not the current Loom journey:
-
-```bash
-npx @mc-and-his-agents/loom-installer add skill loom-retire --host codex
-npx @mc-and-his-agents/loom-installer add skill loom-retire --host claude
-```
-
-An individually installed skill only exposes that skill to the host. If you need `loom-init` routing and the full scenario surface, install the full repository and complete generated skills surface.
+The editable skills source lives under `src/skills/`. The generated and checked-in payload surface lives under [skills/](./skills/). Each `skills/<skill-id>` directory is a self-contained skill payload with `loom-package.json` and `.loom-runtime/`, managed by the root CLI. The canonical Codex plugin manifest lives under [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/) and is installed or verified through `loom host ...`.
 
 ## Maintainer Docs
 

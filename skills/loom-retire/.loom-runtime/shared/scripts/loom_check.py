@@ -4338,8 +4338,8 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
 
     if "agent-first project operating layer" not in readme:
         failures.append(Failure(category, "`README.md` must present Loom as an agent-first project operating layer"))
-    if "Advanced / Compatibility" not in readme:
-        failures.append(Failure(category, "`README.md` must keep single-skill installation as an advanced compatibility path"))
+    if "npm install -g @mc-and-his-agents/loom" not in readme:
+        failures.append(Failure(category, "`README.md` must document the root loom CLI install path"))
     if "[中文版本](./README.zh-CN.md)" not in readme or "[English version](./README.md)" not in readme_zh:
         failures.append(Failure(category, "root README language switch links must stay in sync"))
     if "agent-first project operating layer" not in readme_zh:
@@ -4386,10 +4386,10 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
             failures.append(Failure(category, f"`skills/README.md` must document `{command}`"))
         if command not in skills_readme_zh:
             failures.append(Failure(category, f"`skills/README.zh-CN.md` must document `{command}`"))
-    if "git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom" not in readme:
-        failures.append(Failure(category, "`README.md` must document native skills-library installation"))
-    if "git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom" not in readme_zh:
-        failures.append(Failure(category, "`README.zh-CN.md` must document native skills-library installation"))
+    if "loom host install --host codex --mode plugin --target . --apply --json" not in readme:
+        failures.append(Failure(category, "`README.md` must document CLI-managed Codex host payload installation"))
+    if "loom host install --host codex --mode plugin --target . --apply --json" not in readme_zh:
+        failures.append(Failure(category, "`README.zh-CN.md` must document CLI-managed Codex host payload installation"))
 
     return failures
 

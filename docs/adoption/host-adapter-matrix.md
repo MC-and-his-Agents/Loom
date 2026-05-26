@@ -4,13 +4,16 @@ This matrix defines consistent Loom semantics across supported hosts. Implementa
 
 | Host | Support status | Default install path | Discovery surface | Bootstrap/session-start surface | Tool mapping surface | Upgrade surface | Verification surface |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Codex | primary | clone full repo, link `skills/loom-*` into native skill discovery | `~/.agents/skills/<skill-id>` or host-native equivalent | restart Codex, start from `loom-init` | Codex tools remain host-owned; Loom skills describe required actions | `git pull` on clone, then restart discovery | `make skills-check`; `ls ~/.agents/skills/loom-init/SKILL.md` |
-| Claude Code | adapter | full repo plus Claude plugin or project skills registration | `.claude/skills/<skill-id>` or marketplace plugin | plugin/session guidance must point to `loom-init` | Claude tools remain adapter-owned | refresh repo clone or reinstall adapter package | installer verify plus static plugin/skills checks |
-| OpenCode | adapter contract | full repo plus OpenCode plugin/path injection | configured skills path pointing at generated `skills/` | plugin injects startup guidance for `loom-init` | plugin maps OpenCode tools to Loom host-action expectations | refresh clone and reload plugin | static adapter check until OpenCode CLI is available |
-| Gemini | adapter contract | full repo plus extension/context import | extension/context references generated `skills/` | context import names `loom-init` as root entry | Gemini tool use is documented as adapter mapping | refresh clone and reload extension/context | static adapter check until Gemini extension CLI is available |
-| Cursor | adapter contract | full repo plus Cursor plugin/hooks | plugin manifest points at generated `skills/` | hooks surface `loom-init` startup guidance | Cursor tool mapping is adapter-owned | refresh clone and reload plugin/hooks | static adapter check until Cursor plugin CLI is available |
+| Codex | primary | `npm install -g @mc-and-his-agents/loom`; `loom host install --host codex --mode plugin --target . --apply --json` | CLI-managed `skills/` and `plugins/loom/` payloads in the target repository | host discovery reloads, then start from `loom-init` | Codex tools remain host-owned; Loom skills describe required actions | update root CLI, then rerun `loom host install ... --force` | `loom host verify --host codex --mode plugin --target . --json`; `loom skills check --target . --json` |
+| Claude Code | adapter | root `loom` CLI plus CLI-managed Claude plugin or project skills registration | CLI-managed generated `skills/` payload or host plugin | plugin/session guidance must point to `loom-init` | Claude tools remain adapter-owned | update root CLI, then rerun host install/verify | host verify plus static plugin/skills checks |
+| OpenCode | adapter contract | root `loom` CLI plus CLI-managed OpenCode plugin/path injection | configured skills path pointing at CLI-managed generated `skills/` | plugin injects startup guidance for `loom-init` | plugin maps OpenCode tools to Loom host-action expectations | update root CLI and reload plugin | static adapter check until OpenCode CLI is available |
+| Gemini | adapter contract | root `loom` CLI plus CLI-managed extension/context import | extension/context references CLI-managed generated `skills/` | context import names `loom-init` as root entry | Gemini tool use is documented as adapter mapping | update root CLI and reload extension/context | static adapter check until Gemini extension CLI is available |
+| Cursor | adapter contract | root `loom` CLI plus CLI-managed Cursor plugin/hooks | plugin manifest points at CLI-managed generated `skills/` | hooks surface `loom-init` startup guidance | Cursor tool mapping is adapter-owned | update root CLI and reload plugin/hooks | static adapter check until Cursor plugin CLI is available |
 
-Each supported host has exactly one default path: full repository install plus that host's native or adapter discovery of the generated root `skills/` surface. Single-skill install is always advanced. Installer-driven plugin installation is adapter-managed and must not be described as the Codex default path.
+Each supported host has exactly one default path: the root `loom` CLI installs
+and verifies host plugin/SKILLS payloads. Single-skill payload consumption is
+compatibility-only. Installer-driven plugin installation is deprecated legacy
+behavior and must not be described as a default path.
 
 ## Required Fields
 
@@ -42,11 +45,11 @@ The package source is the checked-in generated root directory. The editable sour
 
 Adapters must surface machine-readable version context instead of implying one global Loom version. The minimum version metadata locations are:
 
-- full repository install: `VERSION` and the git revision of the clone
+- root CLI install: `@mc-and-his-agents/loom`, `VERSION`, and the matching GitHub `v*` tag/release evidence
 - generated skill surface: `skills/registry.json` and `skills/upgrade-contract.json`
 - single-skill package: `skills/<skill-id>/loom-package.json`
 - plugin surface: the host plugin manifest, such as `plugins/loom/.codex-plugin/plugin.json`
-- installer: `packages/loom-installer/package.json`
+- deprecated installer evidence: `packages/loom-installer/package.json`
 
 The authority rules for these surfaces live in `version-authority-map.md`.
 
