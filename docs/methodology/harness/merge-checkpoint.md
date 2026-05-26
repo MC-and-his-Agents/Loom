@@ -26,6 +26,10 @@ Governance lint taxonomy 见 [governance-lint-taxonomy.md](./governance-lint-tax
 
 - 当前 `Work Item`
 - formal spec 路径上的 `spec_review`
+- suite path decision
+- full suite artifact locators，或 minimal path `not_applicable` rationale
+- evidence-map locator、scope、freshness 与 `head_sha` 绑定
+- consistency-analysis locator、classification 与 remediation direction
 - implementation review record
 - 当前 `head_sha`
 - host binding 中的 branch / PR / reviewed head
@@ -52,6 +56,11 @@ Governance lint taxonomy 见 [governance-lint-taxonomy.md](./governance-lint-tax
 
 - 缺 formal `spec_review`
 - `spec_review` 未批准
+- full path 必需 suite 工件缺失、不可读、stale，或 provenance 缺失
+- minimal path 的 `not_applicable` rationale 缺失、不可读、与 spec / plan /
+  recovery 冲突，或 recheck condition 已触发但未重新判断
+- evidence-map 缺失、不可读，或未覆盖当前 `head_sha`、当前范围、当前恢复摘要
+- consistency-analysis 缺失、不可读，或输出 blocking consistency gap
 - implementation review 不存在
 - implementation review 为 `review_stale`
 - 当前 `head_sha` 与 review / PR 绑定不一致
@@ -59,6 +68,8 @@ Governance lint taxonomy 见 [governance-lint-taxonomy.md](./governance-lint-tax
 - behavior evidence 或 test evidence 缺失且没有有效 `not_applicable`
 - evidence 存在但不覆盖当前 `head_sha`、当前范围或当前恢复摘要
 - review record 中存在未处理的 `block` finding、未闭合的 accepted disposition，或无后续承接的 deferred disposition
+- review record 消费的 full suite、evidence-map 或 consistency-analysis backlink
+  与当前 `head_sha` / scope / validation summary 不一致
 - repeated blocker / root-cause escalation 尚未回到前序 gate 处理
   - 回到 review record / 前序 gate / ownership 分配修正点
 - core governance lint 存在 blocking result，且映射到当前 `merge-ready` 必需前置
@@ -92,6 +103,7 @@ Governance lint taxonomy 见 [governance-lint-taxonomy.md](./governance-lint-tax
 - `binding_failure`
 - `missing_prerequisite_gate`
 - `evidence_failure`
+- `consistency_gap`
 
 不得输出私有名词，例如“基本可合”“小问题先过”。
 
@@ -102,6 +114,23 @@ Governance lint taxonomy 见 [governance-lint-taxonomy.md](./governance-lint-tax
 - 缺少 fresh verification evidence
 - 证据只存在于未整合的 subagent 输出中
 - review disposition 指向的补救、拒绝理由或延期事项缺少可消费证据
+
+`consistency_gap` 至少覆盖：
+
+- scenario / acceptance mapping 缺失且没有合法 `not_applicable`
+- evidence-map 与 review record、validation summary、current `HEAD` 或 host PR
+  binding 冲突
+- consistency-analysis 标记 blocking gap
+- stale evidence 被后序 CI success 或 host checks 误当成 fresh evidence
+- host state conflict，例如 PR head、reviewed head、merge-ready head 或 branch
+  binding 互相不一致
+- deferred-as-completed，即 deferred work、accepted finding 或 unresolved carrier
+  被当成当前 Work Item 已完成
+
+`not_applicable` 只在同时具备 rationale、consumer boundary、recheck
+condition、source locator，并且与 spec / plan / recovery 不冲突时可以被
+merge-ready 消费。否则必须按 `missing_prerequisite_gate` 或
+`evidence_failure` fail closed。
 
 `budget_risk` 在 `merge-ready` 中只作为 advisory evidence：
 
@@ -139,4 +168,8 @@ Governance lint 在 `merge-ready` 中的消费纪律：
 - 不把 `merge-ready` 写成宿主按钮说明
 - 不让当前层绕过前序 gate 缺口
 - 不把旧验证、未绑定当前 `HEAD` 的测试结果或未整合的 subagent 输出当作 fresh verification evidence
+- 不把 full suite / evidence-map / consistency-analysis 的 blocking gap 当作
+  advisory warning
+- 不用 PR checks、required checks 或 CI success 覆盖 stale evidence、head drift
+  或 missing predecessor gate
 - 不把 repo-specific lint 规则、guardian 名称、CI job 名或仓库目录名硬编码成 Loom core merge-ready 条件

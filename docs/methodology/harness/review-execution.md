@@ -32,6 +32,34 @@ Loom 把 review 分成三层：
 - fresh verification evidence
   - 检查 behavior evidence / test evidence 是否绑定当前 `reviewed_head` 与当前验证摘要
 
+Full spec path 下，正式 review 还必须消费 pre-review 已暴露的 gate-chain
+输入：
+
+- suite path decision 与 full suite artifact locators
+- `spec.md` scenario / acceptance locators 到 `plan.md` validation / test
+  strategy 的映射
+- evidence-map 中 behavior evidence、test evidence、fresh verification
+  evidence 的 locator / freshness / scope / reviewed head 绑定
+- consistency-analysis 中 blocking / advisory / stale / missing / conflict /
+  `not_applicable` 分类与 remediation direction
+- execution breakdown / task carrier locator（若当前 suite path 声明适用）
+
+这些输入进入 review record 的 `consumed_inputs` 或 findings backlink。它们不
+author 第二份 review truth；正式审查结论仍只能来自单一 review record。
+
+`pre-review` 必须在正式 review 前暴露 full suite、evidence-map 或
+consistency-analysis 的 blocking gap。若 review run 才第一次发现以下系统性
+缺口，review 必须 `fallback` 到 pre-review / build gate，而不是把缺口降为普通
+review finding：
+
+- full path 必需工件缺失、不可读或 provenance 缺失
+- scenario -> validation 或 acceptance -> test evidence 映射缺失
+- evidence-map 表示当前 gate 必需 evidence 为 `missing`、`stale`、`conflict`
+  或 unreadable
+- consistency-analysis 存在 blocking consistency gap
+- minimal path 的 `not_applicable` rationale 缺少原因、consumer boundary、
+  recheck condition，或与 spec / plan / recovery 冲突
+
 ## 2. 唯一 review 载体
 
 正式 review 结论必须落在唯一 `review_entry` 指向的 review record。
@@ -199,6 +227,15 @@ review record 至少应包含：
   - 只记录 review 消费的 budget risk 摘要，不构成第二 authored truth，也不覆盖 review decision
 - `consumed_inputs.behavior_evidence` 与 `consumed_inputs.test_evidence`
   - 只记录 review 消费的证据 locator / 摘要 / fresh 绑定，不构成第二 authored truth
+- `consumed_inputs.full_suite`
+  - 只记录 suite path、artifact locators、minimal path `not_applicable`
+    rationale 与 provenance，不构成第二 authored truth
+- `consumed_inputs.evidence_map`
+  - 只记录 evidence-map locator、freshness、scope 与 `reviewed_head`
+    绑定，不构成第二 authored truth
+- `consumed_inputs.consistency_analysis`
+  - 只记录 classification、blocking/advisory 结论、remediation direction 与
+    source locator，不构成第二 authored truth
 
 ## 4. repeated blocker 与 root cause
 
@@ -224,11 +261,18 @@ subagent 输出只能作为 review 输入证据。主执行者必须先把它整
   - 一旦 `HEAD` 还包含其他路径漂移，仍按 review stale 处理
 - 校验 `reviewed_validation_summary` 是否仍匹配当前 recovery 的 `latest_validation_summary`
 - 校验 review record 消费的 behavior evidence / test evidence 是否仍是 fresh
+- 校验 review record 消费的 full suite、evidence-map 与
+  consistency-analysis backlink 是否仍覆盖当前 `HEAD`、范围与恢复摘要
 - `decision: allow` 才算 review 已通过
 - `decision: block` 返回 `block`
 - `decision: fallback` 按 `fallback_to` 返回 `fallback`
 - 如需读取阻断或后续事项，只能优先消费同一 review record 内的 `findings`
 - 如需读取 review disposition，只能消费同一 review record 中的 `findings[].disposition`
+
+若 review record 中的 full suite / evidence-map / consistency-analysis
+backlink 缺失、stale、head mismatch，或指向的 blocking consistency gap 尚未被
+前序 gate 处理，merge checkpoint 必须 fail closed。后续 CI success、PR checks
+或 host merge readiness 不得覆盖这些前序缺口。
 
 它不得直接消费 engine raw output、prompt、日志或其他 evidence 文件。
 
