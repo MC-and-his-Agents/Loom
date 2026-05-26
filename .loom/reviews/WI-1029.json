@@ -5,7 +5,7 @@
   "kind": "code_review",
   "summary": "Implementation review refreshed after WI-1067 terminal carrier cleanup on PR #1091; no blocking findings for WI-1029 story intake contract changes, with downstream consumption left to #1030, #1031, and #1032.",
   "reviewer": "codex-main-thread",
-  "reviewed_head": "0c2aff17521ff025b6e31d86e2ee11b42588a1b9",
+  "reviewed_head": "0c2aff146d502b2be160e5e5a6aff0987508f94b",
   "reviewed_validation_summary": "Passed after rebase to origin/main `1dffa6a`: git diff --check; python3 tools/skills_surface.py check; make loom-demo-new-project-check; python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/check_cli_contract.py; python3 tools/check_npm_package.py. Checkpoint build/merge correctly required refreshed review records before final gate.",
   "fallback_to": null,
   "findings": [
