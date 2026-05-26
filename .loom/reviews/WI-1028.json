@@ -1,0 +1,26 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1028",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "WI-1028 implementation is approved for PR once final validation passes: the skills routing surfaces distinguish delivery planning from story shaping, build, review, spec review, and merge-ready without changing upstream methodology or host automation contracts.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "639b2fb620d5a4e90b93855af3cbff97ea85f9f3",
+  "reviewed_validation_summary": "Passed: `git diff --check`; focused `rg` checks for planning / issue-tree / route matrix / loom-init / loom-story / build / review routing; `python3 .loom/bin/loom_init.py verify --target .`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1028 --write`; `python3 tools/skills_surface.py check`; `python3 tools/check_npm_package.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_release_surface.py`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1020 skills integration can consume this routing boundary.",
+    "#1052 remains responsible for CLI automation planning."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1028.md",
+    "recovery_entry": ".loom/progress/WI-1028.md",
+    "status_surface": ".loom/status/current.md",
+    "route_matrix": "src/skills/route-matrix.md",
+    "loom_init": "src/skills/loom-init/SKILL.md",
+    "loom_story": "src/skills/loom-story/SKILL.md",
+    "build_checkpoint": "pass"
+  }
+}
