@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -207,6 +208,16 @@ def read_optional_json(path: Path) -> Any | None:
 def write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def copy_tree(source: Path, target: Path) -> None:
+    if target.exists():
+        shutil.rmtree(target)
+
+    def ignore(_directory: str, names: list[str]) -> set[str]:
+        return {name for name in names if name in {"__pycache__", ".DS_Store"} or name.endswith(".pyc")}
+
+    shutil.copytree(source, target, ignore=ignore)
 
 
 def repo_version() -> str:
@@ -468,6 +479,34 @@ def build_installed_state(target: Path, *, host: str, mode: str, skill_id: str |
     }
 
 
+def installed_layer_paths(target: Path) -> set[str]:
+    path = installed_state_path(target)
+    if path is None:
+        return set()
+    try:
+        state = read_json(path)
+    except (OSError, json.JSONDecodeError):
+        return set()
+    if not isinstance(state, dict) or state.get("schema_version") != INSTALLED_STATE_SCHEMA:
+        return set()
+    paths: set[str] = set()
+    for layer in state.get("layers", []):
+        if not isinstance(layer, dict):
+            continue
+        installed_path = layer.get("installed_path")
+        if isinstance(installed_path, str) and installed_path:
+            paths.add(installed_path.rstrip("/"))
+    return paths
+
+
+def is_managed_path(relative: str, managed_paths: set[str]) -> bool:
+    relative = relative.rstrip("/")
+    for managed in managed_paths:
+        if relative == managed or relative.startswith(f"{managed}/"):
+            return True
+    return False
+
+
 def legacy_surface_hints(target: Path) -> list[dict[str, str]]:
     candidates = [
         (".loom/bin", "repo-local-runtime-bin"),
@@ -507,6 +546,7 @@ def surface(path: Path, target: Path, *, kind: str, layer: str, authority: str, 
 def detect_surfaces(target: Path) -> list[dict[str, Any]]:
     surfaces: list[dict[str, Any]] = []
     state_path = installed_state_path(target)
+    managed_paths = installed_layer_paths(target)
     if state_path is not None:
         surfaces.append(
             surface(
@@ -597,20 +637,26 @@ def detect_surfaces(target: Path) -> list[dict[str, Any]]:
     for relative, kind, layer, authority, migration, summary in candidates:
         path = target / relative
         if path.exists():
+            if is_managed_path(relative, managed_paths):
+                migration = "current"
+                authority = "loom-cli"
+                summary = f"CLI-managed {summary[0].lower()}{summary[1:]}"
             surfaces.append(surface(path, target, kind=kind, layer=layer, authority=authority, migration=migration, summary=summary))
 
     skill_dirs = target / "skills"
     if skill_dirs.exists() and skill_dirs.is_dir():
         for skill_path in sorted(skill_dirs.glob("*/SKILL.md")):
+            relative = relative_to_target(skill_path, target)
+            managed = is_managed_path(relative, managed_paths)
             surfaces.append(
                 surface(
                     skill_path,
                     target,
                     kind="single-skill",
                     layer="skills",
-                    authority="skill-package",
-                    migration="legacy",
-                    summary="Standalone skill package is present under skills/.",
+                    authority="loom-cli" if managed else "skill-package",
+                    migration="current" if managed else "legacy",
+                    summary="CLI-managed skill package is present under skills/." if managed else "Standalone skill package is present under skills/.",
                 )
             )
 
@@ -837,6 +883,89 @@ def handle_repair(argv: list[str]) -> int:
     )
 
 
+def host_plugin_path(target: Path, host: str) -> Path:
+    if host == "claude":
+        return target / ".claude" / "marketplaces" / "loom-local" / "plugins" / "loom"
+    return target / "plugins" / "loom"
+
+
+def sync_skills_payload(target: Path) -> list[str]:
+    target_skills = target / "skills"
+    if target.resolve() == REPO_ROOT.resolve():
+        completed = run_capture([sys.executable, str(TOOLS_ROOT / "skills_surface.py"), "generate"])
+        if completed.returncode != 0:
+            raise RuntimeError(completed.stderr.strip() or completed.stdout.strip() or "skills generation failed")
+        return ["skills"]
+    copy_tree(SKILLS_ROOT, target_skills)
+    return ["skills"]
+
+
+def install_host_plugin_payload(target: Path, host: str) -> list[str]:
+    if host != "codex":
+        raise RuntimeError(f"host plugin install is implemented for codex only in this Work Item: {host}")
+    plugin_root = host_plugin_path(target, host)
+    manifest_target = plugin_root / ".codex-plugin" / "plugin.json"
+    manifest_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(PLUGIN_MANIFEST, manifest_target)
+    copy_tree(SKILLS_ROOT, plugin_root / "skills")
+    return [relative_to_target(manifest_target, target), relative_to_target(plugin_root / "skills", target)]
+
+
+def install_cli_managed_surfaces(target: Path, *, host: str, mode: str, skill_id: str | None = None) -> list[str]:
+    writes = sync_skills_payload(target)
+    if mode == "plugin":
+        writes.extend(install_host_plugin_payload(target, host))
+    elif mode == "skill":
+        if not skill_id:
+            raise RuntimeError("skill mode requires --skill-id")
+        skill_source = SKILLS_ROOT / skill_id
+        if not skill_source.exists():
+            raise RuntimeError(f"unknown skill id: {skill_id}")
+        skill_target = target / ".agents" / "skills" / skill_id
+        copy_tree(skill_source, skill_target)
+        writes.append(relative_to_target(skill_target, target))
+    return writes
+
+
+def planned_cli_managed_writes(*, mode: str, skill_id: str | None = None) -> list[str]:
+    writes = ["skills"]
+    if mode == "plugin":
+        writes.append("plugins/loom")
+    elif mode == "skill":
+        writes.append(f".agents/skills/{skill_id or '<skill-id>'}")
+    return writes
+
+
+def verify_cli_managed_surfaces(target: Path, *, host: str, mode: str, skill_id: str | None = None) -> tuple[bool, list[dict[str, str]]]:
+    checks: list[dict[str, str]] = []
+
+    def check(relative: str, kind: str) -> None:
+        path = target / relative
+        checks.append({"kind": kind, "path": relative, "status": "pass" if path.exists() else "missing"})
+
+    check(".loom/installed-state.json", "installed-state")
+    check("skills/registry.json", "skills-registry")
+    registry_path = target / "skills" / "registry.json"
+    if registry_path.exists():
+        try:
+            registry = read_json(registry_path)
+            entries = registry.get("entries", []) if isinstance(registry, dict) else []
+            for entry in entries:
+                if isinstance(entry, dict) and isinstance(entry.get("id"), str):
+                    check(f"skills/{entry['id']}/SKILL.md", "skill")
+        except (OSError, json.JSONDecodeError):
+            checks.append({"kind": "skills-registry-json", "path": "skills/registry.json", "status": "invalid"})
+    if mode == "plugin":
+        if host == "codex":
+            check("plugins/loom/.codex-plugin/plugin.json", "host-plugin")
+            check("plugins/loom/skills/registry.json", "host-plugin-skills")
+        else:
+            checks.append({"kind": "host-plugin", "path": host, "status": "unsupported"})
+    if mode == "skill":
+        check(f".agents/skills/{skill_id or 'missing'}/SKILL.md", "single-skill")
+    return all(item["status"] == "pass" for item in checks), checks
+
+
 def handle_delivery(command: str, argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog=f"loom {command}")
     parser.add_argument("--target", default=".")
@@ -874,7 +1003,7 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                     host=args.host,
                     mode=args.mode,
                     mutates=True,
-                    planned_writes=[relative_to_target(state_path, target)],
+                    planned_writes=[relative_to_target(state_path, target), *planned_cli_managed_writes(mode=args.mode, skill_id=args.skill_id)],
                     detection=detection,
                     failed_layer="install-apply",
                     fail_closed_reason="explicit --apply is required before install writes installed-state",
@@ -896,17 +1025,35 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                     fallback_to=["loom upgrade-plan --target <repo> --json", "loom install --target <repo> --apply --force --json"],
                 )
             )
+        try:
+            managed_writes = install_cli_managed_surfaces(target, host=args.host, mode=args.mode, skill_id=args.skill_id)
+        except RuntimeError as exc:
+            return emit(
+                output(
+                    command,
+                    "block",
+                    schema=DELIVERY_SCHEMA,
+                    summary="CLI-managed install payload could not be written.",
+                    target=str(target),
+                    host=args.host,
+                    mode=args.mode,
+                    failed_layer="cli-managed-install",
+                    fail_closed_reason=str(exc),
+                    fallback_to=["loom host doctor --host <host> --json", "loom skills check --target <repo> --json"],
+                )
+            )
         write_json(state_path, planned_state)
         return emit(
             output(
                 command,
                 "pass",
                 schema=DELIVERY_SCHEMA,
-                summary="Installed-state metadata was written.",
+                summary="CLI-managed plugin/SKILLS payload and installed-state metadata were written.",
                 target=str(target),
                 host=args.host,
                 mode=args.mode,
                 mutates=True,
+                managed_writes=[*managed_writes, relative_to_target(state_path, target)],
                 installed_state_path=str(state_path),
                 installed_state=planned_state,
                 detection=detection,
@@ -1407,40 +1554,51 @@ def handle_host(argv: list[str]) -> int:
         return emit(output(command, "block", schema=HOST_SCHEMA, summary="Full-repo host lifecycle remains operator-owned.", target=str(target), host=host, mode=args.mode, mutates=args.action != "verify", failed_layer="host-lifecycle", fail_closed_reason="CLI does not mutate full-repo clone/discovery state", fallback_to=["docs/adoption/host-adapter-matrix.md", "loom host verify --host <host> --mode plugin --json"]))
     if args.action in {"install", "upgrade", "remove"} and not args.apply:
         return emit(output(command, "block", schema=HOST_SCHEMA, summary=f"Host {args.action} is mutating and requires --apply.", target=str(target), host=host, mode=args.mode, mutates=True, failed_layer=f"host-{args.action}", fail_closed_reason="explicit --apply is required before adapter-managed host mutation", fallback_to=["loom host verify --host <host> --json", "loom host doctor --host <host> --json"]))
-    installer_command = {"install": "add", "upgrade": "add", "verify": "verify-upgrade", "remove": "verify-upgrade"}.get(args.action, "verify-upgrade")
     if args.action == "remove":
         return emit(output(command, "block", schema=HOST_SCHEMA, summary="Host remove only reports verified installed surfaces in this phase.", target=str(target), host=host, mode=args.mode, mutates=False, failed_layer="host-remove", fail_closed_reason="removal requires later rollback/delete ownership contract", fallback_to=["loom host verify --host <host> --json"]))
-    subject = ["plugin"] if args.mode == "plugin" else ["skill", args.skill_id or ""]
     if args.mode == "skill" and not args.skill_id:
         return emit(output(command, "block", schema=HOST_SCHEMA, summary="Skill mode requires --skill-id.", failed_layer="host-input", fail_closed_reason="missing --skill-id", fallback_to=["loom skills list --json"]))
-    installer_cli = REPO_ROOT / "packages/loom-installer/dist/src/cli.js"
-    if not installer_cli.exists():
-        return emit(output(command, "block", schema=HOST_SCHEMA, summary="Installer shim is not built.", target=str(target), host=host, mode=args.mode, failed_layer="loom-installer", fail_closed_reason=f"missing built installer CLI: {installer_cli}", fallback_to=["npm test --prefix packages/loom-installer", "npm run build --prefix packages/loom-installer"]))
-    completed = run_capture(["node", str(installer_cli), installer_command, *subject, "--host", host, "--target", str(target), "--json", *(["--force"] if args.force or args.action == "upgrade" else [])])
-    delegated = parse_json_or_block(command, completed, failed_layer="loom-installer", fallback_to=["npm test --prefix packages/loom-installer", "loom host doctor --json"])
-    result = "pass" if completed.returncode == 0 else "block"
-    return emit(output(command, result, schema=HOST_SCHEMA, summary="Host command delegated to installer shim.", target=str(target), host=host, mode=args.mode, delegated_result=delegated, failed_layer=None if result == "pass" else "loom-installer", fail_closed_reason=None if result == "pass" else delegated.get("fail_closed_reason", "installer shim failed"), fallback_to=None if result == "pass" else ["loom host doctor --json"]))
+    if args.action in {"install", "upgrade"}:
+        try:
+            managed_writes = install_cli_managed_surfaces(target, host=host, mode=args.mode, skill_id=args.skill_id)
+        except RuntimeError as exc:
+            return emit(output(command, "block", schema=HOST_SCHEMA, summary="Host adapter payload could not be installed by the Loom CLI.", target=str(target), host=host, mode=args.mode, mutates=True, failed_layer="host-payload", fail_closed_reason=str(exc), fallback_to=["loom host doctor --host <host> --json", "loom skills check --target <repo> --json"]))
+        state_path = target / ".loom" / "installed-state.json"
+        write_json(state_path, build_installed_state(target, host=host, mode=args.mode, skill_id=args.skill_id))
+        managed_writes.append(relative_to_target(state_path, target))
+        return emit(output(command, "pass", schema=HOST_SCHEMA, summary="Host plugin/SKILLS payload installed by the Loom CLI.", target=str(target), host=host, mode=args.mode, mutates=True, managed_writes=managed_writes, installed_state_path=str(state_path), fallback_to=None))
+    ok, checks = verify_cli_managed_surfaces(target, host=host, mode=args.mode, skill_id=args.skill_id)
+    return emit(output(command, "pass" if ok else "block", schema=HOST_SCHEMA, summary="Host plugin/SKILLS payload verified." if ok else "Host plugin/SKILLS payload is incomplete.", target=str(target), host=host, mode=args.mode, mutates=False, checks=checks, failed_layer=None if ok else "host-payload", fail_closed_reason=None if ok else "one or more CLI-managed host payload checks failed", fallback_to=None if ok else ["loom host install --host <host> --apply --json", "loom skills sync --target <repo> --apply --json"]))
 
 
 def handle_skills(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="loom skills")
     parser.add_argument("action", choices=("list", "generate", "sync", "check", "doctor", "package", "release-check"))
+    parser.add_argument("--target", default=".")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     command = f"skills {args.action}"
+    target = resolve_target(args.target)
     registry = read_optional_json(SKILLS_ROOT / "registry.json") or {}
     entries = registry.get("entries") if isinstance(registry, dict) else []
     if args.action == "list":
         return emit(output(command, "pass", schema=SKILLS_SCHEMA, summary="Generated skills registry listed.", registry_version=registry.get("registry_version"), root_entry=registry.get("root_entry"), skills=entries, fallback_to=None))
     if args.action in {"generate", "sync"} and not args.apply:
-        return emit(output(command, "block", schema=SKILLS_SCHEMA, summary=f"`loom {command}` mutates the generated skills surface and requires --apply.", mutates=True, failed_layer="skills-surface", fail_closed_reason="explicit --apply is required before rewriting skills/", fallback_to=["loom skills check --json"]))
+        return emit(output(command, "block", schema=SKILLS_SCHEMA, summary=f"`loom {command}` mutates the generated skills surface and requires --apply.", target=str(target), mutates=True, failed_layer="skills-surface", fail_closed_reason="explicit --apply is required before rewriting skills/", fallback_to=["loom skills check --target <repo> --json"]))
     if args.action in {"generate", "sync"}:
-        completed = run_capture([sys.executable, str(TOOLS_ROOT / "skills_surface.py"), "generate"])
-        result = "pass" if completed.returncode == 0 else "block"
-        return emit(output(command, result, schema=SKILLS_SCHEMA, summary="Generated skills surface refreshed." if result == "pass" else "Skills generation failed.", mutates=True, stdout=completed.stdout.strip(), failed_layer=None if result == "pass" else "skills-surface", fail_closed_reason=None if result == "pass" else completed.stderr.strip(), fallback_to=None if result == "pass" else ["python3 tools/skills_surface.py check"]))
+        try:
+            managed_writes = sync_skills_payload(target)
+        except RuntimeError as exc:
+            return emit(output(command, "block", schema=SKILLS_SCHEMA, summary="Skills payload sync failed.", target=str(target), mutates=True, failed_layer="skills-surface", fail_closed_reason=str(exc), fallback_to=["python3 tools/skills_surface.py check"]))
+        return emit(output(command, "pass", schema=SKILLS_SCHEMA, summary="CLI-managed skills payload synchronized.", target=str(target), mutates=True, managed_writes=managed_writes, fallback_to=None))
     if args.action in {"check", "doctor", "release-check"}:
-        checks = [[sys.executable, str(TOOLS_ROOT / "skills_surface.py"), "check"]]
+        checks = []
+        if target.resolve() == REPO_ROOT.resolve():
+            checks.append([sys.executable, str(TOOLS_ROOT / "skills_surface.py"), "check"])
+        else:
+            ok, managed_checks = verify_cli_managed_surfaces(target, host="codex", mode="full-repo")
+            checks.append({"command": "loom skills check installed payload", "returncode": 0 if ok else 1, "stdout": json.dumps(managed_checks, ensure_ascii=False), "stderr": "" if ok else "installed skills payload is incomplete"})
         if args.action == "release-check":
             checks.extend(
                 [
@@ -1451,8 +1609,11 @@ def handle_skills(argv: list[str]) -> int:
             )
         results = []
         for check in checks:
-            completed = run_capture(check)
-            results.append({"command": " ".join(check), "returncode": completed.returncode, "stdout": completed.stdout.strip(), "stderr": completed.stderr.strip()})
+            if isinstance(check, dict):
+                results.append(check)
+            else:
+                completed = run_capture(check)
+                results.append({"command": " ".join(check), "returncode": completed.returncode, "stdout": completed.stdout.strip(), "stderr": completed.stderr.strip()})
         failures = [item for item in results if item["returncode"] != 0]
         result = "pass" if not failures else "block"
         release_authority = None

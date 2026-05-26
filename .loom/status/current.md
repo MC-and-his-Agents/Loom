@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1026
-- Goal: Define a PR slicing strategy so Loom can decide which Work Items may share one implementation PR, which must split, and what evidence is required for multi Work Item PRs.
-- Scope: #1026 PR slicing strategy only; create the methodology contract, scaffold template, and repo-local carriers required for review. Do not implement PR gate or merge-ready logic (#1019), GitHub Phase / FR / Work Item / Project mapping (#1027), skills routing (#1028), task carrier contracts (#1017), or CLI automation.
-- Execution Path: issue #1026 -> branch work/1026-pr-slicing-strategy -> worktree /Users/mc/dev/Loom -> PR #1082.
+- Item ID: WI-1066
+- Goal: Implement CLI-managed plugins and SKILLS installation verification for #1063.
+- Scope: #1066: root `loom` CLI installs and verifies the target host plugin payload and SKILLS payload; no README hard cut, npm publish workflow, first npm release, or installer release changes.
+- Execution Path: issue-scoped branch work/1066-cli-managed-plugins-skills in /Users/mc/dev/Loom-1066-cli-managed-plugins-skills
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1026.md
-- Review Entry: .loom/reviews/WI-1026.json
-- Validation Entry: git diff --check; rg -n "PR slicing|scope purity|single PR|multiple Work Item|review risk|依赖顺序" docs .github skills src .loom; rg -n "Loom Work Item|PR body|merge-ready|review evidence" docs .github skills src .loom; python3 tools/loom_check.py --profile source --source-surface contract-only .
-- Closing Condition: #1026 has a PR slicing contract and scaffold covering same-PR conditions, split-PR conditions, single-PR multi-Work-Item evidence, PR body linkage, review risk, merge-ready consumption, and closeout consumption without implementing gate logic.
-- Current Checkpoint: merge
-- Current Stop: PR slicing contract and scaffold drafted, locally validated, reviewed, and bound to PR #1082.
-- Next Step: Consume PR checks, then merge and close out #1026 if green.
-- Blockers: None recorded.
-- Latest Validation Summary: Passed: `git diff --check`; focused `rg` checks for PR slicing fields, scope purity, multi-Work-Item evidence, PR body linkage, review evidence, and merge-ready references; `python3 .loom/bin/loom_init.py verify --target .`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1026 --write`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`.
-- Recovery Boundary: #1026 PR slicing strategy only. Do not expand into #1019 gate-chain implementation, #1027 GitHub mapping, #1028 skills routing, #1017 task carrier contracts, or CLI automation.
-- Current Lane: pr-slicing-strategy
+- Recovery Entry: .loom/progress/WI-1066.md
+- Review Entry: .loom/reviews/WI-1066.json
+- Validation Entry: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py; python3 tools/check_npm_package.py; npm run test:package; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1066; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1066; make check
+- Closing Condition: #1066 is closed after its PR merges and #1067 can consume a root `loom` CLI that installs/verifies plugin and SKILLS payloads without using `loom-installer`.
+- Current Checkpoint: local-validation
+- Current Stop: CLI-native host plugin/SKILLS install and verification are implemented locally and full local validation passes.
+- Next Step: Commit the #1066 implementation, rebase onto latest origin/main, open PR, run PR gate/checks, merge, and close #1066.
+- Blockers: None
+- Latest Validation Summary: Passed: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py; python3 tools/check_npm_package.py; npm run test:package; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1066; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1066; make check. External state: npm @mc-and-his-agents/loom is still unpublished E404 as expected before #1069/#1070; npm @mc-and-his-agents/loom-installer latest remains 0.1.119 and deprecated.
+- Recovery Boundary: Continue from /Users/mc/dev/Loom-1066-cli-managed-plugins-skills on branch work/1066-cli-managed-plugins-skills; keep scope limited to CLI-managed plugin/SKILLS install/verify and #1066 governance carriers.
+- Current Lane: cli-managed-plugins-skills
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: git diff --check; rg -n "PR slicing|scope purity|single PR|multiple Work Item|review risk|依赖顺序" docs .github skills src .loom; rg -n "Loom Work Item|PR body|merge-ready|review evidence" docs .github skills src .loom; python3 tools/loom_check.py --profile source --source-surface contract-only .
+- Verification Entry: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py; python3 tools/check_npm_package.py; npm run test:package; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; npm --prefix packages/loom-installer run check:docs; npm --prefix packages/loom-installer run check:versions; npm --prefix packages/loom-installer run check:payload; npm --prefix packages/loom-installer run check:distribution; python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1066; python3 .loom/bin/loom_flow.py shadow-parity --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1066; make check
 - Lane Entry: not_applicable
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1026.md
-- Dynamic Truth: .loom/progress/WI-1026.md
+- Static Truth: .loom/work-items/WI-1066.md
+- Dynamic Truth: .loom/progress/WI-1066.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
