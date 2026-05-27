@@ -13,6 +13,8 @@
   - 定义 `loom` CLI、SKILLS、plugins、installer shim 与 `.loom/` 的职责边界和 fail-closed 规则
 - [cli-command-matrix.md](./cli-command-matrix.md)
   - 冻结 CLI-first phase 的命令命名、状态分类与机器可读矩阵入口
+- [full-spec-suite-cli-surface.md](./full-spec-suite-cli-surface.md)
+  - 规划 full spec suite 相关 CLI 自动化入口、JSON 输出、failure taxonomy 与后续 implementation backlog；不实现命令
 - [fact-chain-contract.md](./fact-chain-contract.md)
   - 定义静态真相、动态真相、host/control-plane mirror、retained result 与派生读面的读取优先级和 provenance 纪律
 - [execution-context.md](./execution-context.md)
