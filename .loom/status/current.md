@@ -11,11 +11,11 @@
 - Review Entry: .loom/reviews/WI-1117.json
 - Validation Entry: python3 tools/check_cli_contract.py; git diff --check; focused rg; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py
 - Closing Condition: #1117 PR is merged to main, closeout evidence records PR/head/merge/target branch/validation/Project state, #1117 is closed completed, and #1113 can consume the evidence.
-- Current Checkpoint: validation checkpoint
-- Current Stop: Focused scaffold JSON audit contract assertions pass local validation.
-- Next Step: Record formal spec review, commit validated changes, then run build and implementation review before PR.
+- Current Checkpoint: PR checkpoint
+- Current Stop: Branch work/1117-scaffold-json has validated scaffold JSON audit contract coverage and formal reviews recorded; PR creation is next.
+- Next Step: Push branch, open PR for #1117, run PR gate and GitHub checks, then merge and close out #1117.
 - Blockers: None
-- Latest Validation Summary: Passed: python3 tools/check_cli_contract.py; git diff --check; focused rg for rollback_note, ambiguous_overwrite, created_locators, planned_writes, source_templates, apply_required, /speckit, and .specify; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .
+- Latest Validation Summary: Passed: python3 tools/check_cli_contract.py; git diff --check; focused rg for rollback_note, ambiguous_overwrite, created_locators, planned_writes, source_templates, apply_required, /speckit, and .specify; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 .loom/bin/loom_flow.py checkpoint build --target . --item WI-1117; formal spec and general reviews recorded.
 - Recovery Boundary: #1117 owns scaffold JSON contract coverage for overwrite, rollback, planned write, source template, apply-required, and created locator fields only. It must not add rollback execution, new scaffold artifacts, host writes, review writes, merge-ready writes, closeout writes, generated skills, /speckit.*, or .specify surfaces.
 - Current Lane: full-spec-suite-cli/scaffold-json-audit
 
