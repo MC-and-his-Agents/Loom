@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1116",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "Implementation review allows WI-1116 for PR #1162: full suite scaffold generation remains limited to the six standard repo-local artifacts under .loom/specs/<item>/, preserves minimal scaffold compatibility and existing files, reports actual created locators, keeps dry-run read-only, fails closed for invalid item/symlink/non-file artifact paths, and keeps evidence-map, consistency-analysis, task-carrier, host, review, merge-ready, closeout, generated skills, /speckit.*, and .specify surfaces out of scope. The only post-implementation changes are PR/checkpoint carrier refreshes and review evidence refresh.",
+  "reviewer": "Codex",
+  "reviewed_head": "c8af75d6293cb262de500e0c50e2616a25c6d630",
+  "reviewed_validation_summary": "Passed: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/loom.py help --json; full suite dry-run/apply smoke; python3 tools/check_cli_contract.py; git diff --check; focused rg for full suite scaffold anchors and forbidden surfaces; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; python3 .loom/bin/loom_flow.py checkpoint build --target . --item WI-1116; formal spec and general reviews recorded.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1116.md",
+    "recovery_entry": ".loom/progress/WI-1116.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

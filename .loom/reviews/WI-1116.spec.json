@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1116",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review allows WI-1116: full suite scaffold generation is limited to the six standard repo-local artifacts under .loom/specs/<item>/, preserves minimal behavior and existing files, reports actual created locators, keeps dry-run read-only, and keeps evidence-map, consistency-analysis, task-carrier, host, review, merge-ready, closeout, generated skills, /speckit.*, and .specify surfaces out of scope.",
+  "reviewer": "Codex",
+  "reviewed_head": "74ecbfb77f5d2b4708e8ef961a8996005e815718",
+  "reviewed_validation_summary": "Passed: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/loom.py help --json; python3 tools/loom.py suite scaffold --target <tmp> --item WI-1116 --suite full --json; python3 tools/loom.py suite scaffold --target <tmp> --item WI-1116 --suite full --json --apply; python3 tools/check_cli_contract.py; git diff --check; focused rg for full suite scaffold anchors and forbidden surfaces; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1116.md",
+    "recovery_entry": ".loom/progress/WI-1116.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

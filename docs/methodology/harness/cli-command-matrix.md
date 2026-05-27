@@ -136,7 +136,7 @@ loom suite inspect
 loom suite scaffold
 ```
 
-`suite scaffold` defaults to dry-run, emits `mutates: false`, and plans the minimal suite artifacts `spec.md` and `plan.md` under `.loom/specs/<item>/`. Its JSON reports planned writes, source templates, consumed locators, overwrite policy, `apply_required`, rollback note, and `created_locators`. #1115 implements `--apply` for repo-local minimal scaffold writes only: missing `spec.md` and `plan.md` files are created from the Loom templates, existing files are preserved, and the response reports only the locators actually created. Traversal items, absolute items, symlink paths, and non-file artifact placeholders fail closed before writes. Full suite scaffold planning remains reserved for the full-artifact Work Item.
+`suite scaffold` defaults to dry-run, emits `mutates: false`, and plans suite artifacts under `.loom/specs/<item>/`. Its JSON reports planned writes, source templates, consumed locators, required versus conditional artifacts, overwrite policy, `apply_required`, rollback note, and `created_locators`. #1115 implements `--apply` for repo-local minimal scaffold writes: missing `spec.md` and `plan.md` files are created from the Loom templates, existing files are preserved, and the response reports only the locators actually created. #1116 implements `--suite full` for the standard full suite scaffold artifacts: `suite-index.md`, `spec.md`, `plan.md`, `research.md`, `contracts.md`, and `readiness-checklist.md`. Traversal items, absolute items, symlink paths, and non-file artifact placeholders fail closed before writes.
 
 The remaining suite namespace stays planned until later implementation Work Items add those commands to `loom help --json` and the CLI contract checks. The planned namespace is documented in [full-spec-suite-cli-surface.md](./full-spec-suite-cli-surface.md):
 
@@ -211,7 +211,7 @@ For #1109-#1114 it also checks:
 - `suite inspect` stays read-only and emits the shared `loom-cli-output/v1` envelope;
 - unknown, minimal, full, and missing-required-artifact suite states keep stable repo-relative locator output.
 - `suite scaffold` is declared as an implemented suite command in `loom help --json`;
-- `suite scaffold` dry-run stays read-only, reports minimal `spec.md` and `plan.md` planned writes, preserves existing files, and keeps `created_locators` empty;
-- `suite scaffold --apply` creates only missing minimal `spec.md` and `plan.md` files, reports created locators, and preserves existing files;
+- `suite scaffold` dry-run stays read-only, reports minimal or full planned writes, preserves existing files, and keeps `created_locators` empty;
+- `suite scaffold --apply` creates only missing scaffold files for the requested suite path, reports created locators, and preserves existing files;
 - `suite scaffold --apply` fails closed for traversal items, absolute items, symlink paths, and non-file artifact placeholders before writing artifacts;
-- `suite scaffold --suite full` fails closed until the full-artifact planning Work Item implements that surface.
+- `suite scaffold --suite full` plans and applies the standard six full-suite scaffold artifacts without creating evidence-map, consistency-analysis, task-carrier, review, merge-ready, closeout, generated skill, `/speckit.*`, or `.specify/` surfaces.

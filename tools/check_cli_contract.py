@@ -131,8 +131,10 @@ def run_suite_scaffold_fixture(target: Path, item: str, extra_args: list[str] | 
     return payload
 
 
-def run_suite_scaffold_apply_fixture(target: Path, item: str) -> dict[str, Any]:
+def run_suite_scaffold_apply_fixture(target: Path, item: str, extra_args: list[str] | None = None) -> dict[str, Any]:
     args = ["suite", "scaffold", "--target", str(target), "--item", item, "--json", "--apply"]
+    if extra_args:
+        args.extend(extra_args)
     _, payload = run_json(args, expect=0)
     if payload.get("command") != "suite scaffold" or payload.get("result") != "pass":
         raise AssertionError(f"suite scaffold apply envelope drifted for {item}")
@@ -559,14 +561,129 @@ def main() -> int:
         ):
             raise AssertionError("suite scaffold --apply directory artifact did not fail closed")
 
-        suite_scaffold_full = run_suite_scaffold_fixture(scaffold_target, "WI-scaffold", ["--suite", "full"], expect=1)
+        full_symlink_target = tmp / "suite-scaffold-full-symlink"
+        full_symlink_suite = full_symlink_target / ".loom" / "specs" / "WI-full-link"
+        full_symlink_suite.mkdir(parents=True)
+        (full_symlink_suite / "research.md").symlink_to("../../../outside-research.md")
+        _, suite_scaffold_full_symlink = run_json(
+            [
+                "suite",
+                "scaffold",
+                "--target",
+                str(full_symlink_target),
+                "--item",
+                "WI-full-link",
+                "--suite",
+                "full",
+                "--json",
+                "--apply",
+            ],
+            expect=1,
+        )
         if (
-            suite_scaffold_full.get("result") != "block"
-            or suite_scaffold_full.get("fail_closed_reason") != "reserved_surface"
-            or suite_scaffold_full.get("payload", {}).get("suite_path") != "full"
-            or suite_scaffold_full.get("payload", {}).get("created_locators") != []
+            suite_scaffold_full_symlink.get("result") != "block"
+            or suite_scaffold_full_symlink.get("fail_closed_reason") != "missing_scaffold_inputs"
+            or suite_scaffold_full_symlink.get("payload", {}).get("created_locators") != []
+            or (full_symlink_target / "outside-research.md").exists()
+            or (full_symlink_suite / "spec.md").exists()
         ):
-            raise AssertionError("suite scaffold full-suite reservation drifted")
+            raise AssertionError("suite scaffold full-suite --apply symlink path did not fail closed")
+
+        full_artifacts = [
+            "suite-index.md",
+            "spec.md",
+            "plan.md",
+            "research.md",
+            "contracts.md",
+            "readiness-checklist.md",
+        ]
+        full_template_locators = {
+            "suite-index.md": "docs/methodology/templates/scaffold/full-suite-index.md",
+            "spec.md": "docs/methodology/templates/scaffold/spec.md",
+            "plan.md": "docs/methodology/templates/scaffold/plan.md",
+            "research.md": "docs/methodology/templates/scaffold/research.md",
+            "contracts.md": "docs/methodology/templates/scaffold/contracts.md",
+            "readiness-checklist.md": "docs/methodology/templates/scaffold/readiness-checklist.md",
+        }
+
+        full_scaffold_target = tmp / "suite-scaffold-full"
+        full_scaffold_target.mkdir()
+        suite_scaffold_full = run_suite_scaffold_fixture(full_scaffold_target, "WI-full", ["--suite", "full"])
+        full_payload = suite_scaffold_full.get("payload", {})
+        full_planned_writes = {entry["artifact"]: entry for entry in full_payload.get("planned_writes", [])}
+        full_source_templates = {entry["artifact"]: entry["locator"] for entry in full_payload.get("source_templates", [])}
+        if (
+            suite_scaffold_full.get("result") != "pass"
+            or full_payload.get("suite_path") != "full"
+            or full_payload.get("artifact_root") != ".loom/specs/WI-full"
+            or full_payload.get("apply_required") is not True
+            or full_payload.get("apply") is not False
+            or full_payload.get("created_locators") != []
+            or sorted(full_planned_writes) != sorted(full_artifacts)
+            or full_payload.get("required_artifacts") != ["suite-index.md", "spec.md", "plan.md"]
+            or full_payload.get("conditional_artifacts") != ["research.md", "contracts.md", "readiness-checklist.md"]
+            or full_source_templates != full_template_locators
+            or full_planned_writes["suite-index.md"].get("locator") != ".loom/specs/WI-full/suite-index.md"
+            or full_planned_writes["research.md"].get("requirement") != "conditional"
+            or full_planned_writes["spec.md"].get("requirement") != "required"
+        ):
+            raise AssertionError("suite scaffold full-suite dry-run payload drifted")
+        if (full_scaffold_target / ".loom").exists():
+            raise AssertionError("suite scaffold full-suite dry-run created a .loom directory")
+
+        full_apply_target = tmp / "suite-scaffold-full-apply"
+        full_apply_target.mkdir()
+        suite_scaffold_full_apply = run_suite_scaffold_apply_fixture(full_apply_target, "WI-full-apply", ["--suite", "full"])
+        full_apply_payload = suite_scaffold_full_apply.get("payload", {})
+        expected_full_created = [f".loom/specs/WI-full-apply/{artifact}" for artifact in full_artifacts]
+        full_apply_writes = {entry["artifact"]: entry for entry in full_apply_payload.get("planned_writes", [])}
+        if (
+            suite_scaffold_full_apply.get("mutates") is not True
+            or full_apply_payload.get("apply") is not True
+            or full_apply_payload.get("apply_required") is not False
+            or full_apply_payload.get("created_locators") != expected_full_created
+            or any(full_apply_writes[artifact].get("status") != "created" for artifact in full_artifacts)
+            or any(not (full_apply_target / ".loom" / "specs" / "WI-full-apply" / artifact).is_file() for artifact in full_artifacts)
+        ):
+            raise AssertionError("suite scaffold full-suite --apply create payload drifted")
+
+        full_existing_target = tmp / "suite-scaffold-full-existing"
+        full_existing_suite = full_existing_target / ".loom" / "specs" / "WI-full-existing"
+        full_existing_suite.mkdir(parents=True)
+        (full_existing_suite / "suite-index.md").write_text("# Existing index\n", encoding="utf-8")
+        suite_scaffold_full_existing = run_suite_scaffold_apply_fixture(
+            full_existing_target,
+            "WI-full-existing",
+            ["--suite", "full"],
+        )
+        full_existing_payload = suite_scaffold_full_existing.get("payload", {})
+        expected_full_existing_created = [
+            f".loom/specs/WI-full-existing/{artifact}"
+            for artifact in full_artifacts
+            if artifact != "suite-index.md"
+        ]
+        full_existing_writes = {entry["artifact"]: entry for entry in full_existing_payload.get("planned_writes", [])}
+        if (
+            suite_scaffold_full_existing.get("mutates") is not True
+            or full_existing_payload.get("created_locators") != expected_full_existing_created
+            or full_existing_writes["suite-index.md"].get("planned_action") != "preserve_existing"
+            or full_existing_writes["suite-index.md"].get("wrote") is not False
+            or (full_existing_suite / "suite-index.md").read_text(encoding="utf-8") != "# Existing index\n"
+        ):
+            raise AssertionError("suite scaffold full-suite --apply existing-file preservation drifted")
+
+        suite_scaffold_full_apply_again = run_suite_scaffold_apply_fixture(
+            full_apply_target,
+            "WI-full-apply",
+            ["--suite", "full"],
+        )
+        full_apply_again_payload = suite_scaffold_full_apply_again.get("payload", {})
+        if (
+            suite_scaffold_full_apply_again.get("mutates") is not False
+            or full_apply_again_payload.get("created_locators") != []
+            or full_apply_again_payload.get("overwrite_policy", {}).get("existing_files") != expected_full_created
+        ):
+            raise AssertionError("suite scaffold full-suite repeat preservation drifted")
 
         missing_target = tmp / "missing"
         missing_target.mkdir()
