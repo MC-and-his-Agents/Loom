@@ -1,0 +1,28 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1051",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1051 spec suite is approved: scope is limited to source/generated skills surface synchronization, installed shared reference access for full suite / task carrier / evidence-map / consistency-analysis, docs-to-source and source-to-generated drift detection, and #1036 deferred sync consumption. Core #1014-#1019 contracts and #1052 CLI planning remain outside this Work Item.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "f5bcca12ccf96775f04cd30205ba809f89c0ce41",
+  "reviewed_validation_summary": "Spec review consumed `.loom/specs/WI-1051/spec.md`, `.loom/specs/WI-1051/plan.md`, and `.loom/specs/WI-1051/implementation-contract.md`; implementation validation passed locally with `git diff --check`, focused `rg` checks, `python3 tools/skills_surface.py check`, `python3 tools/loom_check.py --profile source --source-surface contract-only .`, `python3 tools/check_release_surface.py`, `python3 tools/host_adapter_check.py`, `python3 tools/version_surface_check.py`, and `python3 tools/check_npm_package.py`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "spec": ".loom/specs/WI-1051/spec.md",
+    "plan": ".loom/specs/WI-1051/plan.md",
+    "implementation_contract": ".loom/specs/WI-1051/implementation-contract.md",
+    "work_item": ".loom/work-items/WI-1051.md",
+    "recovery_entry": ".loom/progress/WI-1051.md",
+    "upstream_spec_suite": "#1016",
+    "upstream_task_carrier": "#1017",
+    "upstream_evidence_consistency": "#1018",
+    "upstream_gate_chain": "#1019",
+    "upstream_github_task_carrier_profile": "#1049 / PR #1103",
+    "upstream_scenario_skills": "#1050 / PR #1104",
+    "deferred_sync_consumed": "#1036"
+  }
+}

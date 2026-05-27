@@ -84,3 +84,10 @@ description: 负责 formal spec review 执行层。Use when Codex needs to revie
 
 - [references/input-signals.md](./references/input-signals.md)
 - [references/output-contract.md](./references/output-contract.md)
+
+Formal spec path 消费的共享合同见：
+
+- [spec-suite.md](.loom-runtime/shared/references/templates/spec-suite.md)
+- [evidence-map.md](.loom-runtime/shared/references/templates/evidence-map.md)
+- [consistency-analysis.md](.loom-runtime/shared/references/templates/consistency-analysis.md)
+- [gate-chain.md](.loom-runtime/shared/references/harness/gate-chain.md)

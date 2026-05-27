@@ -29,6 +29,19 @@ HOST_ADAPTER_VERSION = "1.0.0"
 SOURCE_REVISION = "repository-working-tree"
 IGNORED_NAMES = {"__pycache__", ".DS_Store"}
 TEXT_SUFFIXES = {".json", ".md", ".py", ".txt", ".yaml", ".yml"}
+DOC_REFERENCE_SYNC = {
+    "docs/methodology/templates/spec-suite.md": "shared/references/templates/spec-suite.md",
+    "docs/methodology/templates/execution-breakdown.md": "shared/references/templates/execution-breakdown.md",
+    "docs/methodology/harness/task-carrier-contract.md": "shared/references/harness/task-carrier-contract.md",
+    "docs/methodology/templates/evidence-map.md": "shared/references/templates/evidence-map.md",
+    "docs/methodology/templates/consistency-analysis.md": "shared/references/templates/consistency-analysis.md",
+    "docs/methodology/templates/scaffold/full-suite-index.md": "shared/references/templates/scaffold/full-suite-index.md",
+    "docs/methodology/templates/scaffold/spec.md": "shared/references/templates/scaffold/spec.md",
+    "docs/methodology/templates/scaffold/plan.md": "shared/references/templates/scaffold/plan.md",
+    "docs/methodology/templates/scaffold/research.md": "shared/references/templates/scaffold/research.md",
+    "docs/methodology/templates/scaffold/contracts.md": "shared/references/templates/scaffold/contracts.md",
+    "docs/methodology/templates/scaffold/readiness-checklist.md": "shared/references/templates/scaffold/readiness-checklist.md",
+}
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -313,6 +326,22 @@ def compare_trees(expected: Path, actual: Path) -> list[str]:
     return errors
 
 
+def compare_doc_reference_sync() -> list[str]:
+    errors: list[str] = []
+    for doc_relative, source_relative in DOC_REFERENCE_SYNC.items():
+        doc_path = REPO_ROOT / doc_relative
+        source_path = SOURCE_ROOT / source_relative
+        if not doc_path.is_file():
+            errors.append(f"missing source doc reference: {doc_relative}")
+            continue
+        if not source_path.is_file():
+            errors.append(f"missing source skills reference copy: {source_relative}")
+            continue
+        if not filecmp.cmp(doc_path, source_path, shallow=False):
+            errors.append(f"source skills reference drift: {source_relative} from {doc_relative}")
+    return errors
+
+
 def python_cache_artifacts(root: Path) -> list[str]:
     if not root.exists():
         return []
@@ -440,6 +469,9 @@ def verify_surface(root: Path = TARGET_ROOT, *, run_launchers: bool = True) -> l
 
 
 def check_surface() -> None:
+    reference_drift = compare_doc_reference_sync()
+    if reference_drift:
+        raise RuntimeError("source skills reference drift detected:\n" + "\n".join(reference_drift[:80]))
     cache_artifacts = python_cache_artifacts(TARGET_ROOT)
     if cache_artifacts:
         raise RuntimeError("skills surface contains Python cache artifacts:\n" + "\n".join(cache_artifacts[:80]))

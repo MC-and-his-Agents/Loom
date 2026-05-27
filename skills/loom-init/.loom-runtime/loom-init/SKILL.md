@@ -119,6 +119,10 @@ planning 只回答“应该怎么拆”和“应该落到哪些 host carrier”�
 - `skills/shared/references/harness/workspace-and-purity.md`
 - `skills/shared/references/harness/execution-context.md`
 - `skills/shared/references/templates/spec-suite.md`
+- `skills/shared/references/templates/execution-breakdown.md`
+- `skills/shared/references/harness/task-carrier-contract.md`
+- `skills/shared/references/templates/evidence-map.md`
+- `skills/shared/references/templates/consistency-analysis.md`
 - `skills/shared/references/templates/spec-template.md`
 - `skills/shared/references/templates/implementation-contract-template.md`
 - `skills/shared/references/templates/pull-request.md`
