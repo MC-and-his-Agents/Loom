@@ -5,7 +5,7 @@
   "kind": "spec_review",
   "summary": "Spec review passed for #1052 minimal planning suite. The spec/plan/implementation-contract constrain this Work Item to CLI surface planning records, preserve #1014-#1020 authority, and explicitly forbid CLI implementation, generated skills mutation, and spec-kit command/layout copying.",
   "reviewer": "codex",
-  "reviewed_head": "d588f41a156db875ea255c9dd6b0ea088cd20d96",
+  "reviewed_head": "23df2cc048df4ba82892ab4c8abece176fcb5b23",
   "reviewed_validation_summary": "Passed locally: git diff --check; focused rg over CLI/suite/fail-closed/spec-kit terms; non-Markdown rg confirmed no suite command implementation entry was added; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; accidental repeat loom_check also passed; python3 tools/check_cli_contract.py; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py.",
   "fallback_to": null,
   "findings": [],
