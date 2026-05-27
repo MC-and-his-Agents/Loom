@@ -131,6 +131,16 @@ def run_suite_scaffold_fixture(target: Path, item: str, extra_args: list[str] | 
     return payload
 
 
+def run_suite_scaffold_apply_fixture(target: Path, item: str) -> dict[str, Any]:
+    args = ["suite", "scaffold", "--target", str(target), "--item", item, "--json", "--apply"]
+    _, payload = run_json(args, expect=0)
+    if payload.get("command") != "suite scaffold" or payload.get("result") != "pass":
+        raise AssertionError(f"suite scaffold apply envelope drifted for {item}")
+    if payload.get("item_id") != item:
+        raise AssertionError(f"suite scaffold apply item binding drifted for {item}")
+    return payload
+
+
 def write_state(target: Path, payload: dict[str, Any]) -> None:
     state_dir = target / ".loom"
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -446,13 +456,108 @@ def main() -> int:
         ):
             raise AssertionError("suite scaffold existing-file overwrite policy drifted")
 
-        suite_scaffold_apply = run_suite_scaffold_fixture(scaffold_target, "WI-scaffold", ["--apply"], expect=1)
+        apply_target = tmp / "suite-scaffold-apply"
+        apply_target.mkdir()
+        suite_scaffold_apply = run_suite_scaffold_apply_fixture(apply_target, "WI-apply")
+        apply_payload = suite_scaffold_apply.get("payload", {})
+        apply_writes = {entry["artifact"]: entry for entry in apply_payload.get("planned_writes", [])}
         if (
-            suite_scaffold_apply.get("result") != "block"
-            or suite_scaffold_apply.get("fail_closed_reason") != "mutating_action_requires_apply_implementation"
-            or suite_scaffold_apply.get("payload", {}).get("created_locators") != []
+            suite_scaffold_apply.get("mutates") is not True
+            or apply_payload.get("apply") is not True
+            or apply_payload.get("apply_required") is not False
+            or apply_payload.get("created_locators")
+            != [".loom/specs/WI-apply/spec.md", ".loom/specs/WI-apply/plan.md"]
+            or apply_writes.get("spec.md", {}).get("status") != "created"
+            or apply_writes.get("plan.md", {}).get("status") != "created"
+            or not (apply_target / ".loom/specs/WI-apply/spec.md").is_file()
+            or not (apply_target / ".loom/specs/WI-apply/plan.md").is_file()
         ):
-            raise AssertionError("suite scaffold --apply fail-closed payload drifted")
+            raise AssertionError("suite scaffold --apply create payload drifted")
+
+        existing_apply_target = tmp / "suite-scaffold-apply-existing"
+        existing_apply_suite = existing_apply_target / ".loom" / "specs" / "WI-apply-existing"
+        existing_apply_suite.mkdir(parents=True)
+        (existing_apply_suite / "spec.md").write_text("# Existing spec\n", encoding="utf-8")
+        suite_scaffold_apply_existing = run_suite_scaffold_apply_fixture(existing_apply_target, "WI-apply-existing")
+        apply_existing_payload = suite_scaffold_apply_existing.get("payload", {})
+        apply_existing_writes = {entry["artifact"]: entry for entry in apply_existing_payload.get("planned_writes", [])}
+        if (
+            suite_scaffold_apply_existing.get("mutates") is not True
+            or apply_existing_payload.get("created_locators") != [".loom/specs/WI-apply-existing/plan.md"]
+            or apply_existing_writes.get("spec.md", {}).get("planned_action") != "preserve_existing"
+            or apply_existing_writes.get("spec.md", {}).get("wrote") is not False
+            or apply_existing_writes.get("plan.md", {}).get("status") != "created"
+            or (existing_apply_suite / "spec.md").read_text(encoding="utf-8") != "# Existing spec\n"
+        ):
+            raise AssertionError("suite scaffold --apply existing-file preservation drifted")
+
+        suite_scaffold_apply_again = run_suite_scaffold_apply_fixture(apply_target, "WI-apply")
+        apply_again_payload = suite_scaffold_apply_again.get("payload", {})
+        if (
+            suite_scaffold_apply_again.get("mutates") is not False
+            or apply_again_payload.get("created_locators") != []
+            or apply_again_payload.get("overwrite_policy", {}).get("existing_files")
+            != [".loom/specs/WI-apply/spec.md", ".loom/specs/WI-apply/plan.md"]
+        ):
+            raise AssertionError("suite scaffold --apply repeat preservation drifted")
+
+        traversal_target = tmp / "suite-scaffold-traversal"
+        traversal_target.mkdir()
+        _, suite_scaffold_traversal = run_json(
+            ["suite", "scaffold", "--target", str(traversal_target), "--item", "../escape", "--json", "--apply"],
+            expect=1,
+        )
+        if (
+            suite_scaffold_traversal.get("result") != "block"
+            or suite_scaffold_traversal.get("fail_closed_reason") != "invalid_suite_item"
+            or suite_scaffold_traversal.get("mutates") is not False
+            or suite_scaffold_traversal.get("payload", {}).get("created_locators") != []
+            or (traversal_target / ".loom").exists()
+        ):
+            raise AssertionError("suite scaffold --apply traversal item did not fail closed")
+
+        _, suite_scaffold_absolute = run_json(
+            ["suite", "scaffold", "--target", str(traversal_target), "--item", str(tmp / "abs-write"), "--json", "--apply"],
+            expect=1,
+        )
+        if (
+            suite_scaffold_absolute.get("result") != "block"
+            or suite_scaffold_absolute.get("fail_closed_reason") != "invalid_suite_item"
+            or suite_scaffold_absolute.get("payload", {}).get("created_locators") != []
+        ):
+            raise AssertionError("suite scaffold --apply absolute item did not fail closed")
+
+        symlink_target = tmp / "suite-scaffold-symlink"
+        symlink_suite = symlink_target / ".loom" / "specs" / "WI-link"
+        symlink_suite.mkdir(parents=True)
+        (symlink_suite / "spec.md").symlink_to("../../../outside-spec.md")
+        _, suite_scaffold_symlink = run_json(
+            ["suite", "scaffold", "--target", str(symlink_target), "--item", "WI-link", "--json", "--apply"],
+            expect=1,
+        )
+        if (
+            suite_scaffold_symlink.get("result") != "block"
+            or suite_scaffold_symlink.get("fail_closed_reason") != "missing_scaffold_inputs"
+            or suite_scaffold_symlink.get("payload", {}).get("created_locators") != []
+            or (symlink_target / "outside-spec.md").exists()
+            or (symlink_suite / "plan.md").exists()
+        ):
+            raise AssertionError("suite scaffold --apply symlink path did not fail closed")
+
+        directory_artifact_target = tmp / "suite-scaffold-directory-artifact"
+        directory_artifact_suite = directory_artifact_target / ".loom" / "specs" / "WI-dir"
+        (directory_artifact_suite / "spec.md").mkdir(parents=True)
+        _, suite_scaffold_directory_artifact = run_json(
+            ["suite", "scaffold", "--target", str(directory_artifact_target), "--item", "WI-dir", "--json", "--apply"],
+            expect=1,
+        )
+        if (
+            suite_scaffold_directory_artifact.get("result") != "block"
+            or suite_scaffold_directory_artifact.get("fail_closed_reason") != "missing_scaffold_inputs"
+            or suite_scaffold_directory_artifact.get("payload", {}).get("created_locators") != []
+            or (directory_artifact_suite / "plan.md").exists()
+        ):
+            raise AssertionError("suite scaffold --apply directory artifact did not fail closed")
 
         suite_scaffold_full = run_suite_scaffold_fixture(scaffold_target, "WI-scaffold", ["--suite", "full"], expect=1)
         if (
