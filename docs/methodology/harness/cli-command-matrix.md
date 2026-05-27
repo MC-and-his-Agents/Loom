@@ -120,6 +120,19 @@ loom retire
 
 No command in the #889/#892/#896 implementation batch remains reserved. Later phase issues may still reserve additional names outside #885 scope.
 
+## Planned Suite Commands
+
+#1052 plans the full spec suite CLI command surface but does not implement it. The planned namespace is documented in [full-spec-suite-cli-surface.md](./full-spec-suite-cli-surface.md):
+
+```text
+loom suite inspect|scaffold|validate|analyze
+loom suite evidence inspect|scaffold|validate
+loom suite consistency inspect|analyze
+loom suite carrier inspect|validate
+```
+
+These names are planning output only until a later implementation Work Item adds them to `loom help --json` and the CLI contract checks. Implementations must preserve the #1052 behavior classes: read-only, scaffold-write, validate, analyze, and fail-closed.
+
 ## Delegated Compatibility Commands
 
 These commands currently route to existing wrappers and remain compatibility paths while the CLI-first execution layer is filled in:

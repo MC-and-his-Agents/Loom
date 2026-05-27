@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1052",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review allows WI-1052: planning scope remains CLI command surface documentation only, consumes frozen #1014-#1020 contracts, defines behavior classes, command boundaries, JSON output fields, failure taxonomy, doctor/verify/scenario skill integration points, and follow-up implementation backlog without adding real CLI commands.",
+  "reviewer": "Codex",
+  "reviewed_head": "7a4afdec0e8f6cd33ad86d6fb5c8ae87ee59990a",
+  "reviewed_validation_summary": "Passed locally: git diff --check; focused rg over CLI/suite/fail-closed/spec-kit terms; non-Markdown rg confirmed no suite command implementation entry was added; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; accidental repeat loom_check also passed; python3 tools/check_cli_contract.py; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1052.md",
+    "recovery_entry": ".loom/progress/WI-1052.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
