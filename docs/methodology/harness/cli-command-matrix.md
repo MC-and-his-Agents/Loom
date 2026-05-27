@@ -122,16 +122,24 @@ No command in the #889/#892/#896 implementation batch remains reserved. Later ph
 
 ## Planned Suite Commands
 
-#1052 plans the full spec suite CLI command surface but does not implement it. The planned namespace is documented in [full-spec-suite-cli-surface.md](./full-spec-suite-cli-surface.md):
+#1052 planned the full spec suite CLI command surface. #1109-#1111 implement the first read-only command and add it to the mechanical help matrix and CLI contract checks:
 
 ```text
-loom suite inspect|scaffold|validate|analyze
+loom suite inspect
+```
+
+`suite inspect` is read-only. It reports the current suite path decision, repo-relative artifact locators, task carrier locators, and inspect-only missing input/advisory gaps. It does not decide readiness, scaffold missing artifacts, mutate host state, write review truth, write merge-ready truth, or write closeout truth.
+
+The remaining suite namespace stays planned until later implementation Work Items add those commands to `loom help --json` and the CLI contract checks. The planned namespace is documented in [full-spec-suite-cli-surface.md](./full-spec-suite-cli-surface.md):
+
+```text
+loom suite scaffold|validate|analyze
 loom suite evidence inspect|scaffold|validate
 loom suite consistency inspect|analyze
 loom suite carrier inspect|validate
 ```
 
-These names are planning output only until a later implementation Work Item adds them to `loom help --json` and the CLI contract checks. Implementations must preserve the #1052 behavior classes: read-only, scaffold-write, validate, analyze, and fail-closed.
+These remaining names are planning output only until a later implementation Work Item adds them to `loom help --json` and the CLI contract checks. Implementations must preserve the #1052 behavior classes: read-only, scaffold-write, validate, analyze, and fail-closed.
 
 ## Delegated Compatibility Commands
 
@@ -188,3 +196,9 @@ For #924-#928 it also checks:
 - `spec` and `plan` fail closed with explicit carrier locators when absent;
 - `closeout` is check-only and returns structured fallback guidance;
 - `retire` exposes a non-mutating lifecycle contract.
+
+For #1109-#1111 it also checks:
+
+- `suite inspect` is declared as an implemented suite command in `loom help --json`;
+- `suite inspect` stays read-only and emits the shared `loom-cli-output/v1` envelope;
+- unknown, minimal, full, and missing-required-artifact suite states keep stable repo-relative locator output.

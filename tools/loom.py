@@ -165,6 +165,13 @@ COMMANDS: list[dict[str, Any]] = [
     {"command": "skills doctor", "domain": "skills", "status": "implemented", "json": True},
     {"command": "skills package", "domain": "skills", "status": "implemented", "json": True},
     {"command": "skills release-check", "domain": "skills", "status": "implemented", "json": True},
+    {
+        "command": "suite inspect",
+        "domain": "suite",
+        "status": "implemented",
+        "json": True,
+        "summary": "Inspect suite path decision and repo-relative artifact inventory.",
+    },
 ]
 
 COMMAND_INDEX = {entry["command"]: entry for entry in COMMANDS}
@@ -345,7 +352,8 @@ def print_usage(stream) -> None:
         "  installed-state show|validate|export --target <repo> [--json]\n\n"
         "scenario and gate commands:\n"
         "  init, adopt, route, status, fact-chain, profile, checkpoint, gate\n"
-        "  resume, spec-review, review, merge-ready, check\n\n"
+        "  resume, spec-review, review, merge-ready, check\n"
+        "  suite inspect --target <repo> --item <item> [--json]\n\n"
         "Use `loom help --json` for the full frozen command matrix, including reserved commands.\n"
     )
 
@@ -2111,8 +2119,9 @@ def main(argv: list[str]) -> int:
     if command == "skills" or command.startswith("skills "):
         skills_args = command.split()[1:] + forwarded if command.startswith("skills ") else forwarded
         return handle_skills(skills_args)
-    if command == "suite":
-        return handle_suite(forwarded)
+    if command == "suite" or command.startswith("suite "):
+        suite_args = command.split()[1:] + forwarded if command.startswith("suite ") else forwarded
+        return handle_suite(suite_args)
     if command == "init":
         return handle_init(forwarded)
     if command == "adopt":
