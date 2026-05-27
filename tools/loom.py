@@ -172,6 +172,13 @@ COMMANDS: list[dict[str, Any]] = [
         "json": True,
         "summary": "Inspect suite path decision and repo-relative artifact inventory.",
     },
+    {
+        "command": "suite scaffold",
+        "domain": "suite",
+        "status": "implemented",
+        "json": True,
+        "summary": "Plan spec suite scaffold writes without mutating the repository.",
+    },
 ]
 
 COMMAND_INDEX = {entry["command"]: entry for entry in COMMANDS}
@@ -353,7 +360,8 @@ def print_usage(stream) -> None:
         "scenario and gate commands:\n"
         "  init, adopt, route, status, fact-chain, profile, checkpoint, gate\n"
         "  resume, spec-review, review, merge-ready, check\n"
-        "  suite inspect --target <repo> --item <item> [--json]\n\n"
+        "  suite inspect --target <repo> --item <item> [--json]\n"
+        "  suite scaffold --target <repo> --item <item> [--suite minimal] [--json]\n\n"
         "Use `loom help --json` for the full frozen command matrix, including reserved commands.\n"
     )
 
@@ -1904,6 +1912,76 @@ def suite_artifact_paths(target: Path, item: str | None) -> dict[str, list[Path]
     }
 
 
+SUITE_SCAFFOLD_TEMPLATES = {
+    "spec.md": REPO_ROOT / "docs" / "methodology" / "templates" / "scaffold" / "spec.md",
+    "plan.md": REPO_ROOT / "docs" / "methodology" / "templates" / "scaffold" / "plan.md",
+}
+
+SUITE_SCAFFOLD_CONTRACT_LOCATORS = (
+    "docs/methodology/harness/full-spec-suite-cli-surface.md",
+    "docs/methodology/templates/spec-suite.md",
+)
+
+
+def suite_scaffold_dry_run_payload(target: Path, item: str, suite_path: str) -> tuple[str, dict[str, Any]]:
+    suite_root = target / ".loom" / "specs" / item
+    artifacts = ("spec.md", "plan.md")
+    planned_writes: list[dict[str, Any]] = []
+    source_templates: list[dict[str, str]] = []
+    existing_files: list[str] = []
+    consumed_locators = list(SUITE_SCAFFOLD_CONTRACT_LOCATORS)
+
+    for artifact in artifacts:
+        destination = suite_root / artifact
+        destination_locator = repo_locator(destination, target)
+        template = SUITE_SCAFFOLD_TEMPLATES[artifact]
+        template_locator = template.relative_to(REPO_ROOT).as_posix()
+        exists = destination.exists()
+        if exists:
+            existing_files.append(destination_locator)
+        planned_writes.append(
+            {
+                "artifact": artifact,
+                "locator": destination_locator,
+                "source_template": template_locator,
+                "status": "exists" if exists else "would_create",
+                "planned_action": "preserve_existing" if exists else "create",
+                "would_write": not exists,
+                "overwrite_policy": "preserve_existing",
+            }
+        )
+        source_templates.append(
+            {
+                "artifact": artifact,
+                "locator": template_locator,
+            }
+        )
+
+    overwrite_policy = {
+        "mode": "preserve_existing",
+        "allows_overwrite": False,
+        "existing_files": existing_files,
+        "ambiguous_overwrite": "fail_closed",
+    }
+    payload = {
+        "suite_path": suite_path,
+        "artifact_root": repo_locator(suite_root, target),
+        "suite_locator": repo_locator(suite_root, target),
+        "planned_writes": planned_writes,
+        "source_templates": source_templates,
+        "consumed_locators": consumed_locators,
+        "overwrite_policy": overwrite_policy,
+        "apply_required": True,
+        "apply": False,
+        "rollback_note": "Dry-run only; no files were created. If applied later, rollback is deleting the created repo-relative locators before they are consumed as authored truth.",
+        "created_locators": [],
+        "missing_inputs": [],
+        "advisory_gaps": [],
+    }
+    summary = "Suite scaffold dry-run planned minimal spec and plan artifacts without mutating the repository."
+    return summary, payload
+
+
 def suite_inspect_payload(target: Path, item: str | None) -> tuple[str, dict[str, Any]]:
     paths = suite_artifact_paths(target, item)
     suite_index = paths.get("suite-index.md", [None])[0]
@@ -2033,7 +2111,7 @@ def handle_suite(argv: list[str]) -> int:
         )
 
     action = argv[0]
-    if action != "inspect":
+    if action not in {"inspect", "scaffold"}:
         return emit(
             output(
                 f"suite {action}",
@@ -2043,6 +2121,84 @@ def handle_suite(argv: list[str]) -> int:
                 failed_layer="suite-input",
                 fail_closed_reason=f"unsupported suite action: {action}",
                 fallback_to=["loom suite inspect --target <repo> --item <item> --json"],
+            )
+        )
+
+    if action == "scaffold":
+        parser = argparse.ArgumentParser(prog="loom suite scaffold")
+        parser.add_argument("--target", default=".")
+        parser.add_argument("--item")
+        parser.add_argument("--suite", choices=("minimal", "full"), default="minimal")
+        parser.add_argument("--apply", action="store_true")
+        parser.add_argument("--json", action="store_true")
+        args = parser.parse_args(argv[1:])
+        target = resolve_target(args.target)
+        if not target.exists():
+            return emit(block_target("suite scaffold", target, "target path does not exist"))
+        if not args.item:
+            return emit(
+                output(
+                    "suite scaffold",
+                    "block",
+                    target=str(target),
+                    item_id=args.item,
+                    summary="Suite scaffold requires a Work Item id.",
+                    mutates=False,
+                    failed_layer="suite-input",
+                    fail_closed_reason="missing_work_item",
+                    fallback_to=["loom suite scaffold --target <repo> --item <item> --json"],
+                )
+            )
+        if args.apply:
+            return emit(
+                output(
+                    "suite scaffold",
+                    "block",
+                    target=str(target),
+                    item_id=args.item,
+                    summary="Suite scaffold apply writes are reserved for a later Work Item.",
+                    mutates=False,
+                    failed_layer="cli",
+                    fail_closed_reason="mutating_action_requires_apply_implementation",
+                    fallback_to=["loom suite scaffold --target <repo> --item <item> --json"],
+                    payload={
+                        "apply_required": True,
+                        "created_locators": [],
+                        "planned_writes": [],
+                    },
+                )
+            )
+        if args.suite == "full":
+            return emit(
+                output(
+                    "suite scaffold",
+                    "block",
+                    target=str(target),
+                    item_id=args.item,
+                    summary="Full suite scaffold planning is reserved for the full-suite Work Item.",
+                    mutates=False,
+                    failed_layer="suite",
+                    fail_closed_reason="reserved_surface",
+                    fallback_to=["loom suite scaffold --target <repo> --item <item> --json --suite minimal"],
+                    payload={
+                        "suite_path": "full",
+                        "apply_required": True,
+                        "created_locators": [],
+                        "planned_writes": [],
+                    },
+                )
+            )
+
+        summary, scaffold_payload = suite_scaffold_dry_run_payload(target, args.item, args.suite)
+        return emit(
+            output(
+                "suite scaffold",
+                "pass",
+                target=str(target),
+                item_id=args.item,
+                summary=summary,
+                mutates=False,
+                payload=scaffold_payload,
             )
         )
 

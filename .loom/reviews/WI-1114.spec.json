@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1114",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review allows WI-1114: the minimal suite is limited to dry-run planning for `loom suite scaffold`, adds stable planned-write/source-template/overwrite/rollback JSON, and keeps `--apply`, full suite generation, validation, evidence, carrier, host, review, merge-ready, closeout, generated skills, and spec-kit surfaces out of scope.",
+  "reviewer": "Codex",
+  "reviewed_head": "c861133076b5005e2ff536a2d84a5905bc8b9074",
+  "reviewed_validation_summary": "Passed so far: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/loom.py help --json; python3 tools/loom.py suite scaffold --target . --item WI-1114 --json; python3 tools/check_cli_contract.py.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1114.md",
+    "recovery_entry": ".loom/progress/WI-1114.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pending",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

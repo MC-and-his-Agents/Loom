@@ -130,10 +130,18 @@ loom suite inspect
 
 `suite inspect` is read-only. It reports the current suite path decision, repo-relative artifact locators, task carrier locators, and inspect-only missing input/advisory gaps. It does not decide readiness, scaffold missing artifacts, mutate host state, write review truth, write merge-ready truth, or write closeout truth.
 
+#1114 implements the dry-run planning surface for the first scaffold command:
+
+```text
+loom suite scaffold
+```
+
+`suite scaffold` defaults to dry-run, emits `mutates: false`, and plans the minimal suite artifacts `spec.md` and `plan.md` under `.loom/specs/<item>/`. Its JSON reports planned writes, source templates, consumed locators, overwrite policy, `apply_required`, rollback note, and empty `created_locators`. `--apply` remains fail-closed until the apply Work Item implements explicit writes. Full suite scaffold planning remains reserved for the full-artifact Work Item.
+
 The remaining suite namespace stays planned until later implementation Work Items add those commands to `loom help --json` and the CLI contract checks. The planned namespace is documented in [full-spec-suite-cli-surface.md](./full-spec-suite-cli-surface.md):
 
 ```text
-loom suite scaffold|validate|analyze
+loom suite validate|analyze
 loom suite evidence inspect|scaffold|validate
 loom suite consistency inspect|analyze
 loom suite carrier inspect|validate
@@ -197,8 +205,11 @@ For #924-#928 it also checks:
 - `closeout` is check-only and returns structured fallback guidance;
 - `retire` exposes a non-mutating lifecycle contract.
 
-For #1109-#1111 it also checks:
+For #1109-#1114 it also checks:
 
 - `suite inspect` is declared as an implemented suite command in `loom help --json`;
 - `suite inspect` stays read-only and emits the shared `loom-cli-output/v1` envelope;
 - unknown, minimal, full, and missing-required-artifact suite states keep stable repo-relative locator output.
+- `suite scaffold` is declared as an implemented suite command in `loom help --json`;
+- `suite scaffold` dry-run stays read-only, reports minimal `spec.md` and `plan.md` planned writes, preserves existing files, and keeps `created_locators` empty;
+- `suite scaffold --apply` and `suite scaffold --suite full` fail closed until their later Work Items implement writes and full-artifact planning.
