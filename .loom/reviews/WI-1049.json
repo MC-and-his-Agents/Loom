@@ -3,9 +3,9 @@
   "item_id": "WI-1049",
   "decision": "allow",
   "kind": "general_review",
-  "summary": "WI-1049 is approved for PR: the GitHub profile now defines task carrier mappings, locator/provenance requirements, normalized status rules, and Project Status conflict handling while preserving Work Item, review, merge-ready, closeout, and evidence-map truth boundaries. Scenario skills, source/generated synchronization, drift checks, and CLI planning remain downstream under #1050/#1051/#1052.",
+  "summary": "WI-1049 is approved for PR at the current head: the GitHub profile defines task carrier mappings, locator/provenance requirements, normalized status rules, and Project Status conflict handling while the final carrier refresh aligns status and shadow evidence without changing implementation scope. Scenario skills, source/generated synchronization, drift checks, and CLI planning remain downstream under #1050/#1051/#1052.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "3e08fb1912c7194c0abeaee2a2734908933ffd2d",
+  "reviewed_head": "a6222865be44358bd1053cbffa85275dec391d97",
   "reviewed_validation_summary": "Passed locally on branch `work/1049-github-task-carrier-profile`: `git diff --check`; focused `rg` for GitHub profile / task carrier / sub-issue / Project item / checklist / unique execution entry; focused `rg` for forbidden use / review / merge-ready / closeout / provenance / locator; focused `rg` for Project Status / Todo / In Progress / Done / completed truth / host agent; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`.",
   "fallback_to": null,
   "findings": [
@@ -42,6 +42,8 @@
     "github_profile": "docs/adoption/github-profile.md",
     "task_carrier_contract": "docs/methodology/harness/task-carrier-contract.md",
     "upstream_github_mapping": "#1027 / PR #1084",
-    "build_checkpoint": "pass"
+    "build_checkpoint": "pass",
+    "carrier_refresh": "status surface and shadow evidence refreshed for root self-governance",
+    "merge_checkpoint": "pass at a6222865be44358bd1053cbffa85275dec391d97"
   }
 }
