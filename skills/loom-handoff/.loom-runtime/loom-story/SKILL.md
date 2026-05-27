@@ -85,6 +85,21 @@ User Story 主体不得包含 delivery handoff、spec locator、plan locator、r
 - `Work Item` 仍是唯一执行入口
 - issue tree、Phase / FR / Work Item / PR 切分、blocked-by/blocks 与 host carrier mapping 由 `loom-init` 的 delivery planning 路由承接
 
+## 6. Full / Minimal Suite Path 边界
+
+`loom-story` 不选择或重定义 full/minimal suite path；它只产出可被
+`spec-suite` 消费的 story readiness 与 business confirmation 输入。
+
+- full path：若 formal spec path 消费 story，必须输出 Story Readiness 与 Story
+  Business Confirmation locator，且 decision 为 `confirmed` 或明确
+  `not_applicable`。`pending` / `revision-requested` 必须 fail closed，回到 story
+  shaping 或等待业务语义确认。
+- minimal path：纯治理、维护、格式、链接修复或载体整理可以输出
+  `not_applicable`，但必须包含 bypass rationale、consumer boundary 和 recheck
+  condition，供 `spec.md`、`plan.md`、evidence-map 与后续 gate 消费。
+- `loom-story` 不把 `not_applicable` 升级成产品确认，不生成 evidence-map、
+  consistency-analysis、review、merge-ready 或 GitHub closeout truth。
+
 输入信号与输出合同见：
 
 - [references/input-signals.md](./references/input-signals.md)

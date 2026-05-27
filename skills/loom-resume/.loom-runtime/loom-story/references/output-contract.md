@@ -28,6 +28,8 @@
   - story scenario 到 `plan.md` validation strategy 的映射
   - spec / plan 只消费已 `confirmed` 或明确 `not_applicable` 的 story 语义
   - 任何 `pending` 或 `revision-requested` 的 readiness / confirmation 都必须 fail closed，阻止 formal spec shaping
+  - full path 需要可消费的 readiness / confirmation locator；minimal path 需要
+    `not_applicable` rationale、consumer boundary 和 recheck condition
   - `Work Item` 仍是唯一执行入口
 - `missing_inputs`
   - 当前阻断 story shaping 的缺口；无阻断时为空数组

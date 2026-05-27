@@ -16,6 +16,11 @@
   - 当前 Loom 入口自己的 scene / carrier 判定，以及 fail-closed 原因
 - `governance_lint`
   - `loom-governance-lint-status/v1` 派生证据；blocking lint 进入 `missing_inputs`，advisory lint 只进入风险摘要，不产生 reviewer 结论
+- `suite_path_consumption`
+  - full path 的 required artifacts、evidence-map freshness、consistency-analysis
+    blocking/advisory 分类
+  - minimal path 的 `not_applicable` rationale、consumer boundary、recheck condition
+  - full path 缺必需输入或 minimal path 无有效 rationale 时必须 fail-closed
 - `steps`
   - 固定按 `runtime-state -> fact-chain -> state-check -> runtime-evidence -> checkpoint-admission -> workspace-locate -> governance-lint` 顺序列出
 

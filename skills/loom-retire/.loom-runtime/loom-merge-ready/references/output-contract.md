@@ -28,6 +28,11 @@
   - `loom-governance-lint-status/v1` 派生证据；只消费 fact-chain 与 repo companion 的 blocking/advisory lint result，不替代 authored review record、merge checkpoint 或 host merge truth
 - `gate_chain`
   - `spec_gate`、`build_gate`、`review_gate`、`merge_gate` 的当前可消费状态
+- `suite_path_consumption`
+  - full path 的 suite readiness、evidence-map、consistency-analysis、reviewed
+    locators、PR head / reviewed head / validation freshness
+  - minimal path 的 `not_applicable` rationale、consumer boundary、recheck condition
+  - missing、stale、conflict、deferred 或无理由跳过必须进入 `missing_inputs`
 - `github_controlled_merge`
   - required checks、branch protection、merge method 与 host merge 前置状态
 - `retained_host_signals`

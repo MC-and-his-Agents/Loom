@@ -18,6 +18,21 @@ Loom 当前把正式规约套件的最小内核定义为：
 
 这两个工件分别承担不同职责，不得混写。
 
+Formal spec path 有两条合法 suite path：
+
+- `minimal suite`
+  - 必含 `spec.md` 与 `plan.md`
+  - 适用于低风险、局部、纯治理或文档类事项
+  - 可用 `not_applicable` rationale 合法跳过 full path 附加工件
+- `full suite`
+  - 在 minimal suite 之上消费 suite-index、条件附加工件、evidence-map、
+    consistency-analysis 与 gate-chain consumption
+  - 适用于 formal spec、高风险、跨模块、强 review 或需要完整证据链的事项
+
+路径选择必须有 locator 与 provenance。若从 full path 降到 minimal path，必须说明
+附加工件为什么 `not_applicable`；若从 minimal path 升到 full path，必须说明触发信号
+和需要补齐的工件。
+
 ## 2. `spec.md` 最小要求
 
 `spec.md` 至少应表达：
@@ -58,6 +73,17 @@ Loom 当前把正式规约套件的最小内核定义为：
 - 不能自动化的行为必须声明人工验证路径、证据 locator 与 fresh 条件
 - 纯文档或治理规则变更可以不强制 TDD，但必须说明行为证据如何由结构检查、审查记录或示例消费
 
+映射状态必须可被后续 gate 消费：
+
+- `scenario_id` / scenario locator 映射到 automated、manual、structural 或
+  `not_applicable` validation strategy
+- `acceptance_id` / acceptance locator 映射到 test evidence、structural check、
+  manual evidence 或 `not_applicable`
+- full path 下，缺少 scenario -> validation 或 acceptance -> test mapping 默认阻断
+  build / review
+- minimal path 下，缺映射必须以 `not_applicable` rationale、替代验证入口和
+  recheck condition 解释
+
 ## 4. 套件边界规则
 
 Loom 必须区分：
@@ -74,6 +100,11 @@ Loom 当前不固化：
 
 - 所有项目都必须有同一组附加工件
 - `TODO.md` 或同类文件是永恒必选项
+
+Full path 缺少必需工件、locator、provenance 或 gate 所需 evidence 时必须
+fail-closed。Minimal path 缺少 full path 附加工件时，只有同时具备 rationale、
+consumer boundary 与 recheck condition 的 `not_applicable` 才能消解；无理由缺口
+仍是 `missing`。`deferred` 不等于 `not_applicable`，不得作为 completed truth 消费。
 
 ## 5. 行为证据与测试证据
 

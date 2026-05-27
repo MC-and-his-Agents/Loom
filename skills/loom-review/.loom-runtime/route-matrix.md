@@ -45,7 +45,42 @@
 - `GitHub controlled merge`
   - merge 由宿主控制面执行；Loom 只消费 required checks、review、head 绑定与 merge gate 结果
 
-## 4. `governance_surface` 公共合同
+## 4. Formal Spec Suite Path 消费边界
+
+`loom-story`、`loom-spec-review`、`loom-build`、`loom-pre-review` 与 `loom-merge-ready`
+必须消费 `docs/methodology/templates/spec-suite.md` 已定义的
+`full suite` / `minimal suite` path decision，不得在 skill 中重新定义 suite
+工件、evidence-map、consistency-analysis 或 gate-chain 语义。
+
+固定消费规则：
+
+- `full path` 表示当前事项选择完整 formal spec suite。后续 skill 必须能读取
+  suite path locator、必需工件 locator、条件工件的适用性判断、provenance，以及
+  #1018/#1019 合同声明适用时的 evidence-map、consistency-analysis 与 gate-chain
+  消费结论。
+- `full path` 缺少必需工件、locator、provenance 或当前 gate 所需 evidence 时，
+  `loom-spec-review`、`loom-build`、`loom-pre-review` 与 `loom-merge-ready`
+  必须 fail-closed，返回 `block` 或带明确 `fallback_to` 的 `fallback`。
+- `minimal path` 是合法路径，但只能通过带 rationale、consumer boundary 和
+  recheck condition 的 `not_applicable` 消费 full path 附加工件；无理由缺口仍是
+  `missing`，不得被当成 `not_applicable`。
+- `deferred` 不等于 `not_applicable`。deferred source/generated sync、CLI surface
+  或后续 FR 工作只能作为后续事项输入，不得被当前 skill 当成 completed truth。
+- GitHub issue、sub-issue、Project item、PR、checklist 或 repo-local carrier 只按
+  GitHub task carrier profile 读取 locator、state、provenance 和冲突状态；不得替代
+  Work Item、spec suite、review record 或 merge-ready truth。
+
+场景到消费边界：
+
+| Skill | full path 消费 | minimal path 消费 |
+| --- | --- | --- |
+| `loom-story` | 输出 Story Readiness / Business Confirmation locator，供 `spec.md` / `plan.md` 和 suite path decision 消费 | 对纯治理、维护、格式、链接类事项输出 `not_applicable` rationale、consumer boundary、recheck condition |
+| `loom-spec-review` | 消费 suite path、formal spec、plan、必需工件、evidence-map / consistency-analysis 适用性；缺必需输入时 fail-closed | 只接受有效 `not_applicable` rationale；否则回退到 spec shaping / suite path 修正 |
+| `loom-build` | 在 build readiness 前消费 full suite readiness、scenario-to-validation mapping、task carrier profile locator | 合法跳过附加工件，但必须保留 rationale 和替代验证入口 |
+| `loom-pre-review` | 在 review 前消费 full suite locator、evidence-map freshness、consistency-analysis blocking/advisory 分类 | 缺口必须是有效 `not_applicable`，否则阻断 review admission |
+| `loom-merge-ready` | 在 merge gate 消费 reviewed full suite evidence、gate-chain、PR head / reviewed head / validation freshness | 只把有效 minimal path rationale 当作合法跳过，不把 missing 或 deferred 当作 ready |
+
+## 5. `governance_surface` 公共合同
 
 以下三类入口对外暴露的公共治理读面固定命名为 `governance_surface`：
 
@@ -73,7 +108,7 @@
 - 只回答 locator 与职责边界，不复制实时停点、下一步、阻断项、验证摘要
 - 若需要回答 gate 进度，统一通过 `review_merge_surface` 或 `status control plane` 读取，不在 `governance_surface` 并行维护 authored gate 状态
 
-## 5. Planning 边界
+## 6. Planning 边界
 
 `delivery planning` 是 `loom-init` 的路由结果，不是 build、review 或 merge-ready 的前置硬门禁。
 
@@ -102,7 +137,7 @@ planning 输出只能包含：
 
 planning 输出不能声明某个 Work Item 已完成，不能替代 `spec.md` / `plan.md`，不能替代 review、merge-ready、closeout，也不能直接改写 GitHub，除非用户明确要求执行创建或更新动作。
 
-## 6. fallback 语义
+## 7. fallback 语义
 
 出现以下任一情况时，root skill 不做猜测，直接回退到 `loom-init`：
 

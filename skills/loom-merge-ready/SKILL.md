@@ -17,6 +17,14 @@ description: 负责 merge 前统一放行。Use when Codex needs to confirm whet
 - 只输出进入 `GitHub controlled merge` 前的统一放行摘要，不替代宿主平台 merge 动作
 - PR 合并前的宿主硬门禁由 `pr-gate check` 和 `controlled-merge check|merge` 承接；它们只能消费 authored Loom review record，不能把 raw review/shadow evidence 当作 approval
 - 不新建 authored 真相源，也不直接执行平台合并
+- 消费 full/minimal suite path、evidence-map freshness、consistency-analysis
+  classification 与 gate-chain 当前状态，但不重新定义这些合同
+- full path 下，review record 必须证明已消费 suite locators、evidence-map、
+  consistency-analysis、PR head / reviewed head / validation freshness；缺失、stale 或
+  conflict 必须 fail-closed
+- minimal path 下，只有带 rationale、consumer boundary 和 recheck condition 的
+  `not_applicable` 可以跳过 full path 附加工件；missing、deferred 或 source/generated
+  sync 待办不能被当作 merge-ready
 
 输入信号与输出合同见：
 

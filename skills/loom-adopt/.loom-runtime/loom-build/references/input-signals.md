@@ -14,4 +14,6 @@
 - 目标仓库
 - 当前事项编号，或允许从事实链定位活跃事项
 - Work Item、spec、plan、recovery baseline、validation baseline、workspace 和 ownership constraints
+- suite path decision：full path 的 suite / evidence locators，或 minimal path 的
+  `not_applicable` rationale、consumer boundary、recheck condition 与替代验证入口
 - 若使用 subagent-driven mode，必须提供 delegation/build evidence locator

@@ -22,6 +22,11 @@
   - `checkpoint build` 的结果、摘要、阻断项与回退去向
 - `gate_chain`
   - `spec_gate`、`build_gate` 的当前可消费状态
+- `suite_path_consumption`
+  - `path: full|minimal`
+  - full path 的 suite locator、required artifact locators、provenance 与 freshness
+  - minimal path 的 `not_applicable` rationale、consumer boundary、recheck condition
+  - 无理由 missing、stale、conflict 或 deferred 输入必须进入 `missing_inputs`
 - `spec_review`
   - formal spec 路径、spec review record、head 绑定、stale 语义与当前 gate 结论
 - `spec_review_authority_migration`

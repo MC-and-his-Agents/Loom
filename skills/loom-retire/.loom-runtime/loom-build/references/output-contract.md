@@ -26,6 +26,12 @@
   - `integration_evidence`
   - `ownership_conflicts`
   - `repeated_blocker_signal`
+- `suite_path_consumption`
+  - full path 的必需工件、scenario-to-validation mapping、task carrier locator 与
+    provenance 是否可读
+  - minimal path 的 `not_applicable` rationale、consumer boundary、recheck condition
+    与替代验证入口
+  - 缺失、stale、conflict 或无理由跳过时必须阻断 build readiness
 - `steps`
   - 固定按 `runtime-state -> fact-chain -> state-check -> runtime-evidence -> checkpoint-admission -> workspace-locate -> build-execution` 顺序列出
 
