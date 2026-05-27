@@ -5,7 +5,7 @@
   "kind": "spec_review",
   "summary": "Spec review allows WI-1112: the minimal suite is limited to strengthening existing suite inspect CLI contract fixtures with read-only and mutates=false assertions across unknown, minimal, full, not_applicable, and full-missing states, without adding suite subcommands or changing readiness/scaffold/host truth behavior.",
   "reviewer": "Codex",
-  "reviewed_head": "2a2e5853c9659bc0f25916e3d147cb9b60f1239c",
+  "reviewed_head": "753b8354f15321526f502f99d6487392f94d00a6",
   "reviewed_validation_summary": "Passed: python3 tools/py_compile_clean.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py; python3 tools/loom.py suite inspect --target . --item WI-1112 --json; git diff --check; focused rg for suite inspect fixture anchors; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py governance-profile status --target .; python3 .loom/bin/loom_flow.py runtime-parity validate --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1112; python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1112 --write; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking.",
   "fallback_to": null,
   "findings": [],
