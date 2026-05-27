@@ -1,39 +1,38 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1115",
-  "decision": "fallback",
+  "decision": "allow",
   "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "150af3015d17a3f4e2788f933f77ec253f7ef2df",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "summary": "Implementation review allows WI-1115 at PR checkpoint: `loom suite scaffold --apply` writes only missing repo-local minimal spec/plan artifacts, preserves existing files, reports actual created locators, keeps dry-run and full-suite reserved behavior stable, fails closed for traversal or absolute items, symlink paths, and non-file artifact placeholders, and keeps host, review, merge-ready, closeout, generated skills, spec-kit command names, and `.specify/` layout out of scope. WI-1114 terminal carrier reconciliation is limited to the previously merged PR #1160 state so the active fact chain has a single current Work Item.",
+  "reviewer": "Codex",
+  "reviewed_head": "356e28f144f532c178e17cb5eb894335018e3865",
+  "reviewed_validation_summary": "Passed: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/loom.py help --json; python3 tools/loom.py suite scaffold --target <tmp> --item WI-1115 --json --apply; targeted traversal item, absolute item, symlink artifact, and directory artifact fail-closed checks; python3 tools/check_cli_contract.py; git diff --check; focused rg for suite scaffold apply and fail-closed anchors; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1115 --write; python3 .loom/bin/loom_flow.py governance-profile status --target .; python3 .loom/bin/loom_flow.py runtime-parity validate --target .; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1115.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1115.md",
+    "recovery_entry": ".loom/progress/WI-1115.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "spec_review": ".loom/reviews/WI-1115.spec.json",
+    "subagent_review": "Ramanujan read-only review found item traversal, symlink traversal, absolute item, and non-file artifact risks; all were fixed and covered by CLI contract tests before this implementation review.",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
 }
