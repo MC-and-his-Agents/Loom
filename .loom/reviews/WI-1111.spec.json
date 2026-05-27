@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1111",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review allows WI-1111: the minimal suite covers declaring the existing read-only suite inspect command in help JSON, command matrix docs, and CLI contract checks without adding new suite subcommands or changing readiness/scaffold/host truth behavior.",
+  "reviewer": "Codex",
+  "reviewed_head": "2b229f4da9b516581662f50029a19818c9d27ca8",
+  "reviewed_validation_summary": "Passed: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/loom.py help --json; python3 tools/loom.py suite inspect --target . --item WI-1111 --json; python3 tools/check_cli_contract.py; git diff --check; focused rg for suite inspect declaration anchors; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py governance-profile status --target .",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1111.md",
+    "recovery_entry": ".loom/progress/WI-1111.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pending",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
