@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1118",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "General review allows WI-1118 at build checkpoint: implementation is limited to contract-test fixtures and Loom carriers. The added checks prove suite scaffold planned and created locators stay in the allowed spec scaffold set, forbidden truth surfaces are unchanged, and no host/review/merge-ready/closeout/generated-skill action keys are emitted. Local validation and build checkpoint passed.",
+  "reviewer": "Codex",
+  "reviewed_head": "d1c106844f4ecde11345f3f75fa0bed73f5d52ab",
+  "reviewed_validation_summary": "Passed: python3 tools/check_cli_contract.py; git diff --check; focused rg for forbidden truth fixtures, scaffold write boundaries, /speckit, and .specify; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; python3 .loom/bin/loom_flow.py checkpoint build --target . --item WI-1118.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1118.md",
+    "recovery_entry": ".loom/progress/WI-1118.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}
