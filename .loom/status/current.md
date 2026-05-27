@@ -14,9 +14,9 @@
 - Current Checkpoint: merge-ready
 - Current Stop: PR #1103 opened for WI-1049 with local validation passed; remote PR gate requires Work Item binding update.
 - Next Step: Push Work Item / status / review carriers, update PR body with `Loom Work Item: WI-1049`, wait for remote checks, merge, then close #1049.
-- Blockers: None
+- Blockers: None recorded.
 - Latest Validation Summary: Passed locally on branch `work/1049-github-task-carrier-profile`: `git diff --check`; focused `rg` for GitHub profile / task carrier / sub-issue / Project item / checklist / unique execution entry; focused `rg` for forbidden use / review / merge-ready / closeout / provenance / locator; focused `rg` for Project Status / Todo / In Progress / Done / completed truth / host agent; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`.
-- Recovery Boundary: Continue from `/Users/mc/dev/Loom-worktrees/1049-github-task-carrier-profile` on branch `work/1049-github-task-carrier-profile`. #1049 owns GitHub task carrier profile mapping only; do not update scenario skill routing, source/generated skills surface, drift checks, CLI command surface, or core #1014-#1019 contracts.
+- Recovery Boundary: #1049 owns GitHub task carrier profile mapping only. Do not update scenario skill routing, source/generated skills surface, drift checks, CLI command surface, or core #1014-#1019 contracts in this Work Item.
 - Current Lane: github-task-carrier-profile
 
 ## Runtime Evidence
