@@ -5,7 +5,7 @@
   "kind": "spec_review",
   "summary": "Spec review allows WI-1118: scope is limited to negative contract fixtures proving suite scaffold dry-run/apply stays repo-local and does not modify host, review, merge-ready, closeout, task-carrier, generated skills, runtime, shadow, PR template, or workflow truth surfaces. No host integration, new scaffold artifacts, rollback execution, /speckit.*, or .specify layout is introduced.",
   "reviewer": "Codex",
-  "reviewed_head": "3221696356fad8b907dc9e1ab7f9ef718dc47d8f",
+  "reviewed_head": "32216963095dd657c416263602f17cb61224a2ee",
   "reviewed_validation_summary": "Passed: python3 tools/check_cli_contract.py; git diff --check; focused rg for forbidden truth fixtures, scaffold write boundaries, /speckit, and .specify; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; python3 .loom/bin/loom_flow.py checkpoint build --target . --item WI-1118.",
   "fallback_to": null,
   "findings": [],
