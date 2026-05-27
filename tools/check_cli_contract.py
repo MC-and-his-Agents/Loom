@@ -74,6 +74,7 @@ REQUIRED_COMMANDS = {
     "skills doctor",
     "skills package",
     "skills release-check",
+    "suite inspect",
 }
 
 
@@ -257,6 +258,8 @@ def main() -> int:
     ):
         if matrix[command]["status"] != "implemented":
             raise AssertionError(f"{command} must be implemented for #924-#928")
+    if matrix["suite inspect"]["status"] != "implemented" or matrix["suite inspect"]["domain"] != "suite":
+        raise AssertionError("suite inspect must be declared in help matrix for #1111")
 
     _, version_payload = run_json(["version", "--json"], expect=0)
     if version_payload["result"] != "pass" or not version_payload["versions"]["repo_version"]:

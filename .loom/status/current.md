@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1110
-- Goal: Expose suite path and artifact inventory locators in loom suite inspect.
-- Scope: #1110 only: extend read-only suite inspect to derive explicit suite path decisions and repo-relative artifact inventory locators; update focused CLI contract fixtures; no readiness decision, scaffold writes, host mutation, review truth mutation, merge-ready truth, closeout truth, or spec-kit names/layout.
-- Execution Path: issue #1110 -> branch work/1110-suite-inspect-locators -> worktree /Users/mc/dev/Loom-worktrees/1110-suite-inspect-locators -> PR pending
+- Item ID: WI-1111
+- Goal: Expose `suite inspect` through Loom's declared CLI surface.
+- Scope: #1111 only: add the already implemented read-only `loom suite inspect` command to help JSON, the human command matrix, and CLI contract checks; no new suite subcommands, no readiness decision, no scaffold writes, no host mutation, no review truth mutation, no merge-ready truth, no closeout truth, and no spec-kit names/layout.
+- Execution Path: issue #1111 -> branch work/1111-suite-inspect-surface -> worktree /Users/mc/dev/Loom-worktrees/1111-suite-inspect-surface -> PR pending
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1110.md
-- Review Entry: .loom/reviews/WI-1110.json
-- Validation Entry: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/loom.py suite inspect --target . --item WI-1110 --json; python3 tools/check_cli_contract.py; git diff --check; focused rg; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py
-- Closing Condition: #1110 PR is merged to main, closeout evidence records PR/head/merge/target branch/validation/Project state, #1110 is closed completed, and #1108 can consume the evidence.
-- Current Checkpoint: merge checkpoint
-- Current Stop: WI-1110 PR #1157 is open at head faf24ee9626845fe4e0901f6e11a1b505f0ea53f; local validation, spec review, implementation review, and host readback are complete.
-- Next Step: Run PR gate and GitHub required checks for PR #1157, then perform controlled merge, closeout sync, Project Done update, and parent #1108 evidence consumption.
+- Recovery Entry: .loom/progress/WI-1111.md
+- Review Entry: .loom/reviews/WI-1111.json
+- Validation Entry: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/loom.py help --json; python3 tools/loom.py suite inspect --target . --item WI-1111 --json; python3 tools/check_cli_contract.py; git diff --check; focused rg; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py
+- Closing Condition: #1111 PR is merged to main, closeout evidence records PR/head/merge/target branch/validation/Project state, #1111 is closed completed, and #1108 can consume the evidence.
+- Current Checkpoint: implementation
+- Current Stop: Declared CLI surface edits are complete; local syntax, help JSON, suite inspect, CLI contract, release/version/package, skills surface, host adapter, bootstrap verify, governance profile status, and source loom_check validation passed.
+- Next Step: Commit implementation, record spec and implementation reviews, run Loom checkpoint/gate checks, then open PR, run host checks, merge, closeout, and parent #1108 evidence consumption.
 - Blockers: None
-- Latest Validation Summary: Passed: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/loom.py suite inspect --target . --item WI-1110 --json; python3 tools/check_cli_contract.py; git diff --check; focused rg for suite inspect locator anchors; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 .loom/bin/loom_flow.py checkpoint build --target . --item WI-1110; PR #1157 host readback head faf24ee9626845fe4e0901f6e11a1b505f0ea53f.
-- Recovery Boundary: #1110 owns read-only suite inspect path decision and repo-relative artifact locator reporting plus focused CLI fixtures. It must not implement readiness validation, scaffold writes, evidence freshness, host mutation, review truth mutation by suite commands, merge-ready truth, closeout truth, spec-kit names, or .specify layout.
-- Current Lane: full-spec-suite-cli/suite-inspect-locators
+- Latest Validation Summary: Passed: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/loom.py help --json; python3 tools/loom.py suite inspect --target . --item WI-1111 --json; python3 tools/check_cli_contract.py; git diff --check; focused rg for suite inspect declaration anchors; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py governance-profile status --target .
+- Recovery Boundary: #1111 owns declaring the existing read-only `loom suite inspect` surface in help JSON, command matrix docs, and CLI contract checks. It must not implement scaffold, validate, analyze, evidence, consistency, or carrier suite subcommands; must not decide readiness; must not write suite artifacts; must not mutate host state; and must not replace Work Item, review, merge-ready, closeout, or docs/source truth.
+- Current Lane: full-spec-suite-cli/suite-inspect-surface
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1110.md
-- Dynamic Truth: .loom/progress/WI-1110.md
+- Static Truth: .loom/work-items/WI-1111.md
+- Dynamic Truth: .loom/progress/WI-1111.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
