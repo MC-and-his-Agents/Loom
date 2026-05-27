@@ -5,7 +5,7 @@
   "kind": "general_review",
   "summary": "WI-1051 is approved for PR: source shared references now mirror the docs authority for full suite, linked scaffold templates, execution breakdown, task carrier, evidence-map, and consistency-analysis; scenario skills and install layout expose those references to installed skills; `skills_surface.py check` detects docs-to-source reference drift and source-to-generated skills drift; generated `skills/` is refreshed. #1036 deferred source/generated sync is consumed by this Work Item's evidence and does not need standalone reopening.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "7e57e52729c61e3c81dddd469152898d6fd18462",
+  "reviewed_head": "4e3535ad15a0ef2ab3af0cf8972c9c0f1362bf4b",
   "reviewed_validation_summary": "Passed locally on branch `work/1051-source-generated-skills-sync`: `git diff --check`; focused `rg` checks for full suite, task carrier, evidence-map, consistency-analysis, source/generated, generated skills, drift, deferred, and not_applicable boundaries; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 tools/check_release_surface.py`; `python3 tools/host_adapter_check.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_npm_package.py`.",
   "fallback_to": null,
   "findings": [
