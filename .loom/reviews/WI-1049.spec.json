@@ -1,0 +1,24 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1049",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1049 spec suite is approved: scope is limited to GitHub task carrier profile mapping, normalized carrier status, locator/provenance requirements, and Project Status reconciliation while excluding scenario skills routing, source/generated sync, drift checks, CLI planning, and core #1014-#1019 contract changes.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "e6aecedd471c088ba5919d7a26a3a12a4c382455",
+  "reviewed_validation_summary": "Spec review consumed `.loom/specs/WI-1049/spec.md`, `.loom/specs/WI-1049/plan.md`, and `.loom/specs/WI-1049/implementation-contract.md`; implementation validation passed locally with `git diff --check`, focused `rg` checks, `python3 tools/skills_surface.py check`, and `python3 tools/loom_check.py --profile source --source-surface contract-only .`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1050 scenario skills routing remains downstream.",
+    "#1051 source/generated skills surface synchronization remains downstream and consumes #1036 deferred sync."
+  ],
+  "consumed_inputs": {
+    "spec": ".loom/specs/WI-1049/spec.md",
+    "plan": ".loom/specs/WI-1049/plan.md",
+    "implementation_contract": ".loom/specs/WI-1049/implementation-contract.md",
+    "work_item": ".loom/work-items/WI-1049.md",
+    "recovery_entry": ".loom/progress/WI-1049.md"
+  }
+}

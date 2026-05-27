@@ -100,13 +100,33 @@ GitHub task carrier 边界：
 - Carrier state 必须映射到 `pending`、`in_progress`、`done`、`blocked`、`deferred` 或 `not_applicable`，并回链 `Work Item`、breakdown unit、spec scenario、plan phase 与 validation strategy。
 - Carrier `done`、Project `Done`、checklist checked、issue closed 或 PR merged 都不等于 behavior evidence、test evidence、review pass、merge-ready pass 或 closeout。
 
+GitHub task carrier profile：
+
+| Host object | Carrier type | Allowed use | Required locator / provenance | Forbidden use |
+| --- | --- | --- | --- | --- |
+| Work Item issue | `github_issue` with `relationship: primary` only when the issue is authored as the Work Item | 承接当前 Work Item 的 scope、workspace entry、branch、PR、review、merge-ready、merge commit 和 closeout 回链 | issue number、parent FR、branch、正式 worktree、PR、head SHA、closeout comment、Project item if present | 不被 sub-issue、Project item、checklist、`tasks.md` 或 PR body Markdown 替代 |
+| Sub-issue that is not the Work Item | `github_issue` with `relationship: primary` or `mirror` for a breakdown unit | 承接 execution breakdown unit 的讨论、局部阻断、局部状态和回链 | sub-issue number、parent issue、breakdown unit locator、source issue state、normalized status、creating or syncing comment | 不进入正式执行链；不替代 Work Item、recovery、review、merge-ready 或 closeout truth |
+| Project item | `github_project_item` with `relationship: mirror` | 承接视图、排序、筛选、队列和 normalized status | Project number、item id、Status field source value、sync time 或 host event locator | 不替代 issue state、Work Item、review verdict、merge-ready result、closeout basis 或 evidence freshness |
+| Issue / PR checklist item | `checklist_item` | 承接轻量步骤、人工确认 locator 或局部 ownership 标记 | containing issue / PR locator、checklist item text or anchor、checked state、sync comment if used as evidence locator | checked 不等于 behavior evidence、test evidence、review pass、merge-ready pass 或 closeout |
+| Repo-local `tasks.md` | `repo_tasks_md` | 承接 repo-local task list、breakdown unit 到 carrier 的对照和 subagent ownership | repo-relative path、line or stable anchor、unit id、source commit or head SHA | 不是 GitHub profile 必选工件；不 authored recovery dynamic fields、gate state 或 closeout result |
+| External tracker linked from GitHub | `external_tracker` | 承接 GitHub 外部组织系统中的 task locator 和 mirror status | external URL or id、linked issue / comment、source value、normalized status、freshness rule | GitHub profile 只消费 locator 与 provenance，不把外部状态提升为 Loom truth |
+| No carrier needed | `not_applicable` | 当前 unit 不需要 GitHub carrier，或 minimal path 合法跳过 carrier | rationale、consumer boundary、recheck condition、owning Work Item locator | 不用静默缺失伪装成合法跳过 |
+
+状态规范化规则：
+
+- GitHub open issue 默认只能映射为 `pending` 或 `in_progress`，取决于是否已有 active Work Item / owner / branch / worktree / PR 或明确执行评论。
+- GitHub closed issue 可以映射为 carrier `done`，但若该 issue 是 Work Item，仍必须有 closeout evidence 才能被 closeout 消费。
+- GitHub blocked-by / blocking comment、label 或原生关系可以映射为 carrier `blocked`，但必须回链 blocker locator 或 recovery entry。
+- `deferred` 必须有 follow-up locator、activation condition 和不得作为 completed 消费的声明。
+- `not_applicable` 必须有 rationale、consumer boundary 和 recheck condition；没有这些字段的缺口是 `missing`。
+
 Project `Status` 是宿主视图字段：
 
 - `Todo`: 已规划或已加入 Project，但尚未进入正式执行现场。
 - `In Progress`: 已有 active Work Item / owner / branch / worktree / PR，或明确处于执行中。
 - `Done`: 只能作为 closeout 完成后的宿主视图状态；不能仅因 PR merged、issue closed、task checked 或 Project workflow 自动移动而视为 completed truth。
 
-若 GitHub workflow 自动修改 Project `Status`，agent 必须重新核对 issue、PR、Work Item、recovery、review、merge-ready 和 closeout 证据。若 Project `Status` 与这些证据冲突，Loom truth carriers 与 closeout evidence 优先，Project item 需要回写或标记 drift。
+Host agent 读取或更新 Project `Status` 时必须先消费同一 Work Item 的 issue、PR、merge commit、recovery、review、merge-ready 和 closeout locators。若 GitHub workflow 自动修改 Project `Status`，agent 必须重新核对 issue、PR、Work Item、recovery、review、merge-ready、closeout 和 evidence-map freshness。若 Project `Status` 与这些证据冲突，Loom truth carriers 与 closeout evidence 优先，Project item 需要回写或标记 drift；冲突不得被下游 review、merge-ready 或 closeout 当作 advisory-only 状态展示。
 
 ## 5. strong governance 默认要求
 
