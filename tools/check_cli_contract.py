@@ -97,6 +97,23 @@ def run_json(args: list[str], *, expect: int | None = None) -> tuple[int, dict[s
     return completed.returncode, payload
 
 
+def snapshot_tree(target: Path) -> list[str]:
+    return sorted(path.relative_to(target).as_posix() for path in target.rglob("*"))
+
+
+def run_suite_inspect_fixture(target: Path, item: str) -> dict[str, Any]:
+    before = snapshot_tree(target)
+    _, payload = run_json(["suite", "inspect", "--target", str(target), "--item", item, "--json"], expect=0)
+    after = snapshot_tree(target)
+    if before != after:
+        raise AssertionError(f"suite inspect mutated fixture target for {item}")
+    if payload.get("command") != "suite inspect" or payload.get("result") != "pass" or payload.get("mutates") is not False:
+        raise AssertionError(f"suite inspect envelope drifted for {item}")
+    if payload.get("item_id") != item:
+        raise AssertionError(f"suite inspect item binding drifted for {item}")
+    return payload
+
+
 def write_state(target: Path, payload: dict[str, Any]) -> None:
     state_dir = target / ".loom"
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -269,26 +286,9 @@ def main() -> int:
         tmp = Path(raw_tmp)
         suite_unknown_target = tmp / "suite-unknown"
         suite_unknown_target.mkdir()
-        before_suite_inspect = sorted(
-            path.relative_to(suite_unknown_target).as_posix()
-            for path in suite_unknown_target.rglob("*")
-        )
-        _, suite_unknown = run_json(
-            ["suite", "inspect", "--target", str(suite_unknown_target), "--item", "WI-1109", "--json"],
-            expect=0,
-        )
-        after_suite_inspect = sorted(
-            path.relative_to(suite_unknown_target).as_posix()
-            for path in suite_unknown_target.rglob("*")
-        )
-        if before_suite_inspect != after_suite_inspect:
-            raise AssertionError("suite inspect mutated an unknown suite target")
+        suite_unknown = run_suite_inspect_fixture(suite_unknown_target, "WI-1109")
         if (
-            suite_unknown["command"] != "suite inspect"
-            or suite_unknown["result"] != "pass"
-            or suite_unknown.get("mutates") is not False
-            or suite_unknown.get("item_id") != "WI-1109"
-            or suite_unknown.get("payload", {}).get("suite_path") != "unknown"
+            suite_unknown.get("payload", {}).get("suite_path") != "unknown"
             or suite_unknown.get("payload", {}).get("artifact_inventory") != []
             or "suite_path_decision" not in suite_unknown.get("payload", {}).get("missing_inputs", [])
         ):
@@ -299,10 +299,7 @@ def main() -> int:
         minimal_suite.mkdir(parents=True)
         (minimal_suite / "spec.md").write_text("# Spec\n\n- Suite path: minimal\n", encoding="utf-8")
         (minimal_suite / "plan.md").write_text("# Plan\n\nConsumes Suite path: minimal\n", encoding="utf-8")
-        _, suite_minimal = run_json(
-            ["suite", "inspect", "--target", str(minimal_target), "--item", "WI-minimal", "--json"],
-            expect=0,
-        )
+        suite_minimal = run_suite_inspect_fixture(minimal_target, "WI-minimal")
         minimal_payload = suite_minimal.get("payload", {})
         minimal_inventory = {entry["artifact"]: entry for entry in minimal_payload.get("artifact_inventory", [])}
         if (
@@ -315,6 +312,19 @@ def main() -> int:
             or minimal_payload.get("missing_inputs")
         ):
             raise AssertionError("suite inspect minimal locator payload drifted")
+
+        not_applicable_target = tmp / "suite-not-applicable"
+        not_applicable_suite = not_applicable_target / ".loom" / "specs" / "WI-not-applicable"
+        not_applicable_suite.mkdir(parents=True)
+        (not_applicable_suite / "spec.md").write_text("# Spec\n\n- Suite path: not applicable\n", encoding="utf-8")
+        suite_not_applicable = run_suite_inspect_fixture(not_applicable_target, "WI-not-applicable")
+        not_applicable_payload = suite_not_applicable.get("payload", {})
+        if (
+            not_applicable_payload.get("suite_path") != "not_applicable"
+            or not_applicable_payload.get("path_decision_locator") != ".loom/specs/WI-not-applicable/spec.md"
+            or not_applicable_payload.get("missing_inputs")
+        ):
+            raise AssertionError("suite inspect not_applicable payload drifted")
 
         full_target = tmp / "suite-full"
         full_suite = full_target / ".loom" / "specs" / "WI-full"
@@ -332,10 +342,7 @@ def main() -> int:
             "task-carrier.md",
         ):
             (full_suite / name).write_text(f"# {name}\n", encoding="utf-8")
-        _, suite_full = run_json(
-            ["suite", "inspect", "--target", str(full_target), "--item", "WI-full", "--json"],
-            expect=0,
-        )
+        suite_full = run_suite_inspect_fixture(full_target, "WI-full")
         full_payload = suite_full.get("payload", {})
         full_inventory = {entry["artifact"]: entry for entry in full_payload.get("artifact_inventory", [])}
         expected_full_locators = {
@@ -365,10 +372,7 @@ def main() -> int:
             encoding="utf-8",
         )
         (full_missing_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
-        _, suite_full_missing = run_json(
-            ["suite", "inspect", "--target", str(full_missing_target), "--item", "WI-full-missing", "--json"],
-            expect=0,
-        )
+        suite_full_missing = run_suite_inspect_fixture(full_missing_target, "WI-full-missing")
         full_missing_payload = suite_full_missing.get("payload", {})
         missing_inventory = {entry["artifact"]: entry for entry in full_missing_payload.get("artifact_inventory", [])}
         if (
