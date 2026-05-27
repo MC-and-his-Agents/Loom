@@ -1,39 +1,36 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1116",
-  "decision": "fallback",
+  "decision": "allow",
   "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "7df34481ddf672412285d7a9266de52c34489d31",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "summary": "Implementation review allows WI-1116 at build checkpoint: full suite scaffold generation is limited to the six standard repo-local artifacts under .loom/specs/<item>/, preserves minimal scaffold compatibility, preserves existing files, reports actual created locators, keeps dry-run read-only, fails closed for invalid item/symlink/non-file artifact paths, and keeps evidence-map, consistency-analysis, task-carrier, host, review, merge-ready, closeout, generated skills, /speckit.*, and .specify surfaces out of scope. Sagan read-only review confirmed #1116 owns only these six artifacts and excludes #1017/#1018 extension surfaces.",
+  "reviewer": "Codex",
+  "reviewed_head": "53a53c8c626c56b6c3464b5df84d5b150924ce09",
+  "reviewed_validation_summary": "Passed: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/loom.py help --json; python3 tools/loom.py suite scaffold --target <tmp> --item WI-1116 --suite full --json; python3 tools/loom.py suite scaffold --target <tmp> --item WI-1116 --suite full --json --apply; python3 tools/check_cli_contract.py; git diff --check; focused rg for full suite scaffold anchors and forbidden surfaces; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1116.md",
+    "recovery_entry": ".loom/progress/WI-1116.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
 }
