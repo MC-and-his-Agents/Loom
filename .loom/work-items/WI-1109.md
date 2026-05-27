@@ -6,7 +6,7 @@
 - Goal: Implement the first read-only loom suite inspect JSON command.
 - Scope: #1109 only: add command dispatch and JSON envelope for read-only suite inspect unknown-state fallback; ownership is limited to tools/loom.py, tools/check_cli_contract.py, and WI-1109 local Loom carriers; no validation gates, no scaffold generation, no suite command file writes, no host truth or review truth mutation by the suite command.
 - Execution Path: issue #1109 -> branch work/1109-suite-inspect-basic -> worktree /Users/mc/dev/Loom-worktrees/1109-suite-inspect-basic -> PR #1156
-- Workspace Entry: /Users/mc/dev/Loom-worktrees/1109-suite-inspect-basic
+- Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1109.md
 - Review Entry: .loom/reviews/WI-1109.json
 - Validation Entry: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/loom.py suite inspect --target . --item WI-1109 --json; python3 tools/check_cli_contract.py; git diff --check; focused rg; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py
