@@ -6,7 +6,7 @@
 - Goal: Implement dry-run planning for `loom suite scaffold`.
 - Scope: #1114 only: expose `loom suite scaffold` as a dry-run planning command that reports minimal suite `spec.md` and `plan.md` writes without touching files; include source templates, consumed locators, overwrite policy, rollback note, empty created locators, and `mutates: false`; keep `--apply` and full suite scaffold planning fail-closed for later Work Items.
 - Execution Path: issue #1114 -> branch work/1114-suite-scaffold-dry-run -> worktree /Users/mc/dev/Loom-worktrees/1114-suite-scaffold-dry-run -> PR pending
-- Workspace Entry: /Users/mc/dev/Loom-worktrees/1114-suite-scaffold-dry-run
+- Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1114.md
 - Review Entry: .loom/reviews/WI-1114.json
 - Validation Entry: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/loom.py help --json; python3 tools/loom.py suite scaffold --target . --item WI-1114 --json; python3 tools/check_cli_contract.py; git diff --check; focused rg; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py
