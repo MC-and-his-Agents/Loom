@@ -291,6 +291,91 @@ def main() -> int:
         ):
             raise AssertionError("suite inspect unknown-state payload drifted")
 
+        minimal_target = tmp / "suite-minimal"
+        minimal_suite = minimal_target / ".loom" / "specs" / "WI-minimal"
+        minimal_suite.mkdir(parents=True)
+        (minimal_suite / "spec.md").write_text("# Spec\n\n- Suite path: minimal\n", encoding="utf-8")
+        (minimal_suite / "plan.md").write_text("# Plan\n\nConsumes Suite path: minimal\n", encoding="utf-8")
+        _, suite_minimal = run_json(
+            ["suite", "inspect", "--target", str(minimal_target), "--item", "WI-minimal", "--json"],
+            expect=0,
+        )
+        minimal_payload = suite_minimal.get("payload", {})
+        minimal_inventory = {entry["artifact"]: entry for entry in minimal_payload.get("artifact_inventory", [])}
+        if (
+            minimal_payload.get("suite_path") != "minimal"
+            or minimal_payload.get("path_decision_locator") != ".loom/specs/WI-minimal/spec.md"
+            or minimal_payload.get("spec_locator") != ".loom/specs/WI-minimal/spec.md"
+            or minimal_payload.get("plan_locator") != ".loom/specs/WI-minimal/plan.md"
+            or minimal_inventory.get("spec.md", {}).get("locator") != ".loom/specs/WI-minimal/spec.md"
+            or minimal_inventory.get("plan.md", {}).get("locator") != ".loom/specs/WI-minimal/plan.md"
+            or minimal_payload.get("missing_inputs")
+        ):
+            raise AssertionError("suite inspect minimal locator payload drifted")
+
+        full_target = tmp / "suite-full"
+        full_suite = full_target / ".loom" / "specs" / "WI-full"
+        full_suite.mkdir(parents=True)
+        (full_suite / "suite-index.md").write_text(
+            "# Full Suite Index\n\n- Schema marker: loom-full-suite-index/v1\n- Suite path: full\n",
+            encoding="utf-8",
+        )
+        for name in (
+            "spec.md",
+            "plan.md",
+            "evidence-map.md",
+            "consistency-analysis.md",
+            "execution-breakdown.md",
+            "task-carrier.md",
+        ):
+            (full_suite / name).write_text(f"# {name}\n", encoding="utf-8")
+        _, suite_full = run_json(
+            ["suite", "inspect", "--target", str(full_target), "--item", "WI-full", "--json"],
+            expect=0,
+        )
+        full_payload = suite_full.get("payload", {})
+        full_inventory = {entry["artifact"]: entry for entry in full_payload.get("artifact_inventory", [])}
+        expected_full_locators = {
+            "suite-index.md": ".loom/specs/WI-full/suite-index.md",
+            "spec.md": ".loom/specs/WI-full/spec.md",
+            "plan.md": ".loom/specs/WI-full/plan.md",
+            "evidence-map.md": ".loom/specs/WI-full/evidence-map.md",
+            "consistency-analysis.md": ".loom/specs/WI-full/consistency-analysis.md",
+            "execution-breakdown.md": ".loom/specs/WI-full/execution-breakdown.md",
+            "task-carrier": ".loom/specs/WI-full/task-carrier.md",
+        }
+        if full_payload.get("suite_path") != "full" or full_payload.get("missing_inputs"):
+            raise AssertionError("suite inspect full path decision drifted")
+        for artifact, locator in expected_full_locators.items():
+            if full_inventory.get(artifact, {}).get("locator") != locator:
+                raise AssertionError(f"suite inspect full locator drifted for {artifact}")
+            if full_inventory[artifact]["locator"].startswith("/"):
+                raise AssertionError("suite inspect emitted absolute artifact locator")
+        if full_payload.get("task_carrier_locators") != [".loom/specs/WI-full/task-carrier.md"]:
+            raise AssertionError("suite inspect task carrier locators drifted")
+
+        full_missing_target = tmp / "suite-full-missing"
+        full_missing_suite = full_missing_target / ".loom" / "specs" / "WI-full-missing"
+        full_missing_suite.mkdir(parents=True)
+        (full_missing_suite / "suite-index.md").write_text(
+            "# Full Suite Index\n\n- Schema marker: loom-full-suite-index/v1\n- Suite path: full\n",
+            encoding="utf-8",
+        )
+        (full_missing_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
+        _, suite_full_missing = run_json(
+            ["suite", "inspect", "--target", str(full_missing_target), "--item", "WI-full-missing", "--json"],
+            expect=0,
+        )
+        full_missing_payload = suite_full_missing.get("payload", {})
+        missing_inventory = {entry["artifact"]: entry for entry in full_missing_payload.get("artifact_inventory", [])}
+        if (
+            full_missing_payload.get("suite_path") != "full"
+            or "required_artifact:.loom/specs/WI-full-missing/plan.md"
+            not in full_missing_payload.get("missing_inputs", [])
+            or missing_inventory.get("plan.md", {}).get("status") != "missing"
+        ):
+            raise AssertionError("suite inspect missing required artifact payload drifted")
+
         missing_target = tmp / "missing"
         missing_target.mkdir()
         status, missing_payload = run_json(["installed-state", "validate", "--target", str(missing_target), "--json"])

@@ -1,0 +1,36 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1110",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review allows WI-1110: formal minimal suite covers read-only suite inspect locator discovery, unknown/minimal/full/missing required artifact fixtures, repo-relative locator boundary, and no readiness/scaffold/host truth mutation.",
+  "reviewer": "Codex",
+  "reviewed_head": "3175fca89701ac2e3b79ad1a3ce88b04ca335140",
+  "reviewed_validation_summary": "Passed: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; python3 tools/loom.py suite inspect --target . --item WI-1110 --json; python3 tools/check_cli_contract.py; git diff --check; focused rg for suite inspect locator anchors; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1110.md",
+    "recovery_entry": ".loom/progress/WI-1110.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

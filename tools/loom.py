@@ -1843,6 +1843,173 @@ def resolve_command(argv: list[str]) -> tuple[str, list[str]] | None:
     return argv[0], argv[1:]
 
 
+def repo_locator(path: Path, target_root: Path) -> str:
+    return path.relative_to(target_root).as_posix()
+
+
+def first_existing_locator(paths: list[Path], target_root: Path) -> str | None:
+    for path in paths:
+        if path.exists() and path.is_file():
+            return repo_locator(path, target_root)
+    return None
+
+
+def suite_path_marker(text: str) -> str | None:
+    lowered = text.lower()
+    for line in lowered.splitlines():
+        stripped = line.strip().lstrip("-").strip()
+        if stripped.startswith("suite path:"):
+            value = stripped.split(":", 1)[1].strip().replace(" ", "_")
+            if value in {"full", "minimal", "not_applicable", "unknown"}:
+                return value
+    if "loom-full-suite-index/v1" in lowered:
+        return "full"
+    return None
+
+
+def read_suite_path_marker(path: Path) -> str | None:
+    if not path.exists() or not path.is_file():
+        return None
+    try:
+        return suite_path_marker(path.read_text(encoding="utf-8"))
+    except OSError:
+        return None
+
+
+def suite_artifact_paths(target: Path, item: str | None) -> dict[str, list[Path]]:
+    if not item:
+        return {}
+    suite_root = target / ".loom" / "specs" / item
+    return {
+        "suite-index.md": [suite_root / "suite-index.md"],
+        "spec.md": [suite_root / "spec.md"],
+        "plan.md": [suite_root / "plan.md"],
+        "evidence-map.md": [suite_root / "evidence-map.md"],
+        "consistency-analysis.md": [suite_root / "consistency-analysis.md"],
+        "execution-breakdown.md": [suite_root / "execution-breakdown.md"],
+        "task-carrier": [
+            suite_root / "task-carrier.md",
+            suite_root / "tasks.md",
+            target / ".loom" / "tasks" / f"{item}.md",
+            target / "tasks.md",
+        ],
+    }
+
+
+def suite_inspect_payload(target: Path, item: str | None) -> tuple[str, dict[str, Any]]:
+    paths = suite_artifact_paths(target, item)
+    suite_index = paths.get("suite-index.md", [None])[0]
+    spec = paths.get("spec.md", [None])[0]
+    plan = paths.get("plan.md", [None])[0]
+
+    path_decision_locator: str | None = None
+    suite_path = "unknown"
+    for path in (suite_index, spec, plan):
+        if path is None:
+            continue
+        marker = read_suite_path_marker(path)
+        if marker:
+            suite_path = marker
+            path_decision_locator = repo_locator(path, target)
+            break
+
+    required_by_path = {
+        "full": {"suite-index.md", "spec.md", "plan.md"},
+        "minimal": {"spec.md", "plan.md"},
+        "not_applicable": set(),
+        "unknown": set(),
+    }
+    required = required_by_path.get(suite_path, set())
+
+    artifact_inventory: list[dict[str, Any]] = []
+    missing_inputs: list[str] = []
+    locators: dict[str, Any] = {}
+    for artifact, candidates in paths.items():
+        locator = first_existing_locator(candidates, target)
+        is_required = artifact in required
+        if locator is not None:
+            artifact_inventory.append(
+                {
+                    "artifact": artifact,
+                    "locator": locator,
+                    "status": "present",
+                    "required": is_required,
+                }
+            )
+        elif is_required:
+            expected = repo_locator(candidates[0], target)
+            artifact_inventory.append(
+                {
+                    "artifact": artifact,
+                    "locator": expected,
+                    "status": "missing",
+                    "required": True,
+                }
+            )
+            missing_inputs.append(f"required_artifact:{expected}")
+
+        key = artifact.replace("-", "_").removesuffix(".md") + "_locator"
+        if artifact == "task-carrier":
+            locators["task_carrier_locators"] = [locator] if locator is not None else []
+        else:
+            locators[key] = locator
+
+    if suite_path == "unknown":
+        missing_inputs.insert(0, "suite_path_decision")
+
+    advisory_gaps = []
+    if suite_path == "unknown":
+        advisory_gaps.append(
+            {
+                "id": "suite-inspect-unknown-path",
+                "classification": "missing",
+                "failure_kind": "missing_suite_path_decision",
+                "surface": "suite",
+                "source_locator": None,
+                "consumer_impact": "inspect-only",
+                "remediation_direction": "Author or link a suite path decision before readiness validation.",
+                "fallback_to": "loom suite inspect --target <repo> --item <item> --json",
+            }
+        )
+    for missing in missing_inputs:
+        if not missing.startswith("required_artifact:"):
+            continue
+        locator = missing.split(":", 1)[1]
+        advisory_gaps.append(
+            {
+                "id": f"suite-inspect-missing-{Path(locator).name}",
+                "classification": "missing",
+                "failure_kind": "missing_required_artifact",
+                "surface": "suite",
+                "source_locator": locator,
+                "consumer_impact": "inspect-only",
+                "remediation_direction": "Run suite scaffold dry-run or author the missing repo-relative artifact before readiness validation.",
+                "fallback_to": "loom suite scaffold --target <repo> --item <item> --json",
+            }
+        )
+
+    summary_by_path = {
+        "full": "Suite inspect found a full suite path decision.",
+        "minimal": "Suite inspect found a minimal suite path decision.",
+        "not_applicable": "Suite inspect found a not_applicable suite path decision.",
+        "unknown": "Suite state is unknown; no suite path decision was derived.",
+    }
+    summary = summary_by_path.get(suite_path, summary_by_path["unknown"])
+    if any(entry["status"] == "missing" for entry in artifact_inventory):
+        summary = f"{summary} Missing expected artifact locators are reported for later validation."
+
+    payload = {
+        "suite_path": suite_path,
+        "suite_locator": locators.get("suite_index_locator"),
+        "path_decision_locator": path_decision_locator,
+        "artifact_inventory": artifact_inventory,
+        "missing_inputs": missing_inputs,
+        "advisory_gaps": advisory_gaps,
+        **locators,
+    }
+    return summary, payload
+
+
 def handle_suite(argv: list[str]) -> int:
     if not argv:
         return emit(
@@ -1880,32 +2047,15 @@ def handle_suite(argv: list[str]) -> int:
     if not target.exists():
         return emit(block_target("suite inspect", target, "target path does not exist"))
 
+    summary, suite_payload = suite_inspect_payload(target, args.item)
     payload = output(
         "suite inspect",
         "pass",
         target=str(target),
         item_id=args.item,
-        summary="Suite state is unknown; no suite path decision was derived.",
+        summary=summary,
         mutates=False,
-        payload={
-            "suite_path": "unknown",
-            "suite_locator": None,
-            "path_decision_locator": None,
-            "artifact_inventory": [],
-            "missing_inputs": ["suite_path_decision"],
-            "advisory_gaps": [
-                {
-                    "id": "suite-inspect-unknown-path",
-                    "classification": "missing",
-                    "failure_kind": "missing_suite_path_decision",
-                    "surface": "suite",
-                    "source_locator": None,
-                    "consumer_impact": "inspect-only",
-                    "remediation_direction": "Author or link a suite path decision before readiness validation.",
-                    "fallback_to": "loom suite inspect --target <repo> --item <item> --json",
-                }
-            ],
-        },
+        payload=suite_payload,
     )
     return emit(payload)
 
