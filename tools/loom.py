@@ -177,7 +177,7 @@ COMMANDS: list[dict[str, Any]] = [
         "domain": "suite",
         "status": "implemented",
         "json": True,
-        "summary": "Plan or explicitly apply minimal repo-local spec suite scaffold writes.",
+        "summary": "Plan or explicitly apply repo-local minimal or full spec suite scaffold writes.",
     },
 ]
 
@@ -361,7 +361,7 @@ def print_usage(stream) -> None:
         "  init, adopt, route, status, fact-chain, profile, checkpoint, gate\n"
         "  resume, spec-review, review, merge-ready, check\n"
         "  suite inspect --target <repo> --item <item> [--json]\n"
-        "  suite scaffold --target <repo> --item <item> [--suite minimal] [--apply] [--json]\n\n"
+        "  suite scaffold --target <repo> --item <item> [--suite minimal|full] [--apply] [--json]\n\n"
         "Use `loom help --json` for the full frozen command matrix, including reserved commands.\n"
     )
 
@@ -1920,9 +1920,40 @@ def suite_artifact_paths(target: Path, item: str | None) -> dict[str, list[Path]
     }
 
 
+SUITE_SCAFFOLD_TEMPLATE_LOCATORS = {
+    "suite-index.md": "docs/methodology/templates/scaffold/full-suite-index.md",
+    "spec.md": "docs/methodology/templates/scaffold/spec.md",
+    "plan.md": "docs/methodology/templates/scaffold/plan.md",
+    "research.md": "docs/methodology/templates/scaffold/research.md",
+    "contracts.md": "docs/methodology/templates/scaffold/contracts.md",
+    "readiness-checklist.md": "docs/methodology/templates/scaffold/readiness-checklist.md",
+}
+
 SUITE_SCAFFOLD_TEMPLATES = {
-    "spec.md": REPO_ROOT / "docs" / "methodology" / "templates" / "scaffold" / "spec.md",
-    "plan.md": REPO_ROOT / "docs" / "methodology" / "templates" / "scaffold" / "plan.md",
+    artifact: REPO_ROOT / locator
+    for artifact, locator in SUITE_SCAFFOLD_TEMPLATE_LOCATORS.items()
+}
+
+SUITE_SCAFFOLD_ARTIFACTS = {
+    "minimal": ("spec.md", "plan.md"),
+    "full": (
+        "suite-index.md",
+        "spec.md",
+        "plan.md",
+        "research.md",
+        "contracts.md",
+        "readiness-checklist.md",
+    ),
+}
+
+SUITE_SCAFFOLD_REQUIRED_ARTIFACTS = {
+    "minimal": ("spec.md", "plan.md"),
+    "full": ("suite-index.md", "spec.md", "plan.md"),
+}
+
+SUITE_SCAFFOLD_CONDITIONAL_ARTIFACTS = {
+    "minimal": (),
+    "full": ("research.md", "contracts.md", "readiness-checklist.md"),
 }
 
 SUITE_SCAFFOLD_CONTRACT_LOCATORS = (
@@ -1957,7 +1988,9 @@ def suite_scaffold_payload(target: Path, item: str, suite_path: str, *, apply: b
         return "Suite scaffold failed closed before resolving artifact paths.", payload, "invalid_suite_item"
 
     suite_root = target / ".loom" / "specs" / item
-    artifacts = ("spec.md", "plan.md")
+    artifacts = SUITE_SCAFFOLD_ARTIFACTS[suite_path]
+    required_artifacts = SUITE_SCAFFOLD_REQUIRED_ARTIFACTS[suite_path]
+    conditional_artifacts = SUITE_SCAFFOLD_CONDITIONAL_ARTIFACTS[suite_path]
     planned_writes: list[dict[str, Any]] = []
     source_templates: list[dict[str, str]] = []
     existing_files: list[str] = []
@@ -1982,7 +2015,7 @@ def suite_scaffold_payload(target: Path, item: str, suite_path: str, *, apply: b
         destination = suite_root / artifact
         destination_locator = repo_locator(destination, target)
         template = SUITE_SCAFFOLD_TEMPLATES[artifact]
-        template_locator = template.relative_to(REPO_ROOT).as_posix()
+        template_locator = SUITE_SCAFFOLD_TEMPLATE_LOCATORS[artifact]
         exists = destination.exists()
         if exists:
             existing_files.append(destination_locator)
@@ -2000,6 +2033,7 @@ def suite_scaffold_payload(target: Path, item: str, suite_path: str, *, apply: b
                 "would_write": not exists,
                 "wrote": apply and not exists and not missing_inputs,
                 "overwrite_policy": "preserve_existing",
+                "requirement": "required" if artifact in required_artifacts else "conditional",
             }
         )
         source_templates.append(
@@ -2021,6 +2055,8 @@ def suite_scaffold_payload(target: Path, item: str, suite_path: str, *, apply: b
         "suite_locator": repo_locator(suite_root, target),
         "planned_writes": planned_writes,
         "source_templates": source_templates,
+        "required_artifacts": list(required_artifacts),
+        "conditional_artifacts": list(conditional_artifacts),
         "consumed_locators": consumed_locators,
         "overwrite_policy": overwrite_policy,
         "apply_required": not apply,
@@ -2038,9 +2074,9 @@ def suite_scaffold_payload(target: Path, item: str, suite_path: str, *, apply: b
         summary = "Suite scaffold apply failed closed before writing artifacts." if apply else "Suite scaffold dry-run found unavailable scaffold inputs."
         return summary, payload, "missing_scaffold_inputs"
     if apply:
-        summary = "Suite scaffold applied minimal spec and plan artifacts with preserve-existing overwrite policy."
+        summary = f"Suite scaffold applied {suite_path} suite artifacts with preserve-existing overwrite policy."
     else:
-        summary = "Suite scaffold dry-run planned minimal spec and plan artifacts without mutating the repository."
+        summary = f"Suite scaffold dry-run planned {suite_path} suite artifacts without mutating the repository."
     return summary, payload, None
 
 
@@ -2216,27 +2252,6 @@ def handle_suite(argv: list[str]) -> int:
                     fallback_to=["loom suite scaffold --target <repo> --item <item> --json"],
                 )
             )
-        if args.suite == "full":
-            return emit(
-                output(
-                    "suite scaffold",
-                    "block",
-                    target=str(target),
-                    item_id=args.item,
-                    summary="Full suite scaffold planning is reserved for the full-suite Work Item.",
-                    mutates=False,
-                    failed_layer="suite",
-                    fail_closed_reason="reserved_surface",
-                    fallback_to=["loom suite scaffold --target <repo> --item <item> --json --suite minimal"],
-                    payload={
-                        "suite_path": "full",
-                        "apply_required": True,
-                        "created_locators": [],
-                        "planned_writes": [],
-                    },
-                )
-            )
-
         summary, scaffold_payload, fail_closed_reason = suite_scaffold_payload(target, args.item, args.suite, apply=args.apply)
         if fail_closed_reason:
             return emit(
