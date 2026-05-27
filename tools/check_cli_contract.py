@@ -264,6 +264,33 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory(prefix="loom-cli-contract-") as raw_tmp:
         tmp = Path(raw_tmp)
+        suite_unknown_target = tmp / "suite-unknown"
+        suite_unknown_target.mkdir()
+        before_suite_inspect = sorted(
+            path.relative_to(suite_unknown_target).as_posix()
+            for path in suite_unknown_target.rglob("*")
+        )
+        _, suite_unknown = run_json(
+            ["suite", "inspect", "--target", str(suite_unknown_target), "--item", "WI-1109", "--json"],
+            expect=0,
+        )
+        after_suite_inspect = sorted(
+            path.relative_to(suite_unknown_target).as_posix()
+            for path in suite_unknown_target.rglob("*")
+        )
+        if before_suite_inspect != after_suite_inspect:
+            raise AssertionError("suite inspect mutated an unknown suite target")
+        if (
+            suite_unknown["command"] != "suite inspect"
+            or suite_unknown["result"] != "pass"
+            or suite_unknown.get("mutates") is not False
+            or suite_unknown.get("item_id") != "WI-1109"
+            or suite_unknown.get("payload", {}).get("suite_path") != "unknown"
+            or suite_unknown.get("payload", {}).get("artifact_inventory") != []
+            or "suite_path_decision" not in suite_unknown.get("payload", {}).get("missing_inputs", [])
+        ):
+            raise AssertionError("suite inspect unknown-state payload drifted")
+
         missing_target = tmp / "missing"
         missing_target.mkdir()
         status, missing_payload = run_json(["installed-state", "validate", "--target", str(missing_target), "--json"])

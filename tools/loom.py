@@ -1838,9 +1838,76 @@ def resolve_command(argv: list[str]) -> tuple[str, list[str]] | None:
         if len(argv) < length:
             continue
         candidate = " ".join(argv[:length])
-        if candidate in COMMAND_INDEX or candidate in COMMAND_ROUTES or candidate in {"flow", "check"}:
+        if candidate in COMMAND_INDEX or candidate in COMMAND_ROUTES or candidate in {"flow", "check", "suite"}:
             return candidate, argv[length:]
     return argv[0], argv[1:]
+
+
+def handle_suite(argv: list[str]) -> int:
+    if not argv:
+        return emit(
+            output(
+                "suite",
+                "block",
+                summary="Suite command requires an action.",
+                mutates=False,
+                failed_layer="suite-input",
+                fail_closed_reason="missing suite action",
+                fallback_to=["loom suite inspect --target <repo> --item <item> --json"],
+            )
+        )
+
+    action = argv[0]
+    if action != "inspect":
+        return emit(
+            output(
+                f"suite {action}",
+                "block",
+                summary="Unsupported suite action.",
+                mutates=False,
+                failed_layer="suite-input",
+                fail_closed_reason=f"unsupported suite action: {action}",
+                fallback_to=["loom suite inspect --target <repo> --item <item> --json"],
+            )
+        )
+
+    parser = argparse.ArgumentParser(prog="loom suite inspect")
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--item")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv[1:])
+    target = resolve_target(args.target)
+    if not target.exists():
+        return emit(block_target("suite inspect", target, "target path does not exist"))
+
+    payload = output(
+        "suite inspect",
+        "pass",
+        target=str(target),
+        item_id=args.item,
+        summary="Suite state is unknown; no suite path decision was derived.",
+        mutates=False,
+        payload={
+            "suite_path": "unknown",
+            "suite_locator": None,
+            "path_decision_locator": None,
+            "artifact_inventory": [],
+            "missing_inputs": ["suite_path_decision"],
+            "advisory_gaps": [
+                {
+                    "id": "suite-inspect-unknown-path",
+                    "classification": "missing",
+                    "failure_kind": "missing_suite_path_decision",
+                    "surface": "suite",
+                    "source_locator": None,
+                    "consumer_impact": "inspect-only",
+                    "remediation_direction": "Author or link a suite path decision before readiness validation.",
+                    "fallback_to": "loom suite inspect --target <repo> --item <item> --json",
+                }
+            ],
+        },
+    )
+    return emit(payload)
 
 
 def main(argv: list[str]) -> int:
@@ -1894,6 +1961,8 @@ def main(argv: list[str]) -> int:
     if command == "skills" or command.startswith("skills "):
         skills_args = command.split()[1:] + forwarded if command.startswith("skills ") else forwarded
         return handle_skills(skills_args)
+    if command == "suite":
+        return handle_suite(forwarded)
     if command == "init":
         return handle_init(forwarded)
     if command == "adopt":
