@@ -427,15 +427,19 @@ def main() -> int:
             or scaffold_payload.get("apply_required") is not True
             or scaffold_payload.get("apply") is not False
             or scaffold_payload.get("created_locators") != []
+            or "Dry-run only; no files were created." not in scaffold_payload.get("rollback_note", "")
             or sorted(planned_writes) != ["plan.md", "spec.md"]
             or planned_writes["spec.md"].get("locator") != ".loom/specs/WI-scaffold/spec.md"
             or planned_writes["plan.md"].get("locator") != ".loom/specs/WI-scaffold/plan.md"
             or planned_writes["spec.md"].get("status") != "would_create"
             or planned_writes["plan.md"].get("status") != "would_create"
+            or planned_writes["spec.md"].get("overwrite_policy") != "preserve_existing"
+            or planned_writes["plan.md"].get("overwrite_policy") != "preserve_existing"
             or source_templates.get("spec.md") != "docs/methodology/templates/scaffold/spec.md"
             or source_templates.get("plan.md") != "docs/methodology/templates/scaffold/plan.md"
             or scaffold_payload.get("overwrite_policy", {}).get("mode") != "preserve_existing"
             or scaffold_payload.get("overwrite_policy", {}).get("allows_overwrite") is not False
+            or scaffold_payload.get("overwrite_policy", {}).get("ambiguous_overwrite") != "fail_closed"
             or scaffold_payload.get("overwrite_policy", {}).get("existing_files") != []
         ):
             raise AssertionError("suite scaffold dry-run payload drifted")
@@ -469,6 +473,7 @@ def main() -> int:
             or apply_payload.get("apply_required") is not False
             or apply_payload.get("created_locators")
             != [".loom/specs/WI-apply/spec.md", ".loom/specs/WI-apply/plan.md"]
+            or "Rollback is deleting the created repo-relative locators" not in apply_payload.get("rollback_note", "")
             or apply_writes.get("spec.md", {}).get("status") != "created"
             or apply_writes.get("plan.md", {}).get("status") != "created"
             or not (apply_target / ".loom/specs/WI-apply/spec.md").is_file()
@@ -557,6 +562,8 @@ def main() -> int:
             suite_scaffold_directory_artifact.get("result") != "block"
             or suite_scaffold_directory_artifact.get("fail_closed_reason") != "missing_scaffold_inputs"
             or suite_scaffold_directory_artifact.get("payload", {}).get("created_locators") != []
+            or suite_scaffold_directory_artifact.get("payload", {}).get("overwrite_policy", {}).get("ambiguous_overwrite") != "fail_closed"
+            or "scaffold artifact is not a regular file" not in "\n".join(suite_scaffold_directory_artifact.get("payload", {}).get("missing_inputs", []))
             or (directory_artifact_suite / "plan.md").exists()
         ):
             raise AssertionError("suite scaffold --apply directory artifact did not fail closed")
@@ -619,6 +626,7 @@ def main() -> int:
             or full_payload.get("apply_required") is not True
             or full_payload.get("apply") is not False
             or full_payload.get("created_locators") != []
+            or "Dry-run only; no files were created." not in full_payload.get("rollback_note", "")
             or sorted(full_planned_writes) != sorted(full_artifacts)
             or full_payload.get("required_artifacts") != ["suite-index.md", "spec.md", "plan.md"]
             or full_payload.get("conditional_artifacts") != ["research.md", "contracts.md", "readiness-checklist.md"]
@@ -626,6 +634,8 @@ def main() -> int:
             or full_planned_writes["suite-index.md"].get("locator") != ".loom/specs/WI-full/suite-index.md"
             or full_planned_writes["research.md"].get("requirement") != "conditional"
             or full_planned_writes["spec.md"].get("requirement") != "required"
+            or any(full_planned_writes[artifact].get("overwrite_policy") != "preserve_existing" for artifact in full_artifacts)
+            or full_payload.get("overwrite_policy", {}).get("ambiguous_overwrite") != "fail_closed"
         ):
             raise AssertionError("suite scaffold full-suite dry-run payload drifted")
         if (full_scaffold_target / ".loom").exists():
@@ -642,6 +652,7 @@ def main() -> int:
             or full_apply_payload.get("apply") is not True
             or full_apply_payload.get("apply_required") is not False
             or full_apply_payload.get("created_locators") != expected_full_created
+            or "Rollback is deleting the created repo-relative locators" not in full_apply_payload.get("rollback_note", "")
             or any(full_apply_writes[artifact].get("status") != "created" for artifact in full_artifacts)
             or any(not (full_apply_target / ".loom" / "specs" / "WI-full-apply" / artifact).is_file() for artifact in full_artifacts)
         ):
