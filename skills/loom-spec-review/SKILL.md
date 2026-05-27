@@ -39,6 +39,12 @@ description: 负责 formal spec review 执行层。Use when Codex needs to revie
 - formal spec 路径不存在时，`flow spec-review` 必须 fail-closed
 - spec review 只写回单一 spec review record，不替代 implementation review record
 - `reviewed_head` 与 stale 语义必须显式暴露，供后续 gate 消费
+- full path 必须消费 suite path locator、必需工件 locator、provenance，以及
+  evidence-map / consistency-analysis / gate-chain 适用性结论；缺失或不可读时
+  fail-closed，回退到 spec shaping 或 suite path 修正
+- minimal path 只能消费带 rationale、consumer boundary 和 recheck condition 的
+  `not_applicable`；无理由缺口、`deferred` 或 source/generated sync 待办不得被当作
+  spec gate 通过
 
 ## 3. 固定编排
 
@@ -57,6 +63,9 @@ description: 负责 formal spec review 执行层。Use when Codex needs to revie
 - 不直接执行 merge 或平台动作
 - 不回写 recovery entry、status control plane 或其他 authored 真相载体
 - 不把 Codex App raw review output 直接升级成 spec review authored truth；verified host default 与显式 Codex App path 都必须经同一 normalized `review_record_input` 与 spec review record 边界
+- 不重新定义 full suite、minimal suite、evidence-map、consistency-analysis 或
+  gate-chain 语义；只消费这些合同已经定义的 locator、freshness、classification
+  与 fallback 边界
 
 ## 4. 输出要求
 
@@ -66,6 +75,8 @@ description: 负责 formal spec review 执行层。Use when Codex needs to revie
 - spec review 的机械基线结果
 - spec review record 的定位与当前结论
 - reviewed head 绑定、当前 head、是否 stale
+- suite path decision，以及 full path readiness 或 minimal path `not_applicable`
+  rationale 是否可被 spec gate 消费
 - 审查结论（`allow` / `block` / `fallback`）
 - 若当前不能继续，应回退到哪里
 

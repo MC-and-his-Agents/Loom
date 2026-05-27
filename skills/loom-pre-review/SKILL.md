@@ -43,6 +43,7 @@ description: 负责统一 review 前检查。Use when Codex needs a single pre-r
 - 不替代 reviewer 的语义判断
 - 不直接执行 merge
 - 不回写事实链、恢复入口或状态面
+- 不重新定义 full/minimal suite、evidence-map、consistency-analysis 或 gate-chain
 
 ## 4. 输出要求
 
@@ -53,6 +54,10 @@ description: 负责统一 review 前检查。Use when Codex needs a single pre-r
 - 哪一步阻断了继续进入 review
 - 若阻断，应回退到哪里
 - 当前 steps 的机械结果是什么
+- full path 的 suite locator、evidence-map freshness 与 consistency-analysis
+  blocking/advisory 分类是否已经可供 review 消费
+- minimal path 的 `not_applicable` rationale、consumer boundary 与 recheck condition
+  是否足够；不足时必须 fail-closed，不能进入 review
 
 ## 5. 完成标准
 
@@ -62,6 +67,9 @@ description: 负责统一 review 前检查。Use when Codex needs a single pre-r
 - `flow pre-review` 的步骤顺序稳定为 `runtime-state -> fact-chain -> state-check -> runtime-evidence -> checkpoint-admission -> workspace-locate`
 - 输出 JSON 能直接支撑“是否进入 review 前语义审查”的判断
 - skill 自身不复制治理真相，也不冒充 reviewer 结论
+- full path 缺少必需 suite artifact、provenance、fresh evidence 或存在 blocking
+  consistency gap 时返回 `block` / `fallback`
+- minimal path 只有在缺口具备有效 `not_applicable` rationale 时才允许进入 review
 
 输入信号与输出合同见：
 

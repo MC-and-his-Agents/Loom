@@ -55,10 +55,21 @@ subagent-driven mode 必须先声明以下字段：
 - 多个委派声明重叠 `write_ownership`
 - 多轮或多个委派报告同一 blocker signature
 - 缺少 Work Item、spec、plan、recovery、validation baseline、workspace 或 ownership constraints
+- 选择 full path 但 suite-index、必需 suite 工件、scenario-to-validation mapping、
+  task carrier profile locator、provenance 或当前 build gate 所需 evidence 缺失
+- 选择 minimal path 但 full path 附加工件缺口没有 `not_applicable` rationale、
+  consumer boundary、recheck condition 或替代验证入口
+- 把 `deferred`、source/generated sync 待办或 CLI surface 待办当作 build readiness
+  的 completed truth
 
 ## 5. 完成标准
 
 只有当 `flow build` 返回 pass，且 build evidence 证明所有委派输出已集成、无 ownership overlap、无 repeated blocker 时，才允许继续进入 pre-review / review。
+
+Build readiness 只消费 full/minimal suite path 决策，不重新定义 suite 工件、
+evidence-map、consistency-analysis 或 gate-chain。full path 必须证明必需工件可读且
+fresh；minimal path 必须保留合法 `not_applicable` rationale，并把 recheck condition
+传递给后续 pre-review / review。
 
 输入信号与输出合同见：
 
