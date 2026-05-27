@@ -75,6 +75,7 @@ REQUIRED_COMMANDS = {
     "skills package",
     "skills release-check",
     "suite inspect",
+    "suite scaffold",
 }
 
 
@@ -111,6 +112,22 @@ def run_suite_inspect_fixture(target: Path, item: str) -> dict[str, Any]:
         raise AssertionError(f"suite inspect envelope drifted for {item}")
     if payload.get("item_id") != item:
         raise AssertionError(f"suite inspect item binding drifted for {item}")
+    return payload
+
+
+def run_suite_scaffold_fixture(target: Path, item: str, extra_args: list[str] | None = None, *, expect: int = 0) -> dict[str, Any]:
+    before = snapshot_tree(target)
+    args = ["suite", "scaffold", "--target", str(target), "--item", item, "--json"]
+    if extra_args:
+        args.extend(extra_args)
+    _, payload = run_json(args, expect=expect)
+    after = snapshot_tree(target)
+    if before != after:
+        raise AssertionError(f"suite scaffold mutated fixture target for {item}: {extra_args or []}")
+    if payload.get("command") != "suite scaffold" or payload.get("mutates") is not False:
+        raise AssertionError(f"suite scaffold envelope drifted for {item}")
+    if payload.get("item_id") != item:
+        raise AssertionError(f"suite scaffold item binding drifted for {item}")
     return payload
 
 
@@ -277,6 +294,8 @@ def main() -> int:
             raise AssertionError(f"{command} must be implemented for #924-#928")
     if matrix["suite inspect"]["status"] != "implemented" or matrix["suite inspect"]["domain"] != "suite":
         raise AssertionError("suite inspect must be declared in help matrix for #1111")
+    if matrix["suite scaffold"]["status"] != "implemented" or matrix["suite scaffold"]["domain"] != "suite":
+        raise AssertionError("suite scaffold must be declared in help matrix for #1114")
 
     _, version_payload = run_json(["version", "--json"], expect=0)
     if version_payload["result"] != "pass" or not version_payload["versions"]["repo_version"]:
@@ -382,6 +401,67 @@ def main() -> int:
             or missing_inventory.get("plan.md", {}).get("status") != "missing"
         ):
             raise AssertionError("suite inspect missing required artifact payload drifted")
+
+        scaffold_target = tmp / "suite-scaffold"
+        scaffold_target.mkdir()
+        suite_scaffold = run_suite_scaffold_fixture(scaffold_target, "WI-scaffold")
+        scaffold_payload = suite_scaffold.get("payload", {})
+        planned_writes = {entry["artifact"]: entry for entry in scaffold_payload.get("planned_writes", [])}
+        source_templates = {entry["artifact"]: entry["locator"] for entry in scaffold_payload.get("source_templates", [])}
+        if (
+            suite_scaffold.get("result") != "pass"
+            or scaffold_payload.get("suite_path") != "minimal"
+            or scaffold_payload.get("artifact_root") != ".loom/specs/WI-scaffold"
+            or scaffold_payload.get("apply_required") is not True
+            or scaffold_payload.get("apply") is not False
+            or scaffold_payload.get("created_locators") != []
+            or sorted(planned_writes) != ["plan.md", "spec.md"]
+            or planned_writes["spec.md"].get("locator") != ".loom/specs/WI-scaffold/spec.md"
+            or planned_writes["plan.md"].get("locator") != ".loom/specs/WI-scaffold/plan.md"
+            or planned_writes["spec.md"].get("status") != "would_create"
+            or planned_writes["plan.md"].get("status") != "would_create"
+            or source_templates.get("spec.md") != "docs/methodology/templates/scaffold/spec.md"
+            or source_templates.get("plan.md") != "docs/methodology/templates/scaffold/plan.md"
+            or scaffold_payload.get("overwrite_policy", {}).get("mode") != "preserve_existing"
+            or scaffold_payload.get("overwrite_policy", {}).get("allows_overwrite") is not False
+            or scaffold_payload.get("overwrite_policy", {}).get("existing_files") != []
+        ):
+            raise AssertionError("suite scaffold dry-run payload drifted")
+        if (scaffold_target / ".loom").exists():
+            raise AssertionError("suite scaffold dry-run created a .loom directory")
+
+        existing_scaffold_target = tmp / "suite-scaffold-existing"
+        existing_suite = existing_scaffold_target / ".loom" / "specs" / "WI-existing"
+        existing_suite.mkdir(parents=True)
+        (existing_suite / "spec.md").write_text("# Existing spec\n", encoding="utf-8")
+        suite_scaffold_existing = run_suite_scaffold_fixture(existing_scaffold_target, "WI-existing")
+        existing_payload = suite_scaffold_existing.get("payload", {})
+        existing_writes = {entry["artifact"]: entry for entry in existing_payload.get("planned_writes", [])}
+        if (
+            existing_writes.get("spec.md", {}).get("planned_action") != "preserve_existing"
+            or existing_writes.get("spec.md", {}).get("would_write") is not False
+            or existing_writes.get("plan.md", {}).get("planned_action") != "create"
+            or existing_payload.get("overwrite_policy", {}).get("existing_files") != [".loom/specs/WI-existing/spec.md"]
+            or existing_payload.get("created_locators") != []
+        ):
+            raise AssertionError("suite scaffold existing-file overwrite policy drifted")
+
+        suite_scaffold_apply = run_suite_scaffold_fixture(scaffold_target, "WI-scaffold", ["--apply"], expect=1)
+        if (
+            suite_scaffold_apply.get("result") != "block"
+            or suite_scaffold_apply.get("fail_closed_reason") != "mutating_action_requires_apply_implementation"
+            or suite_scaffold_apply.get("payload", {}).get("created_locators") != []
+        ):
+            raise AssertionError("suite scaffold --apply fail-closed payload drifted")
+
+        suite_scaffold_full = run_suite_scaffold_fixture(scaffold_target, "WI-scaffold", ["--suite", "full"], expect=1)
+        if (
+            suite_scaffold_full.get("result") != "block"
+            or suite_scaffold_full.get("fail_closed_reason") != "reserved_surface"
+            or suite_scaffold_full.get("payload", {}).get("suite_path") != "full"
+            or suite_scaffold_full.get("payload", {}).get("created_locators") != []
+        ):
+            raise AssertionError("suite scaffold full-suite reservation drifted")
 
         missing_target = tmp / "missing"
         missing_target.mkdir()
