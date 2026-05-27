@@ -6,7 +6,7 @@
 - Goal: Synchronize source skills and checked-in generated skills surface for full suite, task carrier, evidence-map, consistency-analysis, and related drift checks.
 - Scope: #1051 source/generated skills surface synchronization only. Consume #1050 scenario skill routing updates and #1036 deferred source/generated sync need. Do not redefine #1014-#1019 core contracts, do not implement CLI command surface (#1052), and do not change GitHub task carrier profile mapping beyond consuming #1049.
 - Execution Path: issue #1051 -> branch work/1051-source-generated-skills-sync -> worktree /Users/mc/dev/Loom-worktrees/1051-source-generated-skills-sync
-- Workspace Entry: /Users/mc/dev/Loom-worktrees/1051-source-generated-skills-sync
+- Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1051.md
 - Review Entry: .loom/reviews/WI-1051.json
 - Validation Entry: git diff --check; focused rg checks for full suite, task carrier, evidence-map, consistency-analysis, source/generated, generated skills, and drift boundaries; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_release_surface.py; python3 tools/host_adapter_check.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py.
