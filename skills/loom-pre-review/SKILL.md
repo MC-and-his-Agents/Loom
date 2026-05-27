@@ -75,3 +75,10 @@ description: 负责统一 review 前检查。Use when Codex needs a single pre-r
 
 - [references/input-signals.md](./references/input-signals.md)
 - [references/output-contract.md](./references/output-contract.md)
+
+Pre-review 消费的共享合同见：
+
+- [spec-suite.md](.loom-runtime/shared/references/templates/spec-suite.md)
+- [evidence-map.md](.loom-runtime/shared/references/templates/evidence-map.md)
+- [consistency-analysis.md](.loom-runtime/shared/references/templates/consistency-analysis.md)
+- [gate-chain.md](.loom-runtime/shared/references/harness/gate-chain.md)

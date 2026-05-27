@@ -69,6 +69,14 @@
 - GitHub issue、sub-issue、Project item、PR、checklist 或 repo-local carrier 只按
   GitHub task carrier profile 读取 locator、state、provenance 和冲突状态；不得替代
   Work Item、spec suite、review record 或 merge-ready truth。
+- 安装态 skill 读取同一组共享引用：
+  `shared/references/templates/spec-suite.md`、
+  `shared/references/templates/execution-breakdown.md`、
+  `shared/references/harness/task-carrier-contract.md`、
+  `shared/references/templates/evidence-map.md` 与
+  `shared/references/templates/consistency-analysis.md`。这些引用是 docs 权威文件的
+  source skills 副本，`tools/skills_surface.py check` 必须同时发现 docs -> source
+  reference drift 和 source -> generated skills drift。
 
 场景到消费边界：
 
