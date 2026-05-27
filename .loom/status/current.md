@@ -11,9 +11,9 @@
 - Review Entry: .loom/reviews/WI-1118.json
 - Validation Entry: python3 tools/check_cli_contract.py; git diff --check; focused rg; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .
 - Closing Condition: #1118 PR is merged to main, closeout evidence records PR/head/merge/target branch/validation/Project state, #1118 is closed completed, and #1113 can consume the evidence.
-- Current Checkpoint: build checkpoint
-- Current Stop: Branch work/1118-scaffold-truth-safeguards has #1118 negative scaffold truth-surface fixtures implemented and local validation/build checkpoint passed.
-- Next Step: Push branch, open PR for #1118, run PR gate and GitHub checks, then merge and close out #1118.
+- Current Checkpoint: PR checkpoint
+- Current Stop: Branch work/1118-scaffold-truth-safeguards is pushed and PR #1164 is open for #1118 after local validation/build checkpoint passed.
+- Next Step: Run PR gate and GitHub checks for PR #1164, then merge and close out #1118.
 - Blockers: None
 - Latest Validation Summary: Passed: python3 tools/check_cli_contract.py; git diff --check; focused rg for forbidden truth fixtures, scaffold write boundaries, /speckit, and .specify; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; python3 .loom/bin/loom_flow.py checkpoint build --target . --item WI-1118.
 - Recovery Boundary: #1118 owns negative scaffold regression coverage only. It must not implement host integration, new scaffold artifacts, rollback execution, generated skills sync, review writes, merge-ready writes, closeout writes, /speckit.*, or .specify surfaces.
