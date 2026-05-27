@@ -5,7 +5,7 @@
   "kind": "general_review",
   "summary": "WI-1049 is approved for PR: the GitHub profile now defines task carrier mappings, locator/provenance requirements, normalized status rules, and Project Status conflict handling while preserving Work Item, review, merge-ready, closeout, and evidence-map truth boundaries. Scenario skills, source/generated synchronization, drift checks, and CLI planning remain downstream under #1050/#1051/#1052.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "3a44f65d2c95e3aaeccbaa9ac00b93a78ae84d9d",
+  "reviewed_head": "e6aecedd471c088ba5919d7a26a3a12a4c382455",
   "reviewed_validation_summary": "Passed locally on branch `work/1049-github-task-carrier-profile`: `git diff --check`; focused `rg` for GitHub profile / task carrier / sub-issue / Project item / checklist / unique execution entry; focused `rg` for forbidden use / review / merge-ready / closeout / provenance / locator; focused `rg` for Project Status / Todo / In Progress / Done / completed truth / host agent; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`.",
   "fallback_to": null,
   "findings": [
