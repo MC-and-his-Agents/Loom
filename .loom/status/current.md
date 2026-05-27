@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1114
-- Goal: Implement dry-run planning for `loom suite scaffold`.
-- Scope: #1114 only: expose `loom suite scaffold` as a dry-run planning command that reports minimal suite `spec.md` and `plan.md` writes without touching files; include source templates, consumed locators, overwrite policy, rollback note, empty created locators, and `mutates: false`; keep `--apply` and full suite scaffold planning fail-closed for later Work Items.
-- Execution Path: issue #1114 -> branch work/1114-suite-scaffold-dry-run -> worktree /Users/mc/dev/Loom-worktrees/1114-suite-scaffold-dry-run -> PR pending
+- Item ID: WI-1115
+- Goal: Implement explicit repo-local writes for `loom suite scaffold --apply`.
+- Scope: #1115 only: allow `loom suite scaffold --apply` to create missing minimal `spec.md` and `plan.md` files under `.loom/specs/<item>/`, preserve existing files, report actual `created_locators`, and keep full suite generation, host writes, review writes, merge-ready writes, closeout writes, generated skills, spec-kit command names, and `.specify/` layout out of scope.
+- Execution Path: issue #1115 -> branch work/1115-suite-scaffold-apply -> worktree /Users/mc/dev/Loom-worktrees/1115-suite-scaffold-apply -> PR #1161
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1114.md
-- Review Entry: .loom/reviews/WI-1114.json
-- Validation Entry: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/loom.py help --json; python3 tools/loom.py suite scaffold --target . --item WI-1114 --json; python3 tools/check_cli_contract.py; git diff --check; focused rg; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py
-- Closing Condition: #1114 PR is merged to main, closeout evidence records PR/head/merge/target branch/validation/Project state, #1114 is closed completed, and #1113 can consume the evidence.
+- Recovery Entry: .loom/progress/WI-1115.md
+- Review Entry: .loom/reviews/WI-1115.json
+- Validation Entry: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/loom.py help --json; python3 tools/loom.py suite scaffold --target <tmp> --item WI-1115 --json --apply; python3 tools/check_cli_contract.py; git diff --check; focused rg; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py
+- Closing Condition: #1115 PR is merged to main, closeout evidence records PR/head/merge/target branch/validation/Project state, #1115 is closed completed, and #1113 can consume the evidence.
 - Current Checkpoint: merge checkpoint
-- Current Stop: PR #1160 is open; local PR gate and required GitHub checks are next.
-- Next Step: Run local PR gate for PR #1160, wait for required GitHub checks, merge, close out #1114, and record parent #1113 evidence.
+- Current Stop: PR #1161 is open at head `f8aecbe2855f3596367b182229113bb572f31d2b`; local merge checkpoint and PR gate are next.
+- Next Step: Run local merge checkpoint and PR gate for PR #1161, then wait for required GitHub checks before controlled merge.
 - Blockers: None
-- Latest Validation Summary: Passed: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/loom.py help --json; python3 tools/loom.py suite scaffold --target . --item WI-1114 --json; python3 tools/check_cli_contract.py; git diff --check; focused rg for suite scaffold anchors; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1114 --write; python3 .loom/bin/loom_flow.py governance-profile status --target .; python3 .loom/bin/loom_flow.py runtime-parity validate --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1114; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; python3 .loom/bin/loom_flow.py checkpoint build --target . --item WI-1114. WI-1112 terminal carrier facts were reconciled from PR #1159 merge commit `c861133076b5005e2ff536a2d84a5905bc8b9074` and GitHub #1112 closed completed / Project Done state to remove stale active workspace binding.
-- Recovery Boundary: #1114 owns dry-run planning for `loom suite scaffold` only. It must not implement `--apply` writes, full suite artifact generation, suite validate/analyze, evidence, consistency, or carrier suite subcommands; must not create GitHub issues, PRs, Project items, review records, merge-ready records, closeout evidence, or generated skills; must not replace Work Item, review, merge-ready, closeout, Project, or docs/source truth; and must not copy spec-kit command names or `.specify/` layout.
-- Current Lane: full-spec-suite-cli/suite-scaffold-dry-run
+- Latest Validation Summary: Passed: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/loom.py help --json; python3 tools/loom.py suite scaffold --target <tmp> --item WI-1115 --json --apply; targeted traversal item, absolute item, symlink artifact, and directory artifact fail-closed checks; python3 tools/check_cli_contract.py; git diff --check; focused rg for suite scaffold apply and fail-closed anchors; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1115 --write; python3 .loom/bin/loom_flow.py governance-profile status --target .; python3 .loom/bin/loom_flow.py runtime-parity validate --target .; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1115; python3 .loom/bin/loom_flow.py checkpoint build --target . --item WI-1115.
+- Recovery Boundary: #1115 owns explicit repo-local `loom suite scaffold --apply` writes for missing minimal `.loom/specs/<item>/spec.md` and `plan.md` only. It preserves existing files, reports actual created locators, fails closed for traversal or absolute items, symlink paths, and non-file artifact placeholders, keeps dry-run read-only, keeps full suite generation reserved, and must not write host, review, merge-ready, closeout, generated skills, spec-kit command names, or `.specify/` surfaces.
+- Current Lane: full-spec-suite-cli/suite-scaffold-apply
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1114.md
-- Dynamic Truth: .loom/progress/WI-1114.md
+- Static Truth: .loom/work-items/WI-1115.md
+- Dynamic Truth: .loom/progress/WI-1115.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
