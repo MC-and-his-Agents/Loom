@@ -1881,31 +1881,46 @@ def suite_item_segment_error(item: str) -> str | None:
 
 def first_existing_locator(paths: list[Path], target_root: Path) -> str | None:
     for path in paths:
-        if path.exists() and path.is_file():
+        if path.exists() and path.is_file() and not path.is_symlink():
             return repo_locator(path, target_root)
     return None
 
 
-def suite_path_marker(text: str) -> str | None:
+def suite_path_marker_values(text: str) -> tuple[list[str], list[str]]:
     lowered = text.lower()
+    values: list[str] = []
+    invalid_values: list[str] = []
     for line in lowered.splitlines():
         stripped = line.strip().lstrip("-").strip()
         if stripped.startswith("suite path:"):
-            value = stripped.split(":", 1)[1].strip().replace(" ", "_")
+            value = stripped.split(":", 1)[1].strip().replace(" ", "_").replace("-", "_")
             if value in {"full", "minimal", "not_applicable", "unknown"}:
-                return value
+                values.append(value)
+            else:
+                invalid_values.append(value)
     if "loom-full-suite-index/v1" in lowered:
-        return "full"
-    return None
+        values.append("full")
+    return values, invalid_values
 
 
-def read_suite_path_marker(path: Path) -> str | None:
-    if not path.exists() or not path.is_file():
-        return None
+def read_suite_path_marker_values(path: Path) -> tuple[list[str], list[str]]:
+    if not path.exists() or path.is_symlink() or not path.is_file():
+        return [], []
     try:
-        return suite_path_marker(path.read_text(encoding="utf-8"))
+        return suite_path_marker_values(path.read_text(encoding="utf-8"))
     except OSError:
-        return None
+        return [], ["unreadable"]
+
+
+def first_artifact_locator_or_invalid(paths: list[Path], target_root: Path) -> tuple[str | None, str | None]:
+    for path in paths:
+        if not path.exists():
+            continue
+        locator = repo_locator(path, target_root)
+        if path.is_symlink() or not path.is_file():
+            return None, locator
+        return locator, None
+    return None, None
 
 
 def suite_artifact_paths(target: Path, item: str | None) -> dict[str, list[Path]]:
@@ -1916,6 +1931,9 @@ def suite_artifact_paths(target: Path, item: str | None) -> dict[str, list[Path]
         "suite-index.md": [suite_root / "suite-index.md"],
         "spec.md": [suite_root / "spec.md"],
         "plan.md": [suite_root / "plan.md"],
+        "research.md": [suite_root / "research.md"],
+        "contracts.md": [suite_root / "contracts.md"],
+        "readiness-checklist.md": [suite_root / "readiness-checklist.md"],
         "evidence-map.md": [suite_root / "evidence-map.md"],
         "consistency-analysis.md": [suite_root / "consistency-analysis.md"],
         "execution-breakdown.md": [suite_root / "execution-breakdown.md"],
@@ -1962,6 +1980,20 @@ SUITE_SCAFFOLD_REQUIRED_ARTIFACTS = {
 SUITE_SCAFFOLD_CONDITIONAL_ARTIFACTS = {
     "minimal": (),
     "full": ("research.md", "contracts.md", "readiness-checklist.md"),
+}
+
+SUITE_REQUIRED_ARTIFACTS_BY_PATH = {
+    "minimal": {"spec.md", "plan.md"},
+    "full": {"suite-index.md", "spec.md", "plan.md"},
+    "not_applicable": set(),
+    "unknown": set(),
+}
+
+SUITE_CONDITIONAL_ARTIFACTS_BY_PATH = {
+    "minimal": set(),
+    "full": {"research.md", "contracts.md", "readiness-checklist.md"},
+    "not_applicable": set(),
+    "unknown": set(),
 }
 
 SUITE_SCAFFOLD_CONTRACT_LOCATORS = (
@@ -2117,29 +2149,69 @@ def suite_inspect_payload(target: Path, item: str | None) -> tuple[str, dict[str
 
     path_decision_locator: str | None = None
     suite_path = "unknown"
+    path_decisions: list[dict[str, Any]] = []
+    decision_values: list[str] = []
+    invalid_decision_locators: list[str] = []
     for path in (suite_index, spec, plan):
         if path is None:
             continue
-        marker = read_suite_path_marker(path)
-        if marker:
-            suite_path = marker
-            path_decision_locator = repo_locator(path, target)
-            break
+        if path.exists() and (path.is_symlink() or not path.is_file()):
+            if path == suite_index:
+                locator = repo_locator(path, target)
+                invalid_decision_locators.append(locator)
+                path_decisions.append(
+                    {
+                        "locator": locator,
+                        "value": None,
+                        "status": "invalid",
+                        "reason": "path decision candidate is not a regular file",
+                    }
+                )
+            continue
+        values, invalid_values = read_suite_path_marker_values(path)
+        if not values and not invalid_values:
+            continue
+        locator = repo_locator(path, target)
+        for value in values:
+            path_decisions.append({"locator": locator, "value": value, "status": "present"})
+            decision_values.append(value)
+        for value in invalid_values:
+            invalid_decision_locators.append(locator)
+            path_decisions.append({"locator": locator, "value": value, "status": "invalid"})
 
-    required_by_path = {
-        "full": {"suite-index.md", "spec.md", "plan.md"},
-        "minimal": {"spec.md", "plan.md"},
-        "not_applicable": set(),
-        "unknown": set(),
-    }
-    required = required_by_path.get(suite_path, set())
+    unique_decision_values = sorted(set(decision_values))
+    if len(unique_decision_values) == 1 and not invalid_decision_locators:
+        suite_path = unique_decision_values[0]
+        path_decision_locator = next(
+            (entry["locator"] for entry in path_decisions if entry.get("value") == suite_path),
+            None,
+        )
+
+    required = SUITE_REQUIRED_ARTIFACTS_BY_PATH.get(suite_path, set())
+    conditional = SUITE_CONDITIONAL_ARTIFACTS_BY_PATH.get(suite_path, set())
+    advisory = set(SUITE_VALIDATE_ADVISORY_ARTIFACTS.get(suite_path, ()))
 
     artifact_inventory: list[dict[str, Any]] = []
     missing_inputs: list[str] = []
     locators: dict[str, Any] = {}
+    if invalid_decision_locators or len(unique_decision_values) > 1:
+        missing_inputs.append("suite_path_decision")
+        for locator in sorted(set(invalid_decision_locators)):
+            missing_inputs.append(f"invalid_suite_path_decision:{locator}")
+        if len(unique_decision_values) > 1:
+            for entry in path_decisions:
+                if entry.get("status") == "present":
+                    missing_inputs.append(f"conflicting_suite_path_decision:{entry['locator']}")
     for artifact, candidates in paths.items():
-        locator = first_existing_locator(candidates, target)
+        locator, invalid_locator = first_artifact_locator_or_invalid(candidates, target)
         is_required = artifact in required
+        is_conditional = artifact in conditional
+        is_advisory = artifact in advisory
+        requirement = (
+            "required"
+            if is_required
+            else ("conditional" if is_conditional else ("extension" if is_advisory else "optional"))
+        )
         if locator is not None:
             artifact_inventory.append(
                 {
@@ -2147,8 +2219,21 @@ def suite_inspect_payload(target: Path, item: str | None) -> tuple[str, dict[str
                     "locator": locator,
                     "status": "present",
                     "required": is_required,
+                    "requirement": requirement,
                 }
             )
+        elif invalid_locator is not None:
+            artifact_inventory.append(
+                {
+                    "artifact": artifact,
+                    "locator": invalid_locator,
+                    "status": "invalid",
+                    "required": is_required,
+                    "requirement": requirement,
+                }
+            )
+            if is_required:
+                missing_inputs.append(f"required_artifact:{invalid_locator}")
         elif is_required:
             expected = repo_locator(candidates[0], target)
             artifact_inventory.append(
@@ -2157,9 +2242,20 @@ def suite_inspect_payload(target: Path, item: str | None) -> tuple[str, dict[str
                     "locator": expected,
                     "status": "missing",
                     "required": True,
+                    "requirement": requirement,
                 }
             )
             missing_inputs.append(f"required_artifact:{expected}")
+        elif is_conditional or is_advisory:
+            artifact_inventory.append(
+                {
+                    "artifact": artifact,
+                    "locator": repo_locator(candidates[0], target),
+                    "status": "absent",
+                    "required": False,
+                    "requirement": requirement,
+                }
+            )
 
         key = artifact.replace("-", "_").removesuffix(".md") + "_locator"
         if artifact == "task-carrier":
@@ -2167,7 +2263,7 @@ def suite_inspect_payload(target: Path, item: str | None) -> tuple[str, dict[str
         else:
             locators[key] = locator
 
-    if suite_path == "unknown":
+    if suite_path == "unknown" and "suite_path_decision" not in missing_inputs:
         missing_inputs.insert(0, "suite_path_decision")
 
     advisory_gaps = []
@@ -2215,6 +2311,7 @@ def suite_inspect_payload(target: Path, item: str | None) -> tuple[str, dict[str
         "suite_path": suite_path,
         "suite_locator": locators.get("suite_index_locator"),
         "path_decision_locator": path_decision_locator,
+        "path_decisions": path_decisions,
         "artifact_inventory": artifact_inventory,
         "missing_inputs": missing_inputs,
         "advisory_gaps": advisory_gaps,
@@ -2299,6 +2396,19 @@ def suite_validate_payload(target: Path, item: str) -> tuple[str, str, dict[str,
                     source_locator=None,
                     consumer_impact="spec review cannot determine whether the suite is full, minimal, or not_applicable",
                     remediation_direction="Author a suite path decision before validating readiness.",
+                    fallback_to="loom suite inspect --target <repo> --item <item> --json",
+                )
+            )
+        elif missing.startswith("invalid_suite_path_decision:") or missing.startswith("conflicting_suite_path_decision:"):
+            locator = missing.split(":", 1)[1]
+            blocking_gaps.append(
+                suite_validate_finding(
+                    gap_id=f"suite-validate-invalid-path-decision-{Path(locator).name}",
+                    classification="blocking",
+                    failure_kind="missing_suite_path_decision",
+                    source_locator=locator,
+                    consumer_impact="spec review cannot consume an invalid or conflicting suite path decision",
+                    remediation_direction="Keep exactly one legal suite path decision: full, minimal, or not_applicable.",
                     fallback_to="loom suite inspect --target <repo> --item <item> --json",
                 )
             )

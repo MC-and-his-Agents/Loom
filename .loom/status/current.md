@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1120
-- Goal: Implement the core read-only `loom suite validate` command.
-- Scope: #1120 only: add the command matrix entry, read-only validate envelope, core pass/block/advisory/not_applicable behavior, and CLI contract fixtures. Defer deeper path artifact validation, not_applicable rationale enforcement, spec/plan mapping, taxonomy expansion, and spec-review integration to #1121-#1125.
-- Execution Path: issue #1120 -> branch work/1120-suite-validate-core -> worktree /Users/mc/dev/Loom-worktrees/1120-suite-validate-core -> PR pending
+- Item ID: WI-1121
+- Goal: Validate suite path decisions and required/conditional suite artifacts.
+- Scope: #1121 only: block missing, invalid, or conflicting suite path decisions; block missing or non-file required artifacts; inventory full path conditional artifacts without enforcing rationale. Defer not_applicable/deferred rationale to #1122, spec/plan mapping to #1123, taxonomy expansion to #1124, and spec-review integration to #1125.
+- Execution Path: issue #1121 -> branch work/1121-suite-path-artifacts -> worktree /Users/mc/dev/Loom-worktrees/1121-suite-path-artifacts -> PR pending
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1120.md
-- Review Entry: .loom/reviews/WI-1120.json
+- Recovery Entry: .loom/progress/WI-1121.md
+- Review Entry: .loom/reviews/WI-1121.json
 - Validation Entry: python3 tools/check_cli_contract.py; git diff --check; focused rg; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .
-- Closing Condition: #1120 PR is merged to main, closeout evidence records PR/head/merge/target branch/validation/Project state, #1120 is closed completed, and #1119 can consume the evidence.
+- Closing Condition: #1121 PR is merged to main, closeout evidence records PR/head/merge/target branch/validation/Project state, #1121 is closed completed, and #1119 can consume the evidence.
 - Current Checkpoint: merge
-- Current Stop: Branch work/1120-suite-validate-core is pushed and PR #1165 is open after local validation, shadow parity, and build checkpoint passed.
-- Next Step: Run PR gate and GitHub checks for PR #1165, then merge and close out #1120.
+- Current Stop: PR #1166 is open with WI-1121 implementation, validation, spec review, and implementation review carriers recorded.
+- Next Step: Pass PR gate, merge PR #1166, and close out #1121.
 - Blockers: None
-- Latest Validation Summary: Passed: python3 tools/check_cli_contract.py; python3 -m py_compile tools/loom.py tools/check_cli_contract.py; git diff --check; focused rg for suite validate, suite validate constants, forbidden /speckit and .specify surfaces; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; python3 .loom/bin/loom_flow.py checkpoint build --target . --item WI-1120.
-- Recovery Boundary: #1120 owns core `loom suite validate` command behavior only. It must not implement #1121 path-depth checks, #1122 not_applicable rationale enforcement, #1123 spec/plan mapping, #1124 final taxonomy expansion, #1125 spec-review integration, host writes, review writes, merge-ready writes, closeout writes, /speckit.*, or .specify surfaces.
-- Current Lane: full-spec-suite-cli/validate-core
+- Latest Validation Summary: Passed: python3 tools/check_cli_contract.py; python3 -m py_compile tools/loom.py tools/check_cli_contract.py; git diff --check; focused rg for suite_path, conditional artifacts, conflicting_suite_path_decision, invalid_suite_path_decision, forbidden /speckit and .specify surfaces; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; python3 .loom/bin/loom_flow.py checkpoint build --target . --item WI-1121.
+- Recovery Boundary: #1121 owns suite path decision legality, required artifact existence/regular-file validation, and conditional artifact inventory only. It must not implement #1122 not_applicable/deferred rationale enforcement, #1123 spec/plan mapping checks, #1124 final taxonomy expansion, #1125 spec-review integration, host writes, review writes from the CLI command, merge-ready writes, closeout writes, /speckit.*, or .specify surfaces.
+- Current Lane: full-spec-suite-cli/validate-path-artifacts
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: python3 tools/check_cli_contract.py; python3 -m py_compile tools/loom.py tools/check_cli_contract.py; git diff --check; focused rg for suite validate, suite validate constants, /speckit, and .specify; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; python3 .loom/bin/loom_flow.py checkpoint build --target . --item WI-1120.
+- Verification Entry: python3 tools/check_cli_contract.py; python3 -m py_compile tools/loom.py tools/check_cli_contract.py; git diff --check; focused rg for suite_path, conditional artifacts, conflicting_suite_path_decision, invalid_suite_path_decision, /speckit, and .specify; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .
 - Lane Entry: not_applicable
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1120.md
-- Dynamic Truth: .loom/progress/WI-1120.md
+- Static Truth: .loom/work-items/WI-1121.md
+- Dynamic Truth: .loom/progress/WI-1121.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
