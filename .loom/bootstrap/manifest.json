@@ -77,7 +77,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "c1e0dbe2eef23e64e318867071e776da30e977440a91381f837133bd15349f3e"
+      "sha256": "65d8b1d1300a7fd31960b4e4e243d04f0e716944eee35569c251f8dbcb30dca0"
     },
     {
       "path": "AGENTS.md",
