@@ -254,5 +254,10 @@ For #1109-#1114 it also checks:
 - `suite scaffold --suite full` plans and applies the standard six full-suite scaffold artifacts without creating evidence-map, consistency-analysis, task-carrier, review, merge-ready, closeout, generated skill, `/speckit.*`, or `.specify/` surfaces.
 - `suite validate` is declared as an implemented suite command in `loom help --json`;
 - `suite validate` stays read-only and covers pass, block, advisory, and not_applicable fixtures with structured readiness gaps.
+
+#1138 wires `loom verify` to consume `suite validate` only when the invocation
+passes `--item` or installed-state/profile requirements explicitly mark
+`suite_validation` as required. Declared suite command support by itself remains
+diagnostic and does not make optional suite parity universally blocking.
 - `suite evidence validate` stays read-only and blocks stale evidence, HEAD / PR-head / reviewed-head binding drift, validation summary digest drift, missing present evidence source locators, and missing fresh verification evidence.
 - `suite carrier validate` stays read-only and blocks missing carrier locators, invalid normalized status or relationship values, missing Work Item backlinks, primary carrier conflicts, deferred-as-completed, carrier truth conflicts, and Project/checklist/issue/PR host signal conflicts without promoting carrier done to completion truth.

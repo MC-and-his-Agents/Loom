@@ -513,6 +513,78 @@ def suite_command_surface_check(state: Any) -> dict[str, Any]:
     }
 
 
+def suite_verify_requirement(state: Any, item: str | None) -> dict[str, Any]:
+    required = bool(item)
+    sources: list[str] = ["work-item-gate"] if item else []
+    configured_item: str | None = None
+
+    def consume(raw: Any, source: str) -> None:
+        nonlocal required, configured_item
+        if not isinstance(raw, dict):
+            return
+        suite_value = raw.get("suite_validation", raw.get("suite"))
+        if isinstance(suite_value, str) and suite_value.strip().lower() in {"required", "blocking", "full"}:
+            required = True
+            sources.append(source)
+        elif suite_value is True:
+            required = True
+            sources.append(source)
+        candidate_item = raw.get("suite_item") or raw.get("work_item") or raw.get("item")
+        if isinstance(candidate_item, str) and candidate_item.strip() and configured_item is None:
+            configured_item = candidate_item.strip()
+
+    if isinstance(state, dict):
+        for key in ("verify_requirements", "profile_requirements", "gate_requirements"):
+            consume(state.get(key), f"installed-state.{key}")
+        profile = state.get("profile")
+        if isinstance(profile, dict):
+            consume(profile.get("requirements"), "installed-state.profile.requirements")
+        layers = state.get("layers", [])
+        if isinstance(layers, list):
+            for index, layer in enumerate(layers, start=1):
+                if not isinstance(layer, dict):
+                    continue
+                layer_id = layer.get("id") if isinstance(layer.get("id"), str) else f"layer[{index}]"
+                for key in ("verify_requirements", "profile_requirements", "gate_requirements"):
+                    consume(layer.get(key), f"installed-state.{layer_id}.{key}")
+
+    return {
+        "required": required,
+        "item_id": item or configured_item,
+        "sources": sorted(set(sources)),
+        "summary": "suite validation is required for this verify invocation." if required else "suite validation is not required for this verify invocation.",
+    }
+
+
+def suite_validation_check(target: Path, item: str | None) -> dict[str, Any]:
+    if not item:
+        return {
+            "name": "suite-validation",
+            "result": "block",
+            "summary": "Suite validation is required but no Work Item was provided.",
+            "missing_inputs": ["suite_validation_item"],
+            "failed_layer": "suite-verify-requirement",
+            "fail_closed_reason": "suite validation requires --item or installed-state suite_item",
+            "fallback_to": ["loom verify --target <repo> --item <item> --json", "loom suite validate --target <repo> --item <item> --json"],
+        }
+    summary, result, payload, failed_layer, fail_closed_reason, fallback_to = suite_validate_payload(target, item)
+    return {
+        "name": "suite-validation",
+        "result": result,
+        "summary": summary,
+        "item_id": item,
+        "command": "loom suite validate",
+        "mutates": False,
+        "failed_layer": failed_layer,
+        "fail_closed_reason": fail_closed_reason,
+        "missing_inputs": payload.get("missing_inputs", []),
+        "blocking_gaps": payload.get("blocking_gaps", []),
+        "advisory_gaps": payload.get("advisory_gaps", []),
+        "fallback_to": fallback_to,
+        "payload": payload,
+    }
+
+
 def print_usage(stream) -> None:
     stream.write(
         "usage: loom <command> [args ...]\n\n"
@@ -1157,6 +1229,7 @@ def verify_cli_managed_surfaces(target: Path, *, host: str, mode: str, skill_id:
 def handle_delivery(command: str, argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog=f"loom {command}")
     parser.add_argument("--target", default=".")
+    parser.add_argument("--item")
     parser.add_argument("--host", default="codex", choices=("codex", "claude", "opencode", "gemini", "cursor"))
     parser.add_argument("--mode", default="full-repo", choices=("full-repo", "plugin", "skill"))
     parser.add_argument("--skill-id")
@@ -1299,20 +1372,32 @@ def handle_delivery(command: str, argv: list[str]) -> int:
 
     if command == "verify":
         doctor = doctor_payload(target)
-        result = "pass" if doctor["result"] == "pass" else "block"
+        requirement = suite_verify_requirement(state, args.item)
+        suite_check = None
+        if doctor["result"] == "pass" and requirement["required"]:
+            suite_check = suite_validation_check(target, requirement["item_id"])
+        blocking_checks = []
+        if doctor["result"] != "pass":
+            blocking_checks.append({"name": "doctor", "failed_layer": "delivery-verify", "summary": "doctor reported missing, invalid, mixed, or legacy installed surfaces"})
+        if suite_check and suite_check["result"] != "pass":
+            blocking_checks.append(suite_check)
+        result = "pass" if not blocking_checks else "block"
+        failed_layer = None if result == "pass" else next((check.get("failed_layer") for check in blocking_checks if check.get("failed_layer")), "delivery-verify")
         return emit(
             output(
                 command,
                 result,
                 schema=DELIVERY_SCHEMA,
-                summary="Installed Loom delivery layers verified." if result == "pass" else "Installed Loom delivery layers are not ready.",
+                summary="Installed Loom delivery layers verified." if result == "pass" else "Installed Loom delivery layers or required suite validation are not ready.",
                 target=str(target),
                 mutates=False,
                 doctor=doctor,
+                suite_validation_requirement=requirement,
+                suite_validation=suite_check,
                 installed_state_path=str(path) if path else None,
-                failed_layer=None if result == "pass" else "delivery-verify",
-                fail_closed_reason=None if result == "pass" else "doctor reported missing, invalid, mixed, or legacy installed surfaces",
-                fallback_to=None if result == "pass" else ["loom upgrade-plan --target <repo> --json", "loom repair plan --target <repo> --json"],
+                failed_layer=failed_layer,
+                fail_closed_reason=None if result == "pass" else "; ".join(str(check.get("summary", check.get("name"))) for check in blocking_checks),
+                fallback_to=None if result == "pass" else ["loom upgrade-plan --target <repo> --json", "loom repair plan --target <repo> --json", "loom suite validate --target <repo> --item <item> --json"],
             )
         )
 

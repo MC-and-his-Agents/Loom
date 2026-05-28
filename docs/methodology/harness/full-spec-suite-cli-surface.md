@@ -212,7 +212,9 @@ Validate / analyze finding fields:
     `suite-command-surface` pass / `declared_support: false`。
 - `loom verify --target . --json`
   - 继续消费 `doctor`。
-  - 仅在 target profile 或 Work Item gate 明确要求 full suite command surface 时，才要求 `suite validate` / `suite evidence validate` / `suite consistency analyze` 可执行。
+  - 仅在 target profile 或 Work Item gate 明确要求 suite validation 时，才运行 `suite validate` 并消费其只读 JSON 作为 gate evidence。
+  - 显式 Work Item gate 可用 `--item <item>`；profile/installed-state 可用 `profile_requirements.suite_validation` 与 `suite_item` 声明要求。
+  - declared suite command support alone does not make every target run suite validation.
   - 不把 validation-only parity 自动提升为 blocking gate。
 
 ## 7. Scenario Skills 接入点
