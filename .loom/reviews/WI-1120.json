@@ -5,7 +5,7 @@
   "kind": "general_review",
   "summary": "General review allows WI-1120 at build checkpoint: the patch adds the implemented `suite validate` CLI surface, keeps it read-only, reuses suite inspect state, returns structured pass/block/advisory/not_applicable envelopes, and adds contract fixtures for the core result classes. The implementation does not add writes, host integration, generated skills sync, `/speckit.*`, `.specify/`, or spec-review flow integration.",
   "reviewer": "Codex",
-  "reviewed_head": "40fd7d4f71214ffb32c61a413d4d1ba9faead166",
+  "reviewed_head": "a2e9013c4d4bc2570660f2880fd33a452d7d7f2a",
   "reviewed_validation_summary": "Passed: python3 tools/check_cli_contract.py; python3 -m py_compile tools/loom.py tools/check_cli_contract.py; git diff --check; focused rg for suite validate, suite validate constants, forbidden /speckit and .specify surfaces; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .",
   "fallback_to": null,
   "findings": [],
