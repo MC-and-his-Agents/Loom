@@ -117,6 +117,7 @@ REQUIRED_COMMANDS = {
     "suite scaffold",
     "suite validate",
     "suite evidence inspect",
+    "suite evidence scaffold",
     "suite evidence validate",
 }
 
@@ -265,6 +266,34 @@ def run_suite_evidence_inspect_fixture(target: Path, item: str) -> dict[str, Any
         raise AssertionError(f"suite evidence inspect envelope drifted for {item}")
     if payload.get("item_id") != item:
         raise AssertionError(f"suite evidence inspect item binding drifted for {item}")
+    return payload
+
+
+def run_suite_evidence_scaffold_fixture(target: Path, item: str, extra_args: list[str] | None = None, *, expect: int = 0) -> dict[str, Any]:
+    before = snapshot_tree(target)
+    args = ["suite", "evidence", "scaffold", "--target", str(target), "--item", item, "--json"]
+    if extra_args:
+        args.extend(extra_args)
+    _, payload = run_json(args, expect=expect)
+    after = snapshot_tree(target)
+    if before != after:
+        raise AssertionError(f"suite evidence scaffold mutated fixture target for {item}: {extra_args or []}")
+    if payload.get("command") != "suite evidence scaffold" or payload.get("mutates") is not False:
+        raise AssertionError(f"suite evidence scaffold dry-run envelope drifted for {item}")
+    if payload.get("item_id") != item:
+        raise AssertionError(f"suite evidence scaffold item binding drifted for {item}")
+    return payload
+
+
+def run_suite_evidence_scaffold_apply_fixture(target: Path, item: str, extra_args: list[str] | None = None, *, expect: int = 0) -> dict[str, Any]:
+    args = ["suite", "evidence", "scaffold", "--target", str(target), "--item", item, "--json", "--apply"]
+    if extra_args:
+        args.extend(extra_args)
+    _, payload = run_json(args, expect=expect)
+    if payload.get("command") != "suite evidence scaffold":
+        raise AssertionError(f"suite evidence scaffold apply command drifted for {item}")
+    if payload.get("item_id") != item:
+        raise AssertionError(f"suite evidence scaffold apply item binding drifted for {item}")
     return payload
 
 
@@ -498,6 +527,8 @@ def main() -> int:
         raise AssertionError("suite validate must be declared in help matrix for #1120")
     if matrix["suite evidence inspect"]["status"] != "implemented" or matrix["suite evidence inspect"]["domain"] != "suite":
         raise AssertionError("suite evidence inspect must be declared in help matrix for #1127")
+    if matrix["suite evidence scaffold"]["status"] != "implemented" or matrix["suite evidence scaffold"]["domain"] != "suite":
+        raise AssertionError("suite evidence scaffold must be declared in help matrix for #1129")
     if matrix["suite evidence validate"]["status"] != "implemented" or matrix["suite evidence validate"]["domain"] != "suite":
         raise AssertionError("suite evidence validate must be declared in help matrix for #1127")
 
@@ -837,6 +868,114 @@ def main() -> int:
             result="block",
             layer="evidence_map",
         )
+
+        evidence_scaffold_target = tmp / "suite-evidence-scaffold"
+        evidence_scaffold_target.mkdir()
+        suite_evidence_scaffold = run_suite_evidence_scaffold_fixture(evidence_scaffold_target, "WI-evidence-scaffold")
+        evidence_scaffold_payload = suite_evidence_scaffold.get("payload", {})
+        evidence_scaffold_writes = {entry["artifact"]: entry for entry in evidence_scaffold_payload.get("planned_writes", [])}
+        if (
+            suite_evidence_scaffold.get("result") != "pass"
+            or evidence_scaffold_payload.get("evidence_map_locator") != ".loom/specs/WI-evidence-scaffold/evidence-map.md"
+            or evidence_scaffold_payload.get("apply_required") is not True
+            or evidence_scaffold_payload.get("apply") is not False
+            or evidence_scaffold_payload.get("created_locators") != []
+            or evidence_scaffold_writes.get("evidence-map.md", {}).get("status") != "would_create"
+            or evidence_scaffold_writes.get("evidence-map.md", {}).get("source_template")
+            != "docs/methodology/templates/scaffold/evidence-map.md"
+            or evidence_scaffold_writes.get("evidence-map.md", {}).get("initial_freshness") != "missing"
+            or evidence_scaffold_payload.get("overwrite_policy", {}).get("mode") != "preserve_existing"
+            or evidence_scaffold_payload.get("overwrite_policy", {}).get("allows_overwrite") is not False
+            or evidence_scaffold_payload.get("initial_freshness_policy") != "scaffold never marks evidence present"
+        ):
+            raise AssertionError("suite evidence scaffold dry-run payload drifted")
+        if (evidence_scaffold_target / ".loom").exists():
+            raise AssertionError("suite evidence scaffold dry-run created a .loom directory")
+
+        evidence_apply_target = tmp / "suite-evidence-scaffold-apply"
+        evidence_apply_target.mkdir()
+        suite_evidence_scaffold_apply = run_suite_evidence_scaffold_apply_fixture(evidence_apply_target, "WI-evidence-apply")
+        evidence_apply_payload = suite_evidence_scaffold_apply.get("payload", {})
+        created_evidence_map = evidence_apply_target / ".loom" / "specs" / "WI-evidence-apply" / "evidence-map.md"
+        created_text = created_evidence_map.read_text(encoding="utf-8")
+        if (
+            suite_evidence_scaffold_apply.get("result") != "pass"
+            or suite_evidence_scaffold_apply.get("mutates") is not True
+            or evidence_apply_payload.get("apply") is not True
+            or evidence_apply_payload.get("apply_required") is not False
+            or evidence_apply_payload.get("created_locators") != [".loom/specs/WI-evidence-apply/evidence-map.md"]
+            or not created_evidence_map.is_file()
+            or "| EV-001 | behavior_evidence |  | .loom/specs/WI-evidence-apply/spec.md scenario / acceptance locator | WI-evidence-apply / scope / head / PR | missing |" not in created_text
+            or " | present | " in created_text
+        ):
+            raise AssertionError("suite evidence scaffold --apply create payload drifted")
+        suite_evidence_scaffold_validate = run_suite_evidence_validate_fixture(evidence_apply_target, "WI-evidence-apply", expect=1)
+        if (
+            suite_evidence_scaffold_validate.get("result") != "block"
+            or not any(gap.get("failure_kind") == "missing_evidence_map" for gap in suite_evidence_scaffold_validate.get("blocking_gaps", []))
+            or not any(gap.get("failure_kind") == "missing_fresh_verification_evidence" for gap in suite_evidence_scaffold_validate.get("blocking_gaps", []))
+        ):
+            raise AssertionError("suite evidence scaffold output must not validate as present evidence")
+        suite_evidence_scaffold_again = run_suite_evidence_scaffold_apply_fixture(evidence_apply_target, "WI-evidence-apply")
+        if (
+            suite_evidence_scaffold_again.get("mutates") is not False
+            or suite_evidence_scaffold_again.get("payload", {}).get("created_locators") != []
+            or suite_evidence_scaffold_again.get("payload", {}).get("overwrite_policy", {}).get("existing_files")
+            != [".loom/specs/WI-evidence-apply/evidence-map.md"]
+        ):
+            raise AssertionError("suite evidence scaffold repeat apply preservation drifted")
+
+        evidence_existing_target = tmp / "suite-evidence-scaffold-existing"
+        evidence_existing_suite = evidence_existing_target / ".loom" / "specs" / "WI-evidence-existing"
+        evidence_existing_suite.mkdir(parents=True)
+        (evidence_existing_suite / "evidence-map.md").write_text("# Existing evidence map\n", encoding="utf-8")
+        suite_evidence_existing = run_suite_evidence_scaffold_apply_fixture(evidence_existing_target, "WI-evidence-existing")
+        if (
+            suite_evidence_existing.get("mutates") is not False
+            or suite_evidence_existing.get("payload", {}).get("created_locators") != []
+            or (evidence_existing_suite / "evidence-map.md").read_text(encoding="utf-8") != "# Existing evidence map\n"
+        ):
+            raise AssertionError("suite evidence scaffold existing-file preservation drifted")
+
+        evidence_symlink_target = tmp / "suite-evidence-scaffold-symlink"
+        evidence_symlink_suite = evidence_symlink_target / ".loom" / "specs" / "WI-evidence-link"
+        evidence_symlink_suite.mkdir(parents=True)
+        (evidence_symlink_suite / "evidence-map.md").symlink_to("../../../outside-evidence.md")
+        suite_evidence_symlink = run_suite_evidence_scaffold_apply_fixture(
+            evidence_symlink_target,
+            "WI-evidence-link",
+            expect=1,
+        )
+        if (
+            suite_evidence_symlink.get("result") != "block"
+            or suite_evidence_symlink.get("fail_closed_reason") != "missing_scaffold_inputs"
+            or suite_evidence_symlink.get("mutates") is not False
+            or suite_evidence_symlink.get("payload", {}).get("created_locators") != []
+            or (evidence_symlink_target / "outside-evidence.md").exists()
+        ):
+            raise AssertionError("suite evidence scaffold symlink path did not fail closed")
+
+        _, suite_evidence_traversal = run_json(
+            [
+                "suite",
+                "evidence",
+                "scaffold",
+                "--target",
+                str(evidence_scaffold_target),
+                "--item",
+                "../escape",
+                "--json",
+                "--apply",
+            ],
+            expect=1,
+        )
+        if (
+            suite_evidence_traversal.get("result") != "block"
+            or suite_evidence_traversal.get("fail_closed_reason") != "invalid_suite_item"
+            or suite_evidence_traversal.get("mutates") is not False
+            or suite_evidence_traversal.get("payload", {}).get("created_locators") != []
+        ):
+            raise AssertionError("suite evidence scaffold traversal item did not fail closed")
 
         full_missing_scenario_target = tmp / "suite-full-missing-scenario-mapping"
         full_missing_scenario_suite = full_missing_scenario_target / ".loom" / "specs" / "WI-full-missing-scenario"

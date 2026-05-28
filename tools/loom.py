@@ -195,6 +195,13 @@ COMMANDS: list[dict[str, Any]] = [
         "summary": "Inspect evidence-map locator, rows, freshness, and repo-local evidence bindings.",
     },
     {
+        "command": "suite evidence scaffold",
+        "domain": "suite",
+        "status": "implemented",
+        "json": True,
+        "summary": "Plan or explicitly apply repo-local evidence-map scaffold writes without marking evidence present.",
+    },
+    {
         "command": "suite evidence validate",
         "domain": "suite",
         "status": "implemented",
@@ -385,7 +392,7 @@ def print_usage(stream) -> None:
         "  suite inspect --target <repo> --item <item> [--json]\n"
         "  suite scaffold --target <repo> --item <item> [--suite minimal|full] [--apply] [--json]\n\n"
         "  suite validate --target <repo> --item <item> [--json]\n\n"
-        "  suite evidence inspect|validate --target <repo> --item <item> [--json]\n\n"
+        "  suite evidence inspect|scaffold|validate --target <repo> --item <item> [--apply] [--json]\n\n"
         "Use `loom help --json` for the full frozen command matrix, including reserved commands.\n"
     )
 
@@ -2027,6 +2034,9 @@ SUITE_EVIDENCE_CONTRACT_LOCATORS = (
     "docs/methodology/templates/evidence-map.md",
 )
 
+SUITE_EVIDENCE_SCAFFOLD_TEMPLATE_LOCATOR = "docs/methodology/templates/scaffold/evidence-map.md"
+SUITE_EVIDENCE_SCAFFOLD_TEMPLATE = REPO_ROOT / SUITE_EVIDENCE_SCAFFOLD_TEMPLATE_LOCATOR
+
 SUITE_VALIDATE_ADVISORY_ARTIFACTS = {
     "full": (
         "evidence-map.md",
@@ -2489,6 +2499,155 @@ def suite_scaffold_payload(target: Path, item: str, suite_path: str, *, apply: b
 def suite_scaffold_dry_run_payload(target: Path, item: str, suite_path: str) -> tuple[str, dict[str, Any]]:
     summary, payload, _ = suite_scaffold_payload(target, item, suite_path, apply=False)
     return summary, payload
+
+
+def suite_evidence_scaffold_content(target: Path, item: str, inspect_payload: dict[str, Any]) -> str:
+    suite_path = str(inspect_payload.get("suite_path") or "unknown")
+    suite_locator = str(inspect_payload.get("suite_locator") or f".loom/specs/{item}")
+    spec_locator = str(inspect_payload.get("spec_locator") or f".loom/specs/{item}/spec.md")
+    plan_locator = str(inspect_payload.get("plan_locator") or f".loom/specs/{item}/plan.md")
+    path_decision_locator = str(inspect_payload.get("path_decision_locator") or "not_authored")
+    task_carriers = inspect_payload.get("task_carrier_locators")
+    task_carrier_locator = ", ".join(str(locator) for locator in task_carriers) if isinstance(task_carriers, list) and task_carriers else "not_applicable rationale required"
+    template_text = SUITE_EVIDENCE_SCAFFOLD_TEMPLATE.read_text(encoding="utf-8")
+    replacements = {
+        "- Work Item locator:": f"- Work Item locator: .loom/work-items/{item}.md",
+        "- FR / parent locator:": "- FR / parent locator:",
+        "- Scope:": "- Scope: current Work Item scope; replace with authored scope before review consumption.",
+        "- Suite path:": f"- Suite path: {suite_path}",
+        "- Current `HEAD`:": "- Current `HEAD`: fill with current head before merge-ready consumption.",
+        "- PR locator, or `not_applicable` rationale:": "- PR locator, or `not_applicable` rationale: fill when PR exists; otherwise author not_applicable rationale.",
+        "- Host state locator, or `not_applicable` rationale:": "- Host state locator, or `not_applicable` rationale: fill when host state exists; otherwise author not_applicable rationale.",
+        "| `spec.md` |  | required |  |  |": f"| `spec.md` | {spec_locator} | required | suite inspect | Bind to current Work Item, scope, and head before consumption. |",
+        "| `plan.md` |  | required |  |  |": f"| `plan.md` | {plan_locator} | required | suite inspect | Bind to current validation strategy and head before consumption. |",
+        "| suite path decision |  | candidate / optional / not_applicable |  |  |": f"| suite path decision | {path_decision_locator} | candidate / optional / not_applicable | suite inspect | Recheck when suite path changes. |",
+        "| execution breakdown / task carrier |  | candidate / optional / deferred / not_applicable |  |  |": f"| execution breakdown / task carrier | {task_carrier_locator} | candidate / optional / deferred / not_applicable | suite inspect | Recheck when task carrier contract is consumed. |",
+        "| review record |  | optional / required / not_applicable |  |  |": "| review record |  | optional / required / not_applicable | authored review truth | Required only after review consumption. |",
+        "| merge-ready basis |  | optional / required / not_applicable |  |  |": "| merge-ready basis |  | optional / required / not_applicable | merge-ready truth | Required only for merge-ready or closeout consumption. |",
+        "| host state |  | required / not_applicable |  |  |": "| host state |  | required / not_applicable | host mirror | Required when PR / issue / Project exists. |",
+        "| EV-001 | behavior_evidence |  | spec scenario / acceptance locator | Work Item / scope / head / PR | present / stale / missing / conflict / not_applicable | review / merge-ready / closeout / status |  |": f"| EV-001 | behavior_evidence |  | {spec_locator} scenario / acceptance locator | {item} / scope / head / PR | missing | review / merge-ready / closeout / status | Add behavior evidence source locator and binding before validation. |",
+        "| EV-002 | test_evidence |  | plan validation / test strategy locator | Work Item / scope / head / PR | present / stale / missing / conflict / not_applicable | review / merge-ready / closeout / status |  |": f"| EV-002 | test_evidence |  | {plan_locator} validation / test strategy locator | {item} / scope / head / PR | missing | review / merge-ready / closeout / status | Add test evidence source locator and rerun validation before consumption. |",
+        "| EV-003 | fresh_verification_input |  | evidence row ids | head / reviewed head / PR head / validation summary | present / stale / missing / conflict / not_applicable | merge-ready / closeout / status |  |": "| EV-003 | fresh_verification_input |  | EV-001 EV-002 | head / reviewed head / PR head / validation summary | missing | merge-ready / closeout / status | Mark present only after behavior and test evidence are present for the current object. |",
+    }
+    for old, new in replacements.items():
+        template_text = template_text.replace(old, new)
+    return template_text.rstrip() + "\n"
+
+
+def suite_evidence_scaffold_payload(target: Path, item: str, *, apply: bool) -> tuple[str, dict[str, Any], str | None]:
+    item_error = suite_item_segment_error(item)
+    if item_error:
+        payload = {
+            "artifact_root": None,
+            "suite_locator": None,
+            "evidence_map_locator": None,
+            "planned_writes": [],
+            "source_templates": [],
+            "consumed_locators": [*SUITE_EVIDENCE_CONTRACT_LOCATORS, SUITE_EVIDENCE_SCAFFOLD_TEMPLATE_LOCATOR],
+            "consumed_suite_locators": {},
+            "overwrite_policy": {
+                "mode": "preserve_existing",
+                "allows_overwrite": False,
+                "existing_files": [],
+                "ambiguous_overwrite": "fail_closed",
+            },
+            "apply_required": not apply,
+            "apply": apply,
+            "rollback_note": "No files were created because the suite item did not resolve to a single repo-local path segment.",
+            "created_locators": [],
+            "missing_inputs": [item_error],
+            "advisory_gaps": [],
+            "seed_rows": [],
+            "initial_freshness_policy": "scaffold never marks evidence present",
+        }
+        return "Suite evidence scaffold failed closed before resolving artifact paths.", payload, "invalid_suite_item"
+
+    inspect_summary, inspect_payload = suite_inspect_payload(target, item)
+    suite_root = target / ".loom" / "specs" / item
+    destination = suite_root / "evidence-map.md"
+    destination_locator = repo_locator(destination, target)
+    missing_inputs: list[str] = []
+
+    if not SUITE_EVIDENCE_SCAFFOLD_TEMPLATE.exists() or not SUITE_EVIDENCE_SCAFFOLD_TEMPLATE.is_file():
+        missing_inputs.append(f"missing scaffold template: {SUITE_EVIDENCE_SCAFFOLD_TEMPLATE_LOCATOR}")
+    for component in (target / ".loom", target / ".loom" / "specs", suite_root, destination):
+        if component.is_symlink():
+            missing_inputs.append(f"scaffold path must not traverse symlink: {repo_locator(component, target)}")
+    if not destination.exists() and destination.parent.exists() and not destination.parent.is_dir():
+        missing_inputs.append(f"scaffold parent is not a directory: {repo_locator(destination.parent, target)}")
+    if destination.exists() and not destination.is_file():
+        missing_inputs.append(f"scaffold artifact is not a regular file: {destination_locator}")
+
+    exists = destination.exists()
+    created_locators: list[str] = []
+    if apply and not exists and not missing_inputs:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(suite_evidence_scaffold_content(target, item, inspect_payload), encoding="utf-8")
+        created_locators.append(destination_locator)
+
+    existing_files = [destination_locator] if exists else []
+    consumed_suite_locators = {
+        "suite_path": inspect_payload.get("suite_path"),
+        "suite_locator": inspect_payload.get("suite_locator"),
+        "path_decision_locator": inspect_payload.get("path_decision_locator"),
+        "spec_locator": inspect_payload.get("spec_locator") or f".loom/specs/{item}/spec.md",
+        "plan_locator": inspect_payload.get("plan_locator") or f".loom/specs/{item}/plan.md",
+        "task_carrier_locators": inspect_payload.get("task_carrier_locators", []),
+    }
+    payload = {
+        "suite_path": inspect_payload.get("suite_path"),
+        "artifact_root": repo_locator(suite_root, target),
+        "suite_locator": inspect_payload.get("suite_locator") or repo_locator(suite_root, target),
+        "evidence_map_locator": destination_locator,
+        "planned_writes": [
+            {
+                "artifact": "evidence-map.md",
+                "locator": destination_locator,
+                "source_template": SUITE_EVIDENCE_SCAFFOLD_TEMPLATE_LOCATOR,
+                "status": "exists" if exists else ("created" if apply and not missing_inputs else "would_create"),
+                "planned_action": "preserve_existing" if exists else "create",
+                "would_write": not exists,
+                "wrote": apply and not exists and not missing_inputs,
+                "overwrite_policy": "preserve_existing",
+                "requirement": "evidence_map",
+                "initial_freshness": "missing",
+            }
+        ],
+        "source_templates": [{"artifact": "evidence-map.md", "locator": SUITE_EVIDENCE_SCAFFOLD_TEMPLATE_LOCATOR}],
+        "consumed_locators": [*SUITE_EVIDENCE_CONTRACT_LOCATORS, SUITE_EVIDENCE_SCAFFOLD_TEMPLATE_LOCATOR],
+        "consumed_suite_locators": consumed_suite_locators,
+        "overwrite_policy": {
+            "mode": "preserve_existing",
+            "allows_overwrite": False,
+            "existing_files": existing_files,
+            "ambiguous_overwrite": "fail_closed",
+        },
+        "apply_required": not apply,
+        "apply": apply,
+        "rollback_note": (
+            "Dry-run only; no files were created. If applied later, rollback is deleting the created repo-relative evidence-map locator before it is consumed as authored truth."
+            if not apply
+            else "Rollback is deleting the created repo-relative evidence-map locator before it is consumed as authored truth; preserved existing files were not modified."
+        ),
+        "created_locators": created_locators,
+        "missing_inputs": missing_inputs,
+        "advisory_gaps": [],
+        "seed_rows": [
+            {"evidence_id": "EV-001", "evidence_type": "behavior_evidence", "freshness": "missing"},
+            {"evidence_id": "EV-002", "evidence_type": "test_evidence", "freshness": "missing"},
+            {"evidence_id": "EV-003", "evidence_type": "fresh_verification_input", "freshness": "missing"},
+        ],
+        "initial_freshness_policy": "scaffold never marks evidence present",
+        "inspect_summary": inspect_summary,
+    }
+    if missing_inputs:
+        summary = "Suite evidence scaffold apply failed closed before writing artifacts." if apply else "Suite evidence scaffold dry-run found unavailable scaffold inputs."
+        return summary, payload, "missing_scaffold_inputs"
+    if apply:
+        summary = "Suite evidence scaffold applied evidence-map artifact with preserve-existing overwrite policy."
+    else:
+        summary = "Suite evidence scaffold dry-run planned evidence-map artifact without mutating the repository."
+    return summary, payload, None
 
 
 def suite_inspect_payload(target: Path, item: str | None) -> tuple[str, dict[str, Any]]:
@@ -3360,7 +3519,7 @@ def handle_suite(argv: list[str]) -> int:
                 output(
                     "suite evidence",
                     "block",
-                    summary="Suite evidence command requires inspect or validate.",
+                    summary="Suite evidence command requires inspect, scaffold, or validate.",
                     mutates=False,
                     failed_layer="suite-input",
                     fail_closed_reason="missing suite evidence action",
@@ -3368,7 +3527,7 @@ def handle_suite(argv: list[str]) -> int:
                 )
             )
         evidence_action = argv[1]
-        if evidence_action not in {"inspect", "validate"}:
+        if evidence_action not in {"inspect", "scaffold", "validate"}:
             return emit(
                 output(
                     f"suite evidence {evidence_action}",
@@ -3383,6 +3542,8 @@ def handle_suite(argv: list[str]) -> int:
         parser = argparse.ArgumentParser(prog=f"loom suite evidence {evidence_action}")
         parser.add_argument("--target", default=".")
         parser.add_argument("--item")
+        if evidence_action == "scaffold":
+            parser.add_argument("--apply", action="store_true")
         parser.add_argument("--json", action="store_true")
         args = parser.parse_args(argv[2:])
         command_name = f"suite evidence {evidence_action}"
@@ -3404,6 +3565,36 @@ def handle_suite(argv: list[str]) -> int:
                     blocking_gaps=[],
                     advisory_gaps=[],
                     fallback_to=[f"loom {command_name} --target <repo> --item <item> --json"],
+                )
+            )
+        if evidence_action == "scaffold":
+            summary, scaffold_payload, fail_closed_reason = suite_evidence_scaffold_payload(target, args.item, apply=args.apply)
+            if fail_closed_reason:
+                return emit(
+                    output(
+                        command_name,
+                        "block",
+                        target=str(target),
+                        item_id=args.item,
+                        summary=summary,
+                        mutates=False,
+                        failed_layer="suite-input",
+                        fail_closed_reason=fail_closed_reason,
+                        missing_inputs=scaffold_payload.get("missing_inputs", []),
+                        advisory_gaps=scaffold_payload.get("advisory_gaps", []),
+                        fallback_to=["loom suite evidence scaffold --target <repo> --item <item> --json"],
+                        payload=scaffold_payload,
+                    )
+                )
+            return emit(
+                output(
+                    command_name,
+                    "pass",
+                    target=str(target),
+                    item_id=args.item,
+                    summary=summary,
+                    mutates=bool(scaffold_payload.get("created_locators")),
+                    payload=scaffold_payload,
                 )
             )
         if evidence_action == "inspect":
