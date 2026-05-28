@@ -7552,6 +7552,49 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 return False
             return True
 
+        def author_review_run_suite_fixture(target: Path) -> None:
+            suite_root = target / ".loom/specs/INIT-0001"
+            suite_root.mkdir(parents=True, exist_ok=True)
+            (suite_root / "spec.md").write_text(
+                "\n".join(
+                    [
+                        "# Spec",
+                        "",
+                        "- Suite path: minimal",
+                        "",
+                        "## Scenarios",
+                        "",
+                        "- Scenario S1: Review-run fixtures consume a validated formal suite.",
+                        "",
+                        "## Acceptance Criteria",
+                        "",
+                        "- AC-1: Review run can treat the authored spec-review record as current input.",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (suite_root / "plan.md").write_text(
+                "\n".join(
+                    [
+                        "# Plan",
+                        "",
+                        "- Suite path: minimal",
+                        "",
+                        "## Validation",
+                        "",
+                        "- S1 -> automated validation evidence: review-run positive and adapter fixtures.",
+                        "- AC-1 -> test evidence: review run consumes spec review without replacing implementation review truth.",
+                        "",
+                        "## Minimal Path Applicability Records",
+                        "",
+                        "- full-path-artifacts not_applicable rationale: review-run fixtures only need the minimal formal suite; consumer boundary: suite validation, spec review, review run, and review record input must not require suite-index.md, research.md, contracts.md, or readiness-checklist.md for this fixture; recheck condition: switch to full suite when these consumers require full-path artifacts.",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
         def prepare_review_target(target: Path, label: str) -> bool:
             if not ensure_source_snapshot():
                 return False
@@ -7592,6 +7635,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 failures.append(Failure("daily-execution-cli", f"`{label}` bootstrap must verify successfully"))
                 return False
             prune_fixture_work_items(target)
+            author_review_run_suite_fixture(target)
             for args in (
                 ["git", "add", "."],
                 ["git", "add", "-f", ".loom"],
@@ -9579,6 +9623,49 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             shutil.copytree(root / "skills", install_root)
             shutil.copytree(root, source_snapshot, ignore=source_snapshot_ignore(root))
 
+            def author_positive_suite_fixture(target: Path) -> None:
+                suite_root = target / ".loom/specs/INIT-0001"
+                suite_root.mkdir(parents=True, exist_ok=True)
+                (suite_root / "spec.md").write_text(
+                    "\n".join(
+                        [
+                            "# Spec",
+                            "",
+                            "- Suite path: minimal",
+                            "",
+                            "## Scenarios",
+                            "",
+                            "- Scenario S1: Installed pre-merge execution reaches review and merge-ready gates.",
+                            "",
+                            "## Acceptance Criteria",
+                            "",
+                            "- AC-1: Installed positive chain can consume suite validation before spec review approval.",
+                            "",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+                (suite_root / "plan.md").write_text(
+                    "\n".join(
+                        [
+                            "# Plan",
+                            "",
+                            "- Suite path: minimal",
+                            "",
+                            "## Validation",
+                            "",
+                            "- S1 -> automated validation evidence: daily-execution-cli installed positive chain.",
+                            "- AC-1 -> test evidence: installed spec-review run and record allow consume suite validation.",
+                            "",
+                            "## Minimal Path Applicability Records",
+                            "",
+                            "- full-path-artifacts not_applicable rationale: installed pre-merge fixture only exercises the minimal formal suite; consumer boundary: suite validation, spec review, review, merge-ready, and controlled merge must not require suite-index.md, research.md, contracts.md, or readiness-checklist.md for this fixture; recheck condition: switch to full suite when these consumers require full-path artifacts.",
+                            "",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+
             def prepare_target(target: Path) -> tuple[str | None, list[str]]:
                 errors: list[str] = []
                 shutil.copytree(source_snapshot, target)
@@ -9618,6 +9705,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     errors.append("installed bootstrap must verify successfully before the pre-merge chain starts")
                     return None, errors
                 prune_fixture_work_items(target)
+                author_positive_suite_fixture(target)
 
                 git_add = run_command(root, ["git", "add", "."], cwd=target)
                 if git_add.returncode != 0:
