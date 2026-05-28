@@ -27,6 +27,11 @@ description: 负责 bounded implementation/build 执行轮。Use when Codex need
 
 - `python3 scripts/loom-build.py flow build --target <repo> [--item <id>] [--build-evidence <path>]`
 
+该入口必须消费 repo-local `loom suite validate --json` 与
+`loom suite carrier validate --json` 输出作为 build readiness 的机器输入。
+缺少可读 CLI JSON 时 fail closed；不得在 skill runtime 中重新实现 suite path、
+scenario mapping 或 task-carrier 判定。
+
 ## 3. Subagent-Driven Ownership Contract
 
 subagent-driven mode 必须先声明以下字段：
@@ -66,10 +71,11 @@ subagent-driven mode 必须先声明以下字段：
 
 只有当 `flow build` 返回 pass，且 build evidence 证明所有委派输出已集成、无 ownership overlap、无 repeated blocker 时，才允许继续进入 pre-review / review。
 
-Build readiness 只消费 full/minimal suite path 决策，不重新定义 suite 工件、
-evidence-map、consistency-analysis 或 gate-chain。full path 必须证明必需工件可读且
-fresh；minimal path 必须保留合法 `not_applicable` rationale，并把 recheck condition
-传递给后续 pre-review / review。
+Build readiness 只消费 `suite validate` / `suite carrier validate` 已输出的
+full/minimal suite path 决策与 carrier readiness，不重新定义 suite 工件、
+evidence-map、consistency-analysis 或 gate-chain。full path 必须由 CLI JSON 证明
+必需工件可读且 fresh；minimal path 必须保留合法 `not_applicable` rationale，并把
+recheck condition 传递给后续 pre-review / review。
 
 输入信号与输出合同见：
 

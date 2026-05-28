@@ -52,6 +52,10 @@
 `full suite` / `minimal suite` path decision，不得在 skill 中重新定义 suite
 工件、evidence-map、consistency-analysis 或 gate-chain 语义。
 
+Scenario skills 消费 suite readiness 时必须读取 `loom suite ... --json`
+输出；缺少 repo-local CLI JSON 时 fail closed，不在 skill runtime 中重新实现
+suite path、evidence-map 或 task-carrier 判定。
+
 固定消费规则：
 
 - `full path` 表示当前事项选择完整 formal spec suite。后续 skill 必须能读取
@@ -84,7 +88,7 @@
 | --- | --- | --- |
 | `loom-story` | 输出 Story Readiness / Business Confirmation locator，供 `spec.md` / `plan.md` 和 suite path decision 消费 | 对纯治理、维护、格式、链接类事项输出 `not_applicable` rationale、consumer boundary、recheck condition |
 | `loom-spec-review` | 消费 suite path、formal spec、plan、必需工件、evidence-map / consistency-analysis 适用性；缺必需输入时 fail-closed | 只接受有效 `not_applicable` rationale；否则回退到 spec shaping / suite path 修正 |
-| `loom-build` | 在 build readiness 前消费 full suite readiness、scenario-to-validation mapping、task carrier profile locator | 合法跳过附加工件，但必须保留 rationale 和替代验证入口 |
+| `loom-build` | 在 build readiness 前消费 `suite validate` 与 `suite carrier validate` JSON，包括 full suite readiness、scenario-to-validation mapping、task carrier profile locator | 合法跳过附加工件，但必须保留 rationale 和替代验证入口 |
 | `loom-pre-review` | 在 review 前消费 full suite locator、evidence-map freshness、consistency-analysis blocking/advisory 分类 | 缺口必须是有效 `not_applicable`，否则阻断 review admission |
 | `loom-merge-ready` | 在 merge gate 消费 reviewed full suite evidence、gate-chain、PR head / reviewed head / validation freshness | 只把有效 minimal path rationale 当作合法跳过，不把 missing 或 deferred 当作 ready |
 

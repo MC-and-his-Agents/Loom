@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1138
-- Goal: Let `loom verify` require suite validation only when profile or Work Item gates demand it.
-- Scope: #1138 only: add `loom verify --item` and installed-state/profile `suite_validation` requirement consumption, run read-only `suite validate` when required, keep declared suite support diagnostic-only, update CLI fixtures/docs, and terminalize the stale WI-1137 progress carrier after PR #1177 closeout. Do not make every repo require suite automation, do not run evidence/carrier/consistency validators from verify, and do not replace Work Item/review/merge-ready/closeout/docs truth with CLI output.
-- Execution Path: issue #1138 -> branch work/1138-suite-verify -> worktree /Users/mc/dev/Loom-worktrees/1138-suite-verify -> PR pending.
+- Item ID: WI-1140
+- Goal: Make scenario skills consume full spec suite CLI JSON instead of reimplementing suite rules.
+- Scope: #1140 only: update `src/skills/`, generated `skills/`, `.loom/bin/loom_flow.py`, `.loom/bootstrap/manifest.json`, `.loom/specs/WI-1138/task-carrier.md`, `tools/check_cli_contract.py`, full suite CLI docs, Loom carriers, and Loom-owned shadow evidence hashes for `.loom/status/current.md` so scenario skills consume `loom suite ... --json` outputs; ownership constraints are limited to these declared files. Do not implement consistency analyze, closeout reconciliation, host writes, new Work Items, `/speckit.*`, or `.specify/` surfaces.
+- Execution Path: issue #1140 -> branch work/1140-suite-skills -> worktree /Users/mc/dev/Loom-worktrees/1140-suite-skills -> PR pending.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1138.md
-- Review Entry: .loom/reviews/WI-1138.json
+- Recovery Entry: .loom/progress/WI-1140.md
+- Review Entry: .loom/reviews/WI-1140.json
 - Validation Entry: python3 tools/check_cli_contract.py; git diff --check; focused rg; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .
-- Closing Condition: #1138 PR is merged to main, closeout evidence records PR/head/merge/target branch/validation/Project state, #1138 is closed completed, and #1136 can consume the evidence.
-- Current Checkpoint: merge
-- Current Stop: Spec review, implementation review, state-check, blocking shadow parity, adopt verify, and local merge-ready prerequisites pass; PR creation is next.
-- Next Step: Commit, push branch work/1138-suite-verify, open PR, run PR gate, controlled merge, closeout, and Project reconciliation for #1138.
+- Closing Condition: #1140 PR is merged to main, closeout evidence records PR/head/merge/target branch/validation/Project state, #1140 is closed completed, and #1136 can consume the evidence.
+- Current Checkpoint: build
+- Current Stop: Local implementation and source/generated skill synchronization are complete on branch work/1140-suite-skills; Project `Loom` remains In Progress and PR creation is next.
+- Next Step: Commit and push #1140, open the issue-scoped PR, run PR/merge-ready gates against the PR head, merge, closeout, and reconcile Project state.
 - Blockers: None
-- Latest Validation Summary: Passed: PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py; python3 tools/loom.py suite validate --target . --item WI-1138 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1138 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1138 --json; git diff --check; focused rg for suite_validation, suite validate, declared_support, /speckit, and .specify; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py state-check --target . --item WI-1138; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1138; python3 tools/loom.py gate spec-review --target . --item WI-1138 --json; python3 tools/loom.py gate review --target . --item WI-1138 --json.
-- Recovery Boundary: #1138 owns verify/profile consumption of required suite validation only. It does not make declared support universally blocking, does not run evidence/carrier/consistency validators from verify, does not write host truth, and does not replace Work Item/review/merge-ready/closeout/docs truth with CLI output.
-- Current Lane: full-spec-suite-cli/verify-suite-requirements
+- Latest Validation Summary: Local #1140 validation passed: `python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py`; `python3 tools/skills_surface.py check`; `git diff --check`; focused `rg` for suite consumption and forbidden `/speckit` / `.specify` surfaces; `python3 tools/check_release_surface.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_npm_package.py`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 tools/loom.py suite validate --target . --item WI-1140 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1140 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1140 --json`; `python3 .loom/bin/loom_flow.py state-check --target . --item WI-1140`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1140`; `python3 tools/loom.py gate spec-review --target . --item WI-1140 --json`; `python3 tools/loom.py gate review --target . --item WI-1140 --json`; `python3 tools/loom.py pre-review --target . --item WI-1140 --json`; `python3 tools/loom.py build --target . --item WI-1140 --build-evidence .loom/progress/WI-1140-build-evidence.json --json`; pre-PR `python3 tools/loom.py merge-ready --target . --item WI-1140 --json` consumed suite evidence/carrier CLI JSON and fell back only because the merge checkpoint and PR head are not yet present.
+- Recovery Boundary: #1140 owns scenario skill consumption of suite CLI JSON only, plus Loom-owned shadow evidence hash refresh for `.loom/status/current.md` caused by this Work Item's status carrier update. It must not implement consistency analyze, closeout reconciliation, host writes, new truth carriers outside the Work Item suite, or any `/speckit.*` / `.specify/` surfaces.
+- Current Lane: full-spec-suite-cli/scenario-skills-json-consumption
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
-- Diagnostics Entry: python3 tools/loom.py verify --target <fixture> --item <item> --json via tools/check_cli_contract.py
-- Verification Entry: .loom/progress/WI-1138.md
-- Lane Entry: full-spec-suite-cli/verify-suite-requirements
+- Diagnostics Entry: python3 tools/loom.py build --target . --item WI-1140 --json
+- Verification Entry: .loom/progress/WI-1140.md
+- Lane Entry: full-spec-suite-cli/scenario-skills-json-consumption
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1138.md
-- Dynamic Truth: .loom/progress/WI-1138.md
+- Static Truth: .loom/work-items/WI-1140.md
+- Dynamic Truth: .loom/progress/WI-1140.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
