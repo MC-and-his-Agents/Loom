@@ -12,7 +12,7 @@
 - Validation Entry: python3 tools/check_cli_contract.py; git diff --check; focused rg; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .
 - Closing Condition: #1127 PR is merged to main, closeout evidence records PR/head/merge/target branch/validation/Project state, #1127 is closed completed, and #1126 can consume the evidence.
 - Current Checkpoint: merge
-- Current Stop: PR #1171 is open for WI-1127 at head afd6dd90633f9906629a2b4d35f6630a51033b79 with local checkpoint validation recorded.
+- Current Stop: PR #1171 is open for WI-1127 on branch `work/1127-suite-evidence-validate` with local checkpoint validation recorded.
 - Next Step: Refresh review evidence for PR #1171, pass PR gate, merge, and close out #1127.
 - Blockers: None
 - Latest Validation Summary: Passed: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; git diff --check; focused rg for suite evidence command names, failure kinds, `/speckit`, and `.specify`; python3 tools/loom.py suite validate --target . --item WI-1127 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1127 --json; python3 tools/check_cli_contract.py; python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py state-check --target . --item WI-1127.

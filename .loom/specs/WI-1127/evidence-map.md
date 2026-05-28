@@ -6,7 +6,7 @@
 - FR parent locator: https://github.com/MC-and-his-Agents/Loom/issues/1126
 - Scope: suite evidence inspect and validate CLI automation
 - Suite path: minimal
-- Current HEAD: afd6dd90633f9906629a2b4d35f6630a51033b79
+- Current HEAD: PR #1171 branch head
 - PR locator: https://github.com/MC-and-his-Agents/Loom/pull/1171
 - Host state locator: https://github.com/MC-and-his-Agents/Loom/issues/1127
 
