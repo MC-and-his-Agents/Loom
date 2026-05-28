@@ -5,7 +5,7 @@
   "kind": "code_review",
   "summary": "Implementation review allows WI-1127: the change is scoped to suite evidence inspect/validate, CLI contract coverage exercises help, happy, missing, and stale evidence paths, and the command remains read-only without scaffold, merge-ready, closeout, /speckit, or .specify writes.",
   "reviewer": "Codex",
-  "reviewed_head": "7d9d7bc24ae499c061fc2e44d0f1fbcdb9df444f",
+  "reviewed_head": "ec7a24bf97f463b2972d55f33b0ea792957e19fe",
   "reviewed_validation_summary": "Passed: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; git diff --check; focused rg for suite evidence command names, failure kinds, `/speckit`, and `.specify`; python3 tools/loom.py suite validate --target . --item WI-1127 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1127 --json; python3 tools/check_cli_contract.py; python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py state-check --target . --item WI-1127.",
   "fallback_to": null,
   "findings": [],
