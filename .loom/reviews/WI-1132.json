@@ -5,7 +5,7 @@
   "kind": "code_review",
   "summary": "Implementation review allows WI-1132: the change is scoped to suite carrier inspect/validate host signal classification, CLI contract fixtures cover Project Done with issue open, checklist checked with missing evidence, and PR merged with issue open conflicts, and the command remains read-only without Project or issue auto-sync, merge-ready integration, closeout changes, /speckit, or .specify surfaces.",
   "reviewer": "Codex",
-  "reviewed_head": "7977215aaad08e36301e3df5ed3fba5c921b908a",
+  "reviewed_head": "03fd96890f854c634f5d9df54b217db6b5f488ab",
   "reviewed_validation_summary": "Passed: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py; python3 tools/loom.py suite validate --target . --item WI-1132 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1132 --json; python3 tools/loom.py suite carrier inspect --target . --item WI-1132 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1132 --json; git diff --check; focused rg for host_signal_conflicts, truth_signal_classifications, carrier_truth_conflict, /speckit, and .specify; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py state-check --target . --item WI-1132; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .",
   "fallback_to": null,
   "findings": [],
