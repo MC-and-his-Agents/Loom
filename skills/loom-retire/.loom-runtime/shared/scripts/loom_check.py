@@ -9991,6 +9991,30 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         root,
                         [
                             "python3",
+                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                            "flow",
+                            "spec-review",
+                            "--target",
+                            str(incomplete_spec_target),
+                            "--item",
+                            "INIT-0001",
+                        ],
+                    )
+                    if error:
+                        failures.append(Failure("daily-execution-cli", f"`installed incomplete flow spec-review` failed: {error}"))
+                    elif payload.get("result") != "block":
+                        failures.append(Failure("daily-execution-cli", "`installed incomplete flow spec-review` must block"))
+                    elif not any(step.get("name") == "suite-validate" for step in payload.get("steps", []) if isinstance(step, dict)):
+                        failures.append(Failure("daily-execution-cli", "`installed incomplete flow spec-review` must consume suite validation"))
+                    elif not any("plan.md" in str(item) for item in payload.get("missing_inputs", [])):
+                        failures.append(Failure("daily-execution-cli", "`installed incomplete flow spec-review` must name the missing plan.md"))
+                    elif payload.get("suite_validation", {}).get("command") != "suite validate":
+                        failures.append(Failure("daily-execution-cli", "`installed incomplete flow spec-review` must expose suite validate output"))
+
+                    payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
                             str(install_root / "loom-spec-review" / "scripts" / "loom-spec-review.py"),
                             "review",
                             "record",

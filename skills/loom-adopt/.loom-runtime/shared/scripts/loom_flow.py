@@ -6375,6 +6375,152 @@ def spec_suite_paths(context: dict[str, Any]) -> dict[str, str]:
     return candidates[0]
 
 
+SPEC_REVIEW_SUITE_READY_RESULTS = {"pass", "advisory"}
+
+
+def suite_validate_command_candidates(context: dict[str, Any]) -> list[Path]:
+    candidates: list[Path] = []
+    for root in (
+        context["target_root"],
+        Path(os.environ["LOOM_SOURCE_REPO_ROOT"]).expanduser().resolve()
+        if os.environ.get("LOOM_SOURCE_REPO_ROOT")
+        else None,
+    ):
+        if not isinstance(root, Path):
+            continue
+        command = root / "tools" / "loom.py"
+        if command.is_file() and command not in candidates:
+            candidates.append(command)
+    return candidates
+
+
+def normalize_suite_validate_payload(payload: dict[str, Any], *, validator: str, mode: str) -> dict[str, Any]:
+    normalized = dict(payload)
+    nested_payload = normalized.get("payload")
+    if isinstance(nested_payload, dict):
+        normalized.setdefault("blocking_gaps", nested_payload.get("blocking_gaps", []))
+        normalized.setdefault("advisory_gaps", nested_payload.get("advisory_gaps", []))
+        normalized.setdefault("failure_taxonomy", nested_payload.get("failure_taxonomy", []))
+        normalized.setdefault("supported_failure_kinds", nested_payload.get("supported_failure_kinds", []))
+    normalized["validator"] = validator
+    normalized["validator_mode"] = mode
+    return normalized
+
+
+def suite_validation_missing_inputs(payload: dict[str, Any]) -> list[str]:
+    missing: list[str] = []
+    for entry in payload.get("missing_inputs", []):
+        text = str(entry)
+        if text not in missing:
+            missing.append(text)
+    for gap in payload.get("blocking_gaps", []):
+        if not isinstance(gap, dict):
+            continue
+        failure_kind = str(gap.get("failure_kind") or "suite_validation_gap")
+        locator = str(gap.get("source_locator") or "")
+        remediation = str(gap.get("remediation_direction") or "")
+        parts = [f"suite validation {failure_kind}"]
+        if locator:
+            parts.append(locator)
+        if remediation:
+            parts.append(remediation)
+        text = ": ".join(parts)
+        if text not in missing:
+            missing.append(text)
+    return missing
+
+
+def suite_validation_fallback_to(payload: dict[str, Any]) -> str | None:
+    fallback = payload.get("fallback_to")
+    if isinstance(fallback, list):
+        return str(fallback[0]) if fallback else "build"
+    if isinstance(fallback, str) and fallback:
+        return fallback
+    return "build"
+
+
+def suite_validation_ready(payload: dict[str, Any]) -> bool:
+    return payload.get("result") in SPEC_REVIEW_SUITE_READY_RESULTS
+
+
+def spec_suite_validation_payload(context: dict[str, Any]) -> dict[str, Any]:
+    errors: list[str] = []
+    for command in suite_validate_command_candidates(context):
+        try:
+            completed = run_process(
+                [
+                    "python3",
+                    str(command),
+                    "suite",
+                    "validate",
+                    "--target",
+                    str(context["target_root"]),
+                    "--item",
+                    str(context["item_id"]),
+                    "--json",
+                ],
+                cwd=command.parents[1],
+                timeout_seconds=30.0,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            errors.append(f"{command}: {exc}")
+            continue
+        stdout = completed.stdout.strip()
+        try:
+            payload = json.loads(stdout) if stdout else {}
+        except json.JSONDecodeError:
+            errors.append(f"{command}: emitted non-JSON suite validate output")
+            continue
+        if isinstance(payload, dict) and payload.get("command") == "suite validate":
+            return normalize_suite_validate_payload(
+                payload,
+                validator=str(command),
+                mode="repo-local-cli",
+            )
+        detail = completed.stderr.strip() or stdout or f"exit {completed.returncode}"
+        errors.append(f"{command}: {detail}")
+
+    suite, missing_suite_paths = formal_spec_suite_status(context)
+    missing_inputs = [f"missing formal spec suite file: {path}" for path in missing_suite_paths]
+    if errors:
+        missing_inputs.extend(f"suite validator unavailable: {error}" for error in errors)
+    result = "block" if missing_inputs else "pass"
+    return {
+        "schema_version": "loom-suite-validation-consumption/v1",
+        "command": "suite validate",
+        "result": result,
+        "summary": (
+            "suite validation fell back to runtime formal suite presence checks."
+            if result == "pass"
+            else "suite validation fell back to fail-closed runtime formal suite presence checks."
+        ),
+        "target": str(context["target_root"]),
+        "item_id": context["item_id"],
+        "mutates": False,
+        "validator": "runtime-presence-check",
+        "validator_mode": "embedded-fail-closed",
+        "formal_spec_suite": suite,
+        "missing_inputs": missing_inputs,
+        "blocking_gaps": [
+            {
+                "id": f"suite-validate-missing-{Path(path).name.replace('.', '-')}",
+                "classification": "missing",
+                "failure_kind": "missing_required_artifact",
+                "default_result": "block",
+                "failed_layer": "suite",
+                "source_locator": path,
+                "consumer_impact": "spec review cannot approve an incomplete formal spec suite",
+                "remediation_direction": "Author the missing formal spec suite artifact before spec review.",
+                "fallback_to": "build",
+                "binding": "flow-spec-review-suite-validation",
+            }
+            for path in missing_suite_paths
+        ],
+        "advisory_gaps": [],
+        "fallback_to": "build" if result == "block" else None,
+    }
+
+
 def review_head_binding(
     target_root: Path,
     *,
@@ -6585,6 +6731,7 @@ def review_gate_payload(
 
 def spec_review_gate_payload(context: dict[str, Any]) -> dict[str, Any]:
     suite, missing_suite_paths = formal_spec_suite_status(context)
+    suite_validation = spec_suite_validation_payload(context)
     spec_path = suite["spec"] if not missing_suite_paths else formal_spec_path(context)
     payload = review_gate_payload(
         context,
@@ -6595,6 +6742,7 @@ def spec_review_gate_payload(context: dict[str, Any]) -> dict[str, Any]:
         path_label=spec_path,
     )
     payload["formal_spec_suite"] = suite
+    payload["suite_validation"] = suite_validation
     if missing_suite_paths:
         payload["result"] = "block"
         payload["summary"] = "spec review is blocked until the complete formal spec suite is present."
@@ -6602,6 +6750,11 @@ def spec_review_gate_payload(context: dict[str, Any]) -> dict[str, Any]:
             f"missing formal spec suite file: {path}" for path in missing_suite_paths
         ] + list(payload.get("missing_inputs", []))
         payload["fallback_to"] = "build"
+    elif not suite_validation_ready(suite_validation):
+        payload["result"] = "block"
+        payload["summary"] = "spec review is blocked until suite validation passes."
+        payload["missing_inputs"] = suite_validation_missing_inputs(suite_validation) + list(payload.get("missing_inputs", []))
+        payload["fallback_to"] = suite_validation_fallback_to(suite_validation)
     return payload
 
 
@@ -7392,6 +7545,9 @@ def build_review_flow_payload(
     if operation == "spec-review":
         review_path = default_spec_review_path(context["item_id"])
         review_record, _, review_errors = load_review_record(target_root, context["item_id"], review_path)
+        suite_validation = spec_suite_validation_payload(context)
+        suite_step_result = "pass" if suite_validation_ready(suite_validation) else "block"
+        suite_step_missing = [] if suite_step_result == "pass" else suite_validation_missing_inputs(suite_validation)
         review_step_name = "spec-review-entry"
         review_step_result = "pass" if review_record and not review_errors else "block"
         review_step_summary = (
@@ -7411,7 +7567,15 @@ def build_review_flow_payload(
             authority_before="repo-owned spec review gate or guardian compatibility verdict",
             authority_after="loom spec review record",
         )
-        extra_steps: list[dict[str, Any]] = []
+        extra_steps: list[dict[str, Any]] = [
+            {
+                "name": "suite-validate",
+                "result": suite_step_result,
+                "summary": str(suite_validation.get("summary") or "suite validation was consumed before spec review."),
+                "missing_inputs": suite_step_missing,
+                "fallback_to": None if suite_step_result == "pass" else suite_validation_fallback_to(suite_validation),
+            }
+        ]
     else:
         review_path = context["review_entry"]
         review_record, _, review_errors = load_review_record(target_root, context["item_id"], review_path)
@@ -7559,6 +7723,7 @@ def build_review_flow_payload(
         **(
             {
                 "spec_review": review_payload,
+                "suite_validation": suite_validation,
                 "spec_review_authority_migration": review_authority,
             }
             if operation == "spec-review"
@@ -17979,19 +18144,18 @@ def handle_review(args: argparse.Namespace) -> int:
             }
         )
     if args.decision == "allow" and args.kind == "spec_review":
-        _, missing_suite_paths = formal_spec_suite_status(context)
-        if missing_suite_paths:
+        suite_validation = spec_suite_validation_payload(context)
+        if not suite_validation_ready(suite_validation):
             return emit(
                 {
                     "command": "review",
                     "operation": "record",
                     "result": "block",
-                    "summary": "spec review cannot be recorded as `allow` without the complete formal spec suite.",
-                    "missing_inputs": [
-                        f"missing formal spec suite file: {path}" for path in missing_suite_paths
-                    ],
-                    "fallback_to": "build",
+                    "summary": "spec review cannot be recorded as `allow` until suite validation passes.",
+                    "missing_inputs": suite_validation_missing_inputs(suite_validation),
+                    "fallback_to": suite_validation_fallback_to(suite_validation),
                     "build_checkpoint": build_payload,
+                    "suite_validation": suite_validation,
                 }
             )
     if args.decision == "allow" and args.kind != "spec_review":

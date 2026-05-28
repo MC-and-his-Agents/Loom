@@ -9991,6 +9991,30 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                         root,
                         [
                             "python3",
+                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                            "flow",
+                            "spec-review",
+                            "--target",
+                            str(incomplete_spec_target),
+                            "--item",
+                            "INIT-0001",
+                        ],
+                    )
+                    if error:
+                        failures.append(Failure("daily-execution-cli", f"`installed incomplete flow spec-review` failed: {error}"))
+                    elif payload.get("result") != "block":
+                        failures.append(Failure("daily-execution-cli", "`installed incomplete flow spec-review` must block"))
+                    elif not any(step.get("name") == "suite-validate" for step in payload.get("steps", []) if isinstance(step, dict)):
+                        failures.append(Failure("daily-execution-cli", "`installed incomplete flow spec-review` must consume suite validation"))
+                    elif not any("plan.md" in str(item) for item in payload.get("missing_inputs", [])):
+                        failures.append(Failure("daily-execution-cli", "`installed incomplete flow spec-review` must name the missing plan.md"))
+                    elif payload.get("suite_validation", {}).get("command") != "suite validate":
+                        failures.append(Failure("daily-execution-cli", "`installed incomplete flow spec-review` must expose suite validate output"))
+
+                    payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
                             str(install_root / "loom-spec-review" / "scripts" / "loom-spec-review.py"),
                             "review",
                             "record",
@@ -18744,8 +18768,8 @@ STORY_SCENARIO_DIMENSIONS = {
     "security_permission",
     "environment_interruption",
 }
-STORY_READINESS_DECISIONS = {"ready", "needs-shaping", "blocked", "not-applicable"}
-STORY_BUSINESS_CONFIRMATION_DECISIONS = {"pending", "confirmed", "revision-requested", "not-applicable"}
+STORY_READINESS_DECISIONS = {"confirmed", "pending", "revision-requested", "not_applicable"}
+STORY_BUSINESS_CONFIRMATION_DECISIONS = {"pending", "confirmed", "revision-requested", "not_applicable"}
 
 
 def require_user_story_payload(
@@ -18885,8 +18909,8 @@ def require_story_business_confirmation_payload(
         failures.append(Failure(category, f"{context} confirmed decision must include confirmation_source"))
     if decision == "revision-requested" and not isinstance(payload.get("revision_request"), str):
         failures.append(Failure(category, f"{context} revision-requested decision must include revision_request"))
-    if decision == "not-applicable" and not isinstance(payload.get("bypass_rationale"), str):
-        failures.append(Failure(category, f"{context} not-applicable decision must include bypass_rationale"))
+    if decision == "not_applicable" and not isinstance(payload.get("bypass_rationale"), str):
+        failures.append(Failure(category, f"{context} not_applicable decision must include bypass_rationale"))
     if any(key in payload for key in ("technical_solution_approval", "test_strategy_approval", "code_quality_approval")):
         failures.append(Failure(category, f"{context} must not ask the user to approve technical solution, test strategy, or code quality"))
 
@@ -18977,6 +19001,10 @@ def require_story_flow_contract_summary(
         failures.append(Failure(category, f"{context} must keep Work Item as delivery consumption entry"))
     elif set(delivery_contract.get("blocks_on_confirmation", [])) != {"pending", "revision-requested"}:
         failures.append(Failure(category, f"{context} delivery consumption must block pending or revision-requested story confirmation"))
+    elif "scenario locator" not in str(delivery_contract.get("scenario_locator_output", "")):
+        failures.append(Failure(category, f"{context} delivery consumption must expose scenario locator output"))
+    elif "Business Confirmation locator" not in str(delivery_contract.get("business_confirmation_locator_output", "")):
+        failures.append(Failure(category, f"{context} delivery consumption must expose Business Confirmation locator output"))
     if any(key in payload for key in ("story", "readiness", "delivery_consumption")):
         failures.append(Failure(category, f"{context} must not expose actual story/readiness payload keys from contract-summary mode"))
 
@@ -18991,7 +19019,7 @@ def check_story_intake_contract(root: Path) -> list[Failure]:
             "loom-story-business-confirmation/v1",
             "Work Item",
             "delivery handoff",
-            "not-applicable",
+            "not_applicable",
             "actor specificity",
             "revision-requested",
         ],
@@ -19004,8 +19032,10 @@ def check_story_intake_contract(root: Path) -> list[Failure]:
         "docs/methodology/templates/scaffold/user-story.md": [
             "Actor",
             "Capability",
+            "Scenario locator",
             "Story Readiness",
             "Story Business Confirmation",
+            "Business Confirmation locator",
             "Delivery Consumption Boundary",
         ],
         "skills/route-matrix.md": [
@@ -19076,7 +19106,7 @@ def check_story_intake_contract(root: Path) -> list[Failure]:
 
     readiness = {
         "schema_version": "loom-story-readiness/v1",
-        "decision": "ready",
+        "decision": "confirmed",
         "rationale": "actor, outcome, value, and scenarios are clear enough to enter spec / plan",
         "story_locator": "docs/methodology/templates/scaffold/user-story.md",
         "missing_inputs": [],
@@ -19090,11 +19120,11 @@ def check_story_intake_contract(root: Path) -> list[Failure]:
             "story_size": "pass",
         },
     }
-    require_story_readiness_payload(failures, category=category, context="ready story", payload=readiness)
+    require_story_readiness_payload(failures, category=category, context="confirmed story", payload=readiness)
     for decision in STORY_READINESS_DECISIONS:
         candidate = dict(readiness)
         candidate["decision"] = decision
-        if decision == "not-applicable":
+        if decision == "not_applicable":
             candidate["rationale"] = "story intake bypassed because the change is a pure repository maintenance closeout"
         require_story_readiness_payload(failures, category=category, context=f"{decision} readiness", payload=candidate)
 
@@ -19130,13 +19160,13 @@ def check_story_intake_contract(root: Path) -> list[Failure]:
         payload=revision_confirmation,
     )
     bypass_confirmation = dict(confirmation)
-    bypass_confirmation["decision"] = "not-applicable"
+    bypass_confirmation["decision"] = "not_applicable"
     bypass_confirmation["confirmation_source"] = None
     bypass_confirmation["bypass_rationale"] = "pure governance link repair has no business semantics to confirm"
     require_story_business_confirmation_payload(
         failures,
         category=category,
-        context="not-applicable story business semantics",
+        context="not_applicable story business semantics",
         payload=bypass_confirmation,
     )
 
@@ -19205,11 +19235,16 @@ def check_story_intake_contract(root: Path) -> list[Failure]:
             "- Out of scope: technical solution approval\n\n"
             "## Story Readiness\n\n"
             "- Schema marker: loom-story-readiness/v1\n"
-            "- Decision: ready\n"
+            "- Decision: confirmed\n"
             "- Rationale: concrete enough for fixture validation\n\n"
+            "## Acceptance Scenarios\n\n"
+            "### Scenario S1\n\n"
+            "- Scenario id: S1\n"
+            "- Scenario locator: .loom/stories/WI-100.md#scenario-s1\n"
+            "- Dimension: happy_path\n\n"
             "## Story Business Confirmation\n\n"
             "- Schema marker: loom-story-business-confirmation/v1\n"
-            "- Decision: not-applicable\n"
+            "- Decision: not_applicable\n"
             "- Bypass rationale, if not applicable: runtime fixture has no business semantic decision\n\n"
             "## Delivery Consumption Boundary\n\n"
             "- Schema marker: loom-story-delivery-mapping/v1\n"
@@ -19223,12 +19258,12 @@ def check_story_intake_contract(root: Path) -> list[Failure]:
         elif payload.get("result") != "pass":
             failures.append(Failure(category, "valid story carrier fixture must pass"))
 
-        pending_story_text = story_text.replace("- Decision: not-applicable\n", "- Decision: pending\n")
+        pending_story_text = story_text.replace("- Decision: not_applicable\n", "- Decision: pending\n")
         (target / ".loom/stories/WI-100.md").write_text(pending_story_text, encoding="utf-8")
         payload, error = load_command_json(root, ["python3", "src/skills/shared/scripts/loom_story_carriers.py", str(target)])
         if error:
             failures.append(Failure(category, f"pending confirmation story carrier fixture failed to return JSON: {error}"))
-        elif payload.get("result") != "block" or not any("confirmed or not-applicable" in str(item) for item in payload.get("missing_inputs", [])):
+        elif payload.get("result") != "block" or not any("confirmed or not_applicable" in str(item) for item in payload.get("missing_inputs", [])):
             failures.append(Failure(category, "pending story business confirmation must fail closed"))
         (target / ".loom/stories/WI-100.md").write_text(story_text, encoding="utf-8")
 
