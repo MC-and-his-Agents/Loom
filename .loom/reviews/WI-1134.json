@@ -1,39 +1,43 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1134",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "46988f4267fc84db626e467a5f30c47124e8b495",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allows WI-1134: pre-review, implementation review, and merge-ready consume suite evidence/carrier validation as gate input evidence; implementation review records persist the consumed validation commands and evidence/task-carrier locators; top-level merge-ready JSON delegation no longer forwards --json to the flow parser; docs and generated skill runtimes are synchronized; closeout semantics, Work Item/review/merge-ready truth boundaries, /speckit, and .specify remain unchanged.",
+  "reviewer": "Codex",
+  "reviewed_head": "0d8523463be85f0a5b84d4fa9f0b710d2e3b643d",
+  "reviewed_validation_summary": "Passed: PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py; python3 tools/check_cli_contract.py; python3 tools/loom.py suite validate --target . --item WI-1134 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1134 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1134 --json; git diff --check; focused rg for suite_gate_validation, suite-evidence-validate, suite-carrier-validate, /speckit, .specify, and closeout scope; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py state-check --target . --item WI-1134; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1134; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1134.md",
+    "recovery_entry": ".loom/progress/WI-1134.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "unavailable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github workflow read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/actions/workflows\": EOF",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_control_plane",
+        "error_count": 1
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1134-gate-evidence-carrier/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-worktrees/1134-gate-evidence-carrier --item WI-1134 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1134-gate-evidence-carrier/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-worktrees/1134-gate-evidence-carrier --item WI-1134 --json",
+    "suite_evidence_map": ".loom/specs/WI-1134/evidence-map.md",
+    "suite_task_carriers": [
+      ".loom/specs/WI-1134/task-carrier.md"
+    ]
+  }
 }
