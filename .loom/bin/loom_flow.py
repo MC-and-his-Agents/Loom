@@ -4359,81 +4359,85 @@ def suite_validation_command_payload(
 ) -> dict[str, Any]:
     target_root = context["target_root"]
     item_id = context["item_id"]
-    loom_cli = target_root / "tools" / "loom.py"
-    command = [
-        sys.executable,
-        str(loom_cli),
-        "suite",
-        domain,
-        "validate",
-        "--target",
-        str(target_root),
-        "--item",
-        item_id,
-        "--json",
-    ]
+    command_label = f"suite {domain} validate"
+    display_command = f"loom {command_label} --target {target_root} --item {item_id} --json"
     if domain not in {"evidence", "carrier"}:
         return {
             "result": "block",
             "summary": f"unsupported suite validation domain `{domain}`.",
             "missing_inputs": [f"unsupported suite validation domain: {domain}"],
             "fallback_to": "build",
-            "command": " ".join(command),
+            "command": display_command,
             "payload": None,
         }
-    if not loom_cli.exists():
-        return {
-            "result": "pass",
-            "summary": "suite validation is not applicable because the source tools/loom.py CLI is not installed in this target.",
-            "missing_inputs": [],
-            "fallback_to": None,
-            "command": " ".join(command),
-            "not_applicable": True,
-            "not_applicable_reason": "source suite CLI unavailable in bootstrapped target runtime",
-            "payload": None,
-        }
-    completed = run_process(command, target_root, timeout_seconds=60)
-    raw_output = completed.stdout.strip() or completed.stderr.strip()
-    try:
-        payload = json.loads(raw_output)
-    except json.JSONDecodeError as exc:
-        return {
-            "result": "block",
-            "summary": f"suite {domain} validation did not emit readable JSON.",
-            "missing_inputs": [f"suite {domain} validate JSON: {exc.msg}"],
-            "fallback_to": f"suite {domain} validate",
-            "command": " ".join(command),
-            "returncode": completed.returncode,
-            "stdout": completed.stdout.strip(),
-            "stderr": completed.stderr.strip(),
-            "payload": None,
-        }
-    result = payload.get("result") if payload.get("result") in {"pass", "block", "fallback"} else "block"
-    missing_inputs = list(payload.get("missing_inputs", [])) if isinstance(payload.get("missing_inputs"), list) else []
-    for gap in payload.get("blocking_gaps", []) if isinstance(payload.get("blocking_gaps"), list) else []:
-        if not isinstance(gap, dict):
+
+    errors: list[str] = []
+    for loom_cli in suite_validate_command_candidates(context):
+        command = [
+            sys.executable,
+            str(loom_cli),
+            "suite",
+            domain,
+            "validate",
+            "--target",
+            str(target_root),
+            "--item",
+            item_id,
+            "--json",
+        ]
+        completed = run_process(command, loom_cli.parents[1], timeout_seconds=60)
+        raw_output = completed.stdout.strip()
+        try:
+            payload = json.loads(raw_output) if raw_output else {}
+        except json.JSONDecodeError as exc:
+            errors.append(f"{loom_cli}: {command_label} emitted non-JSON output: {exc.msg}")
             continue
-        failure_kind = gap.get("failure_kind")
-        source_locator = gap.get("source_locator")
-        if failure_kind:
-            detail = str(failure_kind)
-            if source_locator:
-                detail = f"{detail}: {source_locator}"
-            if detail not in missing_inputs:
-                missing_inputs.append(detail)
-    fallback_to = payload.get("fallback_to")
-    if isinstance(fallback_to, list):
-        fallback_to = fallback_to[0] if fallback_to else None
-    if not isinstance(fallback_to, str) or not fallback_to:
-        fallback_to = None if result == "pass" else f"suite {domain} validate"
+        if not isinstance(payload, dict) or payload.get("command") != command_label:
+            detail = completed.stderr.strip() or raw_output or f"exit {completed.returncode}"
+            errors.append(f"{loom_cli}: {detail}")
+            continue
+
+        result = payload.get("result") if payload.get("result") in {"pass", "block", "fallback"} else "block"
+        missing_inputs = list(payload.get("missing_inputs", [])) if isinstance(payload.get("missing_inputs"), list) else []
+        for gap in payload.get("blocking_gaps", []) if isinstance(payload.get("blocking_gaps"), list) else []:
+            if not isinstance(gap, dict):
+                continue
+            failure_kind = gap.get("failure_kind")
+            source_locator = gap.get("source_locator")
+            if failure_kind:
+                detail = str(failure_kind)
+                if source_locator:
+                    detail = f"{detail}: {source_locator}"
+                if detail not in missing_inputs:
+                    missing_inputs.append(detail)
+        fallback_to = payload.get("fallback_to")
+        if isinstance(fallback_to, list):
+            fallback_to = fallback_to[0] if fallback_to else None
+        if not isinstance(fallback_to, str) or not fallback_to:
+            fallback_to = None if result == "pass" else command_label
+        return {
+            "result": result,
+            "summary": str(payload.get("summary") or f"{command_label} completed."),
+            "missing_inputs": missing_inputs,
+            "fallback_to": fallback_to,
+            "command": " ".join(command),
+            "validator": str(loom_cli),
+            "validator_mode": "repo-local-cli",
+            "returncode": completed.returncode,
+            "payload": payload,
+        }
+
+    missing_inputs = [f"{command_label} CLI JSON unavailable"]
+    missing_inputs.extend(f"suite validator unavailable: {error}" for error in errors)
     return {
-        "result": result,
-        "summary": str(payload.get("summary") or f"suite {domain} validation completed."),
+        "result": "block",
+        "summary": f"{command_label} must be consumed from Loom CLI JSON before this gate can pass.",
         "missing_inputs": missing_inputs,
-        "fallback_to": fallback_to,
-        "command": " ".join(command),
-        "returncode": completed.returncode,
-        "payload": payload,
+        "fallback_to": command_label,
+        "command": display_command,
+        "validator": None,
+        "validator_mode": "cli-json-unavailable",
+        "payload": None,
     }
 
 
@@ -6548,18 +6552,65 @@ SPEC_REVIEW_SUITE_READY_RESULTS = {"pass", "advisory"}
 
 def suite_validate_command_candidates(context: dict[str, Any]) -> list[Path]:
     candidates: list[Path] = []
-    for root in (
-        context["target_root"],
-        Path(os.environ["LOOM_SOURCE_REPO_ROOT"]).expanduser().resolve()
-        if os.environ.get("LOOM_SOURCE_REPO_ROOT")
-        else None,
-    ):
+    roots: list[Path | None] = [context["target_root"]]
+    if os.environ.get("LOOM_SOURCE_REPO_ROOT"):
+        roots.append(Path(os.environ["LOOM_SOURCE_REPO_ROOT"]).expanduser().resolve())
+    for parent in context["target_root"].parents:
+        roots.append(parent)
+    for root in roots:
         if not isinstance(root, Path):
             continue
         command = root / "tools" / "loom.py"
-        if command.is_file() and command not in candidates:
+        contract = root / "docs" / "methodology" / "harness" / "full-spec-suite-cli-surface.md"
+        if command.is_file() and contract.is_file() and command not in candidates:
             candidates.append(command)
     return candidates
+
+
+def suite_gate_required_for_surface(context: dict[str, Any], *, surface: str) -> bool:
+    if surface == "pre_review" and checkpoint_rank(context["current_checkpoint"]) < checkpoint_rank("build"):
+        return False
+    return True
+
+
+def suite_gate_not_applicable_payload(context: dict[str, Any], *, surface: str) -> dict[str, Any]:
+    summary = "suite evidence and carrier validation do not apply before the build checkpoint."
+    validation = {
+        "result": "not_applicable",
+        "summary": summary,
+        "missing_inputs": [],
+        "fallback_to": None,
+        "command": "not_applicable",
+        "validator": None,
+        "validator_mode": "checkpoint-not-applicable",
+        "payload": None,
+    }
+    return {
+        "schema_version": "loom-suite-gate-validation/v1",
+        "surface": surface,
+        "result": "not_applicable",
+        "summary": summary,
+        "missing_inputs": [],
+        "fallback_to": None,
+        "authority_boundary": {
+            "role": "gate_input_evidence",
+            "does_not_replace": [
+                "work_item",
+                "review_record",
+                "merge_ready_result",
+                "closeout_evidence",
+                "docs_source_truth",
+            ],
+        },
+        "consumed_locators": {
+            "evidence_map": None,
+            "task_carriers": [],
+        },
+        "validations": {
+            "evidence": dict(validation),
+            "carrier": dict(validation),
+        },
+    }
 
 
 def normalize_suite_validate_payload(payload: dict[str, Any], *, validator: str, mode: str) -> dict[str, Any]:
@@ -6648,44 +6699,35 @@ def spec_suite_validation_payload(context: dict[str, Any]) -> dict[str, Any]:
         detail = completed.stderr.strip() or stdout or f"exit {completed.returncode}"
         errors.append(f"{command}: {detail}")
 
-    suite, missing_suite_paths = formal_spec_suite_status(context)
-    missing_inputs = [f"missing formal spec suite file: {path}" for path in missing_suite_paths]
-    if errors:
-        missing_inputs.extend(f"suite validator unavailable: {error}" for error in errors)
-    result = "block" if missing_inputs else "pass"
+    missing_inputs = ["suite validate CLI JSON unavailable"]
+    missing_inputs.extend(f"suite validator unavailable: {error}" for error in errors)
     return {
         "schema_version": "loom-suite-validation-consumption/v1",
         "command": "suite validate",
-        "result": result,
-        "summary": (
-            "suite validation fell back to runtime formal suite presence checks."
-            if result == "pass"
-            else "suite validation fell back to fail-closed runtime formal suite presence checks."
-        ),
+        "result": "block",
+        "summary": "suite validation must be consumed from Loom CLI JSON; embedded skill runtime does not reimplement suite rules.",
         "target": str(context["target_root"]),
         "item_id": context["item_id"],
         "mutates": False,
-        "validator": "runtime-presence-check",
-        "validator_mode": "embedded-fail-closed",
-        "formal_spec_suite": suite,
+        "validator": None,
+        "validator_mode": "cli-json-unavailable",
         "missing_inputs": missing_inputs,
         "blocking_gaps": [
             {
-                "id": f"suite-validate-missing-{Path(path).name.replace('.', '-')}",
+                "id": "suite-validate-cli-json-unavailable",
                 "classification": "missing",
-                "failure_kind": "missing_required_artifact",
+                "failure_kind": "suite_cli_json_unavailable",
                 "default_result": "block",
                 "failed_layer": "suite",
-                "source_locator": path,
-                "consumer_impact": "spec review cannot approve an incomplete formal spec suite",
-                "remediation_direction": "Author the missing formal spec suite artifact before spec review.",
-                "fallback_to": "build",
-                "binding": "flow-spec-review-suite-validation",
+                "source_locator": "tools/loom.py",
+                "consumer_impact": "scenario skills cannot decide suite readiness without the canonical CLI JSON envelope",
+                "remediation_direction": "Run or install the repo-local `loom suite validate --target <repo> --item <item> --json` surface.",
+                "fallback_to": "loom suite validate --target <repo> --item <item> --json",
+                "binding": "scenario-skill-suite-cli-consumption",
             }
-            for path in missing_suite_paths
         ],
         "advisory_gaps": [],
-        "fallback_to": "build" if result == "block" else None,
+        "fallback_to": "loom suite validate --target <repo> --item <item> --json",
     }
 
 
@@ -19332,6 +19374,8 @@ def handle_flow(args: argparse.Namespace) -> int:
 
     review_payload: dict[str, Any] | None = None
     build_execution: dict[str, Any] | None = None
+    build_suite_validation: dict[str, Any] | None = None
+    build_suite_carrier_validation: dict[str, Any] | None = None
     governance_lint: dict[str, Any] | None = None
     retained_host_signals: dict[str, Any] | None = None
     pr_metadata_preflight: dict[str, Any] | None = None
@@ -19402,6 +19446,9 @@ def handle_flow(args: argparse.Namespace) -> int:
             locate_payload = base_workspace_payload(context, "locate")
             locate_result = "pass" if not locate_payload["purity"]["hard_failures"] else "block"
             build_execution = build_execution_payload(context, args.build_evidence)
+            build_suite_validation = spec_suite_validation_payload(context)
+            build_suite_step_result = "pass" if suite_validation_ready(build_suite_validation) else "block"
+            build_suite_carrier_validation = suite_validation_command_payload(context, domain="carrier")
             steps.extend(
                 [
                     {
@@ -19421,6 +19468,22 @@ def handle_flow(args: argparse.Namespace) -> int:
                         ),
                         "missing_inputs": list(locate_payload["purity"]["hard_failures"]),
                         "fallback_to": "admission" if locate_payload["purity"]["hard_failures"] else None,
+                    },
+                    {
+                        "name": "suite-validate",
+                        "result": build_suite_step_result,
+                        "summary": str(build_suite_validation.get("summary") or "suite validation was consumed before build readiness."),
+                        "missing_inputs": [] if build_suite_step_result == "pass" else suite_validation_missing_inputs(build_suite_validation),
+                        "fallback_to": None if build_suite_step_result == "pass" else suite_validation_fallback_to(build_suite_validation),
+                        "validation": build_suite_validation,
+                    },
+                    {
+                        "name": "suite-carrier-validate",
+                        "result": build_suite_carrier_validation["result"],
+                        "summary": build_suite_carrier_validation["summary"],
+                        "missing_inputs": build_suite_carrier_validation["missing_inputs"],
+                        "fallback_to": build_suite_carrier_validation["fallback_to"],
+                        "validation": build_suite_carrier_validation.get("payload"),
                     },
                     {
                         "name": "build-execution",
@@ -19540,7 +19603,10 @@ def handle_flow(args: argparse.Namespace) -> int:
         else:
             admission_payload = checkpoint_payload("admission", context)
             if args.operation == "pre-review":
-                suite_gate_validation = suite_gate_validation_payload(context, surface="pre_review")
+                if suite_gate_required_for_surface(context, surface="pre_review"):
+                    suite_gate_validation = suite_gate_validation_payload(context, surface="pre_review")
+                else:
+                    suite_gate_validation = suite_gate_not_applicable_payload(context, surface="pre_review")
                 repo_specific_requirements = repo_specific_requirements_payload(
                     repo_interface,
                     target_root=target_root,
@@ -19910,6 +19976,8 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "checks": state_payload["checks"],
                     },
                     "runtime_evidence": runtime_fields,
+                    "suite_validation": build_suite_validation,
+                    "suite_carrier_validation": build_suite_carrier_validation,
                     "build_execution": build_execution,
                     "current_checkpoint": {
                         "raw": context["current_checkpoint_raw"],

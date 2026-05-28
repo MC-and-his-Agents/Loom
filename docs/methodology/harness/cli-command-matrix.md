@@ -259,5 +259,9 @@ For #1109-#1114 it also checks:
 passes `--item` or installed-state/profile requirements explicitly mark
 `suite_validation` as required. Declared suite command support by itself remains
 diagnostic and does not make optional suite parity universally blocking.
+#1140 wires scenario skill flows to consume suite CLI JSON instead of embedded
+suite readiness fallbacks: `loom build` exposes `suite_validation` and
+`suite_carrier_validation`, and review/pre-review/merge-ready gate payloads
+continue to consume `suite evidence validate` / `suite carrier validate`.
 - `suite evidence validate` stays read-only and blocks stale evidence, HEAD / PR-head / reviewed-head binding drift, validation summary digest drift, missing present evidence source locators, and missing fresh verification evidence.
 - `suite carrier validate` stays read-only and blocks missing carrier locators, invalid normalized status or relationship values, missing Work Item backlinks, primary carrier conflicts, deferred-as-completed, carrier truth conflicts, and Project/checklist/issue/PR host signal conflicts without promoting carrier done to completion truth.

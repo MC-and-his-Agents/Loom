@@ -199,6 +199,30 @@ def assert_suite_gate_consumption(payload: dict[str, Any], *, expected_surface: 
         raise AssertionError(f"{expected_surface} suite gate consumed locators drifted")
 
 
+def assert_suite_build_consumption(payload: dict[str, Any]) -> None:
+    suite_validation = payload.get("suite_validation")
+    if not isinstance(suite_validation, dict):
+        raise AssertionError("build did not expose suite validation")
+    if (
+        suite_validation.get("command") != "suite validate"
+        or suite_validation.get("validator_mode") != "repo-local-cli"
+        or suite_validation.get("mutates") is not False
+    ):
+        raise AssertionError("build suite validation did not consume repo-local CLI JSON")
+    carrier_validation = payload.get("suite_carrier_validation")
+    if not isinstance(carrier_validation, dict):
+        raise AssertionError("build did not expose suite carrier validation")
+    if (
+        "suite carrier validate" not in str(carrier_validation.get("command", ""))
+        or carrier_validation.get("validator_mode") != "repo-local-cli"
+        or not isinstance(carrier_validation.get("payload"), dict)
+    ):
+        raise AssertionError("build suite carrier validation did not consume repo-local CLI JSON")
+    step_names = {step.get("name") for step in payload.get("steps", []) if isinstance(step, dict)}
+    if {"suite-validate", "suite-carrier-validate"} - step_names:
+        raise AssertionError("build did not expose suite validation steps")
+
+
 def snapshot_tree(target: Path) -> list[str]:
     return sorted(path.relative_to(target).as_posix() for path in target.rglob("*"))
 
@@ -2158,6 +2182,11 @@ def main() -> int:
         if pre_review_payload["command"] != "pre-review" or pre_review_payload.get("wrapped_command") != "flow":
             raise AssertionError("pre-review did not wrap the flow runtime")
         active_item = active_work_item_id()
+        status, active_build = run_json_preserving_attempts(
+            ["build", "--target", str(REPO_ROOT), "--item", active_item, "--json"],
+            item=active_item,
+        )
+        assert_suite_build_consumption(active_build)
         _, active_pre_review = run_json_preserving_attempts(
             ["pre-review", "--target", str(REPO_ROOT), "--item", active_item, "--json"],
             item=active_item,

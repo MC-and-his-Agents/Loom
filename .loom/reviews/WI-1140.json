@@ -1,0 +1,42 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1140",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allows WI-1140: scenario skill runtime consumes suite CLI JSON for build and gate inputs, admission-only pre-review defers evidence/carrier gates until build checkpoint, source/generated skills and demo bootstrap fixture are synchronized, and CLI output remains gate evidence only.",
+  "reviewer": "codex",
+  "reviewed_head": "c7aa2af85da58d0b64422e3c2f819aa30f9c58ec",
+  "reviewed_validation_summary": "Local #1140 validation passed: `python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py tools/check_cli_contract.py`; `python3 tools/check_cli_contract.py`; `python3 tools/skills_surface.py check`; `git diff --check`; focused `rg` for suite consumption and forbidden `/speckit` / `.specify` surfaces; `python3 tools/check_release_surface.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_npm_package.py`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 tools/loom.py suite validate --target . --item WI-1140 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1140 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1140 --json`; `python3 .loom/bin/loom_flow.py state-check --target . --item WI-1140`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1140`; `python3 tools/loom.py gate spec-review --target . --item WI-1140 --json`; `python3 tools/loom.py gate review --target . --item WI-1140 --json`; `python3 tools/loom.py pre-review --target . --item WI-1140 --json`; `python3 tools/loom.py build --target . --item WI-1140 --build-evidence .loom/progress/WI-1140-build-evidence.json --json`; pre-PR `python3 tools/loom.py merge-ready --target . --item WI-1140 --json` consumed suite evidence/carrier CLI JSON and fell back only because the merge checkpoint and PR head are not yet present.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1140.md",
+    "recovery_entry": ".loom/progress/WI-1140.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1140-suite-skills/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-worktrees/1140-suite-skills --item WI-1140 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1140-suite-skills/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-worktrees/1140-suite-skills --item WI-1140 --json",
+    "suite_evidence_map": ".loom/specs/WI-1140/evidence-map.md",
+    "suite_task_carriers": [
+      ".loom/specs/WI-1140/task-carrier.md"
+    ]
+  }
+}
