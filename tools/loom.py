@@ -2017,6 +2017,121 @@ SUITE_VALIDATE_ADVISORY_ARTIFACTS = {
     "not_applicable": (),
 }
 
+SUITE_MINIMAL_NOT_APPLICABLE_ARTIFACTS = {
+    "suite-index.md",
+    "research.md",
+    "contracts.md",
+    "readiness-checklist.md",
+}
+
+SUITE_NOT_APPLICABLE_ALIASES = {
+    "full-suite-artifacts": SUITE_MINIMAL_NOT_APPLICABLE_ARTIFACTS,
+    "full-path-artifacts": SUITE_MINIMAL_NOT_APPLICABLE_ARTIFACTS,
+    "suite-level": {"suite"},
+    "whole-suite": {"suite"},
+    "formal-suite": {"suite"},
+}
+
+SUITE_NOT_APPLICABLE_REQUIRED_FIELDS = {
+    "rationale": ("rationale", "reason"),
+    "consumer_boundary": ("consumer boundary", "consumer_boundary", "consumer"),
+    "recheck_condition": ("recheck condition", "recheck_condition", "recheck"),
+}
+
+
+def suite_relevant_text_blocks(text: str) -> list[str]:
+    blocks: list[str] = []
+    current: list[str] = []
+    for line in text.splitlines():
+        if line.strip():
+            current.append(line.strip())
+            continue
+        if current:
+            blocks.append(" ".join(current))
+            current = []
+    if current:
+        blocks.append(" ".join(current))
+    return blocks
+
+
+def suite_record_artifacts(block: str) -> set[str]:
+    normalized = block.lower().replace("_", "-")
+    artifacts = {
+        artifact
+        for artifact in SUITE_MINIMAL_NOT_APPLICABLE_ARTIFACTS
+        if artifact.lower() in normalized
+    }
+    for alias, alias_artifacts in SUITE_NOT_APPLICABLE_ALIASES.items():
+        if alias in normalized or alias.replace("-", " ") in normalized:
+            artifacts.update(alias_artifacts)
+    return artifacts
+
+
+def suite_record_required_fields(block: str) -> dict[str, bool]:
+    lowered = block.lower().replace("_", " ")
+    return {
+        field: any(marker in lowered for marker in markers)
+        for field, markers in SUITE_NOT_APPLICABLE_REQUIRED_FIELDS.items()
+    }
+
+
+def suite_applicability_records(paths: dict[str, list[Path]], target: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    not_applicable_records: list[dict[str, Any]] = []
+    deferred_items: list[dict[str, Any]] = []
+    seen: set[Path] = set()
+    for candidates in paths.values():
+        for path in candidates:
+            if path in seen:
+                continue
+            seen.add(path)
+            if not path.exists() or path.is_symlink() or not path.is_file():
+                continue
+            try:
+                blocks = suite_relevant_text_blocks(path.read_text(encoding="utf-8"))
+            except OSError:
+                continue
+            locator = repo_locator(path, target)
+            for index, block in enumerate(blocks, start=1):
+                lowered = block.lower()
+                if "suite path:" in lowered and not any(marker in lowered for marker in ("rationale", "consumer", "recheck", "deferred")):
+                    continue
+                has_not_applicable = "not_applicable" in lowered or "not applicable" in lowered
+                has_deferred = "deferred" in lowered
+                artifacts = sorted(suite_record_artifacts(block))
+                if has_not_applicable:
+                    fields = suite_record_required_fields(block)
+                    missing_fields = sorted(field for field, present in fields.items() if not present)
+                    not_applicable_records.append(
+                        {
+                            "locator": locator,
+                            "block": index,
+                            "artifacts": artifacts,
+                            "status": "valid" if artifacts and not missing_fields else "invalid",
+                            "missing_fields": missing_fields,
+                        }
+                    )
+                elif has_deferred:
+                    deferred_items.append(
+                        {
+                            "locator": locator,
+                            "block": index,
+                            "artifacts": artifacts,
+                            "status": "deferred",
+                        }
+                    )
+    return not_applicable_records, deferred_items
+
+
+def suite_covered_artifacts(records: list[dict[str, Any]]) -> set[str]:
+    covered: set[str] = set()
+    for record in records:
+        if record.get("status") != "valid":
+            continue
+        artifacts = record.get("artifacts")
+        if isinstance(artifacts, list):
+            covered.update(str(artifact) for artifact in artifacts)
+    return covered
+
 
 def suite_scaffold_payload(target: Path, item: str, suite_path: str, *, apply: bool) -> tuple[str, dict[str, Any], str | None]:
     item_error = suite_item_segment_error(item)
@@ -2313,6 +2428,8 @@ def suite_inspect_payload(target: Path, item: str | None) -> tuple[str, dict[str
         "path_decision_locator": path_decision_locator,
         "path_decisions": path_decisions,
         "artifact_inventory": artifact_inventory,
+        "not_applicable_rationale": [],
+        "deferred_items": [],
         "missing_inputs": missing_inputs,
         "advisory_gaps": advisory_gaps,
         **locators,
@@ -2381,10 +2498,12 @@ def suite_validate_payload(target: Path, item: str) -> tuple[str, str, dict[str,
         )
 
     inspect_summary, inspect_payload = suite_inspect_payload(target, item)
+    paths = suite_artifact_paths(target, item)
     suite_path = inspect_payload.get("suite_path", "unknown")
     missing_inputs = list(inspect_payload.get("missing_inputs", []))
     blocking_gaps: list[dict[str, Any]] = []
     advisory_gaps: list[dict[str, Any]] = []
+    not_applicable_records, deferred_items = suite_applicability_records(paths, target)
 
     for missing in missing_inputs:
         if missing == "suite_path_decision":
@@ -2425,6 +2544,81 @@ def suite_validate_payload(target: Path, item: str) -> tuple[str, str, dict[str,
                     fallback_to="loom suite scaffold --target <repo> --item <item> --json",
                 )
             )
+
+    for record in not_applicable_records:
+        if record.get("status") == "valid":
+            continue
+        locator = str(record.get("locator") or "")
+        missing_fields = ", ".join(str(field) for field in record.get("missing_fields", [])) or "artifact binding"
+        blocking_gaps.append(
+            suite_validate_finding(
+                gap_id=f"suite-validate-invalid-not-applicable-{Path(locator).name or 'record'}-{record.get('block')}",
+                classification="blocking",
+                failure_kind="invalid_not_applicable_rationale",
+                source_locator=locator or None,
+                consumer_impact="spec review cannot treat not_applicable as ready without rationale, consumer boundary, and recheck condition",
+                remediation_direction=(
+                    "Author not_applicable with explicit artifact binding, rationale, consumer boundary, "
+                    f"and recheck condition; missing: {missing_fields}."
+                ),
+                fallback_to="loom suite validate --target <repo> --item <item> --json",
+            )
+        )
+
+    covered_not_applicable = suite_covered_artifacts(not_applicable_records)
+    deferred_coverage = suite_covered_artifacts(
+        [{**record, "status": "valid"} for record in deferred_items]
+    )
+    if suite_path == "minimal":
+        missing_not_applicable = sorted(SUITE_MINIMAL_NOT_APPLICABLE_ARTIFACTS - covered_not_applicable)
+        for artifact in missing_not_applicable:
+            if artifact in deferred_coverage:
+                matching = next(
+                    (
+                        record
+                        for record in deferred_items
+                        if artifact in [str(entry) for entry in record.get("artifacts", [])]
+                    ),
+                    None,
+                )
+                blocking_gaps.append(
+                    suite_validate_finding(
+                        gap_id=f"suite-validate-deferred-as-not-applicable-{artifact.replace('.', '-')}",
+                        classification="blocking",
+                        failure_kind="deferred_as_completed",
+                        source_locator=str(matching.get("locator")) if matching else None,
+                        consumer_impact="minimal suite readiness cannot consume deferred full-path artifacts as completed not_applicable rationale",
+                        remediation_direction="Record not_applicable rationale, consumer boundary, and recheck condition, or keep the suite out of ready state.",
+                        fallback_to="loom suite validate --target <repo> --item <item> --json",
+                    )
+                )
+            else:
+                blocking_gaps.append(
+                    suite_validate_finding(
+                        gap_id=f"suite-validate-missing-not-applicable-{artifact.replace('.', '-')}",
+                        classification="missing",
+                        failure_kind="invalid_not_applicable_rationale",
+                        source_locator=inspect_payload.get("path_decision_locator"),
+                        consumer_impact="minimal suite readiness cannot skip full-path artifacts without authored not_applicable rationale",
+                        remediation_direction=(
+                            f"Author not_applicable for {artifact} with rationale, consumer boundary, "
+                            "and recheck condition."
+                        ),
+                        fallback_to="loom suite validate --target <repo> --item <item> --json",
+                    )
+                )
+    elif suite_path == "not_applicable" and "suite" not in covered_not_applicable:
+        blocking_gaps.append(
+            suite_validate_finding(
+                gap_id="suite-validate-missing-suite-not-applicable-rationale",
+                classification="missing",
+                failure_kind="invalid_not_applicable_rationale",
+                source_locator=inspect_payload.get("path_decision_locator"),
+                consumer_impact="spec review cannot consume a not_applicable suite path without authored rationale",
+                remediation_direction="Author suite-level not_applicable with rationale, consumer boundary, and recheck condition.",
+                fallback_to="loom suite validate --target <repo> --item <item> --json",
+            )
+        )
 
     artifact_inventory = {
         entry.get("artifact"): entry
@@ -2476,6 +2670,8 @@ def suite_validate_payload(target: Path, item: str) -> tuple[str, str, dict[str,
 
     payload = {
         **inspect_payload,
+        "not_applicable_rationale": not_applicable_records,
+        "deferred_items": deferred_items,
         "consumed_contracts": list(SUITE_VALIDATE_CONTRACT_LOCATORS),
         "missing_inputs": missing_inputs,
         "blocking_gaps": blocking_gaps,
