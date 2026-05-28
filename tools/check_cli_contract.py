@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import subprocess
 import sys
 import tempfile
@@ -13,6 +14,44 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LOOM = REPO_ROOT / "tools" / "loom.py"
 LEGACY_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "legacy-migration-validation-fixtures.json"
+
+SCAFFOLD_FORBIDDEN_TRUTH_SURFACES = (
+    ".loom/work-items/WI-truth.md",
+    ".loom/progress/WI-truth.md",
+    ".loom/status/current.md",
+    ".loom/reviews/WI-truth.json",
+    ".loom/reviews/WI-truth.spec.json",
+    ".loom/runtime/attempts/WI-truth/latest.json",
+    ".loom/runtime/review/WI-truth/head/context-pack.json",
+    ".loom/shadow/review-loom.json",
+    ".loom/shadow/merge-ready-loom.json",
+    ".loom/shadow/closeout-loom.json",
+    ".loom/specs/WI-truth/evidence-map.md",
+    ".loom/specs/WI-truth/consistency-analysis.md",
+    ".loom/specs/WI-truth/task-carrier.md",
+    ".loom/tasks/WI-truth.md",
+    "tasks.md",
+    "skills/registry.json",
+    "skills/loom-init/SKILL.md",
+    "src/skills/route-matrix.md",
+    "plugins/loom/.codex-plugin/plugin.json",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+    ".github/workflows/loom.yml",
+)
+
+SCAFFOLD_FORBIDDEN_ACTION_KEYS = {
+    "closeout_actions",
+    "closeout_result",
+    "generated_skills",
+    "host_actions",
+    "issue_actions",
+    "managed_writes",
+    "merge_ready_result",
+    "pr_actions",
+    "project_actions",
+    "review_record",
+    "review_verdict",
+}
 
 REQUIRED_COMMANDS = {
     "version",
@@ -100,6 +139,61 @@ def run_json(args: list[str], *, expect: int | None = None) -> tuple[int, dict[s
 
 def snapshot_tree(target: Path) -> list[str]:
     return sorted(path.relative_to(target).as_posix() for path in target.rglob("*"))
+
+
+def digest_path(path: Path) -> dict[str, str]:
+    if path.is_dir():
+        return {"kind": "directory"}
+    return {
+        "kind": "file",
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+    }
+
+
+def snapshot_paths(target: Path, relatives: tuple[str, ...]) -> dict[str, dict[str, str]]:
+    snapshot: dict[str, dict[str, str]] = {}
+    for relative in relatives:
+        path = target / relative
+        if path.exists():
+            snapshot[relative] = digest_path(path)
+    return snapshot
+
+
+def write_forbidden_truth_fixture(target: Path) -> dict[str, dict[str, str]]:
+    for index, relative in enumerate(SCAFFOLD_FORBIDDEN_TRUTH_SURFACES):
+        path = target / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.suffix == ".json":
+            path.write_text(json.dumps({"fixture_surface": relative, "index": index}, indent=2) + "\n", encoding="utf-8")
+        else:
+            path.write_text(f"# Forbidden scaffold truth fixture\n\n- locator: {relative}\n- index: {index}\n", encoding="utf-8")
+    return snapshot_paths(target, SCAFFOLD_FORBIDDEN_TRUTH_SURFACES)
+
+
+def assert_forbidden_truth_unchanged(target: Path, before: dict[str, dict[str, str]]) -> None:
+    after = snapshot_paths(target, SCAFFOLD_FORBIDDEN_TRUTH_SURFACES)
+    if after != before:
+        raise AssertionError("suite scaffold modified forbidden host/review/merge-ready/closeout/generated-skill truth surfaces")
+
+
+def assert_scaffold_write_boundary(payload: dict[str, Any], *, item: str, allowed_artifacts: list[str]) -> None:
+    allowed_locators = {f".loom/specs/{item}/{artifact}" for artifact in allowed_artifacts}
+    planned = payload.get("planned_writes", [])
+    if not isinstance(planned, list):
+        raise AssertionError("suite scaffold planned_writes is not a list")
+    for entry in planned:
+        locator = entry.get("locator")
+        if locator not in allowed_locators:
+            raise AssertionError(f"suite scaffold planned write escaped allowed artifact set: {locator}")
+    created = payload.get("created_locators", [])
+    if not isinstance(created, list):
+        raise AssertionError("suite scaffold created_locators is not a list")
+    unexpected_created = sorted(locator for locator in created if locator not in allowed_locators)
+    if unexpected_created:
+        raise AssertionError(f"suite scaffold created forbidden locators: {unexpected_created}")
+    forbidden_keys = sorted(SCAFFOLD_FORBIDDEN_ACTION_KEYS & set(payload))
+    if forbidden_keys:
+        raise AssertionError(f"suite scaffold emitted forbidden host/truth action keys: {forbidden_keys}")
 
 
 def run_suite_inspect_fixture(target: Path, item: str) -> dict[str, Any]:
@@ -695,6 +789,42 @@ def main() -> int:
             or full_apply_again_payload.get("overwrite_policy", {}).get("existing_files") != expected_full_created
         ):
             raise AssertionError("suite scaffold full-suite repeat preservation drifted")
+
+        truth_dry_run_target = tmp / "suite-scaffold-truth-dry-run"
+        truth_dry_run_target.mkdir()
+        truth_dry_run_before = write_forbidden_truth_fixture(truth_dry_run_target)
+        truth_dry_run_tree_before = snapshot_tree(truth_dry_run_target)
+        suite_scaffold_truth_dry_run = run_suite_scaffold_fixture(
+            truth_dry_run_target,
+            "WI-truth",
+            ["--suite", "full"],
+        )
+        truth_dry_run_payload = suite_scaffold_truth_dry_run.get("payload", {})
+        assert_forbidden_truth_unchanged(truth_dry_run_target, truth_dry_run_before)
+        assert_scaffold_write_boundary(truth_dry_run_payload, item="WI-truth", allowed_artifacts=full_artifacts)
+        if snapshot_tree(truth_dry_run_target) != truth_dry_run_tree_before:
+            raise AssertionError("suite scaffold dry-run changed host/review/closeout/generated-skill fixture tree")
+
+        truth_minimal_target = tmp / "suite-scaffold-truth-minimal"
+        truth_minimal_target.mkdir()
+        truth_minimal_before = write_forbidden_truth_fixture(truth_minimal_target)
+        suite_scaffold_truth_minimal = run_suite_scaffold_apply_fixture(truth_minimal_target, "WI-truth")
+        truth_minimal_payload = suite_scaffold_truth_minimal.get("payload", {})
+        assert_forbidden_truth_unchanged(truth_minimal_target, truth_minimal_before)
+        assert_scaffold_write_boundary(truth_minimal_payload, item="WI-truth", allowed_artifacts=["spec.md", "plan.md"])
+        if truth_minimal_payload.get("created_locators") != [".loom/specs/WI-truth/spec.md", ".loom/specs/WI-truth/plan.md"]:
+            raise AssertionError("suite scaffold minimal truth-boundary fixture created unexpected locators")
+
+        truth_full_target = tmp / "suite-scaffold-truth-full"
+        truth_full_target.mkdir()
+        truth_full_before = write_forbidden_truth_fixture(truth_full_target)
+        suite_scaffold_truth_full = run_suite_scaffold_apply_fixture(truth_full_target, "WI-truth", ["--suite", "full"])
+        truth_full_payload = suite_scaffold_truth_full.get("payload", {})
+        expected_truth_full_created = [f".loom/specs/WI-truth/{artifact}" for artifact in full_artifacts]
+        assert_forbidden_truth_unchanged(truth_full_target, truth_full_before)
+        assert_scaffold_write_boundary(truth_full_payload, item="WI-truth", allowed_artifacts=full_artifacts)
+        if truth_full_payload.get("created_locators") != expected_truth_full_created:
+            raise AssertionError("suite scaffold full truth-boundary fixture created unexpected locators")
 
         missing_target = tmp / "missing"
         missing_target.mkdir()
