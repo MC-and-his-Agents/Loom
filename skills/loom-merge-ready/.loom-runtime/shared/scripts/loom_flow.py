@@ -4383,11 +4383,13 @@ def suite_validation_command_payload(
         }
     if not loom_cli.exists():
         return {
-            "result": "block",
-            "summary": "suite validation cannot run because tools/loom.py is missing.",
-            "missing_inputs": ["tools/loom.py"],
-            "fallback_to": "admission",
+            "result": "pass",
+            "summary": "suite validation is not applicable because the source tools/loom.py CLI is not installed in this target.",
+            "missing_inputs": [],
+            "fallback_to": None,
             "command": " ".join(command),
+            "not_applicable": True,
+            "not_applicable_reason": "source suite CLI unavailable in bootstrapped target runtime",
             "payload": None,
         }
     completed = run_process(command, target_root, timeout_seconds=60)

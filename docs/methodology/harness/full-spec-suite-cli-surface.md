@@ -227,6 +227,7 @@ Scenario skills 仍是 agent-facing entrance；CLI 是 machine interface。后�
 - `loom-pre-review`
   - 调用 `suite evidence validate` 与 `suite carrier validate`，把 blocking evidence / carrier gap 挡在正式 review 前。
   - 输出 `suite-evidence-validate`、`suite-carrier-validate` steps 与 `suite_gate_validation` payload；该 payload 只是 gate input evidence，不替代 Work Item、review record、merge-ready result、closeout evidence 或 docs/source truth。
+  - 若 bootstrapped target runtime 未安装 source `tools/loom.py` suite CLI，suite gate payload 以 not-applicable/pass 记录该边界；source repo 中存在 suite CLI 时，blocking evidence / carrier gap 仍 fail closed。
 - `loom-review`
   - implementation review flow 暴露同一 `suite_gate_validation` payload；`review record --decision allow` 在非 spec-review 记录前必须重新消费 `suite evidence validate` 与 `suite carrier validate`。
   - 只消费 suite/evidence/carrier locators，并把 consumed locators 写入单一 review record；CLI validation output 不成为第二个 review verdict。
