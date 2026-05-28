@@ -1,0 +1,24 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1127",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review allows WI-1127: the suite is minimal with explicit not_applicable rationale, scenarios cover evidence inspect, pass validation, and blocking gaps, and the plan maps each acceptance criterion to focused CLI contract evidence.",
+  "reviewer": "Codex",
+  "reviewed_head": "pending",
+  "reviewed_validation_summary": "Passed: python3 -m py_compile tools/loom.py tools/check_cli_contract.py; git diff --check; focused rg for suite evidence command names, failure kinds, /speckit, and .specify; python3 tools/loom.py suite validate --target . --item WI-1127 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1127 --json; python3 tools/check_cli_contract.py; python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py state-check --target . --item WI-1127.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1127.md",
+    "recovery_entry": ".loom/progress/WI-1127.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-1127/spec.md",
+    "plan": ".loom/specs/WI-1127/plan.md",
+    "implementation_contract": ".loom/specs/WI-1127/implementation-contract.md",
+    "suite_validation": "python3 tools/loom.py suite validate --target . --item WI-1127 --json",
+    "suite_evidence_validation": "python3 tools/loom.py suite evidence validate --target . --item WI-1127 --json"
+  }
+}

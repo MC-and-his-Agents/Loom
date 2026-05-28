@@ -146,11 +146,20 @@ loom suite validate
 
 `suite validate` is read-only. It reuses the suite inspect state and returns a readiness envelope with `pass`, `block`, `advisory`, or `not_applicable`, plus `failed_layer`, `fail_closed_reason`, `missing_inputs`, `blocking_gaps`, `advisory_gaps`, `findings`, and `failure_taxonomy`. The #1120/#1121/#1122/#1123/#1124/#1125 slice covers core path, artifact, not_applicable, spec/plan mapping validation, stable failure taxonomy output, and spec-review consumer integration: missing, invalid, or conflicting suite path decisions block; missing or non-file required artifacts block; full path conditional artifacts are inventoried; minimal and suite-level `not_applicable` records must carry rationale, consumer boundary, and recheck condition; `deferred` cannot satisfy a `not_applicable` readiness gap; authored scenario and acceptance ids in `spec.md` must map to `plan.md` validation or test strategies; every emitted finding carries failure kind, default result, failed layer, source locator, consumer impact, remediation direction, fallback, and binding; `flow spec-review`, `gate spec-review`, and spec-review record allow consume the suite validation result before approval. Later evidence, consistency, carrier, and merge-ready integration checks remain owned by later Work Items. It does not write suite files, review truth, merge-ready truth, closeout truth, host state, `/speckit.*`, or `.specify/` surfaces.
 
+#1127 implements the first evidence-map read and validation commands:
+
+```text
+loom suite evidence inspect
+loom suite evidence validate
+```
+
+`suite evidence inspect` is read-only. It reports the evidence-map locator, row count, normalized rows, required evidence types, freshness vocabulary, consumed contracts, and inspect-only missing input/advisory gaps. `suite evidence validate` is read-only and returns the shared readiness envelope for behavior evidence, test evidence, and fresh verification input rows. Missing evidence-map rows, incomplete required row fields, stale/conflicting evidence freshness, and fresh verification rows that do not consume present behavior and test evidence block with machine-readable findings. These commands do not scaffold evidence-map files, write review truth, write merge-ready truth, write closeout truth, mutate host state, or create `/speckit.*` or `.specify/` surfaces.
+
 The remaining suite namespace stays planned until later implementation Work Items add those commands to `loom help --json` and the CLI contract checks. The planned namespace is documented in [full-spec-suite-cli-surface.md](./full-spec-suite-cli-surface.md):
 
 ```text
 loom suite analyze
-loom suite evidence inspect|scaffold|validate
+loom suite evidence scaffold
 loom suite consistency inspect|analyze
 loom suite carrier inspect|validate
 ```
