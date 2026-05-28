@@ -471,7 +471,14 @@ def main() -> int:
         minimal_target = tmp / "suite-minimal"
         minimal_suite = minimal_target / ".loom" / "specs" / "WI-minimal"
         minimal_suite.mkdir(parents=True)
-        (minimal_suite / "spec.md").write_text("# Spec\n\n- Suite path: minimal\n", encoding="utf-8")
+        (minimal_suite / "spec.md").write_text(
+            "# Spec\n\n"
+            "- Suite path: minimal\n\n"
+            "- Full suite artifacts not_applicable: rationale: low-risk CLI contract fixture; "
+            "consumer boundary: suite validate and spec review do not require full path artifacts; "
+            "recheck condition: scope expands beyond minimal fixture coverage.\n",
+            encoding="utf-8",
+        )
         (minimal_suite / "plan.md").write_text("# Plan\n\nConsumes Suite path: minimal\n", encoding="utf-8")
         suite_minimal = run_suite_inspect_fixture(minimal_target, "WI-minimal")
         minimal_payload = suite_minimal.get("payload", {})
@@ -494,15 +501,64 @@ def main() -> int:
             or suite_minimal_validate.get("missing_inputs")
             or suite_minimal_validate.get("blocking_gaps")
             or suite_minimal_validate.get("advisory_gaps")
+            or not suite_minimal_validate.get("payload", {}).get("not_applicable_rationale")
             or "docs/methodology/harness/full-spec-suite-cli-surface.md"
             not in suite_minimal_validate.get("payload", {}).get("consumed_contracts", [])
         ):
             raise AssertionError("suite validate minimal pass payload drifted")
 
+        minimal_invalid_target = tmp / "suite-minimal-invalid-rationale"
+        minimal_invalid_suite = minimal_invalid_target / ".loom" / "specs" / "WI-minimal-invalid"
+        minimal_invalid_suite.mkdir(parents=True)
+        (minimal_invalid_suite / "spec.md").write_text(
+            "# Spec\n\n- Suite path: minimal\n\n- Full suite artifacts not_applicable: rationale: fixture only.\n",
+            encoding="utf-8",
+        )
+        (minimal_invalid_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
+        suite_minimal_invalid = run_suite_validate_fixture(minimal_invalid_target, "WI-minimal-invalid", expect=1)
+        if (
+            suite_minimal_invalid.get("result") != "block"
+            or suite_minimal_invalid.get("fail_closed_reason") != "invalid_not_applicable_rationale"
+            or not any(
+                gap.get("failure_kind") == "invalid_not_applicable_rationale"
+                for gap in suite_minimal_invalid.get("blocking_gaps", [])
+            )
+        ):
+            raise AssertionError("suite validate invalid not_applicable rationale payload drifted")
+
+        minimal_deferred_target = tmp / "suite-minimal-deferred"
+        minimal_deferred_suite = minimal_deferred_target / ".loom" / "specs" / "WI-minimal-deferred"
+        minimal_deferred_suite.mkdir(parents=True)
+        (minimal_deferred_suite / "spec.md").write_text(
+            "# Spec\n\n"
+            "- Suite path: minimal\n\n"
+            "- Full suite artifacts deferred: activation condition: later evidence Work Item; "
+            "non-blocking consumers: none for readiness.\n",
+            encoding="utf-8",
+        )
+        (minimal_deferred_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
+        suite_minimal_deferred = run_suite_validate_fixture(minimal_deferred_target, "WI-minimal-deferred", expect=1)
+        if (
+            suite_minimal_deferred.get("result") != "block"
+            or not suite_minimal_deferred.get("payload", {}).get("deferred_items")
+            or not any(
+                gap.get("failure_kind") == "deferred_as_completed"
+                for gap in suite_minimal_deferred.get("blocking_gaps", [])
+            )
+        ):
+            raise AssertionError("suite validate deferred-as-not-applicable payload drifted")
+
         not_applicable_target = tmp / "suite-not-applicable"
         not_applicable_suite = not_applicable_target / ".loom" / "specs" / "WI-not-applicable"
         not_applicable_suite.mkdir(parents=True)
-        (not_applicable_suite / "spec.md").write_text("# Spec\n\n- Suite path: not applicable\n", encoding="utf-8")
+        (not_applicable_suite / "spec.md").write_text(
+            "# Spec\n\n"
+            "- Suite path: not applicable\n\n"
+            "- Suite-level not_applicable: rationale: no formal suite is needed for this fixture; "
+            "consumer boundary: suite validation only records the bypass; "
+            "recheck condition: a Work Item requires formal spec consumption.\n",
+            encoding="utf-8",
+        )
         suite_not_applicable = run_suite_inspect_fixture(not_applicable_target, "WI-not-applicable")
         not_applicable_payload = suite_not_applicable.get("payload", {})
         if (
@@ -516,6 +572,7 @@ def main() -> int:
             suite_not_applicable_validate.get("result") != "not_applicable"
             or suite_not_applicable_validate.get("payload", {}).get("suite_path") != "not_applicable"
             or suite_not_applicable_validate.get("blocking_gaps")
+            or not suite_not_applicable_validate.get("payload", {}).get("not_applicable_rationale")
         ):
             raise AssertionError("suite validate not_applicable payload drifted")
 
