@@ -4461,6 +4461,11 @@ def suite_gate_validation_payload(context: dict[str, Any], *, surface: str) -> d
                     missing_inputs.append(detail)
     evidence_payload = evidence.get("payload") if isinstance(evidence.get("payload"), dict) else {}
     carrier_payload = carrier.get("payload") if isinstance(carrier.get("payload"), dict) else {}
+    carrier_suite_payload = carrier_payload.get("payload") if isinstance(carrier_payload.get("payload"), dict) else {}
+    task_carriers = carrier_suite_payload.get("task_carrier_locators")
+    if not isinstance(task_carriers, list):
+        task_carrier_locator = carrier_suite_payload.get("task_carrier_locator")
+        task_carriers = [task_carrier_locator] if isinstance(task_carrier_locator, str) and task_carrier_locator else []
     return {
         "schema_version": "loom-suite-gate-validation/v1",
         "surface": surface,
@@ -4486,9 +4491,7 @@ def suite_gate_validation_payload(context: dict[str, Any], *, surface: str) -> d
             "evidence_map": evidence_payload.get("payload", {}).get("evidence_map_locator")
             if isinstance(evidence_payload.get("payload"), dict)
             else None,
-            "task_carriers": carrier_payload.get("payload", {}).get("task_carrier_locators", [])
-            if isinstance(carrier_payload.get("payload"), dict)
-            else [],
+            "task_carriers": task_carriers,
         },
         "validations": validations,
     }
