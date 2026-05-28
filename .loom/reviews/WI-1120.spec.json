@@ -1,0 +1,22 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1120",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review allows WI-1120: the implementation scope is limited to the core read-only `loom suite validate` command, command matrix/docs updates, and contract fixtures for pass, block, advisory, and not_applicable. Deeper suite path validation, not_applicable rationale enforcement, spec/plan mapping, taxonomy expansion, and spec-review integration remain deferred to #1121-#1125.",
+  "reviewer": "Codex",
+  "reviewed_head": "87c5054756aea665ad83d05aac7d7ee62d720d12",
+  "reviewed_validation_summary": "Passed: python3 tools/check_cli_contract.py; python3 -m py_compile tools/loom.py tools/check_cli_contract.py; git diff --check; focused rg for suite validate, suite validate constants, forbidden /speckit and .specify surfaces; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1120.md",
+    "recovery_entry": ".loom/progress/WI-1120.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-1120/spec.md",
+    "plan": ".loom/specs/WI-1120/plan.md",
+    "implementation_contract": ".loom/specs/WI-1120/implementation-contract.md"
+  }
+}
