@@ -153,7 +153,7 @@ loom suite evidence inspect
 loom suite evidence validate
 ```
 
-`suite evidence inspect` is read-only. It reports the evidence-map locator, row count, normalized rows, required evidence types, freshness vocabulary, consumed contracts, and inspect-only missing input/advisory gaps. `suite evidence validate` is read-only and returns the shared readiness envelope for behavior evidence, test evidence, and fresh verification input rows. Missing evidence-map rows, incomplete required row fields, stale/conflicting evidence freshness, and fresh verification rows that do not consume present behavior and test evidence block with machine-readable findings. These commands do not scaffold evidence-map files, write review truth, write merge-ready truth, write closeout truth, mutate host state, or create `/speckit.*` or `.specify/` surfaces.
+`suite evidence inspect` is read-only. It reports the evidence-map locator, row count, normalized rows, required evidence types, freshness vocabulary, consumed contracts, and inspect-only missing input/advisory gaps. `suite evidence validate` is read-only and returns the shared readiness envelope for behavior evidence, test evidence, and fresh verification input rows. Missing evidence-map rows, incomplete required row fields, missing repo-local source locators for present evidence, stale/conflicting evidence freshness, explicit current-head / PR-head / reviewed-head drift, validation-summary digest drift, and fresh verification rows that do not consume present behavior and test evidence block with machine-readable findings. These commands do not scaffold evidence-map files, write review truth, write merge-ready truth, write closeout truth, mutate host state, or create `/speckit.*` or `.specify/` surfaces.
 
 #1129 implements the evidence-map scaffold command:
 
@@ -241,3 +241,4 @@ For #1109-#1114 it also checks:
 - `suite scaffold --suite full` plans and applies the standard six full-suite scaffold artifacts without creating evidence-map, consistency-analysis, task-carrier, review, merge-ready, closeout, generated skill, `/speckit.*`, or `.specify/` surfaces.
 - `suite validate` is declared as an implemented suite command in `loom help --json`;
 - `suite validate` stays read-only and covers pass, block, advisory, and not_applicable fixtures with structured readiness gaps.
+- `suite evidence validate` stays read-only and blocks stale evidence, HEAD / PR-head / reviewed-head binding drift, validation summary digest drift, missing present evidence source locators, and missing fresh verification evidence.

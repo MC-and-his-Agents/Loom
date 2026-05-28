@@ -163,6 +163,16 @@ def snapshot_paths(target: Path, relatives: tuple[str, ...]) -> dict[str, dict[s
     return snapshot
 
 
+def init_git_fixture(target: Path) -> str:
+    subprocess.run(["git", "init"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "config", "user.email", "loom@example.invalid"], cwd=target, check=True)
+    subprocess.run(["git", "config", "user.name", "Loom Fixture"], cwd=target, check=True)
+    (target / "README.md").write_text("# Fixture\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=target, check=True)
+    subprocess.run(["git", "commit", "-m", "fixture"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+
+
 def write_forbidden_truth_fixture(target: Path) -> dict[str, dict[str, str]]:
     for index, relative in enumerate(SCAFFOLD_FORBIDDEN_TRUTH_SURFACES):
         path = target / relative
@@ -773,6 +783,8 @@ def main() -> int:
         evidence_target = tmp / "suite-evidence"
         evidence_suite = evidence_target / ".loom" / "specs" / "WI-evidence"
         evidence_suite.mkdir(parents=True)
+        (evidence_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
+        (evidence_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
         (evidence_suite / "evidence-map.md").write_text(
             "\n".join(
                 [
@@ -806,6 +818,7 @@ def main() -> int:
             or suite_evidence_validate.get("blocking_gaps")
             or suite_evidence_validate.get("payload", {}).get("required_evidence_types")
             != ["behavior_evidence", "test_evidence", "fresh_verification_input"]
+            or suite_evidence_validate.get("payload", {}).get("freshness_context", {}).get("validation_summary_status") != "missing"
         ):
             raise AssertionError("suite evidence validate pass payload drifted")
 
@@ -830,6 +843,7 @@ def main() -> int:
         evidence_stale_target = tmp / "suite-evidence-stale"
         evidence_stale_suite = evidence_stale_target / ".loom" / "specs" / "WI-evidence-stale"
         evidence_stale_suite.mkdir(parents=True)
+        (evidence_stale_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
         (evidence_stale_suite / "evidence-map.md").write_text(
             "\n".join(
                 [
@@ -868,6 +882,137 @@ def main() -> int:
             result="block",
             layer="evidence_map",
         )
+
+        evidence_head_target = tmp / "suite-evidence-head-drift"
+        evidence_head_suite = evidence_head_target / ".loom" / "specs" / "WI-evidence-head"
+        evidence_head_suite.mkdir(parents=True)
+        current_head = init_git_fixture(evidence_head_target)
+        stale_head = "0" * 40 if current_head != "0" * 40 else "1" * 40
+        (evidence_head_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
+        (evidence_head_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
+        (evidence_head_suite / "evidence-map.md").write_text(
+            "\n".join(
+                [
+                    "# Evidence Map",
+                    "",
+                    "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
+                    "| --- | --- | --- | --- | --- | --- | --- | --- |",
+                    f"| EV-001 | behavior_evidence | .loom/specs/WI-evidence-head/spec.md | Scenario S1 | head_sha={stale_head} | present | merge-ready evidence | refresh behavior evidence |",
+                    f"| EV-002 | test_evidence | .loom/specs/WI-evidence-head/plan.md | AC-1 | head_sha={current_head} | present | merge-ready evidence | rerun tests |",
+                    f"| EV-003 | fresh_verification_input | python3 tools/check_cli_contract.py | EV-001 EV-002 | head_sha={current_head} | present | merge-ready evidence | rerun validation |",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        suite_evidence_head_drift = run_suite_evidence_validate_fixture(evidence_head_target, "WI-evidence-head", expect=1)
+        if (
+            suite_evidence_head_drift.get("result") != "block"
+            or suite_evidence_head_drift.get("fail_closed_reason") != "head_or_pr_drift"
+            or not any(gap.get("failure_kind") == "head_or_pr_drift" for gap in suite_evidence_head_drift.get("blocking_gaps", []))
+        ):
+            raise AssertionError("suite evidence validate head binding drift payload drifted")
+        assert_suite_failure_taxonomy(
+            suite_evidence_head_drift,
+            "head_or_pr_drift",
+            result="block",
+            layer="evidence_map",
+        )
+
+        evidence_pr_head_target = tmp / "suite-evidence-pr-head-drift"
+        evidence_pr_head_suite = evidence_pr_head_target / ".loom" / "specs" / "WI-evidence-pr-head"
+        evidence_pr_head_suite.mkdir(parents=True)
+        current_pr_head = init_git_fixture(evidence_pr_head_target)
+        stale_pr_head = "f" * 40 if current_pr_head != "f" * 40 else "e" * 40
+        (evidence_pr_head_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
+        (evidence_pr_head_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
+        (evidence_pr_head_suite / "evidence-map.md").write_text(
+            "\n".join(
+                [
+                    "# Evidence Map",
+                    "",
+                    "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
+                    "| --- | --- | --- | --- | --- | --- | --- | --- |",
+                    f"| EV-001 | behavior_evidence | .loom/specs/WI-evidence-pr-head/spec.md | Scenario S1 | pr_head={stale_pr_head} | present | merge-ready evidence | refresh behavior evidence |",
+                    f"| EV-002 | test_evidence | .loom/specs/WI-evidence-pr-head/plan.md | AC-1 | pr_head={current_pr_head} | present | merge-ready evidence | rerun tests |",
+                    f"| EV-003 | fresh_verification_input | python3 tools/check_cli_contract.py | EV-001 EV-002 | pr_head={current_pr_head} | present | merge-ready evidence | rerun validation |",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        suite_evidence_pr_head_drift = run_suite_evidence_validate_fixture(evidence_pr_head_target, "WI-evidence-pr-head", expect=1)
+        if (
+            suite_evidence_pr_head_drift.get("result") != "block"
+            or suite_evidence_pr_head_drift.get("fail_closed_reason") != "head_or_pr_drift"
+            or not any(gap.get("failure_kind") == "head_or_pr_drift" for gap in suite_evidence_pr_head_drift.get("blocking_gaps", []))
+        ):
+            raise AssertionError("suite evidence validate PR head binding drift payload drifted")
+
+        evidence_validation_target = tmp / "suite-evidence-validation-drift"
+        evidence_validation_suite = evidence_validation_target / ".loom" / "specs" / "WI-evidence-validation"
+        progress_dir = evidence_validation_target / ".loom" / "progress"
+        evidence_validation_suite.mkdir(parents=True)
+        progress_dir.mkdir(parents=True)
+        validation_summary = "Passed: fixture validation"
+        validation_digest = hashlib.sha256(validation_summary.encode("utf-8")).hexdigest()
+        stale_validation_digest = "a" * 64 if validation_digest != "a" * 64 else "b" * 64
+        (progress_dir / "WI-evidence-validation.md").write_text(
+            f"# WI-evidence-validation Progress\n\n- Latest Validation Summary: {validation_summary}\n",
+            encoding="utf-8",
+        )
+        (evidence_validation_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
+        (evidence_validation_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
+        (evidence_validation_suite / "evidence-map.md").write_text(
+            "\n".join(
+                [
+                    "# Evidence Map",
+                    "",
+                    "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
+                    "| --- | --- | --- | --- | --- | --- | --- | --- |",
+                    f"| EV-001 | behavior_evidence | .loom/specs/WI-evidence-validation/spec.md | Scenario S1 | validation_summary_sha256={stale_validation_digest} | present | merge-ready evidence | refresh behavior evidence |",
+                    f"| EV-002 | test_evidence | .loom/specs/WI-evidence-validation/plan.md | AC-1 | validation_summary_sha256={validation_digest} | present | merge-ready evidence | rerun tests |",
+                    f"| EV-003 | fresh_verification_input | python3 tools/check_cli_contract.py | EV-001 EV-002 | validation_summary_sha256={validation_digest} | present | merge-ready evidence | rerun validation |",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        suite_evidence_validation_drift = run_suite_evidence_validate_fixture(evidence_validation_target, "WI-evidence-validation", expect=1)
+        if (
+            suite_evidence_validation_drift.get("result") != "block"
+            or suite_evidence_validation_drift.get("fail_closed_reason") != "stale_evidence"
+            or suite_evidence_validation_drift.get("payload", {}).get("freshness_context", {}).get("validation_summary_sha256") != validation_digest
+            or not any(gap.get("failure_kind") == "stale_evidence" for gap in suite_evidence_validation_drift.get("blocking_gaps", []))
+        ):
+            raise AssertionError("suite evidence validate validation summary drift payload drifted")
+
+        evidence_missing_source_target = tmp / "suite-evidence-missing-source"
+        evidence_missing_source_suite = evidence_missing_source_target / ".loom" / "specs" / "WI-evidence-missing-source"
+        evidence_missing_source_suite.mkdir(parents=True)
+        (evidence_missing_source_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
+        (evidence_missing_source_suite / "evidence-map.md").write_text(
+            "\n".join(
+                [
+                    "# Evidence Map",
+                    "",
+                    "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
+                    "| --- | --- | --- | --- | --- | --- | --- | --- |",
+                    "| EV-001 | behavior_evidence | tools/missing-source.py | Scenario S1 | current HEAD | present | merge-ready evidence | refresh behavior evidence |",
+                    "| EV-002 | test_evidence | .loom/specs/WI-evidence-missing-source/plan.md | AC-1 | current HEAD | present | merge-ready evidence | rerun tests |",
+                    "| EV-003 | fresh_verification_input | python3 tools/check_cli_contract.py | EV-001 EV-002 | current HEAD | present | merge-ready evidence | rerun validation |",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        suite_evidence_missing_source = run_suite_evidence_validate_fixture(evidence_missing_source_target, "WI-evidence-missing-source", expect=1)
+        if (
+            suite_evidence_missing_source.get("result") != "block"
+            or suite_evidence_missing_source.get("fail_closed_reason") != "missing_source_locator"
+            or not any(gap.get("failure_kind") == "missing_source_locator" for gap in suite_evidence_missing_source.get("blocking_gaps", []))
+        ):
+            raise AssertionError("suite evidence validate missing source locator payload drifted")
 
         evidence_scaffold_target = tmp / "suite-evidence-scaffold"
         evidence_scaffold_target.mkdir()

@@ -9,6 +9,7 @@ JSON block instead of silently falling back to legacy wrappers.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -2136,6 +2137,16 @@ SUITE_VALIDATE_FAILURE_TAXONOMY: dict[str, dict[str, str]] = {
         "failed_layer": "evidence_map",
         "fallback_to": "loom suite evidence validate --target <repo> --item <item> --json",
     },
+    "head_or_pr_drift": {
+        "default_result": "block",
+        "failed_layer": "evidence_map",
+        "fallback_to": "loom suite evidence validate --target <repo> --item <item> --json",
+    },
+    "missing_source_locator": {
+        "default_result": "block",
+        "failed_layer": "evidence_map",
+        "fallback_to": "loom suite evidence validate --target <repo> --item <item> --json",
+    },
 }
 
 SUITE_EVIDENCE_REQUIRED_TYPES = ("behavior_evidence", "test_evidence", "fresh_verification_input")
@@ -2905,6 +2916,73 @@ def is_empty_evidence_value(value: Any) -> bool:
     return str(value or "").strip().lower() in SUITE_EVIDENCE_EMPTY_MARKERS
 
 
+def git_head_sha_for_target(target: Path) -> str | None:
+    completed = subprocess.run(
+        ["git", "-C", str(target), "rev-parse", "HEAD"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        return None
+    head = completed.stdout.strip()
+    return head if re.fullmatch(r"[0-9a-f]{40}", head) else None
+
+
+def latest_validation_summary_for_item(target: Path, item: str) -> str | None:
+    progress_path = target / ".loom" / "progress" / f"{item}.md"
+    try:
+        text = progress_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        if line.startswith("- Latest Validation Summary:"):
+            return line.split(":", 1)[1].strip()
+    return None
+
+
+def sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def evidence_binding_text(row: dict[str, Any]) -> str:
+    return " ".join(
+        str(row.get(field) or "")
+        for field in (
+            "binding",
+            "freshness_rule",
+            "provenance",
+            "consumer_boundary",
+        )
+    )
+
+
+def binding_sha_matches(observed: str, expected: str) -> bool:
+    return expected.startswith(observed.lower()) if len(observed) < len(expected) else observed.lower() == expected
+
+
+def extract_binding_shas(text: str, names: tuple[str, ...]) -> list[str]:
+    name_pattern = "|".join(re.escape(name) for name in names)
+    return [
+        match.group(2).lower()
+        for match in re.finditer(
+            rf"\b({name_pattern})\b\s*[:=]\s*([0-9a-f]{{7,64}})",
+            text,
+            flags=re.IGNORECASE,
+        )
+    ]
+
+
+def is_repo_local_source_locator(source_locator: str, source_kind: str) -> bool:
+    if source_kind == "repo_file":
+        return True
+    if not source_locator or re.match(r"^[a-z][a-z0-9+.-]*:", source_locator, re.IGNORECASE):
+        return False
+    if source_locator.startswith((".", "/")):
+        return True
+    return " " not in source_locator and "/" in source_locator
+
+
 def split_markdown_table_row(line: str) -> list[str]:
     stripped = line.strip()
     if not stripped.startswith("|") or not stripped.endswith("|"):
@@ -3078,6 +3156,9 @@ def suite_evidence_validate_payload(target: Path, item: str) -> tuple[str, str, 
     rows = inspect_payload.get("rows", [])
     missing_inputs = list(inspect_payload.get("missing_inputs", []))
     evidence_locator = inspect_payload.get("evidence_map", {}).get("locator")
+    current_head = git_head_sha_for_target(target)
+    validation_summary = latest_validation_summary_for_item(target, item)
+    validation_summary_sha256 = sha256_text(validation_summary) if validation_summary else None
     blocking_gaps: list[dict[str, Any]] = []
     advisory_gaps: list[dict[str, Any]] = []
 
@@ -3158,6 +3239,83 @@ def suite_evidence_validate_payload(target: Path, item: str) -> tuple[str, str, 
                     remediation="Use one of present, stale, missing, conflict, or not_applicable for evidence freshness.",
                     fallback="loom suite evidence validate --target <repo> --item <item> --json",
                 )
+                continue
+            binding_drift = False
+            if freshness == "present":
+                source_locator = str(row.get("source_locator") or "")
+                source_kind = str(row.get("source_kind") or "").strip().lower()
+                if row.get("source_exists") is False and is_repo_local_source_locator(source_locator, source_kind):
+                    binding_drift = True
+                    add_gap(
+                        gap_id=f"suite-evidence-validate-missing-source-{row.get('evidence_id')}",
+                        classification="missing",
+                        failure_kind="missing_source_locator",
+                        source_locator=row_locator,
+                        impact="merge-ready cannot consume present evidence whose repo-local source locator is missing",
+                        remediation="Restore the cited source locator or update evidence-map to a current readable locator.",
+                    )
+
+                binding_text = evidence_binding_text(row)
+                binding_text_lower = binding_text.lower()
+                explicit_stale_markers = (
+                    "previous head",
+                    "old head",
+                    "stale head",
+                    "previous pr head",
+                    "old pr head",
+                    "stale pr head",
+                    "old validation summary",
+                    "stale validation summary",
+                )
+                if any(marker in binding_text_lower for marker in explicit_stale_markers):
+                    binding_drift = True
+                    add_gap(
+                        gap_id=f"suite-evidence-validate-stale-binding-{row.get('evidence_id')}",
+                        classification="stale",
+                        failure_kind="stale_evidence",
+                        source_locator=row_locator,
+                        impact="merge-ready cannot consume evidence with an explicitly stale HEAD, PR head, or validation summary binding",
+                        remediation="Refresh the evidence binding to the current HEAD, PR head, reviewed head, and validation summary.",
+                    )
+
+                head_checks = (
+                    ("head", extract_binding_shas(binding_text, ("head_sha", "current_head", "head"))),
+                    ("pr_head", extract_binding_shas(binding_text, ("pr_head_sha", "pr_head"))),
+                    ("reviewed_head", extract_binding_shas(binding_text, ("reviewed_head_sha", "reviewed_head"))),
+                )
+                for binding_name, observed_shas in head_checks:
+                    if not observed_shas:
+                        continue
+                    if current_head is None or not any(binding_sha_matches(observed, current_head) for observed in observed_shas):
+                        binding_drift = True
+                        add_gap(
+                            gap_id=f"suite-evidence-validate-{binding_name.replace('_', '-')}-drift-{row.get('evidence_id')}",
+                            classification="stale",
+                            failure_kind="head_or_pr_drift",
+                            source_locator=row_locator,
+                            impact=f"merge-ready cannot consume present evidence whose {binding_name} binding does not match the current execution head",
+                            remediation="Rerun or re-author the evidence against the current HEAD / PR head before merge-ready.",
+                        )
+
+                validation_digests = extract_binding_shas(
+                    binding_text,
+                    ("validation_summary_sha256", "validation_summary_digest", "validation_summary"),
+                )
+                if validation_digests and (
+                    validation_summary_sha256 is None
+                    or not any(binding_sha_matches(observed, validation_summary_sha256) for observed in validation_digests)
+                ):
+                    binding_drift = True
+                    add_gap(
+                        gap_id=f"suite-evidence-validate-validation-summary-drift-{row.get('evidence_id')}",
+                        classification="stale",
+                        failure_kind="stale_evidence",
+                        source_locator=row_locator,
+                        impact="merge-ready cannot consume present evidence whose validation summary binding is stale",
+                        remediation="Refresh validation evidence and bind it to the current Latest Validation Summary digest.",
+                    )
+
+            if binding_drift:
                 continue
             if freshness in {"stale", "conflict"}:
                 add_gap(
@@ -3241,6 +3399,11 @@ def suite_evidence_validate_payload(target: Path, item: str) -> tuple[str, str, 
         "findings": findings,
         "failure_taxonomy": suite_failure_taxonomy_for_findings(findings),
         "supported_failure_kinds": sorted(SUITE_VALIDATE_FAILURE_TAXONOMY),
+        "freshness_context": {
+            "head_sha": current_head,
+            "validation_summary_sha256": validation_summary_sha256,
+            "validation_summary_status": "present" if validation_summary else "missing",
+        },
         "remediation_directions": [entry["remediation_direction"] for entry in findings],
     }
     return summary, result, payload, failed_layer, fail_closed_reason, fallback_to
