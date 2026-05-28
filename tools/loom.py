@@ -1870,7 +1870,7 @@ def dispatch(command: str, forwarded_args: list[str]) -> int:
             ),
             stream=sys.stderr,
         )
-    completed = subprocess.run([sys.executable, str(tool_path), *prefix, *forwarded_args], check=False)
+    completed = subprocess.run([sys.executable, str(tool_path), *prefix, *strip_json_flag(forwarded_args)], check=False)
     return completed.returncode
 
 

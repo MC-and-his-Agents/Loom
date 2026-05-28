@@ -6839,12 +6839,14 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     "runtime-evidence",
                     "checkpoint-admission",
                     "workspace-locate",
+                    "suite-evidence-validate",
+                    "suite-carrier-validate",
                     "governance-lint",
                 ]:
                     failures.append(
                         Failure(
                             "daily-execution-cli",
-                            "`flow pre-review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-admission, workspace-locate, and governance-lint in order",
+                            "`flow pre-review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-admission, workspace-locate, suite evidence/carrier validation, and governance-lint in order",
                         )
                     )
                 governance_step = next((step for step in steps if isinstance(step, dict) and step.get("name") == "governance-lint"), None)
@@ -7091,12 +7093,14 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 "runtime-evidence",
                 "checkpoint-build",
                 "spec-review-gate",
+                "suite-evidence-validate",
+                "suite-carrier-validate",
                 "review-entry",
             ]:
                 failures.append(
                     Failure(
                         "daily-execution-cli",
-                        "`flow review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-build, spec-review-gate, and review-entry in order",
+                        "`flow review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-build, spec-review-gate, suite evidence/carrier validation, and review-entry in order",
                     )
                 )
             review = payload.get("review")
@@ -7269,13 +7273,15 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 "runtime-evidence",
                 "checkpoint-build",
                 "checkpoint-merge",
+                "suite-evidence-validate",
+                "suite-carrier-validate",
                 "governance-lint",
                 "pr-metadata-preflight",
             ]:
                 failures.append(
                     Failure(
                         "daily-execution-cli",
-                        "`flow merge-ready` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-build, checkpoint-merge, governance-lint, and pr-metadata-preflight in order",
+                        "`flow merge-ready` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-build, checkpoint-merge, governance-lint, suite evidence/carrier validation, and pr-metadata-preflight in order",
                     )
                 )
             governance_step = next((step for step in steps if isinstance(step, dict) and step.get("name") == "governance-lint"), None)
@@ -7574,6 +7580,59 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 ),
                 encoding="utf-8",
             )
+            (suite_root / "execution-breakdown.md").write_text(
+                "\n".join(
+                    [
+                        "# Execution Breakdown",
+                        "",
+                        "## unit-init-1",
+                        "",
+                        "- Scope: review-run fixture gate consumption.",
+                        "- Validation: review run and review record consume suite evidence/carrier validation.",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (suite_root / "evidence-map.md").write_text(
+                "\n".join(
+                    [
+                        "# Evidence Map",
+                        "",
+                        "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
+                        "| --- | --- | --- | --- | --- | --- | --- | --- |",
+                        "| EV-001 | behavior_evidence | README.md | `.loom/specs/INIT-0001/spec.md` S1 | INIT-0001 / review-run fixture behavior | present | review evidence only | Re-run review-run fixture commands after behavior changes. |",
+                        "| EV-002 | test_evidence | .loom/progress/INIT-0001.md | `.loom/specs/INIT-0001/plan.md` validation | INIT-0001 / review-run fixture tests | present | review evidence only | Re-run daily-execution-cli fixture validation. |",
+                        "| EV-003 | fresh_verification_input | .loom/progress/INIT-0001.md | EV-001 EV-002 | INIT-0001 / latest validation summary | present | review evidence only | Refresh the progress summary after rerunning validation. |",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (suite_root / "task-carrier.md").write_text(
+                "\n".join(
+                    [
+                        "# Task Carrier",
+                        "",
+                        "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |",
+                        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+                        "| repo_tasks_md | .loom/work-items/INIT-0001.md | fixture in progress | in_progress | primary | .loom/work-items/INIT-0001.md | .loom/specs/INIT-0001/execution-breakdown.md#unit-init-1 | .loom/specs/INIT-0001/spec.md#scenario-s1 | .loom/specs/INIT-0001/plan.md#validation | .loom/specs/INIT-0001/plan.md#validation | daily-execution-cli review-run fixture | Recheck before review record and PR gate fixture consumption. |",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            work_item_path = target / ".loom/work-items/INIT-0001.md"
+            if work_item_path.exists():
+                work_item_text = work_item_path.read_text(encoding="utf-8")
+                additions = [
+                    "- `.loom/specs/INIT-0001/evidence-map.md`",
+                    "- `.loom/specs/INIT-0001/execution-breakdown.md`",
+                    "- `.loom/specs/INIT-0001/task-carrier.md`",
+                ]
+                missing = [line for line in additions if line not in work_item_text]
+                if missing:
+                    work_item_path.write_text(work_item_text.rstrip() + "\n" + "\n".join(missing) + "\n", encoding="utf-8")
             (suite_root / "plan.md").write_text(
                 "\n".join(
                     [
@@ -9645,6 +9704,59 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     ),
                     encoding="utf-8",
                 )
+                (suite_root / "execution-breakdown.md").write_text(
+                    "\n".join(
+                        [
+                            "# Execution Breakdown",
+                            "",
+                            "## unit-init-1",
+                            "",
+                            "- Scope: installed positive pre-merge fixture gate consumption.",
+                            "- Validation: pre-review, review, PR gate, merge-ready, and controlled merge consume current carriers.",
+                            "",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+                (suite_root / "evidence-map.md").write_text(
+                    "\n".join(
+                        [
+                            "# Evidence Map",
+                            "",
+                            "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
+                            "| --- | --- | --- | --- | --- | --- | --- | --- |",
+                            "| EV-001 | behavior_evidence | README.md | `.loom/specs/INIT-0001/spec.md` S1 | INIT-0001 / installed fixture behavior | present | review and merge-ready evidence only | Re-run installed positive chain after behavior changes. |",
+                            "| EV-002 | test_evidence | .loom/progress/INIT-0001.md | `.loom/specs/INIT-0001/plan.md` validation | INIT-0001 / installed fixture tests | present | review and merge-ready evidence only | Re-run daily-execution-cli installed fixture validation. |",
+                            "| EV-003 | fresh_verification_input | .loom/progress/INIT-0001.md | EV-001 EV-002 | INIT-0001 / latest validation summary | present | review and merge-ready evidence only | Refresh progress summary after rerunning validation. |",
+                            "",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+                (suite_root / "task-carrier.md").write_text(
+                    "\n".join(
+                        [
+                            "# Task Carrier",
+                            "",
+                            "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |",
+                            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+                            "| repo_tasks_md | .loom/work-items/INIT-0001.md | fixture in progress | in_progress | primary | .loom/work-items/INIT-0001.md | .loom/specs/INIT-0001/execution-breakdown.md#unit-init-1 | .loom/specs/INIT-0001/spec.md#scenario-s1 | .loom/specs/INIT-0001/plan.md#validation | .loom/specs/INIT-0001/plan.md#validation | daily-execution-cli installed positive fixture | Recheck before review, PR gate, merge-ready, and controlled merge fixture consumption. |",
+                            "",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+                work_item_path = target / ".loom/work-items/INIT-0001.md"
+                if work_item_path.exists():
+                    work_item_text = work_item_path.read_text(encoding="utf-8")
+                    additions = [
+                        "- `.loom/specs/INIT-0001/evidence-map.md`",
+                        "- `.loom/specs/INIT-0001/execution-breakdown.md`",
+                        "- `.loom/specs/INIT-0001/task-carrier.md`",
+                    ]
+                    missing = [line for line in additions if line not in work_item_text]
+                    if missing:
+                        work_item_path.write_text(work_item_text.rstrip() + "\n" + "\n".join(missing) + "\n", encoding="utf-8")
                 (suite_root / "plan.md").write_text(
                     "\n".join(
                         [

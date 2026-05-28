@@ -1,0 +1,5 @@
+# WI-1134 Task Carrier
+
+| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1134 | Issue open / PR pending / Project In Progress | in_progress | primary | .loom/work-items/WI-1134.md | .loom/specs/WI-1134/execution-breakdown.md#unit-1134-1 | .loom/specs/WI-1134/spec.md#scenario-s1 | .loom/specs/WI-1134/plan.md#implementation-plan | .loom/specs/WI-1134/plan.md#validation-commands | workspace comment https://github.com/MC-and-his-Agents/Loom/issues/1134#issuecomment-4565937056; branch work/1134-gate-evidence-carrier; worktree /Users/mc/dev/Loom-worktrees/1134-gate-evidence-carrier | Recheck issue / PR / Project binding before merge-ready; carrier state is tracking-only. |

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -141,6 +142,61 @@ def run_json(args: list[str], *, expect: int | None = None) -> tuple[int, dict[s
     except json.JSONDecodeError as exc:
         raise AssertionError(f"{args} did not emit JSON: {exc}\n{raw}") from exc
     return completed.returncode, payload
+
+
+def active_work_item_id() -> str:
+    payload = json.loads((REPO_ROOT / ".loom" / "bootstrap" / "init-result.json").read_text(encoding="utf-8"))
+    item_id = payload.get("fact_chain", {}).get("entry_points", {}).get("current_item_id")
+    if not isinstance(item_id, str) or not item_id:
+        raise AssertionError("init-result current_item_id is missing")
+    return item_id
+
+
+def run_json_preserving_attempts(args: list[str], *, item: str, expect: int | None = None) -> tuple[int, dict[str, Any]]:
+    attempt_root = REPO_ROOT / ".loom" / "runtime" / "attempts" / item
+    with tempfile.TemporaryDirectory(prefix="loom-attempt-backup-") as raw_backup:
+        backup = Path(raw_backup) / "attempts"
+        existed = attempt_root.exists()
+        if existed:
+            shutil.copytree(attempt_root, backup)
+        try:
+            return run_json(args, expect=expect)
+        finally:
+            if attempt_root.exists():
+                shutil.rmtree(attempt_root)
+            if existed:
+                shutil.copytree(backup, attempt_root)
+
+
+def assert_suite_gate_consumption(payload: dict[str, Any], *, expected_surface: str) -> None:
+    suite_gate = payload.get("suite_gate_validation")
+    if not isinstance(suite_gate, dict):
+        raise AssertionError(f"{expected_surface} did not expose suite gate validation")
+    if suite_gate.get("schema_version") != "loom-suite-gate-validation/v1":
+        raise AssertionError(f"{expected_surface} suite gate validation schema drifted")
+    if suite_gate.get("surface") != expected_surface:
+        raise AssertionError(f"{expected_surface} suite gate validation surface drifted")
+    if suite_gate.get("result") not in {"pass", "block", "fallback"}:
+        raise AssertionError(f"{expected_surface} suite gate validation result drifted")
+    authority = suite_gate.get("authority_boundary", {})
+    if authority.get("role") != "gate_input_evidence" or "review_record" not in authority.get("does_not_replace", []):
+        raise AssertionError(f"{expected_surface} suite gate authority boundary drifted")
+    validations = suite_gate.get("validations", {})
+    for domain, command_fragment in (
+        ("evidence", "suite evidence validate"),
+        ("carrier", "suite carrier validate"),
+    ):
+        validation = validations.get(domain)
+        if not isinstance(validation, dict):
+            raise AssertionError(f"{expected_surface} missing {domain} validation payload")
+        if command_fragment not in str(validation.get("command", "")):
+            raise AssertionError(f"{expected_surface} {domain} validation command drifted")
+    step_names = {step.get("name") for step in payload.get("steps", []) if isinstance(step, dict)}
+    if {"suite-evidence-validate", "suite-carrier-validate"} - step_names:
+        raise AssertionError(f"{expected_surface} did not expose suite evidence/carrier validation steps")
+    consumed = suite_gate.get("consumed_locators", {})
+    if not isinstance(consumed, dict) or "evidence_map" not in consumed or "task_carriers" not in consumed:
+        raise AssertionError(f"{expected_surface} suite gate consumed locators drifted")
 
 
 def snapshot_tree(target: Path) -> list[str]:
@@ -2024,6 +2080,22 @@ def main() -> int:
         status, pre_review_payload = run_json(["pre-review", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
         if pre_review_payload["command"] != "pre-review" or pre_review_payload.get("wrapped_command") != "flow":
             raise AssertionError("pre-review did not wrap the flow runtime")
+        active_item = active_work_item_id()
+        _, active_pre_review = run_json_preserving_attempts(
+            ["pre-review", "--target", str(REPO_ROOT), "--item", active_item, "--json"],
+            item=active_item,
+        )
+        assert_suite_gate_consumption(active_pre_review, expected_surface="pre_review")
+        _, active_review_gate = run_json_preserving_attempts(
+            ["gate", "review", "--target", str(REPO_ROOT), "--item", active_item, "--json"],
+            item=active_item,
+        )
+        assert_suite_gate_consumption(active_review_gate, expected_surface="review")
+        _, active_merge_ready = run_json_preserving_attempts(
+            ["merge-ready", "--target", str(REPO_ROOT), "--item", active_item, "--json"],
+            item=active_item,
+        )
+        assert_suite_gate_consumption(active_merge_ready, expected_surface="merge_ready")
         status, handoff_payload = run_json(["handoff", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
         if handoff_payload["command"] != "handoff" or handoff_payload.get("wrapped_command") != "flow":
             raise AssertionError("handoff did not wrap the flow runtime")

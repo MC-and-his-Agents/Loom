@@ -4352,6 +4352,174 @@ def run_process(args: list[str], cwd: Path, *, timeout_seconds: float | None = N
     )
 
 
+def suite_validation_command_payload(
+    context: dict[str, Any],
+    *,
+    domain: str,
+) -> dict[str, Any]:
+    target_root = context["target_root"]
+    item_id = context["item_id"]
+    loom_cli = target_root / "tools" / "loom.py"
+    command = [
+        sys.executable,
+        str(loom_cli),
+        "suite",
+        domain,
+        "validate",
+        "--target",
+        str(target_root),
+        "--item",
+        item_id,
+        "--json",
+    ]
+    if domain not in {"evidence", "carrier"}:
+        return {
+            "result": "block",
+            "summary": f"unsupported suite validation domain `{domain}`.",
+            "missing_inputs": [f"unsupported suite validation domain: {domain}"],
+            "fallback_to": "build",
+            "command": " ".join(command),
+            "payload": None,
+        }
+    if not loom_cli.exists():
+        return {
+            "result": "pass",
+            "summary": "suite validation is not applicable because the source tools/loom.py CLI is not installed in this target.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "command": " ".join(command),
+            "not_applicable": True,
+            "not_applicable_reason": "source suite CLI unavailable in bootstrapped target runtime",
+            "payload": None,
+        }
+    completed = run_process(command, target_root, timeout_seconds=60)
+    raw_output = completed.stdout.strip() or completed.stderr.strip()
+    try:
+        payload = json.loads(raw_output)
+    except json.JSONDecodeError as exc:
+        return {
+            "result": "block",
+            "summary": f"suite {domain} validation did not emit readable JSON.",
+            "missing_inputs": [f"suite {domain} validate JSON: {exc.msg}"],
+            "fallback_to": f"suite {domain} validate",
+            "command": " ".join(command),
+            "returncode": completed.returncode,
+            "stdout": completed.stdout.strip(),
+            "stderr": completed.stderr.strip(),
+            "payload": None,
+        }
+    result = payload.get("result") if payload.get("result") in {"pass", "block", "fallback"} else "block"
+    missing_inputs = list(payload.get("missing_inputs", [])) if isinstance(payload.get("missing_inputs"), list) else []
+    for gap in payload.get("blocking_gaps", []) if isinstance(payload.get("blocking_gaps"), list) else []:
+        if not isinstance(gap, dict):
+            continue
+        failure_kind = gap.get("failure_kind")
+        source_locator = gap.get("source_locator")
+        if failure_kind:
+            detail = str(failure_kind)
+            if source_locator:
+                detail = f"{detail}: {source_locator}"
+            if detail not in missing_inputs:
+                missing_inputs.append(detail)
+    fallback_to = payload.get("fallback_to")
+    if isinstance(fallback_to, list):
+        fallback_to = fallback_to[0] if fallback_to else None
+    if not isinstance(fallback_to, str) or not fallback_to:
+        fallback_to = None if result == "pass" else f"suite {domain} validate"
+    return {
+        "result": result,
+        "summary": str(payload.get("summary") or f"suite {domain} validation completed."),
+        "missing_inputs": missing_inputs,
+        "fallback_to": fallback_to,
+        "command": " ".join(command),
+        "returncode": completed.returncode,
+        "payload": payload,
+    }
+
+
+def suite_gate_validation_payload(context: dict[str, Any], *, surface: str) -> dict[str, Any]:
+    evidence = suite_validation_command_payload(context, domain="evidence")
+    carrier = suite_validation_command_payload(context, domain="carrier")
+    validations = {
+        "evidence": evidence,
+        "carrier": carrier,
+    }
+    missing_inputs: list[str] = []
+    result = "pass"
+    fallback_to: str | None = None
+    for name, validation in validations.items():
+        validation_result = validation["result"]
+        if validation_result == "fallback" and result == "pass":
+            result = "fallback"
+            fallback_to = validation.get("fallback_to") or f"suite {name} validate"
+        elif validation_result == "block":
+            if result == "pass":
+                result = "block"
+                fallback_to = validation.get("fallback_to") or f"suite {name} validate"
+        if validation_result in {"block", "fallback"}:
+            for message in validation.get("missing_inputs", []):
+                detail = f"{name}: {message}"
+                if detail not in missing_inputs:
+                    missing_inputs.append(detail)
+    evidence_payload = evidence.get("payload") if isinstance(evidence.get("payload"), dict) else {}
+    carrier_payload = carrier.get("payload") if isinstance(carrier.get("payload"), dict) else {}
+    carrier_suite_payload = carrier_payload.get("payload") if isinstance(carrier_payload.get("payload"), dict) else {}
+    task_carriers = carrier_suite_payload.get("task_carrier_locators")
+    if not isinstance(task_carriers, list):
+        task_carrier_locator = carrier_suite_payload.get("task_carrier_locator")
+        task_carriers = [task_carrier_locator] if isinstance(task_carrier_locator, str) and task_carrier_locator else []
+    return {
+        "schema_version": "loom-suite-gate-validation/v1",
+        "surface": surface,
+        "result": result,
+        "summary": (
+            "suite evidence and carrier validation passed for this gate surface."
+            if result == "pass"
+            else "suite evidence or carrier validation found blocking gate inputs."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": fallback_to,
+        "authority_boundary": {
+            "role": "gate_input_evidence",
+            "does_not_replace": [
+                "work_item",
+                "review_record",
+                "merge_ready_result",
+                "closeout_evidence",
+                "docs_source_truth",
+            ],
+        },
+        "consumed_locators": {
+            "evidence_map": evidence_payload.get("payload", {}).get("evidence_map_locator")
+            if isinstance(evidence_payload.get("payload"), dict)
+            else None,
+            "task_carriers": task_carriers,
+        },
+        "validations": validations,
+    }
+
+
+def suite_gate_step(name: str, suite_gate: dict[str, Any], domain: str) -> dict[str, Any]:
+    validation = suite_gate.get("validations", {}).get(domain) if isinstance(suite_gate.get("validations"), dict) else None
+    if not isinstance(validation, dict):
+        return {
+            "name": name,
+            "result": "block",
+            "summary": f"{name} validation payload is missing.",
+            "missing_inputs": [name],
+            "fallback_to": "build",
+        }
+    return {
+        "name": name,
+        "result": validation["result"],
+        "summary": validation["summary"],
+        "missing_inputs": validation["missing_inputs"],
+        "fallback_to": validation["fallback_to"],
+        "validation": validation.get("payload"),
+        "command": validation.get("command"),
+    }
+
+
 def has_make_target(makefile_path: Path, target: str) -> bool:
     if not makefile_path.exists():
         return False
@@ -7542,6 +7710,7 @@ def build_review_flow_payload(
         target_root=target_root,
         surface=surface_name,
     )
+    suite_gate_validation: dict[str, Any] | None = None
     if operation == "spec-review":
         review_path = default_spec_review_path(context["item_id"])
         review_record, _, review_errors = load_review_record(target_root, context["item_id"], review_path)
@@ -7593,6 +7762,7 @@ def build_review_flow_payload(
             authority_after="loom review record",
         )
         spec_gate = spec_review_gate_payload(context)
+        suite_gate_validation = suite_gate_validation_payload(context, surface="review")
         extra_steps = [
             {
                 "name": "spec-review-gate",
@@ -7604,7 +7774,9 @@ def build_review_flow_payload(
                 "summary": spec_gate["summary"],
                 "missing_inputs": spec_gate["missing_inputs"],
                 "fallback_to": spec_gate["fallback_to"],
-            }
+            },
+            suite_gate_step("suite-evidence-validate", suite_gate_validation, "evidence"),
+            suite_gate_step("suite-carrier-validate", suite_gate_validation, "carrier"),
         ]
         review_step_name = "review-entry"
         review_step_result = "pass" if review_record and not review_errors else "block"
@@ -7733,6 +7905,7 @@ def build_review_flow_payload(
                     "record": review_record,
                 },
                 "spec_review": spec_gate,
+                "suite_gate_validation": suite_gate_validation,
                 "review_authority_migration": review_authority,
             }
         ),
@@ -18158,6 +18331,7 @@ def handle_review(args: argparse.Namespace) -> int:
                     "suite_validation": suite_validation,
                 }
             )
+    suite_gate_validation: dict[str, Any] | None = None
     if args.decision == "allow" and args.kind != "spec_review":
         spec_gate = spec_review_gate_payload(context)
         if spec_gate["result"] != "pass":
@@ -18171,6 +18345,21 @@ def handle_review(args: argparse.Namespace) -> int:
                     "fallback_to": spec_gate["fallback_to"] or "build",
                     "build_checkpoint": build_payload,
                     "spec_review": spec_gate,
+                }
+            )
+        suite_gate_validation = suite_gate_validation_payload(context, surface="review")
+        if suite_gate_validation["result"] != "pass":
+            return emit(
+                {
+                    "command": "review",
+                    "operation": "record",
+                    "result": "block",
+                    "summary": "implementation review cannot be recorded as `allow` until suite evidence and carrier validation pass.",
+                    "missing_inputs": list(suite_gate_validation["missing_inputs"]),
+                    "fallback_to": suite_gate_validation["fallback_to"] or "build",
+                    "build_checkpoint": build_payload,
+                    "spec_review": spec_gate,
+                    "suite_gate_validation": suite_gate_validation,
                 }
             )
 
@@ -18235,6 +18424,20 @@ def handle_review(args: argparse.Namespace) -> int:
             "normalized_findings": args.normalized_findings,
         },
     }
+    if isinstance(suite_gate_validation, dict):
+        consumed_locators = suite_gate_validation.get("consumed_locators", {})
+        review_payload["consumed_inputs"].update(
+            {
+                "suite_evidence_validation": suite_gate_validation["validations"]["evidence"]["command"],
+                "suite_carrier_validation": suite_gate_validation["validations"]["carrier"]["command"],
+                "suite_evidence_map": consumed_locators.get("evidence_map")
+                if isinstance(consumed_locators, dict)
+                else None,
+                "suite_task_carriers": consumed_locators.get("task_carriers", [])
+                if isinstance(consumed_locators, dict)
+                else [],
+            }
+        )
     review_abs, review_path_errors = resolve_repo_relative_path(target_root, review_path, label="review artifact path")
     if review_path_errors:
         return emit(
@@ -18283,6 +18486,7 @@ def handle_review(args: argparse.Namespace) -> int:
                 "result": build_payload["result"],
                 "summary": build_payload["summary"],
             },
+            **({"suite_gate_validation": suite_gate_validation} if isinstance(suite_gate_validation, dict) else {}),
         }
     )
 
@@ -19131,6 +19335,7 @@ def handle_flow(args: argparse.Namespace) -> int:
     governance_lint: dict[str, Any] | None = None
     retained_host_signals: dict[str, Any] | None = None
     pr_metadata_preflight: dict[str, Any] | None = None
+    suite_gate_validation: dict[str, Any] | None = None
     governance_surface = build_governance_surface(target_root)
     upgrade_path = maturity_upgrade_path(governance_surface, target_root)
     repo_interface = governance_surface.get("repo_interface")
@@ -19229,6 +19434,7 @@ def handle_flow(args: argparse.Namespace) -> int:
         elif args.operation == "merge-ready":
             build_payload = checkpoint_payload("build", context)
             merge_payload = checkpoint_payload("merge", context)
+            suite_gate_validation = suite_gate_validation_payload(context, surface="merge_ready")
             repo_specific_requirements = repo_specific_requirements_payload(
                 repo_interface,
                 target_root=target_root,
@@ -19272,6 +19478,8 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "missing_inputs": merge_payload["missing_inputs"],
                         "fallback_to": merge_payload["fallback_to"],
                     },
+                    suite_gate_step("suite-evidence-validate", suite_gate_validation, "evidence"),
+                    suite_gate_step("suite-carrier-validate", suite_gate_validation, "carrier"),
                     {
                         "name": "governance-lint",
                         "result": governance_lint["result"],
@@ -19332,6 +19540,7 @@ def handle_flow(args: argparse.Namespace) -> int:
         else:
             admission_payload = checkpoint_payload("admission", context)
             if args.operation == "pre-review":
+                suite_gate_validation = suite_gate_validation_payload(context, surface="pre_review")
                 repo_specific_requirements = repo_specific_requirements_payload(
                     repo_interface,
                     target_root=target_root,
@@ -19366,6 +19575,9 @@ def handle_flow(args: argparse.Namespace) -> int:
             )
             steps.append(locate_step)
             if args.operation == "pre-review" and isinstance(governance_lint, dict):
+                if isinstance(suite_gate_validation, dict):
+                    steps.append(suite_gate_step("suite-evidence-validate", suite_gate_validation, "evidence"))
+                    steps.append(suite_gate_step("suite-carrier-validate", suite_gate_validation, "carrier"))
                 steps.append(
                     {
                         "name": "governance-lint",
@@ -19731,6 +19943,7 @@ def handle_flow(args: argparse.Namespace) -> int:
                     ),
                     "review": review_payload,
                     "repo_specific_requirements": repo_specific_requirements,
+                    "suite_gate_validation": suite_gate_validation,
                     "current_checkpoint": {
                         "raw": context["current_checkpoint_raw"],
                         "normalized": context["current_checkpoint"],
@@ -19756,6 +19969,7 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "fallback_to": admission_payload["fallback_to"],
                     },
                     "repo_specific_requirements": repo_specific_requirements,
+                    "suite_gate_validation": suite_gate_validation,
                     "current_checkpoint": {
                         "raw": context["current_checkpoint_raw"],
                         "normalized": context["current_checkpoint"],
@@ -19806,6 +20020,7 @@ def handle_flow(args: argparse.Namespace) -> int:
                     "current_lane": context["current_lane"],
                     "latest_validation_summary": context["latest_validation_summary"],
                     "repo_specific_requirements": repo_specific_requirements,
+                    "suite_gate_validation": suite_gate_validation,
                 }
                 if args.operation == "merge-ready"
                 else {}
