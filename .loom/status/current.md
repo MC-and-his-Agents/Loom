@@ -11,7 +11,7 @@
 - Review Entry: .loom/reviews/WI-1129.json
 - Validation Entry: python3 tools/check_cli_contract.py; git diff --check; focused rg; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .
 - Closing Condition: #1129 PR is merged to main, closeout evidence records PR/head/merge/target branch/validation/Project state, #1129 is closed completed, and #1126 can consume the evidence.
-- Current Checkpoint: build
+- Current Checkpoint: merge
 - Current Stop: PR #1172 is open on branch `work/1129-suite-evidence-scaffold`.
 - Next Step: Run PR gate, wait for required checks, merge, and close out #1129.
 - Blockers: None
