@@ -3,10 +3,10 @@
   "item_id": "WI-1125",
   "decision": "allow",
   "kind": "general_review",
-  "summary": "General review allows WI-1125 at build checkpoint: spec-review flow now consumes suite validation before review entry, the spec review gate and spec_review allow record path expose the same suite validation basis, generated skill/runtime mirrors were refreshed, and incomplete formal suite regression coverage is in loom_check.",
-  "reviewer": "Codex",
-  "reviewed_head": "aaa21ddef66a45d6281e5e1a1014c31d7794fb3f",
-  "reviewed_validation_summary": "Passed: python3 -m py_compile src/skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_check.py skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_check.py .loom/bin/loom_flow.py .loom/bin/loom_check.py; git diff --check; focused rg for suite_validation, suite-validate, gate spec-review, flow spec-review, /speckit, and .specify surfaces; python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/loom.py suite validate --target . --item WI-1125 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py verify --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py state-check --target . --item WI-1125; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py checkpoint build --target . --item WI-1125.",
+  "summary": "WI-1125 full loom-check fixture repair is ready: spec-review suite validation remains enforced, review-run and installed pre-merge fixtures now author minimal suite readiness, root/demo runtime provenance is refreshed, and full local loom-check passes.",
+  "reviewer": "loom-check",
+  "reviewed_head": "6d2f6c8df0d29eb4c14b193b9640103383be2610",
+  "reviewed_validation_summary": "Passed: make loom-check; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface source-self-fixture .; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface bootstrap-regression .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run; make loom-demo-new-project-sync && make loom-demo-new-project-check; python3 tools/skills_surface.py check; git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/loom.py suite validate --target . --item WI-1125 --json.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -15,7 +15,22 @@
     "work_item": ".loom/work-items/WI-1125.md",
     "recovery_entry": ".loom/progress/WI-1125.md",
     "status_surface": ".loom/status/current.md",
-    "spec_review": ".loom/reviews/WI-1125.spec.json",
-    "build_checkpoint": "pass"
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
   }
 }
