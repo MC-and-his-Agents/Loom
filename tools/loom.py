@@ -187,6 +187,20 @@ COMMANDS: list[dict[str, Any]] = [
         "json": True,
         "summary": "Validate the current suite path decision and core readiness envelope without mutating files.",
     },
+    {
+        "command": "suite evidence inspect",
+        "domain": "suite",
+        "status": "implemented",
+        "json": True,
+        "summary": "Inspect evidence-map locator, rows, freshness, and repo-local evidence bindings.",
+    },
+    {
+        "command": "suite evidence validate",
+        "domain": "suite",
+        "status": "implemented",
+        "json": True,
+        "summary": "Validate behavior, test, and fresh verification evidence-map freshness without mutating files.",
+    },
 ]
 
 COMMAND_INDEX = {entry["command"]: entry for entry in COMMANDS}
@@ -371,6 +385,7 @@ def print_usage(stream) -> None:
         "  suite inspect --target <repo> --item <item> [--json]\n"
         "  suite scaffold --target <repo> --item <item> [--suite minimal|full] [--apply] [--json]\n\n"
         "  suite validate --target <repo> --item <item> [--json]\n\n"
+        "  suite evidence inspect|validate --target <repo> --item <item> [--json]\n\n"
         "Use `loom help --json` for the full frozen command matrix, including reserved commands.\n"
     )
 
@@ -2007,6 +2022,11 @@ SUITE_VALIDATE_CONTRACT_LOCATORS = (
     "docs/methodology/templates/spec-suite.md",
 )
 
+SUITE_EVIDENCE_CONTRACT_LOCATORS = (
+    "docs/methodology/harness/full-spec-suite-cli-surface.md",
+    "docs/methodology/templates/evidence-map.md",
+)
+
 SUITE_VALIDATE_ADVISORY_ARTIFACTS = {
     "full": (
         "evidence-map.md",
@@ -2091,6 +2111,36 @@ SUITE_VALIDATE_FAILURE_TAXONOMY: dict[str, dict[str, str]] = {
         "failed_layer": "suite",
         "fallback_to": "loom suite validate --target <repo> --item <item> --json",
     },
+    "missing_evidence_map": {
+        "default_result": "block",
+        "failed_layer": "evidence_map",
+        "fallback_to": "loom suite evidence scaffold --target <repo> --item <item> --json",
+    },
+    "stale_evidence": {
+        "default_result": "block",
+        "failed_layer": "evidence_map",
+        "fallback_to": "loom suite evidence validate --target <repo> --item <item> --json",
+    },
+    "missing_fresh_verification_evidence": {
+        "default_result": "block",
+        "failed_layer": "evidence_map",
+        "fallback_to": "loom suite evidence validate --target <repo> --item <item> --json",
+    },
+}
+
+SUITE_EVIDENCE_REQUIRED_TYPES = ("behavior_evidence", "test_evidence", "fresh_verification_input")
+SUITE_EVIDENCE_FRESHNESS_VALUES = {"present", "stale", "missing", "conflict", "not_applicable"}
+SUITE_EVIDENCE_EMPTY_MARKERS = {
+    "",
+    "-",
+    "tbd",
+    "todo",
+    "unknown",
+    "n/a",
+    "na",
+    "not set",
+    "not_set",
+    "not-set",
 }
 
 
@@ -2679,6 +2729,364 @@ def suite_failure_taxonomy_for_findings(findings: list[dict[str, Any]]) -> list[
     return taxonomy_entries
 
 
+def suite_evidence_path(target: Path, item: str | None) -> Path | None:
+    return suite_artifact_paths(target, item).get("evidence-map.md", [None])[0]
+
+
+def normalized_table_cell(value: str) -> str:
+    return re.sub(r"<br\s*/?>", " ", value.strip(), flags=re.IGNORECASE).replace("`", "").strip()
+
+
+def normalize_table_header(value: str) -> str:
+    normalized = normalized_table_cell(value).lower().replace("-", "_").replace(" ", "_")
+    return re.sub(r"[^a-z0-9_]+", "", normalized)
+
+
+def is_empty_evidence_value(value: Any) -> bool:
+    return str(value or "").strip().lower() in SUITE_EVIDENCE_EMPTY_MARKERS
+
+
+def split_markdown_table_row(line: str) -> list[str]:
+    stripped = line.strip()
+    if not stripped.startswith("|") or not stripped.endswith("|"):
+        return []
+    return [normalized_table_cell(cell) for cell in stripped.strip("|").split("|")]
+
+
+def is_markdown_separator_row(cells: list[str]) -> bool:
+    return bool(cells) and all(re.fullmatch(r":?-{3,}:?", cell.strip()) for cell in cells)
+
+
+def parse_evidence_map_rows(path: Path, target: Path) -> list[dict[str, Any]]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    index = 0
+    while index < len(lines):
+        header_cells = split_markdown_table_row(lines[index])
+        if not header_cells:
+            index += 1
+            continue
+        if index + 1 >= len(lines):
+            break
+        separator_cells = split_markdown_table_row(lines[index + 1])
+        if not is_markdown_separator_row(separator_cells):
+            index += 1
+            continue
+
+        headers = [normalize_table_header(cell) for cell in header_cells]
+        if "evidence_id" not in headers and "evidenceid" not in headers and "type" not in headers:
+            index += 2
+            continue
+
+        index += 2
+        while index < len(lines):
+            cells = split_markdown_table_row(lines[index])
+            if not cells or is_markdown_separator_row(cells):
+                break
+            mapped = {headers[cell_index]: cells[cell_index] for cell_index in range(min(len(headers), len(cells)))}
+            evidence_id = mapped.get("evidence_id") or mapped.get("evidenceid") or mapped.get("id") or ""
+            evidence_type = mapped.get("type") or mapped.get("evidence_type") or ""
+            source_locator = mapped.get("source_locator") or mapped.get("source") or ""
+            freshness = (mapped.get("freshness") or "").strip().lower().replace(" ", "_")
+            row_locator = f"{repo_locator(path, target)}:{index + 1}"
+            source_exists = None
+            source_kind = mapped.get("source_kind") or mapped.get("sourcekind") or None
+            if source_locator and not re.match(r"^[a-z][a-z0-9+.-]*:", source_locator, re.IGNORECASE):
+                source_path = (target / source_locator).resolve()
+                try:
+                    source_exists = source_path.is_relative_to(target.resolve()) and source_path.exists()
+                except OSError:
+                    source_exists = False
+            rows.append(
+                {
+                    "evidence_id": evidence_id,
+                    "evidence_type": evidence_type.strip().lower(),
+                    "source_locator": source_locator,
+                    "source_kind": source_kind,
+                    "consumes": mapped.get("consumes") or "",
+                    "binding": mapped.get("binding") or "",
+                    "freshness": freshness,
+                    "freshness_rule": mapped.get("freshness_rule") or mapped.get("freshnessrule") or "",
+                    "provenance": mapped.get("provenance") or "",
+                    "consumer_boundary": mapped.get("consumer_boundary") or mapped.get("consumerboundary") or "",
+                    "remediation_direction": mapped.get("remediation_direction") or mapped.get("remediationdirection") or "",
+                    "locator": row_locator,
+                    "source_exists": source_exists,
+                }
+            )
+            index += 1
+        continue
+    return rows
+
+
+def suite_evidence_inspect_payload(target: Path, item: str) -> tuple[str, dict[str, Any]]:
+    evidence_path = suite_evidence_path(target, item)
+    evidence_locator = repo_locator(evidence_path, target) if evidence_path else None
+    status = "missing"
+    rows: list[dict[str, Any]] = []
+    missing_inputs: list[str] = []
+    advisory_gaps: list[dict[str, Any]] = []
+
+    if evidence_path is None:
+        evidence_locator = f".loom/specs/{item}/evidence-map.md"
+        missing_inputs.append("evidence_map_locator")
+    elif evidence_path.exists() and (evidence_path.is_symlink() or not evidence_path.is_file()):
+        status = "invalid"
+        missing_inputs.append(f"invalid_evidence_map:{evidence_locator}")
+    elif evidence_path.exists():
+        status = "present"
+        rows = parse_evidence_map_rows(evidence_path, target)
+        if not rows:
+            missing_inputs.append(f"evidence_rows:{evidence_locator}")
+    else:
+        missing_inputs.append("evidence_map_locator")
+
+    if missing_inputs:
+        advisory_gaps.append(
+            suite_validate_finding(
+                gap_id="suite-evidence-inspect-missing-evidence-map",
+                classification="missing",
+                failure_kind="missing_evidence_map",
+                source_locator=evidence_locator,
+                consumer_impact="inspect-only",
+                remediation_direction="Author or scaffold evidence-map rows before evidence readiness validation.",
+                fallback_to="loom suite evidence scaffold --target <repo> --item <item> --json",
+                surface="evidence_map",
+                binding="suite-evidence-inspect",
+            )
+        )
+
+    payload = {
+        "evidence_map": {
+            "locator": evidence_locator,
+            "status": status,
+            "row_count": len(rows),
+        },
+        "evidence_map_locator": evidence_locator if status == "present" else None,
+        "rows": rows,
+        "required_evidence_types": list(SUITE_EVIDENCE_REQUIRED_TYPES),
+        "freshness_values": sorted(SUITE_EVIDENCE_FRESHNESS_VALUES),
+        "consumed_contracts": list(SUITE_EVIDENCE_CONTRACT_LOCATORS),
+        "missing_inputs": missing_inputs,
+        "advisory_gaps": advisory_gaps,
+    }
+    summary = "Suite evidence inspect found an evidence-map." if status == "present" else "Suite evidence inspect did not find a usable evidence-map."
+    return summary, payload
+
+
+def suite_evidence_validate_payload(target: Path, item: str) -> tuple[str, str, dict[str, Any], str | None, str | None, list[str]]:
+    item_error = suite_item_segment_error(item)
+    if item_error:
+        blocking_gaps = [
+            suite_validate_finding(
+                gap_id="suite-evidence-validate-invalid-item",
+                classification="blocking",
+                failure_kind="invalid_suite_item",
+                source_locator=None,
+                consumer_impact="evidence validation cannot bind an unsafe item segment",
+                remediation_direction="Use a single repo-local Work Item id as the suite item.",
+                fallback_to="loom suite evidence inspect --target <repo> --item <item> --json",
+                surface="evidence_map",
+                binding="suite-evidence-validate",
+            )
+        ]
+        payload = {
+            "evidence_map": {"locator": None, "status": "invalid", "row_count": 0},
+            "rows": [],
+            "consumed_contracts": list(SUITE_EVIDENCE_CONTRACT_LOCATORS),
+            "missing_inputs": [item_error],
+            "blocking_gaps": blocking_gaps,
+            "advisory_gaps": [],
+            "findings": blocking_gaps,
+            "failure_taxonomy": suite_failure_taxonomy_for_findings(blocking_gaps),
+            "supported_failure_kinds": sorted(SUITE_VALIDATE_FAILURE_TAXONOMY),
+            "remediation_directions": [blocking_gaps[0]["remediation_direction"]],
+        }
+        return (
+            "Suite evidence validate failed closed before resolving evidence-map.",
+            "block",
+            payload,
+            "evidence_map",
+            "invalid_suite_item",
+            ["loom suite evidence inspect --target <repo> --item <item> --json"],
+        )
+
+    inspect_summary, inspect_payload = suite_evidence_inspect_payload(target, item)
+    rows = inspect_payload.get("rows", [])
+    missing_inputs = list(inspect_payload.get("missing_inputs", []))
+    evidence_locator = inspect_payload.get("evidence_map", {}).get("locator")
+    blocking_gaps: list[dict[str, Any]] = []
+    advisory_gaps: list[dict[str, Any]] = []
+
+    def add_gap(
+        *,
+        gap_id: str,
+        classification: str,
+        failure_kind: str,
+        source_locator: str | None,
+        impact: str,
+        remediation: str,
+        fallback: str = "loom suite evidence validate --target <repo> --item <item> --json",
+    ) -> None:
+        blocking_gaps.append(
+            suite_validate_finding(
+                gap_id=gap_id,
+                classification=classification,
+                failure_kind=failure_kind,
+                source_locator=source_locator,
+                consumer_impact=impact,
+                remediation_direction=remediation,
+                fallback_to=fallback,
+                surface="evidence_map",
+                binding="suite-evidence-validate",
+            )
+        )
+
+    if missing_inputs:
+        add_gap(
+            gap_id="suite-evidence-validate-missing-evidence-map",
+            classification="missing",
+            failure_kind="missing_evidence_map",
+            source_locator=evidence_locator,
+            impact="merge-ready evidence validation cannot consume missing or unreadable evidence-map rows",
+            remediation="Author or scaffold evidence-map rows before evidence readiness validation.",
+            fallback="loom suite evidence scaffold --target <repo> --item <item> --json",
+        )
+
+    required_row_fields = (
+        "evidence_id",
+        "evidence_type",
+        "source_locator",
+        "consumes",
+        "binding",
+        "freshness",
+        "consumer_boundary",
+        "remediation_direction",
+    )
+    present_by_type: dict[str, list[dict[str, Any]]] = {evidence_type: [] for evidence_type in SUITE_EVIDENCE_REQUIRED_TYPES}
+    present_ids_by_type: dict[str, set[str]] = {evidence_type: set() for evidence_type in SUITE_EVIDENCE_REQUIRED_TYPES}
+
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            row_locator = str(row.get("locator") or evidence_locator or "")
+            evidence_type = str(row.get("evidence_type") or "").strip().lower()
+            freshness = str(row.get("freshness") or "").strip().lower()
+            missing_fields = [field for field in required_row_fields if is_empty_evidence_value(row.get(field))]
+            if missing_fields:
+                add_gap(
+                    gap_id=f"suite-evidence-validate-missing-fields-{row.get('evidence_id') or Path(row_locator).name}",
+                    classification="missing",
+                    failure_kind="missing_evidence_map",
+                    source_locator=row_locator,
+                    impact="merge-ready cannot consume evidence rows with incomplete binding, freshness, or consumer boundary fields",
+                    remediation=f"Fill evidence-map fields before validation; missing: {', '.join(missing_fields)}.",
+                    fallback="loom suite evidence scaffold --target <repo> --item <item> --json",
+                )
+                continue
+            if freshness not in SUITE_EVIDENCE_FRESHNESS_VALUES:
+                add_gap(
+                    gap_id=f"suite-evidence-validate-invalid-freshness-{row.get('evidence_id')}",
+                    classification="missing",
+                    failure_kind="missing_evidence_map",
+                    source_locator=row_locator,
+                    impact="merge-ready cannot classify evidence freshness from an unknown value",
+                    remediation="Use one of present, stale, missing, conflict, or not_applicable for evidence freshness.",
+                    fallback="loom suite evidence validate --target <repo> --item <item> --json",
+                )
+                continue
+            if freshness in {"stale", "conflict"}:
+                add_gap(
+                    gap_id=f"suite-evidence-validate-stale-{row.get('evidence_id')}",
+                    classification="stale",
+                    failure_kind="stale_evidence",
+                    source_locator=row_locator,
+                    impact="merge-ready cannot consume stale or conflicting evidence against the current execution object",
+                    remediation="Refresh the cited evidence or bind it to the current HEAD, PR, review, and validation object before merge-ready.",
+                )
+            elif freshness == "missing":
+                add_gap(
+                    gap_id=f"suite-evidence-validate-missing-{row.get('evidence_id')}",
+                    classification="missing",
+                    failure_kind=(
+                        "missing_fresh_verification_evidence"
+                        if evidence_type == "fresh_verification_input"
+                        else "missing_evidence_map"
+                    ),
+                    source_locator=row_locator,
+                    impact="merge-ready cannot consume evidence rows marked missing",
+                    remediation="Author the missing evidence source and update evidence-map freshness before validation.",
+                    fallback=(
+                        "loom suite evidence validate --target <repo> --item <item> --json"
+                        if evidence_type == "fresh_verification_input"
+                        else "loom suite evidence scaffold --target <repo> --item <item> --json"
+                    ),
+                )
+            elif freshness == "present" and evidence_type in present_by_type:
+                present_by_type[evidence_type].append(row)
+                present_ids_by_type[evidence_type].add(str(row.get("evidence_id")))
+
+    for evidence_type in ("behavior_evidence", "test_evidence"):
+        if present_by_type[evidence_type]:
+            continue
+        add_gap(
+            gap_id=f"suite-evidence-validate-missing-{evidence_type.replace('_', '-')}",
+            classification="missing",
+            failure_kind="missing_evidence_map",
+            source_locator=evidence_locator,
+            impact=f"merge-ready evidence validation requires a present {evidence_type} row",
+            remediation=f"Author a present {evidence_type} row with source locator, binding, freshness, consumer boundary, and remediation direction.",
+            fallback="loom suite evidence scaffold --target <repo> --item <item> --json",
+        )
+
+    fresh_rows = present_by_type["fresh_verification_input"]
+    behavior_ids = present_ids_by_type["behavior_evidence"]
+    test_ids = present_ids_by_type["test_evidence"]
+    fresh_consumes_required = False
+    for row in fresh_rows:
+        consumes = str(row.get("consumes") or "")
+        if any(evidence_id and evidence_id in consumes for evidence_id in behavior_ids) and any(
+            evidence_id and evidence_id in consumes for evidence_id in test_ids
+        ):
+            fresh_consumes_required = True
+            break
+    if not fresh_rows or not fresh_consumes_required:
+        add_gap(
+            gap_id="suite-evidence-validate-missing-fresh-verification",
+            classification="missing",
+            failure_kind="missing_fresh_verification_evidence",
+            source_locator=evidence_locator,
+            impact="merge-ready cannot prove behavior and test evidence combine into a fresh verification input",
+            remediation="Author a present fresh_verification_input row that consumes present behavior and test evidence ids for the current object.",
+        )
+
+    findings = [*blocking_gaps, *advisory_gaps]
+    result = "block" if blocking_gaps else "pass"
+    failed_layer = str(blocking_gaps[0].get("failed_layer") or "evidence_map") if blocking_gaps else None
+    fail_closed_reason = str(blocking_gaps[0].get("failure_kind")) if blocking_gaps else None
+    fallback_to = [str(blocking_gaps[0].get("fallback_to"))] if blocking_gaps else ["loom suite evidence inspect --target <repo> --item <item> --json"]
+    summary = "Suite evidence validate found blocking evidence-map gaps." if blocking_gaps else "Suite evidence validate found present behavior, test, and fresh verification evidence."
+
+    payload = {
+        **inspect_payload,
+        "required_evidence_types": list(SUITE_EVIDENCE_REQUIRED_TYPES),
+        "consumed_contracts": list(SUITE_EVIDENCE_CONTRACT_LOCATORS),
+        "missing_inputs": missing_inputs,
+        "blocking_gaps": blocking_gaps,
+        "advisory_gaps": advisory_gaps,
+        "findings": findings,
+        "failure_taxonomy": suite_failure_taxonomy_for_findings(findings),
+        "supported_failure_kinds": sorted(SUITE_VALIDATE_FAILURE_TAXONOMY),
+        "remediation_directions": [entry["remediation_direction"] for entry in findings],
+    }
+    return summary, result, payload, failed_layer, fail_closed_reason, fallback_to
+
+
 def suite_validate_payload(target: Path, item: str) -> tuple[str, str, dict[str, Any], str | None, str | None, list[str]]:
     item_error = suite_item_segment_error(item)
     if item_error:
@@ -2933,7 +3341,7 @@ def handle_suite(argv: list[str]) -> int:
         )
 
     action = argv[0]
-    if action not in {"inspect", "scaffold", "validate"}:
+    if action not in {"inspect", "scaffold", "validate", "evidence"}:
         return emit(
             output(
                 f"suite {action}",
@@ -2943,6 +3351,93 @@ def handle_suite(argv: list[str]) -> int:
                 failed_layer="suite-input",
                 fail_closed_reason=f"unsupported suite action: {action}",
                 fallback_to=["loom suite inspect --target <repo> --item <item> --json"],
+            )
+        )
+
+    if action == "evidence":
+        if len(argv) < 2:
+            return emit(
+                output(
+                    "suite evidence",
+                    "block",
+                    summary="Suite evidence command requires inspect or validate.",
+                    mutates=False,
+                    failed_layer="suite-input",
+                    fail_closed_reason="missing suite evidence action",
+                    fallback_to=["loom suite evidence inspect --target <repo> --item <item> --json"],
+                )
+            )
+        evidence_action = argv[1]
+        if evidence_action not in {"inspect", "validate"}:
+            return emit(
+                output(
+                    f"suite evidence {evidence_action}",
+                    "block",
+                    summary="Unsupported suite evidence action.",
+                    mutates=False,
+                    failed_layer="suite-input",
+                    fail_closed_reason=f"unsupported suite evidence action: {evidence_action}",
+                    fallback_to=["loom suite evidence inspect --target <repo> --item <item> --json"],
+                )
+            )
+        parser = argparse.ArgumentParser(prog=f"loom suite evidence {evidence_action}")
+        parser.add_argument("--target", default=".")
+        parser.add_argument("--item")
+        parser.add_argument("--json", action="store_true")
+        args = parser.parse_args(argv[2:])
+        command_name = f"suite evidence {evidence_action}"
+        target = resolve_target(args.target)
+        if not target.exists():
+            return emit(block_target(command_name, target, "target path does not exist"))
+        if not args.item:
+            return emit(
+                output(
+                    command_name,
+                    "block",
+                    target=str(target),
+                    item_id=args.item,
+                    summary=f"Suite evidence {evidence_action} requires a Work Item id.",
+                    mutates=False,
+                    failed_layer="suite-input",
+                    fail_closed_reason="missing_work_item",
+                    missing_inputs=["missing_work_item"],
+                    blocking_gaps=[],
+                    advisory_gaps=[],
+                    fallback_to=[f"loom {command_name} --target <repo> --item <item> --json"],
+                )
+            )
+        if evidence_action == "inspect":
+            summary, evidence_payload = suite_evidence_inspect_payload(target, args.item)
+            return emit(
+                output(
+                    command_name,
+                    "pass",
+                    target=str(target),
+                    item_id=args.item,
+                    summary=summary,
+                    mutates=False,
+                    missing_inputs=evidence_payload.get("missing_inputs", []),
+                    advisory_gaps=evidence_payload.get("advisory_gaps", []),
+                    payload=evidence_payload,
+                )
+            )
+
+        summary, result, evidence_payload, failed_layer, fail_closed_reason, fallback_to = suite_evidence_validate_payload(target, args.item)
+        return emit(
+            output(
+                command_name,
+                result,
+                target=str(target),
+                item_id=args.item,
+                summary=summary,
+                mutates=False,
+                failed_layer=failed_layer,
+                fail_closed_reason=fail_closed_reason,
+                missing_inputs=evidence_payload.get("missing_inputs", []),
+                blocking_gaps=evidence_payload.get("blocking_gaps", []),
+                advisory_gaps=evidence_payload.get("advisory_gaps", []),
+                fallback_to=fallback_to,
+                payload=evidence_payload,
             )
         )
 

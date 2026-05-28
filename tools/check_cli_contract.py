@@ -116,6 +116,8 @@ REQUIRED_COMMANDS = {
     "suite inspect",
     "suite scaffold",
     "suite validate",
+    "suite evidence inspect",
+    "suite evidence validate",
 }
 
 
@@ -250,6 +252,34 @@ def run_suite_validate_fixture(target: Path, item: str, *, expect: int = 0) -> d
         raise AssertionError(f"suite validate item binding drifted for {item}")
     if not isinstance(payload.get("blocking_gaps"), list) or not isinstance(payload.get("advisory_gaps"), list):
         raise AssertionError(f"suite validate gaps are not structured for {item}")
+    return payload
+
+
+def run_suite_evidence_inspect_fixture(target: Path, item: str) -> dict[str, Any]:
+    before = snapshot_tree(target)
+    _, payload = run_json(["suite", "evidence", "inspect", "--target", str(target), "--item", item, "--json"], expect=0)
+    after = snapshot_tree(target)
+    if before != after:
+        raise AssertionError(f"suite evidence inspect mutated fixture target for {item}")
+    if payload.get("command") != "suite evidence inspect" or payload.get("result") != "pass" or payload.get("mutates") is not False:
+        raise AssertionError(f"suite evidence inspect envelope drifted for {item}")
+    if payload.get("item_id") != item:
+        raise AssertionError(f"suite evidence inspect item binding drifted for {item}")
+    return payload
+
+
+def run_suite_evidence_validate_fixture(target: Path, item: str, *, expect: int = 0) -> dict[str, Any]:
+    before = snapshot_tree(target)
+    _, payload = run_json(["suite", "evidence", "validate", "--target", str(target), "--item", item, "--json"], expect=expect)
+    after = snapshot_tree(target)
+    if before != after:
+        raise AssertionError(f"suite evidence validate mutated fixture target for {item}")
+    if payload.get("command") != "suite evidence validate" or payload.get("mutates") is not False:
+        raise AssertionError(f"suite evidence validate envelope drifted for {item}")
+    if payload.get("item_id") != item:
+        raise AssertionError(f"suite evidence validate item binding drifted for {item}")
+    if not isinstance(payload.get("blocking_gaps"), list) or not isinstance(payload.get("advisory_gaps"), list):
+        raise AssertionError(f"suite evidence validate gaps are not structured for {item}")
     return payload
 
 
@@ -466,6 +496,10 @@ def main() -> int:
         raise AssertionError("suite scaffold must be declared in help matrix for #1114")
     if matrix["suite validate"]["status"] != "implemented" or matrix["suite validate"]["domain"] != "suite":
         raise AssertionError("suite validate must be declared in help matrix for #1120")
+    if matrix["suite evidence inspect"]["status"] != "implemented" or matrix["suite evidence inspect"]["domain"] != "suite":
+        raise AssertionError("suite evidence inspect must be declared in help matrix for #1127")
+    if matrix["suite evidence validate"]["status"] != "implemented" or matrix["suite evidence validate"]["domain"] != "suite":
+        raise AssertionError("suite evidence validate must be declared in help matrix for #1127")
 
     _, version_payload = run_json(["version", "--json"], expect=0)
     if version_payload["result"] != "pass" or not version_payload["versions"]["repo_version"]:
@@ -704,6 +738,105 @@ def main() -> int:
             or suite_full_validate.get("payload", {}).get("spec_plan_mapping", {}).get("missing_acceptance")
         ):
             raise AssertionError("suite validate full pass payload drifted")
+
+        evidence_target = tmp / "suite-evidence"
+        evidence_suite = evidence_target / ".loom" / "specs" / "WI-evidence"
+        evidence_suite.mkdir(parents=True)
+        (evidence_suite / "evidence-map.md").write_text(
+            "\n".join(
+                [
+                    "# Evidence Map",
+                    "",
+                    "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
+                    "| --- | --- | --- | --- | --- | --- | --- | --- |",
+                    "| EV-001 | behavior_evidence | .loom/specs/WI-evidence/spec.md | Scenario S1 | current HEAD | present | merge-ready evidence | refresh behavior evidence |",
+                    "| EV-002 | test_evidence | .loom/specs/WI-evidence/plan.md | AC-1 | current HEAD | present | merge-ready evidence | rerun tests |",
+                    "| EV-003 | fresh_verification_input | python3 tools/check_cli_contract.py | EV-001 EV-002 | current HEAD | present | merge-ready evidence | rerun validation |",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        suite_evidence_inspect = run_suite_evidence_inspect_fixture(evidence_target, "WI-evidence")
+        evidence_payload = suite_evidence_inspect.get("payload", {})
+        if (
+            evidence_payload.get("evidence_map", {}).get("status") != "present"
+            or evidence_payload.get("evidence_map", {}).get("row_count") != 3
+            or evidence_payload.get("evidence_map_locator") != ".loom/specs/WI-evidence/evidence-map.md"
+            or len(evidence_payload.get("rows", [])) != 3
+            or "docs/methodology/templates/evidence-map.md" not in evidence_payload.get("consumed_contracts", [])
+        ):
+            raise AssertionError("suite evidence inspect payload drifted")
+        suite_evidence_validate = run_suite_evidence_validate_fixture(evidence_target, "WI-evidence")
+        if (
+            suite_evidence_validate.get("result") != "pass"
+            or suite_evidence_validate.get("failed_layer") is not None
+            or suite_evidence_validate.get("fail_closed_reason") is not None
+            or suite_evidence_validate.get("blocking_gaps")
+            or suite_evidence_validate.get("payload", {}).get("required_evidence_types")
+            != ["behavior_evidence", "test_evidence", "fresh_verification_input"]
+        ):
+            raise AssertionError("suite evidence validate pass payload drifted")
+
+        evidence_missing_target = tmp / "suite-evidence-missing"
+        evidence_missing_target.mkdir()
+        suite_evidence_missing = run_suite_evidence_validate_fixture(evidence_missing_target, "WI-evidence-missing", expect=1)
+        if (
+            suite_evidence_missing.get("result") != "block"
+            or suite_evidence_missing.get("failed_layer") != "evidence_map"
+            or suite_evidence_missing.get("fail_closed_reason") != "missing_evidence_map"
+            or "evidence_map_locator" not in suite_evidence_missing.get("missing_inputs", [])
+            or not any(gap.get("failure_kind") == "missing_evidence_map" for gap in suite_evidence_missing.get("blocking_gaps", []))
+        ):
+            raise AssertionError("suite evidence validate missing map payload drifted")
+        assert_suite_failure_taxonomy(
+            suite_evidence_missing,
+            "missing_evidence_map",
+            result="block",
+            layer="evidence_map",
+        )
+
+        evidence_stale_target = tmp / "suite-evidence-stale"
+        evidence_stale_suite = evidence_stale_target / ".loom" / "specs" / "WI-evidence-stale"
+        evidence_stale_suite.mkdir(parents=True)
+        (evidence_stale_suite / "evidence-map.md").write_text(
+            "\n".join(
+                [
+                    "# Evidence Map",
+                    "",
+                    "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
+                    "| --- | --- | --- | --- | --- | --- | --- | --- |",
+                    "| EV-001 | behavior_evidence | .loom/specs/WI-evidence-stale/spec.md | Scenario S1 | previous HEAD | stale | merge-ready evidence | refresh behavior evidence |",
+                    "| EV-002 | test_evidence | .loom/specs/WI-evidence-stale/plan.md | AC-1 | current HEAD | present | merge-ready evidence | rerun tests |",
+                    "| EV-003 | fresh_verification_input | python3 tools/check_cli_contract.py | EV-001 EV-002 | current HEAD | present | merge-ready evidence | rerun validation |",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        suite_evidence_stale = run_suite_evidence_validate_fixture(evidence_stale_target, "WI-evidence-stale", expect=1)
+        if (
+            suite_evidence_stale.get("result") != "block"
+            or suite_evidence_stale.get("fail_closed_reason") != "stale_evidence"
+            or not any(gap.get("failure_kind") == "stale_evidence" for gap in suite_evidence_stale.get("blocking_gaps", []))
+            or not any(
+                gap.get("failure_kind") == "missing_fresh_verification_evidence"
+                for gap in suite_evidence_stale.get("blocking_gaps", [])
+            )
+        ):
+            raise AssertionError("suite evidence validate stale payload drifted")
+        assert_suite_failure_taxonomy(
+            suite_evidence_stale,
+            "stale_evidence",
+            result="block",
+            layer="evidence_map",
+        )
+        assert_suite_failure_taxonomy(
+            suite_evidence_stale,
+            "missing_fresh_verification_evidence",
+            result="block",
+            layer="evidence_map",
+        )
 
         full_missing_scenario_target = tmp / "suite-full-missing-scenario-mapping"
         full_missing_scenario_suite = full_missing_scenario_target / ".loom" / "specs" / "WI-full-missing-scenario"
