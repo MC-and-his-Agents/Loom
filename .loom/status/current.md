@@ -12,10 +12,10 @@
 - Validation Entry: python3 tools/check_cli_contract.py; git diff --check; focused rg; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .
 - Closing Condition: #1141 PR is merged to main, closeout evidence records PR/head/merge/target branch/validation/Project state, #1141 is closed completed, and #1136 can consume the evidence.
 - Current Checkpoint: build
-- Current Stop: Implementation in progress on branch work/1141-review-consumed-locators; review consumed-input payload, #1141 suite artifacts, and contract checks are being updated.
-- Next Step: Finish code/test updates, sync generated runtimes, run focused validation, record review, open PR, and run merge-ready gates.
+- Current Stop: Implementation commit 06f2469d records review consumed suite/evidence/analysis locators; local validation is complete and formal review records are next.
+- Next Step: Record spec review and implementation review for head 06f2469d, rerun gate chain, push PR, and merge-ready.
 - Blockers: None
-- Latest Validation Summary: Initial #1141 setup passed: suite scaffold applied; suite validate for WI-1141 passes; state-check passes after retiring #1140 progress to closed.
+- Latest Validation Summary: Local #1141 validation passed before review: `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py examples/new-project/.loom/bin/loom_flow.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py`; `git diff --check`; focused `rg` for suite consumed locators and forbidden `/speckit` / `.specify` surfaces; `python3 tools/skills_surface.py check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 tools/check_release_surface.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_npm_package.py`; `make loom-demo-new-project-check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate/evidence validate/carrier validate --target . --item WI-1141 --json`.
 - Recovery Boundary: #1141 owns review record consumed locator recording and required carrier cleanup only; it must not implement suite consistency analyze, new host writes, parallel review truth, /speckit.* commands, or .specify/ layout.
 - Current Lane: full-spec-suite-cli/review-consumed-locators
 
