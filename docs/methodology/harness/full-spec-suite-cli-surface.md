@@ -30,7 +30,7 @@
 | `loom suite validate` | implemented core + spec-review consumer integration (#1120/#1121/#1122/#1123/#1124/#1125) | validate | 校验 suite path decision、core required artifact envelope、full path conditional artifact inventory、minimal / suite-level `not_applicable` rationale、spec -> plan scenario / acceptance mapping，并输出稳定 failure taxonomy findings；`flow spec-review` / `gate spec-review` 在 formal spec review 前消费该结果；task carrier mapping 与 evidence-map freshness 由后续 Work Items 加深。 |
 | `loom suite analyze` | planned | analyze | 运行 consistency-analysis 风格的跨工件分析，只输出 finding 与 remediation direction，不修文件。 |
 | `loom suite evidence inspect` | implemented row inventory (#1127) | read-only | 读取 evidence-map locator、row、source locator、freshness 与 binding；不写 evidence-map、review、merge-ready 或 closeout truth。 |
-| `loom suite evidence scaffold` | planned | scaffold-write | 为当前 suite 生成 evidence-map scaffold；必须显式 `--apply`。 |
+| `loom suite evidence scaffold` | implemented dry-run / apply (#1129) | scaffold-write | 为当前 suite 生成 evidence-map scaffold；默认 dry-run，显式 `--apply` 才写入，初始 rows 必须保持 `missing`，不得把 scaffold 当作 present evidence。 |
 | `loom suite evidence validate` | implemented evidence freshness core (#1127) | validate | 校验 behavior evidence、test evidence、fresh verification evidence 的 mapping、required row fields、freshness 与 fresh verification consumes binding。 |
 | `loom suite consistency inspect` | planned | read-only | 读取现有 consistency-analysis 结果和 gate consumer boundary。 |
 | `loom suite consistency analyze` | planned | analyze | 生成 `loom-consistency-analysis/v1` 风格分析结果，不写修复。 |
@@ -66,6 +66,8 @@ Scaffold-write 命令只能写入 caller 指定的 repo-local planning / scaffol
 
 - `suite scaffold`
 - `suite evidence scaffold`
+
+`suite evidence scaffold` 的初始 evidence rows 只能作为占位结构；它们必须以 `missing` freshness 起步，并要求后续 authored source locator、binding 与验证摘要把 evidence 升级为 `present`。Scaffold 文件存在本身不得满足 behavior evidence、test evidence 或 fresh verification evidence。
 
 ### Validate
 
@@ -240,7 +242,7 @@ Scenario skills 仍是 agent-facing entrance；CLI 是 machine interface。后�
 2. `suite scaffold` dry-run / apply：基于 docs scaffold 生成 suite artifacts，默认 fail closed without `--apply`。
 3. `suite validate`：#1120 先校验 full/minimal/not_applicable path 与 core required artifacts；#1121 加深 path decision 合法性、required artifact 普通文件约束与 full path conditional artifact inventory；#1122 校验 authored `not_applicable` rationale、consumer boundary、recheck condition，并阻止 `deferred` 被当作 `not_applicable` 消费；#1123 校验 `spec.md` scenario / acceptance id 是否被 `plan.md` validation / test strategy 逐项消费；#1124 输出稳定 machine-readable failure taxonomy findings；#1125 接入 `flow spec-review` / `gate spec-review` 和 spec-review record allow gate。
 4. `suite carrier inspect|validate`：读取 execution breakdown / task carrier normalized status 与 truth conflict。
-5. `suite evidence inspect|validate`：#1127 读取并校验 evidence-map locator、row fields、freshness 与 behavior/test/fresh verification binding；`suite evidence scaffold` 仍由后续 Work Item 实现。
+5. `suite evidence inspect|validate`：#1127 读取并校验 evidence-map locator、row fields、freshness 与 behavior/test/fresh verification binding；#1129 实现 `suite evidence scaffold` dry-run / apply，生成 `evidence-map.md` scaffold 但不把 seed rows 标为 present。
 6. `suite consistency inspect|analyze`：输出 consistency-analysis findings、classification 与 remediation direction。
 7. Scenario skill integration：让 `loom-spec-review`、`loom-build`、`loom-pre-review`、`loom-review`、`loom-merge-ready` 消费 suite CLI JSON。
 8. Doctor / verify / command-matrix checks：在 declared-support profile 下检查 suite command presence、schema 与 fail-closed behavior。

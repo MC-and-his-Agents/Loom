@@ -155,11 +155,18 @@ loom suite evidence validate
 
 `suite evidence inspect` is read-only. It reports the evidence-map locator, row count, normalized rows, required evidence types, freshness vocabulary, consumed contracts, and inspect-only missing input/advisory gaps. `suite evidence validate` is read-only and returns the shared readiness envelope for behavior evidence, test evidence, and fresh verification input rows. Missing evidence-map rows, incomplete required row fields, stale/conflicting evidence freshness, and fresh verification rows that do not consume present behavior and test evidence block with machine-readable findings. These commands do not scaffold evidence-map files, write review truth, write merge-ready truth, write closeout truth, mutate host state, or create `/speckit.*` or `.specify/` surfaces.
 
+#1129 implements the evidence-map scaffold command:
+
+```text
+loom suite evidence scaffold
+```
+
+`suite evidence scaffold` defaults to dry-run, emits `mutates: false`, and plans exactly one repo-local artifact: `.loom/specs/<item>/evidence-map.md`. `--apply` is required before writing. Existing files are preserved, symlink or non-file targets fail closed, and the response reports planned writes, source template, consumed suite locators, preserve-existing overwrite policy, rollback note, and created locators. Seed rows for behavior evidence, test evidence, and fresh verification input start with `missing` freshness, so the scaffold itself cannot satisfy evidence validation or replace authored evidence truth.
+
 The remaining suite namespace stays planned until later implementation Work Items add those commands to `loom help --json` and the CLI contract checks. The planned namespace is documented in [full-spec-suite-cli-surface.md](./full-spec-suite-cli-surface.md):
 
 ```text
 loom suite analyze
-loom suite evidence scaffold
 loom suite consistency inspect|analyze
 loom suite carrier inspect|validate
 ```
