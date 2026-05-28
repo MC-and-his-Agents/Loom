@@ -27,7 +27,7 @@
 | --- | --- | --- | --- |
 | `loom suite inspect` | planned | read-only | 读取 Work Item、suite path decision、artifact inventory、delivery planning、task carrier、evidence-map、consistency-analysis 与 gate-chain locators。 |
 | `loom suite scaffold` | planned | scaffold-write | 生成或补齐 suite scaffold 文件；必须显式 `--apply`，默认只输出 plan。 |
-| `loom suite validate` | implemented core (#1120/#1121/#1122) | validate | 校验 suite path decision、core required artifact envelope、full path conditional artifact inventory 与 minimal / suite-level `not_applicable` rationale；spec -> plan mapping、task carrier mapping 与 evidence-map freshness 由后续 Work Items 加深。 |
+| `loom suite validate` | implemented core (#1120/#1121/#1122/#1123) | validate | 校验 suite path decision、core required artifact envelope、full path conditional artifact inventory、minimal / suite-level `not_applicable` rationale 与 spec -> plan scenario / acceptance mapping；task carrier mapping 与 evidence-map freshness 由后续 Work Items 加深。 |
 | `loom suite analyze` | planned | analyze | 运行 consistency-analysis 风格的跨工件分析，只输出 finding 与 remediation direction，不修文件。 |
 | `loom suite evidence inspect` | planned | read-only | 读取 evidence-map row、source locator、freshness、HEAD / PR / merge binding。 |
 | `loom suite evidence scaffold` | planned | scaffold-write | 为当前 suite 生成 evidence-map scaffold；必须显式 `--apply`。 |
@@ -235,7 +235,7 @@ Scenario skills 仍是 agent-facing entrance；CLI 是 machine interface。后�
 
 1. `suite inspect` read-only：读取 suite path decision、artifact inventory、core locators 与 host binding。
 2. `suite scaffold` dry-run / apply：基于 docs scaffold 生成 suite artifacts，默认 fail closed without `--apply`。
-3. `suite validate`：#1120 先校验 full/minimal/not_applicable path 与 core required artifacts；#1121 加深 path decision 合法性、required artifact 普通文件约束与 full path conditional artifact inventory；#1122 校验 authored `not_applicable` rationale、consumer boundary、recheck condition，并阻止 `deferred` 被当作 `not_applicable` 消费；后续 Work Items 继续加深 spec -> plan mapping 与 delivery planning locators。
+3. `suite validate`：#1120 先校验 full/minimal/not_applicable path 与 core required artifacts；#1121 加深 path decision 合法性、required artifact 普通文件约束与 full path conditional artifact inventory；#1122 校验 authored `not_applicable` rationale、consumer boundary、recheck condition，并阻止 `deferred` 被当作 `not_applicable` 消费；#1123 校验 `spec.md` scenario / acceptance id 是否被 `plan.md` validation / test strategy 逐项消费；后续 Work Items 继续加深 failure taxonomy 与 spec-review integration。
 4. `suite carrier inspect|validate`：读取 execution breakdown / task carrier normalized status 与 truth conflict。
 5. `suite evidence inspect|scaffold|validate`：生成并校验 evidence-map locator、row fields、freshness 与 evidence binding。
 6. `suite consistency inspect|analyze`：输出 consistency-analysis findings、classification 与 remediation direction。

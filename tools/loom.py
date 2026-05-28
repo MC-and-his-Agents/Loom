@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -2038,6 +2039,22 @@ SUITE_NOT_APPLICABLE_REQUIRED_FIELDS = {
     "recheck_condition": ("recheck condition", "recheck_condition", "recheck"),
 }
 
+SUITE_MAPPING_STRATEGY_MARKERS = (
+    "automated",
+    "manual",
+    "structural",
+    "not_applicable",
+    "not applicable",
+    "test evidence",
+    "behavior evidence",
+    "validation evidence",
+    "structural check",
+    "manual evidence",
+)
+
+SUITE_SCENARIO_ID_PATTERN = re.compile(r"(?i)(?:^|\b)scenario\s+([A-Z][A-Z0-9_-]*\d[A-Z0-9_-]*)\b")
+SUITE_ACCEPTANCE_ID_PATTERN = re.compile(r"(?i)(?:^|\b)(?:acceptance|criterion)\s+([A-Z][A-Z0-9_-]*\d[A-Z0-9_-]*)\b|\b(A\d+|AC[-_]?\d+)\s*:")
+
 
 def suite_relevant_text_blocks(text: str) -> list[str]:
     blocks: list[str] = []
@@ -2131,6 +2148,136 @@ def suite_covered_artifacts(records: list[dict[str, Any]]) -> set[str]:
         if isinstance(artifacts, list):
             covered.update(str(artifact) for artifact in artifacts)
     return covered
+
+
+def suite_unique_ids(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        normalized = value.strip().rstrip(":").upper()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        ordered.append(normalized)
+    return ordered
+
+
+def suite_spec_plan_ids(spec_text: str) -> tuple[list[str], list[str]]:
+    scenario_ids: list[str] = []
+    acceptance_ids: list[str] = []
+    for line in spec_text.splitlines():
+        stripped = line.strip()
+        scenario_match = SUITE_SCENARIO_ID_PATTERN.search(stripped)
+        if scenario_match:
+            scenario_ids.append(scenario_match.group(1))
+        acceptance_match = SUITE_ACCEPTANCE_ID_PATTERN.search(stripped)
+        if acceptance_match:
+            acceptance_ids.append(next(group for group in acceptance_match.groups() if group))
+    return suite_unique_ids(scenario_ids), suite_unique_ids(acceptance_ids)
+
+
+def suite_plan_mapping_lines(plan_text: str, identifier: str) -> list[str]:
+    token = re.escape(identifier)
+    id_pattern = re.compile(rf"(?i)(?:^|[^A-Z0-9_-]){token}(?:[^A-Z0-9_-]|$)")
+    lines: list[str] = []
+    for line in plan_text.splitlines():
+        lowered = line.lower()
+        if not id_pattern.search(line):
+            continue
+        if "->" not in line and "mapping" not in lowered and "strategy" not in lowered:
+            continue
+        if not any(marker in lowered for marker in SUITE_MAPPING_STRATEGY_MARKERS):
+            continue
+        lines.append(line.strip())
+    return lines
+
+
+def suite_spec_plan_mapping(paths: dict[str, list[Path]], target: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    spec_locator = first_existing_locator(paths.get("spec.md", []), target)
+    plan_locator = first_existing_locator(paths.get("plan.md", []), target)
+    mapping = {
+        "spec_locator": spec_locator,
+        "plan_locator": plan_locator,
+        "required_scenarios": [],
+        "required_acceptance": [],
+        "mapped_scenarios": [],
+        "mapped_acceptance": [],
+        "missing_scenarios": [],
+        "missing_acceptance": [],
+    }
+    if spec_locator is None or plan_locator is None:
+        return mapping, []
+
+    spec_path = next((path for path in paths.get("spec.md", []) if path.exists() and path.is_file() and not path.is_symlink()), None)
+    plan_path = next((path for path in paths.get("plan.md", []) if path.exists() and path.is_file() and not path.is_symlink()), None)
+    if spec_path is None or plan_path is None:
+        return mapping, []
+
+    try:
+        spec_text = spec_path.read_text(encoding="utf-8")
+        plan_text = plan_path.read_text(encoding="utf-8")
+    except OSError:
+        return mapping, []
+
+    scenario_ids, acceptance_ids = suite_spec_plan_ids(spec_text)
+    mapped_scenarios: list[dict[str, Any]] = []
+    missing_scenarios: list[str] = []
+    for scenario_id in scenario_ids:
+        lines = suite_plan_mapping_lines(plan_text, scenario_id)
+        if lines:
+            mapped_scenarios.append({"id": scenario_id, "plan_locator": plan_locator, "mapping": lines[0]})
+        else:
+            missing_scenarios.append(scenario_id)
+
+    mapped_acceptance: list[dict[str, Any]] = []
+    missing_acceptance: list[str] = []
+    for acceptance_id in acceptance_ids:
+        lines = suite_plan_mapping_lines(plan_text, acceptance_id)
+        if lines:
+            mapped_acceptance.append({"id": acceptance_id, "plan_locator": plan_locator, "mapping": lines[0]})
+        else:
+            missing_acceptance.append(acceptance_id)
+
+    mapping.update(
+        {
+            "required_scenarios": scenario_ids,
+            "required_acceptance": acceptance_ids,
+            "mapped_scenarios": mapped_scenarios,
+            "mapped_acceptance": mapped_acceptance,
+            "missing_scenarios": missing_scenarios,
+            "missing_acceptance": missing_acceptance,
+        }
+    )
+    blocking_gaps: list[dict[str, Any]] = []
+    for scenario_id in missing_scenarios:
+        blocking_gaps.append(
+            suite_validate_finding(
+                gap_id=f"suite-validate-missing-scenario-mapping-{scenario_id.lower().replace('_', '-')}",
+                classification="missing",
+                failure_kind="missing_spec_plan_mapping",
+                source_locator=spec_locator,
+                consumer_impact=f"spec review cannot verify that scenario {scenario_id} maps to a plan validation strategy",
+                remediation_direction=f"Map scenario {scenario_id} in plan.md to automated, manual, structural, or not_applicable validation.",
+                fallback_to="loom suite validate --target <repo> --item <item> --json",
+                surface="spec/plan",
+                binding="suite-validate-spec-plan-mapping",
+            )
+        )
+    for acceptance_id in missing_acceptance:
+        blocking_gaps.append(
+            suite_validate_finding(
+                gap_id=f"suite-validate-missing-acceptance-mapping-{acceptance_id.lower().replace('_', '-')}",
+                classification="missing",
+                failure_kind="missing_spec_plan_mapping",
+                source_locator=spec_locator,
+                consumer_impact=f"spec review cannot verify that acceptance {acceptance_id} maps to a plan test strategy",
+                remediation_direction=f"Map acceptance {acceptance_id} in plan.md to test evidence, structural check, manual evidence, or not_applicable.",
+                fallback_to="loom suite validate --target <repo> --item <item> --json",
+                surface="spec/plan",
+                binding="suite-validate-spec-plan-mapping",
+            )
+        )
+    return mapping, blocking_gaps
 
 
 def suite_scaffold_payload(target: Path, item: str, suite_path: str, *, apply: bool) -> tuple[str, dict[str, Any], str | None]:
@@ -2446,16 +2593,18 @@ def suite_validate_finding(
     consumer_impact: str,
     remediation_direction: str,
     fallback_to: str,
+    surface: str = "suite",
+    binding: str = "suite-validate-core",
 ) -> dict[str, Any]:
     return {
         "id": gap_id,
         "classification": classification,
         "failure_kind": failure_kind,
-        "surface": "suite",
+        "surface": surface,
         "source_locator": source_locator,
         "conflicting_locator": None,
         "freshness": "missing" if classification == "missing" else None,
-        "binding": "suite-validate-core",
+        "binding": binding,
         "consumer_impact": consumer_impact,
         "remediation_direction": remediation_direction,
         "fallback_to": fallback_to,
@@ -2620,6 +2769,20 @@ def suite_validate_payload(target: Path, item: str) -> tuple[str, str, dict[str,
             )
         )
 
+    spec_plan_mapping = {
+        "spec_locator": inspect_payload.get("spec_locator"),
+        "plan_locator": inspect_payload.get("plan_locator"),
+        "required_scenarios": [],
+        "required_acceptance": [],
+        "mapped_scenarios": [],
+        "mapped_acceptance": [],
+        "missing_scenarios": [],
+        "missing_acceptance": [],
+    }
+    if suite_path in {"full", "minimal"}:
+        spec_plan_mapping, mapping_gaps = suite_spec_plan_mapping(paths, target)
+        blocking_gaps.extend(mapping_gaps)
+
     artifact_inventory = {
         entry.get("artifact"): entry
         for entry in inspect_payload.get("artifact_inventory", [])
@@ -2652,7 +2815,7 @@ def suite_validate_payload(target: Path, item: str) -> tuple[str, str, dict[str,
     fallback_to = ["loom suite inspect --target <repo> --item <item> --json"]
     if blocking_gaps:
         result = "block"
-        failed_layer = "suite"
+        failed_layer = str(blocking_gaps[0].get("surface") or "suite")
         fail_closed_reason = blocking_gaps[0]["failure_kind"]
         fallback_to = [blocking_gaps[0]["fallback_to"]]
         summary = "Suite validate found blocking readiness gaps."
@@ -2672,6 +2835,7 @@ def suite_validate_payload(target: Path, item: str) -> tuple[str, str, dict[str,
         **inspect_payload,
         "not_applicable_rationale": not_applicable_records,
         "deferred_items": deferred_items,
+        "spec_plan_mapping": spec_plan_mapping,
         "consumed_contracts": list(SUITE_VALIDATE_CONTRACT_LOCATORS),
         "missing_inputs": missing_inputs,
         "blocking_gaps": blocking_gaps,
