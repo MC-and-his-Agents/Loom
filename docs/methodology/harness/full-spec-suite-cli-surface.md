@@ -34,8 +34,8 @@
 | `loom suite evidence validate` | implemented evidence freshness core (#1127) | validate | 校验 behavior evidence、test evidence、fresh verification evidence 的 mapping、required row fields、freshness 与 fresh verification consumes binding。 |
 | `loom suite consistency inspect` | planned | read-only | 读取现有 consistency-analysis 结果和 gate consumer boundary。 |
 | `loom suite consistency analyze` | planned | analyze | 生成 `loom-consistency-analysis/v1` 风格分析结果，不写修复。 |
-| `loom suite carrier inspect` | planned | read-only | 读取 execution breakdown unit 与 task carrier normalized status。 |
-| `loom suite carrier validate` | planned | validate | 校验 carrier locator、relationship、normalized status、Work Item / breakdown / spec / plan / validation 回链。 |
+| `loom suite carrier inspect` | implemented carrier inventory (#1131) | read-only | 读取 execution breakdown unit、task carrier locator、normalized status、relationship、Work Item backlink、provenance 与 truth boundary。 |
+| `loom suite carrier validate` | implemented carrier core (#1131) | validate | 校验 carrier locator、relationship、normalized status、Work Item / breakdown / spec / plan / validation 回链，并阻止 carrier done / Project Done / checklist checked 替代 Work Item、evidence、review、merge-ready 或 closeout truth。 |
 
 `loom spec` 与 `loom plan` 保持现有 scenario surface：它们暴露 expected locators 并在 authoring carriers 缺失时 fail closed。后续若实现 `loom suite scaffold`，它可以调用或复用 `loom spec` / `loom plan` 的 locator 规则，但不得让 `loom spec` / `loom plan` 变成 full suite orchestrator。
 
@@ -242,7 +242,7 @@ Scenario skills 仍是 agent-facing entrance；CLI 是 machine interface。后�
 1. `suite inspect` read-only：读取 suite path decision、artifact inventory、core locators 与 host binding。
 2. `suite scaffold` dry-run / apply：基于 docs scaffold 生成 suite artifacts，默认 fail closed without `--apply`。
 3. `suite validate`：#1120 先校验 full/minimal/not_applicable path 与 core required artifacts；#1121 加深 path decision 合法性、required artifact 普通文件约束与 full path conditional artifact inventory；#1122 校验 authored `not_applicable` rationale、consumer boundary、recheck condition，并阻止 `deferred` 被当作 `not_applicable` 消费；#1123 校验 `spec.md` scenario / acceptance id 是否被 `plan.md` validation / test strategy 逐项消费；#1124 输出稳定 machine-readable failure taxonomy findings；#1125 接入 `flow spec-review` / `gate spec-review` 和 spec-review record allow gate。
-4. `suite carrier inspect|validate`：读取 execution breakdown / task carrier normalized status 与 truth conflict。
+4. `suite carrier inspect|validate`：#1131 读取 execution breakdown / task carrier normalized status、relationship、Work Item backlink 和 truth boundary，并校验 missing locator、invalid status/relationship、primary carrier conflict、deferred-as-completed 与 carrier truth conflict。
 5. `suite evidence inspect|validate`：#1127 读取并校验 evidence-map locator、row fields、freshness 与 behavior/test/fresh verification binding；#1129 实现 `suite evidence scaffold` dry-run / apply，生成 `evidence-map.md` scaffold 但不把 seed rows 标为 present。
 6. `suite consistency inspect|analyze`：输出 consistency-analysis findings、classification 与 remediation direction。
 7. Scenario skill integration：让 `loom-spec-review`、`loom-build`、`loom-pre-review`、`loom-review`、`loom-merge-ready` 消费 suite CLI JSON。

@@ -163,15 +163,22 @@ loom suite evidence scaffold
 
 `suite evidence scaffold` defaults to dry-run, emits `mutates: false`, and plans exactly one repo-local artifact: `.loom/specs/<item>/evidence-map.md`. `--apply` is required before writing. Existing files are preserved, symlink or non-file targets fail closed, and the response reports planned writes, source template, consumed suite locators, preserve-existing overwrite policy, rollback note, and created locators. Seed rows for behavior evidence, test evidence, and fresh verification input start with `missing` freshness, so the scaffold itself cannot satisfy evidence validation or replace authored evidence truth.
 
+#1131 implements the task-carrier read and validation commands:
+
+```text
+loom suite carrier inspect|validate
+```
+
+`suite carrier inspect` is read-only. It reports the task-carrier locator, normalized carrier rows, recognized carrier types, normalized status vocabulary, relationship vocabulary, Work Item/recovery truth locators, consumed contracts, and the explicit boundary that carrier/project/checklist `done` does not satisfy Work Item, evidence, review, merge-ready, or closeout truth. `suite carrier validate` is read-only and returns the shared readiness envelope for carrier locator, normalized status, relationship, Work Item backlink, breakdown/spec/plan/validation locators, provenance, freshness rule, primary-carrier uniqueness, deferred-as-completed, and carrier truth conflict findings. These commands do not write task-carrier files, host state, review truth, merge-ready truth, closeout truth, `/speckit.*`, or `.specify/` surfaces.
+
 The remaining suite namespace stays planned until later implementation Work Items add those commands to `loom help --json` and the CLI contract checks. The planned namespace is documented in [full-spec-suite-cli-surface.md](./full-spec-suite-cli-surface.md):
 
 ```text
 loom suite analyze
 loom suite consistency inspect|analyze
-loom suite carrier inspect|validate
 ```
 
-These remaining names are planning output only until a later implementation Work Item adds them to `loom help --json` and the CLI contract checks. Implementations must preserve the #1052 behavior classes: read-only, scaffold-write, validate, analyze, and fail-closed.
+Remaining planned names are planning output only until a later implementation Work Item adds them to `loom help --json` and the CLI contract checks. Implementations must preserve the #1052 behavior classes: read-only, scaffold-write, validate, analyze, and fail-closed.
 
 ## Delegated Compatibility Commands
 
@@ -242,3 +249,4 @@ For #1109-#1114 it also checks:
 - `suite validate` is declared as an implemented suite command in `loom help --json`;
 - `suite validate` stays read-only and covers pass, block, advisory, and not_applicable fixtures with structured readiness gaps.
 - `suite evidence validate` stays read-only and blocks stale evidence, HEAD / PR-head / reviewed-head binding drift, validation summary digest drift, missing present evidence source locators, and missing fresh verification evidence.
+- `suite carrier validate` stays read-only and blocks missing carrier locators, invalid normalized status or relationship values, missing Work Item backlinks, primary carrier conflicts, deferred-as-completed, and carrier truth conflicts without promoting carrier done to completion truth.
