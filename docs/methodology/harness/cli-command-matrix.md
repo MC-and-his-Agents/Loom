@@ -228,6 +228,12 @@ For #910-#914 it also checks:
 - `upgrade-plan` emits `loom-delivery-control/v1` actions without mutation;
 - `verify` consumes `doctor` and returns the same readiness boundary.
 
+For #1137 it also checks:
+
+- `doctor` passes when installed-state does not declare suite command support;
+- `doctor` consumes installed-state declared suite commands and `loom help --json`;
+- declared suite command drift fails closed without running full suite validation.
+
 For #924-#928 it also checks:
 
 - scenario commands are implemented in `loom help --json`;

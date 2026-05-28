@@ -205,6 +205,11 @@ Validate / analyze finding fields:
   - 读取 installed-state、CLI command matrix 与 legacy/mixed surfaces。
   - 若 suite commands 未实现但当前 version 未声明支持它们，结果仍可 pass。
   - 若 installed-state 声明支持 suite commands，但 `loom help --json` 缺命令或命令输出 schema drift，fail closed to `loom repair plan` 或 `loom suite inspect`。
+  - Doctor 只做 declared-support / command-matrix drift 检查，不运行 `suite
+    validate`、`suite evidence validate` 或 `suite carrier validate`。
+  - 声明入口是 installed-state top-level 或 layer-level
+    `declared_support.suite_commands`；没有声明时输出
+    `suite-command-surface` pass / `declared_support: false`。
 - `loom verify --target . --json`
   - 继续消费 `doctor`。
   - 仅在 target profile 或 Work Item gate 明确要求 full suite command surface 时，才要求 `suite validate` / `suite evidence validate` / `suite consistency analyze` 可执行。

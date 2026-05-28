@@ -1973,6 +1973,9 @@ def main() -> int:
         _, valid_doctor = run_json(["doctor", "--target", str(valid_target), "--json"], expect=0)
         if valid_doctor["result"] != "pass":
             raise AssertionError("valid installed-state doctor did not pass")
+        undeclared_suite_check = next((check for check in valid_doctor.get("checks", []) if check.get("name") == "suite-command-surface"), None)
+        if not undeclared_suite_check or undeclared_suite_check.get("result") != "pass" or undeclared_suite_check.get("declared_support") is not False:
+            raise AssertionError("doctor did not pass undeclared suite command support")
         _, valid_plan = run_json(["repair", "plan", "--target", str(valid_target), "--json"], expect=0)
         if valid_plan["actions"]:
             raise AssertionError("current installed-state repair plan should be no-op")
@@ -1985,6 +1988,36 @@ def main() -> int:
         _, verify_payload = run_json(["verify", "--target", str(valid_target), "--json"], expect=0)
         if verify_payload["schema"] != "loom-delivery-control/v1" or verify_payload["doctor"]["result"] != "pass":
             raise AssertionError("verify did not consume doctor success")
+        declared_target = tmp / "declared-suite-support"
+        declared_target.mkdir()
+        declared_state = valid_state(declared_target)
+        declared_state["declared_support"] = {"suite_commands": ["suite inspect", "suite validate", "suite evidence validate", "suite carrier validate"]}
+        write_state(declared_target, declared_state)
+        _, declared_doctor = run_json(["doctor", "--target", str(declared_target), "--json"], expect=0)
+        declared_suite_check = next((check for check in declared_doctor.get("checks", []) if check.get("name") == "suite-command-surface"), None)
+        if (
+            declared_doctor.get("result") != "pass"
+            or not declared_suite_check
+            or declared_suite_check.get("declared_support") is not True
+            or declared_suite_check.get("schema_errors")
+        ):
+            raise AssertionError("doctor did not pass declared suite command support")
+        drift_target = tmp / "declared-suite-drift"
+        drift_target.mkdir()
+        drift_state = valid_state(drift_target)
+        drift_state["declared_support"] = {"suite_commands": ["suite inspect", "suite imaginary"]}
+        write_state(drift_target, drift_state)
+        status, drift_doctor = run_json(["doctor", "--target", str(drift_target), "--json"])
+        drift_suite_check = next((check for check in drift_doctor.get("checks", []) if check.get("name") == "suite-command-surface"), None)
+        if (
+            status == 0
+            or drift_doctor.get("result") != "block"
+            or drift_doctor.get("failed_layer") != "suite-command-surface"
+            or not drift_suite_check
+            or drift_suite_check.get("result") != "block"
+            or not any(error.get("command") == "suite imaginary" for error in drift_suite_check.get("schema_errors", []))
+        ):
+            raise AssertionError("doctor did not fail closed on declared suite command surface drift")
         status, install_payload = run_json(["install", "--target", str(valid_target), "--json"])
         if status == 0 or install_payload["failed_layer"] != "install-apply":
             raise AssertionError("install did not fail closed without --apply")
