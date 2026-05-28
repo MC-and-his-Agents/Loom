@@ -1,0 +1,22 @@
+{
+  "schema_version": "loom-build-evidence/v1",
+  "delegations": [],
+  "integration_evidence": [
+    {
+      "id": "WI-1141-local-build",
+      "status": "integrated",
+      "summary": "Main executor integrated review consumed locator recording into the shared loom_flow runtime, generated runtime copies, CLI contract fixtures, and #1141 suite carriers.",
+      "locators": [
+        "src/skills/shared/scripts/loom_flow.py",
+        "skills/shared/scripts/loom_flow.py",
+        ".loom/bin/loom_flow.py",
+        "examples/new-project/.loom/bin/loom_flow.py",
+        "tools/check_cli_contract.py",
+        ".loom/specs/WI-1141/spec.md",
+        ".loom/specs/WI-1141/plan.md",
+        ".loom/specs/WI-1141/evidence-map.md",
+        ".loom/specs/WI-1141/task-carrier.md"
+      ]
+    }
+  ]
+}

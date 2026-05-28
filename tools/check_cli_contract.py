@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -168,6 +169,42 @@ def run_json_preserving_attempts(args: list[str], *, item: str, expect: int | No
                 shutil.copytree(backup, attempt_root)
 
 
+@contextmanager
+def preserved_repo_paths(relatives: tuple[str, ...]):
+    with tempfile.TemporaryDirectory(prefix="loom-path-backup-") as raw_backup:
+        backup = Path(raw_backup)
+        snapshots: dict[str, Path | None] = {}
+        for relative in relatives:
+            source = REPO_ROOT / relative
+            destination = backup / relative
+            if source.exists():
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                if source.is_dir():
+                    shutil.copytree(source, destination)
+                else:
+                    shutil.copy2(source, destination)
+                snapshots[relative] = destination
+            else:
+                snapshots[relative] = None
+        try:
+            yield
+        finally:
+            for relative, snapshot in snapshots.items():
+                source = REPO_ROOT / relative
+                if source.exists():
+                    if source.is_dir():
+                        shutil.rmtree(source)
+                    else:
+                        source.unlink()
+                if snapshot is None:
+                    continue
+                source.parent.mkdir(parents=True, exist_ok=True)
+                if snapshot.is_dir():
+                    shutil.copytree(snapshot, source)
+                else:
+                    shutil.copy2(snapshot, source)
+
+
 def assert_suite_gate_consumption(payload: dict[str, Any], *, expected_surface: str) -> None:
     suite_gate = payload.get("suite_gate_validation")
     if not isinstance(suite_gate, dict):
@@ -195,7 +232,12 @@ def assert_suite_gate_consumption(payload: dict[str, Any], *, expected_surface: 
     if {"suite-evidence-validate", "suite-carrier-validate"} - step_names:
         raise AssertionError(f"{expected_surface} did not expose suite evidence/carrier validation steps")
     consumed = suite_gate.get("consumed_locators", {})
-    if not isinstance(consumed, dict) or "evidence_map" not in consumed or "task_carriers" not in consumed:
+    if (
+        not isinstance(consumed, dict)
+        or "evidence_map" not in consumed
+        or "consistency_analysis" not in consumed
+        or "task_carriers" not in consumed
+    ):
         raise AssertionError(f"{expected_surface} suite gate consumed locators drifted")
 
 
@@ -221,6 +263,82 @@ def assert_suite_build_consumption(payload: dict[str, Any]) -> None:
     step_names = {step.get("name") for step in payload.get("steps", []) if isinstance(step, dict)}
     if {"suite-validate", "suite-carrier-validate"} - step_names:
         raise AssertionError("build did not expose suite validation steps")
+
+
+def assert_review_record_consumed_locators(active_item: str) -> None:
+    spec_review = REPO_ROOT / ".loom" / "reviews" / f"{active_item}.spec.json"
+    implementation_review = REPO_ROOT / ".loom" / "reviews" / f"{active_item}.json"
+    with preserved_repo_paths((spec_review.relative_to(REPO_ROOT).as_posix(), implementation_review.relative_to(REPO_ROOT).as_posix())):
+        _, spec_record_payload = run_json(
+            [
+                "review",
+                "record",
+                "--target",
+                str(REPO_ROOT),
+                "--item",
+                active_item,
+                "--decision",
+                "allow",
+                "--kind",
+                "spec_review",
+                "--summary",
+                "Contract fixture spec review allow.",
+                "--reviewer",
+                "contract-check",
+            ],
+            expect=0,
+        )
+        if spec_record_payload.get("result") != "pass":
+            raise AssertionError("spec review record fixture did not pass")
+        spec_record = json.loads(spec_review.read_text(encoding="utf-8"))
+        spec_consumed = spec_record.get("consumed_inputs", {})
+        expected_spec = f".loom/specs/{active_item}/spec.md"
+        expected_plan = f".loom/specs/{active_item}/plan.md"
+        expected_evidence = f".loom/specs/{active_item}/evidence-map.md"
+        expected_carrier = f".loom/specs/{active_item}/task-carrier.md"
+        if (
+            spec_consumed.get("suite_validation") != "suite validate"
+            or spec_consumed.get("suite_validator_mode") != "repo-local-cli"
+            or spec_consumed.get("suite_spec") != expected_spec
+            or spec_consumed.get("suite_plan") != expected_plan
+            or spec_consumed.get("suite_evidence_map") != expected_evidence
+            or "suite_consistency_analysis" not in spec_consumed
+            or expected_carrier not in spec_consumed.get("suite_task_carriers", [])
+        ):
+            raise AssertionError("spec review record consumed suite locators drifted")
+        _, implementation_record_payload = run_json(
+            [
+                "review",
+                "record",
+                "--target",
+                str(REPO_ROOT),
+                "--item",
+                active_item,
+                "--decision",
+                "allow",
+                "--kind",
+                "code_review",
+                "--summary",
+                "Contract fixture implementation review allow.",
+                "--reviewer",
+                "contract-check",
+            ],
+            expect=0,
+        )
+        if implementation_record_payload.get("result") != "pass":
+            raise AssertionError("implementation review record fixture did not pass")
+        implementation_record = json.loads(implementation_review.read_text(encoding="utf-8"))
+        implementation_consumed = implementation_record.get("consumed_inputs", {})
+        if (
+            "suite evidence validate" not in str(implementation_consumed.get("suite_evidence_validation", ""))
+            or "suite carrier validate" not in str(implementation_consumed.get("suite_carrier_validation", ""))
+            or implementation_consumed.get("suite_evidence_map") != expected_evidence
+            or "suite_consistency_analysis" not in implementation_consumed
+            or expected_carrier not in implementation_consumed.get("suite_task_carriers", [])
+            or not isinstance(implementation_consumed.get("suite_evidence_consumed_contracts"), list)
+            or not isinstance(implementation_consumed.get("suite_carrier_consumed_contracts"), list)
+        ):
+            raise AssertionError("implementation review record consumed suite/evidence locators drifted")
 
 
 def snapshot_tree(target: Path) -> list[str]:
@@ -2187,6 +2305,7 @@ def main() -> int:
             item=active_item,
         )
         assert_suite_build_consumption(active_build)
+        assert_review_record_consumed_locators(active_item)
         _, active_pre_review = run_json_preserving_attempts(
             ["pre-review", "--target", str(REPO_ROOT), "--item", active_item, "--json"],
             item=active_item,

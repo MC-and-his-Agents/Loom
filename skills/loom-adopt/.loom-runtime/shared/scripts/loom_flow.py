@@ -4466,6 +4466,7 @@ def suite_gate_validation_payload(context: dict[str, Any], *, surface: str) -> d
                 if detail not in missing_inputs:
                     missing_inputs.append(detail)
     evidence_payload = evidence.get("payload") if isinstance(evidence.get("payload"), dict) else {}
+    evidence_suite_payload = evidence_payload.get("payload") if isinstance(evidence_payload.get("payload"), dict) else {}
     carrier_payload = carrier.get("payload") if isinstance(carrier.get("payload"), dict) else {}
     carrier_suite_payload = carrier_payload.get("payload") if isinstance(carrier_payload.get("payload"), dict) else {}
     task_carriers = carrier_suite_payload.get("task_carrier_locators")
@@ -4494,12 +4495,65 @@ def suite_gate_validation_payload(context: dict[str, Any], *, surface: str) -> d
             ],
         },
         "consumed_locators": {
-            "evidence_map": evidence_payload.get("payload", {}).get("evidence_map_locator")
-            if isinstance(evidence_payload.get("payload"), dict)
-            else None,
+            "evidence_map": evidence_suite_payload.get("evidence_map_locator"),
+            "consistency_analysis": evidence_suite_payload.get("consistency_analysis_locator"),
             "task_carriers": task_carriers,
         },
         "validations": validations,
+    }
+
+
+def suite_validation_consumed_inputs(suite_validation: dict[str, Any]) -> dict[str, Any]:
+    suite_payload = suite_validation.get("payload") if isinstance(suite_validation.get("payload"), dict) else {}
+    task_carriers = suite_payload.get("task_carrier_locators")
+    if not isinstance(task_carriers, list):
+        task_carriers = []
+    consumed_contracts = suite_payload.get("consumed_contracts")
+    if not isinstance(consumed_contracts, list):
+        consumed_contracts = []
+    return {
+        "suite_validation": suite_validation.get("command"),
+        "suite_validator": suite_validation.get("validator"),
+        "suite_validator_mode": suite_validation.get("validator_mode"),
+        "suite_spec": suite_payload.get("spec_locator"),
+        "suite_plan": suite_payload.get("plan_locator"),
+        "suite_evidence_map": suite_payload.get("evidence_map_locator"),
+        "suite_consistency_analysis": suite_payload.get("consistency_analysis_locator"),
+        "suite_task_carriers": task_carriers,
+        "suite_consumed_contracts": consumed_contracts,
+    }
+
+
+def suite_gate_consumed_inputs(suite_gate_validation: dict[str, Any]) -> dict[str, Any]:
+    validations = suite_gate_validation.get("validations") if isinstance(suite_gate_validation.get("validations"), dict) else {}
+    evidence = validations.get("evidence") if isinstance(validations.get("evidence"), dict) else {}
+    carrier = validations.get("carrier") if isinstance(validations.get("carrier"), dict) else {}
+    evidence_payload = evidence.get("payload") if isinstance(evidence.get("payload"), dict) else {}
+    evidence_suite_payload = evidence_payload.get("payload") if isinstance(evidence_payload.get("payload"), dict) else {}
+    carrier_payload = carrier.get("payload") if isinstance(carrier.get("payload"), dict) else {}
+    carrier_suite_payload = carrier_payload.get("payload") if isinstance(carrier_payload.get("payload"), dict) else {}
+    consumed_locators = (
+        suite_gate_validation.get("consumed_locators")
+        if isinstance(suite_gate_validation.get("consumed_locators"), dict)
+        else {}
+    )
+    task_carriers = consumed_locators.get("task_carriers")
+    if not isinstance(task_carriers, list):
+        task_carriers = []
+    evidence_contracts = evidence_suite_payload.get("consumed_contracts")
+    if not isinstance(evidence_contracts, list):
+        evidence_contracts = []
+    carrier_contracts = carrier_suite_payload.get("consumed_contracts")
+    if not isinstance(carrier_contracts, list):
+        carrier_contracts = []
+    return {
+        "suite_evidence_validation": evidence.get("command"),
+        "suite_carrier_validation": carrier.get("command"),
+        "suite_evidence_map": consumed_locators.get("evidence_map"),
+        "suite_consistency_analysis": consumed_locators.get("consistency_analysis"),
+        "suite_task_carriers": task_carriers,
+        "suite_evidence_consumed_contracts": evidence_contracts,
+        "suite_carrier_consumed_contracts": carrier_contracts,
     }
 
 
@@ -18358,6 +18412,7 @@ def handle_review(args: argparse.Namespace) -> int:
                 "build_checkpoint": build_payload,
             }
         )
+    suite_validation: dict[str, Any] | None = None
     if args.decision == "allow" and args.kind == "spec_review":
         suite_validation = spec_suite_validation_payload(context)
         if not suite_validation_ready(suite_validation):
@@ -18467,19 +18522,9 @@ def handle_review(args: argparse.Namespace) -> int:
         },
     }
     if isinstance(suite_gate_validation, dict):
-        consumed_locators = suite_gate_validation.get("consumed_locators", {})
-        review_payload["consumed_inputs"].update(
-            {
-                "suite_evidence_validation": suite_gate_validation["validations"]["evidence"]["command"],
-                "suite_carrier_validation": suite_gate_validation["validations"]["carrier"]["command"],
-                "suite_evidence_map": consumed_locators.get("evidence_map")
-                if isinstance(consumed_locators, dict)
-                else None,
-                "suite_task_carriers": consumed_locators.get("task_carriers", [])
-                if isinstance(consumed_locators, dict)
-                else [],
-            }
-        )
+        review_payload["consumed_inputs"].update(suite_gate_consumed_inputs(suite_gate_validation))
+    if isinstance(suite_validation, dict):
+        review_payload["consumed_inputs"].update(suite_validation_consumed_inputs(suite_validation))
     review_abs, review_path_errors = resolve_repo_relative_path(target_root, review_path, label="review artifact path")
     if review_path_errors:
         return emit(
