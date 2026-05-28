@@ -209,6 +209,20 @@ COMMANDS: list[dict[str, Any]] = [
         "json": True,
         "summary": "Validate behavior, test, and fresh verification evidence-map freshness without mutating files.",
     },
+    {
+        "command": "suite carrier inspect",
+        "domain": "suite",
+        "status": "implemented",
+        "json": True,
+        "summary": "Inspect task-carrier locators, normalized status, relationships, and Work Item backlinks.",
+    },
+    {
+        "command": "suite carrier validate",
+        "domain": "suite",
+        "status": "implemented",
+        "json": True,
+        "summary": "Validate task-carrier locator/status/backlink consistency without promoting carrier truth.",
+    },
 ]
 
 COMMAND_INDEX = {entry["command"]: entry for entry in COMMANDS}
@@ -2035,6 +2049,12 @@ SUITE_EVIDENCE_CONTRACT_LOCATORS = (
     "docs/methodology/templates/evidence-map.md",
 )
 
+SUITE_CARRIER_CONTRACT_LOCATORS = (
+    "docs/methodology/harness/task-carrier-contract.md",
+    "docs/methodology/templates/execution-breakdown.md",
+    "docs/methodology/harness/full-spec-suite-cli-surface.md",
+)
+
 SUITE_EVIDENCE_SCAFFOLD_TEMPLATE_LOCATOR = "docs/methodology/templates/scaffold/evidence-map.md"
 SUITE_EVIDENCE_SCAFFOLD_TEMPLATE = REPO_ROOT / SUITE_EVIDENCE_SCAFFOLD_TEMPLATE_LOCATOR
 
@@ -2147,6 +2167,16 @@ SUITE_VALIDATE_FAILURE_TAXONOMY: dict[str, dict[str, str]] = {
         "failed_layer": "evidence_map",
         "fallback_to": "loom suite evidence validate --target <repo> --item <item> --json",
     },
+    "missing_task_carrier_locator": {
+        "default_result": "block",
+        "failed_layer": "task_carrier",
+        "fallback_to": "loom suite carrier validate --target <repo> --item <item> --json",
+    },
+    "carrier_truth_conflict": {
+        "default_result": "block",
+        "failed_layer": "task_carrier",
+        "fallback_to": "loom suite carrier inspect --target <repo> --item <item> --json",
+    },
 }
 
 SUITE_EVIDENCE_REQUIRED_TYPES = ("behavior_evidence", "test_evidence", "fresh_verification_input")
@@ -2163,6 +2193,23 @@ SUITE_EVIDENCE_EMPTY_MARKERS = {
     "not_set",
     "not-set",
 }
+SUITE_CARRIER_TYPES = {
+    "github_issue",
+    "github_project_item",
+    "checklist_item",
+    "repo_tasks_md",
+    "external_tracker",
+    "not_applicable",
+}
+SUITE_CARRIER_STATUS_VALUES = {
+    "pending",
+    "in_progress",
+    "done",
+    "blocked",
+    "deferred",
+    "not_applicable",
+}
+SUITE_CARRIER_RELATIONSHIPS = {"primary", "mirror", "evidence_locator", "not_applicable"}
 
 
 def suite_relevant_text_blocks(text: str) -> list[str]:
@@ -3409,6 +3456,392 @@ def suite_evidence_validate_payload(target: Path, item: str) -> tuple[str, str, 
     return summary, result, payload, failed_layer, fail_closed_reason, fallback_to
 
 
+def suite_carrier_path(target: Path, item: str | None) -> Path | None:
+    return suite_artifact_paths(target, item).get("task-carrier", [None])[0]
+
+
+def normalize_carrier_token(value: Any) -> str:
+    return re.sub(r"[^a-z0-9_]+", "", str(value or "").strip().lower().replace("-", "_").replace(" ", "_"))
+
+
+def parse_task_carrier_rows(path: Path, target: Path) -> list[dict[str, Any]]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    index = 0
+    while index < len(lines):
+        header_cells = split_markdown_table_row(lines[index])
+        if not header_cells or index + 1 >= len(lines):
+            index += 1
+            continue
+        separator_cells = split_markdown_table_row(lines[index + 1])
+        if not is_markdown_separator_row(separator_cells):
+            index += 1
+            continue
+
+        headers = [normalize_table_header(cell) for cell in header_cells]
+        if not ({"carrier_type", "carriertype"} & set(headers) or {"carrier_locator", "carrierlocator"} & set(headers)):
+            index += 2
+            continue
+
+        index += 2
+        while index < len(lines):
+            cells = split_markdown_table_row(lines[index])
+            if not cells or is_markdown_separator_row(cells):
+                break
+            mapped = {headers[cell_index]: cells[cell_index] for cell_index in range(min(len(headers), len(cells)))}
+            carrier_locator = mapped.get("carrier_locator") or mapped.get("carrierlocator") or mapped.get("locator") or ""
+            carrier_type = normalize_carrier_token(mapped.get("carrier_type") or mapped.get("carriertype") or mapped.get("type"))
+            normalized_status = normalize_carrier_token(
+                mapped.get("normalized_status") or mapped.get("normalizedstatus") or mapped.get("status")
+            )
+            relationship = normalize_carrier_token(mapped.get("relationship") or mapped.get("relation"))
+            locator_exists = None
+            if carrier_locator and is_repo_local_source_locator(carrier_locator, ""):
+                carrier_path = (target / carrier_locator).resolve()
+                try:
+                    locator_exists = carrier_path.is_relative_to(target.resolve()) and carrier_path.exists()
+                except OSError:
+                    locator_exists = False
+            rows.append(
+                {
+                    "carrier_type": carrier_type,
+                    "carrier_locator": carrier_locator,
+                    "source_value": mapped.get("source_value") or mapped.get("sourcevalue") or "",
+                    "normalized_status": normalized_status,
+                    "relationship": relationship,
+                    "work_item_locator": mapped.get("work_item_locator") or mapped.get("workitemlocator") or "",
+                    "breakdown_unit_locator": mapped.get("breakdown_unit_locator") or mapped.get("breakdownunitlocator") or "",
+                    "spec_scenario_locator": mapped.get("spec_scenario_locator") or mapped.get("specscenariolocator") or "",
+                    "plan_phase_locator": mapped.get("plan_phase_locator") or mapped.get("planphaselocator") or "",
+                    "validation_strategy_locator": mapped.get("validation_strategy_locator") or mapped.get("validationstrategylocator") or "",
+                    "provenance": mapped.get("provenance") or "",
+                    "freshness_rule": mapped.get("freshness_rule") or mapped.get("freshnessrule") or "",
+                    "locator": f"{repo_locator(path, target)}:{index + 1}",
+                    "carrier_locator_exists": locator_exists,
+                }
+            )
+            index += 1
+        continue
+    return rows
+
+
+def suite_carrier_inspect_payload(target: Path, item: str) -> tuple[str, dict[str, Any]]:
+    carrier_path = suite_carrier_path(target, item)
+    carrier_locator = repo_locator(carrier_path, target) if carrier_path else f".loom/specs/{item}/task-carrier.md"
+    status = "missing"
+    rows: list[dict[str, Any]] = []
+    missing_inputs: list[str] = []
+    advisory_gaps: list[dict[str, Any]] = []
+
+    if carrier_path is None:
+        missing_inputs.append("task_carrier_locator")
+    elif carrier_path.exists() and (carrier_path.is_symlink() or not carrier_path.is_file()):
+        status = "invalid"
+        missing_inputs.append(f"invalid_task_carrier:{carrier_locator}")
+    elif carrier_path.exists():
+        status = "present"
+        rows = parse_task_carrier_rows(carrier_path, target)
+        if not rows:
+            missing_inputs.append(f"task_carrier_rows:{carrier_locator}")
+    else:
+        missing_inputs.append("task_carrier_locator")
+
+    if missing_inputs:
+        advisory_gaps.append(
+            suite_validate_finding(
+                gap_id="suite-carrier-inspect-missing-task-carrier",
+                classification="missing",
+                failure_kind="missing_task_carrier_locator",
+                source_locator=carrier_locator,
+                consumer_impact="inspect-only",
+                remediation_direction="Author task-carrier rows before carrier readiness validation.",
+                fallback_to="loom suite carrier validate --target <repo> --item <item> --json",
+                surface="task_carrier",
+                binding="suite-carrier-inspect",
+            )
+        )
+
+    payload = {
+        "task_carrier": {
+            "locator": carrier_locator,
+            "status": status,
+            "row_count": len(rows),
+        },
+        "task_carrier_locator": carrier_locator if status == "present" else None,
+        "rows": rows,
+        "recognized_carrier_types": sorted(SUITE_CARRIER_TYPES),
+        "normalized_status_values": sorted(SUITE_CARRIER_STATUS_VALUES),
+        "relationship_values": sorted(SUITE_CARRIER_RELATIONSHIPS),
+        "consumed_contracts": list(SUITE_CARRIER_CONTRACT_LOCATORS),
+        "truth_boundary": {
+            "carrier_done_satisfies_work_item_done": False,
+            "project_done_satisfies_work_item_done": False,
+            "checklist_done_satisfies_evidence_or_gate": False,
+        },
+        "work_item_truth": {
+            "work_item_locator": f".loom/work-items/{item}.md",
+            "work_item_present": (target / ".loom" / "work-items" / f"{item}.md").is_file(),
+            "recovery_locator": f".loom/progress/{item}.md",
+            "recovery_present": (target / ".loom" / "progress" / f"{item}.md").is_file(),
+        },
+        "missing_inputs": missing_inputs,
+        "advisory_gaps": advisory_gaps,
+    }
+    summary = "Suite carrier inspect found task-carrier rows." if status == "present" else "Suite carrier inspect did not find usable task-carrier rows."
+    return summary, payload
+
+
+def suite_carrier_truth_claim_text(row: dict[str, Any]) -> str:
+    return " ".join(
+        str(row.get(field) or "")
+        for field in (
+            "source_value",
+            "provenance",
+            "freshness_rule",
+            "relationship",
+        )
+    ).lower()
+
+
+def suite_carrier_validate_payload(target: Path, item: str) -> tuple[str, str, dict[str, Any], str | None, str | None, list[str]]:
+    item_error = suite_item_segment_error(item)
+    if item_error:
+        blocking_gaps = [
+            suite_validate_finding(
+                gap_id="suite-carrier-validate-invalid-item",
+                classification="blocking",
+                failure_kind="invalid_suite_item",
+                source_locator=None,
+                consumer_impact="carrier validation cannot bind an unsafe item segment",
+                remediation_direction="Use a single repo-local Work Item id as the suite item.",
+                fallback_to="loom suite carrier inspect --target <repo> --item <item> --json",
+                surface="task_carrier",
+                binding="suite-carrier-validate",
+            )
+        ]
+        payload = {
+            "task_carrier": {"locator": None, "status": "invalid", "row_count": 0},
+            "rows": [],
+            "consumed_contracts": list(SUITE_CARRIER_CONTRACT_LOCATORS),
+            "missing_inputs": [item_error],
+            "blocking_gaps": blocking_gaps,
+            "advisory_gaps": [],
+            "findings": blocking_gaps,
+            "failure_taxonomy": suite_failure_taxonomy_for_findings(blocking_gaps),
+            "supported_failure_kinds": sorted(SUITE_VALIDATE_FAILURE_TAXONOMY),
+            "remediation_directions": [blocking_gaps[0]["remediation_direction"]],
+        }
+        return (
+            "Suite carrier validate failed closed before resolving task-carrier rows.",
+            "block",
+            payload,
+            "task_carrier",
+            "invalid_suite_item",
+            ["loom suite carrier inspect --target <repo> --item <item> --json"],
+        )
+
+    inspect_summary, inspect_payload = suite_carrier_inspect_payload(target, item)
+    rows = inspect_payload.get("rows", [])
+    carrier_locator = inspect_payload.get("task_carrier", {}).get("locator")
+    missing_inputs = list(inspect_payload.get("missing_inputs", []))
+    blocking_gaps: list[dict[str, Any]] = []
+    advisory_gaps: list[dict[str, Any]] = []
+
+    def add_gap(
+        *,
+        gap_id: str,
+        classification: str,
+        failure_kind: str,
+        source_locator: str | None,
+        impact: str,
+        remediation: str,
+        fallback: str = "loom suite carrier validate --target <repo> --item <item> --json",
+    ) -> None:
+        blocking_gaps.append(
+            suite_validate_finding(
+                gap_id=gap_id,
+                classification=classification,
+                failure_kind=failure_kind,
+                source_locator=source_locator,
+                consumer_impact=impact,
+                remediation_direction=remediation,
+                fallback_to=fallback,
+                surface="task_carrier",
+                binding="suite-carrier-validate",
+            )
+        )
+
+    if missing_inputs:
+        add_gap(
+            gap_id="suite-carrier-validate-missing-task-carrier",
+            classification="missing",
+            failure_kind="missing_task_carrier_locator",
+            source_locator=carrier_locator,
+            impact="merge-ready carrier validation cannot consume missing or unreadable task-carrier rows",
+            remediation="Author task-carrier rows with locator, status, relationship, Work Item backlink, provenance, and freshness rule.",
+        )
+
+    required_fields = (
+        "carrier_type",
+        "carrier_locator",
+        "source_value",
+        "normalized_status",
+        "relationship",
+        "work_item_locator",
+        "breakdown_unit_locator",
+        "spec_scenario_locator",
+        "plan_phase_locator",
+        "validation_strategy_locator",
+        "provenance",
+        "freshness_rule",
+    )
+    primary_by_unit: dict[str, list[dict[str, Any]]] = {}
+    item_number = item.split("-", 1)[1] if item.startswith("WI-") and "-" in item else item
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            row_locator = str(row.get("locator") or carrier_locator or "")
+            missing_fields = [field for field in required_fields if is_empty_evidence_value(row.get(field))]
+            if missing_fields:
+                add_gap(
+                    gap_id=f"suite-carrier-validate-missing-fields-{Path(row_locator).name}",
+                    classification="missing",
+                    failure_kind="missing_task_carrier_locator",
+                    source_locator=row_locator,
+                    impact="merge-ready cannot consume carrier rows with incomplete locator, backlink, provenance, or freshness fields",
+                    remediation=f"Fill task-carrier fields before validation; missing: {', '.join(missing_fields)}.",
+                )
+                continue
+
+            if str(row.get("carrier_type")) not in SUITE_CARRIER_TYPES:
+                add_gap(
+                    gap_id=f"suite-carrier-validate-invalid-type-{Path(row_locator).name}",
+                    classification="missing",
+                    failure_kind="missing_task_carrier_locator",
+                    source_locator=row_locator,
+                    impact="carrier validation cannot normalize an unknown carrier type",
+                    remediation="Use github_issue, github_project_item, checklist_item, repo_tasks_md, external_tracker, or not_applicable.",
+                )
+            if str(row.get("normalized_status")) not in SUITE_CARRIER_STATUS_VALUES:
+                add_gap(
+                    gap_id=f"suite-carrier-validate-invalid-status-{Path(row_locator).name}",
+                    classification="missing",
+                    failure_kind="missing_task_carrier_locator",
+                    source_locator=row_locator,
+                    impact="carrier validation cannot consume an unknown normalized status",
+                    remediation="Use pending, in_progress, done, blocked, deferred, or not_applicable.",
+                )
+            if str(row.get("relationship")) not in SUITE_CARRIER_RELATIONSHIPS:
+                add_gap(
+                    gap_id=f"suite-carrier-validate-invalid-relationship-{Path(row_locator).name}",
+                    classification="missing",
+                    failure_kind="missing_task_carrier_locator",
+                    source_locator=row_locator,
+                    impact="carrier validation cannot consume an unknown carrier relationship",
+                    remediation="Use primary, mirror, evidence_locator, or not_applicable.",
+                )
+
+            work_item_locator = str(row.get("work_item_locator") or "")
+            if item not in work_item_locator and item_number not in work_item_locator:
+                add_gap(
+                    gap_id=f"suite-carrier-validate-work-item-backlink-{Path(row_locator).name}",
+                    classification="missing",
+                    failure_kind="missing_task_carrier_locator",
+                    source_locator=row_locator,
+                    impact="carrier rows must backlink the owning Work Item before they can be consumed",
+                    remediation=f"Bind the carrier row to {item} or its issue locator.",
+                )
+
+            if row.get("carrier_locator_exists") is False:
+                add_gap(
+                    gap_id=f"suite-carrier-validate-missing-locator-{Path(row_locator).name}",
+                    classification="missing",
+                    failure_kind="missing_task_carrier_locator",
+                    source_locator=row_locator,
+                    impact="carrier validation cannot consume a repo-local carrier locator that is missing",
+                    remediation="Restore the repo-local carrier locator or update the carrier row to a readable locator.",
+                )
+
+            if row.get("relationship") == "primary":
+                primary_by_unit.setdefault(str(row.get("breakdown_unit_locator") or ""), []).append(row)
+
+            truth_claim_text = suite_carrier_truth_claim_text(row)
+            truth_replacement_markers = (
+                "work_item_completed",
+                "work item completed",
+                "work item done",
+                "closeout complete",
+                "closeout completed",
+                "merge-ready pass",
+                "merge_ready_pass",
+                "review pass",
+                "review approved",
+                "evidence present",
+                "gate pass",
+                "project done means completed",
+                "checklist checked means evidence",
+            )
+            if any(marker in truth_claim_text for marker in truth_replacement_markers):
+                add_gap(
+                    gap_id=f"suite-carrier-validate-truth-conflict-{Path(row_locator).name}",
+                    classification="conflict",
+                    failure_kind="carrier_truth_conflict",
+                    source_locator=row_locator,
+                    impact="carrier status cannot replace Work Item, evidence, review, merge-ready, or closeout truth",
+                    remediation="Demote carrier status to tracking-only language and return completion truth to Work Item/review/merge-ready/closeout carriers.",
+                    fallback="loom suite carrier inspect --target <repo> --item <item> --json",
+                )
+
+            if row.get("normalized_status") == "deferred" and re.search(r"\b(done|completed|closed)\b", truth_claim_text):
+                add_gap(
+                    gap_id=f"suite-carrier-validate-deferred-completed-{Path(row_locator).name}",
+                    classification="conflict",
+                    failure_kind="deferred_as_completed",
+                    source_locator=row_locator,
+                    impact="deferred carrier status cannot satisfy completed truth",
+                    remediation="Record an activation condition for the deferred carrier or move completion truth to the owning Work Item closeout.",
+                    fallback="loom suite carrier inspect --target <repo> --item <item> --json",
+                )
+
+    for unit_locator, primary_rows in primary_by_unit.items():
+        if unit_locator and len(primary_rows) > 1:
+            add_gap(
+                gap_id=f"suite-carrier-validate-primary-conflict-{Path(unit_locator).name}",
+                classification="conflict",
+                failure_kind="carrier_truth_conflict",
+                source_locator=unit_locator,
+                impact="a breakdown unit cannot have multiple primary carriers",
+                remediation="Keep one primary carrier for the breakdown unit and mark the rest mirror or evidence_locator.",
+                fallback="loom suite carrier inspect --target <repo> --item <item> --json",
+            )
+
+    findings = [*blocking_gaps, *advisory_gaps]
+    result = "block" if blocking_gaps else "pass"
+    failed_layer = str(blocking_gaps[0].get("failed_layer") or "task_carrier") if blocking_gaps else None
+    fail_closed_reason = str(blocking_gaps[0].get("failure_kind")) if blocking_gaps else None
+    fallback_to = [str(blocking_gaps[0].get("fallback_to"))] if blocking_gaps else ["loom suite carrier inspect --target <repo> --item <item> --json"]
+    summary = "Suite carrier validate found blocking task-carrier gaps." if blocking_gaps else "Suite carrier validate found carrier locators, normalized status, relationships, and Work Item backlinks."
+
+    payload = {
+        **inspect_payload,
+        "required_fields": list(required_fields),
+        "consumed_contracts": list(SUITE_CARRIER_CONTRACT_LOCATORS),
+        "missing_inputs": missing_inputs,
+        "blocking_gaps": blocking_gaps,
+        "advisory_gaps": advisory_gaps,
+        "findings": findings,
+        "failure_taxonomy": suite_failure_taxonomy_for_findings(findings),
+        "supported_failure_kinds": sorted(SUITE_VALIDATE_FAILURE_TAXONOMY),
+        "remediation_directions": [entry["remediation_direction"] for entry in findings],
+    }
+    return summary, result, payload, failed_layer, fail_closed_reason, fallback_to
+
+
 def suite_validate_payload(target: Path, item: str) -> tuple[str, str, dict[str, Any], str | None, str | None, list[str]]:
     item_error = suite_item_segment_error(item)
     if item_error:
@@ -3663,7 +4096,7 @@ def handle_suite(argv: list[str]) -> int:
         )
 
     action = argv[0]
-    if action not in {"inspect", "scaffold", "validate", "evidence"}:
+    if action not in {"inspect", "scaffold", "validate", "evidence", "carrier"}:
         return emit(
             output(
                 f"suite {action}",
@@ -3673,6 +4106,93 @@ def handle_suite(argv: list[str]) -> int:
                 failed_layer="suite-input",
                 fail_closed_reason=f"unsupported suite action: {action}",
                 fallback_to=["loom suite inspect --target <repo> --item <item> --json"],
+            )
+        )
+
+    if action == "carrier":
+        if len(argv) < 2:
+            return emit(
+                output(
+                    "suite carrier",
+                    "block",
+                    summary="Suite carrier command requires inspect or validate.",
+                    mutates=False,
+                    failed_layer="suite-input",
+                    fail_closed_reason="missing suite carrier action",
+                    fallback_to=["loom suite carrier inspect --target <repo> --item <item> --json"],
+                )
+            )
+        carrier_action = argv[1]
+        if carrier_action not in {"inspect", "validate"}:
+            return emit(
+                output(
+                    f"suite carrier {carrier_action}",
+                    "block",
+                    summary="Unsupported suite carrier action.",
+                    mutates=False,
+                    failed_layer="suite-input",
+                    fail_closed_reason=f"unsupported suite carrier action: {carrier_action}",
+                    fallback_to=["loom suite carrier inspect --target <repo> --item <item> --json"],
+                )
+            )
+        parser = argparse.ArgumentParser(prog=f"loom suite carrier {carrier_action}")
+        parser.add_argument("--target", default=".")
+        parser.add_argument("--item")
+        parser.add_argument("--json", action="store_true")
+        args = parser.parse_args(argv[2:])
+        command_name = f"suite carrier {carrier_action}"
+        target = resolve_target(args.target)
+        if not target.exists():
+            return emit(block_target(command_name, target, "target path does not exist"))
+        if not args.item:
+            return emit(
+                output(
+                    command_name,
+                    "block",
+                    target=str(target),
+                    item_id=args.item,
+                    summary=f"Suite carrier {carrier_action} requires a Work Item id.",
+                    mutates=False,
+                    failed_layer="suite-input",
+                    fail_closed_reason="missing_work_item",
+                    missing_inputs=["missing_work_item"],
+                    blocking_gaps=[],
+                    advisory_gaps=[],
+                    fallback_to=[f"loom {command_name} --target <repo> --item <item> --json"],
+                )
+            )
+        if carrier_action == "inspect":
+            summary, carrier_payload = suite_carrier_inspect_payload(target, args.item)
+            return emit(
+                output(
+                    command_name,
+                    "pass",
+                    target=str(target),
+                    item_id=args.item,
+                    summary=summary,
+                    mutates=False,
+                    missing_inputs=carrier_payload.get("missing_inputs", []),
+                    advisory_gaps=carrier_payload.get("advisory_gaps", []),
+                    payload=carrier_payload,
+                )
+            )
+
+        summary, result, carrier_payload, failed_layer, fail_closed_reason, fallback_to = suite_carrier_validate_payload(target, args.item)
+        return emit(
+            output(
+                command_name,
+                result,
+                target=str(target),
+                item_id=args.item,
+                summary=summary,
+                mutates=False,
+                failed_layer=failed_layer,
+                fail_closed_reason=fail_closed_reason,
+                missing_inputs=carrier_payload.get("missing_inputs", []),
+                blocking_gaps=carrier_payload.get("blocking_gaps", []),
+                advisory_gaps=carrier_payload.get("advisory_gaps", []),
+                fallback_to=fallback_to,
+                payload=carrier_payload,
             )
         )
 
