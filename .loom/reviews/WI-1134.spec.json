@@ -1,0 +1,32 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1134",
+  "decision": "fallback",
+  "kind": "spec_review",
+  "summary": "Spec review has not been recorded yet.",
+  "reviewer": "not yet assigned",
+  "reviewed_head": "46988f4267fc84db626e467a5f30c47124e8b495",
+  "reviewed_validation_summary": "No validation recorded yet.",
+  "fallback_to": "build",
+  "findings": [
+    {
+      "id": "spec-review-pending",
+      "summary": "Spec review must be recorded before implementation review.",
+      "severity": "block",
+      "rebuttal": null,
+      "disposition": {
+        "status": "rejected",
+        "summary": "Replace this placeholder with a real spec review conclusion."
+      }
+    }
+  ],
+  "blocking_issues": [
+    "Spec review must be recorded before implementation review."
+  ],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1134.md",
+    "recovery_entry": ".loom/progress/WI-1134.md",
+    "status_surface": ".loom/status/current.md"
+  }
+}

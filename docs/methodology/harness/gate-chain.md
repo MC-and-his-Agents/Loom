@@ -97,6 +97,8 @@ formal spec 路径上必须证明：
 - consistency-analysis 中 blocking / advisory / stale / missing / conflict /
   `not_applicable` 分类
 - task carrier 或 execution breakdown locator（若当前 path 声明适用）
+- `suite evidence validate` / `suite carrier validate` 的当前结果，作为
+  gate input evidence 消费
 
 以下情况不得进入正式 review：
 
@@ -106,11 +108,15 @@ formal spec 路径上必须证明：
 - evidence-map 显示当前 gate 必需 evidence 为 `missing`、`stale`、`conflict`
   或 unreadable
 - consistency-analysis 存在 blocking consistency gap
+- task carrier validation 报告 carrier truth conflict、缺 locator、状态非法、
+  relationship 非法或 Work Item / breakdown / spec / plan / validation 回链缺失
 - minimal path 用无理由 `not_applicable` 掩盖 full path 缺口
 
 `pre-review` 可以暴露 advisory gap，但必须保留 source locator、freshness
 判断和后续消费者边界。正式 review 不应成为第一次系统性发现
 spec / plan / evidence gap 的地方。
+`pre-review` 的 suite validation payload 只证明 gate 读过哪些 evidence /
+carrier 输入；它不替代正式 review 记录或 merge-ready 结果。
 
 ### 3.6 `review gate`
 
@@ -123,6 +129,9 @@ spec / plan / evidence gap 的地方。
 - 单一 review record
 - reviewer 已消费的 full suite / evidence-map / consistency-analysis locators
   与 review record backlink
+- implementation review 记录 `allow` 前必须重新消费 `suite evidence
+  validate` 与 `suite carrier validate`，并在 review record 的
+  `consumed_inputs` 中保留 evidence-map 与 task-carrier locators
 
 ### 3.7 `merge gate`
 
@@ -134,6 +143,9 @@ spec / plan / evidence gap 的地方。
 - 未出现 `review_stale`、`head_drift` 或 `missing_prerequisite_gate`
 - evidence-map 显示 behavior evidence、test evidence 与 fresh verification
   evidence 覆盖当前 `HEAD`、scope 与 recovery summary
+- `suite evidence validate` 没有 stale / missing / conflict evidence
+- `suite carrier validate` 没有 carrier truth conflict 或 tracking carrier
+  替代 Work Item、review、merge-ready、closeout truth 的信号
 - consistency-analysis 无 blocking gap、stale evidence、host state conflict 或
   deferred-as-completed
 - review record 对 full suite evidence 的消费仍 fresh

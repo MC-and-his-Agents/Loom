@@ -31,11 +31,11 @@
 | `loom suite analyze` | planned | analyze | 运行 consistency-analysis 风格的跨工件分析，只输出 finding 与 remediation direction，不修文件。 |
 | `loom suite evidence inspect` | implemented row inventory (#1127) | read-only | 读取 evidence-map locator、row、source locator、freshness 与 binding；不写 evidence-map、review、merge-ready 或 closeout truth。 |
 | `loom suite evidence scaffold` | implemented dry-run / apply (#1129) | scaffold-write | 为当前 suite 生成 evidence-map scaffold；默认 dry-run，显式 `--apply` 才写入，初始 rows 必须保持 `missing`，不得把 scaffold 当作 present evidence。 |
-| `loom suite evidence validate` | implemented evidence freshness core (#1127) | validate | 校验 behavior evidence、test evidence、fresh verification evidence 的 mapping、required row fields、freshness 与 fresh verification consumes binding。 |
+| `loom suite evidence validate` | implemented evidence freshness core + gate consumer integration (#1127/#1134) | validate | 校验 behavior evidence、test evidence、fresh verification evidence 的 mapping、required row fields、freshness 与 fresh verification consumes binding；`pre-review`、implementation `review` 与 `merge-ready` 将其作为 gate input evidence 消费。 |
 | `loom suite consistency inspect` | planned | read-only | 读取现有 consistency-analysis 结果和 gate consumer boundary。 |
 | `loom suite consistency analyze` | planned | analyze | 生成 `loom-consistency-analysis/v1` 风格分析结果，不写修复。 |
 | `loom suite carrier inspect` | implemented carrier inventory (#1131) + truth signal vocabulary (#1132) | read-only | 读取 execution breakdown unit、task carrier locator、normalized status、relationship、Work Item backlink、provenance、truth boundary 与 host truth signal vocabulary。 |
-| `loom suite carrier validate` | implemented carrier core (#1131) + host signal conflict classification (#1132) | validate | 校验 carrier locator、relationship、normalized status、Work Item / breakdown / spec / plan / validation 回链，阻止 carrier done / Project Done / checklist checked 替代 Work Item、evidence、review、merge-ready 或 closeout truth，并分类 Project/checklist/issue/PR host mirror 冲突。 |
+| `loom suite carrier validate` | implemented carrier core + host signal conflict classification + gate consumer integration (#1131/#1132/#1134) | validate | 校验 carrier locator、relationship、normalized status、Work Item / breakdown / spec / plan / validation 回链，阻止 carrier done / Project Done / checklist checked 替代 Work Item、evidence、review、merge-ready 或 closeout truth，并分类 Project/checklist/issue/PR host mirror 冲突；`pre-review`、implementation `review` 与 `merge-ready` 将其作为 gate input evidence 消费。 |
 
 `loom spec` 与 `loom plan` 保持现有 scenario surface：它们暴露 expected locators 并在 authoring carriers 缺失时 fail closed。后续若实现 `loom suite scaffold`，它可以调用或复用 `loom spec` / `loom plan` 的 locator 规则，但不得让 `loom spec` / `loom plan` 变成 full suite orchestrator。
 
@@ -225,11 +225,14 @@ Scenario skills 仍是 agent-facing entrance；CLI 是 machine interface。后�
   - 在 build readiness 前消费 `suite validate` 与 `suite carrier validate`。
   - 不把 carrier `done` 当作 evidence present。
 - `loom-pre-review`
-  - 调用 `suite evidence validate` 与 `suite consistency analyze`，把 blocking gap 挡在正式 review 前。
+  - 调用 `suite evidence validate` 与 `suite carrier validate`，把 blocking evidence / carrier gap 挡在正式 review 前。
+  - 输出 `suite-evidence-validate`、`suite-carrier-validate` steps 与 `suite_gate_validation` payload；该 payload 只是 gate input evidence，不替代 Work Item、review record、merge-ready result、closeout evidence 或 docs/source truth。
 - `loom-review`
-  - 只消费已通过 pre-review 的 suite/evidence/analysis locators，并把 consumed locators 写入单一 review record。
+  - implementation review flow 暴露同一 `suite_gate_validation` payload；`review record --decision allow` 在非 spec-review 记录前必须重新消费 `suite evidence validate` 与 `suite carrier validate`。
+  - 只消费 suite/evidence/carrier locators，并把 consumed locators 写入单一 review record；CLI validation output 不成为第二个 review verdict。
 - `loom-merge-ready`
-  - 消费 reviewed full suite evidence、fresh verification evidence、PR head / reviewed head / validation freshness 与 gate-chain 结论。
+  - 消费 reviewed full suite evidence、fresh verification evidence、carrier truth conflict classification、PR head / reviewed head / validation freshness 与 gate-chain 结论。
+  - `suite evidence validate` 的 stale evidence 或 `suite carrier validate` 的 carrier truth conflict 在 merge-ready 前 fail closed；closeout 语义不因此改变，仍消费 retained merge-ready / PR / merge / issue / Project / reconciliation evidence。
 - `loom-handoff` / `loom-resume`
   - 只展示 suite locator、blocking gap 与 next check；不得 authored suite truth。
 - `loom-closeout` / `loom-retire`
@@ -245,7 +248,7 @@ Scenario skills 仍是 agent-facing entrance；CLI 是 machine interface。后�
 4. `suite carrier inspect|validate`：#1131 读取 execution breakdown / task carrier normalized status、relationship、Work Item backlink 和 truth boundary，并校验 missing locator、invalid status/relationship、primary carrier conflict、deferred-as-completed 与 carrier truth conflict；#1132 补充 Project/checklist/issue/PR host signal conflict 分类，确保 Project Done、checklist checked、issue closed/open 与 PR merged 等宿主镜像冲突在 merge-ready 前 fail closed。
 5. `suite evidence inspect|validate`：#1127 读取并校验 evidence-map locator、row fields、freshness 与 behavior/test/fresh verification binding；#1129 实现 `suite evidence scaffold` dry-run / apply，生成 `evidence-map.md` scaffold 但不把 seed rows 标为 present。
 6. `suite consistency inspect|analyze`：输出 consistency-analysis findings、classification 与 remediation direction。
-7. Scenario skill integration：让 `loom-spec-review`、`loom-build`、`loom-pre-review`、`loom-review`、`loom-merge-ready` 消费 suite CLI JSON。
+7. Scenario skill integration：#1134 已让 `loom-pre-review`、implementation `loom-review` 与 `loom-merge-ready` 消费 `suite evidence validate` / `suite carrier validate` JSON，并把 consumed locators 保留在 gate payload / review record；`loom-build` 与 consistency analyze 仍是后续加深点。
 8. Doctor / verify / command-matrix checks：在 declared-support profile 下检查 suite command presence、schema 与 fail-closed behavior。
 9. GitHub reconciliation / closeout integration：让 closeout 可消费 suite evidence、merge commit、target branch、issue / Project 状态与 reconciliation audit。
 
