@@ -1,0 +1,20 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1124",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "General review allows WI-1124 at build checkpoint: `loom suite validate` now emits stable failure taxonomy metadata for blocking and advisory findings, exposes `failure_taxonomy` and `supported_failure_kinds`, preserves passing-suite compatibility, and keeps spec-review integration, host writes, review writes, merge-ready writes, closeout writes, `/speckit.*`, and `.specify/` out of scope.",
+  "reviewer": "Codex",
+  "reviewed_head": "f7403c206367cbabea0ab5abb5a18c4b3cdf6e46",
+  "reviewed_validation_summary": "Passed: python3 tools/check_cli_contract.py; python3 -m py_compile tools/loom.py tools/check_cli_contract.py; git diff --check; focused rg for failure_taxonomy, supported_failure_kinds, default_result, failed_layer, /speckit, .specify, spec-review, and suite validate; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; python3 .loom/bin/loom_flow.py checkpoint build --target . --item WI-1124.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1124.md",
+    "recovery_entry": ".loom/progress/WI-1124.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass"
+  }
+}

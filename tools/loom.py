@@ -2055,6 +2055,44 @@ SUITE_MAPPING_STRATEGY_MARKERS = (
 SUITE_SCENARIO_ID_PATTERN = re.compile(r"(?i)(?:^|\b)scenario\s+([A-Z][A-Z0-9_-]*\d[A-Z0-9_-]*)\b")
 SUITE_ACCEPTANCE_ID_PATTERN = re.compile(r"(?i)(?:^|\b)(?:acceptance|criterion)\s+([A-Z][A-Z0-9_-]*\d[A-Z0-9_-]*)\b|\b(A\d+|AC[-_]?\d+)\s*:")
 
+SUITE_VALIDATE_FAILURE_TAXONOMY: dict[str, dict[str, str]] = {
+    "invalid_suite_item": {
+        "default_result": "block",
+        "failed_layer": "suite-input",
+        "fallback_to": "loom suite inspect --target <repo> --item <item> --json",
+    },
+    "missing_suite_path_decision": {
+        "default_result": "block",
+        "failed_layer": "suite",
+        "fallback_to": "loom suite inspect --target <repo> --item <item> --json",
+    },
+    "missing_required_artifact": {
+        "default_result": "block",
+        "failed_layer": "suite",
+        "fallback_to": "loom suite scaffold --target <repo> --item <item> --json",
+    },
+    "invalid_not_applicable_rationale": {
+        "default_result": "block",
+        "failed_layer": "suite",
+        "fallback_to": "loom suite validate --target <repo> --item <item> --json",
+    },
+    "deferred_as_completed": {
+        "default_result": "block",
+        "failed_layer": "suite",
+        "fallback_to": "loom suite validate --target <repo> --item <item> --json",
+    },
+    "missing_spec_plan_mapping": {
+        "default_result": "block",
+        "failed_layer": "spec/plan",
+        "fallback_to": "loom suite validate --target <repo> --item <item> --json",
+    },
+    "missing_optional_suite_artifact": {
+        "default_result": "advisory",
+        "failed_layer": "suite",
+        "fallback_to": "loom suite validate --target <repo> --item <item> --json",
+    },
+}
+
 
 def suite_relevant_text_blocks(text: str) -> list[str]:
     blocks: list[str] = []
@@ -2596,10 +2634,15 @@ def suite_validate_finding(
     surface: str = "suite",
     binding: str = "suite-validate-core",
 ) -> dict[str, Any]:
+    taxonomy = SUITE_VALIDATE_FAILURE_TAXONOMY.get(failure_kind, {})
+    default_result = taxonomy.get("default_result", "block" if classification != "advisory" else "advisory")
+    failed_layer = taxonomy.get("failed_layer", surface)
     return {
         "id": gap_id,
         "classification": classification,
         "failure_kind": failure_kind,
+        "default_result": default_result,
+        "failed_layer": failed_layer,
         "surface": surface,
         "source_locator": source_locator,
         "conflicting_locator": None,
@@ -2609,6 +2652,31 @@ def suite_validate_finding(
         "remediation_direction": remediation_direction,
         "fallback_to": fallback_to,
     }
+
+
+def suite_failure_taxonomy_for_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    taxonomy_entries: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for finding in findings:
+        failure_kind = str(finding.get("failure_kind") or "")
+        if not failure_kind or failure_kind in seen:
+            continue
+        seen.add(failure_kind)
+        taxonomy = SUITE_VALIDATE_FAILURE_TAXONOMY.get(failure_kind, {})
+        taxonomy_entries.append(
+            {
+                "failure_kind": failure_kind,
+                "classification": finding.get("classification"),
+                "default_result": finding.get("default_result") or taxonomy.get("default_result"),
+                "failed_layer": finding.get("failed_layer") or taxonomy.get("failed_layer"),
+                "source_locator": finding.get("source_locator"),
+                "consumer_impact": finding.get("consumer_impact"),
+                "remediation_direction": finding.get("remediation_direction"),
+                "fallback_to": finding.get("fallback_to") or taxonomy.get("fallback_to"),
+                "binding": finding.get("binding"),
+            }
+        )
+    return taxonomy_entries
 
 
 def suite_validate_payload(target: Path, item: str) -> tuple[str, str, dict[str, Any], str | None, str | None, list[str]]:
@@ -2635,6 +2703,8 @@ def suite_validate_payload(target: Path, item: str) -> tuple[str, str, dict[str,
             "blocking_gaps": blocking_gaps,
             "advisory_gaps": [],
             "findings": blocking_gaps,
+            "failure_taxonomy": suite_failure_taxonomy_for_findings(blocking_gaps),
+            "supported_failure_kinds": sorted(SUITE_VALIDATE_FAILURE_TAXONOMY),
             "remediation_directions": [blocking_gaps[0]["remediation_direction"]],
         }
         return (
@@ -2841,6 +2911,8 @@ def suite_validate_payload(target: Path, item: str) -> tuple[str, str, dict[str,
         "blocking_gaps": blocking_gaps,
         "advisory_gaps": advisory_gaps,
         "findings": findings,
+        "failure_taxonomy": suite_failure_taxonomy_for_findings(findings),
+        "supported_failure_kinds": sorted(SUITE_VALIDATE_FAILURE_TAXONOMY),
         "remediation_directions": [entry["remediation_direction"] for entry in findings],
     }
     return summary, result, payload, failed_layer, fail_closed_reason, fallback_to

@@ -253,6 +253,52 @@ def run_suite_validate_fixture(target: Path, item: str, *, expect: int = 0) -> d
     return payload
 
 
+def assert_suite_failure_taxonomy(payload: dict[str, Any], failure_kind: str, *, result: str, layer: str) -> None:
+    suite_payload = payload.get("payload", {})
+    findings = suite_payload.get("findings", [])
+    taxonomy = suite_payload.get("failure_taxonomy", [])
+    supported = suite_payload.get("supported_failure_kinds", [])
+    if failure_kind not in supported:
+        raise AssertionError(f"suite validate supported failure kinds missing {failure_kind}")
+    matching_findings = [entry for entry in findings if entry.get("failure_kind") == failure_kind]
+    if not matching_findings:
+        raise AssertionError(f"suite validate findings missing {failure_kind}")
+    for finding in matching_findings:
+        for field in (
+            "id",
+            "classification",
+            "failure_kind",
+            "default_result",
+            "failed_layer",
+            "source_locator",
+            "binding",
+            "consumer_impact",
+            "remediation_direction",
+            "fallback_to",
+        ):
+            if field not in finding:
+                raise AssertionError(f"suite validate finding {failure_kind} missing {field}")
+        if finding.get("default_result") != result or finding.get("failed_layer") != layer:
+            raise AssertionError(f"suite validate finding taxonomy drifted for {failure_kind}")
+    taxonomy_entry = next((entry for entry in taxonomy if entry.get("failure_kind") == failure_kind), None)
+    if not taxonomy_entry:
+        raise AssertionError(f"suite validate failure_taxonomy missing {failure_kind}")
+    for field in (
+        "classification",
+        "default_result",
+        "failed_layer",
+        "source_locator",
+        "consumer_impact",
+        "remediation_direction",
+        "fallback_to",
+        "binding",
+    ):
+        if field not in taxonomy_entry:
+            raise AssertionError(f"suite validate taxonomy {failure_kind} missing {field}")
+    if taxonomy_entry.get("default_result") != result or taxonomy_entry.get("failed_layer") != layer:
+        raise AssertionError(f"suite validate failure_taxonomy values drifted for {failure_kind}")
+
+
 def write_state(target: Path, payload: dict[str, Any]) -> None:
     state_dir = target / ".loom"
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -446,6 +492,12 @@ def main() -> int:
             or suite_unknown_validate.get("advisory_gaps")
         ):
             raise AssertionError("suite validate unknown-state block payload drifted")
+        assert_suite_failure_taxonomy(
+            suite_unknown_validate,
+            "missing_suite_path_decision",
+            result="block",
+            layer="suite",
+        )
 
         suite_conflict_target = tmp / "suite-conflict"
         suite_conflict = suite_conflict_target / ".loom" / "specs" / "WI-conflict"
@@ -525,6 +577,12 @@ def main() -> int:
             )
         ):
             raise AssertionError("suite validate invalid not_applicable rationale payload drifted")
+        assert_suite_failure_taxonomy(
+            suite_minimal_invalid,
+            "invalid_not_applicable_rationale",
+            result="block",
+            layer="suite",
+        )
 
         minimal_deferred_target = tmp / "suite-minimal-deferred"
         minimal_deferred_suite = minimal_deferred_target / ".loom" / "specs" / "WI-minimal-deferred"
@@ -547,6 +605,12 @@ def main() -> int:
             )
         ):
             raise AssertionError("suite validate deferred-as-not-applicable payload drifted")
+        assert_suite_failure_taxonomy(
+            suite_minimal_deferred,
+            "deferred_as_completed",
+            result="block",
+            layer="suite",
+        )
 
         not_applicable_target = tmp / "suite-not-applicable"
         not_applicable_suite = not_applicable_target / ".loom" / "specs" / "WI-not-applicable"
@@ -681,6 +745,12 @@ def main() -> int:
             )
         ):
             raise AssertionError("suite validate missing scenario mapping payload drifted")
+        assert_suite_failure_taxonomy(
+            suite_full_missing_scenario,
+            "missing_spec_plan_mapping",
+            result="block",
+            layer="spec/plan",
+        )
 
         full_missing_acceptance_target = tmp / "suite-full-missing-acceptance-mapping"
         full_missing_acceptance_suite = full_missing_acceptance_target / ".loom" / "specs" / "WI-full-missing-acceptance"
@@ -735,6 +805,12 @@ def main() -> int:
             or suite_full_advisory_validate.get("payload", {}).get("suite_path") != "full"
         ):
             raise AssertionError("suite validate advisory payload drifted")
+        assert_suite_failure_taxonomy(
+            suite_full_advisory_validate,
+            "missing_optional_suite_artifact",
+            result="advisory",
+            layer="suite",
+        )
         full_advisory_inventory = {
             entry["artifact"]: entry
             for entry in suite_full_advisory_validate.get("payload", {}).get("artifact_inventory", [])
@@ -775,6 +851,12 @@ def main() -> int:
             )
         ):
             raise AssertionError("suite validate missing required artifact payload drifted")
+        assert_suite_failure_taxonomy(
+            suite_full_missing_validate,
+            "missing_required_artifact",
+            result="block",
+            layer="suite",
+        )
 
         full_invalid_target = tmp / "suite-full-invalid"
         full_invalid_suite = full_invalid_target / ".loom" / "specs" / "WI-full-invalid"
