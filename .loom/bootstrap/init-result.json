@@ -7,7 +7,7 @@
     "contract_version": "1.3.0"
   },
   "run": {
-    "target": "/Users/mc/dev/Loom-worktrees/1121-suite-path-artifacts",
+    "target": "/Users/mc/dev/Loom-worktrees/1137-suite-doctor",
     "scenario": "复杂既有仓库",
     "scenario_key": "complex-existing",
     "integration_mode": "companion",
@@ -76,9 +76,9 @@
     "mode": "work-item + recovery-entry + derived status-surface",
     "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
     "entry_points": {
-      "current_item_id": "WI-1134",
-      "work_item": ".loom/work-items/WI-1134.md",
-      "recovery_entry": ".loom/progress/WI-1134.md",
+      "current_item_id": "WI-1137",
+      "work_item": ".loom/work-items/WI-1137.md",
+      "recovery_entry": ".loom/progress/WI-1137.md",
       "status_surface": ".loom/status/current.md"
     }
   },

@@ -226,6 +226,18 @@ COMMANDS: list[dict[str, Any]] = [
 ]
 
 COMMAND_INDEX = {entry["command"]: entry for entry in COMMANDS}
+IMPLEMENTED_SUITE_COMMANDS = tuple(
+    entry["command"]
+    for entry in COMMANDS
+    if entry.get("domain") == "suite" and entry.get("status") == "implemented"
+)
+SUITE_SUPPORT_MARKERS = {
+    "suite-command-surface",
+    "suite-commands",
+    "loom-suite-commands",
+    "full-spec-suite-cli",
+    "full-spec-suite-cli-surface",
+}
 
 COMMAND_ROUTES: dict[str, tuple[str, tuple[str, ...]]] = {
     "init": ("loom_init.py", ()),
@@ -393,6 +405,114 @@ def command_matrix() -> list[dict[str, Any]]:
     ]
 
 
+def normalize_support_marker(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    marker = value.strip().lower().replace("_", "-")
+    return marker or None
+
+
+def extract_declared_support_entries(raw: Any) -> tuple[list[str], list[str]]:
+    markers: list[str] = []
+    suite_commands: list[str] = []
+    if raw is None:
+        return markers, suite_commands
+    if isinstance(raw, str):
+        marker = normalize_support_marker(raw)
+        if marker:
+            markers.append(marker)
+        return markers, suite_commands
+    if isinstance(raw, list):
+        for item in raw:
+            item_markers, item_commands = extract_declared_support_entries(item)
+            markers.extend(item_markers)
+            suite_commands.extend(item_commands)
+        return markers, suite_commands
+    if isinstance(raw, dict):
+        for key in ("suite_commands", "suite-command-surface", "suite_command_surface"):
+            commands = raw.get(key)
+            if isinstance(commands, list):
+                suite_commands.extend(command for command in commands if isinstance(command, str) and command.strip())
+        for key in ("surface", "support", "id", "name"):
+            marker = normalize_support_marker(raw.get(key))
+            if marker:
+                markers.append(marker)
+        for key in ("supports", "declared_support", "provided_surfaces"):
+            item_markers, item_commands = extract_declared_support_entries(raw.get(key))
+            markers.extend(item_markers)
+            suite_commands.extend(item_commands)
+    return markers, suite_commands
+
+
+def suite_support_declaration(state: Any) -> tuple[bool, list[str], list[str]]:
+    declarations: list[str] = []
+    declared_commands: list[str] = []
+    if not isinstance(state, dict):
+        return False, declarations, declared_commands
+    for key in ("declared_support", "supported_surfaces", "provides"):
+        markers, commands = extract_declared_support_entries(state.get(key))
+        declarations.extend(markers)
+        declared_commands.extend(commands)
+    layers = state.get("layers", [])
+    if isinstance(layers, list):
+        for layer in layers:
+            if not isinstance(layer, dict):
+                continue
+            for key in ("declared_support", "supported_surfaces", "provides"):
+                markers, commands = extract_declared_support_entries(layer.get(key))
+                declarations.extend(markers)
+                declared_commands.extend(commands)
+    declaration_set = set(declarations)
+    declares_surface = bool(declaration_set & SUITE_SUPPORT_MARKERS) or bool(declared_commands)
+    required_commands = sorted(set(declared_commands)) if declared_commands else list(IMPLEMENTED_SUITE_COMMANDS)
+    return declares_surface, sorted(declaration_set), required_commands
+
+
+def suite_command_surface_check(state: Any) -> dict[str, Any]:
+    declared, declarations, required_commands = suite_support_declaration(state)
+    matrix = {entry["command"]: entry for entry in command_matrix()}
+    exposed_suite_commands = sorted(command for command, entry in matrix.items() if entry.get("domain") == "suite")
+    if not declared:
+        return {
+            "name": "suite-command-surface",
+            "result": "pass",
+            "summary": "Suite command support is not declared for this installed-state; doctor does not require the suite surface.",
+            "declared_support": False,
+            "declarations": declarations,
+            "required_commands": [],
+            "exposed_commands": exposed_suite_commands,
+        }
+
+    schema_errors: list[dict[str, str]] = []
+    for command in required_commands:
+        entry = matrix.get(command)
+        if entry is None:
+            schema_errors.append({"command": command, "reason": "missing from loom help --json command matrix"})
+            continue
+        if entry.get("domain") != "suite":
+            schema_errors.append({"command": command, "reason": "command matrix domain is not suite"})
+        if entry.get("status") != "implemented":
+            schema_errors.append({"command": command, "reason": "declared suite command is not implemented"})
+        if entry.get("json") is not True:
+            schema_errors.append({"command": command, "reason": "declared suite command does not expose json=true"})
+    result = "pass" if not schema_errors else "block"
+    return {
+        "name": "suite-command-surface",
+        "result": result,
+        "summary": "Declared suite command surface matches loom help --json." if result == "pass" else "Declared suite command surface disagrees with loom help --json.",
+        "declared_support": True,
+        "declarations": declarations,
+        "required_commands": required_commands,
+        "exposed_commands": exposed_suite_commands,
+        "help_schema": "loom help --json",
+        "schema_errors": schema_errors,
+        **({} if result == "pass" else {
+            "failed_layer": "suite-command-surface",
+            "fallback_to": ["loom repair plan", "loom help --json", "loom suite inspect --target <repo> --item <item> --json"],
+        }),
+    }
+
+
 def print_usage(stream) -> None:
     stream.write(
         "usage: loom <command> [args ...]\n\n"
@@ -489,6 +609,9 @@ def build_installed_state(target: Path, *, host: str, mode: str, skill_id: str |
             "runtime_state": "ready",
             "upgrade_eligibility": "current",
             "provides": ["loom runtime wrappers", "CLI-first control-plane entry"],
+            "declared_support": {
+                "suite_commands": list(IMPLEMENTED_SUITE_COMMANDS),
+            },
             "consumes": [],
         },
         {
@@ -826,6 +949,7 @@ def doctor_payload(target: Path) -> dict[str, Any]:
                 "installed_state_path": str(path),
             }
         )
+        checks.append(suite_command_surface_check(state))
     legacy_surfaces = [item for item in detection["surfaces"] if item.get("migration_status") == "legacy" or str(item.get("kind", "")).startswith("symlink-")]
     if legacy_surfaces:
         checks.append(
@@ -837,7 +961,9 @@ def doctor_payload(target: Path) -> dict[str, Any]:
                 "fallback_to": ["loom repair plan"],
             }
         )
-    result = "pass" if all(check["result"] == "pass" for check in checks) else "block"
+    blocking_checks = [check for check in checks if check["result"] != "pass"]
+    result = "pass" if not blocking_checks else "block"
+    failed_layer = None if result == "pass" else next((check.get("failed_layer") for check in blocking_checks if check.get("failed_layer")), "installed-surface")
     return output(
         "doctor",
         result,
@@ -846,8 +972,8 @@ def doctor_payload(target: Path) -> dict[str, Any]:
         target=str(target),
         detection=detection,
         checks=checks,
-        failed_layer=None if result == "pass" else "installed-surface",
-        fail_closed_reason=None if result == "pass" else "target has missing, invalid, mixed, or legacy installed surfaces",
+        failed_layer=failed_layer,
+        fail_closed_reason=None if result == "pass" else "doctor found blocking checks: " + ", ".join(check["name"] for check in blocking_checks),
         fallback_to=None if result == "pass" else ["loom repair plan"],
     )
 

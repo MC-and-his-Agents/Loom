@@ -29,6 +29,13 @@ The CLI also reads `.loom/installed-state.v2.json` and `.loom/installed-state/in
       },
       "runtime_state": "ready",
       "upgrade_eligibility": "current",
+      "declared_support": {
+        "suite_commands": [
+          "suite inspect",
+          "suite scaffold",
+          "suite validate"
+        ]
+      },
       "provides": ["loom runtime wrappers"],
       "consumes": []
     }
@@ -57,6 +64,20 @@ Non-ready layers must include:
 
 - `failed_layer`
 - `fail_closed_reason`
+
+Layers or the top-level object may also include optional `declared_support`.
+For the full spec suite CLI surface, Loom uses:
+
+```json
+{"suite_commands": ["suite inspect", "suite validate"]}
+```
+
+`declared_support` is a doctor/verify input only. It does not make suite CLI
+output authoritative Work Item, review, merge-ready, closeout, or docs truth.
+When suite command support is not declared, `loom doctor` does not require the
+suite surface. When support is declared, `loom doctor` compares those command
+names with `loom help --json` and fails closed if the command matrix is missing
+commands or exposes the wrong domain/status/JSON capability.
 
 ## Installation Graph
 
