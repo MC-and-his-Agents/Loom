@@ -447,6 +447,27 @@ def main() -> int:
         ):
             raise AssertionError("suite validate unknown-state block payload drifted")
 
+        suite_conflict_target = tmp / "suite-conflict"
+        suite_conflict = suite_conflict_target / ".loom" / "specs" / "WI-conflict"
+        suite_conflict.mkdir(parents=True)
+        (suite_conflict / "suite-index.md").write_text("# Suite\n\n- Suite path: full\n", encoding="utf-8")
+        (suite_conflict / "spec.md").write_text("# Spec\n\n- Suite path: minimal\n", encoding="utf-8")
+        (suite_conflict / "plan.md").write_text("# Plan\n", encoding="utf-8")
+        suite_conflict_validate = run_suite_validate_fixture(suite_conflict_target, "WI-conflict", expect=1)
+        conflict_missing = suite_conflict_validate.get("payload", {}).get("missing_inputs", [])
+        if (
+            suite_conflict_validate.get("result") != "block"
+            or suite_conflict_validate.get("fail_closed_reason") != "missing_suite_path_decision"
+            or "suite_path_decision" not in conflict_missing
+            or not any(str(entry).startswith("conflicting_suite_path_decision:") for entry in conflict_missing)
+            or not any(
+                gap.get("failure_kind") == "missing_suite_path_decision"
+                and gap.get("source_locator") == ".loom/specs/WI-conflict/spec.md"
+                for gap in suite_conflict_validate.get("blocking_gaps", [])
+            )
+        ):
+            raise AssertionError("suite validate conflicting path decision payload drifted")
+
         minimal_target = tmp / "suite-minimal"
         minimal_suite = minimal_target / ".loom" / "specs" / "WI-minimal"
         minimal_suite.mkdir(parents=True)
@@ -560,6 +581,16 @@ def main() -> int:
             or suite_full_advisory_validate.get("payload", {}).get("suite_path") != "full"
         ):
             raise AssertionError("suite validate advisory payload drifted")
+        full_advisory_inventory = {
+            entry["artifact"]: entry
+            for entry in suite_full_advisory_validate.get("payload", {}).get("artifact_inventory", [])
+        }
+        for artifact in ("research.md", "contracts.md", "readiness-checklist.md"):
+            if (
+                full_advisory_inventory.get(artifact, {}).get("status") != "absent"
+                or full_advisory_inventory.get(artifact, {}).get("requirement") != "conditional"
+            ):
+                raise AssertionError(f"suite validate conditional artifact handling drifted for {artifact}")
 
         full_missing_target = tmp / "suite-full-missing"
         full_missing_suite = full_missing_target / ".loom" / "specs" / "WI-full-missing"
@@ -590,6 +621,29 @@ def main() -> int:
             )
         ):
             raise AssertionError("suite validate missing required artifact payload drifted")
+
+        full_invalid_target = tmp / "suite-full-invalid"
+        full_invalid_suite = full_invalid_target / ".loom" / "specs" / "WI-full-invalid"
+        full_invalid_suite.mkdir(parents=True)
+        (full_invalid_suite / "suite-index.md").write_text(
+            "# Full Suite Index\n\n- Schema marker: loom-full-suite-index/v1\n- Suite path: full\n",
+            encoding="utf-8",
+        )
+        (full_invalid_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
+        (full_invalid_suite / "plan.md").mkdir()
+        suite_full_invalid_validate = run_suite_validate_fixture(full_invalid_target, "WI-full-invalid", expect=1)
+        invalid_inventory = {
+            entry["artifact"]: entry
+            for entry in suite_full_invalid_validate.get("payload", {}).get("artifact_inventory", [])
+        }
+        if (
+            suite_full_invalid_validate.get("result") != "block"
+            or suite_full_invalid_validate.get("fail_closed_reason") != "missing_required_artifact"
+            or invalid_inventory.get("plan.md", {}).get("status") != "invalid"
+            or "required_artifact:.loom/specs/WI-full-invalid/plan.md"
+            not in suite_full_invalid_validate.get("payload", {}).get("missing_inputs", [])
+        ):
+            raise AssertionError("suite validate invalid required artifact payload drifted")
 
         scaffold_target = tmp / "suite-scaffold"
         scaffold_target.mkdir()

@@ -7,7 +7,7 @@
     "contract_version": "1.3.0"
   },
   "run": {
-    "target": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance",
+    "target": "/Users/mc/dev/Loom-worktrees/1121-suite-path-artifacts",
     "scenario": "复杂既有仓库",
     "scenario_key": "complex-existing",
     "integration_mode": "companion",
@@ -76,9 +76,9 @@
     "mode": "work-item + recovery-entry + derived status-surface",
     "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
     "entry_points": {
-      "current_item_id": "WI-1120",
-      "work_item": ".loom/work-items/WI-1120.md",
-      "recovery_entry": ".loom/progress/WI-1120.md",
+      "current_item_id": "WI-1121",
+      "work_item": ".loom/work-items/WI-1121.md",
+      "recovery_entry": ".loom/progress/WI-1121.md",
       "status_surface": ".loom/status/current.md"
     }
   },
