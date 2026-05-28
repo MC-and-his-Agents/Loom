@@ -27,7 +27,7 @@
 | --- | --- | --- | --- |
 | `loom suite inspect` | planned | read-only | 读取 Work Item、suite path decision、artifact inventory、delivery planning、task carrier、evidence-map、consistency-analysis 与 gate-chain locators。 |
 | `loom suite scaffold` | planned | scaffold-write | 生成或补齐 suite scaffold 文件；必须显式 `--apply`，默认只输出 plan。 |
-| `loom suite validate` | implemented core (#1120/#1121/#1122/#1123/#1124) | validate | 校验 suite path decision、core required artifact envelope、full path conditional artifact inventory、minimal / suite-level `not_applicable` rationale、spec -> plan scenario / acceptance mapping，并输出稳定 failure taxonomy findings；task carrier mapping 与 evidence-map freshness 由后续 Work Items 加深。 |
+| `loom suite validate` | implemented core + spec-review consumer integration (#1120/#1121/#1122/#1123/#1124/#1125) | validate | 校验 suite path decision、core required artifact envelope、full path conditional artifact inventory、minimal / suite-level `not_applicable` rationale、spec -> plan scenario / acceptance mapping，并输出稳定 failure taxonomy findings；`flow spec-review` / `gate spec-review` 在 formal spec review 前消费该结果；task carrier mapping 与 evidence-map freshness 由后续 Work Items 加深。 |
 | `loom suite analyze` | planned | analyze | 运行 consistency-analysis 风格的跨工件分析，只输出 finding 与 remediation direction，不修文件。 |
 | `loom suite evidence inspect` | planned | read-only | 读取 evidence-map row、source locator、freshness、HEAD / PR / merge binding。 |
 | `loom suite evidence scaffold` | planned | scaffold-write | 为当前 suite 生成 evidence-map scaffold；必须显式 `--apply`。 |
@@ -215,8 +215,9 @@ Scenario skills 仍是 agent-facing entrance；CLI 是 machine interface。后�
   - 继续输出 Story Readiness / Business Confirmation locator 或合法 `not_applicable` rationale。
   - 可调用 `loom suite inspect` 读取 path decision，不写 suite。
 - `loom-spec-review`
-  - 在 formal spec review 前调用 `loom suite validate`。
-  - full path 缺 required artifact、provenance 或 mapping 时 fail closed to spec shaping / suite scaffold dry-run。
+  - 在 formal spec review 前消费 `loom suite validate`。
+  - `flow spec-review` 输出 `suite-validate` step 与 `suite_validation` payload；`gate spec-review` 继续委托该 flow。
+  - full path 缺 required artifact、provenance 或 mapping 时 fail closed to spec shaping / suite scaffold dry-run；`review record --kind spec_review --decision allow` 不得绕过 suite validation block。
 - `loom-build`
   - 在 build readiness 前消费 `suite validate` 与 `suite carrier validate`。
   - 不把 carrier `done` 当作 evidence present。
@@ -237,7 +238,7 @@ Scenario skills 仍是 agent-facing entrance；CLI 是 machine interface。后�
 
 1. `suite inspect` read-only：读取 suite path decision、artifact inventory、core locators 与 host binding。
 2. `suite scaffold` dry-run / apply：基于 docs scaffold 生成 suite artifacts，默认 fail closed without `--apply`。
-3. `suite validate`：#1120 先校验 full/minimal/not_applicable path 与 core required artifacts；#1121 加深 path decision 合法性、required artifact 普通文件约束与 full path conditional artifact inventory；#1122 校验 authored `not_applicable` rationale、consumer boundary、recheck condition，并阻止 `deferred` 被当作 `not_applicable` 消费；#1123 校验 `spec.md` scenario / acceptance id 是否被 `plan.md` validation / test strategy 逐项消费；#1124 输出稳定 machine-readable failure taxonomy findings；后续 Work Item 继续接入 spec-review integration。
+3. `suite validate`：#1120 先校验 full/minimal/not_applicable path 与 core required artifacts；#1121 加深 path decision 合法性、required artifact 普通文件约束与 full path conditional artifact inventory；#1122 校验 authored `not_applicable` rationale、consumer boundary、recheck condition，并阻止 `deferred` 被当作 `not_applicable` 消费；#1123 校验 `spec.md` scenario / acceptance id 是否被 `plan.md` validation / test strategy 逐项消费；#1124 输出稳定 machine-readable failure taxonomy findings；#1125 接入 `flow spec-review` / `gate spec-review` 和 spec-review record allow gate。
 4. `suite carrier inspect|validate`：读取 execution breakdown / task carrier normalized status 与 truth conflict。
 5. `suite evidence inspect|scaffold|validate`：生成并校验 evidence-map locator、row fields、freshness 与 evidence binding。
 6. `suite consistency inspect|analyze`：输出 consistency-analysis findings、classification 与 remediation direction。
