@@ -138,10 +138,18 @@ loom suite scaffold
 
 `suite scaffold` defaults to dry-run, emits `mutates: false`, and plans suite artifacts under `.loom/specs/<item>/`. Its JSON reports planned writes, source templates, consumed locators, required versus conditional artifacts, overwrite policy, `apply_required`, rollback note, and `created_locators`. #1115 implements `--apply` for repo-local minimal scaffold writes: missing `spec.md` and `plan.md` files are created from the Loom templates, existing files are preserved, and the response reports only the locators actually created. #1116 implements `--suite full` for the standard full suite scaffold artifacts: `suite-index.md`, `spec.md`, `plan.md`, `research.md`, `contracts.md`, and `readiness-checklist.md`. Traversal items, absolute items, symlink paths, and non-file artifact placeholders fail closed before writes.
 
+#1120 implements the first validate command:
+
+```text
+loom suite validate
+```
+
+`suite validate` is read-only. It reuses the suite inspect state and returns a readiness envelope with `pass`, `block`, `advisory`, or `not_applicable`, plus `failed_layer`, `fail_closed_reason`, `missing_inputs`, `blocking_gaps`, and `advisory_gaps`. The #1120 slice is intentionally core-only: missing suite path decisions and missing required suite artifacts block; later evidence, consistency, and carrier artifacts can appear as advisory gaps until their owning Work Items deepen validation. It does not write suite files, review truth, merge-ready truth, closeout truth, host state, generated skills, `/speckit.*`, or `.specify/` surfaces.
+
 The remaining suite namespace stays planned until later implementation Work Items add those commands to `loom help --json` and the CLI contract checks. The planned namespace is documented in [full-spec-suite-cli-surface.md](./full-spec-suite-cli-surface.md):
 
 ```text
-loom suite validate|analyze
+loom suite analyze
 loom suite evidence inspect|scaffold|validate
 loom suite consistency inspect|analyze
 loom suite carrier inspect|validate
@@ -215,3 +223,5 @@ For #1109-#1114 it also checks:
 - `suite scaffold --apply` creates only missing scaffold files for the requested suite path, reports created locators, and preserves existing files;
 - `suite scaffold --apply` fails closed for traversal items, absolute items, symlink paths, and non-file artifact placeholders before writing artifacts;
 - `suite scaffold --suite full` plans and applies the standard six full-suite scaffold artifacts without creating evidence-map, consistency-analysis, task-carrier, review, merge-ready, closeout, generated skill, `/speckit.*`, or `.specify/` surfaces.
+- `suite validate` is declared as an implemented suite command in `loom help --json`;
+- `suite validate` stays read-only and covers pass, block, advisory, and not_applicable fixtures with structured readiness gaps.

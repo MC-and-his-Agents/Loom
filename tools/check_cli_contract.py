@@ -115,6 +115,7 @@ REQUIRED_COMMANDS = {
     "skills release-check",
     "suite inspect",
     "suite scaffold",
+    "suite validate",
 }
 
 
@@ -234,6 +235,21 @@ def run_suite_scaffold_apply_fixture(target: Path, item: str, extra_args: list[s
         raise AssertionError(f"suite scaffold apply envelope drifted for {item}")
     if payload.get("item_id") != item:
         raise AssertionError(f"suite scaffold apply item binding drifted for {item}")
+    return payload
+
+
+def run_suite_validate_fixture(target: Path, item: str, *, expect: int = 0) -> dict[str, Any]:
+    before = snapshot_tree(target)
+    _, payload = run_json(["suite", "validate", "--target", str(target), "--item", item, "--json"], expect=expect)
+    after = snapshot_tree(target)
+    if before != after:
+        raise AssertionError(f"suite validate mutated fixture target for {item}")
+    if payload.get("command") != "suite validate" or payload.get("mutates") is not False:
+        raise AssertionError(f"suite validate envelope drifted for {item}")
+    if payload.get("item_id") != item:
+        raise AssertionError(f"suite validate item binding drifted for {item}")
+    if not isinstance(payload.get("blocking_gaps"), list) or not isinstance(payload.get("advisory_gaps"), list):
+        raise AssertionError(f"suite validate gaps are not structured for {item}")
     return payload
 
 
@@ -402,6 +418,8 @@ def main() -> int:
         raise AssertionError("suite inspect must be declared in help matrix for #1111")
     if matrix["suite scaffold"]["status"] != "implemented" or matrix["suite scaffold"]["domain"] != "suite":
         raise AssertionError("suite scaffold must be declared in help matrix for #1114")
+    if matrix["suite validate"]["status"] != "implemented" or matrix["suite validate"]["domain"] != "suite":
+        raise AssertionError("suite validate must be declared in help matrix for #1120")
 
     _, version_payload = run_json(["version", "--json"], expect=0)
     if version_payload["result"] != "pass" or not version_payload["versions"]["repo_version"]:
@@ -418,6 +436,16 @@ def main() -> int:
             or "suite_path_decision" not in suite_unknown.get("payload", {}).get("missing_inputs", [])
         ):
             raise AssertionError("suite inspect unknown-state payload drifted")
+        suite_unknown_validate = run_suite_validate_fixture(suite_unknown_target, "WI-1109", expect=1)
+        if (
+            suite_unknown_validate.get("result") != "block"
+            or suite_unknown_validate.get("failed_layer") != "suite"
+            or suite_unknown_validate.get("fail_closed_reason") != "missing_suite_path_decision"
+            or "suite_path_decision" not in suite_unknown_validate.get("missing_inputs", [])
+            or not suite_unknown_validate.get("blocking_gaps")
+            or suite_unknown_validate.get("advisory_gaps")
+        ):
+            raise AssertionError("suite validate unknown-state block payload drifted")
 
         minimal_target = tmp / "suite-minimal"
         minimal_suite = minimal_target / ".loom" / "specs" / "WI-minimal"
@@ -437,6 +465,18 @@ def main() -> int:
             or minimal_payload.get("missing_inputs")
         ):
             raise AssertionError("suite inspect minimal locator payload drifted")
+        suite_minimal_validate = run_suite_validate_fixture(minimal_target, "WI-minimal")
+        if (
+            suite_minimal_validate.get("result") != "pass"
+            or suite_minimal_validate.get("failed_layer") is not None
+            or suite_minimal_validate.get("fail_closed_reason") is not None
+            or suite_minimal_validate.get("missing_inputs")
+            or suite_minimal_validate.get("blocking_gaps")
+            or suite_minimal_validate.get("advisory_gaps")
+            or "docs/methodology/harness/full-spec-suite-cli-surface.md"
+            not in suite_minimal_validate.get("payload", {}).get("consumed_contracts", [])
+        ):
+            raise AssertionError("suite validate minimal pass payload drifted")
 
         not_applicable_target = tmp / "suite-not-applicable"
         not_applicable_suite = not_applicable_target / ".loom" / "specs" / "WI-not-applicable"
@@ -450,6 +490,13 @@ def main() -> int:
             or not_applicable_payload.get("missing_inputs")
         ):
             raise AssertionError("suite inspect not_applicable payload drifted")
+        suite_not_applicable_validate = run_suite_validate_fixture(not_applicable_target, "WI-not-applicable", expect=1)
+        if (
+            suite_not_applicable_validate.get("result") != "not_applicable"
+            or suite_not_applicable_validate.get("payload", {}).get("suite_path") != "not_applicable"
+            or suite_not_applicable_validate.get("blocking_gaps")
+        ):
+            raise AssertionError("suite validate not_applicable payload drifted")
 
         full_target = tmp / "suite-full"
         full_suite = full_target / ".loom" / "specs" / "WI-full"
@@ -488,6 +535,31 @@ def main() -> int:
                 raise AssertionError("suite inspect emitted absolute artifact locator")
         if full_payload.get("task_carrier_locators") != [".loom/specs/WI-full/task-carrier.md"]:
             raise AssertionError("suite inspect task carrier locators drifted")
+        suite_full_validate = run_suite_validate_fixture(full_target, "WI-full")
+        if (
+            suite_full_validate.get("result") != "pass"
+            or suite_full_validate.get("blocking_gaps")
+            or suite_full_validate.get("advisory_gaps")
+        ):
+            raise AssertionError("suite validate full pass payload drifted")
+
+        full_advisory_target = tmp / "suite-full-advisory"
+        full_advisory_suite = full_advisory_target / ".loom" / "specs" / "WI-full-advisory"
+        full_advisory_suite.mkdir(parents=True)
+        (full_advisory_suite / "suite-index.md").write_text(
+            "# Full Suite Index\n\n- Schema marker: loom-full-suite-index/v1\n- Suite path: full\n",
+            encoding="utf-8",
+        )
+        (full_advisory_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
+        (full_advisory_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
+        suite_full_advisory_validate = run_suite_validate_fixture(full_advisory_target, "WI-full-advisory", expect=1)
+        if (
+            suite_full_advisory_validate.get("result") != "advisory"
+            or suite_full_advisory_validate.get("blocking_gaps")
+            or not suite_full_advisory_validate.get("advisory_gaps")
+            or suite_full_advisory_validate.get("payload", {}).get("suite_path") != "full"
+        ):
+            raise AssertionError("suite validate advisory payload drifted")
 
         full_missing_target = tmp / "suite-full-missing"
         full_missing_suite = full_missing_target / ".loom" / "specs" / "WI-full-missing"
@@ -507,6 +579,17 @@ def main() -> int:
             or missing_inventory.get("plan.md", {}).get("status") != "missing"
         ):
             raise AssertionError("suite inspect missing required artifact payload drifted")
+        suite_full_missing_validate = run_suite_validate_fixture(full_missing_target, "WI-full-missing", expect=1)
+        if (
+            suite_full_missing_validate.get("result") != "block"
+            or suite_full_missing_validate.get("failed_layer") != "suite"
+            or suite_full_missing_validate.get("fail_closed_reason") != "missing_required_artifact"
+            or not any(
+                gap.get("failure_kind") == "missing_required_artifact"
+                for gap in suite_full_missing_validate.get("blocking_gaps", [])
+            )
+        ):
+            raise AssertionError("suite validate missing required artifact payload drifted")
 
         scaffold_target = tmp / "suite-scaffold"
         scaffold_target.mkdir()

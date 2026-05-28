@@ -179,6 +179,13 @@ COMMANDS: list[dict[str, Any]] = [
         "json": True,
         "summary": "Plan or explicitly apply repo-local minimal or full spec suite scaffold writes.",
     },
+    {
+        "command": "suite validate",
+        "domain": "suite",
+        "status": "implemented",
+        "json": True,
+        "summary": "Validate the current suite path decision and core readiness envelope without mutating files.",
+    },
 ]
 
 COMMAND_INDEX = {entry["command"]: entry for entry in COMMANDS}
@@ -362,6 +369,7 @@ def print_usage(stream) -> None:
         "  resume, spec-review, review, merge-ready, check\n"
         "  suite inspect --target <repo> --item <item> [--json]\n"
         "  suite scaffold --target <repo> --item <item> [--suite minimal|full] [--apply] [--json]\n\n"
+        "  suite validate --target <repo> --item <item> [--json]\n\n"
         "Use `loom help --json` for the full frozen command matrix, including reserved commands.\n"
     )
 
@@ -1961,6 +1969,22 @@ SUITE_SCAFFOLD_CONTRACT_LOCATORS = (
     "docs/methodology/templates/spec-suite.md",
 )
 
+SUITE_VALIDATE_CONTRACT_LOCATORS = (
+    "docs/methodology/harness/full-spec-suite-cli-surface.md",
+    "docs/methodology/templates/spec-suite.md",
+)
+
+SUITE_VALIDATE_ADVISORY_ARTIFACTS = {
+    "full": (
+        "evidence-map.md",
+        "consistency-analysis.md",
+        "execution-breakdown.md",
+        "task-carrier",
+    ),
+    "minimal": (),
+    "not_applicable": (),
+}
+
 
 def suite_scaffold_payload(target: Path, item: str, suite_path: str, *, apply: bool) -> tuple[str, dict[str, Any], str | None]:
     item_error = suite_item_segment_error(item)
@@ -2199,6 +2223,159 @@ def suite_inspect_payload(target: Path, item: str | None) -> tuple[str, dict[str
     return summary, payload
 
 
+def suite_validate_finding(
+    *,
+    gap_id: str,
+    classification: str,
+    failure_kind: str,
+    source_locator: str | None,
+    consumer_impact: str,
+    remediation_direction: str,
+    fallback_to: str,
+) -> dict[str, Any]:
+    return {
+        "id": gap_id,
+        "classification": classification,
+        "failure_kind": failure_kind,
+        "surface": "suite",
+        "source_locator": source_locator,
+        "conflicting_locator": None,
+        "freshness": "missing" if classification == "missing" else None,
+        "binding": "suite-validate-core",
+        "consumer_impact": consumer_impact,
+        "remediation_direction": remediation_direction,
+        "fallback_to": fallback_to,
+    }
+
+
+def suite_validate_payload(target: Path, item: str) -> tuple[str, str, dict[str, Any], str | None, str | None, list[str]]:
+    item_error = suite_item_segment_error(item)
+    if item_error:
+        blocking_gaps = [
+            suite_validate_finding(
+                gap_id="suite-validate-invalid-item",
+                classification="blocking",
+                failure_kind="invalid_suite_item",
+                source_locator=None,
+                consumer_impact="suite validation cannot bind an unsafe item segment",
+                remediation_direction="Use a single repo-local Work Item id as the suite item.",
+                fallback_to="loom suite inspect --target <repo> --item <item> --json",
+            )
+        ]
+        payload = {
+            "suite_path": "unknown",
+            "suite_locator": None,
+            "path_decision_locator": None,
+            "artifact_inventory": [],
+            "consumed_contracts": list(SUITE_VALIDATE_CONTRACT_LOCATORS),
+            "missing_inputs": [item_error],
+            "blocking_gaps": blocking_gaps,
+            "advisory_gaps": [],
+            "findings": blocking_gaps,
+            "remediation_directions": [blocking_gaps[0]["remediation_direction"]],
+        }
+        return (
+            "Suite validate failed closed before resolving artifact paths.",
+            "block",
+            payload,
+            "suite-input",
+            "invalid_suite_item",
+            ["loom suite inspect --target <repo> --item <item> --json"],
+        )
+
+    inspect_summary, inspect_payload = suite_inspect_payload(target, item)
+    suite_path = inspect_payload.get("suite_path", "unknown")
+    missing_inputs = list(inspect_payload.get("missing_inputs", []))
+    blocking_gaps: list[dict[str, Any]] = []
+    advisory_gaps: list[dict[str, Any]] = []
+
+    for missing in missing_inputs:
+        if missing == "suite_path_decision":
+            blocking_gaps.append(
+                suite_validate_finding(
+                    gap_id="suite-validate-missing-suite-path-decision",
+                    classification="missing",
+                    failure_kind="missing_suite_path_decision",
+                    source_locator=None,
+                    consumer_impact="spec review cannot determine whether the suite is full, minimal, or not_applicable",
+                    remediation_direction="Author a suite path decision before validating readiness.",
+                    fallback_to="loom suite inspect --target <repo> --item <item> --json",
+                )
+            )
+        elif missing.startswith("required_artifact:"):
+            locator = missing.split(":", 1)[1]
+            blocking_gaps.append(
+                suite_validate_finding(
+                    gap_id=f"suite-validate-missing-{Path(locator).name}",
+                    classification="missing",
+                    failure_kind="missing_required_artifact",
+                    source_locator=locator,
+                    consumer_impact="spec review readiness cannot pass while a required suite artifact is absent",
+                    remediation_direction="Run suite scaffold dry-run or author the missing repo-relative artifact.",
+                    fallback_to="loom suite scaffold --target <repo> --item <item> --json",
+                )
+            )
+
+    artifact_inventory = {
+        entry.get("artifact"): entry
+        for entry in inspect_payload.get("artifact_inventory", [])
+        if isinstance(entry, dict)
+    }
+    for artifact in SUITE_VALIDATE_ADVISORY_ARTIFACTS.get(str(suite_path), ()):
+        if artifact_inventory.get(artifact, {}).get("status") == "present":
+            continue
+        locator_field = "task_carrier_locators" if artifact == "task-carrier" else artifact.replace("-", "_").removesuffix(".md") + "_locator"
+        locator_value = inspect_payload.get(locator_field)
+        if locator_value:
+            continue
+        expected_locator = f".loom/specs/{item}/{artifact if artifact != 'task-carrier' else 'task-carrier.md'}"
+        advisory_gaps.append(
+            suite_validate_finding(
+                gap_id=f"suite-validate-advisory-missing-{artifact.replace('.', '-').replace('_', '-')}",
+                classification="advisory",
+                failure_kind="missing_optional_suite_artifact",
+                source_locator=expected_locator,
+                consumer_impact="core suite validation can continue, but later evidence/carrier checks may require this artifact",
+                remediation_direction="Leave for the owning evidence, consistency, or carrier validation Work Item unless the current consumer requires it.",
+                fallback_to="loom suite validate --target <repo> --item <item> --json",
+            )
+        )
+
+    findings = [*blocking_gaps, *advisory_gaps]
+    result = "pass"
+    failed_layer: str | None = None
+    fail_closed_reason: str | None = None
+    fallback_to = ["loom suite inspect --target <repo> --item <item> --json"]
+    if blocking_gaps:
+        result = "block"
+        failed_layer = "suite"
+        fail_closed_reason = blocking_gaps[0]["failure_kind"]
+        fallback_to = [blocking_gaps[0]["fallback_to"]]
+        summary = "Suite validate found blocking readiness gaps."
+    elif suite_path == "not_applicable":
+        result = "not_applicable"
+        summary = "Suite validate found a not_applicable suite path decision."
+    elif advisory_gaps:
+        result = "advisory"
+        summary = "Suite validate found no core blocking gaps, but later suite checks still have advisory gaps."
+    else:
+        summary = {
+            "full": "Suite validate found a full suite path with core required artifacts present.",
+            "minimal": "Suite validate found a minimal suite path with core required artifacts present.",
+        }.get(str(suite_path), inspect_summary)
+
+    payload = {
+        **inspect_payload,
+        "consumed_contracts": list(SUITE_VALIDATE_CONTRACT_LOCATORS),
+        "missing_inputs": missing_inputs,
+        "blocking_gaps": blocking_gaps,
+        "advisory_gaps": advisory_gaps,
+        "findings": findings,
+        "remediation_directions": [entry["remediation_direction"] for entry in findings],
+    }
+    return summary, result, payload, failed_layer, fail_closed_reason, fallback_to
+
+
 def handle_suite(argv: list[str]) -> int:
     if not argv:
         return emit(
@@ -2214,7 +2391,7 @@ def handle_suite(argv: list[str]) -> int:
         )
 
     action = argv[0]
-    if action not in {"inspect", "scaffold"}:
+    if action not in {"inspect", "scaffold", "validate"}:
         return emit(
             output(
                 f"suite {action}",
@@ -2224,6 +2401,51 @@ def handle_suite(argv: list[str]) -> int:
                 failed_layer="suite-input",
                 fail_closed_reason=f"unsupported suite action: {action}",
                 fallback_to=["loom suite inspect --target <repo> --item <item> --json"],
+            )
+        )
+
+    if action == "validate":
+        parser = argparse.ArgumentParser(prog="loom suite validate")
+        parser.add_argument("--target", default=".")
+        parser.add_argument("--item")
+        parser.add_argument("--json", action="store_true")
+        args = parser.parse_args(argv[1:])
+        target = resolve_target(args.target)
+        if not target.exists():
+            return emit(block_target("suite validate", target, "target path does not exist"))
+        if not args.item:
+            return emit(
+                output(
+                    "suite validate",
+                    "block",
+                    target=str(target),
+                    item_id=args.item,
+                    summary="Suite validate requires a Work Item id.",
+                    mutates=False,
+                    failed_layer="suite-input",
+                    fail_closed_reason="missing_work_item",
+                    missing_inputs=["missing_work_item"],
+                    blocking_gaps=[],
+                    advisory_gaps=[],
+                    fallback_to=["loom suite validate --target <repo> --item <item> --json"],
+                )
+            )
+        summary, result, validate_payload, failed_layer, fail_closed_reason, fallback_to = suite_validate_payload(target, args.item)
+        return emit(
+            output(
+                "suite validate",
+                result,
+                target=str(target),
+                item_id=args.item,
+                summary=summary,
+                mutates=False,
+                failed_layer=failed_layer,
+                fail_closed_reason=fail_closed_reason,
+                missing_inputs=validate_payload.get("missing_inputs", []),
+                blocking_gaps=validate_payload.get("blocking_gaps", []),
+                advisory_gaps=validate_payload.get("advisory_gaps", []),
+                fallback_to=fallback_to,
+                payload=validate_payload,
             )
         )
 
