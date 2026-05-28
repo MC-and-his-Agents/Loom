@@ -592,6 +592,24 @@ def main() -> int:
             "task-carrier.md",
         ):
             (full_suite / name).write_text(f"# {name}\n", encoding="utf-8")
+        (full_suite / "spec.md").write_text(
+            "# Spec\n\n"
+            "## Key Scenarios\n\n"
+            "### Scenario S1\n\nGiven a full suite fixture\nWhen validation runs\nThen scenario mapping is consumed\n\n"
+            "## Acceptance Criteria\n\n"
+            "- [ ] A1: Full suite validation can consume test mapping\n",
+            encoding="utf-8",
+        )
+        (full_suite / "plan.md").write_text(
+            "# Plan\n\n"
+            "## Validation\n\n"
+            "- Scenario validation mapping:\n"
+            "  - S1 -> structural: python3 tools/check_cli_contract.py\n\n"
+            "## Test Strategy\n\n"
+            "- Acceptance test mapping:\n"
+            "  - A1 -> test evidence: python3 tools/check_cli_contract.py\n",
+            encoding="utf-8",
+        )
         suite_full = run_suite_inspect_fixture(full_target, "WI-full")
         full_payload = suite_full.get("payload", {})
         full_inventory = {entry["artifact"]: entry for entry in full_payload.get("artifact_inventory", [])}
@@ -618,8 +636,87 @@ def main() -> int:
             suite_full_validate.get("result") != "pass"
             or suite_full_validate.get("blocking_gaps")
             or suite_full_validate.get("advisory_gaps")
+            or suite_full_validate.get("payload", {}).get("spec_plan_mapping", {}).get("missing_scenarios")
+            or suite_full_validate.get("payload", {}).get("spec_plan_mapping", {}).get("missing_acceptance")
         ):
             raise AssertionError("suite validate full pass payload drifted")
+
+        full_missing_scenario_target = tmp / "suite-full-missing-scenario-mapping"
+        full_missing_scenario_suite = full_missing_scenario_target / ".loom" / "specs" / "WI-full-missing-scenario"
+        full_missing_scenario_suite.mkdir(parents=True)
+        (full_missing_scenario_suite / "suite-index.md").write_text(
+            "# Full Suite Index\n\n- Schema marker: loom-full-suite-index/v1\n- Suite path: full\n",
+            encoding="utf-8",
+        )
+        (full_missing_scenario_suite / "spec.md").write_text(
+            "# Spec\n\n"
+            "## Key Scenarios\n\n"
+            "### Scenario S1\n\nGiven a missing mapping fixture\nWhen validation runs\nThen it blocks\n\n"
+            "## Acceptance Criteria\n\n"
+            "- [ ] A1: Acceptance still maps\n",
+            encoding="utf-8",
+        )
+        (full_missing_scenario_suite / "plan.md").write_text(
+            "# Plan\n\n"
+            "## Test Strategy\n\n"
+            "- Acceptance test mapping:\n"
+            "  - A1 -> manual evidence: issue closeout comment\n",
+            encoding="utf-8",
+        )
+        suite_full_missing_scenario = run_suite_validate_fixture(
+            full_missing_scenario_target,
+            "WI-full-missing-scenario",
+            expect=1,
+        )
+        if (
+            suite_full_missing_scenario.get("result") != "block"
+            or suite_full_missing_scenario.get("failed_layer") != "spec/plan"
+            or suite_full_missing_scenario.get("fail_closed_reason") != "missing_spec_plan_mapping"
+            or "S1"
+            not in suite_full_missing_scenario.get("payload", {}).get("spec_plan_mapping", {}).get("missing_scenarios", [])
+            or not any(
+                gap.get("failure_kind") == "missing_spec_plan_mapping"
+                and gap.get("surface") == "spec/plan"
+                for gap in suite_full_missing_scenario.get("blocking_gaps", [])
+            )
+        ):
+            raise AssertionError("suite validate missing scenario mapping payload drifted")
+
+        full_missing_acceptance_target = tmp / "suite-full-missing-acceptance-mapping"
+        full_missing_acceptance_suite = full_missing_acceptance_target / ".loom" / "specs" / "WI-full-missing-acceptance"
+        full_missing_acceptance_suite.mkdir(parents=True)
+        (full_missing_acceptance_suite / "suite-index.md").write_text(
+            "# Full Suite Index\n\n- Schema marker: loom-full-suite-index/v1\n- Suite path: full\n",
+            encoding="utf-8",
+        )
+        (full_missing_acceptance_suite / "spec.md").write_text(
+            "# Spec\n\n"
+            "## Key Scenarios\n\n"
+            "### Scenario S1\n\nGiven an acceptance mapping fixture\nWhen validation runs\nThen it blocks\n\n"
+            "## Acceptance Criteria\n\n"
+            "- [ ] A1: Acceptance must map to a test strategy\n",
+            encoding="utf-8",
+        )
+        (full_missing_acceptance_suite / "plan.md").write_text(
+            "# Plan\n\n"
+            "## Validation\n\n"
+            "- Scenario validation mapping:\n"
+            "  - S1 -> automated: python3 tools/check_cli_contract.py\n",
+            encoding="utf-8",
+        )
+        suite_full_missing_acceptance = run_suite_validate_fixture(
+            full_missing_acceptance_target,
+            "WI-full-missing-acceptance",
+            expect=1,
+        )
+        if (
+            suite_full_missing_acceptance.get("result") != "block"
+            or suite_full_missing_acceptance.get("failed_layer") != "spec/plan"
+            or suite_full_missing_acceptance.get("fail_closed_reason") != "missing_spec_plan_mapping"
+            or "A1"
+            not in suite_full_missing_acceptance.get("payload", {}).get("spec_plan_mapping", {}).get("missing_acceptance", [])
+        ):
+            raise AssertionError("suite validate missing acceptance mapping payload drifted")
 
         full_advisory_target = tmp / "suite-full-advisory"
         full_advisory_suite = full_advisory_target / ".loom" / "specs" / "WI-full-advisory"
