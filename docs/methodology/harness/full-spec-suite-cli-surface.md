@@ -186,9 +186,10 @@ Validate / analyze finding fields:
 | `missing_evidence_map` | block | evidence_map | 当前 gate 需要 evidence-map 但 locator 缺失。 | `loom suite evidence scaffold` dry-run |
 | `stale_evidence` | block | evidence_map | evidence 绑定旧 head、旧 scope、旧 validation summary 或旧 PR head。 | 重新验证并更新 evidence locator |
 | `missing_fresh_verification_evidence` | block | evidence_map | behavior/test evidence 无法组合成当前对象的 fresh evidence。 | `loom suite evidence validate` |
+| `missing_source_locator` | block | evidence_map | present evidence 指向的 repo-local source locator 不存在或不可读。 | 修复 source locator 或重新验证 |
 | `blocking_consistency_gap` | block | consistency_analysis | consistency-analysis 存在 blocking finding。 | `loom suite consistency analyze` |
 | `host_state_conflict` | block | host_state | issue、PR、Project、checks、branch 或 merge state 冲突。 | `loom reconcile` dry-run |
-| `head_or_pr_drift` | block | host_state | current head、reviewed head、PR head 或 merge commit 包含关系不一致。 | 回到 review 或 merge gate |
+| `head_or_pr_drift` | block | evidence_map / host_state | current head、reviewed head、PR head 或 merge commit 包含关系不一致。 | 回到 review 或 merge gate |
 | `missing_prerequisite_gate` | block | gate_chain | gate chain 缺前序结论。 | 对应 `loom gate ...` |
 | `mutating_action_requires_apply` | block | cli | scaffold-write 或 host write 未显式 `--apply`。 | 重跑 dry-run 或显式 apply |
 | `reserved_surface` | block | cli | planned command 尚未实现。 | 当前 docs/source workflow |
