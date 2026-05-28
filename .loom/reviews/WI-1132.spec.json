@@ -1,0 +1,28 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1132",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review allows WI-1132: the suite defines host carrier conflict boundaries for Project, checklist, issue, PR, and active recovery truth, keeps host state as tracking-only evidence, and maps each acceptance criterion to focused CLI contract and structural validation without adding /speckit or .specify surfaces.",
+  "reviewer": "Codex",
+  "reviewed_head": "f44b0206990d6ced72db246a7dd7869ddeee48e0",
+  "reviewed_validation_summary": "Passed: python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py; python3 tools/loom.py suite validate --target . --item WI-1132 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1132 --json; python3 tools/loom.py suite carrier inspect --target . --item WI-1132 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1132 --json; git diff --check; focused rg for host_signal_conflicts, truth_signal_classifications, carrier_truth_conflict, /speckit, and .specify; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py state-check --target . --item WI-1132; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1132.md",
+    "recovery_entry": ".loom/progress/WI-1132.md",
+    "status_surface": ".loom/status/current.md",
+    "spec": ".loom/specs/WI-1132/spec.md",
+    "plan": ".loom/specs/WI-1132/plan.md",
+    "implementation_contract": ".loom/specs/WI-1132/implementation-contract.md",
+    "evidence_map": ".loom/specs/WI-1132/evidence-map.md",
+    "execution_breakdown": ".loom/specs/WI-1132/execution-breakdown.md",
+    "task_carrier": ".loom/specs/WI-1132/task-carrier.md",
+    "suite_validation": "python3 tools/loom.py suite validate --target . --item WI-1132 --json",
+    "suite_carrier_validation": "python3 tools/loom.py suite carrier validate --target . --item WI-1132 --json",
+    "cli_contract": "python3 tools/check_cli_contract.py"
+  }
+}

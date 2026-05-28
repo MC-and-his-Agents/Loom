@@ -2210,6 +2210,20 @@ SUITE_CARRIER_STATUS_VALUES = {
     "not_applicable",
 }
 SUITE_CARRIER_RELATIONSHIPS = {"primary", "mirror", "evidence_locator", "not_applicable"}
+SUITE_CARRIER_TRUTH_SIGNALS = {
+    "carrier_done",
+    "project_done",
+    "project_in_progress",
+    "checklist_checked",
+    "evidence_missing",
+    "issue_open",
+    "issue_closed",
+    "pr_open",
+    "pr_merged",
+    "work_item_open",
+    "work_item_terminal",
+}
+SUITE_CARRIER_TERMINAL_CHECKPOINTS = {"closed", "merged", "retired", "complete", "completed"}
 
 
 def suite_relevant_text_blocks(text: str) -> list[str]:
@@ -3576,6 +3590,7 @@ def suite_carrier_inspect_payload(target: Path, item: str) -> tuple[str, dict[st
         "recognized_carrier_types": sorted(SUITE_CARRIER_TYPES),
         "normalized_status_values": sorted(SUITE_CARRIER_STATUS_VALUES),
         "relationship_values": sorted(SUITE_CARRIER_RELATIONSHIPS),
+        "recognized_truth_signals": sorted(SUITE_CARRIER_TRUTH_SIGNALS),
         "consumed_contracts": list(SUITE_CARRIER_CONTRACT_LOCATORS),
         "truth_boundary": {
             "carrier_done_satisfies_work_item_done": False,
@@ -3599,12 +3614,153 @@ def suite_carrier_truth_claim_text(row: dict[str, Any]) -> str:
     return " ".join(
         str(row.get(field) or "")
         for field in (
+            "carrier_locator",
             "source_value",
+            "normalized_status",
             "provenance",
             "freshness_rule",
             "relationship",
         )
     ).lower()
+
+
+def read_markdown_bullet_field(path: Path, field: str) -> str:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return ""
+    prefix = f"- {field}:"
+    for line in lines:
+        if line.startswith(prefix):
+            return line.removeprefix(prefix).strip()
+    return ""
+
+
+def suite_carrier_work_item_truth(target: Path, item: str) -> dict[str, Any]:
+    recovery_path = target / ".loom" / "progress" / f"{item}.md"
+    checkpoint = normalize_carrier_token(read_markdown_bullet_field(recovery_path, "Current Checkpoint"))
+    return {
+        "work_item_locator": f".loom/work-items/{item}.md",
+        "work_item_present": (target / ".loom" / "work-items" / f"{item}.md").is_file(),
+        "recovery_locator": f".loom/progress/{item}.md",
+        "recovery_present": recovery_path.is_file(),
+        "recovery_checkpoint": checkpoint or None,
+        "recovery_terminal": checkpoint in SUITE_CARRIER_TERMINAL_CHECKPOINTS,
+    }
+
+
+def suite_carrier_signal_set(row: dict[str, Any]) -> set[str]:
+    text = suite_carrier_truth_claim_text(row)
+    carrier_type = str(row.get("carrier_type") or "")
+    status = str(row.get("normalized_status") or "")
+    signals: set[str] = set()
+    if status == "done":
+        signals.add("carrier_done")
+    if carrier_type == "github_project_item" and (status == "done" or re.search(r"\b(project\s+)?done\b", text)):
+        signals.add("project_done")
+    if carrier_type == "github_project_item" and re.search(r"\b(project\s+)?in[_ -]?progress\b", text):
+        signals.add("project_in_progress")
+    if carrier_type == "checklist_item" and re.search(r"\b(checked|checklist\s+checked)\b", text):
+        signals.add("checklist_checked")
+    if re.search(r"\bevidence\s+(missing|absent|not[_ -]?present)\b", text):
+        signals.add("evidence_missing")
+    if re.search(r"\b(issue\s+)?open\b", text):
+        signals.add("issue_open")
+    if re.search(r"\b(issue\s+)?closed\b", text):
+        signals.add("issue_closed")
+    if re.search(r"\b(pr|pull request)\s+open\b", text):
+        signals.add("pr_open")
+    if re.search(r"\b(pr|pull request)\s+merged\b", text):
+        signals.add("pr_merged")
+    if re.search(r"\bwork[_ -]?item\s+(open|in[_ -]?progress)\b", text):
+        signals.add("work_item_open")
+    if re.search(r"\bwork[_ -]?item\s+(done|closed|complete|completed)\b", text):
+        signals.add("work_item_terminal")
+    return signals
+
+
+def suite_carrier_truth_signal_classifications(row: dict[str, Any], truth: dict[str, Any]) -> list[dict[str, Any]]:
+    signals = suite_carrier_signal_set(row)
+    row_locator = str(row.get("locator") or "")
+    classifications: list[dict[str, Any]] = []
+
+    def add_conflict(conflict_id: str, observed: list[str], impact: str, remediation: str) -> None:
+        classifications.append(
+            {
+                "id": conflict_id,
+                "classification": "conflict",
+                "failure_kind": "carrier_truth_conflict",
+                "source_locator": row_locator,
+                "carrier_type": row.get("carrier_type"),
+                "carrier_locator": row.get("carrier_locator"),
+                "observed_signals": observed,
+                "truth_owner": "work_item+recovery",
+                "work_item_truth": truth,
+                "consumer_impact": impact,
+                "remediation_direction": remediation,
+                "blocking": True,
+            }
+        )
+
+    if "project_done" in signals and "issue_open" in signals:
+        add_conflict(
+            "project-done-issue-open",
+            ["project_done", "issue_open"],
+            "merge-ready cannot consume a carrier row whose Project mirror says Done while the issue mirror says open",
+            "Reconcile the host mirrors or mark one signal stale before consuming the carrier row.",
+        )
+    if "pr_merged" in signals and "issue_open" in signals:
+        add_conflict(
+            "pr-merged-issue-open",
+            ["pr_merged", "issue_open"],
+            "merge-ready cannot consume PR merged as Work Item completion while the issue mirror remains open",
+            "Use PR merged only as merge locator evidence and close the Work Item through closeout.",
+        )
+    if "issue_closed" in signals and "project_in_progress" in signals:
+        add_conflict(
+            "issue-closed-project-in-progress",
+            ["issue_closed", "project_in_progress"],
+            "merge-ready cannot consume an issue-closed carrier when the Project mirror remains in progress",
+            "Reconcile Project status or treat the Project value as stale mirror evidence.",
+        )
+    if "checklist_checked" in signals and "evidence_missing" in signals:
+        add_conflict(
+            "checklist-checked-evidence-missing",
+            ["checklist_checked", "evidence_missing"],
+            "checklist checked cannot satisfy missing evidence or gate truth",
+            "Keep checklist state as tracking-only and restore evidence-map / verification evidence.",
+        )
+    if (
+        ("project_done" in signals or "issue_closed" in signals or "pr_merged" in signals or "work_item_terminal" in signals)
+        and truth.get("recovery_present")
+        and not truth.get("recovery_terminal")
+        and ("work_item_terminal" in signals or "work_item_open" in signals)
+    ):
+        add_conflict(
+            "host-terminal-recovery-active",
+            sorted(signals & {"project_done", "issue_closed", "pr_merged", "work_item_open", "work_item_terminal"}),
+            "host terminal signals conflict with active recovery truth",
+            "Return completion truth to Work Item/recovery/closeout and keep host carrier state as a mirror.",
+        )
+
+    if not classifications:
+        classifications.append(
+            {
+                "id": "no-blocking-host-carrier-conflict",
+                "classification": "not_applicable",
+                "failure_kind": None,
+                "source_locator": row_locator,
+                "carrier_type": row.get("carrier_type"),
+                "carrier_locator": row.get("carrier_locator"),
+                "observed_signals": sorted(signals),
+                "truth_owner": "work_item+recovery",
+                "work_item_truth": truth,
+                "consumer_impact": "host carrier signals remain tracking-only",
+                "remediation_direction": None,
+                "blocking": False,
+            }
+        )
+    return classifications
 
 
 def suite_carrier_validate_payload(target: Path, item: str) -> tuple[str, str, dict[str, Any], str | None, str | None, list[str]]:
@@ -3650,6 +3806,8 @@ def suite_carrier_validate_payload(target: Path, item: str) -> tuple[str, str, d
     missing_inputs = list(inspect_payload.get("missing_inputs", []))
     blocking_gaps: list[dict[str, Any]] = []
     advisory_gaps: list[dict[str, Any]] = []
+    work_item_truth = suite_carrier_work_item_truth(target, item)
+    truth_signal_classifications: list[dict[str, Any]] = []
 
     def add_gap(
         *,
@@ -3808,6 +3966,21 @@ def suite_carrier_validate_payload(target: Path, item: str) -> tuple[str, str, d
                     fallback="loom suite carrier inspect --target <repo> --item <item> --json",
                 )
 
+            row_classifications = suite_carrier_truth_signal_classifications(row, work_item_truth)
+            truth_signal_classifications.extend(row_classifications)
+            for classification in row_classifications:
+                if not classification.get("blocking"):
+                    continue
+                add_gap(
+                    gap_id=f"suite-carrier-validate-host-conflict-{classification['id']}-{Path(row_locator).name}",
+                    classification="conflict",
+                    failure_kind="carrier_truth_conflict",
+                    source_locator=row_locator,
+                    impact=str(classification.get("consumer_impact") or "host carrier signal conflict blocks merge-ready consumption"),
+                    remediation=str(classification.get("remediation_direction") or "Reconcile host carrier mirrors before merge-ready."),
+                    fallback="loom suite carrier inspect --target <repo> --item <item> --json",
+                )
+
     for unit_locator, primary_rows in primary_by_unit.items():
         if unit_locator and len(primary_rows) > 1:
             add_gap(
@@ -3831,6 +4004,10 @@ def suite_carrier_validate_payload(target: Path, item: str) -> tuple[str, str, d
         **inspect_payload,
         "required_fields": list(required_fields),
         "consumed_contracts": list(SUITE_CARRIER_CONTRACT_LOCATORS),
+        "recognized_truth_signals": sorted(SUITE_CARRIER_TRUTH_SIGNALS),
+        "truth_signal_classifications": truth_signal_classifications,
+        "host_signal_conflicts": [entry for entry in truth_signal_classifications if entry.get("blocking")],
+        "work_item_truth": {**inspect_payload.get("work_item_truth", {}), **work_item_truth},
         "missing_inputs": missing_inputs,
         "blocking_gaps": blocking_gaps,
         "advisory_gaps": advisory_gaps,

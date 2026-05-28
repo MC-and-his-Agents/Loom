@@ -1199,6 +1199,57 @@ def main() -> int:
         ):
             raise AssertionError("suite carrier validate truth conflict payload drifted")
 
+        carrier_host_conflict_target = tmp / "suite-carrier-host-conflict"
+        carrier_host_conflict_suite = carrier_host_conflict_target / ".loom" / "specs" / "WI-carrier-host-conflict"
+        carrier_host_conflict_suite.mkdir(parents=True)
+        (carrier_host_conflict_target / ".loom" / "progress").mkdir(parents=True)
+        (carrier_host_conflict_target / ".loom" / "progress" / "WI-carrier-host-conflict.md").write_text(
+            "\n".join(
+                [
+                    "# WI-carrier-host-conflict Progress",
+                    "",
+                    "## Dynamic Facts",
+                    "",
+                    "- Item ID: WI-carrier-host-conflict",
+                    "- Current Checkpoint: build",
+                    "- Current Stop: fixture",
+                    "- Next Step: fixture",
+                    "- Blockers: None",
+                    "- Latest Validation Summary: fixture",
+                    "- Recovery Boundary: fixture",
+                    "- Current Lane: fixture",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (carrier_host_conflict_suite / "task-carrier.md").write_text(
+            "\n".join(
+                [
+                    "# Task Carrier",
+                    "",
+                    "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |",
+                    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+                    "| github_project_item | project://loom/item/9 | Project Done / issue open | done | mirror | .loom/work-items/WI-carrier-host-conflict.md | .loom/specs/WI-carrier-host-conflict/execution-breakdown.md#unit-project | .loom/specs/WI-carrier-host-conflict/spec.md#scenario-project | .loom/specs/WI-carrier-host-conflict/plan.md#phase-project | .loom/specs/WI-carrier-host-conflict/plan.md#validation | project fixture | mirror only |",
+                    "| checklist_item | .loom/specs/WI-carrier-host-conflict/task-carrier.md | checklist checked / evidence missing | done | evidence_locator | .loom/work-items/WI-carrier-host-conflict.md | .loom/specs/WI-carrier-host-conflict/execution-breakdown.md#unit-checklist | .loom/specs/WI-carrier-host-conflict/spec.md#scenario-checklist | .loom/specs/WI-carrier-host-conflict/plan.md#phase-checklist | .loom/specs/WI-carrier-host-conflict/plan.md#validation | checklist fixture | checklist mirror only |",
+                    "| github_issue | https://github.com/owner/repo/pull/99 | PR merged / issue open | done | mirror | .loom/work-items/WI-carrier-host-conflict.md | .loom/specs/WI-carrier-host-conflict/execution-breakdown.md#unit-pr | .loom/specs/WI-carrier-host-conflict/spec.md#scenario-pr | .loom/specs/WI-carrier-host-conflict/plan.md#phase-pr | .loom/specs/WI-carrier-host-conflict/plan.md#validation | pr fixture | PR merged is merge locator only |",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        suite_carrier_host_conflict = run_suite_carrier_validate_fixture(carrier_host_conflict_target, "WI-carrier-host-conflict", expect=1)
+        host_conflict_payload = suite_carrier_host_conflict.get("payload", {})
+        host_conflict_ids = {entry.get("id") for entry in host_conflict_payload.get("host_signal_conflicts", [])}
+        if (
+            suite_carrier_host_conflict.get("result") != "block"
+            or suite_carrier_host_conflict.get("fail_closed_reason") != "carrier_truth_conflict"
+            or not {"project-done-issue-open", "checklist-checked-evidence-missing", "pr-merged-issue-open"}.issubset(host_conflict_ids)
+            or "project_done" not in host_conflict_payload.get("recognized_truth_signals", [])
+            or not any(gap.get("failure_kind") == "carrier_truth_conflict" for gap in suite_carrier_host_conflict.get("blocking_gaps", []))
+        ):
+            raise AssertionError("suite carrier validate host signal conflict payload drifted")
+
         carrier_deferred_target = tmp / "suite-carrier-deferred"
         carrier_deferred_suite = carrier_deferred_target / ".loom" / "specs" / "WI-carrier-deferred"
         carrier_deferred_suite.mkdir(parents=True)
