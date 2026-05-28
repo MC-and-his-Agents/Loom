@@ -1,32 +1,36 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1134",
-  "decision": "fallback",
+  "decision": "allow",
   "kind": "spec_review",
-  "summary": "Spec review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "46988f4267fc84db626e467a5f30c47124e8b495",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "build",
-  "findings": [
-    {
-      "id": "spec-review-pending",
-      "summary": "Spec review must be recorded before implementation review.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Replace this placeholder with a real spec review conclusion."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Spec review must be recorded before implementation review."
-  ],
+  "summary": "Spec review allows WI-1134: the suite narrows to pre-review, implementation review, and merge-ready consumption of existing evidence/carrier validators; it preserves the authority boundary that suite validation is gate input evidence only, keeps closeout semantics out of scope, and maps each scenario to CLI contract or focused gate validation without adding /speckit or .specify surfaces.",
+  "reviewer": "Codex",
+  "reviewed_head": "faec4dc8695fc4bbe035f1aa8a82ae1f06543efd",
+  "reviewed_validation_summary": "Passed: PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py; python3 tools/check_cli_contract.py; python3 tools/loom.py suite validate --target . --item WI-1134 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1134 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1134 --json; git diff --check; focused rg for suite_gate_validation, suite-evidence-validate, suite-carrier-validate, /speckit, .specify, and closeout scope; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/host_adapter_check.py; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py state-check --target . --item WI-1134; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1134; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
   "follow_ups": [],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-1134.md",
     "recovery_entry": ".loom/progress/WI-1134.md",
-    "status_surface": ".loom/status/current.md"
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
   }
 }
