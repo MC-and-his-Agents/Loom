@@ -79,6 +79,17 @@ suite surface. When support is declared, `loom doctor` compares those command
 names with `loom help --json` and fails closed if the command matrix is missing
 commands or exposes the wrong domain/status/JSON capability.
 
+Targets may separately declare verify/profile requirements:
+
+```json
+{"profile_requirements": {"suite_validation": "required", "suite_item": "WI-1234"}}
+```
+
+`suite_validation` may be `required`, `blocking`, `full`, or `true`. `loom
+verify` consumes this requirement, or an explicit `--item`, to run `suite
+validate` as read-only gate evidence. Declared suite command support alone does
+not make suite validation universally blocking.
+
 ## Installation Graph
 
 `installation_graph.layers` lists layer ids. `installation_graph.edges` records dependency direction, typically:

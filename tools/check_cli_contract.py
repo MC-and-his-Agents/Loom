@@ -548,6 +548,20 @@ def valid_state(target: Path) -> dict[str, Any]:
     }
 
 
+def write_minimal_suite(target: Path, item: str) -> None:
+    suite_dir = target / ".loom" / "specs" / item
+    suite_dir.mkdir(parents=True)
+    (suite_dir / "spec.md").write_text(
+        "# Spec\n\n"
+        "- Suite path: minimal\n\n"
+        "- Full suite artifacts not_applicable: rationale: low-risk verify profile fixture; "
+        "consumer boundary: verify only requires suite validate for this fixture; "
+        "recheck condition: profile expands beyond minimal suite validation.\n",
+        encoding="utf-8",
+    )
+    (suite_dir / "plan.md").write_text("# Plan\n\nConsumes Suite path: minimal\n", encoding="utf-8")
+
+
 def main() -> int:
     _, help_payload = run_json(["help", "--json"], expect=0)
     matrix = {entry["command"]: entry for entry in help_payload["commands"]}
@@ -1988,6 +2002,8 @@ def main() -> int:
         _, verify_payload = run_json(["verify", "--target", str(valid_target), "--json"], expect=0)
         if verify_payload["schema"] != "loom-delivery-control/v1" or verify_payload["doctor"]["result"] != "pass":
             raise AssertionError("verify did not consume doctor success")
+        if verify_payload.get("suite_validation") is not None or verify_payload.get("suite_validation_requirement", {}).get("required") is not False:
+            raise AssertionError("verify should not require suite validation without profile or Work Item demand")
         declared_target = tmp / "declared-suite-support"
         declared_target.mkdir()
         declared_state = valid_state(declared_target)
@@ -2002,6 +2018,34 @@ def main() -> int:
             or declared_suite_check.get("schema_errors")
         ):
             raise AssertionError("doctor did not pass declared suite command support")
+        _, declared_verify = run_json(["verify", "--target", str(declared_target), "--json"], expect=0)
+        if declared_verify.get("suite_validation_requirement", {}).get("required") is not False or declared_verify.get("suite_validation") is not None:
+            raise AssertionError("declared suite support alone must not make verify run suite validation")
+        required_target = tmp / "verify-suite-required"
+        required_target.mkdir()
+        required_state = valid_state(required_target)
+        required_state["profile_requirements"] = {"suite_validation": "required", "suite_item": "WI-verify"}
+        write_state(required_target, required_state)
+        write_minimal_suite(required_target, "WI-verify")
+        _, required_verify = run_json(["verify", "--target", str(required_target), "--json"], expect=0)
+        if (
+            required_verify.get("suite_validation_requirement", {}).get("required") is not True
+            or required_verify.get("suite_validation", {}).get("result") != "pass"
+            or required_verify.get("suite_validation", {}).get("item_id") != "WI-verify"
+        ):
+            raise AssertionError("verify did not run required profile suite validation")
+        missing_suite_target = tmp / "verify-suite-missing"
+        missing_suite_target.mkdir()
+        write_state(missing_suite_target, valid_state(missing_suite_target))
+        status, missing_suite_verify = run_json(["verify", "--target", str(missing_suite_target), "--item", "WI-missing", "--json"])
+        if (
+            status == 0
+            or missing_suite_verify.get("result") != "block"
+            or missing_suite_verify.get("failed_layer") != "suite"
+            or missing_suite_verify.get("suite_validation_requirement", {}).get("required") is not True
+            or missing_suite_verify.get("suite_validation", {}).get("result") != "block"
+        ):
+            raise AssertionError("verify did not block when required Work Item suite validation failed")
         drift_target = tmp / "declared-suite-drift"
         drift_target.mkdir()
         drift_state = valid_state(drift_target)
