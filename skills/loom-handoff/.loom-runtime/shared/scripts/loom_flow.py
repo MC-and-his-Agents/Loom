@@ -6552,18 +6552,65 @@ SPEC_REVIEW_SUITE_READY_RESULTS = {"pass", "advisory"}
 
 def suite_validate_command_candidates(context: dict[str, Any]) -> list[Path]:
     candidates: list[Path] = []
-    for root in (
-        context["target_root"],
-        Path(os.environ["LOOM_SOURCE_REPO_ROOT"]).expanduser().resolve()
-        if os.environ.get("LOOM_SOURCE_REPO_ROOT")
-        else None,
-    ):
+    roots: list[Path | None] = [context["target_root"]]
+    if os.environ.get("LOOM_SOURCE_REPO_ROOT"):
+        roots.append(Path(os.environ["LOOM_SOURCE_REPO_ROOT"]).expanduser().resolve())
+    for parent in context["target_root"].parents:
+        roots.append(parent)
+    for root in roots:
         if not isinstance(root, Path):
             continue
         command = root / "tools" / "loom.py"
-        if command.is_file() and command not in candidates:
+        contract = root / "docs" / "methodology" / "harness" / "full-spec-suite-cli-surface.md"
+        if command.is_file() and contract.is_file() and command not in candidates:
             candidates.append(command)
     return candidates
+
+
+def suite_gate_required_for_surface(context: dict[str, Any], *, surface: str) -> bool:
+    if surface == "pre_review" and checkpoint_rank(context["current_checkpoint"]) < checkpoint_rank("build"):
+        return False
+    return True
+
+
+def suite_gate_not_applicable_payload(context: dict[str, Any], *, surface: str) -> dict[str, Any]:
+    summary = "suite evidence and carrier validation do not apply before the build checkpoint."
+    validation = {
+        "result": "not_applicable",
+        "summary": summary,
+        "missing_inputs": [],
+        "fallback_to": None,
+        "command": "not_applicable",
+        "validator": None,
+        "validator_mode": "checkpoint-not-applicable",
+        "payload": None,
+    }
+    return {
+        "schema_version": "loom-suite-gate-validation/v1",
+        "surface": surface,
+        "result": "not_applicable",
+        "summary": summary,
+        "missing_inputs": [],
+        "fallback_to": None,
+        "authority_boundary": {
+            "role": "gate_input_evidence",
+            "does_not_replace": [
+                "work_item",
+                "review_record",
+                "merge_ready_result",
+                "closeout_evidence",
+                "docs_source_truth",
+            ],
+        },
+        "consumed_locators": {
+            "evidence_map": None,
+            "task_carriers": [],
+        },
+        "validations": {
+            "evidence": dict(validation),
+            "carrier": dict(validation),
+        },
+    }
 
 
 def normalize_suite_validate_payload(payload: dict[str, Any], *, validator: str, mode: str) -> dict[str, Any]:
@@ -19556,7 +19603,10 @@ def handle_flow(args: argparse.Namespace) -> int:
         else:
             admission_payload = checkpoint_payload("admission", context)
             if args.operation == "pre-review":
-                suite_gate_validation = suite_gate_validation_payload(context, surface="pre_review")
+                if suite_gate_required_for_surface(context, surface="pre_review"):
+                    suite_gate_validation = suite_gate_validation_payload(context, surface="pre_review")
+                else:
+                    suite_gate_validation = suite_gate_not_applicable_payload(context, surface="pre_review")
                 repo_specific_requirements = repo_specific_requirements_payload(
                     repo_interface,
                     target_root=target_root,
