@@ -5,7 +5,7 @@
   "kind": "spec_review",
   "summary": "Spec suite package/release surface plan maps S1-S3 and A1-A4 to concrete validation; minimal suite path and boundaries are acceptable for #1144 on committed head.",
   "reviewer": "codex",
-  "reviewed_head": "407f3bab3f51c829d3bec78a72602fd53828bab2",
+  "reviewed_head": "54df6bc53c0b58138f1bbb8a6797891bee9f5707",
   "reviewed_validation_summary": "Passed `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_npm_package.py tools/check_cli_contract.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_npm_package.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --json`; `node --test test/npm-package-smoke.test.mjs`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_release_surface.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/version_surface_check.py`; `git diff --check`; focused `rg` for package/release-check docs and forbidden external command/layout strings; `PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .`; `make loom-demo-new-project-check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1144 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1144 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1144 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py state-check --target . --item WI-1144`; and `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py`. Also reconciled #1143 terminal carrier truth after PR #1182 merge.",
   "fallback_to": null,
   "findings": [],
