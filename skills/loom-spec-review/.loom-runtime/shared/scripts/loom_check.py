@@ -4373,6 +4373,83 @@ def require_full_suite_happy_path_validation(
             failures.append(Failure(category, f"{context} `{label}` must pass the full suite happy path fixture"))
 
 
+def author_suite_negative_fail_closed_fixtures(target: Path) -> tuple[str, str]:
+    full_item = "WI-full-missing-negative"
+    full_suite = target / ".loom/specs" / full_item
+    full_suite.mkdir(parents=True, exist_ok=True)
+    (full_suite / "suite-index.md").write_text(
+        "# Full Suite Index\n\n- Schema marker: loom-full-suite-index/v1\n- Suite path: full\n",
+        encoding="utf-8",
+    )
+    (full_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
+
+    minimal_item = "WI-minimal-invalid-negative"
+    minimal_suite = target / ".loom/specs" / minimal_item
+    minimal_suite.mkdir(parents=True, exist_ok=True)
+    (minimal_suite / "spec.md").write_text(
+        "# Spec\n\n- Suite path: minimal\n\n- Full suite artifacts not_applicable.\n",
+        encoding="utf-8",
+    )
+    (minimal_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
+    return full_item, minimal_item
+
+
+def require_suite_negative_fail_closed_validation(
+    failures: list[Failure],
+    *,
+    root: Path,
+    target: Path,
+    category: str,
+    context: str,
+) -> None:
+    full_item, minimal_item = author_suite_negative_fail_closed_fixtures(target)
+    fixtures = (
+        (
+            "missing required artifact",
+            full_item,
+            "missing_required_artifact",
+            "required_artifact:.loom/specs/WI-full-missing-negative/plan.md",
+            (),
+        ),
+        (
+            "invalid not_applicable",
+            minimal_item,
+            "invalid_not_applicable_rationale",
+            "not_applicable_rationale:.loom/specs/WI-minimal-invalid-negative/spec.md:block-3:rationale",
+            ("rationale", "consumer_boundary", "recheck_condition"),
+        ),
+    )
+    for label, item, failure_kind, expected_missing_input, expected_missing_fields in fixtures:
+        payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom.py", "suite", "validate", "--target", str(target), "--item", item, "--json"],
+        )
+        if error:
+            failures.append(Failure(category, f"{context} `{label}` negative fixture failed: {error}"))
+            continue
+        blocking_gaps = payload.get("blocking_gaps", [])
+        payload_body = payload.get("payload", {})
+        taxonomy = payload_body.get("failure_taxonomy", [])
+        if payload.get("result") != "block" or payload.get("fail_closed_reason") != failure_kind:
+            failures.append(Failure(category, f"{context} `{label}` fixture must block as {failure_kind}"))
+        elif expected_missing_input not in payload.get("missing_inputs", []):
+            failures.append(Failure(category, f"{context} `{label}` fixture must expose the blocking missing input"))
+        elif not any(gap.get("failure_kind") == failure_kind and gap.get("remediation_direction") for gap in blocking_gaps):
+            failures.append(Failure(category, f"{context} `{label}` fixture must expose blocking remediation"))
+        elif not any(entry.get("failure_kind") == failure_kind and entry.get("default_result") == "block" for entry in taxonomy):
+            failures.append(Failure(category, f"{context} `{label}` fixture must expose failure taxonomy"))
+        if expected_missing_fields:
+            records = payload_body.get("not_applicable_rationale", [])
+            missing_fields = {
+                field
+                for record in records
+                if isinstance(record, dict)
+                for field in record.get("missing_fields", [])
+            }
+            if not set(expected_missing_fields).issubset(missing_fields):
+                failures.append(Failure(category, f"{context} `{label}` fixture must expose missing not_applicable fields"))
+
+
 def require_runtime_state_payload(
     failures: list[Failure],
     *,
@@ -7987,6 +8064,13 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 category="daily-execution-cli",
                 context=f"`{label}` source full suite happy path",
             )
+            require_suite_negative_fail_closed_validation(
+                failures,
+                root=root,
+                target=target,
+                category="daily-execution-cli",
+                context=f"`{label}` source suite negative fail-closed",
+            )
             for args in (
                 ["git", "add", "."],
                 ["git", "add", "-f", ".loom"],
@@ -10126,6 +10210,13 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     item="WI-full-happy",
                     category="daily-execution-cli",
                     context="`installed pre-merge chain` full suite happy path",
+                )
+                require_suite_negative_fail_closed_validation(
+                    failures,
+                    root=root,
+                    target=target,
+                    category="daily-execution-cli",
+                    context="`installed pre-merge chain` suite negative fail-closed",
                 )
 
                 git_add = run_command(root, ["git", "add", "."], cwd=target)

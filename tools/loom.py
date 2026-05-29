@@ -4276,6 +4276,10 @@ def suite_validate_payload(target: Path, item: str) -> tuple[str, str, dict[str,
     advisory_gaps: list[dict[str, Any]] = []
     not_applicable_records, deferred_items = suite_applicability_records(paths, target)
 
+    def add_missing_input(value: str) -> None:
+        if value not in missing_inputs:
+            missing_inputs.append(value)
+
     for missing in missing_inputs:
         if missing == "suite_path_decision":
             blocking_gaps.append(
@@ -4321,6 +4325,8 @@ def suite_validate_payload(target: Path, item: str) -> tuple[str, str, dict[str,
             continue
         locator = str(record.get("locator") or "")
         missing_fields = ", ".join(str(field) for field in record.get("missing_fields", [])) or "artifact binding"
+        for field in record.get("missing_fields", []) or ["artifact_binding"]:
+            add_missing_input(f"not_applicable_rationale:{locator}:block-{record.get('block')}:{field}")
         blocking_gaps.append(
             suite_validate_finding(
                 gap_id=f"suite-validate-invalid-not-applicable-{Path(locator).name or 'record'}-{record.get('block')}",
@@ -4364,6 +4370,7 @@ def suite_validate_payload(target: Path, item: str) -> tuple[str, str, dict[str,
                     )
                 )
             else:
+                add_missing_input(f"not_applicable_rationale:{artifact}")
                 blocking_gaps.append(
                     suite_validate_finding(
                         gap_id=f"suite-validate-missing-not-applicable-{artifact.replace('.', '-')}",
@@ -4379,6 +4386,7 @@ def suite_validate_payload(target: Path, item: str) -> tuple[str, str, dict[str,
                     )
                 )
     elif suite_path == "not_applicable" and "suite" not in covered_not_applicable:
+        add_missing_input("not_applicable_rationale:suite")
         blocking_gaps.append(
             suite_validate_finding(
                 gap_id="suite-validate-missing-suite-not-applicable-rationale",

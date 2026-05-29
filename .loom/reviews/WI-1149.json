@@ -1,0 +1,52 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1149",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allows WI-1149 negative fail-closed fixtures on the PR implementation head: missing required artifact and invalid not_applicable rationale fields are covered in CLI contract and source/installed runtime fixtures, generated surfaces are synced, and remaining closeout/reconciliation stay with the main thread.",
+  "reviewer": "codex",
+  "reviewed_head": "89b40fda0306487b019453e09f99af635b3edb0c",
+  "reviewed_validation_summary": "Passing local evidence on 2026-05-29 for PR #1186 fact-chain evidence refresh: PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .; git diff --check; python3 tools/loom_flow.py pr-gate check --target . --pr 1186 --head-sha <PR-head> --branch work/1149-negative-suite-fixtures; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1149.md",
+    "recovery_entry": ".loom/progress/WI-1149.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "python3 tools/loom.py suite evidence validate --target . --item WI-1149 --json",
+    "suite_carrier_validation": "python3 tools/loom.py suite carrier validate --target . --item WI-1149 --json",
+    "suite_evidence_map": ".loom/specs/WI-1149/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1149/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  }
+}

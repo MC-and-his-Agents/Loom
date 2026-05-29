@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1148
-- Goal: Prove the full suite path can pass the full automation chain.
-- Scope: #1148 only: add source and installed regression fixture assertions proving a valid full suite with suite-index, required artifacts, conditional artifacts, evidence-map, consistency-analysis, execution-breakdown, and task-carrier passes suite validate, suite evidence validate, and suite carrier validate; consume #1147 terminal Loom carrier updates needed to keep the active fact chain continuous after PR #1184 closeout. Do not add negative fail-closed fixtures, scaffold fixtures, generated-skill parity fixtures, PR gate/merge-ready/closeout integration fixtures, host truth writes beyond normal #1148 issue/PR/Project closeout, /speckit.* commands, or .specify/ layout.
-- Execution Path: issue #1148 -> branch work/1148-full-suite-happy-path -> worktree /Users/mc/dev/Loom-worktrees/1148-full-suite-happy-path -> PR pending.
+- Item ID: WI-1149
+- Goal: Add missing artifact and invalid not_applicable fail-closed fixtures for the full spec suite CLI chain.
+- Scope: #1149 only: add negative fixtures for a missing full required artifact and a minimal path not_applicable record missing rationale, consumer boundary, and recheck condition; assert result=block, failure taxonomy, blocking gaps, remediation, and missing-input evidence in CLI contract and source/installed loom_check surfaces.
+- Execution Path: issue #1149 -> branch work/1149-negative-suite-fixtures -> target-local workspace `.` -> PR #1186.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1148.md
-- Review Entry: .loom/reviews/WI-1148.json
-- Validation Entry: python3 tools/check_cli_contract.py; python3 tools/loom_check.py --profile source --source-surface source-self-fixture .; python3 tools/loom_check.py --profile source --source-surface contract-only .; git diff --check; focused rg; python3 tools/skills_surface.py check.
-- Closing Condition: #1148 PR is merged to main, closeout evidence records PR/head/merge/target branch/validation/Project state, #1148 is closed completed, and #1145 can consume the evidence.
+- Recovery Entry: .loom/progress/WI-1149.md
+- Review Entry: .loom/reviews/WI-1149.json
+- Validation Entry: git diff --check; focused rg; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_cli_contract.py; py_compile/source-self fixture checks as applicable.
+- Closing Condition: #1149 PR is opened with validation evidence for the owning worker; main thread owns final review, merge ordering, Project closeout, #1149 issue closeout, and parent FR/phase reconciliation after merge.
 - Current Checkpoint: merge
-- Current Stop: Full suite happy path fixture assertions, generated/runtime sync, suite validation, source-self fixture, review records, and root self-governance checks passed locally.
-- Next Step: Open PR for work/1148-full-suite-happy-path, push head SHA, run required checks and merge-ready gate.
+- Current Stop: PR #1186 gate/checkpoint evidence has been refreshed for main-thread consumption: #1149 remains scoped to negative suite fixtures, authored implementation review is bound to the PR implementation head, status/progress carriers are target-local, and closeout/merge remain out of worker scope.
+- Next Step: Main thread may consume PR #1186 merge-gate evidence and decide merge order; this worker must not merge, close #1149, close parent items, or advance Project reconciliation.
 - Blockers: None recorded.
-- Latest Validation Summary: Passing local evidence on 2026-05-29: git diff --check; focused rg; python3 tools/py_compile_clean.py tools/check_cli_contract.py src/skills/shared/scripts/loom_check.py skills/shared/scripts/loom_check.py .loom/bin/loom_check.py examples/new-project/.loom/bin/loom_check.py; python3 tools/check_cli_contract.py; python3 tools/loom.py suite validate/evidence validate/carrier validate --target . --item WI-1148 --json; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/loom_check.py --profile source --source-surface source-self-fixture .; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/check_loom_check_runtime_regressions.py; python3 tools/check_demo_bootstrap_fixture.py; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py governance-profile status --target .; python3 .loom/bin/loom_flow.py runtime-parity validate --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1148; python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking.
-- Recovery Boundary: #1148 owns full suite happy path fixture assertions and the #1147 terminal Loom carrier sync consumed after PR #1184 closeout; it does not complete negative fail-closed, scaffold, generated-skill parity, PR gate, merge-ready, closeout, or Project reconciliation fixtures.
-- Current Lane: full-spec-suite-cli/e2e-governance/full-happy-path
+- Latest Validation Summary: Passing local evidence on 2026-05-29 for PR #1186 fact-chain evidence refresh: PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .; git diff --check; python3 tools/loom_flow.py pr-gate check --target . --pr 1186 --head-sha <PR-head> --branch work/1149-negative-suite-fixtures; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check.
+- Recovery Boundary: #1149 owns only missing full required artifact and invalid minimal not_applicable negative fixtures. It does not implement evidence freshness, host conflict, scaffold, generated-skill parity, PR gate, merge-ready, closeout, Project reconciliation, #1145 closeout, or #1107 closeout.
+- Current Lane: full-spec-suite-cli/e2e-governance/negative-fixtures
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1148.md
-- Dynamic Truth: .loom/progress/WI-1148.md
+- Static Truth: .loom/work-items/WI-1149.md
+- Dynamic Truth: .loom/progress/WI-1149.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
