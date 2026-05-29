@@ -1,0 +1,39 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1150",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allows WI-1150: stale evidence and host conflict block fixtures are added to source and generated loom_check surfaces, assert taxonomy and remediation, and keep production reconciliation behavior unchanged.",
+  "reviewer": "codex",
+  "reviewed_head": "15af08f58bc509ce042644bcd9d154d331593826",
+  "reviewed_validation_summary": "Passed locally: git diff --check; focused rg for stale_evidence, carrier_truth_conflict, host conflict fixtures, /speckit, and .specify; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_check.py skills/shared/scripts/loom_check.py .loom/bin/loom_check.py tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1150 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface source-self-fixture .; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py fact-chain --target . --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py closeout check --target . --skip-gate; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py closeout sync --target . --skip-gate; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py checkpoint build --target . --item WI-1150; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py verify --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py governance-profile status --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py runtime-parity validate --target .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1150.md",
+    "recovery_entry": ".loom/progress/WI-1150.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "suite_validation": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1150 --json",
+    "source_self_fixture": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface source-self-fixture .",
+    "contract_only": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

@@ -4450,6 +4450,156 @@ def require_suite_negative_fail_closed_validation(
                 failures.append(Failure(category, f"{context} `{label}` fixture must expose missing not_applicable fields"))
 
 
+def author_stale_evidence_block_fixture(target: Path, item: str) -> None:
+    suite_root = target / ".loom/specs" / item
+    suite_root.mkdir(parents=True, exist_ok=True)
+    (target / ".loom/progress").mkdir(parents=True, exist_ok=True)
+    (suite_root / "spec.md").write_text(
+        "# Spec\n\n"
+        "## Scenarios\n\n"
+        "### Scenario S1\n\n"
+        "Given evidence bound to a stale HEAD, stale PR head, or stale validation summary\n"
+        "When suite evidence validation runs\n"
+        "Then merge-ready and closeout consumption is blocked.\n",
+        encoding="utf-8",
+    )
+    (suite_root / "plan.md").write_text(
+        "# Plan\n\n"
+        "## Validation\n\n"
+        "- S1 -> automated validation evidence: suite evidence validate stale binding block payload.\n",
+        encoding="utf-8",
+    )
+    validation_summary = "Current validation summary for stale evidence fixture."
+    (target / ".loom/progress" / f"{item}.md").write_text(
+        f"# {item} Progress\n\n"
+        f"- Item ID: {item}\n"
+        "- Current Stop: Stale evidence fixture is intentionally blocked.\n"
+        "- Next Step: Refresh stale evidence before consumption.\n"
+        f"- Latest Validation Summary: {validation_summary}\n"
+        "- Recovery Boundary: Fixture only; it must not author review, merge-ready, closeout, or Project truth.\n",
+        encoding="utf-8",
+    )
+    stale_validation_digest = "a" * 64
+    (suite_root / "evidence-map.md").write_text(
+        "# Evidence Map\n\n"
+        "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        f"| EV-001 | behavior_evidence | .loom/specs/{item}/spec.md | S1 | previous HEAD; stale head | present | merge-ready / closeout evidence | Refresh behavior evidence on the current head. |\n"
+        f"| EV-002 | test_evidence | .loom/specs/{item}/plan.md | S1 validation | previous PR head; stale pr head | present | merge-ready / closeout evidence | Rerun tests on the current PR head. |\n"
+        f"| EV-003 | fresh_verification_input | .loom/progress/{item}.md | EV-001 EV-002 | validation_summary_sha256={stale_validation_digest}; stale validation summary | present | merge-ready / closeout evidence | Refresh validation summary binding before merge-ready. |\n",
+        encoding="utf-8",
+    )
+
+
+def require_stale_evidence_block_validation(
+    failures: list[Failure],
+    *,
+    root: Path,
+    target: Path,
+    item: str,
+    category: str,
+    context: str,
+) -> None:
+    payload, error = load_command_json(
+        root,
+        ["python3", "tools/loom.py", "suite", "evidence", "validate", "--target", str(target), "--item", item, "--json"],
+    )
+    if error:
+        failures.append(Failure(category, f"{context} `suite evidence validate` failed: {error}"))
+        return
+    blocking_gaps = payload.get("blocking_gaps", [])
+    failure_taxonomy = payload.get("payload", {}).get("failure_taxonomy", [])
+    remediation = payload.get("payload", {}).get("remediation_directions", [])
+    stale_taxonomy = next((entry for entry in failure_taxonomy if entry.get("failure_kind") == "stale_evidence"), {})
+    if (
+        payload.get("result") != "block"
+        or payload.get("fail_closed_reason") != "stale_evidence"
+        or not any(gap.get("failure_kind") == "stale_evidence" for gap in blocking_gaps)
+        or stale_taxonomy.get("default_result") != "block"
+        or stale_taxonomy.get("failed_layer") != "evidence_map"
+        or not any("Refresh" in str(entry) or "refresh" in str(entry) for entry in remediation)
+    ):
+        failures.append(
+            Failure(
+                category,
+                f"{context} `suite evidence validate` must block stale HEAD / PR head / validation summary evidence with taxonomy and remediation",
+            )
+        )
+
+
+def author_host_conflict_block_fixture(target: Path, item: str) -> None:
+    suite_root = target / ".loom/specs" / item
+    suite_root.mkdir(parents=True, exist_ok=True)
+    (target / ".loom/work-items").mkdir(parents=True, exist_ok=True)
+    (target / ".loom/progress").mkdir(parents=True, exist_ok=True)
+    (target / ".loom/work-items" / f"{item}.md").write_text(
+        f"# {item}\n\n"
+        f"- Item ID: {item}\n"
+        "- Scope: Host state conflict fixture only.\n"
+        f"- Recovery Entry: .loom/progress/{item}.md\n",
+        encoding="utf-8",
+    )
+    (target / ".loom/progress" / f"{item}.md").write_text(
+        f"# {item} Progress\n\n"
+        f"- Item ID: {item}\n"
+        "- Current Checkpoint: build\n"
+        "- Current Stop: Host conflict fixture is intentionally blocked.\n"
+        "- Next Step: Reconcile host mirrors before consumption.\n"
+        "- Latest Validation Summary: fixture\n"
+        "- Recovery Boundary: Fixture only; host carrier state stays mirror-only.\n",
+        encoding="utf-8",
+    )
+    (suite_root / "task-carrier.md").write_text(
+        "# Task Carrier\n\n"
+        "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        f"| github_project_item | project://loom/item/1150 | Project Done / issue open | done | mirror | .loom/work-items/{item}.md | .loom/specs/{item}/execution-breakdown.md#unit-project | .loom/specs/{item}/spec.md#scenario-project | .loom/specs/{item}/plan.md#phase-project | .loom/specs/{item}/plan.md#validation | project fixture | mirror only |\n"
+        f"| checklist_item | .loom/specs/{item}/task-carrier.md | checklist checked / evidence missing | done | evidence_locator | .loom/work-items/{item}.md | .loom/specs/{item}/execution-breakdown.md#unit-checklist | .loom/specs/{item}/spec.md#scenario-checklist | .loom/specs/{item}/plan.md#phase-checklist | .loom/specs/{item}/plan.md#validation | checklist fixture | checklist mirror only |\n"
+        f"| github_issue | https://github.com/owner/repo/pull/1150 | PR merged / issue open | done | mirror | .loom/work-items/{item}.md | .loom/specs/{item}/execution-breakdown.md#unit-pr | .loom/specs/{item}/spec.md#scenario-pr | .loom/specs/{item}/plan.md#phase-pr | .loom/specs/{item}/plan.md#validation | PR fixture | PR merged is merge locator only |\n",
+        encoding="utf-8",
+    )
+
+
+def require_host_conflict_block_validation(
+    failures: list[Failure],
+    *,
+    root: Path,
+    target: Path,
+    item: str,
+    category: str,
+    context: str,
+) -> None:
+    payload, error = load_command_json(
+        root,
+        ["python3", "tools/loom.py", "suite", "carrier", "validate", "--target", str(target), "--item", item, "--json"],
+    )
+    if error:
+        failures.append(Failure(category, f"{context} `suite carrier validate` failed: {error}"))
+        return
+    body = payload.get("payload", {})
+    host_conflict_ids = {entry.get("id") for entry in body.get("host_signal_conflicts", [])}
+    blocking_gaps = payload.get("blocking_gaps", [])
+    failure_taxonomy = body.get("failure_taxonomy", [])
+    remediation = body.get("remediation_directions", [])
+    carrier_taxonomy = next((entry for entry in failure_taxonomy if entry.get("failure_kind") == "carrier_truth_conflict"), {})
+    if (
+        payload.get("result") != "block"
+        or payload.get("fail_closed_reason") != "carrier_truth_conflict"
+        or not {"project-done-issue-open", "checklist-checked-evidence-missing", "pr-merged-issue-open"}.issubset(host_conflict_ids)
+        or not any(gap.get("failure_kind") == "carrier_truth_conflict" for gap in blocking_gaps)
+        or carrier_taxonomy.get("default_result") != "block"
+        or carrier_taxonomy.get("failed_layer") != "task_carrier"
+        or "project_done" not in body.get("recognized_truth_signals", [])
+        or not any("Reconcile" in str(entry) or "reconcile" in str(entry) for entry in remediation)
+    ):
+        failures.append(
+            Failure(
+                category,
+                f"{context} `suite carrier validate` must block Project / issue / carrier host conflicts with taxonomy and remediation",
+            )
+        )
+
+
 def require_runtime_state_payload(
     failures: list[Failure],
     *,
@@ -8071,6 +8221,24 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 category="daily-execution-cli",
                 context=f"`{label}` source suite negative fail-closed",
             )
+            author_stale_evidence_block_fixture(target, "WI-stale-evidence")
+            require_stale_evidence_block_validation(
+                failures,
+                root=root,
+                target=target,
+                item="WI-stale-evidence",
+                category="daily-execution-cli",
+                context=f"`{label}` source stale evidence fixture",
+            )
+            author_host_conflict_block_fixture(target, "WI-host-conflict")
+            require_host_conflict_block_validation(
+                failures,
+                root=root,
+                target=target,
+                item="WI-host-conflict",
+                category="daily-execution-cli",
+                context=f"`{label}` source host conflict fixture",
+            )
             for args in (
                 ["git", "add", "."],
                 ["git", "add", "-f", ".loom"],
@@ -10217,6 +10385,24 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     target=target,
                     category="daily-execution-cli",
                     context="`installed pre-merge chain` suite negative fail-closed",
+                )
+                author_stale_evidence_block_fixture(target, "WI-stale-evidence")
+                require_stale_evidence_block_validation(
+                    failures,
+                    root=root,
+                    target=target,
+                    item="WI-stale-evidence",
+                    category="daily-execution-cli",
+                    context="`installed pre-merge chain` stale evidence fixture",
+                )
+                author_host_conflict_block_fixture(target, "WI-host-conflict")
+                require_host_conflict_block_validation(
+                    failures,
+                    root=root,
+                    target=target,
+                    item="WI-host-conflict",
+                    category="daily-execution-cli",
+                    context="`installed pre-merge chain` host conflict fixture",
                 )
 
                 git_add = run_command(root, ["git", "add", "."], cwd=target)
