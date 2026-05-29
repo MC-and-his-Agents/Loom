@@ -6,7 +6,7 @@
 - Goal: Prove the minimal suite happy path can pass the full automation chain.
 - Scope: #1147 only: add source and installed regression fixture assertions proving a valid minimal suite with legal not_applicable rationale passes suite validate, suite evidence validate, and suite carrier validate. Do not add the full suite fixture, fail-closed negative fixtures, scaffold fixtures, generated-skill parity fixtures, PR gate/merge-ready/closeout integration fixtures, host truth writes, /speckit.* commands, or .specify/ layout.
 - Execution Path: issue #1147 -> branch work/1147-minimal-suite-happy-path -> worktree /Users/mc/dev/Loom-worktrees/1147-minimal-suite-happy-path -> PR #1184.
-- Workspace Entry: /Users/mc/dev/Loom-worktrees/1147-minimal-suite-happy-path
+- Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1147.md
 - Review Entry: .loom/reviews/WI-1147.json
 - Validation Entry: python3 tools/check_cli_contract.py; python3 tools/loom_check.py --profile source --source-surface source-self-fixture .; python3 tools/loom_check.py --profile source --source-surface contract-only .; git diff --check; focused rg; python3 tools/skills_surface.py check.
