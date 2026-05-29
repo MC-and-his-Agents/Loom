@@ -2380,6 +2380,19 @@ def main() -> int:
         if not skills_package["packages"]:
             raise AssertionError("skills package did not emit package metadata")
         _, skills_release_check = run_json(["skills", "release-check", "--json"], expect=0)
+        release_check_commands = [
+            item.get("command", "")
+            for item in skills_release_check.get("checks", [])
+            if isinstance(item, dict)
+        ]
+        for expected_check in (
+            "tools/host_adapter_check.py",
+            "tools/version_surface_check.py",
+            "tools/check_release_surface.py",
+            "tools/check_npm_package.py",
+        ):
+            if not any(expected_check in command for command in release_check_commands):
+                raise AssertionError(f"skills release-check did not consume {expected_check}")
         release_authority = skills_release_check.get("release_authority") or {}
         if release_authority.get("active_cli_line") != "loom":
             raise AssertionError("skills release-check did not identify loom as the active CLI line")
