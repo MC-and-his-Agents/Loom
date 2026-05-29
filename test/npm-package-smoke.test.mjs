@@ -20,6 +20,19 @@ test("root npm package exposes the frozen loom bin contract", () => {
   assert.equal(JSON.stringify(packageJson).includes("@mc-and-his-agents/loom-installer"), false);
 });
 
+test("root npm package includes suite contract source truth", () => {
+  for (const requiredFile of [
+    "docs/adoption/github-profile.md",
+    "docs/methodology/harness/full-spec-suite-cli-surface.md",
+    "docs/methodology/harness/gate-chain.md",
+    "docs/methodology/harness/task-carrier-contract.md",
+    "docs/methodology/templates/evidence-map.md",
+    "docs/methodology/templates/spec-suite.md"
+  ]) {
+    assert.equal(packageJson.files.includes(requiredFile), true, requiredFile);
+  }
+});
+
 test("loom bin prints help", () => {
   const completed = runLoom(["--help"]);
   assert.equal(completed.status, 0, completed.stderr);

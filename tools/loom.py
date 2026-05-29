@@ -1878,6 +1878,7 @@ def handle_skills(argv: list[str]) -> int:
                     [sys.executable, str(TOOLS_ROOT / "host_adapter_check.py")],
                     [sys.executable, str(TOOLS_ROOT / "version_surface_check.py")],
                     [sys.executable, str(TOOLS_ROOT / "check_release_surface.py")],
+                    [sys.executable, str(TOOLS_ROOT / "check_npm_package.py")],
                 ]
             )
         results = []
