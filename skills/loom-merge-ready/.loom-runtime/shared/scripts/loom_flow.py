@@ -4974,6 +4974,7 @@ def closeout_suite_gate_subchecks(
     profile: str,
 ) -> list[dict[str, Any]]:
     subchecks: list[dict[str, Any]] = []
+    suite_required = suite_gate_validation.get("result") != "not_applicable"
     validations = (
         suite_gate_validation.get("validations")
         if isinstance(suite_gate_validation.get("validations"), dict)
@@ -4997,14 +4998,16 @@ def closeout_suite_gate_subchecks(
             missing_inputs.append(f"suite {domain} validation")
         else:
             validation_result = validation.get("result")
-            result = "pass" if validation_result == "pass" else "block"
+            result = "pass" if validation_result in {"pass", "not_applicable"} else "block"
             fallback_value = validation.get("fallback_to")
             fallback_to = None if result == "pass" else (fallback_value if isinstance(fallback_value, str) and fallback_value else fallback_to)
             summary = str(validation.get("summary") or summary)
             raw_missing = validation.get("missing_inputs")
-            if isinstance(raw_missing, list):
+            if result == "pass":
+                missing_inputs = []
+            elif isinstance(raw_missing, list):
                 missing_inputs.extend(str(message) for message in raw_missing)
-            elif result != "pass":
+            else:
                 missing_inputs.append(f"suite {domain} validation did not pass")
             command = validation.get("command")
             validator = validation.get("validator")
@@ -5014,7 +5017,7 @@ def closeout_suite_gate_subchecks(
                 check_id=f"suite_{domain}_validation",
                 source="suite_gate",
                 profile=profile,
-                required_for_closeout=True,
+                required_for_closeout=suite_required,
                 trigger_reason=(
                     f"closeout consumes suite {domain} validation as retained evidence "
                     "instead of treating merged PR state as completion truth"
@@ -6686,14 +6689,49 @@ def suite_validate_command_candidates(context: dict[str, Any]) -> list[Path]:
     return candidates
 
 
+def suite_path_decision_presence(context: dict[str, Any]) -> tuple[bool, set[str]]:
+    suite = spec_suite_paths(context)
+    candidates = [
+        suite["spec"],
+        suite["plan"],
+    ]
+    marker_present = False
+    values: set[str] = set()
+    for relative in candidates:
+        path = context["target_root"] / relative
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            marker_present = True
+            continue
+        for line in text.splitlines():
+            match = re.match(
+                r"^\s*(?:[-*]\s*)?suite path(?: consumed)?\s*:\s*([A-Za-z_][A-Za-z_-]*)\b",
+                line,
+                re.IGNORECASE,
+            )
+            if not match:
+                continue
+            marker_present = True
+            values.add(match.group(1).lower().replace("-", "_"))
+    return marker_present, values
+
+
 def suite_gate_required_for_surface(context: dict[str, Any], *, surface: str) -> bool:
     if surface == "pre_review" and checkpoint_rank(context["current_checkpoint"]) < checkpoint_rank("build"):
+        return False
+    marker_present, values = suite_path_decision_presence(context)
+    if not marker_present:
+        return False
+    if values and values <= {"not_applicable"}:
         return False
     return True
 
 
 def suite_gate_not_applicable_payload(context: dict[str, Any], *, surface: str) -> dict[str, Any]:
-    summary = "suite evidence and carrier validation do not apply before the build checkpoint."
+    summary = "suite evidence and carrier validation are not applicable for this gate surface."
     validation = {
         "result": "not_applicable",
         "summary": summary,
