@@ -1,0 +1,52 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1148",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allows #1148 full suite happy path fixture and runtime parity sync on refreshed spec-review head; local suite validation, source-self fixture, contract-only, CLI contract, release, version, package, demo, root self-governance, adopt verify, carrier refresh, and shadow parity passed before PR merge-ready.",
+  "reviewer": "codex",
+  "reviewed_head": "958f1610a94013494613562b0c7507606c41d7f8",
+  "reviewed_validation_summary": "Passing local evidence on 2026-05-29: git diff --check; focused rg; python3 tools/py_compile_clean.py tools/check_cli_contract.py src/skills/shared/scripts/loom_check.py skills/shared/scripts/loom_check.py .loom/bin/loom_check.py examples/new-project/.loom/bin/loom_check.py; python3 tools/check_cli_contract.py; python3 tools/loom.py suite validate/evidence validate/carrier validate --target . --item WI-1148 --json; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/loom_check.py --profile source --source-surface source-self-fixture .; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/check_loom_check_runtime_regressions.py; python3 tools/check_demo_bootstrap_fixture.py; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py governance-profile status --target .; python3 .loom/bin/loom_flow.py runtime-parity validate --target .; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1148; python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1148.md",
+    "recovery_entry": ".loom/progress/WI-1148.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1148-full-suite-happy-path/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-worktrees/1148-full-suite-happy-path --item WI-1148 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1148-full-suite-happy-path/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-worktrees/1148-full-suite-happy-path --item WI-1148 --json",
+    "suite_evidence_map": ".loom/specs/WI-1148/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1148/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  }
+}

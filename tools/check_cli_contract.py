@@ -905,6 +905,141 @@ def write_minimal_suite(target: Path, item: str) -> None:
     )
 
 
+def write_full_suite(target: Path, item: str) -> None:
+    suite_dir = target / ".loom" / "specs" / item
+    suite_dir.mkdir(parents=True)
+    (target / ".loom" / "work-items").mkdir(parents=True, exist_ok=True)
+    (target / ".loom" / "progress").mkdir(parents=True, exist_ok=True)
+    (suite_dir / "suite-index.md").write_text(
+        "# Full Suite Index\n\n"
+        "- Schema marker: loom-full-suite-index/v1\n"
+        "- Suite path: full\n\n"
+        "## Artifact Inventory\n\n"
+        "- spec.md: required\n"
+        "- plan.md: required\n"
+        "- research.md: conditional / present\n"
+        "- contracts.md: conditional / present\n"
+        "- readiness-checklist.md: conditional / present\n"
+        "- evidence-map.md: closeout evidence / present\n"
+        "- consistency-analysis.md: consistency evidence / present\n"
+        "- execution-breakdown.md: task breakdown / present\n"
+        "- task-carrier.md: task carrier / present\n",
+        encoding="utf-8",
+    )
+    (suite_dir / "spec.md").write_text(
+        "# Spec\n\n"
+        "## Scenarios\n\n"
+        "### Scenario S1\n\n"
+        "Given a full suite fixture with required and conditional artifacts\n"
+        "When suite validation runs\n"
+        "Then the full path passes without bypass records\n\n"
+        "### Scenario S2\n\n"
+        "Given behavior and test evidence rows\n"
+        "When evidence validation runs\n"
+        "Then the evidence map is consumable by review, merge-ready, and closeout\n\n"
+        "### Scenario S3\n\n"
+        "Given a primary task carrier row\n"
+        "When carrier validation runs\n"
+        "Then Work Item, breakdown, spec, and plan backlinks are consumable\n\n"
+        "## Acceptance Criteria\n\n"
+        "- AC-1: Suite inspect reports a full path from suite-index.md.\n"
+        "- AC-2: Suite validate passes with required and conditional artifacts present.\n"
+        "- AC-3: Suite evidence validate passes with behavior, test, and fresh verification inputs.\n"
+        "- AC-4: Suite carrier validate passes with a primary Work Item carrier.\n",
+        encoding="utf-8",
+    )
+    (suite_dir / "plan.md").write_text(
+        "# Plan\n\n"
+        "- Suite path: full\n\n"
+        "## Validation\n\n"
+        "- S1 -> automated validation evidence: suite inspect and suite validate full pass payloads.\n"
+        "- S2 -> automated validation evidence: suite evidence validate pass payload.\n"
+        "- S3 -> automated validation evidence: suite carrier validate pass payload.\n"
+        "- AC-1 -> test evidence: path decision locator is suite-index.md.\n"
+        "- AC-2 -> test evidence: required and conditional artifacts are present.\n"
+        "- AC-3 -> test evidence: evidence-map.md rows cover behavior, tests, and fresh verification.\n"
+        "- AC-4 -> test evidence: task-carrier.md row backlinks to Work Item and execution breakdown.\n",
+        encoding="utf-8",
+    )
+    (suite_dir / "research.md").write_text(
+        "# Research\n\n"
+        "- Finding: full suite happy path requires no bypass record when conditional artifacts are present.\n"
+        "- Source: docs/methodology/harness/full-spec-suite-cli-surface.md\n",
+        encoding="utf-8",
+    )
+    (suite_dir / "contracts.md").write_text(
+        "# Contracts\n\n"
+        "- Suite validator consumes docs/methodology/harness/full-spec-suite-cli-surface.md.\n"
+        "- Evidence validator consumes docs/methodology/templates/evidence-map.md.\n"
+        "- Carrier validator consumes docs/methodology/harness/task-carrier-contract.md.\n",
+        encoding="utf-8",
+    )
+    (suite_dir / "readiness-checklist.md").write_text(
+        "# Readiness Checklist\n\n"
+        "- [x] Full suite path decision is present.\n"
+        "- [x] Required artifacts are present.\n"
+        "- [x] Conditional artifacts are present for this fixture.\n"
+        "- [x] Evidence and carrier artifacts are present for gate consumption.\n",
+        encoding="utf-8",
+    )
+    (target / ".loom" / "work-items" / f"{item}.md").write_text(
+        f"# {item}\n\n"
+        f"- Item ID: {item}\n"
+        "- Scope: Full suite happy path fixture for source and installed regression checks.\n"
+        f"- Spec Entry: .loom/specs/{item}/spec.md\n"
+        f"- Plan Entry: .loom/specs/{item}/plan.md\n"
+        f"- Suite Entry: .loom/specs/{item}/suite-index.md\n"
+        f"- Recovery Entry: .loom/progress/{item}.md\n"
+        f"- Validation Entry: suite validate; suite evidence validate; suite carrier validate\n",
+        encoding="utf-8",
+    )
+    (target / ".loom" / "progress" / f"{item}.md").write_text(
+        f"# {item} Progress\n\n"
+        f"- Item ID: {item}\n"
+        "- Current Stop: Full suite happy path fixture is ready for validation.\n"
+        "- Next Step: Run source and installed full suite regression checks.\n"
+        "- Latest Validation Summary: fixture validation pending until commands run.\n"
+        "- Recovery Boundary: Fixture only; does not author review, merge-ready, closeout, or Project truth.\n"
+        "- Current Lane: fixture\n"
+        f"- Plan Locator: .loom/specs/{item}/plan.md\n"
+        f"- Acceptance Locator: .loom/specs/{item}/spec.md\n"
+        f"- Validation Evidence Locator: .loom/specs/{item}/evidence-map.md\n",
+        encoding="utf-8",
+    )
+    (suite_dir / "execution-breakdown.md").write_text(
+        "# Execution Breakdown\n\n"
+        "| Unit | Scope | Owner | Status | Validation |\n"
+        "| --- | --- | --- | --- | --- |\n"
+        f"| unit-{item.lower()}-1 | Full suite happy path fixture. | loom_check fixture | done | suite validate / evidence validate / carrier validate |\n",
+        encoding="utf-8",
+    )
+    (suite_dir / "consistency-analysis.md").write_text(
+        "# Consistency Analysis\n\n"
+        "| Source | Target | Status | Evidence |\n"
+        "| --- | --- | --- | --- |\n"
+        f"| .loom/specs/{item}/spec.md | .loom/specs/{item}/plan.md | consistent | S1-S3 and AC-1-AC-4 mapped |\n"
+        f"| .loom/specs/{item}/evidence-map.md | .loom/specs/{item}/task-carrier.md | consistent | EV-001 through EV-004 bind to {item} |\n",
+        encoding="utf-8",
+    )
+    (suite_dir / "evidence-map.md").write_text(
+        "# Evidence Map\n\n"
+        "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        f"| EV-001 | behavior_evidence | .loom/specs/{item}/spec.md | S1 S2 S3 / AC-1 | {item} / full suite behavior | present | fixture evidence only | Re-run suite validate after changing the fixture. |\n"
+        f"| EV-002 | test_evidence | .loom/specs/{item}/plan.md | AC-2 AC-3 AC-4 | {item} / full suite tests | present | fixture evidence only | Re-run source and installed checks after changing the fixture. |\n"
+        f"| EV-003 | behavior_evidence | .loom/specs/{item}/consistency-analysis.md | consistency analysis | {item} / full suite consistency | present | review / merge-ready / closeout evidence | Refresh consistency analysis after spec or plan changes. |\n"
+        f"| EV-004 | fresh_verification_input | .loom/progress/{item}.md | EV-001 EV-002 EV-003 | {item} / latest validation summary | present | review / merge-ready / closeout evidence | Refresh progress summary after validation changes. |\n",
+        encoding="utf-8",
+    )
+    (suite_dir / "task-carrier.md").write_text(
+        "# Task Carrier\n\n"
+        "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        f"| repo_tasks_md | .loom/work-items/{item}.md | fixture in progress | in_progress | primary | .loom/work-items/{item}.md | .loom/specs/{item}/execution-breakdown.md#unit-{item.lower()}-1 | .loom/specs/{item}/spec.md#scenario-s1 | .loom/specs/{item}/plan.md#validation | .loom/specs/{item}/plan.md#validation | full suite happy path fixture | Recheck before consuming fixture output. |\n",
+        encoding="utf-8",
+    )
+
+
 def assert_minimal_suite_happy_path_fixture(target: Path, item: str) -> None:
     suite_minimal = run_suite_inspect_fixture(target, item)
     minimal_payload = suite_minimal.get("payload", {})
@@ -948,6 +1083,74 @@ def assert_minimal_suite_happy_path_fixture(target: Path, item: str) -> None:
         or suite_carrier_validate.get("payload", {}).get("task_carrier", {}).get("status") != "present"
     ):
         raise AssertionError("suite carrier validate minimal happy path payload drifted")
+
+
+def assert_full_suite_happy_path_fixture(target: Path, item: str) -> None:
+    suite_full = run_suite_inspect_fixture(target, item)
+    full_payload = suite_full.get("payload", {})
+    full_inventory = {entry["artifact"]: entry for entry in full_payload.get("artifact_inventory", [])}
+    expected_locators = {
+        "suite-index.md": f".loom/specs/{item}/suite-index.md",
+        "spec.md": f".loom/specs/{item}/spec.md",
+        "plan.md": f".loom/specs/{item}/plan.md",
+        "research.md": f".loom/specs/{item}/research.md",
+        "contracts.md": f".loom/specs/{item}/contracts.md",
+        "readiness-checklist.md": f".loom/specs/{item}/readiness-checklist.md",
+        "evidence-map.md": f".loom/specs/{item}/evidence-map.md",
+        "consistency-analysis.md": f".loom/specs/{item}/consistency-analysis.md",
+        "execution-breakdown.md": f".loom/specs/{item}/execution-breakdown.md",
+        "task-carrier": f".loom/specs/{item}/task-carrier.md",
+    }
+    if (
+        full_payload.get("suite_path") != "full"
+        or full_payload.get("suite_locator") != f".loom/specs/{item}/suite-index.md"
+        or full_payload.get("path_decision_locator") != f".loom/specs/{item}/suite-index.md"
+        or full_payload.get("missing_inputs")
+    ):
+        raise AssertionError("suite inspect full happy path payload drifted")
+    for artifact, locator in expected_locators.items():
+        entry = full_inventory.get(artifact, {})
+        if entry.get("locator") != locator or entry.get("status") != "present":
+            raise AssertionError(f"suite inspect full locator drifted for {artifact}")
+        if str(entry.get("locator", "")).startswith("/"):
+            raise AssertionError("suite inspect emitted absolute full suite artifact locator")
+    suite_full_validate = run_suite_validate_fixture(target, item)
+    mapping = suite_full_validate.get("payload", {}).get("spec_plan_mapping", {})
+    if (
+        suite_full_validate.get("result") != "pass"
+        or suite_full_validate.get("failed_layer") is not None
+        or suite_full_validate.get("fail_closed_reason") is not None
+        or suite_full_validate.get("missing_inputs")
+        or suite_full_validate.get("blocking_gaps")
+        or suite_full_validate.get("advisory_gaps")
+        or suite_full_validate.get("payload", {}).get("not_applicable_rationale")
+        or mapping.get("missing_scenarios")
+        or mapping.get("missing_acceptance")
+        or "docs/methodology/harness/full-spec-suite-cli-surface.md"
+        not in suite_full_validate.get("payload", {}).get("consumed_contracts", [])
+    ):
+        raise AssertionError("suite validate full happy path payload drifted")
+    suite_evidence_validate = run_suite_evidence_validate_fixture(target, item)
+    if (
+        suite_evidence_validate.get("result") != "pass"
+        or suite_evidence_validate.get("missing_inputs")
+        or suite_evidence_validate.get("blocking_gaps")
+        or suite_evidence_validate.get("payload", {}).get("evidence_map", {}).get("status") != "present"
+        or suite_evidence_validate.get("payload", {}).get("evidence_map", {}).get("row_count") != 4
+        or "docs/methodology/templates/evidence-map.md"
+        not in suite_evidence_validate.get("payload", {}).get("consumed_contracts", [])
+    ):
+        raise AssertionError("suite evidence validate full happy path payload drifted")
+    suite_carrier_validate = run_suite_carrier_validate_fixture(target, item)
+    if (
+        suite_carrier_validate.get("result") != "pass"
+        or suite_carrier_validate.get("missing_inputs")
+        or suite_carrier_validate.get("blocking_gaps")
+        or suite_carrier_validate.get("payload", {}).get("task_carrier", {}).get("status") != "present"
+        or "docs/methodology/harness/task-carrier-contract.md"
+        not in suite_carrier_validate.get("payload", {}).get("consumed_contracts", [])
+    ):
+        raise AssertionError("suite carrier validate full happy path payload drifted")
 
 
 def main() -> int:
@@ -1173,69 +1376,8 @@ def main() -> int:
             raise AssertionError("suite validate not_applicable payload drifted")
 
         full_target = tmp / "suite-full"
-        full_suite = full_target / ".loom" / "specs" / "WI-full"
-        full_suite.mkdir(parents=True)
-        (full_suite / "suite-index.md").write_text(
-            "# Full Suite Index\n\n- Schema marker: loom-full-suite-index/v1\n- Suite path: full\n",
-            encoding="utf-8",
-        )
-        for name in (
-            "spec.md",
-            "plan.md",
-            "evidence-map.md",
-            "consistency-analysis.md",
-            "execution-breakdown.md",
-            "task-carrier.md",
-        ):
-            (full_suite / name).write_text(f"# {name}\n", encoding="utf-8")
-        (full_suite / "spec.md").write_text(
-            "# Spec\n\n"
-            "## Key Scenarios\n\n"
-            "### Scenario S1\n\nGiven a full suite fixture\nWhen validation runs\nThen scenario mapping is consumed\n\n"
-            "## Acceptance Criteria\n\n"
-            "- [ ] A1: Full suite validation can consume test mapping\n",
-            encoding="utf-8",
-        )
-        (full_suite / "plan.md").write_text(
-            "# Plan\n\n"
-            "## Validation\n\n"
-            "- Scenario validation mapping:\n"
-            "  - S1 -> structural: python3 tools/check_cli_contract.py\n\n"
-            "## Test Strategy\n\n"
-            "- Acceptance test mapping:\n"
-            "  - A1 -> test evidence: python3 tools/check_cli_contract.py\n",
-            encoding="utf-8",
-        )
-        suite_full = run_suite_inspect_fixture(full_target, "WI-full")
-        full_payload = suite_full.get("payload", {})
-        full_inventory = {entry["artifact"]: entry for entry in full_payload.get("artifact_inventory", [])}
-        expected_full_locators = {
-            "suite-index.md": ".loom/specs/WI-full/suite-index.md",
-            "spec.md": ".loom/specs/WI-full/spec.md",
-            "plan.md": ".loom/specs/WI-full/plan.md",
-            "evidence-map.md": ".loom/specs/WI-full/evidence-map.md",
-            "consistency-analysis.md": ".loom/specs/WI-full/consistency-analysis.md",
-            "execution-breakdown.md": ".loom/specs/WI-full/execution-breakdown.md",
-            "task-carrier": ".loom/specs/WI-full/task-carrier.md",
-        }
-        if full_payload.get("suite_path") != "full" or full_payload.get("missing_inputs"):
-            raise AssertionError("suite inspect full path decision drifted")
-        for artifact, locator in expected_full_locators.items():
-            if full_inventory.get(artifact, {}).get("locator") != locator:
-                raise AssertionError(f"suite inspect full locator drifted for {artifact}")
-            if full_inventory[artifact]["locator"].startswith("/"):
-                raise AssertionError("suite inspect emitted absolute artifact locator")
-        if full_payload.get("task_carrier_locators") != [".loom/specs/WI-full/task-carrier.md"]:
-            raise AssertionError("suite inspect task carrier locators drifted")
-        suite_full_validate = run_suite_validate_fixture(full_target, "WI-full")
-        if (
-            suite_full_validate.get("result") != "pass"
-            or suite_full_validate.get("blocking_gaps")
-            or suite_full_validate.get("advisory_gaps")
-            or suite_full_validate.get("payload", {}).get("spec_plan_mapping", {}).get("missing_scenarios")
-            or suite_full_validate.get("payload", {}).get("spec_plan_mapping", {}).get("missing_acceptance")
-        ):
-            raise AssertionError("suite validate full pass payload drifted")
+        write_full_suite(full_target, "WI-full")
+        assert_full_suite_happy_path_fixture(full_target, "WI-full")
 
         evidence_target = tmp / "suite-evidence"
         evidence_suite = evidence_target / ".loom" / "specs" / "WI-evidence"
