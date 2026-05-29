@@ -4373,6 +4373,79 @@ def require_full_suite_happy_path_validation(
             failures.append(Failure(category, f"{context} `{label}` must pass the full suite happy path fixture"))
 
 
+def require_generated_skills_surface_parity_validation(
+    failures: list[Failure],
+    *,
+    root: Path,
+    category: str,
+    context: str,
+) -> None:
+    payload, error = load_command_json(
+        root,
+        ["python3", "tools/loom.py", "skills", "check", "--target", str(root), "--json"],
+        timeout_seconds=ADOPT_VERIFY_TIMEOUT_SECONDS,
+    )
+    if error:
+        failures.append(Failure(category, f"{context} `skills check` failed: {error}"))
+        return
+    checks = payload.get("checks")
+    if (
+        payload.get("command") != "skills check"
+        or payload.get("result") != "pass"
+        or payload.get("schema") != "loom-skills-surface/v1"
+        or payload.get("root_entry") != "loom-init"
+        or not isinstance(checks, list)
+        or not any(
+            isinstance(check, dict)
+            and "tools/skills_surface.py check" in str(check.get("command", ""))
+            and check.get("returncode") == 0
+            and "skills surface check: OK" in str(check.get("stdout", ""))
+            for check in checks
+        )
+    ):
+        failures.append(Failure(category, f"{context} `skills check` must prove generated skills surface parity"))
+        return
+
+    stable_surface_files = (
+        "registry.json",
+        "install-layout.json",
+        "upgrade-contract.json",
+        "distribution-and-adapter-contract.md",
+        "route-matrix.md",
+        "shared/references/templates/spec-suite.md",
+        "shared/references/templates/evidence-map.md",
+        "shared/references/templates/consistency-analysis.md",
+        "shared/references/harness/task-carrier-contract.md",
+    )
+    for relative in stable_surface_files:
+        source = root / "src/skills" / relative
+        generated = root / "skills" / relative
+        if not source.is_file() or not generated.is_file():
+            failures.append(Failure(category, f"{context} generated skills parity missing `{relative}`"))
+            continue
+        if source.read_bytes() != generated.read_bytes():
+            failures.append(Failure(category, f"{context} generated skills parity drifted for `{relative}`"))
+
+    registry = load_json_file(root / "src/skills/registry.json")
+    entries = registry.get("entries") if isinstance(registry, dict) else None
+    if not isinstance(entries, list) or not entries:
+        failures.append(Failure(category, f"{context} source skills registry must expose public entries"))
+        return
+    for entry in entries:
+        skill_id = entry.get("id") if isinstance(entry, dict) else None
+        if not isinstance(skill_id, str) or not skill_id:
+            failures.append(Failure(category, f"{context} source skills registry contains an invalid entry"))
+            continue
+        runtime_root = root / "skills" / skill_id / ".loom-runtime"
+        for relative in ("registry.json", "install-layout.json", "route-matrix.md"):
+            source = root / "src/skills" / relative
+            runtime = runtime_root / relative
+            if not runtime.is_file():
+                failures.append(Failure(category, f"{context} `{skill_id}` runtime missing `{relative}`"))
+                continue
+            if source.read_bytes() != runtime.read_bytes():
+                failures.append(Failure(category, f"{context} `{skill_id}` runtime drifted for `{relative}`"))
+
 def author_suite_negative_fail_closed_fixtures(target: Path) -> tuple[str, str]:
     full_item = "WI-full-missing-negative"
     full_suite = target / ".loom/specs" / full_item
@@ -8387,6 +8460,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 category="daily-execution-cli",
                 context=f"`{label}` source full suite happy path",
             )
+            require_generated_skills_surface_parity_validation(
+                failures,
+                root=root,
+                category="daily-execution-cli",
+                context=f"`{label}` source generated skills surface parity",
+            )
             require_suite_negative_fail_closed_validation(
                 failures,
                 root=root,
@@ -10558,6 +10637,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     item="WI-full-happy",
                     category="daily-execution-cli",
                     context="`installed pre-merge chain` full suite happy path",
+                )
+                require_generated_skills_surface_parity_validation(
+                    failures,
+                    root=root,
+                    category="daily-execution-cli",
+                    context="`installed pre-merge chain` generated skills surface parity",
                 )
                 require_suite_negative_fail_closed_validation(
                     failures,

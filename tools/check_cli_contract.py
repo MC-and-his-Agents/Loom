@@ -1191,6 +1191,60 @@ def assert_full_suite_happy_path_fixture(target: Path, item: str) -> None:
         raise AssertionError("suite carrier validate full happy path payload drifted")
 
 
+def assert_generated_skills_surface_parity_contract(skills_check: dict[str, Any]) -> None:
+    if (
+        skills_check.get("command") != "skills check"
+        or skills_check.get("result") != "pass"
+        or skills_check.get("schema") != "loom-skills-surface/v1"
+        or skills_check.get("root_entry") != "loom-init"
+        or skills_check.get("failed_layer") is not None
+        or skills_check.get("fail_closed_reason") is not None
+    ):
+        raise AssertionError("skills check did not expose a passing generated skills parity contract")
+    checks = skills_check.get("checks")
+    if not isinstance(checks, list) or not any(
+        isinstance(check, dict)
+        and "tools/skills_surface.py check" in str(check.get("command", ""))
+        and check.get("returncode") == 0
+        and "skills surface check: OK" in str(check.get("stdout", ""))
+        for check in checks
+    ):
+        raise AssertionError("skills check did not consume tools/skills_surface.py check")
+
+    stable_surface_files = (
+        "registry.json",
+        "install-layout.json",
+        "upgrade-contract.json",
+        "distribution-and-adapter-contract.md",
+        "route-matrix.md",
+        "shared/references/templates/spec-suite.md",
+        "shared/references/templates/evidence-map.md",
+        "shared/references/templates/consistency-analysis.md",
+        "shared/references/harness/task-carrier-contract.md",
+    )
+    for relative in stable_surface_files:
+        source = REPO_ROOT / "src" / "skills" / relative
+        generated = REPO_ROOT / "skills" / relative
+        if not source.is_file() or not generated.is_file():
+            raise AssertionError(f"generated skills surface missing parity file: {relative}")
+        if source.read_bytes() != generated.read_bytes():
+            raise AssertionError(f"generated skills surface drifted from src/skills: {relative}")
+
+    registry = json.loads((REPO_ROOT / "src/skills/registry.json").read_text(encoding="utf-8"))
+    for entry in registry.get("entries", []):
+        skill_id = entry.get("id")
+        if not isinstance(skill_id, str) or not skill_id:
+            raise AssertionError("src/skills registry contains an invalid skill entry")
+        package_root = REPO_ROOT / "skills" / skill_id
+        runtime_root = package_root / ".loom-runtime"
+        for relative in ("registry.json", "install-layout.json", "route-matrix.md"):
+            source = REPO_ROOT / "src" / "skills" / relative
+            runtime = runtime_root / relative
+            if not runtime.is_file():
+                raise AssertionError(f"{skill_id} package runtime missing {relative}")
+            if source.read_bytes() != runtime.read_bytes():
+                raise AssertionError(f"{skill_id} package runtime drifted for {relative}")
+
 def main() -> int:
     _, help_payload = run_json(["help", "--json"], expect=0)
     matrix = {entry["command"]: entry for entry in help_payload["commands"]}
@@ -2622,6 +2676,8 @@ def main() -> int:
         status, skills_generate = run_json(["skills", "generate", "--json"])
         if status == 0 or skills_generate["failed_layer"] != "skills-surface":
             raise AssertionError("skills generate did not fail closed without --apply")
+        _, skills_check = run_json(["skills", "check", "--target", str(REPO_ROOT), "--json"], expect=0)
+        assert_generated_skills_surface_parity_contract(skills_check)
         _, skills_package = run_json(["skills", "package", "--json"], expect=0)
         if not skills_package["packages"]:
             raise AssertionError("skills package did not emit package metadata")
