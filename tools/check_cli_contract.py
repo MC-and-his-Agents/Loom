@@ -229,7 +229,14 @@ def assert_suite_gate_consumption(payload: dict[str, Any], *, expected_surface: 
         if command_fragment not in str(validation.get("command", "")):
             raise AssertionError(f"{expected_surface} {domain} validation command drifted")
     step_names = {step.get("name") for step in payload.get("steps", []) if isinstance(step, dict)}
-    if {"suite-evidence-validate", "suite-carrier-validate"} - step_names:
+    subcheck_names = {
+        subcheck.get("id")
+        for subcheck in payload.get("gate", {}).get("subchecks", [])
+        if isinstance(subcheck, dict)
+    }
+    has_step_evidence = {"suite-evidence-validate", "suite-carrier-validate"}.issubset(step_names)
+    has_closeout_subchecks = {"suite_evidence_validation", "suite_carrier_validation"}.issubset(subcheck_names)
+    if not has_step_evidence and not has_closeout_subchecks:
         raise AssertionError(f"{expected_surface} did not expose suite evidence/carrier validation steps")
     consumed = suite_gate.get("consumed_locators", {})
     if (
@@ -339,6 +346,23 @@ def assert_review_record_consumed_locators(active_item: str) -> None:
             or not isinstance(implementation_consumed.get("suite_carrier_consumed_contracts"), list)
         ):
             raise AssertionError("implementation review record consumed suite/evidence locators drifted")
+
+
+def assert_closeout_blocks_missing_suite_evidence(active_item: str) -> None:
+    evidence_map = f".loom/specs/{active_item}/evidence-map.md"
+    with preserved_repo_paths((evidence_map,)):
+        path = REPO_ROOT / evidence_map
+        if path.exists():
+            path.unlink()
+        status, payload = run_json(["closeout", "--target", str(REPO_ROOT), "--json"])
+        if status == 0 or payload.get("result") != "block":
+            raise AssertionError("closeout did not fail closed when suite evidence was missing")
+        suite_gate = payload.get("suite_gate_validation")
+        if not isinstance(suite_gate, dict) or suite_gate.get("surface") != "closeout":
+            raise AssertionError("closeout missing suite gate validation on missing suite evidence")
+        missing = payload.get("missing_inputs")
+        if not isinstance(missing, list) or not any("suite_evidence_validation" in str(message) for message in missing):
+            raise AssertionError("closeout missing inputs did not identify suite evidence validation")
 
 
 def snapshot_tree(target: Path) -> list[str]:
@@ -2330,6 +2354,8 @@ def main() -> int:
         _, closeout_payload = run_json(["closeout", "--target", str(REPO_ROOT), "--json"], expect=0)
         if closeout_payload["command"] != "closeout" or closeout_payload.get("schema_version") != "loom-scenario-control/v1":
             raise AssertionError("closeout did not wrap the closeout check runtime")
+        assert_suite_gate_consumption(closeout_payload, expected_surface="closeout")
+        assert_closeout_blocks_missing_suite_evidence(active_item)
         _, checkpoint_admission = run_json(["checkpoint", "admission", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"])
         if checkpoint_admission["command"] != "checkpoint admission" or checkpoint_admission.get("checkpoint") != "admission":
             raise AssertionError("checkpoint admission did not wrap checkpoint JSON")
