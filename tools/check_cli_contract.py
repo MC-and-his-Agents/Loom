@@ -728,6 +728,44 @@ def assert_suite_failure_taxonomy(payload: dict[str, Any], failure_kind: str, *,
         raise AssertionError(f"suite validate failure_taxonomy values drifted for {failure_kind}")
 
 
+def assert_suite_negative_fail_closed(
+    payload: dict[str, Any],
+    failure_kind: str,
+    *,
+    expected_missing_inputs: tuple[str, ...] = (),
+    expected_missing_fields: tuple[str, ...] = (),
+) -> None:
+    if payload.get("result") != "block" or payload.get("fail_closed_reason") != failure_kind:
+        raise AssertionError(f"suite validate did not fail closed with {failure_kind}")
+    blocking_gaps = payload.get("blocking_gaps", [])
+    if not blocking_gaps or not any(gap.get("failure_kind") == failure_kind for gap in blocking_gaps):
+        raise AssertionError(f"suite validate blocking gaps missing {failure_kind}")
+    matching_gaps = [gap for gap in blocking_gaps if gap.get("failure_kind") == failure_kind]
+    for gap in matching_gaps:
+        if not gap.get("remediation_direction") or not gap.get("consumer_impact") or not gap.get("fallback_to"):
+            raise AssertionError(f"suite validate {failure_kind} gap missing remediation contract")
+    payload_body = payload.get("payload", {})
+    if not payload_body.get("remediation_directions"):
+        raise AssertionError(f"suite validate {failure_kind} payload missing remediation directions")
+    top_missing = payload.get("missing_inputs", [])
+    payload_missing = payload_body.get("missing_inputs", [])
+    for expected in expected_missing_inputs:
+        if expected not in top_missing or expected not in payload_missing:
+            raise AssertionError(f"suite validate {failure_kind} missing input drifted: {expected}")
+    if expected_missing_fields:
+        records = payload_body.get("not_applicable_rationale", [])
+        missing_fields = {
+            field
+            for record in records
+            if isinstance(record, dict)
+            for field in record.get("missing_fields", [])
+        }
+        for expected in expected_missing_fields:
+            if expected not in missing_fields:
+                raise AssertionError(f"suite validate not_applicable missing field drifted: {expected}")
+    assert_suite_failure_taxonomy(payload, failure_kind, result="block", layer=str(payload.get("failed_layer") or "suite"))
+
+
 def write_state(target: Path, payload: dict[str, Any]) -> None:
     state_dir = target / ".loom"
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -1298,25 +1336,20 @@ def main() -> int:
         minimal_invalid_suite = minimal_invalid_target / ".loom" / "specs" / "WI-minimal-invalid"
         minimal_invalid_suite.mkdir(parents=True)
         (minimal_invalid_suite / "spec.md").write_text(
-            "# Spec\n\n- Suite path: minimal\n\n- Full suite artifacts not_applicable: rationale: fixture only.\n",
+            "# Spec\n\n- Suite path: minimal\n\n- Full suite artifacts not_applicable.\n",
             encoding="utf-8",
         )
         (minimal_invalid_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
         suite_minimal_invalid = run_suite_validate_fixture(minimal_invalid_target, "WI-minimal-invalid", expect=1)
-        if (
-            suite_minimal_invalid.get("result") != "block"
-            or suite_minimal_invalid.get("fail_closed_reason") != "invalid_not_applicable_rationale"
-            or not any(
-                gap.get("failure_kind") == "invalid_not_applicable_rationale"
-                for gap in suite_minimal_invalid.get("blocking_gaps", [])
-            )
-        ):
-            raise AssertionError("suite validate invalid not_applicable rationale payload drifted")
-        assert_suite_failure_taxonomy(
+        assert_suite_negative_fail_closed(
             suite_minimal_invalid,
             "invalid_not_applicable_rationale",
-            result="block",
-            layer="suite",
+            expected_missing_inputs=(
+                "not_applicable_rationale:.loom/specs/WI-minimal-invalid/spec.md:block-3:rationale",
+                "not_applicable_rationale:.loom/specs/WI-minimal-invalid/spec.md:block-3:consumer_boundary",
+                "not_applicable_rationale:.loom/specs/WI-minimal-invalid/spec.md:block-3:recheck_condition",
+            ),
+            expected_missing_fields=("rationale", "consumer_boundary", "recheck_condition"),
         )
 
         minimal_deferred_target = tmp / "suite-minimal-deferred"
@@ -2083,21 +2116,12 @@ def main() -> int:
         ):
             raise AssertionError("suite inspect missing required artifact payload drifted")
         suite_full_missing_validate = run_suite_validate_fixture(full_missing_target, "WI-full-missing", expect=1)
-        if (
-            suite_full_missing_validate.get("result") != "block"
-            or suite_full_missing_validate.get("failed_layer") != "suite"
-            or suite_full_missing_validate.get("fail_closed_reason") != "missing_required_artifact"
-            or not any(
-                gap.get("failure_kind") == "missing_required_artifact"
-                for gap in suite_full_missing_validate.get("blocking_gaps", [])
-            )
-        ):
-            raise AssertionError("suite validate missing required artifact payload drifted")
-        assert_suite_failure_taxonomy(
+        if suite_full_missing_validate.get("failed_layer") != "suite":
+            raise AssertionError("suite validate missing required artifact layer drifted")
+        assert_suite_negative_fail_closed(
             suite_full_missing_validate,
             "missing_required_artifact",
-            result="block",
-            layer="suite",
+            expected_missing_inputs=("required_artifact:.loom/specs/WI-full-missing/plan.md",),
         )
 
         full_invalid_target = tmp / "suite-full-invalid"
