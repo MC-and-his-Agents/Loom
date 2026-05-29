@@ -7,9 +7,11 @@
 - `.loom/specs/WI-1151/*`
 - `.loom/work-items/WI-1151.md`
 - `.loom/progress/WI-1151.md`
+- `.loom/progress/WI-1149.md` terminal fact-chain sync only, because PR #1186 is already merged/closed but `origin/main` still carries a merge checkpoint carrier that blocks single-active-WI purity after #1151 rebase.
 - `.loom/reviews/WI-1151.spec.json`
 - `.loom/reviews/WI-1151.json`
 - generated hash carriers for changed `loom_check.py`
+- `.loom/shadow/merge-ready-loom.json` and `.loom/shadow/closeout-loom.json` status hash parity only, when `.loom/status/current.md` changes for the #1151 active carrier.
 
 ## Behavior Contract
 
