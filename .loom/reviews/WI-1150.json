@@ -1,0 +1,39 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1150",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allows WI-1150: stale evidence and host conflict block fixtures remain scoped, the CI gate provenance repair only refreshes .loom/bootstrap/init-result.json for the current .loom/bin/loom_check.py hash, and production reconciliation behavior remains unchanged.",
+  "reviewer": "codex",
+  "reviewed_head": "e61d33b366839e0d4fc31ee93755cc311f09f73e",
+  "reviewed_validation_summary": "Passing local evidence on 2026-05-29 for CI gate repair head e61d33b366839e0d4fc31ee93755cc311f09f73e: git diff --check; focused rg for runtime hash evidence; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py; make loom-check; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1150.md",
+    "recovery_entry": ".loom/progress/WI-1150.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "suite_validation": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1150 --json",
+    "source_self_fixture": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface source-self-fixture .",
+    "contract_only": "PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
+}

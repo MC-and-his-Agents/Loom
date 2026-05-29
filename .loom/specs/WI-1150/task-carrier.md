@@ -1,0 +1,5 @@
+# WI-1150 Task Carrier
+
+| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1150 | Issue open / Project In Progress / PR pending | in_progress | primary | .loom/work-items/WI-1150.md | .loom/specs/WI-1150/execution-breakdown.md#unit-1150-1 | .loom/specs/WI-1150/spec.md#scenario-s1 | .loom/specs/WI-1150/plan.md#implementation-plan | .loom/specs/WI-1150/plan.md#validation-commands | workspace comment https://github.com/MC-and-his-Agents/Loom/issues/1150#issuecomment-4572244095; branch work/1150-stale-host-conflict-fixtures; workspace entry ./. | Recheck issue / PR / Project binding before PR handoff; carrier state is tracking-only. |

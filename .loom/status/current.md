@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1149
-- Goal: Add missing artifact and invalid not_applicable fail-closed fixtures for the full spec suite CLI chain.
-- Scope: #1149 only: add negative fixtures for a missing full required artifact and a minimal path not_applicable record missing rationale, consumer boundary, and recheck condition; assert result=block, failure taxonomy, blocking gaps, remediation, and missing-input evidence in CLI contract and source/installed loom_check surfaces.
-- Execution Path: issue #1149 -> branch work/1149-negative-suite-fixtures -> target-local workspace `.` -> PR #1186.
-- Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1149.md
-- Review Entry: .loom/reviews/WI-1149.json
-- Validation Entry: git diff --check; focused rg; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_cli_contract.py; py_compile/source-self fixture checks as applicable.
-- Closing Condition: #1149 PR is opened with validation evidence for the owning worker; main thread owns final review, merge ordering, Project closeout, #1149 issue closeout, and parent FR/phase reconciliation after merge.
+- Item ID: WI-1150
+- Goal: Add stale evidence and host state conflict fixtures that prove stale evidence and host conflicts block merge-ready/closeout consumption.
+- Scope: #1150 only: source and generated `loom_check` fixture coverage for stale HEAD / PR head / validation summary binding, plus Project / issue / carrier host conflict blocking with taxonomy and remediation assertions. Do not change production reconciliation behavior, parent FR closeout, #1107 closeout, #1149, or #1151-#1153 carriers.
+- Execution Path: issue #1150 -> branch work/1150-stale-host-conflict-fixtures -> workspace root `.` -> PR #1187.
+- Workspace Entry: ./.
+- Recovery Entry: .loom/progress/WI-1150.md
+- Review Entry: .loom/reviews/WI-1150.json
+- Validation Entry: git diff --check; focused rg; python3 tools/skills_surface.py check; python3 tools/check_cli_contract.py; python3 tools/loom_check.py --profile source --source-surface source-self-fixture .; python3 tools/loom_check.py --profile source --source-surface contract-only .; root self-governance dry checks.
+- Closing Condition: #1150 PR is opened with head SHA and validation evidence for stale / host conflict fixture blocks; parent FR #1145 and #1107 closeout remain out of scope for this worker.
 - Current Checkpoint: merge
-- Current Stop: PR #1186 gate/checkpoint evidence has been refreshed for main-thread consumption: #1149 remains scoped to negative suite fixtures, authored implementation review is bound to the PR implementation head, status/progress carriers are target-local, and closeout/merge remain out of worker scope.
-- Next Step: Main thread may consume PR #1186 merge-gate evidence and decide merge order; this worker must not merge, close #1149, close parent items, or advance Project reconciliation.
+- Current Stop: Stale evidence and host conflict fixture implementation and local validation are complete; PR creation is pending.
+- Next Step: Commit, push `work/1150-stale-host-conflict-fixtures`, open PR, and leave #1150 / parent closeout for the main thread.
 - Blockers: None recorded.
-- Latest Validation Summary: Passing local evidence on 2026-05-29 for PR #1186 fact-chain evidence refresh: PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .; git diff --check; python3 tools/loom_flow.py pr-gate check --target . --pr 1186 --head-sha <PR-head> --branch work/1149-negative-suite-fixtures; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check.
-- Recovery Boundary: #1149 owns only missing full required artifact and invalid minimal not_applicable negative fixtures. It does not implement evidence freshness, host conflict, scaffold, generated-skill parity, PR gate, merge-ready, closeout, Project reconciliation, #1145 closeout, or #1107 closeout.
-- Current Lane: full-spec-suite-cli/e2e-governance/negative-fixtures
+- Latest Validation Summary: Passing local evidence on 2026-05-29 for CI gate repair head e61d33b366839e0d4fc31ee93755cc311f09f73e: git diff --check; focused rg for runtime hash evidence; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py; make loom-check; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .
+- Recovery Boundary: #1150 owns stale evidence and host state conflict fixtures only; it does not modify production reconciliation behavior, close #1150, close #1145, advance #1107 closeout, or touch #1149/#1151-#1153 carriers.
+- Current Lane: full-spec-suite-cli/e2e-governance/stale-host-conflict-fixtures
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1149.md
-- Dynamic Truth: .loom/progress/WI-1149.md
+- Static Truth: .loom/work-items/WI-1150.md
+- Dynamic Truth: .loom/progress/WI-1150.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
