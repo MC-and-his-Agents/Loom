@@ -825,15 +825,129 @@ def valid_state(target: Path) -> dict[str, Any]:
 def write_minimal_suite(target: Path, item: str) -> None:
     suite_dir = target / ".loom" / "specs" / item
     suite_dir.mkdir(parents=True)
+    (target / ".loom" / "work-items").mkdir(parents=True, exist_ok=True)
+    (target / ".loom" / "progress").mkdir(parents=True, exist_ok=True)
     (suite_dir / "spec.md").write_text(
         "# Spec\n\n"
         "- Suite path: minimal\n\n"
+        "## Scenarios\n\n"
+        "- Scenario S1: Minimal suite happy path validates without full-path artifacts.\n\n"
+        "## Acceptance Criteria\n\n"
+        "- AC-1: Suite validation passes with a legal full-artifact skip rationale.\n"
+        "- AC-2: Evidence validation passes with behavior, test, and fresh verification evidence.\n"
+        "- AC-3: Carrier validation passes with a primary Work Item carrier.\n\n"
         "- Full suite artifacts not_applicable: rationale: low-risk verify profile fixture; "
-        "consumer boundary: verify only requires suite validate for this fixture; "
+        "consumer boundary: minimal suite happy path fixture requires suite validate, evidence validate, "
+        "and carrier validate but not full-path artifacts; "
         "recheck condition: profile expands beyond minimal suite validation.\n",
         encoding="utf-8",
     )
-    (suite_dir / "plan.md").write_text("# Plan\n\nConsumes Suite path: minimal\n", encoding="utf-8")
+    (suite_dir / "plan.md").write_text(
+        "# Plan\n\n"
+        "- Suite path: minimal\n\n"
+        "## Validation\n\n"
+        "- S1 -> automated validation evidence: suite validate, suite evidence validate, and suite carrier validate.\n"
+        "- AC-1 -> test evidence: suite validate pass payload.\n"
+        "- AC-2 -> test evidence: suite evidence validate pass payload.\n"
+        "- AC-3 -> test evidence: suite carrier validate pass payload.\n\n"
+        "## Minimal Path Applicability Records\n\n"
+        "- full-path-artifacts not_applicable rationale: low-risk verify profile fixture; "
+        "consumer boundary: minimal suite happy path fixture requires suite validate, evidence validate, "
+        "and carrier validate but not full-path artifacts; "
+        "recheck condition: profile expands beyond minimal suite validation.\n",
+        encoding="utf-8",
+    )
+    (target / ".loom" / "work-items" / f"{item}.md").write_text(
+        f"# {item}\n\n"
+        f"- Item ID: {item}\n"
+        "- Scope: Minimal suite happy path fixture for source and installed regression checks.\n"
+        f"- Spec Entry: .loom/specs/{item}/spec.md\n"
+        f"- Plan Entry: .loom/specs/{item}/plan.md\n"
+        f"- Recovery Entry: .loom/progress/{item}.md\n"
+        f"- Validation Entry: suite validate; suite evidence validate; suite carrier validate\n",
+        encoding="utf-8",
+    )
+    (target / ".loom" / "progress" / f"{item}.md").write_text(
+        f"# {item} Progress\n\n"
+        f"- Item ID: {item}\n"
+        "- Current Stop: Minimal suite happy path fixture is ready for validation.\n"
+        "- Next Step: Run source and installed suite regression checks.\n"
+        "- Latest Validation Summary: fixture validation pending until commands run.\n"
+        "- Recovery Boundary: Fixture only; does not author review, merge-ready, closeout, or Project truth.\n"
+        "- Current Lane: fixture\n"
+        f"- Plan Locator: .loom/specs/{item}/plan.md\n"
+        f"- Acceptance Locator: .loom/specs/{item}/spec.md\n"
+        f"- Validation Evidence Locator: .loom/specs/{item}/evidence-map.md\n",
+        encoding="utf-8",
+    )
+    (suite_dir / "execution-breakdown.md").write_text(
+        "# Execution Breakdown\n\n"
+        f"| Unit | Scope | Owner | Status | Validation |\n"
+        "| --- | --- | --- | --- | --- |\n"
+        f"| unit-{item.lower()}-1 | Minimal suite happy path fixture. | loom_check fixture | done | suite validate / evidence validate / carrier validate |\n",
+        encoding="utf-8",
+    )
+    (suite_dir / "evidence-map.md").write_text(
+        "# Evidence Map\n\n"
+        "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        f"| EV-001 | behavior_evidence | .loom/specs/{item}/spec.md | S1 / AC-1 | {item} / minimal suite behavior | present | fixture evidence only | Re-run suite validate after changing the fixture. |\n"
+        f"| EV-002 | test_evidence | .loom/specs/{item}/plan.md | validation plan | {item} / minimal suite tests | present | fixture evidence only | Re-run source and installed checks after changing the fixture. |\n"
+        f"| EV-003 | fresh_verification_input | .loom/progress/{item}.md | EV-001 EV-002 | {item} / latest validation summary | present | review / merge-ready / closeout evidence | Refresh progress summary after validation changes. |\n",
+        encoding="utf-8",
+    )
+    (suite_dir / "task-carrier.md").write_text(
+        "# Task Carrier\n\n"
+        "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        f"| repo_tasks_md | .loom/work-items/{item}.md | fixture in progress | in_progress | primary | .loom/work-items/{item}.md | .loom/specs/{item}/execution-breakdown.md#unit-{item.lower()}-1 | .loom/specs/{item}/spec.md#scenario-s1 | .loom/specs/{item}/plan.md#validation | .loom/specs/{item}/plan.md#validation | minimal suite happy path fixture | Recheck before consuming fixture output. |\n",
+        encoding="utf-8",
+    )
+
+
+def assert_minimal_suite_happy_path_fixture(target: Path, item: str) -> None:
+    suite_minimal = run_suite_inspect_fixture(target, item)
+    minimal_payload = suite_minimal.get("payload", {})
+    minimal_inventory = {entry["artifact"]: entry for entry in minimal_payload.get("artifact_inventory", [])}
+    if (
+        minimal_payload.get("suite_path") != "minimal"
+        or minimal_payload.get("path_decision_locator") != f".loom/specs/{item}/spec.md"
+        or minimal_payload.get("spec_locator") != f".loom/specs/{item}/spec.md"
+        or minimal_payload.get("plan_locator") != f".loom/specs/{item}/plan.md"
+        or minimal_inventory.get("spec.md", {}).get("locator") != f".loom/specs/{item}/spec.md"
+        or minimal_inventory.get("plan.md", {}).get("locator") != f".loom/specs/{item}/plan.md"
+        or minimal_payload.get("missing_inputs")
+    ):
+        raise AssertionError("suite inspect minimal happy path payload drifted")
+    suite_minimal_validate = run_suite_validate_fixture(target, item)
+    if (
+        suite_minimal_validate.get("result") != "pass"
+        or suite_minimal_validate.get("failed_layer") is not None
+        or suite_minimal_validate.get("fail_closed_reason") is not None
+        or suite_minimal_validate.get("missing_inputs")
+        or suite_minimal_validate.get("blocking_gaps")
+        or suite_minimal_validate.get("advisory_gaps")
+        or not suite_minimal_validate.get("payload", {}).get("not_applicable_rationale")
+        or "docs/methodology/harness/full-spec-suite-cli-surface.md"
+        not in suite_minimal_validate.get("payload", {}).get("consumed_contracts", [])
+    ):
+        raise AssertionError("suite validate minimal happy path payload drifted")
+    suite_evidence_validate = run_suite_evidence_validate_fixture(target, item)
+    if (
+        suite_evidence_validate.get("result") != "pass"
+        or suite_evidence_validate.get("missing_inputs")
+        or suite_evidence_validate.get("blocking_gaps")
+        or suite_evidence_validate.get("payload", {}).get("evidence_map", {}).get("status") != "present"
+    ):
+        raise AssertionError("suite evidence validate minimal happy path payload drifted")
+    suite_carrier_validate = run_suite_carrier_validate_fixture(target, item)
+    if (
+        suite_carrier_validate.get("result") != "pass"
+        or suite_carrier_validate.get("missing_inputs")
+        or suite_carrier_validate.get("blocking_gaps")
+        or suite_carrier_validate.get("payload", {}).get("task_carrier", {}).get("status") != "present"
+    ):
+        raise AssertionError("suite carrier validate minimal happy path payload drifted")
 
 
 def main() -> int:
@@ -974,43 +1088,8 @@ def main() -> int:
             raise AssertionError("suite validate conflicting path decision payload drifted")
 
         minimal_target = tmp / "suite-minimal"
-        minimal_suite = minimal_target / ".loom" / "specs" / "WI-minimal"
-        minimal_suite.mkdir(parents=True)
-        (minimal_suite / "spec.md").write_text(
-            "# Spec\n\n"
-            "- Suite path: minimal\n\n"
-            "- Full suite artifacts not_applicable: rationale: low-risk CLI contract fixture; "
-            "consumer boundary: suite validate and spec review do not require full path artifacts; "
-            "recheck condition: scope expands beyond minimal fixture coverage.\n",
-            encoding="utf-8",
-        )
-        (minimal_suite / "plan.md").write_text("# Plan\n\nConsumes Suite path: minimal\n", encoding="utf-8")
-        suite_minimal = run_suite_inspect_fixture(minimal_target, "WI-minimal")
-        minimal_payload = suite_minimal.get("payload", {})
-        minimal_inventory = {entry["artifact"]: entry for entry in minimal_payload.get("artifact_inventory", [])}
-        if (
-            minimal_payload.get("suite_path") != "minimal"
-            or minimal_payload.get("path_decision_locator") != ".loom/specs/WI-minimal/spec.md"
-            or minimal_payload.get("spec_locator") != ".loom/specs/WI-minimal/spec.md"
-            or minimal_payload.get("plan_locator") != ".loom/specs/WI-minimal/plan.md"
-            or minimal_inventory.get("spec.md", {}).get("locator") != ".loom/specs/WI-minimal/spec.md"
-            or minimal_inventory.get("plan.md", {}).get("locator") != ".loom/specs/WI-minimal/plan.md"
-            or minimal_payload.get("missing_inputs")
-        ):
-            raise AssertionError("suite inspect minimal locator payload drifted")
-        suite_minimal_validate = run_suite_validate_fixture(minimal_target, "WI-minimal")
-        if (
-            suite_minimal_validate.get("result") != "pass"
-            or suite_minimal_validate.get("failed_layer") is not None
-            or suite_minimal_validate.get("fail_closed_reason") is not None
-            or suite_minimal_validate.get("missing_inputs")
-            or suite_minimal_validate.get("blocking_gaps")
-            or suite_minimal_validate.get("advisory_gaps")
-            or not suite_minimal_validate.get("payload", {}).get("not_applicable_rationale")
-            or "docs/methodology/harness/full-spec-suite-cli-surface.md"
-            not in suite_minimal_validate.get("payload", {}).get("consumed_contracts", [])
-        ):
-            raise AssertionError("suite validate minimal pass payload drifted")
+        write_minimal_suite(minimal_target, "WI-minimal")
+        assert_minimal_suite_happy_path_fixture(minimal_target, "WI-minimal")
 
         minimal_invalid_target = tmp / "suite-minimal-invalid-rationale"
         minimal_invalid_suite = minimal_invalid_target / ".loom" / "specs" / "WI-minimal-invalid"
@@ -2301,6 +2380,7 @@ def main() -> int:
         required_state["profile_requirements"] = {"suite_validation": "required", "suite_item": "WI-verify"}
         write_state(required_target, required_state)
         write_minimal_suite(required_target, "WI-verify")
+        assert_minimal_suite_happy_path_fixture(required_target, "WI-verify")
         _, required_verify = run_json(["verify", "--target", str(required_target), "--json"], expect=0)
         if (
             required_verify.get("suite_validation_requirement", {}).get("required") is not True

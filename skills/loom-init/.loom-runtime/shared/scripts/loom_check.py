@@ -4098,6 +4098,59 @@ def require_review_run_payload(
                 failures.append(Failure(category, f"{context} app review metadata must keep raw App output outside merge-ready truth"))
 
 
+def require_minimal_suite_happy_path_validation(
+    failures: list[Failure],
+    *,
+    root: Path,
+    target: Path,
+    item: str,
+    category: str,
+    context: str,
+) -> None:
+    validations = (
+        (
+            "suite validate",
+            ["python3", "tools/loom.py", "suite", "validate", "--target", str(target), "--item", item, "--json"],
+            lambda payload: (
+                payload.get("result") == "pass"
+                and payload.get("failed_layer") is None
+                and payload.get("fail_closed_reason") is None
+                and not payload.get("missing_inputs")
+                and not payload.get("blocking_gaps")
+                and payload.get("payload", {}).get("suite_path") == "minimal"
+                and payload.get("payload", {}).get("not_applicable_rationale")
+            ),
+        ),
+        (
+            "suite evidence validate",
+            ["python3", "tools/loom.py", "suite", "evidence", "validate", "--target", str(target), "--item", item, "--json"],
+            lambda payload: (
+                payload.get("result") == "pass"
+                and not payload.get("missing_inputs")
+                and not payload.get("blocking_gaps")
+                and payload.get("payload", {}).get("evidence_map", {}).get("status") == "present"
+            ),
+        ),
+        (
+            "suite carrier validate",
+            ["python3", "tools/loom.py", "suite", "carrier", "validate", "--target", str(target), "--item", item, "--json"],
+            lambda payload: (
+                payload.get("result") == "pass"
+                and not payload.get("missing_inputs")
+                and not payload.get("blocking_gaps")
+                and payload.get("payload", {}).get("task_carrier", {}).get("status") == "present"
+            ),
+        ),
+    )
+    for label, command, predicate in validations:
+        payload, error = load_command_json(root, command)
+        if error:
+            failures.append(Failure(category, f"{context} `{label}` failed: {error}"))
+            continue
+        if not predicate(payload):
+            failures.append(Failure(category, f"{context} `{label}` must pass the minimal suite happy path fixture"))
+
+
 def require_runtime_state_payload(
     failures: list[Failure],
     *,
@@ -7695,6 +7748,14 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 return False
             prune_fixture_work_items(target)
             author_review_run_suite_fixture(target)
+            require_minimal_suite_happy_path_validation(
+                failures,
+                root=root,
+                target=target,
+                item="INIT-0001",
+                category="daily-execution-cli",
+                context=f"`{label}` source minimal suite happy path",
+            )
             for args in (
                 ["git", "add", "."],
                 ["git", "add", "-f", ".loom"],
@@ -9818,6 +9879,14 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     return None, errors
                 prune_fixture_work_items(target)
                 author_positive_suite_fixture(target)
+                require_minimal_suite_happy_path_validation(
+                    failures,
+                    root=root,
+                    target=target,
+                    item="INIT-0001",
+                    category="daily-execution-cli",
+                    context="`installed pre-merge chain` minimal suite happy path",
+                )
 
                 git_add = run_command(root, ["git", "add", "."], cwd=target)
                 if git_add.returncode != 0:
