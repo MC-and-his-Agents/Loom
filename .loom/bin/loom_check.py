@@ -4394,6 +4394,179 @@ def author_suite_negative_fail_closed_fixtures(target: Path) -> tuple[str, str]:
     return full_item, minimal_item
 
 
+SCAFFOLD_MUTATION_FORBIDDEN_SURFACES = (
+    ".loom/reviews/WI-scaffold-boundary.md",
+    ".loom/merge-ready/WI-scaffold-boundary.json",
+    ".loom/closeout/WI-scaffold-boundary.md",
+    ".loom/work-items/WI-scaffold-boundary.md",
+    ".loom/progress/WI-scaffold-boundary.md",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+    "skills/loom-review/SKILL.md",
+)
+
+
+def snapshot_scaffold_mutation_target(target: Path) -> dict[str, dict[str, str]]:
+    snapshot: dict[str, dict[str, str]] = {}
+    if not target.exists():
+        return snapshot
+    for path in sorted(target.rglob("*")):
+        relative = path.relative_to(target).as_posix()
+        if ".git" in path.relative_to(target).parts:
+            continue
+        if path.is_dir():
+            snapshot[relative] = {"kind": "directory"}
+        elif path.is_symlink():
+            snapshot[relative] = {"kind": "symlink", "target": os.readlink(path)}
+        elif path.is_file():
+            snapshot[relative] = {"kind": "file", "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+        else:
+            snapshot[relative] = {"kind": "other"}
+    return snapshot
+
+
+def author_scaffold_forbidden_truth_fixture(target: Path) -> dict[str, dict[str, str]]:
+    for index, relative in enumerate(SCAFFOLD_MUTATION_FORBIDDEN_SURFACES):
+        path = target / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.suffix == ".json":
+            path.write_text(
+                json.dumps({"fixture_surface": relative, "index": index}, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        else:
+            path.write_text(
+                f"# Scaffold mutation boundary fixture\n\n- locator: {relative}\n- index: {index}\n",
+                encoding="utf-8",
+            )
+    return snapshot_scaffold_mutation_target(target)
+
+
+def require_scaffold_mutation_boundary_validation(
+    failures: list[Failure],
+    *,
+    root: Path,
+    target: Path,
+    category: str,
+    context: str,
+) -> None:
+    full_artifacts = [
+        "suite-index.md",
+        "spec.md",
+        "plan.md",
+        "research.md",
+        "contracts.md",
+        "readiness-checklist.md",
+    ]
+    expected_full_created = [f".loom/specs/WI-scaffold-apply/{artifact}" for artifact in full_artifacts]
+
+    dry_run_target = target / "scaffold-dry-run"
+    dry_run_target.mkdir(parents=True, exist_ok=True)
+    dry_run_before = snapshot_scaffold_mutation_target(dry_run_target)
+    dry_payload, dry_error = load_command_json(
+        root,
+        [
+            "python3",
+            "tools/loom.py",
+            "suite",
+            "scaffold",
+            "--target",
+            str(dry_run_target),
+            "--item",
+            "WI-scaffold-dry-run",
+            "--suite",
+            "full",
+            "--json",
+        ],
+    )
+    if dry_error:
+        failures.append(Failure(category, f"{context} scaffold dry-run failed: {dry_error}"))
+    elif (
+        dry_payload.get("result") != "pass"
+        or dry_payload.get("mutates") is not False
+        or dry_payload.get("payload", {}).get("apply") is not False
+        or dry_payload.get("payload", {}).get("apply_required") is not True
+        or dry_payload.get("payload", {}).get("created_locators") != []
+        or sorted(entry.get("artifact") for entry in dry_payload.get("payload", {}).get("planned_writes", [])) != sorted(full_artifacts)
+        or snapshot_scaffold_mutation_target(dry_run_target) != dry_run_before
+    ):
+        failures.append(Failure(category, f"{context} scaffold dry-run must plan full artifacts without mutating the target"))
+
+    apply_target = target / "scaffold-apply"
+    apply_target.mkdir(parents=True, exist_ok=True)
+    apply_payload, apply_error = load_command_json(
+        root,
+        [
+            "python3",
+            "tools/loom.py",
+            "suite",
+            "scaffold",
+            "--target",
+            str(apply_target),
+            "--item",
+            "WI-scaffold-apply",
+            "--suite",
+            "full",
+            "--json",
+            "--apply",
+        ],
+    )
+    if apply_error:
+        failures.append(Failure(category, f"{context} scaffold apply failed: {apply_error}"))
+    elif (
+        apply_payload.get("result") != "pass"
+        or apply_payload.get("mutates") is not True
+        or apply_payload.get("payload", {}).get("apply") is not True
+        or apply_payload.get("payload", {}).get("apply_required") is not False
+        or apply_payload.get("payload", {}).get("created_locators") != expected_full_created
+        or any(not (apply_target / locator).is_file() for locator in expected_full_created)
+        or any(
+            locator
+            for locator in apply_payload.get("payload", {}).get("created_locators", [])
+            if not locator.startswith(".loom/specs/WI-scaffold-apply/")
+        )
+    ):
+        failures.append(Failure(category, f"{context} scaffold apply must create only contracted full suite artifacts"))
+
+    truth_target = target / "scaffold-host-truth-negative"
+    truth_target.mkdir(parents=True, exist_ok=True)
+    truth_before = author_scaffold_forbidden_truth_fixture(truth_target)
+    truth_payload, truth_error = load_command_json(
+        root,
+        [
+            "python3",
+            "tools/loom.py",
+            "suite",
+            "scaffold",
+            "--target",
+            str(truth_target),
+            "--item",
+            "WI-scaffold-boundary",
+            "--suite",
+            "full",
+            "--json",
+            "--apply",
+        ],
+    )
+    truth_after = snapshot_scaffold_mutation_target(truth_target)
+    for relative in SCAFFOLD_MUTATION_FORBIDDEN_SURFACES:
+        if truth_before.get(relative) != truth_after.get(relative):
+            failures.append(Failure(category, f"{context} scaffold apply must not mutate forbidden truth surface `{relative}`"))
+    if truth_error:
+        failures.append(Failure(category, f"{context} scaffold host truth negative fixture failed: {truth_error}"))
+    elif (
+        truth_payload.get("result") != "pass"
+        or truth_payload.get("mutates") is not True
+        or truth_payload.get("payload", {}).get("created_locators")
+        != [f".loom/specs/WI-scaffold-boundary/{artifact}" for artifact in full_artifacts]
+        or any(
+            locator
+            for locator in truth_payload.get("payload", {}).get("created_locators", [])
+            if not locator.startswith(".loom/specs/WI-scaffold-boundary/")
+        )
+    ):
+        failures.append(Failure(category, f"{context} scaffold host truth fixture must write only suite scaffold artifacts"))
+
+
 def require_suite_negative_fail_closed_validation(
     failures: list[Failure],
     *,
@@ -4448,6 +4621,156 @@ def require_suite_negative_fail_closed_validation(
             }
             if not set(expected_missing_fields).issubset(missing_fields):
                 failures.append(Failure(category, f"{context} `{label}` fixture must expose missing not_applicable fields"))
+
+
+def author_stale_evidence_block_fixture(target: Path, item: str) -> None:
+    suite_root = target / ".loom/specs" / item
+    suite_root.mkdir(parents=True, exist_ok=True)
+    (target / ".loom/progress").mkdir(parents=True, exist_ok=True)
+    (suite_root / "spec.md").write_text(
+        "# Spec\n\n"
+        "## Scenarios\n\n"
+        "### Scenario S1\n\n"
+        "Given evidence bound to a stale HEAD, stale PR head, or stale validation summary\n"
+        "When suite evidence validation runs\n"
+        "Then merge-ready and closeout consumption is blocked.\n",
+        encoding="utf-8",
+    )
+    (suite_root / "plan.md").write_text(
+        "# Plan\n\n"
+        "## Validation\n\n"
+        "- S1 -> automated validation evidence: suite evidence validate stale binding block payload.\n",
+        encoding="utf-8",
+    )
+    validation_summary = "Current validation summary for stale evidence fixture."
+    (target / ".loom/progress" / f"{item}.md").write_text(
+        f"# {item} Progress\n\n"
+        f"- Item ID: {item}\n"
+        "- Current Stop: Stale evidence fixture is intentionally blocked.\n"
+        "- Next Step: Refresh stale evidence before consumption.\n"
+        f"- Latest Validation Summary: {validation_summary}\n"
+        "- Recovery Boundary: Fixture only; it must not author review, merge-ready, closeout, or Project truth.\n",
+        encoding="utf-8",
+    )
+    stale_validation_digest = "a" * 64
+    (suite_root / "evidence-map.md").write_text(
+        "# Evidence Map\n\n"
+        "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        f"| EV-001 | behavior_evidence | .loom/specs/{item}/spec.md | S1 | previous HEAD; stale head | present | merge-ready / closeout evidence | Refresh behavior evidence on the current head. |\n"
+        f"| EV-002 | test_evidence | .loom/specs/{item}/plan.md | S1 validation | previous PR head; stale pr head | present | merge-ready / closeout evidence | Rerun tests on the current PR head. |\n"
+        f"| EV-003 | fresh_verification_input | .loom/progress/{item}.md | EV-001 EV-002 | validation_summary_sha256={stale_validation_digest}; stale validation summary | present | merge-ready / closeout evidence | Refresh validation summary binding before merge-ready. |\n",
+        encoding="utf-8",
+    )
+
+
+def require_stale_evidence_block_validation(
+    failures: list[Failure],
+    *,
+    root: Path,
+    target: Path,
+    item: str,
+    category: str,
+    context: str,
+) -> None:
+    payload, error = load_command_json(
+        root,
+        ["python3", "tools/loom.py", "suite", "evidence", "validate", "--target", str(target), "--item", item, "--json"],
+    )
+    if error:
+        failures.append(Failure(category, f"{context} `suite evidence validate` failed: {error}"))
+        return
+    blocking_gaps = payload.get("blocking_gaps", [])
+    failure_taxonomy = payload.get("payload", {}).get("failure_taxonomy", [])
+    remediation = payload.get("payload", {}).get("remediation_directions", [])
+    stale_taxonomy = next((entry for entry in failure_taxonomy if entry.get("failure_kind") == "stale_evidence"), {})
+    if (
+        payload.get("result") != "block"
+        or payload.get("fail_closed_reason") != "stale_evidence"
+        or not any(gap.get("failure_kind") == "stale_evidence" for gap in blocking_gaps)
+        or stale_taxonomy.get("default_result") != "block"
+        or stale_taxonomy.get("failed_layer") != "evidence_map"
+        or not any("Refresh" in str(entry) or "refresh" in str(entry) for entry in remediation)
+    ):
+        failures.append(
+            Failure(
+                category,
+                f"{context} `suite evidence validate` must block stale HEAD / PR head / validation summary evidence with taxonomy and remediation",
+            )
+        )
+
+
+def author_host_conflict_block_fixture(target: Path, item: str) -> None:
+    suite_root = target / ".loom/specs" / item
+    suite_root.mkdir(parents=True, exist_ok=True)
+    (target / ".loom/work-items").mkdir(parents=True, exist_ok=True)
+    (target / ".loom/progress").mkdir(parents=True, exist_ok=True)
+    (target / ".loom/work-items" / f"{item}.md").write_text(
+        f"# {item}\n\n"
+        f"- Item ID: {item}\n"
+        "- Scope: Host state conflict fixture only.\n"
+        f"- Recovery Entry: .loom/progress/{item}.md\n",
+        encoding="utf-8",
+    )
+    (target / ".loom/progress" / f"{item}.md").write_text(
+        f"# {item} Progress\n\n"
+        f"- Item ID: {item}\n"
+        "- Current Checkpoint: build\n"
+        "- Current Stop: Host conflict fixture is intentionally blocked.\n"
+        "- Next Step: Reconcile host mirrors before consumption.\n"
+        "- Latest Validation Summary: fixture\n"
+        "- Recovery Boundary: Fixture only; host carrier state stays mirror-only.\n",
+        encoding="utf-8",
+    )
+    (suite_root / "task-carrier.md").write_text(
+        "# Task Carrier\n\n"
+        "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        f"| github_project_item | project://loom/item/1150 | Project Done / issue open | done | mirror | .loom/work-items/{item}.md | .loom/specs/{item}/execution-breakdown.md#unit-project | .loom/specs/{item}/spec.md#scenario-project | .loom/specs/{item}/plan.md#phase-project | .loom/specs/{item}/plan.md#validation | project fixture | mirror only |\n"
+        f"| checklist_item | .loom/specs/{item}/task-carrier.md | checklist checked / evidence missing | done | evidence_locator | .loom/work-items/{item}.md | .loom/specs/{item}/execution-breakdown.md#unit-checklist | .loom/specs/{item}/spec.md#scenario-checklist | .loom/specs/{item}/plan.md#phase-checklist | .loom/specs/{item}/plan.md#validation | checklist fixture | checklist mirror only |\n"
+        f"| github_issue | https://github.com/owner/repo/pull/1150 | PR merged / issue open | done | mirror | .loom/work-items/{item}.md | .loom/specs/{item}/execution-breakdown.md#unit-pr | .loom/specs/{item}/spec.md#scenario-pr | .loom/specs/{item}/plan.md#phase-pr | .loom/specs/{item}/plan.md#validation | PR fixture | PR merged is merge locator only |\n",
+        encoding="utf-8",
+    )
+
+
+def require_host_conflict_block_validation(
+    failures: list[Failure],
+    *,
+    root: Path,
+    target: Path,
+    item: str,
+    category: str,
+    context: str,
+) -> None:
+    payload, error = load_command_json(
+        root,
+        ["python3", "tools/loom.py", "suite", "carrier", "validate", "--target", str(target), "--item", item, "--json"],
+    )
+    if error:
+        failures.append(Failure(category, f"{context} `suite carrier validate` failed: {error}"))
+        return
+    body = payload.get("payload", {})
+    host_conflict_ids = {entry.get("id") for entry in body.get("host_signal_conflicts", [])}
+    blocking_gaps = payload.get("blocking_gaps", [])
+    failure_taxonomy = body.get("failure_taxonomy", [])
+    remediation = body.get("remediation_directions", [])
+    carrier_taxonomy = next((entry for entry in failure_taxonomy if entry.get("failure_kind") == "carrier_truth_conflict"), {})
+    if (
+        payload.get("result") != "block"
+        or payload.get("fail_closed_reason") != "carrier_truth_conflict"
+        or not {"project-done-issue-open", "checklist-checked-evidence-missing", "pr-merged-issue-open"}.issubset(host_conflict_ids)
+        or not any(gap.get("failure_kind") == "carrier_truth_conflict" for gap in blocking_gaps)
+        or carrier_taxonomy.get("default_result") != "block"
+        or carrier_taxonomy.get("failed_layer") != "task_carrier"
+        or "project_done" not in body.get("recognized_truth_signals", [])
+        or not any("Reconcile" in str(entry) or "reconcile" in str(entry) for entry in remediation)
+    ):
+        failures.append(
+            Failure(
+                category,
+                f"{context} `suite carrier validate` must block Project / issue / carrier host conflicts with taxonomy and remediation",
+            )
+        )
 
 
 def require_runtime_state_payload(
@@ -8071,6 +8394,31 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 category="daily-execution-cli",
                 context=f"`{label}` source suite negative fail-closed",
             )
+            author_stale_evidence_block_fixture(target, "WI-stale-evidence")
+            require_stale_evidence_block_validation(
+                failures,
+                root=root,
+                target=target,
+                item="WI-stale-evidence",
+                category="daily-execution-cli",
+                context=f"`{label}` source stale evidence fixture",
+            )
+            author_host_conflict_block_fixture(target, "WI-host-conflict")
+            require_host_conflict_block_validation(
+                failures,
+                root=root,
+                target=target,
+                item="WI-host-conflict",
+                category="daily-execution-cli",
+                context=f"`{label}` source host conflict fixture",
+            )
+            require_scaffold_mutation_boundary_validation(
+                failures,
+                root=root,
+                target=target / "WI-1151-scaffold-fixtures",
+                category="daily-execution-cli",
+                context=f"`{label}` source scaffold mutation boundary",
+            )
             for args in (
                 ["git", "add", "."],
                 ["git", "add", "-f", ".loom"],
@@ -10217,6 +10565,31 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     target=target,
                     category="daily-execution-cli",
                     context="`installed pre-merge chain` suite negative fail-closed",
+                )
+                author_stale_evidence_block_fixture(target, "WI-stale-evidence")
+                require_stale_evidence_block_validation(
+                    failures,
+                    root=root,
+                    target=target,
+                    item="WI-stale-evidence",
+                    category="daily-execution-cli",
+                    context="`installed pre-merge chain` stale evidence fixture",
+                )
+                author_host_conflict_block_fixture(target, "WI-host-conflict")
+                require_host_conflict_block_validation(
+                    failures,
+                    root=root,
+                    target=target,
+                    item="WI-host-conflict",
+                    category="daily-execution-cli",
+                    context="`installed pre-merge chain` host conflict fixture",
+                )
+                require_scaffold_mutation_boundary_validation(
+                    failures,
+                    root=root,
+                    target=target / "WI-1151-scaffold-fixtures",
+                    category="daily-execution-cli",
+                    context="`installed pre-merge chain` scaffold mutation boundary",
                 )
 
                 git_add = run_command(root, ["git", "add", "."], cwd=target)

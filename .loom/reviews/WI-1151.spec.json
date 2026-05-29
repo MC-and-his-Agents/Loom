@@ -1,0 +1,15 @@
+{
+  "schema_version": "loom-review-record/v1",
+  "review_type": "spec",
+  "item": "WI-1151",
+  "result": "pass",
+  "decision": "The scoped plan covers dry-run no mutation, apply creates expected suite artifacts, and host truth negative fixture evidence without expanding scaffold artifact types.",
+  "consumed_locators": [
+    ".loom/specs/WI-1151/spec.md",
+    ".loom/specs/WI-1151/plan.md",
+    ".loom/specs/WI-1151/implementation-contract.md",
+    "https://github.com/MC-and-his-Agents/Loom/issues/1151"
+  ],
+  "findings": [],
+  "remaining_risk": "Final implementation review and PR gate remain for the main thread/reviewer."
+}

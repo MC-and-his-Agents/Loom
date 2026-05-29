@@ -4394,6 +4394,179 @@ def author_suite_negative_fail_closed_fixtures(target: Path) -> tuple[str, str]:
     return full_item, minimal_item
 
 
+SCAFFOLD_MUTATION_FORBIDDEN_SURFACES = (
+    ".loom/reviews/WI-scaffold-boundary.md",
+    ".loom/merge-ready/WI-scaffold-boundary.json",
+    ".loom/closeout/WI-scaffold-boundary.md",
+    ".loom/work-items/WI-scaffold-boundary.md",
+    ".loom/progress/WI-scaffold-boundary.md",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+    "skills/loom-review/SKILL.md",
+)
+
+
+def snapshot_scaffold_mutation_target(target: Path) -> dict[str, dict[str, str]]:
+    snapshot: dict[str, dict[str, str]] = {}
+    if not target.exists():
+        return snapshot
+    for path in sorted(target.rglob("*")):
+        relative = path.relative_to(target).as_posix()
+        if ".git" in path.relative_to(target).parts:
+            continue
+        if path.is_dir():
+            snapshot[relative] = {"kind": "directory"}
+        elif path.is_symlink():
+            snapshot[relative] = {"kind": "symlink", "target": os.readlink(path)}
+        elif path.is_file():
+            snapshot[relative] = {"kind": "file", "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+        else:
+            snapshot[relative] = {"kind": "other"}
+    return snapshot
+
+
+def author_scaffold_forbidden_truth_fixture(target: Path) -> dict[str, dict[str, str]]:
+    for index, relative in enumerate(SCAFFOLD_MUTATION_FORBIDDEN_SURFACES):
+        path = target / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.suffix == ".json":
+            path.write_text(
+                json.dumps({"fixture_surface": relative, "index": index}, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        else:
+            path.write_text(
+                f"# Scaffold mutation boundary fixture\n\n- locator: {relative}\n- index: {index}\n",
+                encoding="utf-8",
+            )
+    return snapshot_scaffold_mutation_target(target)
+
+
+def require_scaffold_mutation_boundary_validation(
+    failures: list[Failure],
+    *,
+    root: Path,
+    target: Path,
+    category: str,
+    context: str,
+) -> None:
+    full_artifacts = [
+        "suite-index.md",
+        "spec.md",
+        "plan.md",
+        "research.md",
+        "contracts.md",
+        "readiness-checklist.md",
+    ]
+    expected_full_created = [f".loom/specs/WI-scaffold-apply/{artifact}" for artifact in full_artifacts]
+
+    dry_run_target = target / "scaffold-dry-run"
+    dry_run_target.mkdir(parents=True, exist_ok=True)
+    dry_run_before = snapshot_scaffold_mutation_target(dry_run_target)
+    dry_payload, dry_error = load_command_json(
+        root,
+        [
+            "python3",
+            "tools/loom.py",
+            "suite",
+            "scaffold",
+            "--target",
+            str(dry_run_target),
+            "--item",
+            "WI-scaffold-dry-run",
+            "--suite",
+            "full",
+            "--json",
+        ],
+    )
+    if dry_error:
+        failures.append(Failure(category, f"{context} scaffold dry-run failed: {dry_error}"))
+    elif (
+        dry_payload.get("result") != "pass"
+        or dry_payload.get("mutates") is not False
+        or dry_payload.get("payload", {}).get("apply") is not False
+        or dry_payload.get("payload", {}).get("apply_required") is not True
+        or dry_payload.get("payload", {}).get("created_locators") != []
+        or sorted(entry.get("artifact") for entry in dry_payload.get("payload", {}).get("planned_writes", [])) != sorted(full_artifacts)
+        or snapshot_scaffold_mutation_target(dry_run_target) != dry_run_before
+    ):
+        failures.append(Failure(category, f"{context} scaffold dry-run must plan full artifacts without mutating the target"))
+
+    apply_target = target / "scaffold-apply"
+    apply_target.mkdir(parents=True, exist_ok=True)
+    apply_payload, apply_error = load_command_json(
+        root,
+        [
+            "python3",
+            "tools/loom.py",
+            "suite",
+            "scaffold",
+            "--target",
+            str(apply_target),
+            "--item",
+            "WI-scaffold-apply",
+            "--suite",
+            "full",
+            "--json",
+            "--apply",
+        ],
+    )
+    if apply_error:
+        failures.append(Failure(category, f"{context} scaffold apply failed: {apply_error}"))
+    elif (
+        apply_payload.get("result") != "pass"
+        or apply_payload.get("mutates") is not True
+        or apply_payload.get("payload", {}).get("apply") is not True
+        or apply_payload.get("payload", {}).get("apply_required") is not False
+        or apply_payload.get("payload", {}).get("created_locators") != expected_full_created
+        or any(not (apply_target / locator).is_file() for locator in expected_full_created)
+        or any(
+            locator
+            for locator in apply_payload.get("payload", {}).get("created_locators", [])
+            if not locator.startswith(".loom/specs/WI-scaffold-apply/")
+        )
+    ):
+        failures.append(Failure(category, f"{context} scaffold apply must create only contracted full suite artifacts"))
+
+    truth_target = target / "scaffold-host-truth-negative"
+    truth_target.mkdir(parents=True, exist_ok=True)
+    truth_before = author_scaffold_forbidden_truth_fixture(truth_target)
+    truth_payload, truth_error = load_command_json(
+        root,
+        [
+            "python3",
+            "tools/loom.py",
+            "suite",
+            "scaffold",
+            "--target",
+            str(truth_target),
+            "--item",
+            "WI-scaffold-boundary",
+            "--suite",
+            "full",
+            "--json",
+            "--apply",
+        ],
+    )
+    truth_after = snapshot_scaffold_mutation_target(truth_target)
+    for relative in SCAFFOLD_MUTATION_FORBIDDEN_SURFACES:
+        if truth_before.get(relative) != truth_after.get(relative):
+            failures.append(Failure(category, f"{context} scaffold apply must not mutate forbidden truth surface `{relative}`"))
+    if truth_error:
+        failures.append(Failure(category, f"{context} scaffold host truth negative fixture failed: {truth_error}"))
+    elif (
+        truth_payload.get("result") != "pass"
+        or truth_payload.get("mutates") is not True
+        or truth_payload.get("payload", {}).get("created_locators")
+        != [f".loom/specs/WI-scaffold-boundary/{artifact}" for artifact in full_artifacts]
+        or any(
+            locator
+            for locator in truth_payload.get("payload", {}).get("created_locators", [])
+            if not locator.startswith(".loom/specs/WI-scaffold-boundary/")
+        )
+    ):
+        failures.append(Failure(category, f"{context} scaffold host truth fixture must write only suite scaffold artifacts"))
+
+
 def require_suite_negative_fail_closed_validation(
     failures: list[Failure],
     *,
@@ -8239,6 +8412,13 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 category="daily-execution-cli",
                 context=f"`{label}` source host conflict fixture",
             )
+            require_scaffold_mutation_boundary_validation(
+                failures,
+                root=root,
+                target=target / "WI-1151-scaffold-fixtures",
+                category="daily-execution-cli",
+                context=f"`{label}` source scaffold mutation boundary",
+            )
             for args in (
                 ["git", "add", "."],
                 ["git", "add", "-f", ".loom"],
@@ -10403,6 +10583,13 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     item="WI-host-conflict",
                     category="daily-execution-cli",
                     context="`installed pre-merge chain` host conflict fixture",
+                )
+                require_scaffold_mutation_boundary_validation(
+                    failures,
+                    root=root,
+                    target=target / "WI-1151-scaffold-fixtures",
+                    category="daily-execution-cli",
+                    context="`installed pre-merge chain` scaffold mutation boundary",
                 )
 
                 git_add = run_command(root, ["git", "add", "."], cwd=target)

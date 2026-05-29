@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1150
-- Goal: Add stale evidence and host state conflict fixtures that prove stale evidence and host conflicts block merge-ready/closeout consumption.
-- Scope: #1150 only: source and generated `loom_check` fixture coverage for stale HEAD / PR head / validation summary binding, plus Project / issue / carrier host conflict blocking with taxonomy and remediation assertions. Do not change production reconciliation behavior, parent FR closeout, #1107 closeout, #1149, or #1151-#1153 carriers.
-- Execution Path: issue #1150 -> branch work/1150-stale-host-conflict-fixtures -> workspace root `.` -> PR #1187.
-- Workspace Entry: ./.
-- Recovery Entry: .loom/progress/WI-1150.md
-- Review Entry: .loom/reviews/WI-1150.json
-- Validation Entry: git diff --check; focused rg; python3 tools/skills_surface.py check; python3 tools/check_cli_contract.py; python3 tools/loom_check.py --profile source --source-surface source-self-fixture .; python3 tools/loom_check.py --profile source --source-surface contract-only .; root self-governance dry checks.
-- Closing Condition: #1150 PR is opened with head SHA and validation evidence for stale / host conflict fixture blocks; parent FR #1145 and #1107 closeout remain out of scope for this worker.
-- Current Checkpoint: merge
-- Current Stop: Stale evidence and host conflict fixture implementation and local validation are complete; PR creation is pending.
-- Next Step: Commit, push `work/1150-stale-host-conflict-fixtures`, open PR, and leave #1150 / parent closeout for the main thread.
+- Item ID: WI-1151
+- Goal: Prove scaffold commands are dry-run by default and write only under `--apply`.
+- Scope: #1151 only: add source and installed regression fixture assertions proving `loom suite scaffold` dry-run does not mutate, `--apply` creates only contracted suite scaffold artifacts, and forbidden host/review/merge-ready/closeout/generated-skill truth surfaces remain unchanged; sync generated runtime/hash surfaces for the changed `loom_check.py`; consume the #1148 terminal carrier sync needed to keep the active fact chain single-bound after PR #1185 closeout. Do not add scaffold artifact types, do not alter #1149/#1150/#1152/#1153 carriers, and do not close #1151, #1145, or #1107.
+- Execution Path: issue #1151 -> branch work/1151-scaffold-mutation-fixtures -> registered issue workspace_entry -> PR pending.
+- Workspace Entry: .
+- Recovery Entry: .loom/progress/WI-1151.md
+- Review Entry: .loom/reviews/WI-1151.json
+- Validation Entry: python3 tools/check_cli_contract.py; python3 tools/loom_check.py --profile source --source-surface source-self-fixture .; python3 tools/loom_check.py --profile source --source-surface contract-only .; git diff --check; focused rg; python3 tools/skills_surface.py check.
+- Closing Condition: #1151 PR is merged to main, validation evidence is written to #1151, Project status is Done, and parent FR #1145 can consume the evidence. This worker does not perform closeout.
+- Current Checkpoint: build
+- Current Stop: Scaffold mutation boundary fixture helper, runtime copies, generated hash surfaces, and WI-1151 carriers are implemented with local validation passing.
+- Next Step: Commit, push, and open PR for main-thread review.
 - Blockers: None recorded.
-- Latest Validation Summary: Passing local evidence on 2026-05-29 for CI gate repair head e61d33b366839e0d4fc31ee93755cc311f09f73e: git diff --check; focused rg for runtime hash evidence; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py; make loom-check; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .
-- Recovery Boundary: #1150 owns stale evidence and host state conflict fixtures only; it does not modify production reconciliation behavior, close #1150, close #1145, advance #1107 closeout, or touch #1149/#1151-#1153 carriers.
-- Current Lane: full-spec-suite-cli/e2e-governance/stale-host-conflict-fixtures
+- Latest Validation Summary: Passing local evidence on 2026-05-29: git diff --check; focused rg for scaffold fixture symbols, forbidden spec-kit names, and local workspace path leakage; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/check_cli_contract.py src/skills/shared/scripts/loom_check.py skills/shared/scripts/loom_check.py .loom/bin/loom_check.py examples/new-project/.loom/bin/loom_check.py skills/*/.loom-runtime/shared/scripts/loom_check.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1151 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1151 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1151 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface source-self-fixture .
+- Recovery Boundary: #1151 owns scaffold mutation boundary fixture assertions, runtime copy sync, and WI-1151 Loom carriers only; it does not complete missing artifact, stale host conflict, generated-skill parity, PR gate, merge-ready, closeout, parent FR, or Project reconciliation fixtures.
+- Current Lane: full-spec-suite-cli/e2e-governance/scaffold-mutation-fixtures
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1150.md
-- Dynamic Truth: .loom/progress/WI-1150.md
+- Static Truth: .loom/work-items/WI-1151.md
+- Dynamic Truth: .loom/progress/WI-1151.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
