@@ -5,7 +5,7 @@
   "kind": "spec_review",
   "summary": "Spec review allows the scoped #1151 plan: it covers scaffold dry-run no mutation, apply-created contracted suite artifacts, and host truth negative fixture evidence without expanding scaffold artifact types.",
   "reviewer": "codex",
-  "reviewed_head": "91ba31fc2218a0c561de8f80ea185b967d973152",
+  "reviewed_head": "3fbde9ddc7f28b8a30542d88d0745e7936010731",
   "reviewed_validation_summary": "Passing local evidence on 2026-05-29: git diff --check; focused rg for scaffold fixture symbols, forbidden spec-kit names, and local workspace path leakage; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/check_cli_contract.py src/skills/shared/scripts/loom_check.py skills/shared/scripts/loom_check.py .loom/bin/loom_check.py examples/new-project/.loom/bin/loom_check.py skills/*/.loom-runtime/shared/scripts/loom_check.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1151 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1151 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1151 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface source-self-fixture .",
   "fallback_to": null,
   "findings": [],
