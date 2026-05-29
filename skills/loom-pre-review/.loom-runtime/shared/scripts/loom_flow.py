@@ -15901,6 +15901,133 @@ def reconciliation_result(findings: list[dict[str, Any]]) -> str:
     return "warn"
 
 
+SUITE_RECONCILIATION_FINDINGS = {
+    "stale_evidence": {
+        "kind": "suite_stale_evidence",
+        "recommended_action": "refresh suite evidence and rerun suite evidence validation before closeout reconciliation.",
+    },
+    "head_or_pr_drift": {
+        "kind": "suite_head_or_pr_drift",
+        "recommended_action": "return to review, merge-ready, or merge gate until suite evidence is bound to the current head and PR.",
+    },
+    "host_state_conflict": {
+        "kind": "suite_host_state_conflict",
+        "recommended_action": "reconcile host issue, PR, Project, checks, branch, or merge state before closeout.",
+    },
+    "carrier_truth_conflict": {
+        "kind": "suite_host_state_conflict",
+        "recommended_action": "reconcile host carrier mirrors and keep carrier truth tracking-only before closeout.",
+    },
+}
+
+
+def suite_validation_blocking_entries(validation: dict[str, Any]) -> list[dict[str, Any]]:
+    payload = validation.get("payload") if isinstance(validation.get("payload"), dict) else {}
+    nested_payload = payload.get("payload") if isinstance(payload.get("payload"), dict) else {}
+    entries: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for source, source_payload in (("payload", payload), ("nested_payload", nested_payload)):
+        blocking_gaps = source_payload.get("blocking_gaps")
+        if not isinstance(blocking_gaps, list):
+            continue
+        for gap in blocking_gaps:
+            if not isinstance(gap, dict):
+                continue
+            failure_kind = str(gap.get("failure_kind") or "")
+            source_locator = str(gap.get("source_locator") or "")
+            gap_id = str(gap.get("id") or "")
+            key = (failure_kind, source_locator, gap_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            entries.append({**gap, "source_payload": source})
+    return entries
+
+
+def suite_reconciliation_fallback(value: Any, default: str) -> str:
+    if isinstance(value, str) and value:
+        return value
+    if isinstance(value, list):
+        for entry in value:
+            if isinstance(entry, str) and entry:
+                return entry
+    return default
+
+
+def suite_gate_reconciliation_findings(
+    suite_gate_validation: dict[str, Any],
+    *,
+    subject: str,
+) -> list[dict[str, Any]]:
+    result = suite_gate_validation.get("result")
+    if result in {"pass", "not_applicable"}:
+        return []
+
+    findings: list[dict[str, Any]] = []
+    validations = (
+        suite_gate_validation.get("validations")
+        if isinstance(suite_gate_validation.get("validations"), dict)
+        else {}
+    )
+    for domain in ("evidence", "carrier"):
+        validation = validations.get(domain) if isinstance(validations.get(domain), dict) else None
+        if validation is None:
+            continue
+        for gap in suite_validation_blocking_entries(validation):
+            failure_kind = str(gap.get("failure_kind") or "")
+            mapping = SUITE_RECONCILIATION_FINDINGS.get(failure_kind)
+            if mapping is None:
+                continue
+            fallback_to = suite_reconciliation_fallback(
+                gap.get("fallback_to") or validation.get("fallback_to"),
+                f"suite {domain} validate",
+            )
+            findings.append(
+                make_reconciliation_finding(
+                    kind=str(mapping["kind"]),
+                    severity="block",
+                    subject=subject,
+                    category="suite_drift",
+                    evidence={
+                        "suite_surface": suite_gate_validation.get("surface"),
+                        "domain": domain,
+                        "failure_kind": failure_kind,
+                        "failed_layer": gap.get("failed_layer") or gap.get("surface"),
+                        "source_locator": gap.get("source_locator"),
+                        "classification": gap.get("classification"),
+                        "binding": gap.get("binding"),
+                        "consumer_impact": gap.get("consumer_impact"),
+                        "remediation_direction": gap.get("remediation_direction"),
+                        "validation_command": validation.get("command"),
+                    },
+                    recommended_action=str(mapping["recommended_action"]),
+                    fallback_to=fallback_to,
+                )
+            )
+
+    if not findings and result == "block":
+        findings.append(
+            make_reconciliation_finding(
+                kind="missing_suite_gate",
+                severity="block",
+                subject=subject,
+                category="suite_drift",
+                evidence={
+                    "suite_surface": suite_gate_validation.get("surface"),
+                    "suite_result": suite_gate_validation.get("result"),
+                    "missing_inputs": suite_gate_validation.get("missing_inputs", []),
+                    "fallback_to": suite_gate_validation.get("fallback_to"),
+                },
+                recommended_action="restore readable suite gate evidence before closeout reconciliation.",
+                fallback_to=suite_reconciliation_fallback(
+                    suite_gate_validation.get("fallback_to"),
+                    "suite evidence validate",
+                ),
+            )
+        )
+    return findings
+
+
 def reconciliation_audit_payload(
     *,
     target_root: Path,
@@ -15918,6 +16045,46 @@ def reconciliation_audit_payload(
 
     if issue_number is None and pr_number is None and project_number is None:
         missing_inputs.append("issue/pr/project")
+
+    suite_gate_validation: dict[str, Any] | None = None
+    expected_reconciliation_item = closeout_expected_item_id(target_root, issue_number)
+    if expected_reconciliation_item is not None:
+        suite_context, suite_context_errors = load_retained_item_context(
+            target_root,
+            ".loom/bootstrap/init-result.json",
+            expected_reconciliation_item,
+        )
+        if suite_context_errors:
+            suite_gate_validation = {
+                "schema_version": "loom-suite-gate-validation/v1",
+                "surface": "closeout",
+                "result": "block",
+                "summary": "suite gate context is unreadable for reconciliation audit.",
+                "missing_inputs": suite_context_errors,
+                "fallback_to": "fact-chain",
+                "authority_boundary": {
+                    "role": "gate_input_evidence",
+                    "does_not_replace": [
+                        "work_item",
+                        "review_record",
+                        "merge_ready_result",
+                        "closeout_evidence",
+                        "docs_source_truth",
+                    ],
+                },
+                "consumed_locators": {"evidence_map": None, "task_carriers": []},
+                "validations": {},
+            }
+        elif suite_gate_required_for_surface(suite_context, surface="closeout"):
+            suite_gate_validation = suite_gate_validation_payload(suite_context, surface="closeout")
+        else:
+            suite_gate_validation = suite_gate_not_applicable_payload(suite_context, surface="closeout")
+        findings.extend(
+            suite_gate_reconciliation_findings(
+                suite_gate_validation,
+                subject=f"issue #{issue_number}" if issue_number is not None else expected_reconciliation_item,
+            )
+        )
 
     binding_payload = github_binding_payload(
         target_root=target_root,
@@ -16256,6 +16423,7 @@ def reconciliation_audit_payload(
             "pr": pr_payload,
             "project": project_payload,
             "binding": binding,
+            **({"suite_gate_validation": suite_gate_validation} if suite_gate_validation is not None else {}),
             "findings": findings,
         },
         [],

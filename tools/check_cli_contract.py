@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -363,6 +364,113 @@ def assert_closeout_blocks_missing_suite_evidence(active_item: str) -> None:
         missing = payload.get("missing_inputs")
         if not isinstance(missing, list) or not any("suite_evidence_validation" in str(message) for message in missing):
             raise AssertionError("closeout missing inputs did not identify suite evidence validation")
+
+
+def load_loom_flow_module() -> Any:
+    module_path = REPO_ROOT / "src" / "skills" / "shared" / "scripts" / "loom_flow.py"
+    spec = importlib.util.spec_from_file_location("loom_flow_contract", module_path)
+    if spec is None or spec.loader is None:
+        raise AssertionError("could not load loom_flow module for reconciliation contract checks")
+    module = importlib.util.module_from_spec(spec)
+    scripts_root = str(module_path.parent)
+    sys.path.insert(0, scripts_root)
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        if sys.path and sys.path[0] == scripts_root:
+            sys.path.pop(0)
+    return module
+
+
+def assert_reconciliation_suite_taxonomy_contract() -> None:
+    loom_flow = load_loom_flow_module()
+    suite_gate = {
+        "schema_version": "loom-suite-gate-validation/v1",
+        "surface": "closeout",
+        "result": "block",
+        "missing_inputs": ["evidence: stale_evidence", "carrier: carrier_truth_conflict"],
+        "fallback_to": "suite evidence validate",
+        "validations": {
+            "evidence": {
+                "result": "block",
+                "fallback_to": "suite evidence validate",
+                "command": "loom suite evidence validate --target . --item WI-taxonomy --json",
+                "payload": {
+                    "blocking_gaps": [
+                        {
+                            "id": "stale-evidence",
+                            "classification": "stale",
+                            "failure_kind": "stale_evidence",
+                            "failed_layer": "evidence_map",
+                            "source_locator": ".loom/specs/WI-taxonomy/evidence-map.md:5",
+                            "binding": "suite-evidence-validate",
+                            "consumer_impact": "closeout cannot consume stale evidence",
+                            "remediation_direction": "refresh evidence",
+                            "fallback_to": "loom suite evidence validate --target <repo> --item <item> --json",
+                        },
+                        {
+                            "id": "head-drift",
+                            "classification": "stale",
+                            "failure_kind": "head_or_pr_drift",
+                            "failed_layer": "evidence_map",
+                            "source_locator": ".loom/specs/WI-taxonomy/evidence-map.md:6",
+                            "binding": "suite-evidence-validate",
+                            "consumer_impact": "closeout cannot consume evidence bound to a stale PR head",
+                            "remediation_direction": "rerun merge-ready against the current PR head",
+                            "fallback_to": "loom gate merge --target <repo> --pr <pr> --json",
+                        },
+                    ]
+                },
+            },
+            "carrier": {
+                "result": "block",
+                "fallback_to": "suite carrier validate",
+                "command": "loom suite carrier validate --target . --item WI-taxonomy --json",
+                "payload": {
+                    "payload": {
+                        "blocking_gaps": [
+                            {
+                                "id": "host-conflict",
+                                "classification": "conflict",
+                                "failure_kind": "carrier_truth_conflict",
+                                "failed_layer": "task_carrier",
+                                "source_locator": ".loom/specs/WI-taxonomy/task-carrier.md:5",
+                                "binding": "suite-carrier-validate",
+                                "consumer_impact": "host carrier mirror conflicts with Work Item truth",
+                                "remediation_direction": "reconcile host mirror",
+                                "fallback_to": "loom suite carrier inspect --target <repo> --item <item> --json",
+                            }
+                        ],
+                        "host_signal_conflicts": [{"id": "project-done-issue-open", "blocking": True}],
+                    }
+                },
+            },
+        },
+    }
+    findings = loom_flow.suite_gate_reconciliation_findings(suite_gate, subject="issue #1143")
+    kinds = {finding.get("kind") for finding in findings}
+    required = {"suite_stale_evidence", "suite_head_or_pr_drift", "suite_host_state_conflict"}
+    if not required.issubset(kinds):
+        raise AssertionError(f"reconciliation suite taxonomy findings drifted: {kinds}")
+    if any(finding.get("severity") != "block" or finding.get("category") != "suite_drift" for finding in findings):
+        raise AssertionError("reconciliation suite taxonomy findings must be blocking suite_drift findings")
+    failure_kinds = {finding.get("evidence", {}).get("failure_kind") for finding in findings}
+    if {"stale_evidence", "head_or_pr_drift", "carrier_truth_conflict"} - failure_kinds:
+        raise AssertionError("reconciliation suite taxonomy evidence did not retain source failure kinds")
+
+    missing_gate_findings = loom_flow.suite_gate_reconciliation_findings(
+        {
+            "schema_version": "loom-suite-gate-validation/v1",
+            "surface": "closeout",
+            "result": "block",
+            "missing_inputs": ["suite evidence validation"],
+            "fallback_to": "suite evidence validate",
+            "validations": {},
+        },
+        subject="issue #1143",
+    )
+    if [finding.get("kind") for finding in missing_gate_findings] != ["missing_suite_gate"]:
+        raise AssertionError("reconciliation did not classify missing suite gate drift")
 
 
 def snapshot_tree(target: Path) -> list[str]:
@@ -2356,6 +2464,7 @@ def main() -> int:
             raise AssertionError("closeout did not wrap the closeout check runtime")
         assert_suite_gate_consumption(closeout_payload, expected_surface="closeout")
         assert_closeout_blocks_missing_suite_evidence(active_item)
+        assert_reconciliation_suite_taxonomy_contract()
         _, checkpoint_admission = run_json(["checkpoint", "admission", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"])
         if checkpoint_admission["command"] != "checkpoint admission" or checkpoint_admission.get("checkpoint") != "admission":
             raise AssertionError("checkpoint admission did not wrap checkpoint JSON")

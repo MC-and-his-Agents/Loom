@@ -7,7 +7,7 @@
     "contract_version": "1.3.0"
   },
   "run": {
-    "target": "/Users/mc/dev/Loom-worktrees/1140-suite-skills",
+    "target": "/Users/mc/dev/Loom-worktrees/1143-reconciliation-suite-taxonomy",
     "scenario": "复杂既有仓库",
     "scenario_key": "complex-existing",
     "integration_mode": "companion",
@@ -24,9 +24,7 @@
     "shared_contract_or_high_risk_boundary": true,
     "purity_or_scope_signals": "severe",
     "merge_review_semantic_overload": false,
-    "notes": "autodetected by loom_init.py",
-    "adoption_intent": "execution-control",
-    "adoption_intent_source": "preserved-root-bootstrap"
+    "notes": "autodetected by loom_init.py"
   },
   "project_judgment": {
     "scenario": "复杂既有仓库",
@@ -76,31 +74,10 @@
     "mode": "work-item + recovery-entry + derived status-surface",
     "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
     "entry_points": {
-      "current_item_id": "WI-1142",
-      "work_item": ".loom/work-items/WI-1142.md",
-      "recovery_entry": ".loom/progress/WI-1142.md",
+      "current_item_id": "WI-1143",
+      "work_item": ".loom/work-items/WI-1143.md",
+      "recovery_entry": ".loom/progress/WI-1143.md",
       "status_surface": ".loom/status/current.md"
-    }
-  },
-  "gitignore_policy": {
-    "path": ".gitignore",
-    "status": "ok",
-    "blanket_loom_ignore": false,
-    "blanket_entries": [],
-    "required_runtime_ignores": [
-      ".loom/runtime/",
-      ".loom/tmp/",
-      ".loom/cache/",
-      ".loom/attempts/**/raw-logs/",
-      ".loom/attempts/**/scratch/",
-      ".loom/local/"
-    ],
-    "missing_runtime_ignores": [],
-    "repair": {
-      "available": false,
-      "command": "python3 .loom/bin/loom_init.py bootstrap --target . --write --repair-gitignore",
-      "summary": "remove blanket .loom ignore and keep only runtime/cache scratch paths ignored",
-      "unified_diff": ""
     }
   },
   "initial_artifacts": [
@@ -151,7 +128,7 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "abdd01c8400d98e76dbfd83853cb4baa7324a3835b5b49e0775a3022b9e15b32"
+      "sha256": "e0fecd8dffe9a77e60f3dc80fd83c67b8080f1d2326abb45aea9cd5e08dbf433"
     },
     {
       "path": ".loom/bin/loom_status.py",
@@ -221,11 +198,6 @@
       "path": ".loom/specs/INIT-0001/implementation-contract.md",
       "kind": "implementation-contract",
       "source": "skills/shared/assets/templates/scaffold/implementation-contract.md"
-    },
-    {
-      "path": ".github/PULL_REQUEST_TEMPLATE.md",
-      "kind": "pr-template",
-      "source": "skills/shared/assets/github/PULL_REQUEST_TEMPLATE.md"
     }
   ],
   "initial_work_items": [
@@ -277,47 +249,44 @@
   },
   "runtime_state": {
     "result": "pass",
-    "summary": "runtime carrier `repo-local-wrapper` is executing as `repo-local-demo` with a consistent bundled runtime.",
+    "summary": "runtime carrier `bootstrapped-target-runtime` is executing as `installed-runtime` with a consistent bundled runtime.",
     "missing_inputs": [],
     "fallback_to": null,
-    "scene": "repo-local-demo",
-    "carrier": "repo-local-wrapper",
+    "scene": "installed-runtime",
+    "carrier": "bootstrapped-target-runtime",
     "entry_family": "loom-init",
-    "install_root": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills",
-    "runtime_root": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills/shared/scripts",
-    "registry_path": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills/registry.json",
-    "layout_or_manifest_path": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills/install-layout.json",
-    "source_repo_root": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance",
-    "target_root": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance",
+    "install_root": null,
+    "runtime_root": "/Users/mc/dev/Loom-worktrees/1143-reconciliation-suite-taxonomy/.loom/bin",
+    "registry_path": null,
+    "layout_or_manifest_path": "/Users/mc/dev/Loom-worktrees/1143-reconciliation-suite-taxonomy/.loom/bootstrap/manifest.json",
+    "source_repo_root": null,
+    "target_root": "/Users/mc/dev/Loom-worktrees/1143-reconciliation-suite-taxonomy",
     "checks": {
       "scene_marker": {
         "status": "pass",
-        "summary": "scene marker `repo-local-demo` is consistent with carrier `repo-local-wrapper`."
+        "summary": "scene defaults to `installed-runtime` for carrier `bootstrapped-target-runtime`."
       },
       "carrier_layout": {
         "status": "pass",
-        "summary": "carrier layout exposes an installed skills root and shared runtime tree.",
+        "summary": "bootstrap manifest and .loom/bin runtime files are aligned.",
         "evidence": {
-          "install_root": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills"
+          "path": "/Users/mc/dev/Loom-worktrees/1143-reconciliation-suite-taxonomy/.loom/bootstrap/manifest.json"
         }
       },
       "registry_contract": {
-        "status": "pass",
-        "summary": "registry, upgrade contract, and skill entrypoints are consistent.",
-        "evidence": {
-          "path": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills/registry.json"
-        }
+        "status": "not_applicable",
+        "summary": "bootstrapped target runtime does not consume `skills/registry.json`; it uses `.loom/bootstrap/manifest.json`."
       },
       "shared_runtime": {
         "status": "pass",
-        "summary": "shared runtime scripts are present and executable roots can be resolved.",
+        "summary": "bootstrap manifest and .loom/bin runtime files are aligned.",
         "evidence": {
-          "path": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance/skills/shared/scripts"
+          "path": "/Users/mc/dev/Loom-worktrees/1143-reconciliation-suite-taxonomy/.loom/bootstrap/manifest.json"
         }
       },
       "referenced_resources": {
-        "status": "pass",
-        "summary": "shared references and assets required by the installed runtime are present."
+        "status": "not_applicable",
+        "summary": "bootstrapped target runtime validates copied runtime artifacts via the bootstrap manifest instead of shared references."
       }
     }
   },
@@ -327,17 +296,17 @@
     "carrier_summary": {
       "work_item": {
         "status": "present",
-        "locator": ".loom/work-items/INIT-0001.md",
+        "locator": ".loom/work-items/WI-1142.md",
         "source": "repository scan"
       },
       "recovery": {
         "status": "present",
-        "locator": ".loom/progress/INIT-0001.md",
+        "locator": ".loom/progress/WI-1142.md",
         "source": "repository scan"
       },
       "review": {
         "status": "present",
-        "locator": ".loom/reviews/INIT-0001.json",
+        "locator": ".loom/reviews/WI-1142.json",
         "source": "repository scan"
       },
       "status_surface": {
@@ -347,21 +316,21 @@
       },
       "spec_path": {
         "status": "present",
-        "locator": ".loom/specs/INIT-0001/spec.md",
+        "locator": ".loom/specs/WI-1142/spec.md",
         "source": "repository scan"
       },
       "plan_path": {
         "status": "present",
-        "locator": ".loom/specs/INIT-0001/plan.md",
+        "locator": ".loom/specs/WI-1142/plan.md",
         "source": "repository scan"
       }
     },
-    "execution_entry": "python3 .loom/bin/loom_flow.py flow resume --target . --item INIT-0001",
+    "execution_entry": "python3 .loom/bin/loom_flow.py flow resume --target . --item WI-1142",
     "validation_entry": "python3 .loom/bin/loom_init.py verify --target .",
     "review_merge_surface": {
       "pr_template": ".github/PULL_REQUEST_TEMPLATE.md",
       "validation_surface": ".loom/status/current.md",
-      "merge_surface": "python3 .loom/bin/loom_flow.py checkpoint merge --target . --item INIT-0001"
+      "merge_surface": "python3 .loom/bin/loom_flow.py checkpoint merge --target . --item WI-1142"
     },
     "github_control_plane": {
       "repository": "MC-and-his-Agents/Loom",
@@ -371,7 +340,8 @@
         "py-compile",
         "demo-bootstrap",
         "repo-local-cli",
-        "loom-check"
+        "loom-check",
+        "loom-pr-merge-gate"
       ],
       "pr_reviews": "not_required",
       "rulesets": {
@@ -436,16 +406,15 @@
         ],
         "errors": [],
         "budget": {
-          "schema_version": "loom-host-api-budget/v1",
-          "default_non_merge_read_mode": "cached_non_merge",
-          "merge_gate_read_mode": "uncached_live_gate",
-          "cache_scope": "process",
-          "rest_first": true,
-          "graphql_allowed_when": "REST cannot express the required relationship",
-          "search_endpoint": "not_in_hot_path",
-          "polling": "not_in_hot_path",
-          "rate_limit_policy": "consume x-ratelimit-* headers from natural responses when available; do not call /rate_limit just to inspect budget",
-          "github_actions_budget": "design for GITHUB_TOKEN per-repository hourly request limits"
+          "schema_version": "loom-execution-budget/v1",
+          "status": "not_applicable",
+          "enforcement": "advisory",
+          "summary": "execution budget is not collected for this invocation.",
+          "dimensions": [],
+          "provenance": {
+            "source": "github_host"
+          },
+          "adapter_evidence_locator": ""
         }
       }
     },
@@ -471,8 +440,156 @@
         "locator": ".loom/companion/repo-interface.json",
         "source": "repo companion manifest.repo_interface"
       },
+      "dynamic_tool_locators": {
+        "status": "present",
+        "locator": ".loom/companion/repo-interface.json",
+        "source": "repo companion manifest.repo_interface"
+      },
+      "policy_locators": {
+        "status": "present",
+        "locator": ".loom/companion/repo-interface.json",
+        "source": "repo companion manifest.repo_interface"
+      },
+      "hook_locators": {
+        "status": "missing",
+        "locator": "unknown",
+        "source": "repo companion interface"
+      },
+      "release_targets": {
+        "availability": "absent",
+        "catalog": {
+          "status": "missing",
+          "locator": "unknown",
+          "source": "repo companion interface.release_targets"
+        },
+        "current_target": {
+          "status": "missing",
+          "locator": "unknown",
+          "source": "repo companion interface.release_targets"
+        },
+        "status": {
+          "status": "missing",
+          "locator": "unknown",
+          "source": "repo companion interface.release_targets"
+        },
+        "enforcement": "unknown",
+        "summary": "no target repository release/version surface is declared for this repository.",
+        "missing_inputs": [],
+        "target_release": {
+          "schema_version": "loom-target-release-status/v1",
+          "result": "not_applicable",
+          "summary": "no target repository release/version surface is declared for this repository.",
+          "release_id": null,
+          "display_name": null,
+          "target_branch": null,
+          "release_goal": null,
+          "authored_status": null,
+          "included_scope": {
+            "phase": [],
+            "fr": [],
+            "work_item": [],
+            "implementation_pr": [],
+            "merge_commit": []
+          },
+          "delivery_chain": {
+            "merged": [],
+            "unmerged": [],
+            "unreleased": [],
+            "unreconciled": []
+          },
+          "release_evidence": {
+            "changelog": {
+              "status": "not_applicable",
+              "locator": null
+            },
+            "release_notes": {
+              "status": "not_applicable",
+              "locator": null
+            },
+            "migration_notes": {
+              "status": "not_applicable",
+              "locator": null
+            },
+            "tag_or_artifact": {
+              "status": "not_applicable",
+              "locator": null
+            },
+            "rollback_basis": {
+              "status": "not_applicable",
+              "locator": null
+            }
+          },
+          "closeout_gaps": [],
+          "rollback_readiness": {
+            "status": "not_applicable",
+            "locator": null
+          },
+          "provenance": {
+            "source_layer": "repo_companion",
+            "source_locator": null,
+            "status_locator": null,
+            "enforcement": null
+          },
+          "missing_inputs": [],
+          "fallback_to": null
+        }
+      },
+      "tool_availability": {
+        "schema_version": "loom-dynamic-tool-handshake/v1",
+        "result": "pass",
+        "summary": "no dynamic tools are declared for this repository.",
+        "declared_tools": [],
+        "failure_summary": {
+          "required_blocking": [],
+          "optional_advisory": [],
+          "by_status": {
+            "advertised": 0,
+            "failed": 0,
+            "unavailable": 0,
+            "unsupported": 0
+          }
+        },
+        "missing_inputs": [],
+        "fallback_to": null
+      },
+      "policy_readiness": {
+        "schema_version": "loom-policy-readiness/v1",
+        "result": "pass",
+        "summary": "no approval or sandbox policy read surfaces are declared for this repository.",
+        "declared_policies": [],
+        "approval_policy": null,
+        "sandbox_policy": null,
+        "risk_summary": {
+          "blocking": [],
+          "advisory": [],
+          "by_status": {
+            "conflict": 0,
+            "declared": 0,
+            "missing": 0,
+            "unsafe": 0
+          },
+          "by_policy": {
+            "approval": "missing",
+            "sandbox": "missing"
+          }
+        },
+        "missing_inputs": [],
+        "fallback_to": null
+      },
+      "hook_profile": {
+        "schema_version": "loom-hooks-extension-profile/v1",
+        "profile_id": "orchestration-extension/hooks",
+        "enabled": false,
+        "result": "pass",
+        "status": "not_applicable",
+        "summary": "hooks extension profile is not enabled for this repository.",
+        "missing_inputs": [],
+        "missing_optional": [],
+        "checks": []
+      },
       "summary": "repo companion manifest and machine-readable repo interface are readable.",
-      "missing_inputs": []
+      "missing_inputs": [],
+      "missing_optional": []
     },
     "repo_interop": {
       "availability": "present",
@@ -496,8 +613,14 @@
         "locator": ".loom/companion/interop.json",
         "source": "repo interop contract"
       },
-      "summary": "repo interop contract is readable for host adapters, repo-native carriers, and shadow parity.",
-      "missing_inputs": []
+      "external_orchestrators": {
+        "status": "present",
+        "locator": ".loom/companion/interop.json",
+        "source": "repo interop contract"
+      },
+      "summary": "repo interop contract is readable for host adapters, repo-native carriers, shadow parity, and external orchestrator locators.",
+      "missing_inputs": [],
+      "missing_optional": []
     },
     "workspace_profile": {
       "schema_version": "loom-workspace-profile/v1",
@@ -526,7 +649,7 @@
       "host_worktree": {
         "ownership": "host",
         "status": "present",
-        "locator": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance"
+        "locator": "/Users/mc/dev/Loom-worktrees/1143-reconciliation-suite-taxonomy"
       },
       "result": "pass",
       "missing_inputs": [],
@@ -548,7 +671,7 @@
         "status": {
           "surface": "status",
           "entrypoint": ".loom/bin/loom_status.py",
-          "command": "python3 .loom/bin/loom_status.py --target . --item INIT-0001",
+          "command": "python3 .loom/bin/loom_status.py --target . --item WI-1142",
           "authority": "local",
           "enforcement": "advisory",
           "host_enforcement": false,
@@ -558,7 +681,7 @@
         "merge-ready": {
           "surface": "merge_ready",
           "entrypoint": ".loom/bin/loom_flow.py",
-          "command": "python3 .loom/bin/loom_flow.py flow merge-ready --target . --item INIT-0001",
+          "command": "python3 .loom/bin/loom_flow.py flow merge-ready --target . --item WI-1142",
           "authority": "local",
           "enforcement": "advisory",
           "host_enforcement": false,
@@ -636,7 +759,7 @@
         "host_worktree": {
           "ownership": "host",
           "status": "present",
-          "locator": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance"
+          "locator": "/Users/mc/dev/Loom-worktrees/1143-reconciliation-suite-taxonomy"
         },
         "result": "pass",
         "missing_inputs": [],
@@ -658,7 +781,7 @@
           "status": {
             "surface": "status",
             "entrypoint": ".loom/bin/loom_status.py",
-            "command": "python3 .loom/bin/loom_status.py --target . --item INIT-0001",
+            "command": "python3 .loom/bin/loom_status.py --target . --item WI-1142",
             "authority": "local",
             "enforcement": "advisory",
             "host_enforcement": false,
@@ -668,7 +791,7 @@
           "merge-ready": {
             "surface": "merge_ready",
             "entrypoint": ".loom/bin/loom_flow.py",
-            "command": "python3 .loom/bin/loom_flow.py flow merge-ready --target . --item INIT-0001",
+            "command": "python3 .loom/bin/loom_flow.py flow merge-ready --target . --item WI-1142",
             "authority": "local",
             "enforcement": "advisory",
             "host_enforcement": false,
@@ -721,17 +844,17 @@
           },
           "work_item": {
             "status": "present",
-            "locator": ".loom/work-items/INIT-0001.md",
+            "locator": ".loom/work-items/WI-1142.md",
             "authority": "loom fact chain"
           },
           "branch": {
             "status": "present",
-            "locator": "work/536-fact-chain-provenance",
+            "locator": "work/1143-reconciliation-suite-taxonomy",
             "authority": "git"
           },
           "worktree": {
             "status": "present",
-            "locator": "/Users/mc/dev/Loom-worktrees/work-536-fact-chain-provenance",
+            "locator": "/Users/mc/dev/Loom-worktrees/1143-reconciliation-suite-taxonomy",
             "authority": "git"
           },
           "implementation_pr": {
@@ -1076,6 +1199,65 @@
     "summary": "resume chain is readable and the current governance carriers can support continued execution.",
     "missing_inputs": []
   },
+  "lifecycle_expectations": {
+    "schema_version": "loom-workspace-lifecycle/v1",
+    "result": "pass",
+    "missing_inputs": [],
+    "workspace": {
+      "entry": ".",
+      "path": ".",
+      "profile": "single-workspace",
+      "exists": true
+    },
+    "operations": {
+      "create": {
+        "semantics": "establish or confirm the workspace_entry execution workspace",
+        "creates_host_worktree": false
+      },
+      "locate": {
+        "semantics": "resolve workspace_entry, recovery_entry, checkpoint, and purity without mutation",
+        "writes_truth": false
+      },
+      "attach": {
+        "semantics": "locate and bind an existing repo-defined workspace",
+        "creates_workspace": false,
+        "deletes_workspace": false,
+        "takes_host_lifecycle": false
+      },
+      "handoff": {
+        "semantics": "consume the same workspace/recovery contract and preserve recovery authored fields",
+        "requires_recovery_entry": true
+      },
+      "cleanup": {
+        "semantics": "remove only explicit Loom-owned temporary residue",
+        "deletes_non_loom_owned": false
+      },
+      "retire": {
+        "semantics": "record local-only retire evidence without writing versioned recovery or status carriers",
+        "deletes_workspace_directory": false,
+        "writes_versioned_carriers": false
+      },
+      "execution_boundary": {
+        "run": "read/event surface only",
+        "stop": "read/event surface only"
+      },
+      "remove": {
+        "in_core": false,
+        "fallback_to": "workspace cleanup/retire plus host-owned directory or git worktree lifecycle"
+      }
+    },
+    "worker_backend": {
+      "schema_version": "loom-worker-backend/v1",
+      "backend": "local",
+      "ownership": "host-adapter",
+      "execution_boundary": {
+        "run": "read/event surface only; Loom does not start a daemon",
+        "stop": "read/event surface only; Loom does not own worker termination"
+      },
+      "daemon": false,
+      "future_backend_rule": "future backends may change invocation mechanics but must preserve Work Item, workspace, recovery, and ledger truth boundaries"
+    }
+  },
   "maturity_upgrade_path": {
     "result": "pass",
     "current": "strong",
@@ -1134,551 +1316,5 @@
         "recommended_action": "disable blocking consumption, preserve evidence, repair drift, then rerun adversarial adoption checks before re-enabling blocking"
       }
     }
-  },
-  "detected_repository_mode": {
-    "repository_type": "existing",
-    "scenario_key": "complex-existing",
-    "governance_surface_mode": "complex-existing"
-  },
-  "adoption_intent": {
-    "requested": "execution-control",
-    "effective": "execution-control",
-    "source": "cli",
-    "requires_explicit_confirmation": false
-  },
-  "planned_writes": [
-    {
-      "path": ".loom/README.md",
-      "kind": "rule-entry",
-      "owner": "loom",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/bootstrap/intake.snapshot.json",
-      "kind": "intake",
-      "owner": "loom",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/bootstrap/init-result.json",
-      "kind": "init-result",
-      "owner": "loom",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/bootstrap/manifest.json",
-      "kind": "manifest",
-      "owner": "loom",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/bootstrap/capability-map.md",
-      "kind": "capability-map",
-      "owner": "loom",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/bin/loom_init.py",
-      "kind": "loom-tool",
-      "owner": "loom-runtime",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/bin/fact_chain_support.py",
-      "kind": "loom-tool-support",
-      "owner": "loom-runtime",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/bin/governance_surface.py",
-      "kind": "loom-tool-support",
-      "owner": "loom-runtime",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/bin/loom_flow.py",
-      "kind": "loom-tool",
-      "owner": "loom-runtime",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/bin/loom_status.py",
-      "kind": "loom-tool",
-      "owner": "loom-runtime",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/bin/runtime_paths.py",
-      "kind": "loom-tool-support",
-      "owner": "loom-runtime",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/bin/runtime_state.py",
-      "kind": "loom-tool-support",
-      "owner": "loom-runtime",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/bin/loom_check.py",
-      "kind": "loom-tool",
-      "owner": "loom-runtime",
-      "requires_intent": null
-    },
-    {
-      "path": "AGENTS.md",
-      "kind": "root-entry",
-      "owner": "loom",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/work-items/INIT-0001.md",
-      "kind": "work-item",
-      "owner": "loom",
-      "requires_intent": "execution-control"
-    },
-    {
-      "path": ".loom/progress/INIT-0001.md",
-      "kind": "progress",
-      "owner": "loom",
-      "requires_intent": "execution-control"
-    },
-    {
-      "path": ".loom/reviews/INIT-0001.json",
-      "kind": "review-entry",
-      "owner": "loom",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/reviews/INIT-0001.spec.json",
-      "kind": "review-entry",
-      "owner": "loom",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/status/current.md",
-      "kind": "status-surface",
-      "owner": "loom",
-      "requires_intent": "execution-control"
-    },
-    {
-      "path": ".loom/specs/INIT-0001/spec.md",
-      "kind": "spec",
-      "owner": "loom",
-      "requires_intent": "execution-control"
-    },
-    {
-      "path": ".loom/specs/INIT-0001/plan.md",
-      "kind": "plan",
-      "owner": "loom",
-      "requires_intent": "execution-control"
-    },
-    {
-      "path": ".loom/specs/INIT-0001/implementation-contract.md",
-      "kind": "implementation-contract",
-      "owner": "loom",
-      "requires_intent": "execution-control"
-    },
-    {
-      "path": ".loom/companion/README.md",
-      "kind": "repo-companion-entry",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/companion/manifest.json",
-      "kind": "repo-companion-manifest",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/companion/repo-interface.json",
-      "kind": "repo-companion-interface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/companion/interop.json",
-      "kind": "repo-interop-contract",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/companion/checkpoints.md",
-      "kind": "repo-companion-doc",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/companion/review.md",
-      "kind": "repo-companion-doc",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/companion/merge-ready.md",
-      "kind": "repo-companion-doc",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/companion/closeout.md",
-      "kind": "repo-companion-doc",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/companion/releases/changelog.md",
-      "kind": "repo-release-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/companion/releases/release-notes.md",
-      "kind": "repo-release-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/companion/releases/migration-notes.md",
-      "kind": "repo-release-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/companion/releases/rollback.md",
-      "kind": "repo-release-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/companion/releases/catalog.json",
-      "kind": "repo-release-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/companion/releases/current.json",
-      "kind": "repo-release-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/companion/releases/status.json",
-      "kind": "repo-release-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/shadow/admission-loom.json",
-      "kind": "shadow-parity-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/shadow/admission-repo.json",
-      "kind": "shadow-parity-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/shadow/review-loom.json",
-      "kind": "shadow-parity-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/shadow/review-repo.json",
-      "kind": "shadow-parity-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/shadow/merge-ready-loom.json",
-      "kind": "shadow-parity-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/shadow/merge-ready-repo.json",
-      "kind": "shadow-parity-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/shadow/closeout-loom.json",
-      "kind": "shadow-parity-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".loom/shadow/closeout-repo.json",
-      "kind": "shadow-parity-surface",
-      "owner": "repo-companion",
-      "requires_intent": null
-    },
-    {
-      "path": ".gitignore",
-      "kind": "gitignore",
-      "owner": "repo-owned",
-      "requires_intent": null
-    }
-  ],
-  "intentionally_absent": [],
-  "risk_summary": {
-    "heavy_writes": true,
-    "repo_owned_truth_risk": "high",
-    "requires_explicit_intent": false,
-    "missing_inputs": [],
-    "fallback_to": null
-  },
-  "scaffold_profile": {
-    "name": "execution-control",
-    "writes_artifacts": true,
-    "writes_work_item_carriers": true,
-    "description": "Loom-owned work item, progress, review, status, and spec carriers",
-    "required_carriers": [
-      {
-        "path": ".loom/README.md",
-        "kind": "rule-entry",
-        "owner": "loom"
-      },
-      {
-        "path": ".loom/bootstrap/intake.snapshot.json",
-        "kind": "intake",
-        "owner": "loom"
-      },
-      {
-        "path": ".loom/bootstrap/init-result.json",
-        "kind": "init-result",
-        "owner": "loom"
-      },
-      {
-        "path": ".loom/bootstrap/manifest.json",
-        "kind": "manifest",
-        "owner": "loom"
-      },
-      {
-        "path": ".loom/bootstrap/capability-map.md",
-        "kind": "capability-map",
-        "owner": "loom"
-      },
-      {
-        "path": ".loom/bin/loom_init.py",
-        "kind": "loom-tool",
-        "owner": "loom-runtime"
-      },
-      {
-        "path": ".loom/bin/fact_chain_support.py",
-        "kind": "loom-tool-support",
-        "owner": "loom-runtime"
-      },
-      {
-        "path": ".loom/bin/governance_surface.py",
-        "kind": "loom-tool-support",
-        "owner": "loom-runtime"
-      },
-      {
-        "path": ".loom/bin/loom_flow.py",
-        "kind": "loom-tool",
-        "owner": "loom-runtime"
-      },
-      {
-        "path": ".loom/bin/loom_status.py",
-        "kind": "loom-tool",
-        "owner": "loom-runtime"
-      },
-      {
-        "path": ".loom/bin/runtime_paths.py",
-        "kind": "loom-tool-support",
-        "owner": "loom-runtime"
-      },
-      {
-        "path": ".loom/bin/runtime_state.py",
-        "kind": "loom-tool-support",
-        "owner": "loom-runtime"
-      },
-      {
-        "path": ".loom/bin/loom_check.py",
-        "kind": "loom-tool",
-        "owner": "loom-runtime"
-      },
-      {
-        "path": "AGENTS.md",
-        "kind": "root-entry",
-        "owner": "loom"
-      },
-      {
-        "path": ".loom/work-items/INIT-0001.md",
-        "kind": "work-item",
-        "owner": "loom"
-      },
-      {
-        "path": ".loom/progress/INIT-0001.md",
-        "kind": "progress",
-        "owner": "loom"
-      },
-      {
-        "path": ".loom/reviews/INIT-0001.json",
-        "kind": "review-entry",
-        "owner": "loom"
-      },
-      {
-        "path": ".loom/reviews/INIT-0001.spec.json",
-        "kind": "review-entry",
-        "owner": "loom"
-      },
-      {
-        "path": ".loom/status/current.md",
-        "kind": "status-surface",
-        "owner": "loom"
-      },
-      {
-        "path": ".loom/specs/INIT-0001/spec.md",
-        "kind": "spec",
-        "owner": "loom"
-      },
-      {
-        "path": ".loom/specs/INIT-0001/plan.md",
-        "kind": "plan",
-        "owner": "loom"
-      },
-      {
-        "path": ".loom/specs/INIT-0001/implementation-contract.md",
-        "kind": "implementation-contract",
-        "owner": "loom"
-      },
-      {
-        "path": ".github/PULL_REQUEST_TEMPLATE.md",
-        "kind": "pr-template",
-        "owner": "repo-owned"
-      }
-    ],
-    "forbidden_authored_carriers": []
-  },
-  "upgrade_triggers": [
-    {
-      "from_profile": "execution-control",
-      "capability": "host-specific-skill-regression-matrix",
-      "trigger": "a host adapter or marketplace package is added"
-    }
-  ],
-  "required_carriers": [
-    {
-      "path": ".loom/README.md",
-      "kind": "rule-entry",
-      "owner": "loom"
-    },
-    {
-      "path": ".loom/bootstrap/intake.snapshot.json",
-      "kind": "intake",
-      "owner": "loom"
-    },
-    {
-      "path": ".loom/bootstrap/init-result.json",
-      "kind": "init-result",
-      "owner": "loom"
-    },
-    {
-      "path": ".loom/bootstrap/manifest.json",
-      "kind": "manifest",
-      "owner": "loom"
-    },
-    {
-      "path": ".loom/bootstrap/capability-map.md",
-      "kind": "capability-map",
-      "owner": "loom"
-    },
-    {
-      "path": ".loom/bin/loom_init.py",
-      "kind": "loom-tool",
-      "owner": "loom-runtime"
-    },
-    {
-      "path": ".loom/bin/fact_chain_support.py",
-      "kind": "loom-tool-support",
-      "owner": "loom-runtime"
-    },
-    {
-      "path": ".loom/bin/governance_surface.py",
-      "kind": "loom-tool-support",
-      "owner": "loom-runtime"
-    },
-    {
-      "path": ".loom/bin/loom_flow.py",
-      "kind": "loom-tool",
-      "owner": "loom-runtime"
-    },
-    {
-      "path": ".loom/bin/loom_status.py",
-      "kind": "loom-tool",
-      "owner": "loom-runtime"
-    },
-    {
-      "path": ".loom/bin/runtime_paths.py",
-      "kind": "loom-tool-support",
-      "owner": "loom-runtime"
-    },
-    {
-      "path": ".loom/bin/runtime_state.py",
-      "kind": "loom-tool-support",
-      "owner": "loom-runtime"
-    },
-    {
-      "path": ".loom/bin/loom_check.py",
-      "kind": "loom-tool",
-      "owner": "loom-runtime"
-    },
-    {
-      "path": "AGENTS.md",
-      "kind": "root-entry",
-      "owner": "loom"
-    },
-    {
-      "path": ".loom/work-items/INIT-0001.md",
-      "kind": "work-item",
-      "owner": "loom"
-    },
-    {
-      "path": ".loom/progress/INIT-0001.md",
-      "kind": "progress",
-      "owner": "loom"
-    },
-    {
-      "path": ".loom/reviews/INIT-0001.json",
-      "kind": "review-entry",
-      "owner": "loom"
-    },
-    {
-      "path": ".loom/reviews/INIT-0001.spec.json",
-      "kind": "review-entry",
-      "owner": "loom"
-    },
-    {
-      "path": ".loom/status/current.md",
-      "kind": "status-surface",
-      "owner": "loom"
-    },
-    {
-      "path": ".loom/specs/INIT-0001/spec.md",
-      "kind": "spec",
-      "owner": "loom"
-    },
-    {
-      "path": ".loom/specs/INIT-0001/plan.md",
-      "kind": "plan",
-      "owner": "loom"
-    },
-    {
-      "path": ".loom/specs/INIT-0001/implementation-contract.md",
-      "kind": "implementation-contract",
-      "owner": "loom"
-    },
-    {
-      "path": ".github/PULL_REQUEST_TEMPLATE.md",
-      "kind": "pr-template",
-      "owner": "repo-owned"
-    }
-  ],
-  "forbidden_authored_carriers": []
+  }
 }
