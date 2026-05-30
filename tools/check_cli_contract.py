@@ -146,6 +146,25 @@ def run_json(args: list[str], *, expect: int | None = None) -> tuple[int, dict[s
     return completed.returncode, payload
 
 
+def run_flow_json(args: list[str], *, cwd: Path = REPO_ROOT, expect: int | None = None) -> tuple[int, dict[str, Any]]:
+    completed = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "tools" / "loom_flow.py"), *args],
+        cwd=cwd,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if expect is not None and completed.returncode != expect:
+        raise AssertionError(f"loom_flow.py {args} returned {completed.returncode}, expected {expect}\n{completed.stderr}\n{completed.stdout}")
+    raw = completed.stdout or completed.stderr
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise AssertionError(f"loom_flow.py {args} did not emit JSON: {exc}\n{raw}") from exc
+    return completed.returncode, payload
+
+
 def active_work_item_id() -> str:
     payload = json.loads((REPO_ROOT / ".loom" / "bootstrap" / "init-result.json").read_text(encoding="utf-8"))
     item_id = payload.get("fact_chain", {}).get("entry_points", {}).get("current_item_id")
@@ -1244,6 +1263,313 @@ def assert_generated_skills_surface_parity_contract(skills_check: dict[str, Any]
                 raise AssertionError(f"{skill_id} package runtime missing {relative}")
             if source.read_bytes() != runtime.read_bytes():
                 raise AssertionError(f"{skill_id} package runtime drifted for {relative}")
+
+
+def write_governance_chain_fixture(target: Path, *, issue_open: bool = False, project_done: bool = True) -> dict[str, str]:
+    item = "WI-1153"
+    issue_number = "1153"
+    pr_number = "1199"
+    branch = "work/1153-pr-gate-closeout-integration"
+    target_branch = "main"
+    validation_summary = "fixture validation passed for PR gate, merge-ready, closeout, issue, Project, target branch, and merge commit evidence."
+
+    write_full_suite(target, item)
+    work_item = target / ".loom" / "work-items" / f"{item}.md"
+    work_item.write_text(
+        "# WI-1153\n\n"
+        "## Static Facts\n\n"
+        f"- Item ID: {item}\n"
+        "- Goal: Fixture proves the end-to-end governance chain consumes suite automation.\n"
+        "- Scope: Non-mutating closeout/reconciliation fixture only; PR merged alone is not closeout complete.\n"
+        f"- Execution Path: issue #{issue_number} -> branch {branch} -> target-local workspace `.` -> PR #{pr_number}.\n"
+        "- Workspace Entry: .\n"
+        f"- Recovery Entry: .loom/progress/{item}.md\n"
+        f"- Review Entry: .loom/reviews/{item}.json\n"
+        "- Validation Entry: fixture PR gate; merge-ready; closeout; reconciliation\n"
+        "- Closing Condition: closeout consumes merged PR, issue closed, Project Done, target branch, merge commit, review, merge-ready, and suite evidence together.\n"
+        "\n## Associated Artifacts\n\n"
+        f"- `.loom/work-items/{item}.md`\n"
+        f"- `.loom/progress/{item}.md`\n"
+        f"- `.loom/reviews/{item}.json`\n"
+        f"- `.loom/specs/{item}/spec.md`\n"
+        f"- `.loom/specs/{item}/plan.md`\n"
+        f"- `.loom/specs/{item}/evidence-map.md`\n"
+        f"- `.loom/specs/{item}/task-carrier.md`\n",
+        encoding="utf-8",
+    )
+    progress = target / ".loom" / "progress" / f"{item}.md"
+    progress.write_text(
+        f"# {item} Progress\n\n"
+        "## Dynamic Facts\n\n"
+        f"- Item ID: {item}\n"
+        "- Current Checkpoint: merge-ready\n"
+        "- Current Stop: Fixture has retained review and merge-ready evidence for closeout consumption.\n"
+        "- Next Step: Run non-mutating closeout and reconciliation fixture checks.\n"
+        "- Blockers: None recorded.\n"
+        f"- Latest Validation Summary: {validation_summary}\n"
+        "- Recovery Boundary: Fixture only; does not mutate GitHub issue, PR, Project, or parent truth.\n"
+        "- Current Lane: full-spec-suite-cli/e2e-governance/closeout-integration\n"
+        "\n## Execution Ledger\n\n"
+        "- Ledger Binding: recovery_entry\n"
+        f"- Plan Locator: .loom/specs/{item}/plan.md\n"
+        f"- Acceptance Locator: .loom/specs/{item}/spec.md\n"
+        f"- Validation Evidence Locator: .loom/specs/{item}/evidence-map.md\n"
+        "- Handoff Notes Locator: not_applicable\n"
+        "- Evidence Freshness: current\n",
+        encoding="utf-8",
+    )
+
+    subprocess.run(["git", "init", "-b", target_branch], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "config", "user.email", "loom@example.invalid"], cwd=target, check=True)
+    subprocess.run(["git", "config", "user.name", "Loom Fixture"], cwd=target, check=True)
+    (target / "README.md").write_text("# Governance Chain Fixture\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=target, check=True)
+    subprocess.run(["git", "commit", "-m", "fixture base"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "checkout", "-b", branch], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    (target / "fixture-change.txt").write_text("PR head evidence\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=target, check=True)
+    subprocess.run(["git", "commit", "-m", "fixture pr head"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+
+    (target / ".loom" / "reviews").mkdir(parents=True, exist_ok=True)
+    (target / ".loom" / "reviews" / f"{item}.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "loom-review/v1",
+                "item_id": item,
+                "decision": "allow",
+                "kind": "code_review",
+                "summary": "Fixture implementation review allows closeout integration consumption.",
+                "reviewer": "codex",
+                "reviewed_head": head_sha,
+                "reviewed_validation_summary": validation_summary,
+                "fallback_to": None,
+                "findings": [],
+                "blocking_issues": [],
+                "follow_ups": [],
+                "consumed_inputs": {
+                    "work_item": f".loom/work-items/{item}.md",
+                    "recovery_entry": f".loom/progress/{item}.md",
+                    "suite_evidence_map": f".loom/specs/{item}/evidence-map.md",
+                    "suite_task_carriers": [f".loom/specs/{item}/task-carrier.md"],
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    attempt_dir = target / ".loom" / "runtime" / "attempts" / item
+    attempt_dir.mkdir(parents=True, exist_ok=True)
+    attempt_payload = {
+        "schema_version": "loom-execution-attempt/v1",
+        "attempt_id": f"{item}-merge-ready-fixture",
+        "item_id": item,
+        "command": "flow",
+        "operation": "merge-ready",
+        "result": "pass",
+        "created_at": "2026-05-30T00:00:00Z",
+        "head_sha": head_sha,
+        "branch": branch,
+        "workspace": {"entry": ".", "path": "."},
+        "failure": {
+            "category": "none",
+            "execution_classification": "none",
+            "execution_summary": "fixture merge-ready pass",
+            "missing_inputs": [],
+            "fallback_to": None,
+        },
+        "steps": [],
+        "evidence": {
+            "status": "present",
+            "locator": f".loom/runtime/attempts/{item}/{item}-merge-ready-fixture.json",
+            "latest_locator": f".loom/runtime/attempts/{item}/latest.json",
+        },
+    }
+    for name in (f"{item}-merge-ready-fixture.json", "latest.json"):
+        (attempt_dir / name).write_text(json.dumps(attempt_payload, indent=2) + "\n", encoding="utf-8")
+
+    subprocess.run(["git", "add", "."], cwd=target, check=True)
+    subprocess.run(["git", "commit", "-m", "fixture retained closeout evidence"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    subprocess.run(["git", "checkout", target_branch], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "merge", "--no-ff", branch, "-m", "fixture merge"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    merge_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+    origin = target.parent / f"{target.name}-origin.git"
+    subprocess.run(["git", "init", "--bare", str(origin)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "remote", "add", "origin", str(origin)], cwd=target, check=True)
+    subprocess.run(["git", "push", "-u", "origin", target_branch], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    fixture_dir = target / ".loom" / "fixtures" / "WI-1153"
+    fixture_dir.mkdir(parents=True, exist_ok=True)
+    issue_payload = {
+        "id": "ISSUE_fixture_1153",
+        "number": int(issue_number),
+        "state": "OPEN" if issue_open else "CLOSED",
+        "title": "WI fixture",
+        "url": f"https://github.com/owner/repo/issues/{issue_number}",
+        "labels": ["work-item"],
+    }
+    pr_payload = {
+        "number": int(pr_number),
+        "state": "MERGED",
+        "title": "PR fixture",
+        "body": f"Loom Work Item: {item}\nBranch: {branch}\nHead SHA: {head_sha}\n",
+        "url": f"https://github.com/owner/repo/pull/{pr_number}",
+        "isDraft": False,
+        "mergedAt": "2026-05-30T00:00:00Z",
+        "mergeCommit": {"oid": merge_commit},
+        "mergeStateStatus": "MERGEABLE",
+        "headRefName": branch,
+        "headRefOid": head_sha,
+        "baseRefName": target_branch,
+    }
+    project_payload = {
+        "project_id": "PROJECT_fixture",
+        "status_field_id": "STATUS_fixture",
+        "done_option_id": "DONE_fixture",
+        "items": [
+            {
+                "id": "PROJECT_ITEM_issue_1153",
+                "status": "Done" if project_done else "In Progress",
+                "content": {"type": "Issue", "number": int(issue_number), "title": "WI fixture"},
+            },
+            {
+                "id": "PROJECT_ITEM_pr_1199",
+                "status": "Done",
+                "content": {"type": "PullRequest", "number": int(pr_number), "title": "PR fixture"},
+            },
+        ],
+    }
+    checks_payload = [
+        {"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"},
+        {"name": "loom-check", "conclusion": "SUCCESS", "status": "COMPLETED"},
+    ]
+    for filename, payload in (
+        ("issue.json", issue_payload),
+        ("pr.json", pr_payload),
+        ("project.json", project_payload),
+        ("checks.json", checks_payload),
+        ("branch-protection.json", {"required_status_checks": {"contexts": []}}),
+        ("ruleset.json", []),
+    ):
+        (fixture_dir / filename).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return {
+        "item": item,
+        "issue": issue_number,
+        "pr": pr_number,
+        "branch": branch,
+        "head_sha": head_sha,
+        "merge_commit": merge_commit,
+        "issue_file": ".loom/fixtures/WI-1153/issue.json",
+        "pr_file": ".loom/fixtures/WI-1153/pr.json",
+        "project_file": ".loom/fixtures/WI-1153/project.json",
+        "checks_file": ".loom/fixtures/WI-1153/checks.json",
+        "branch_protection_file": ".loom/fixtures/WI-1153/branch-protection.json",
+        "ruleset_file": ".loom/fixtures/WI-1153/ruleset.json",
+    }
+
+
+def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
+    pass_target = tmp / "governance-chain-pass"
+    pass_target.mkdir()
+    fixture = write_governance_chain_fixture(pass_target)
+    command = [
+        "closeout",
+        "check",
+        "--target",
+        str(pass_target),
+        "--issue",
+        fixture["issue"],
+        "--pr",
+        fixture["pr"],
+        "--project",
+        "4",
+        "--branch",
+        fixture["branch"],
+        "--owner",
+        "owner",
+        "--repo",
+        "repo",
+        "--skip-gate",
+        "--issue-payload-file",
+        fixture["issue_file"],
+        "--pr-payload-file",
+        fixture["pr_file"],
+        "--project-payload-file",
+        fixture["project_file"],
+        "--status-checks-file",
+        fixture["checks_file"],
+        "--branch-protection-file",
+        fixture["branch_protection_file"],
+        "--ruleset-file",
+        fixture["ruleset_file"],
+    ]
+    _, closeout_payload = run_flow_json(command, expect=0)
+    subchecks = {entry.get("id"): entry for entry in closeout_payload.get("gate", {}).get("subchecks", []) if isinstance(entry, dict)}
+    if (
+        closeout_payload.get("result") != "pass"
+        or closeout_payload.get("reconciliation", {}).get("result") != "pass"
+        or subchecks.get("pr_merge_backlink", {}).get("merge_commit_sha") != fixture["merge_commit"]
+        or subchecks.get("pr_merge_backlink", {}).get("target_branch") != "main"
+        or subchecks.get("merge_ready_attempt", {}).get("head_sha") != fixture["head_sha"]
+        or closeout_payload.get("issue", {}).get("state") != "CLOSED"
+        or closeout_payload.get("project", {}).get("issue_item", {}).get("status") != "Done"
+    ):
+        raise AssertionError("governance chain closeout pass fixture did not consume PR, issue, Project, target branch, merge commit, review, and merge-ready evidence together")
+
+    _, reconciliation_payload = run_flow_json(
+        [
+            "reconciliation",
+            "audit",
+            "--target",
+            str(pass_target),
+            "--issue",
+            fixture["issue"],
+            "--pr",
+            fixture["pr"],
+            "--project",
+            "4",
+            "--branch",
+            fixture["branch"],
+            "--owner",
+            "owner",
+            "--repo",
+            "repo",
+            "--issue-payload-file",
+            fixture["issue_file"],
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--project-payload-file",
+            fixture["project_file"],
+        ],
+        expect=0,
+    )
+    if reconciliation_payload.get("result") != "pass" or reconciliation_payload.get("findings"):
+        raise AssertionError("governance chain reconciliation pass fixture drifted")
+
+    negative_target = tmp / "governance-chain-pr-merged-alone"
+    negative_target.mkdir()
+    negative = write_governance_chain_fixture(negative_target, issue_open=True, project_done=False)
+    _, negative_closeout = run_flow_json(
+        [
+            *command[:3],
+            str(negative_target),
+            *command[4:],
+        ],
+        expect=1,
+    )
+    finding_kinds = {finding.get("kind") for finding in negative_closeout.get("reconciliation", {}).get("findings", []) if isinstance(finding, dict)}
+    missing_inputs = set(negative_closeout.get("missing_inputs", []))
+    if (
+        negative_closeout.get("result") != "block"
+        or "merged_but_open" not in finding_kinds
+        or "project_drift" not in finding_kinds
+        or "issue is not closed" not in missing_inputs
+        or "issue project status is not Done" not in missing_inputs
+    ):
+        raise AssertionError("PR merged alone negative fixture must block closeout until issue and Project closeout evidence are present")
+
 
 def main() -> int:
     _, help_payload = run_json(["help", "--json"], expect=0)
@@ -2780,6 +3106,7 @@ def main() -> int:
         assert_suite_gate_consumption(closeout_payload, expected_surface="closeout")
         assert_closeout_blocks_missing_suite_evidence(active_item)
         assert_reconciliation_suite_taxonomy_contract()
+        assert_governance_chain_closeout_fixture(tmp)
         _, checkpoint_admission = run_json(["checkpoint", "admission", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"])
         if checkpoint_admission["command"] != "checkpoint admission" or checkpoint_admission.get("checkpoint") != "admission":
             raise AssertionError("checkpoint admission did not wrap checkpoint JSON")
