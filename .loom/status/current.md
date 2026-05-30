@@ -5,8 +5,8 @@
 - Item ID: WI-1153
 - Goal: Prove the end-to-end governance chain consumes suite automation.
 - Scope: #1153 only: add non-mutating integration fixtures proving PR gate, merge-ready, closeout, issue, Project, target branch, and merge commit evidence are consumed together; PR merged alone must not equal closeout complete. Do not add live GitHub mutation, do not touch #1152, and do not close #1153/#1145/#1107.
-- Execution Path: issue #1153 -> branch work/1153-pr-gate-closeout-integration -> workspace `.` -> PR #1190
-- Workspace Entry: .
+- Execution Path: issue #1153 -> branch work/1153-pr-gate-closeout-integration -> workspace root `././.` -> PR #1190
+- Workspace Entry: ././.
 - Recovery Entry: .loom/progress/WI-1153.md
 - Review Entry: .loom/reviews/WI-1153.json
 - Validation Entry: git diff --check; focused rg; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_cli_contract.py; closeout/reconciliation/gate fixture checks
