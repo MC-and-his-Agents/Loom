@@ -5,7 +5,7 @@
   "kind": "spec_review",
   "summary": "WI-1153 spec suite covers PR gate, merge-ready, closeout, issue, Project, target branch, merge commit, and PR-merged-alone negative fixture scope.",
   "reviewer": "codex",
-  "reviewed_head": "be5537d1da35229963fb26984e4c4af9f3923f73",
+  "reviewed_head": "034ef88b99ae4288fd308e41ab05d302d1a3e3f1",
   "reviewed_validation_summary": "Passing local evidence on 2026-05-30: git diff --check; focused rg for WI-1153, PR gate, merge-ready, closeout, Project, merge commit, target branch, PR merged alone, /speckit, and .specify; PYTHONDONTWRITEBYTECODE=1 python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface contract-only .; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py runtime-parity validate --target .; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1153 --json (advisory only: optional consistency-analysis.md absent); PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1153 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1153 --json.",
   "fallback_to": null,
   "findings": [],
