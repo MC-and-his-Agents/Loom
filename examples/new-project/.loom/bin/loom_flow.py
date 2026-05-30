@@ -757,7 +757,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default="auto",
         help="Closeout local gate profile; auto uses the lightweight closeout contract unless a heavier profile is explicit.",
     )
+    closeout.add_argument("--issue-payload-file", help="Optional repo-relative issue payload JSON fixture")
     closeout.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+    closeout.add_argument("--project-payload-file", help="Optional repo-relative Project status JSON fixture")
     closeout.add_argument("--status-checks-file", help="Optional repo-relative statusCheckRollup JSON fixture")
     closeout.add_argument("--branch-protection-file", help="Optional repo-relative branch protection JSON fixture")
     closeout.add_argument("--ruleset-file", help="Optional repo-relative branch rules/ruleset JSON fixture")
@@ -774,6 +776,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     reconciliation.add_argument("--branch", help="GitHub branch name bound to the work item")
     reconciliation.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
     reconciliation.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
+    reconciliation.add_argument("--issue-payload-file", help="Optional repo-relative issue payload JSON fixture")
+    reconciliation.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+    reconciliation.add_argument("--project-payload-file", help="Optional repo-relative Project status JSON fixture")
     reconciliation.add_argument("--comment", help="Optional closeout comment for issue sync")
     reconciliation.add_argument("--comment-file", help="Read closeout comment body from a file")
     reconciliation.add_argument("--dry-run", action="store_true", default=True, help="Preview reconciliation sync actions without writing GitHub state; this is the default")
@@ -13387,6 +13392,28 @@ def normalize_pr_fixture_payload(payload: Any) -> tuple[dict[str, Any] | None, l
     return normalized, []
 
 
+def normalize_issue_fixture_payload(payload: Any) -> tuple[dict[str, Any] | None, list[str]]:
+    if not isinstance(payload, dict):
+        return None, ["issue payload fixture must be a JSON object"]
+    normalized = dict(payload)
+    if "html_url" in normalized and "url" not in normalized:
+        normalized["url"] = normalized.get("html_url")
+    if "node_id" in normalized and "id" not in normalized:
+        normalized["id"] = normalized.get("node_id")
+    if "state" in normalized:
+        normalized["state"] = github_issue_state(normalized.get("state"))
+    else:
+        normalized["state"] = "OPEN"
+    labels = normalized.get("labels")
+    if isinstance(labels, list):
+        normalized["labels"] = [
+            str(label.get("name"))
+            for label in labels
+            if isinstance(label, dict) and isinstance(label.get("name"), str)
+        ]
+    return normalized, []
+
+
 def infer_pr_number_from_ref(ref: str | None) -> int | None:
     if not isinstance(ref, str):
         return None
@@ -16039,6 +16066,9 @@ def reconciliation_audit_payload(
     branch_name: str | None,
     owner: str,
     repo_name: str,
+    issue_payload_file: str | None = None,
+    pr_payload_file: str | None = None,
+    project_payload_file: str | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     missing_inputs: list[str] = []
     findings: list[dict[str, Any]] = []
@@ -16120,46 +16150,69 @@ def reconciliation_audit_payload(
     issue_id: str | None = None
     parent_payload: dict[str, Any] | None = None
     if issue_number is not None:
-        issue_payload, issue_errors = github_issue_payload(target_root, owner, repo_name, issue_number)
+        fixture_issue_payload, fixture_issue_errors = load_optional_json_fixture(
+            target_root,
+            issue_payload_file,
+            label="issue payload fixture",
+        )
+        if fixture_issue_errors:
+            issue_payload = None
+            issue_errors = fixture_issue_errors
+        elif isinstance(fixture_issue_payload, dict):
+            issue_payload, issue_errors = normalize_issue_fixture_payload(fixture_issue_payload)
+        else:
+            issue_payload, issue_errors = github_issue_payload(target_root, owner, repo_name, issue_number)
         if issue_errors:
             missing_inputs.extend(f"issue: {message}" for message in issue_errors)
         elif issue_payload is not None:
             raw_issue_id = issue_payload.get("id")
             if isinstance(raw_issue_id, str) and raw_issue_id:
                 issue_id = raw_issue_id
-            issue_tree, issue_tree_errors = issue_tree_payload(target_root, owner, repo_name, issue_number)
-            if issue_tree_errors:
-                issue_payload["sub_issue_tree"] = {
-                    "status": "unavailable",
-                    "reason": "GraphQL-only parent/sub-issue tree could not be read.",
-                    "errors": issue_tree_errors,
-                    "budget_guard": graphql_budget_guard("native_parent_sub_issue_tree", issue_tree_errors),
-                }
-            elif issue_tree is not None:
-                issue_payload = {**issue_payload, **issue_tree}
-                parent = issue_payload.get("parent")
-                if isinstance(parent, dict):
-                    parent_payload = parent
-            native_dependencies = github_issue_dependencies_payload(target_root, owner, repo_name, issue_number)
-            dependency_graph = dependency_graph_payload(
-                issue_number=issue_number,
-                issue_payload=issue_payload,
-                native_dependency_payload=native_dependencies,
-            )
-            for finding in dependency_graph.get("findings", []):
-                if isinstance(finding, dict) and finding.get("kind") in {
-                    "missing_native_edge",
-                    "stale_native_edge",
-                    "open_blocker_executable_conflict",
-                    "native_dependency_unreadable",
-                }:
-                    findings.append(finding)
+            if fixture_issue_payload is None:
+                issue_tree, issue_tree_errors = issue_tree_payload(target_root, owner, repo_name, issue_number)
+                if issue_tree_errors:
+                    issue_payload["sub_issue_tree"] = {
+                        "status": "unavailable",
+                        "reason": "GraphQL-only parent/sub-issue tree could not be read.",
+                        "errors": issue_tree_errors,
+                        "budget_guard": graphql_budget_guard("native_parent_sub_issue_tree", issue_tree_errors),
+                    }
+                elif issue_tree is not None:
+                    issue_payload = {**issue_payload, **issue_tree}
+                    parent = issue_payload.get("parent")
+                    if isinstance(parent, dict):
+                        parent_payload = parent
+                native_dependencies = github_issue_dependencies_payload(target_root, owner, repo_name, issue_number)
+                dependency_graph = dependency_graph_payload(
+                    issue_number=issue_number,
+                    issue_payload=issue_payload,
+                    native_dependency_payload=native_dependencies,
+                )
+                for finding in dependency_graph.get("findings", []):
+                    if isinstance(finding, dict) and finding.get("kind") in {
+                        "missing_native_edge",
+                        "stale_native_edge",
+                        "open_blocker_executable_conflict",
+                        "native_dependency_unreadable",
+                    }:
+                        findings.append(finding)
 
     pr_payload: dict[str, Any] | None = None
     merge_commit_sha: str | None = None
     merge_commit_in_main = False
     if pr_number is not None:
-        pr_payload, pr_errors = github_pr_payload(target_root, owner, repo_name, pr_number)
+        fixture_pr_payload, fixture_pr_errors = load_optional_json_fixture(
+            target_root,
+            pr_payload_file,
+            label="PR payload fixture",
+        )
+        if fixture_pr_errors:
+            pr_payload = None
+            pr_errors = fixture_pr_errors
+        elif isinstance(fixture_pr_payload, dict):
+            pr_payload, pr_errors = normalize_pr_fixture_payload(fixture_pr_payload)
+        else:
+            pr_payload, pr_errors = github_pr_payload(target_root, owner, repo_name, pr_number)
         if pr_errors:
             missing_inputs.extend(f"pr: {message}" for message in pr_errors)
         elif pr_payload is not None:
@@ -16288,7 +16341,24 @@ def reconciliation_audit_payload(
     project_payload: dict[str, Any] | None = None
     project_drift_details: list[dict[str, Any]] = []
     if project_number is not None:
-        project_context, project_errors = project_status_context(target_root, owner, project_number)
+        fixture_project_payload, fixture_project_errors = load_optional_json_fixture(
+            target_root,
+            project_payload_file,
+            label="Project payload fixture",
+        )
+        if fixture_project_errors:
+            project_context = {}
+            project_errors = fixture_project_errors
+        elif isinstance(fixture_project_payload, dict):
+            project_context = {
+                "project_id": fixture_project_payload.get("project_id") or fixture_project_payload.get("id") or f"fixture-project-{project_number}",
+                "status_field_id": fixture_project_payload.get("status_field_id") or "fixture-status-field",
+                "done_option_id": fixture_project_payload.get("done_option_id") or "fixture-done",
+                "items": fixture_project_payload.get("items") if isinstance(fixture_project_payload.get("items"), list) else [],
+            }
+            project_errors = []
+        else:
+            project_context, project_errors = project_status_context(target_root, owner, project_number)
         if project_errors:
             if any("unknown owner type" in message for message in project_errors):
                 project_payload = {
@@ -17548,7 +17618,9 @@ def closeout_payload(
     skip_gate: bool,
     goal_completion_file: str | None = None,
     gate_profile: str = "auto",
+    issue_payload_file: str | None = None,
     pr_payload_file: str | None = None,
+    project_payload_file: str | None = None,
     status_checks_file: str | None = None,
     branch_protection_file: str | None = None,
     ruleset_file: str | None = None,
@@ -17666,6 +17738,9 @@ def closeout_payload(
             branch_name=branch_name,
             owner=owner,
             repo_name=repo_name,
+            issue_payload_file=issue_payload_file,
+            pr_payload_file=pr_payload_file,
+            project_payload_file=project_payload_file,
         )
         if reconciliation_errors:
             missing_inputs.extend(f"reconciliation: {message}" for message in reconciliation_errors)
@@ -17680,37 +17755,49 @@ def closeout_payload(
     issue_id: str | None = None
     dependency_graph: dict[str, Any] | None = None
     if issue_number is not None:
-        issue_payload, issue_errors = github_issue_payload(target_root, owner, repo_name, issue_number)
+        fixture_issue_payload, fixture_issue_errors = load_optional_json_fixture(
+            target_root,
+            issue_payload_file,
+            label="issue payload fixture",
+        )
+        if fixture_issue_errors:
+            issue_payload = None
+            issue_errors = fixture_issue_errors
+        elif isinstance(fixture_issue_payload, dict):
+            issue_payload, issue_errors = normalize_issue_fixture_payload(fixture_issue_payload)
+        else:
+            issue_payload, issue_errors = github_issue_payload(target_root, owner, repo_name, issue_number)
         if issue_errors:
             missing_inputs.extend(f"issue: {message}" for message in issue_errors)
         elif issue_payload is not None:
             raw_issue_id = issue_payload.get("id")
             if isinstance(raw_issue_id, str) and raw_issue_id:
                 issue_id = raw_issue_id
-            native_dependencies = github_issue_dependencies_payload(target_root, owner, repo_name, issue_number)
-            dependency_graph = dependency_graph_payload(
-                issue_number=issue_number,
-                issue_payload=issue_payload,
-                native_dependency_payload=native_dependencies,
-            )
-            for finding in dependency_graph.get("findings", []):
-                if not isinstance(finding, dict):
-                    continue
-                if finding.get("kind") in {"open_blocker_executable_conflict", "stale_native_edge"}:
-                    missing_inputs.append(str(finding.get("subject") or finding.get("kind")))
-                    closeout_findings.append(
-                        {
-                            **finding,
-                            "why_blocking": (
-                                "closeout is blocked because an open native dependency blocker remains."
-                                if finding.get("kind") == "open_blocker_executable_conflict"
-                                else "closeout is blocked because the native dependency mirror is stale."
-                            ),
-                            "fallback_to": finding.get("fallback_to") or "manual-reconciliation",
-                        }
-                    )
-                elif finding.get("kind") == "native_dependency_unreadable":
-                    closeout_findings.append({**finding, "severity": "warn"})
+            if fixture_issue_payload is None:
+                native_dependencies = github_issue_dependencies_payload(target_root, owner, repo_name, issue_number)
+                dependency_graph = dependency_graph_payload(
+                    issue_number=issue_number,
+                    issue_payload=issue_payload,
+                    native_dependency_payload=native_dependencies,
+                )
+                for finding in dependency_graph.get("findings", []):
+                    if not isinstance(finding, dict):
+                        continue
+                    if finding.get("kind") in {"open_blocker_executable_conflict", "stale_native_edge"}:
+                        missing_inputs.append(str(finding.get("subject") or finding.get("kind")))
+                        closeout_findings.append(
+                            {
+                                **finding,
+                                "why_blocking": (
+                                    "closeout is blocked because an open native dependency blocker remains."
+                                    if finding.get("kind") == "open_blocker_executable_conflict"
+                                    else "closeout is blocked because the native dependency mirror is stale."
+                                ),
+                                "fallback_to": finding.get("fallback_to") or "manual-reconciliation",
+                            }
+                        )
+                    elif finding.get("kind") == "native_dependency_unreadable":
+                        closeout_findings.append({**finding, "severity": "warn"})
 
     pr_payload: dict[str, Any] | None = None
     merge_commit_sha: str | None = None
@@ -17772,7 +17859,24 @@ def closeout_payload(
 
     project_payload: dict[str, Any] | None = None
     if project_number is not None:
-        project_context, project_errors = project_status_context(target_root, owner, project_number)
+        fixture_project_payload, fixture_project_errors = load_optional_json_fixture(
+            target_root,
+            project_payload_file,
+            label="Project payload fixture",
+        )
+        if fixture_project_errors:
+            project_context = {}
+            project_errors = fixture_project_errors
+        elif isinstance(fixture_project_payload, dict):
+            project_context = {
+                "project_id": fixture_project_payload.get("project_id") or fixture_project_payload.get("id") or f"fixture-project-{project_number}",
+                "status_field_id": fixture_project_payload.get("status_field_id") or "fixture-status-field",
+                "done_option_id": fixture_project_payload.get("done_option_id") or "fixture-done",
+                "items": fixture_project_payload.get("items") if isinstance(fixture_project_payload.get("items"), list) else [],
+            }
+            project_errors = []
+        else:
+            project_context, project_errors = project_status_context(target_root, owner, project_number)
         if project_errors:
             if any("unknown owner type" in message for message in project_errors):
                 project_payload = {
@@ -18005,7 +18109,9 @@ def handle_closeout(args: argparse.Namespace) -> int:
         skip_gate=args.skip_gate,
         goal_completion_file=args.goal_completion,
         gate_profile=args.gate_profile,
+        issue_payload_file=args.issue_payload_file,
         pr_payload_file=args.pr_payload_file,
+        project_payload_file=args.project_payload_file,
         status_checks_file=args.status_checks_file,
         branch_protection_file=args.branch_protection_file,
         ruleset_file=args.ruleset_file,
@@ -18119,6 +18225,13 @@ def handle_closeout(args: argparse.Namespace) -> int:
         repo_name=repo_name,
         skip_gate=args.skip_gate,
         goal_completion_file=args.goal_completion,
+        gate_profile=args.gate_profile,
+        issue_payload_file=args.issue_payload_file,
+        pr_payload_file=args.pr_payload_file,
+        project_payload_file=args.project_payload_file,
+        status_checks_file=args.status_checks_file,
+        branch_protection_file=args.branch_protection_file,
+        ruleset_file=args.ruleset_file,
     )
     if errors:
         sync_missing.extend(errors)
@@ -18202,6 +18315,9 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
         branch_name=args.branch,
         owner=owner,
         repo_name=repo_name,
+        issue_payload_file=args.issue_payload_file,
+        pr_payload_file=args.pr_payload_file,
+        project_payload_file=args.project_payload_file,
     )
     if errors:
         return emit(
@@ -18384,6 +18500,9 @@ def handle_reconciliation(args: argparse.Namespace) -> int:
         branch_name=args.branch,
         owner=owner,
         repo_name=repo_name,
+        issue_payload_file=args.issue_payload_file,
+        pr_payload_file=args.pr_payload_file,
+        project_payload_file=args.project_payload_file,
     )
     if refreshed_errors:
         sync_missing.extend(refreshed_errors)
