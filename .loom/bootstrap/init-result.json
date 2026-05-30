@@ -7,7 +7,7 @@
     "contract_version": "1.3.0"
   },
   "run": {
-    "target": "/Users/mc/dev/Loom-worktrees/1143-reconciliation-suite-taxonomy",
+    "target": "/Users/mc/dev/Loom-worktrees/1152-generated-skills-surface-parity",
     "scenario": "复杂既有仓库",
     "scenario_key": "complex-existing",
     "integration_mode": "companion",
@@ -74,9 +74,9 @@
     "mode": "work-item + recovery-entry + derived status-surface",
     "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
     "entry_points": {
-      "current_item_id": "WI-1151",
-      "work_item": ".loom/work-items/WI-1151.md",
-      "recovery_entry": ".loom/progress/WI-1151.md",
+      "current_item_id": "WI-1152",
+      "work_item": ".loom/work-items/WI-1152.md",
+      "recovery_entry": ".loom/progress/WI-1152.md",
       "status_surface": ".loom/status/current.md"
     }
   },
@@ -152,7 +152,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "e6697b44f02b17041fe52abf6c4bf35a29021dc0fa0fa943675af3ea9607b096"
+      "sha256": "8ea487f0a5bbf564bc63ecdaf85408f2da7242fb975504f667024cef8f46f287"
     },
     {
       "path": "AGENTS.md",
