@@ -515,8 +515,13 @@
 {
   "type": "pr_body_html_comment_json",
   "schema_version": "loom-repo-pr-metadata/v1",
+  "carrier_id": "repo-pr-body-machine-block",
   "marker": "loom:repo-pr-metadata",
-  "required_fields": ["contract_surface"],
+  "surface": "merge_ready",
+  "repo_specific_field_set": ["contract_surface"],
+  "authority_locator": ".github/PULL_REQUEST_TEMPLATE.md#loom-repo-pr-metadata",
+  "applicability_locator": ".loom/companion/README.md#pr-metadata",
+  "enforcement": "blocking",
   "preflight": {
     "required_before": ["review", "merge_ready"],
     "failure_mode": "blocking",
@@ -537,13 +542,25 @@
 
 - `type` 目前只允许 `pr_body_html_comment_json`
 - `schema_version` 固定为 `loom-repo-pr-metadata/v1`
+- `carrier_id` 是 repo companion 内稳定的 carrier 名称，用于诊断与迁移回链
 - `marker` 是 HTML comment marker，例如 `loom:repo-pr-metadata`
-- `required_fields` 是 repo-specific 字段名列表，只由目标仓库声明
+- `surface` 是 carrier 服务的 Loom surface，例如 `review` / `merge_ready` / `closeout`
+- `repo_specific_field_set` 是 repo-specific 字段名列表，只由目标仓库声明
+- `authority_locator` 指向 machine carrier 的权威模板、artifact 或 host/project field declaration
+- `applicability_locator` 指向何时需要该 carrier 的 repo-owned 说明
+- `enforcement` 只允许 `blocking | advisory`
 - `preflight.required_before` 只允许 `review` / `merge_ready`
 - `preflight.failure_mode` 只允许 `blocking | advisory`
 - `preflight.command_locator` 必须指向仓内可读路径
 - `diagnostics.*` 必须显式要求 `block_locator`、`parse_error`、`missing_fields`、`expected_format`、`suggested_fix`
 - `migration_mode` 只允许 `advisory_legacy | dual_read | required`，缺省等同 `advisory_legacy`
+
+`type` 当前稳定支持 `pr_body_html_comment_json`，但合同允许 repo companion 在不改写 Loom core taxonomy 的前提下声明以下 carrier 形态：
+
+- HTML comment 内 JSON/YAML
+- Loom 管理的 fenced machine block
+- 独立 artifact locator
+- repo-declared host/project field locator
 
 PR body 中的 machine block 格式固定为：
 
@@ -551,13 +568,14 @@ PR body 中的 machine block 格式固定为：
 <!-- loom:repo-pr-metadata
 {
   "schema_version": "loom-repo-pr-metadata/v1",
+  "carrier_id": "repo-pr-body-machine-block",
   "metadata_contract_id": "integration_check",
   "surface": "merge_ready",
   "fields": {
     "contract_surface": "checked"
   },
   "source": {
-    "rendered_hash": "sha256-or-repo-renderer-hash"
+    "source_range_or_hash": "sha256-or-repo-renderer-hash"
   },
   "parser_version": "repo-parser/v1"
 }
@@ -568,9 +586,10 @@ PR body 中的 machine block 格式固定为：
 
 - PR body 的 Summary / Validation / Risks / Related Work 仍是人类展示层，不是 repo-specific metadata 的机器真相
 - parser 必须优先读取 HTML comment JSON machine block，不得从自由 Markdown 列表、标题或自然语言中推断 required fields
+- parser、PR body renderer 或 CLI 输出只能证明 carrier 可读性与诊断结果；它们不得替代 Work Item、review record、merge-ready verdict、closeout truth 或 docs/source truth
 - block 存在但 JSON 不可解析、schema 不匹配、surface 不匹配或 required field 缺失时必须 fail closed，并返回 block locator、parse error、missing fields、expected format 与 suggested fix
 - block 缺失时按 `migration_mode` 处理：`required` 阻断；`advisory_legacy` 与 `dual_read` 不让旧 PR 批量失效，但必须在 preflight 输出中暴露 legacy/advisory 状态
-- `required_fields` 中不得声明 `guardian_verdict`、`ruleset_result`、`host_action_result`、`review_decision`、`validation_status`、`closeout_result` 等 retained host action 或 Loom-authored truth 字段
+- `repo_specific_field_set` 中不得声明 `guardian_verdict`、`ruleset_result`、`host_action_result`、`review_decision`、`validation_status`、`closeout_result` 等 retained host action 或 Loom-authored truth 字段
 - `command_locator` 是 preflight 命令或说明的 repo-owned locator；它不能越界、不能指向宿主动作结果，也不能承载当前 run 的 parser verdict
 
 ### 4.9.2 明确禁止上移的字段模式
