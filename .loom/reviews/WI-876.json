@@ -5,7 +5,7 @@
   "kind": "code_review",
   "summary": "WI-876 contract-only change is limited to PR metadata machine carrier documentation, PR template boundary text, generated skills reference sync, and WI-876 carrier activation; validation passed and no blocking findings were found.",
   "reviewer": "codex",
-  "reviewed_head": "d8cf29e990b2c893da39e0cea3fb5875789e4f9f",
+  "reviewed_head": "9306c3c881b5057dc3a30dc68e15740a1fe78d84",
   "reviewed_validation_summary": "Passing local evidence on 2026-05-31: git diff --check; focused rg for carrier_id, repo_specific_field_set, source_range_or_hash, required_fields, rendered_hash, free Markdown, and machine carrier; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/loom.py suite validate --target . --item WI-876 --json; python3 tools/loom.py suite evidence validate --target . --item WI-876 --json; python3 tools/loom.py suite carrier validate --target . --item WI-876 --json.",
   "fallback_to": null,
   "findings": [],
