@@ -5,7 +5,7 @@
   "kind": "spec_review",
   "summary": "Spec review allows WI-957: scope remains limited to pre-review readiness/cost guard consumption of PR metadata preflight, PR/head alignment, dirty state, deterministic validation, generated surface, #969 profile proof, closeout preview, and post-review carrier policy; #1107 full spec suite CLI tree and frozen truth-contract rewrites remain out of scope.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "b4bafa352d7e6e26f79b6fe18a32bebfdf073c95",
+  "reviewed_head": "1bfce44b07d8d116cc9e69d90900746e3988fc83",
   "reviewed_validation_summary": "Passing local evidence on 2026-06-01 for WI-957 pre-review readiness/cost guard: `git diff --check`; focused `rg` for `pre-review-readiness-cost-guard`, `loom-pre-review-readiness-cost-guard/v1`, `checkout_head_drift`, `push_or_refresh_pr_head`, `post_review_carrier_policy`, `source_issue\": \"#969\"`, `PRE_REVIEW_REQUIRED_VALIDATION_TOKENS`, and `readiness_cost_guard`; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 tools/check_cli_contract.py`; `python3 tools/loom.py suite validate --target . --item WI-957 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-957 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-957 --json`; `python3 tools/check_release_surface.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_npm_package.py`; `python3 tools/loom.py checkpoint build --target . --item WI-957 --json`; `make loom-demo-new-project-check`; `python3 tools/loom_flow.py shadow-parity --target . --blocking` passed after #875 terminal carrier reconciliation and demo/shadow refresh.",
   "fallback_to": null,
   "findings": [],
