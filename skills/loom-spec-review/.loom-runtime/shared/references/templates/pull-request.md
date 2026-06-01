@@ -37,8 +37,21 @@ Loom 支持结构化 PR 模板，但必须满足：
 - 基础模板保持短小
 - 条件块按需触发
 - 模板内容直接服务 review 与 merge 判断
+- repo-specific PR metadata 若会被机器门禁消费，必须由 repo companion 声明 stable machine carrier；PR 模板中的人类摘要不得成为唯一机器读取来源
 
 不允许：
 
 - 用超重模板制造机械性噪音
 - 把长期规则真相写死在 PR 模板里
+- 让自由 Markdown 标题、列表或自然语言替代 declared machine carrier
+
+## 5. PR metadata machine carrier
+
+当目标仓库声明 `metadata_contract.fields[*].machine_carrier` 时，PR 模板可以展示人类可读摘要，但必须保留 repo companion 声明的 machine carrier。
+
+稳定规则：
+
+- machine carrier 由 repo companion 声明 `schema_version`、`carrier_id`、`surface`、`repo_specific_field_set`、`authority_locator`、`applicability_locator`、`enforcement`、`parser_version` 与 `source_range_or_hash`
+- renderer 或 `gh pr edit` 后必须能通过 preflight 证明 carrier 未漂移
+- Markdown 展示层可以重排；machine carrier、artifact 或 host/project field locator 必须保持可解析
+- parser 或 CLI 输出只证明 carrier 可读性，不替代 Work Item、review、merge-ready、closeout 或 docs/source truth
