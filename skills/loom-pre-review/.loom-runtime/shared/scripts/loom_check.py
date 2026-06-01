@@ -21370,12 +21370,48 @@ Human-readable PR text.
         elif "source_range_or_hash" not in json.dumps(missing_diagnostics, ensure_ascii=False):
             failures.append(Failure(category, "missing field diagnostics must preserve the declared source range or hash"))
 
+        missing_schema_target = base / "missing-schema"
+        missing_schema_target.mkdir()
+        install_companion(missing_schema_target)
+        missing_schema_body = valid_body.replace('  "schema_version": "loom-repo-pr-metadata/v1",\n', "")
+        missing_schema_payload = run_preflight(missing_schema_target, pr_payload(missing_schema_body))
+        missing_schema_diagnostics = missing_schema_payload.get("diagnostics") if isinstance(missing_schema_payload, dict) else []
+        if not isinstance(missing_schema_payload, dict) or missing_schema_payload.get("result") != "block":
+            failures.append(Failure(category, "metadata block missing schema_version must block"))
+        elif "schema_version" not in json.dumps(missing_schema_diagnostics, ensure_ascii=False):
+            failures.append(Failure(category, "missing schema diagnostics must identify schema_version"))
+        elif "expected_format" not in json.dumps(missing_schema_diagnostics, ensure_ascii=False):
+            failures.append(Failure(category, "missing schema diagnostics must include the expected metadata format"))
+
+        unsupported_version_target = base / "unsupported-parser-version"
+        unsupported_version_target.mkdir()
+        install_companion(unsupported_version_target)
+        unsupported_version_body = valid_body.replace('"parser_version": "repo-parser/v1"', '"parser_version": "legacy-parser/v0"')
+        unsupported_version_payload = run_preflight(unsupported_version_target, pr_payload(unsupported_version_body))
+        unsupported_version_diagnostics = unsupported_version_payload.get("diagnostics") if isinstance(unsupported_version_payload, dict) else []
+        if not isinstance(unsupported_version_payload, dict) or unsupported_version_payload.get("result") != "block":
+            failures.append(Failure(category, "unsupported parser_version must block metadata preflight"))
+        elif "unsupported parser_version" not in json.dumps(unsupported_version_diagnostics, ensure_ascii=False):
+            failures.append(Failure(category, "unsupported parser_version diagnostics must identify the version failure"))
+
         advisory_legacy_target = base / "advisory-legacy"
         advisory_legacy_target.mkdir()
         install_companion(advisory_legacy_target, migration_mode="advisory_legacy")
         advisory_payload = run_preflight(advisory_legacy_target, pr_payload("## Summary\n\nNo machine block yet.\n"))
         if not isinstance(advisory_payload, dict) or advisory_payload.get("result") != "pass":
             failures.append(Failure(category, "advisory legacy migration mode must not break old PR bodies"))
+
+        dual_read_legacy_target = base / "dual-read-legacy"
+        dual_read_legacy_target.mkdir()
+        install_companion(dual_read_legacy_target, migration_mode="dual_read")
+        dual_read_payload = run_preflight(
+            dual_read_legacy_target,
+            pr_payload("## Summary\n\nLegacy Markdown-only PR body with `contract_surface: checked` in free text.\n"),
+        )
+        if not isinstance(dual_read_payload, dict) or dual_read_payload.get("result") != "pass":
+            failures.append(Failure(category, "dual_read migration mode must keep legacy Markdown-only PR bodies advisory"))
+        elif not any(contract.get("legacy_mode") for contract in dual_read_payload.get("metadata_contracts", []) if isinstance(contract, dict)):
+            failures.append(Failure(category, "dual_read legacy advisory output must expose legacy_mode for migration"))
 
         required_absent_target = base / "required-absent"
         required_absent_target.mkdir()
@@ -21392,7 +21428,21 @@ Human-readable PR text.
         body_file.parent.mkdir(parents=True, exist_ok=True)
         body_file.write_text(valid_body, encoding="utf-8")
         readback_file.write_text(
-            valid_body.replace("Human-readable PR text.", "Human-readable PR text.\n\nExtra human-only paragraph with 中文括号（ok）."),
+            valid_body.replace(
+                "Human-readable PR text.",
+                "\n".join(
+                    [
+                        "Renamed human heading text with `inline code`.",
+                        "",
+                        "- List item with changed indentation",
+                        "  - Nested-looking human-only detail",
+                        "",
+                        "Shell command substitution example: $(printf 'metadata stays in comment')",
+                        "",
+                        "Extra human-only paragraph with 中文括号（ok）.",
+                    ]
+                ),
+            ),
             encoding="utf-8",
         )
         body_file_payload = run_preflight(
@@ -21421,6 +21471,11 @@ Human-readable PR text.
             failures.append(Failure(category, "post-edit readback must block when the metadata machine block hash drifts"))
         elif "machine block drift" not in json.dumps(drift_payload.get("body_artifact", {}), ensure_ascii=False):
             failures.append(Failure(category, "post-edit machine block drift diagnostics must identify the hash comparison failure"))
+        drift_diagnostics = json.dumps(drift_payload.get("body_artifact", {}), ensure_ascii=False)
+        if "raw_excerpt_sha256" not in drift_diagnostics:
+            failures.append(Failure(category, "post-edit machine block drift diagnostics must expose raw excerpt hashes"))
+        if "gh_pr_edit_body_file_readback" not in drift_diagnostics:
+            failures.append(Failure(category, "post-edit machine block drift diagnostics must include the readback repair fallback"))
 
         forbidden_target = base / "forbidden-truth"
         forbidden_target.mkdir()
