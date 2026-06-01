@@ -75,6 +75,11 @@ task-carrier 规则。
 - full path 缺少必需 suite artifact、provenance、fresh evidence 或存在 blocking
   consistency gap 时返回 `block` / `fallback`
 - minimal path 只有在缺口具备有效 `not_applicable` rationale 时才允许进入 review
+- 昂贵 semantic review 前必须消费 readiness / cost guard：PR head / checkout
+  head、dirty state、deterministic validation summary、generated skills surface、
+  PR metadata preflight、#969 review profile proof、closeout preview 与
+  post-review carrier-only policy；有 PR 绑定或已到 build checkpoint 时 fail
+  closed，普通早期路由探测只输出 advisory evidence
 
 输入信号与输出合同见：
 

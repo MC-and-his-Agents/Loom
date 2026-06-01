@@ -3099,6 +3099,51 @@ def main() -> int:
             item=active_item,
         )
         assert_suite_gate_consumption(active_pre_review, expected_surface="pre_review")
+        active_guard = active_pre_review.get("readiness_cost_guard")
+        if not isinstance(active_guard, dict):
+            raise AssertionError("active pre-review did not expose readiness/cost guard")
+        if active_guard.get("schema_version") != "loom-pre-review-readiness-cost-guard/v1":
+            raise AssertionError("active pre-review readiness/cost guard schema mismatch")
+        if active_guard.get("model_profile_proof", {}).get("source_issue") != "#969":
+            raise AssertionError("active pre-review readiness/cost guard did not consume #969 profile proof")
+        if not isinstance(active_guard.get("post_review_carrier_policy"), dict):
+            raise AssertionError("active pre-review readiness/cost guard did not expose carrier-only policy")
+        drift_fixture = REPO_ROOT / ".loom" / "runtime" / "WI-957-pr-head-drift-fixture.json"
+        drift_fixture.parent.mkdir(parents=True, exist_ok=True)
+        drift_payload = {
+            "number": 957,
+            "state": "OPEN",
+            "title": "WI-957 drift fixture",
+            "body": f"Loom Work Item: {active_item}\n",
+            "url": "https://github.com/MC-and-his-Agents/Loom/pull/957",
+            "isDraft": False,
+            "headRefName": "work/957-pre-review-readiness-cost-guard",
+            "headRefOid": "0000000000000000000000000000000000000000",
+            "baseRefName": "main",
+        }
+        try:
+            drift_fixture.write_text(json.dumps(drift_payload, indent=2) + "\n", encoding="utf-8")
+            _, drift_pre_review = run_json_preserving_attempts(
+                [
+                    "pre-review",
+                    "--target",
+                    str(REPO_ROOT),
+                    "--item",
+                    active_item,
+                    "--pr-payload-file",
+                    ".loom/runtime/WI-957-pr-head-drift-fixture.json",
+                    "--json",
+                ],
+                item=active_item,
+            )
+        finally:
+            if drift_fixture.exists():
+                drift_fixture.unlink()
+        drift_guard = drift_pre_review.get("readiness_cost_guard")
+        if not isinstance(drift_guard, dict) or "checkout_head_drift" not in drift_guard.get("failure_taxonomy", []):
+            raise AssertionError("pre-review readiness/cost guard did not classify PR head drift")
+        if drift_guard.get("fallback_to") != "push_or_refresh_pr_head":
+            raise AssertionError("pre-review readiness/cost guard did not return push_or_refresh_pr_head fallback for PR head drift")
         _, active_review_gate = run_json_preserving_attempts(
             ["gate", "review", "--target", str(REPO_ROOT), "--item", active_item, "--json"],
             item=active_item,

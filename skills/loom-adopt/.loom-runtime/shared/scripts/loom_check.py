@@ -7591,11 +7591,12 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     "suite-carrier-validate",
                     "governance-lint",
                     "pr-metadata-preflight",
+                    "pre-review-readiness-cost-guard",
                 ]:
                     failures.append(
                         Failure(
                             "daily-execution-cli",
-                            "`flow pre-review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-admission, workspace-locate, suite evidence/carrier validation, governance-lint, and pr-metadata-preflight in order",
+                            "`flow pre-review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-admission, workspace-locate, suite evidence/carrier validation, governance-lint, pr-metadata-preflight, and readiness/cost guard in order",
                         )
                     )
                 governance_step = next((step for step in steps if isinstance(step, dict) and step.get("name") == "governance-lint"), None)
@@ -7604,6 +7605,24 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 metadata_step = next((step for step in steps if isinstance(step, dict) and step.get("name") == "pr-metadata-preflight"), None)
                 if not isinstance(metadata_step, dict) or "pr_metadata_preflight" not in metadata_step:
                     failures.append(Failure("daily-execution-cli", "`flow pre-review` pr-metadata-preflight step must embed parser preflight evidence"))
+                readiness_step = next((step for step in steps if isinstance(step, dict) and step.get("name") == "pre-review-readiness-cost-guard"), None)
+                readiness_guard = readiness_step.get("readiness_cost_guard") if isinstance(readiness_step, dict) else None
+                if not isinstance(readiness_guard, dict):
+                    failures.append(Failure("daily-execution-cli", "`flow pre-review` must embed pre-review readiness/cost guard evidence"))
+                else:
+                    if readiness_guard.get("schema_version") != "loom-pre-review-readiness-cost-guard/v1":
+                        failures.append(Failure("daily-execution-cli", "`flow pre-review` readiness/cost guard must expose its schema version"))
+                    if not isinstance(readiness_guard.get("failure_taxonomy"), list):
+                        failures.append(Failure("daily-execution-cli", "`flow pre-review` readiness/cost guard must expose failure_taxonomy"))
+                    if not isinstance(readiness_guard.get("deterministic_checks"), dict):
+                        failures.append(Failure("daily-execution-cli", "`flow pre-review` readiness/cost guard must expose deterministic check readiness"))
+                    if not isinstance(readiness_guard.get("post_review_carrier_policy"), dict):
+                        failures.append(Failure("daily-execution-cli", "`flow pre-review` readiness/cost guard must expose post-review carrier-only policy"))
+                    model_proof = readiness_guard.get("model_profile_proof")
+                    if not isinstance(model_proof, dict) or model_proof.get("source_issue") != "#969":
+                        failures.append(Failure("daily-execution-cli", "`flow pre-review` readiness/cost guard must consume #969 review profile proof"))
+                    if readiness_guard.get("pr_metadata_preflight") is None:
+                        failures.append(Failure("daily-execution-cli", "`flow pre-review` readiness/cost guard must consume PR metadata preflight evidence"))
             require_governance_lint_status_payload(
                 failures,
                 category="daily-execution-cli",
