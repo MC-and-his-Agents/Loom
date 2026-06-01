@@ -1713,10 +1713,14 @@ def handle_pr(argv: list[str]) -> int:
     parser.add_argument("pr", nargs="?")
     parser.add_argument("--head-sha")
     parser.add_argument("--work-item")
+    parser.add_argument("--surface", choices=("pre_review", "review", "merge_ready"), default="merge_ready")
+    parser.add_argument("--body-file")
+    parser.add_argument("--compare-body-file")
+    parser.add_argument("--pr-payload-file")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     command = f"pr {args.action}"
-    if not args.pr:
+    if not args.pr and not (args.action == "metadata-preflight" and args.body_file):
         return emit(output(command, "block", schema=HOST_OBJECT_SCHEMA, summary="PR command requires a PR number.", failed_layer="pr-input", fail_closed_reason="missing PR number", fallback_to=["loom help --json"]))
     if args.action == "inspect":
         flow_args = ["host-binding", "inspect", "--target", ".", "--pr", args.pr]
@@ -1724,9 +1728,17 @@ def handle_pr(argv: list[str]) -> int:
             flow_args.extend(["--head-sha", args.head_sha])
         return emit_flow(command, flow_args, fallback_to=["loom pr gate <pr> --json", "manual-reconciliation"])
     if args.action == "metadata-preflight":
-        flow_args = ["pr-metadata", "preflight", "--target", ".", "--surface", "merge_ready", "--pr", args.pr]
+        flow_args = ["pr-metadata", "preflight", "--target", ".", "--surface", args.surface]
+        if args.pr:
+            flow_args.extend(["--pr", args.pr])
         if args.head_sha:
             flow_args.extend(["--head-sha", args.head_sha])
+        if args.body_file:
+            flow_args.extend(["--body-file", args.body_file])
+        if args.compare_body_file:
+            flow_args.extend(["--compare-body-file", args.compare_body_file])
+        if args.pr_payload_file:
+            flow_args.extend(["--pr-payload-file", args.pr_payload_file])
         return emit_flow(command, flow_args, fallback_to=["update PR body", "loom pr inspect <pr> --json"])
     flow_args = ["pr-gate", "check", "--target", ".", "--pr", args.pr]
     if args.head_sha:

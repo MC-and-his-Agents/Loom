@@ -21277,23 +21277,29 @@ def check_pr_metadata_machine_preflight_contract(root: Path) -> list[Failure]:
             "body": body,
         }
 
-    def run_preflight(target: Path, payload: dict[str, object], *, surface: str = "merge_ready") -> dict[str, object] | None:
-        write_json(target / ".loom/tmp/pr.json", payload)
-        result, error = load_command_json(
-            root,
-            [
-                "python3",
-                "src/skills/shared/scripts/loom_flow.py",
-                "pr-metadata",
-                "preflight",
-                "--target",
-                str(target),
-                "--surface",
-                surface,
-                "--pr-payload-file",
-                ".loom/tmp/pr.json",
-            ],
-        )
+    def run_preflight(
+        target: Path,
+        payload: dict[str, object] | None = None,
+        *,
+        surface: str = "merge_ready",
+        extra_args: list[str] | None = None,
+    ) -> dict[str, object] | None:
+        command = [
+            "python3",
+            "src/skills/shared/scripts/loom_flow.py",
+            "pr-metadata",
+            "preflight",
+            "--target",
+            str(target),
+            "--surface",
+            surface,
+        ]
+        if payload is not None:
+            write_json(target / ".loom/tmp/pr.json", payload)
+            command.extend(["--pr-payload-file", ".loom/tmp/pr.json"])
+        if extra_args:
+            command.extend(extra_args)
+        result, error = load_command_json(root, command)
         if error:
             failures.append(Failure(category, f"preflight command returned invalid output: {error}"))
         return result
@@ -21378,6 +21384,44 @@ Human-readable PR text.
         if not isinstance(required_absent_payload, dict) or required_absent_payload.get("result") != "block":
             failures.append(Failure(category, "required migration mode must block absent machine blocks"))
 
+        body_file_target = base / "body-file"
+        body_file_target.mkdir()
+        install_companion(body_file_target)
+        body_file = body_file_target / ".loom/tmp/rendered-pr.md"
+        readback_file = body_file_target / ".loom/tmp/readback-pr.md"
+        body_file.parent.mkdir(parents=True, exist_ok=True)
+        body_file.write_text(valid_body, encoding="utf-8")
+        readback_file.write_text(
+            valid_body.replace("Human-readable PR text.", "Human-readable PR text.\n\nExtra human-only paragraph with 中文括号（ok）."),
+            encoding="utf-8",
+        )
+        body_file_payload = run_preflight(
+            body_file_target,
+            extra_args=["--body-file", ".loom/tmp/rendered-pr.md"],
+        )
+        if not isinstance(body_file_payload, dict) or body_file_payload.get("result") != "pass":
+            failures.append(Failure(category, "rendered PR body file must pass metadata preflight before gh pr edit"))
+        elif body_file_payload.get("body_artifact", {}).get("body_sha256") is None:
+            failures.append(Failure(category, "body-file preflight must expose rendered body hash evidence"))
+        readback_payload = run_preflight(
+            body_file_target,
+            extra_args=["--body-file", ".loom/tmp/rendered-pr.md", "--compare-body-file", ".loom/tmp/readback-pr.md"],
+        )
+        if not isinstance(readback_payload, dict) or readback_payload.get("result") != "pass":
+            failures.append(Failure(category, "post-edit readback must pass when machine blocks match despite human Markdown drift"))
+        elif readback_payload.get("body_artifact", {}).get("preflight_body_source") != "compare_body_file":
+            failures.append(Failure(category, "post-edit readback preflight must validate the read-back body, not only the rendered artifact"))
+        drift_file = body_file_target / ".loom/tmp/readback-drift-pr.md"
+        drift_file.write_text(valid_body.replace('"contract_surface": "checked"', '"contract_surface": "edited"'), encoding="utf-8")
+        drift_payload = run_preflight(
+            body_file_target,
+            extra_args=["--body-file", ".loom/tmp/rendered-pr.md", "--compare-body-file", ".loom/tmp/readback-drift-pr.md"],
+        )
+        if not isinstance(drift_payload, dict) or drift_payload.get("result") != "block":
+            failures.append(Failure(category, "post-edit readback must block when the metadata machine block hash drifts"))
+        elif "machine block drift" not in json.dumps(drift_payload.get("body_artifact", {}), ensure_ascii=False):
+            failures.append(Failure(category, "post-edit machine block drift diagnostics must identify the hash comparison failure"))
+
         forbidden_target = base / "forbidden-truth"
         forbidden_target.mkdir()
         install_companion(forbidden_target, required_fields=["guardian_verdict"])
@@ -21407,6 +21451,9 @@ Human-readable PR text.
         "PR_METADATA_PREFLIGHT_SCHEMA",
         "surface=\"pre_review\"",
         "surface=\"review\"",
+        "--body-file",
+        "compare_body_file",
+        "body_artifact",
     ):
         if anchor not in source_text:
             failures.append(Failure(category, f"`loom_flow.py` must retain `{anchor}`"))

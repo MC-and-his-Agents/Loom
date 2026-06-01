@@ -22,3 +22,7 @@ Validation details:
 - Issue:
 - Loom Work Item:
 - Spec / plan:
+
+## PR Metadata Machine Carrier
+
+If this repository declares repo-specific PR metadata in `.loom/companion/repo-interface.json`, preserve the declared machine block exactly. Render the body to a file, update with `gh pr edit --body-file <file>`, read the PR body back, and run `loom pr metadata-preflight --body-file <rendered> --compare-body-file <readback>` before review or merge-ready.
