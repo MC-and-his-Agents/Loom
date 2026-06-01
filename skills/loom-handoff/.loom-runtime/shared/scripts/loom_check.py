@@ -7590,16 +7590,20 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     "suite-evidence-validate",
                     "suite-carrier-validate",
                     "governance-lint",
+                    "pr-metadata-preflight",
                 ]:
                     failures.append(
                         Failure(
                             "daily-execution-cli",
-                            "`flow pre-review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-admission, workspace-locate, suite evidence/carrier validation, and governance-lint in order",
+                            "`flow pre-review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-admission, workspace-locate, suite evidence/carrier validation, governance-lint, and pr-metadata-preflight in order",
                         )
                     )
                 governance_step = next((step for step in steps if isinstance(step, dict) and step.get("name") == "governance-lint"), None)
                 if not isinstance(governance_step, dict) or "governance_lint" not in governance_step:
                     failures.append(Failure("daily-execution-cli", "`flow pre-review` governance-lint step must embed governance_lint evidence"))
+                metadata_step = next((step for step in steps if isinstance(step, dict) and step.get("name") == "pr-metadata-preflight"), None)
+                if not isinstance(metadata_step, dict) or "pr_metadata_preflight" not in metadata_step:
+                    failures.append(Failure("daily-execution-cli", "`flow pre-review` pr-metadata-preflight step must embed parser preflight evidence"))
             require_governance_lint_status_payload(
                 failures,
                 category="daily-execution-cli",
@@ -7843,14 +7847,18 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 "spec-review-gate",
                 "suite-evidence-validate",
                 "suite-carrier-validate",
+                "pr-metadata-preflight",
                 "review-entry",
             ]:
                 failures.append(
                     Failure(
                         "daily-execution-cli",
-                        "`flow review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-build, spec-review-gate, suite evidence/carrier validation, and review-entry in order",
+                        "`flow review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-build, spec-review-gate, suite evidence/carrier validation, pr-metadata-preflight, and review-entry in order",
                     )
                 )
+            metadata_step = next((step for step in steps if isinstance(step, dict) and step.get("name") == "pr-metadata-preflight"), None)
+            if not isinstance(metadata_step, dict) or "pr_metadata_preflight" not in metadata_step:
+                failures.append(Failure("daily-execution-cli", "`flow review` pr-metadata-preflight step must embed parser preflight evidence"))
             review = payload.get("review")
             if isinstance(review, dict):
                 require_review_record_contract(
@@ -21232,9 +21240,10 @@ def check_pr_metadata_machine_preflight_contract(root: Path) -> list[Failure]:
                                 "type": "pr_body_html_comment_json",
                                 "schema_version": "loom-repo-pr-metadata/v1",
                                 "marker": "loom:repo-pr-metadata",
+                                "source_range_or_hash": "sha256:declared-renderer-source",
                                 "required_fields": required_fields or ["contract_surface"],
                                 "preflight": {
-                                    "required_before": ["merge_ready"],
+                                    "required_before": ["pre_review", "review", "merge_ready"],
                                     "failure_mode": "blocking",
                                     "command_locator": command_locator,
                                 },
@@ -21268,7 +21277,7 @@ def check_pr_metadata_machine_preflight_contract(root: Path) -> list[Failure]:
             "body": body,
         }
 
-    def run_preflight(target: Path, payload: dict[str, object]) -> dict[str, object] | None:
+    def run_preflight(target: Path, payload: dict[str, object], *, surface: str = "merge_ready") -> dict[str, object] | None:
         write_json(target / ".loom/tmp/pr.json", payload)
         result, error = load_command_json(
             root,
@@ -21280,7 +21289,7 @@ def check_pr_metadata_machine_preflight_contract(root: Path) -> list[Failure]:
                 "--target",
                 str(target),
                 "--surface",
-                "merge_ready",
+                surface,
                 "--pr-payload-file",
                 ".loom/tmp/pr.json",
             ],
@@ -21318,6 +21327,16 @@ Human-readable PR text.
         valid_payload = run_preflight(valid_target, pr_payload(valid_body))
         if not isinstance(valid_payload, dict) or valid_payload.get("result") != "pass":
             failures.append(Failure(category, "valid HTML comment JSON metadata block must pass preflight"))
+        review_payload = run_preflight(valid_target, pr_payload(valid_body.replace('"surface": "merge_ready"', '"surface": "review"')), surface="review")
+        if not isinstance(review_payload, dict) or review_payload.get("result") != "pass":
+            failures.append(Failure(category, "review surface must consume repo-specific PR metadata preflight"))
+        pre_review_payload = run_preflight(
+            valid_target,
+            pr_payload(valid_body.replace('"surface": "merge_ready"', '"surface": "pre_review"')),
+            surface="pre_review",
+        )
+        if not isinstance(pre_review_payload, dict) or pre_review_payload.get("result") != "pass":
+            failures.append(Failure(category, "pre-review surface must consume repo-specific PR metadata preflight before review admission"))
 
         malformed_target = base / "malformed"
         malformed_target.mkdir()
@@ -21329,6 +21348,8 @@ Human-readable PR text.
             failures.append(Failure(category, "malformed metadata JSON must block"))
         elif "parse_error" not in json.dumps(diagnostics, ensure_ascii=False):
             failures.append(Failure(category, "malformed metadata JSON must expose parser diagnostics"))
+        elif "raw_excerpt_sha256" not in json.dumps(diagnostics, ensure_ascii=False):
+            failures.append(Failure(category, "malformed metadata diagnostics must expose a raw excerpt hash"))
 
         missing_field_target = base / "missing-field"
         missing_field_target.mkdir()
@@ -21340,6 +21361,8 @@ Human-readable PR text.
             failures.append(Failure(category, "missing required repo-specific metadata field must block"))
         elif "fields.contract_surface" not in json.dumps(missing_diagnostics, ensure_ascii=False):
             failures.append(Failure(category, "missing field diagnostics must name the exact repo-specific field"))
+        elif "source_range_or_hash" not in json.dumps(missing_diagnostics, ensure_ascii=False):
+            failures.append(Failure(category, "missing field diagnostics must preserve the declared source range or hash"))
 
         advisory_legacy_target = base / "advisory-legacy"
         advisory_legacy_target.mkdir()
@@ -21382,6 +21405,8 @@ Human-readable PR text.
         "pr_metadata_preflight_payload(",
         "\"name\": \"pr-metadata-preflight\"",
         "PR_METADATA_PREFLIGHT_SCHEMA",
+        "surface=\"pre_review\"",
+        "surface=\"review\"",
     ):
         if anchor not in source_text:
             failures.append(Failure(category, f"`loom_flow.py` must retain `{anchor}`"))

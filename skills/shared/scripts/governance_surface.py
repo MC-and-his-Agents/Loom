@@ -349,7 +349,7 @@ REPO_INTERFACE_CONTEXT_TYPES = {"string", "integer", "number", "boolean"}
 REPO_METADATA_MACHINE_CARRIER_TYPES = {"pr_body_html_comment_json"}
 REPO_METADATA_MACHINE_CARRIER_SCHEMAS = {"loom-repo-pr-metadata/v1"}
 REPO_METADATA_MACHINE_CARRIER_MIGRATION_MODES = {"advisory_legacy", "dual_read", "required"}
-REPO_METADATA_MACHINE_CARRIER_PREFLIGHT_SURFACES = {"review", "merge_ready"}
+REPO_METADATA_MACHINE_CARRIER_PREFLIGHT_SURFACES = {"pre_review", "review", "merge_ready"}
 REPO_METADATA_MACHINE_CARRIER_FAILURE_MODES = {"blocking", "advisory"}
 REPO_INTERFACE_MANIFEST_KEYS = {"schema_version", "companion_entry", "repo_interface"}
 REPO_INTERFACE_V1_KEYS = {"schema_version", "companion_entry", "repo_specific_requirements", "specialized_gates"}
@@ -1285,7 +1285,9 @@ def validate_metadata_machine_carrier(
         else:
             for index, surface in enumerate(required_before):
                 if surface not in REPO_METADATA_MACHINE_CARRIER_PREFLIGHT_SURFACES:
-                    missing_inputs.append(f"{prefix}.preflight.required_before[{index}] must be `review` or `merge_ready`")
+                    missing_inputs.append(
+                        f"{prefix}.preflight.required_before[{index}] must be `pre_review`, `review`, or `merge_ready`"
+                    )
         if preflight.get("failure_mode") not in REPO_METADATA_MACHINE_CARRIER_FAILURE_MODES:
             missing_inputs.append(f"{prefix}.preflight.failure_mode must be `blocking` or `advisory`")
         command_locator = preflight.get("command_locator")

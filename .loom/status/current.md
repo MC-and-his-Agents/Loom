@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-876
-- Goal: Define the repo-specific PR metadata machine carrier contract.
-- Scope: #876 only: freeze PR metadata machine carrier schema fields, PR body human/machine boundary, legacy migration mode, and generated skills reference sync. Do not implement #877 parser behavior, #874 render/edit validation, #875 fixtures, or #957 readiness guard.
-- Execution Path: issue #876 -> branch work/876-pr-metadata-machine-carrier -> workspace `.` in the checked out issue-scoped worktree recorded on issue #876 -> PR #1191
+- Item ID: WI-877
+- Goal: Implement repo-specific PR metadata parser preflight before review and merge-ready.
+- Scope: #877 only: add parser preflight consumption for declared PR metadata machine carriers, structured diagnostics, and focused contract fixtures. Do not implement #874 PR body render/edit validation, #875 Markdown drift/legacy migration fixture expansion, #957 readiness/cost guard, or #1107 full spec suite CLI tree.
+- Execution Path: issue #877 -> branch work/877-pr-metadata-parser-preflight -> workspace `.` in the checked out issue-scoped worktree recorded on issue #877 -> PR pending
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-876.md
-- Review Entry: .loom/reviews/WI-876.json
-- Validation Entry: git diff --check; focused rg carrier contract/readability check; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/loom.py suite validate --target . --item WI-876 --json; python3 tools/loom.py suite evidence validate --target . --item WI-876 --json; python3 tools/loom.py suite carrier validate --target . --item WI-876 --json
-- Closing Condition: PR #1191 merged to main, issue #876 closed completed, Project Loom Done, and closeout evidence records PR, head SHA, merge commit, target branch, validation, and Project truth.
+- Recovery Entry: .loom/progress/WI-877.md
+- Review Entry: .loom/reviews/WI-877.json
+- Validation Entry: git diff --check; focused rg for pre_review, pr-metadata-preflight, raw_excerpt_sha256, source_range_or_hash, metadata machine block; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_cli_contract.py after WI-877 carrier activation
+- Closing Condition: PR merged to main, issue #877 closed completed, Project Loom Done, and closeout evidence records PR, head SHA, merge commit, target branch, validation, and Project truth.
 - Current Checkpoint: merge
-- Current Stop: PR metadata machine carrier contract is implemented, reviewed, and ready for PR gate on PR #1191.
-- Next Step: Refresh PR body with WI-876 binding, rerun PR gate, then merge and close out #876.
+- Current Stop: Implementation, parser preflight validation, PR #1192, and host dependency reconciliation are complete for #877; waiting for required checks and controlled merge.
+- Next Step: Wait for PR #1192 required checks, run PR gate / controlled merge, then close out #877 with PR, merge commit, target branch, validation, reconciliation, and Project evidence.
 - Blockers: None recorded.
-- Latest Validation Summary: Passing local evidence on 2026-05-31: git diff --check; focused rg for carrier_id, repo_specific_field_set, source_range_or_hash, required_fields, rendered_hash, free Markdown, and machine carrier; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/loom.py suite validate --target . --item WI-876 --json; python3 tools/loom.py suite evidence validate --target . --item WI-876 --json; python3 tools/loom.py suite carrier validate --target . --item WI-876 --json.
-- Recovery Boundary: #876 owns PR metadata machine carrier contract docs, PR template human/machine boundary text, generated skills reference sync, and WI-876 carriers only; #877 parser behavior, #874 render/edit validation, #875 fixtures, and #957 readiness guard remain out of scope.
-- Current Lane: loom-hardening/pr-metadata-machine-carrier
+- Latest Validation Summary: Passing local evidence on 2026-06-01: git diff --check; focused rg for pre_review, pr-metadata-preflight, raw_excerpt_sha256, source_range_or_hash, metadata machine block, diagnostics boundary; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_cli_contract.py; python3 tools/loom.py suite validate --target . --item WI-877 --json; python3 tools/loom.py suite evidence validate --target . --item WI-877 --json; python3 tools/loom.py suite carrier validate --target . --item WI-877 --json; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py verify --target .; make loom-demo-new-project-check; make loom-check; PR #1192 head f037d9c2613de690037f673f692f247a3625f2b1 pushed; removed stale GitHub blockedBy #876 edge and re-read #877 blockedBy empty; rm -rf .loom/bin/__pycache__ cleanup.
+- Recovery Boundary: #877 owns parser preflight consumption and diagnostics only; #874 render/edit validation, #875 Markdown drift/legacy migration fixture expansion, #957 readiness/cost guard, and #1107 full spec suite CLI tree remain out of scope.
+- Current Lane: loom-hardening/pr-metadata-parser-preflight
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-876.md
-- Dynamic Truth: .loom/progress/WI-876.md
+- Static Truth: .loom/work-items/WI-877.md
+- Dynamic Truth: .loom/progress/WI-877.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
