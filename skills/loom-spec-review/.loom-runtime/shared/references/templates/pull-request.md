@@ -55,3 +55,10 @@ Loom 支持结构化 PR 模板，但必须满足：
 - renderer 或 `gh pr edit` 后必须能通过 preflight 证明 carrier 未漂移
 - Markdown 展示层可以重排；machine carrier、artifact 或 host/project field locator 必须保持可解析
 - parser 或 CLI 输出只证明 carrier 可读性，不替代 Work Item、review、merge-ready、closeout 或 docs/source truth
+
+安全更新策略：
+
+- 优先把 PR body 渲染到独立文件，再用 `gh pr edit --body-file <file>` 更新；不要用 shell command substitution 拼接包含反引号、多行 JSON、中文标点或列表缩进的 body。
+- 写入前对渲染文件运行 `loom pr metadata-preflight --body-file <rendered> --surface <surface>`。
+- 写入后读取 GitHub PR body 到独立文件，再运行 `loom pr metadata-preflight --body-file <rendered> --compare-body-file <readback> --surface <surface>`；该检查必须比较 machine block 的 locator/hash，并在 machine block 漂移时 fail closed。
+- `--body-file` / `--compare-body-file` 只是 render/edit preflight evidence，不能替代 Work Item、review、merge-ready、closeout 或 docs/source truth。

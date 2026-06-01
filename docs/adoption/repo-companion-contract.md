@@ -587,6 +587,7 @@ PR body 中的 machine block 格式固定为：
 - PR body 的 Summary / Validation / Risks / Related Work 仍是人类展示层，不是 repo-specific metadata 的机器真相
 - parser 必须优先读取 HTML comment JSON machine block，不得从自由 Markdown 列表、标题或自然语言中推断 required fields
 - parser、PR body renderer 或 CLI 输出只能证明 carrier 可读性与诊断结果；它们不得替代 Work Item、review record、merge-ready verdict、closeout truth 或 docs/source truth
+- renderer / edit 流程必须优先使用 body-file artifact：写入前校验 rendered body，`gh pr edit --body-file` 写入后再读回 PR body，并用 preflight 比对 rendered/readback machine block 的 locator/hash；shell command substitution 不得作为推荐更新路径
 - block 存在但 JSON 不可解析、schema 不匹配、surface 不匹配或 required field 缺失时必须 fail closed，并返回 block locator、parse error、missing fields、expected format 与 suggested fix
 - block 缺失时按 `migration_mode` 处理：`required` 阻断；`advisory_legacy` 与 `dual_read` 不让旧 PR 批量失效，但必须在 preflight 输出中暴露 legacy/advisory 状态
 - `repo_specific_field_set` 中不得声明 `guardian_verdict`、`ruleset_result`、`host_action_result`、`review_decision`、`validation_status`、`closeout_result` 等 retained host action 或 Loom-authored truth 字段

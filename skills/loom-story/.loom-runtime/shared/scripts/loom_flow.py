@@ -596,6 +596,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     pr_metadata.add_argument("--head-sha", help="Expected PR head SHA")
     pr_metadata.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
     pr_metadata.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+    pr_metadata.add_argument("--body-file", help="Optional repo-relative rendered PR body markdown to validate before gh pr edit")
+    pr_metadata.add_argument("--compare-body-file", help="Optional repo-relative post-edit/readback PR body markdown to compare against --body-file")
 
     controlled_merge = subparsers.add_parser("controlled-merge", help="Check or execute Loom-controlled PR merge")
     controlled_merge.add_argument("operation", choices=("check", "merge"))
@@ -13418,6 +13420,21 @@ def load_optional_json_fixture(target_root: Path, fixture: str | None, *, label:
         return None, [f"invalid {label} `{fixture}`: {exc}"]
 
 
+def load_optional_text_fixture(target_root: Path, fixture: str | None, *, label: str) -> tuple[str | None, list[str]]:
+    if not fixture:
+        return None, []
+    path, errors = resolve_repo_relative_path(target_root, fixture, label=label)
+    if errors:
+        return None, errors
+    assert path is not None
+    if not path.exists() or not path.is_file():
+        return None, [f"{label} points to a missing file: {fixture}"]
+    try:
+        return path.read_text(encoding="utf-8"), []
+    except OSError as exc:
+        return None, [f"invalid {label} `{fixture}`: {exc}"]
+
+
 def normalize_pr_fixture_payload(payload: Any) -> tuple[dict[str, Any] | None, list[str]]:
     if not isinstance(payload, dict):
         return None, ["PR payload fixture must be a JSON object"]
@@ -13592,6 +13609,77 @@ def pr_metadata_html_comment_blocks(body: str, marker: str) -> list[dict[str, An
             }
         )
     return blocks
+
+
+def pr_metadata_block_fingerprints(body: str, marker: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "index": index,
+            "start_line": block["locator"].get("start_line"),
+            "end_line": block["locator"].get("end_line"),
+            "raw_excerpt_sha256": block["locator"].get("raw_excerpt_sha256"),
+        }
+        for index, block in enumerate(pr_metadata_html_comment_blocks(body, marker))
+    ]
+
+
+def pr_metadata_body_artifact_payload(
+    *,
+    body_file: str | None,
+    body: str | None,
+    compare_body_file: str | None,
+    compare_body: str | None,
+    applicable_contracts: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    if body_file is None and compare_body_file is None:
+        return None
+    body_sha256 = hashlib.sha256(body.encode("utf-8")).hexdigest() if isinstance(body, str) else None
+    compare_sha256 = hashlib.sha256(compare_body.encode("utf-8")).hexdigest() if isinstance(compare_body, str) else None
+    comparisons: list[dict[str, Any]] = []
+    missing_inputs: list[str] = []
+    for field in applicable_contracts:
+        contract_id = str(field.get("id") or "unknown")
+        machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
+        marker = str(machine_carrier.get("marker") or "loom:repo-pr-metadata")
+        before_blocks = pr_metadata_block_fingerprints(body, marker) if isinstance(body, str) else []
+        after_blocks = pr_metadata_block_fingerprints(compare_body, marker) if isinstance(compare_body, str) else []
+        status = "not_compared"
+        if compare_body_file is not None:
+            before_hashes = [block.get("raw_excerpt_sha256") for block in before_blocks]
+            after_hashes = [block.get("raw_excerpt_sha256") for block in after_blocks]
+            status = "match" if before_hashes == after_hashes else "mismatch"
+            if status == "mismatch":
+                missing_inputs.append(f"PR metadata machine block drift after body edit: {contract_id}")
+        comparisons.append(
+            {
+                "metadata_contract_id": contract_id,
+                "marker": marker,
+                "status": status,
+                "rendered_blocks": before_blocks,
+                "post_edit_blocks": after_blocks if compare_body_file is not None else [],
+            }
+        )
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "schema_version": "loom-pr-body-metadata-artifact/v1",
+        "result": result,
+        "summary": (
+            "rendered PR body metadata artifact is readable and post-edit machine blocks match."
+            if result == "pass" and compare_body_file is not None
+            else "rendered PR body metadata artifact is readable."
+            if result == "pass"
+            else "post-edit PR body readback changed declared metadata machine blocks."
+        ),
+        "body_file": body_file,
+        "body_sha256": body_sha256,
+        "compare_body_file": compare_body_file,
+        "compare_body_sha256": compare_sha256,
+        "preflight_body_source": "compare_body_file" if compare_body_file else "body_file",
+        "machine_block_comparisons": comparisons,
+        "missing_inputs": missing_inputs,
+        "fallback_to": "gh_pr_edit_body_file_readback" if missing_inputs else None,
+        "safe_update_strategy": "render PR body to a file, update with `gh pr edit --body-file <file>`, read back the PR body, then rerun metadata preflight with --body-file and --compare-body-file.",
+    }
 
 
 def pr_metadata_diagnostic(
@@ -13879,6 +13967,8 @@ def pr_metadata_preflight_payload(
     head_sha: str | None = None,
     branch_name: str | None = None,
     pr_payload_file: str | None = None,
+    body_file: str | None = None,
+    compare_body_file: str | None = None,
     pr_payload: dict[str, Any] | None = None,
     effective_pr: int | None = None,
     governance_surface: dict[str, Any] | None = None,
@@ -13890,9 +13980,20 @@ def pr_metadata_preflight_payload(
     if contract_errors:
         missing_inputs.extend(str(message) for message in contract_errors)
 
+    body_artifact, body_errors = load_optional_text_fixture(target_root, body_file, label="PR body file")
+    compare_body_artifact, compare_body_errors = load_optional_text_fixture(
+        target_root,
+        compare_body_file,
+        label="post-edit PR body file",
+    )
+    missing_inputs.extend(str(message) for message in body_errors)
+    missing_inputs.extend(str(message) for message in compare_body_errors)
+    if compare_body_file and not body_file:
+        missing_inputs.append("--compare-body-file requires --body-file")
+
     pr_errors: list[str] = []
     inferences: list[dict[str, Any]] = []
-    if applicable_contracts and pr_payload is None and not contract_errors:
+    if applicable_contracts and pr_payload is None and body_artifact is None and compare_body_artifact is None and not contract_errors:
         detected_owner, detected_repo = detect_github_repo(target_root)
         pr_payload, effective_pr, pr_errors, inferences = load_pr_payload_for_gate(
             target_root=target_root,
@@ -13905,7 +14006,18 @@ def pr_metadata_preflight_payload(
         )
         missing_inputs.extend(f"pr: {message}" for message in pr_errors)
 
-    body = pr_payload.get("body") if isinstance(pr_payload, dict) else None
+    body = compare_body_artifact if compare_body_artifact is not None else body_artifact
+    if body is None:
+        body = pr_payload.get("body") if isinstance(pr_payload, dict) else None
+    body_artifact_result = pr_metadata_body_artifact_payload(
+        body_file=body_file,
+        body=body_artifact,
+        compare_body_file=compare_body_file,
+        compare_body=compare_body_artifact,
+        applicable_contracts=applicable_contracts,
+    )
+    if isinstance(body_artifact_result, dict):
+        missing_inputs.extend(str(message) for message in body_artifact_result.get("missing_inputs", []))
     contract_results = [
         pr_metadata_contract_preflight(field=field, body=body if isinstance(body, str) else None, surface=surface)
         for field in applicable_contracts
@@ -13947,6 +14059,7 @@ def pr_metadata_preflight_payload(
             "head_sha": pr_payload.get("headRefOid") if isinstance(pr_payload, dict) else head_sha,
             "has_body": isinstance(body, str),
         },
+        "body_artifact": body_artifact_result,
         "inferences": inferences,
     }
 
@@ -14444,6 +14557,8 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
             head_sha=args.head_sha,
             branch_name=args.branch,
             pr_payload_file=args.pr_payload_file,
+            body_file=args.body_file,
+            compare_body_file=args.compare_body_file,
         )
     )
 

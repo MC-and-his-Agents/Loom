@@ -1659,6 +1659,21 @@ def main() -> int:
     if version_payload["result"] != "pass" or not version_payload["versions"]["repo_version"]:
         raise AssertionError("version output did not include repo version context")
 
+    _, body_file_preflight = run_json(
+        [
+            "pr",
+            "metadata-preflight",
+            "--surface",
+            "merge_ready",
+            "--body-file",
+            ".github/PULL_REQUEST_TEMPLATE.md",
+            "--json",
+        ],
+        expect=0,
+    )
+    if body_file_preflight.get("result") != "pass" or "body_artifact" not in body_file_preflight:
+        raise AssertionError("pr metadata-preflight must support PR body-file artifact validation without requiring a live PR")
+
     with tempfile.TemporaryDirectory(prefix="loom-cli-contract-") as raw_tmp:
         tmp = Path(raw_tmp)
         suite_unknown_target = tmp / "suite-unknown"
