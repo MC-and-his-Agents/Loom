@@ -5,7 +5,7 @@
   "kind": "code_review",
   "summary": "WI-877 implementation review allows parser preflight hardening: repo companion validator permits pre_review, pr-metadata preflight exposes detailed diagnostics, pre-review/review/merge-ready flows consume parser evidence, generated skills surface is synced, and validation passed.",
   "reviewer": "codex",
-  "reviewed_head": "78203de9be2f912c5758bfa5d6a567f4b233a2c7",
+  "reviewed_head": "96afefe5e34993e8d4f5ed1fe437d5c9d5801e2b",
   "reviewed_validation_summary": "Passing local evidence on 2026-06-01: git diff --check; focused rg for pre_review, pr-metadata-preflight, raw_excerpt_sha256, source_range_or_hash, metadata machine block, diagnostics boundary; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_cli_contract.py; python3 tools/loom.py suite validate --target . --item WI-877 --json; python3 tools/loom.py suite evidence validate --target . --item WI-877 --json; python3 tools/loom.py suite carrier validate --target . --item WI-877 --json; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py verify --target .; rm -rf .loom/bin/__pycache__ cleanup.",
   "fallback_to": null,
   "findings": [],
