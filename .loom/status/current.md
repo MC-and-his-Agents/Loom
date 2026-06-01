@@ -12,10 +12,10 @@
 - Validation Entry: git diff --check; focused rg for pre_review, pr-metadata-preflight, raw_excerpt_sha256, source_range_or_hash, metadata machine block; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_cli_contract.py after WI-877 carrier activation
 - Closing Condition: PR merged to main, issue #877 closed completed, Project Loom Done, and closeout evidence records PR, head SHA, merge commit, target branch, validation, and Project truth.
 - Current Checkpoint: build
-- Current Stop: Parser preflight implementation and contract fixtures are integrated locally for #877.
-- Next Step: Run full focused validation, author review record, open PR, wait required checks, controlled merge, and close out #877.
+- Current Stop: Parser preflight implementation, contract fixtures, generated skills surface, and local validation are complete for #877.
+- Next Step: Commit, push, open PR, wait required checks, controlled merge, and close out #877.
 - Blockers: None recorded.
-- Latest Validation Summary: Passing local evidence on 2026-06-01 so far: git diff --check; focused rg for pre_review, pr-metadata-preflight, raw_excerpt_sha256, source_range_or_hash, metadata machine block; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only . after repo companion pre_review validator sync.
+- Latest Validation Summary: Passing local evidence on 2026-06-01: git diff --check; focused rg for pre_review, pr-metadata-preflight, raw_excerpt_sha256, source_range_or_hash, metadata machine block, diagnostics boundary; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_cli_contract.py; python3 tools/loom.py suite validate --target . --item WI-877 --json; python3 tools/loom.py suite evidence validate --target . --item WI-877 --json; python3 tools/loom.py suite carrier validate --target . --item WI-877 --json; PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py verify --target .; rm -rf .loom/bin/__pycache__ cleanup.
 - Recovery Boundary: #877 owns parser preflight consumption and diagnostics only; #874 render/edit validation, #875 Markdown drift/legacy migration fixture expansion, #957 readiness/cost guard, and #1107 full spec suite CLI tree remain out of scope.
 - Current Lane: loom-hardening/pr-metadata-parser-preflight
 

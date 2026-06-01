@@ -7590,16 +7590,20 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     "suite-evidence-validate",
                     "suite-carrier-validate",
                     "governance-lint",
+                    "pr-metadata-preflight",
                 ]:
                     failures.append(
                         Failure(
                             "daily-execution-cli",
-                            "`flow pre-review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-admission, workspace-locate, suite evidence/carrier validation, and governance-lint in order",
+                            "`flow pre-review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-admission, workspace-locate, suite evidence/carrier validation, governance-lint, and pr-metadata-preflight in order",
                         )
                     )
                 governance_step = next((step for step in steps if isinstance(step, dict) and step.get("name") == "governance-lint"), None)
                 if not isinstance(governance_step, dict) or "governance_lint" not in governance_step:
                     failures.append(Failure("daily-execution-cli", "`flow pre-review` governance-lint step must embed governance_lint evidence"))
+                metadata_step = next((step for step in steps if isinstance(step, dict) and step.get("name") == "pr-metadata-preflight"), None)
+                if not isinstance(metadata_step, dict) or "pr_metadata_preflight" not in metadata_step:
+                    failures.append(Failure("daily-execution-cli", "`flow pre-review` pr-metadata-preflight step must embed parser preflight evidence"))
             require_governance_lint_status_payload(
                 failures,
                 category="daily-execution-cli",
@@ -7843,14 +7847,18 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 "spec-review-gate",
                 "suite-evidence-validate",
                 "suite-carrier-validate",
+                "pr-metadata-preflight",
                 "review-entry",
             ]:
                 failures.append(
                     Failure(
                         "daily-execution-cli",
-                        "`flow review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-build, spec-review-gate, suite evidence/carrier validation, and review-entry in order",
+                        "`flow review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-build, spec-review-gate, suite evidence/carrier validation, pr-metadata-preflight, and review-entry in order",
                     )
                 )
+            metadata_step = next((step for step in steps if isinstance(step, dict) and step.get("name") == "pr-metadata-preflight"), None)
+            if not isinstance(metadata_step, dict) or "pr_metadata_preflight" not in metadata_step:
+                failures.append(Failure("daily-execution-cli", "`flow review` pr-metadata-preflight step must embed parser preflight evidence"))
             review = payload.get("review")
             if isinstance(review, dict):
                 require_review_record_contract(
