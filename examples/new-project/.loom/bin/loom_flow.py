@@ -124,6 +124,7 @@ CLOSEOUT_HEAVY_PROFILES = {
 PR_METADATA_PREFLIGHT_SCHEMA = "loom-pr-metadata-preflight/v1"
 PR_METADATA_MACHINE_SCHEMA = "loom-repo-pr-metadata/v1"
 PR_METADATA_PARSER_VERSION = "loom-pr-metadata-parser/v1"
+PR_METADATA_SUPPORTED_PARSER_VERSIONS = (PR_METADATA_PARSER_VERSION, "repo-parser/v1")
 
 PROJECT_DRIFT_KINDS = {
     "project_missing_item",
@@ -13761,8 +13762,13 @@ def validate_pr_metadata_envelope(
     source = envelope.get("source")
     if not isinstance(source, dict) or not isinstance(source.get("rendered_hash"), str) or not source.get("rendered_hash"):
         missing_fields.append("source.rendered_hash")
-    if not isinstance(envelope.get("parser_version"), str) or not envelope.get("parser_version"):
+    parser_version = envelope.get("parser_version")
+    unsupported_parser_version = False
+    if not isinstance(parser_version, str) or not parser_version:
         missing_fields.append("parser_version")
+    elif parser_version not in PR_METADATA_SUPPORTED_PARSER_VERSIONS:
+        missing_fields.append("parser_version")
+        unsupported_parser_version = True
     required_fields = machine_carrier.get("required_fields")
     if isinstance(required_fields, list):
         for required_field in required_fields:
@@ -13774,7 +13780,11 @@ def validate_pr_metadata_envelope(
             pr_metadata_diagnostic(
                 contract_id=contract_id,
                 marker=marker,
-                reason="machine block is missing required envelope or repo-specific fields",
+                reason=(
+                    f"unsupported parser_version: {parser_version}"
+                    if unsupported_parser_version
+                    else "machine block is missing required envelope or repo-specific fields"
+                ),
                 source_locator=authority_locator,
                 source_range_or_hash=source_range_or_hash,
                 expected_schema=expected_schema,
