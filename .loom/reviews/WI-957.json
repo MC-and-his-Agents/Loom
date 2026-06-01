@@ -1,0 +1,52 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-957",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review allows WI-957: readiness/cost guard is wired after PR metadata preflight, blocks PR head drift and missing readiness inputs before expensive review, consumes #969 only as profile proof, refreshes generated/demo/shadow evidence, and preserves Work Item/review/merge-ready/closeout/docs truth boundaries.",
+  "reviewer": "codex-main-agent",
+  "reviewed_head": "b4bafa352d7e6e26f79b6fe18a32bebfdf073c95",
+  "reviewed_validation_summary": "Passing local evidence on 2026-06-01 for WI-957 pre-review readiness/cost guard: `git diff --check`; focused `rg` for `pre-review-readiness-cost-guard`, `loom-pre-review-readiness-cost-guard/v1`, `checkout_head_drift`, `push_or_refresh_pr_head`, `post_review_carrier_policy`, `source_issue\": \"#969\"`, `PRE_REVIEW_REQUIRED_VALIDATION_TOKENS`, and `readiness_cost_guard`; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 tools/check_cli_contract.py`; `python3 tools/loom.py suite validate --target . --item WI-957 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-957 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-957 --json`; `python3 tools/check_release_surface.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_npm_package.py`; `python3 tools/loom.py checkpoint build --target . --item WI-957 --json`; `make loom-demo-new-project-check`; `python3 tools/loom_flow.py shadow-parity --target . --blocking` passed after #875 terminal carrier reconciliation and demo/shadow refresh.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-957.md",
+    "recovery_entry": ".loom/progress/WI-957.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": "Passing local evidence on 2026-06-01 for WI-957 head b4bafa35: git diff --check; focused rg for readiness/cost guard contract tokens; make loom-demo-new-project-check; python3 tools/loom_flow.py shadow-parity --target . --blocking; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_cli_contract.py. Earlier implementation validation also passed suite validate/evidence/carrier, release/version/package surface checks, and pre-review smoke with readiness/cost guard pass.",
+    "normalized_findings": "[]",
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/957-pre-review-readiness-cost-guard/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-worktrees/957-pre-review-readiness-cost-guard --item WI-957 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/957-pre-review-readiness-cost-guard/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-worktrees/957-pre-review-readiness-cost-guard --item WI-957 --json",
+    "suite_evidence_map": ".loom/specs/WI-957/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-957/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  }
+}
