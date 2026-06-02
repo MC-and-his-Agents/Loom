@@ -51,6 +51,28 @@ loom skills check --target . --json
 loom doctor --target . --json
 ```
 
+`loom host install` and `loom host verify` manage and verify the target
+repository payload: `.loom/installed-state.json`, generated `skills/`, and the
+repo-local `plugins/loom/` Codex plugin payload. They do not prove that Codex
+Desktop on the current workstation has registered, enabled, or loaded the
+plugin.
+
+On a second development machine for an already adopted repository, register the
+repo-local plugin payload with the local Codex Desktop workstation explicitly:
+
+```bash
+loom host verify --host codex --mode plugin --target . --json
+loom host register --host codex --source ./plugins/loom --scope user --dry-run --json
+loom host register --host codex --source ./plugins/loom --scope user --apply --json
+loom doctor --target . --json
+```
+
+The registration command writes user workstation state such as the personal
+Codex marketplace entry, user plugin cache payload, and Codex config enablement.
+It does not write target repository truth. Start a new Codex session, or restart
+Codex Desktop if the plugin list was already loaded; Loom does not claim that an
+existing session hot-loads newly registered plugins.
+
 Use `npx @mc-and-his-agents/loom ...` only as an ephemeral way to run the same root `loom` CLI.
 
 Requirements:

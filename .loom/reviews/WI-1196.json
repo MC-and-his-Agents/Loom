@@ -1,0 +1,52 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1196",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1196 implementation review allow after local CLI contract, suite evidence, carrier validation, release surface, focused workstation registration fixture, and docs/source surface checks passed. make loom-check still has root self-adoption carrier drift to repair before merge-ready.",
+  "reviewer": "codex",
+  "reviewed_head": "5f9420a13a37aab8bad08552c3a931a64ef98567",
+  "reviewed_validation_summary": "Baseline read complete for #1196-#1203, AGENTS.md, README.md, Codex install docs, host adapter matrix, tools/loom.py, check_cli_contract, check_release_surface, and current install/verify/doctor/repair/upgrade outputs. Implemented `loom host register` dry-run/apply, separate workstation diagnostics, repair/upgrade registration recommendation, and HotCP-style isolated HOME regression fixture. Passing so far: `python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py`; `python3 tools/check_release_surface.py`; manual isolated fixture where `host verify` passes and `doctor` reports missing workstation registration. Earlier full `python3 tools/check_cli_contract.py` reached repository purity and blocked because the previous active carrier was #957; WI-957 is now marked terminal/retired and WI-1196 owns the active workspace.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1196.md",
+    "recovery_entry": ".loom/progress/WI-1196.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom --item WI-1196 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom --item WI-1196 --json",
+    "suite_evidence_map": ".loom/specs/WI-1196/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1196/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  }
+}
