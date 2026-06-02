@@ -55,6 +55,11 @@ FORBIDDEN_PREFIXES = (
     "examples/",
     "packages/loom-installer/",
 )
+FORBIDDEN_PATH_PARTS = (
+    "/__pycache__/",
+    "__pycache__/",
+    ".pyc",
+)
 FORBIDDEN_MANIFEST_STRINGS = (
     "@mc-and-his-agents/loom-installer",
     "loom-installer",
@@ -147,6 +152,13 @@ def main() -> int:
     forbidden = sorted(path for path in pack_files if path.startswith(FORBIDDEN_PREFIXES))
     if forbidden:
         fail(f"npm pack payload contains forbidden repository/internal files: {forbidden[:20]}")
+    forbidden_parts = sorted(
+        path
+        for path in pack_files
+        if any(part in path for part in FORBIDDEN_PATH_PARTS)
+    )
+    if forbidden_parts:
+        fail(f"npm pack payload contains Python cache files: {forbidden_parts[:20]}")
 
     print(json.dumps({
         "schema_version": "loom-npm-package-check/v1",
@@ -158,6 +170,7 @@ def main() -> int:
         "required_files": sorted(REQUIRED_FILES),
         "required_manifest_files": sorted(REQUIRED_MANIFEST_FILES),
         "forbidden_prefixes": list(FORBIDDEN_PREFIXES),
+        "forbidden_path_parts": list(FORBIDDEN_PATH_PARTS),
     }, indent=2))
     return 0
 

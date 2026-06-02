@@ -4,14 +4,14 @@ This matrix defines consistent Loom semantics across supported hosts. Implementa
 
 | Host | Support status | Default install path | Discovery surface | Bootstrap/session-start surface | Tool mapping surface | Upgrade surface | Verification surface |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Codex | primary | `npm install -g @mc-and-his-agents/loom`; `loom host install --host codex --mode plugin --target . --apply --json`; `loom host register --host codex --source ./plugins/loom --scope user --apply --json` when Codex Desktop workstation registration is needed | CLI-managed `skills/` and `plugins/loom/` payloads in the target repository; user workstation registration is separate | new Codex session or Codex Desktop restart after registration, then start from `loom-init` | Codex tools remain host-owned; Loom skills describe required actions | update root CLI, rerun `loom host install ... --force`, then rerun workstation registration if needed | target payload: `loom host verify --host codex --mode plugin --target . --json`; workstation: `loom host register --host codex --source ./plugins/loom --scope user --dry-run --json`; `loom skills check --target . --json` |
+| Codex | primary | `npm install -g @mc-and-his-agents/loom`; `loom host install --host codex --mode plugin --target . --apply --json`; `loom host register --host codex --source ./plugins/loom --scope user --apply --json` when Codex Desktop workstation registration is needed | CLI-managed `plugins/loom/` payload in the target repository, with embedded skills at `plugins/loom/skills/`; user workstation registration is separate | new Codex session or Codex Desktop restart after registration, then start from `loom-init` | Codex tools remain host-owned; Loom skills describe required actions | update root CLI, rerun `loom host install ... --force`, then rerun workstation registration if needed | target payload: `loom host verify --host codex --mode plugin --target . --json`; workstation: `loom host register --host codex --source ./plugins/loom --scope user --dry-run --json`; `loom skills check --target . --json` |
 | Claude Code | adapter | root `loom` CLI plus CLI-managed Claude plugin or project skills registration | CLI-managed generated `skills/` payload or host plugin | plugin/session guidance must point to `loom-init` | Claude tools remain adapter-owned | update root CLI, then rerun host install/verify | host verify plus static plugin/skills checks |
 | OpenCode | adapter contract | root `loom` CLI plus CLI-managed OpenCode plugin/path injection | configured skills path pointing at CLI-managed generated `skills/` | plugin injects startup guidance for `loom-init` | plugin maps OpenCode tools to Loom host-action expectations | update root CLI and reload plugin | static adapter check until OpenCode CLI is available |
 | Gemini | adapter contract | root `loom` CLI plus CLI-managed extension/context import | extension/context references CLI-managed generated `skills/` | context import names `loom-init` as root entry | Gemini tool use is documented as adapter mapping | update root CLI and reload extension/context | static adapter check until Gemini extension CLI is available |
 | Cursor | adapter contract | root `loom` CLI plus CLI-managed Cursor plugin/hooks | plugin manifest points at CLI-managed generated `skills/` | hooks surface `loom-init` startup guidance | Cursor tool mapping is adapter-owned | update root CLI and reload plugin/hooks | static adapter check until Cursor plugin CLI is available |
 
 Each supported host has exactly one default path: the root `loom` CLI installs
-and verifies host plugin/SKILLS payloads. Single-skill payload consumption is
+and verifies host plugin payloads. Single-skill payload consumption is
 compatibility-only. Installer-driven plugin installation is deprecated legacy
 behavior and must not be described as a default path.
 
@@ -23,6 +23,13 @@ user-scoped, and mutating only with `--apply`; it writes Codex user state such a
 the personal marketplace entry, user plugin cache payload, and config
 enablement. It must not write Codex Desktop private state into target repository
 truth.
+
+For downstream Codex plugin mode, `plugins/loom/skills/` is the canonical Loom
+skills payload. Downstream top-level `skills/` is not written or required by
+default and belongs to the target repository namespace unless an explicit future
+profile owns it. Existing Loom-generated top-level `skills/` from older plugin
+installs is migration residue; mixed or target-owned `skills/` must fail closed
+to manual review.
 
 ## Required Fields
 

@@ -15,6 +15,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+sys.dont_write_bytecode = True
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LOOM = REPO_ROOT / "tools" / "loom.py"
 LEGACY_FIXTURES = REPO_ROOT / "docs" / "evidence" / "fixtures" / "legacy-migration-validation-fixtures.json"
@@ -857,6 +860,83 @@ def assert_legacy_fixture_contract(tmp: Path) -> None:
         status, verify = run_json(["verify", "--target", str(target), "--json"])
         if status == 0 or verify["result"] != expected["verify_result"]:
             raise AssertionError(f"{fixture['id']} verify did not block on legacy surfaces")
+
+
+def assert_downstream_plugin_layout_contract(tmp: Path) -> None:
+    target = tmp / "downstream-plugin-layout"
+    home = tmp / "downstream-plugin-home"
+    target.mkdir()
+    home.mkdir()
+    with isolated_codex_workstation(home):
+        _, installed = run_json(["host", "install", "--host", "codex", "--mode", "plugin", "--target", str(target), "--apply", "--json"], expect=0)
+        if "skills" in installed.get("managed_writes", []):
+            raise AssertionError("plugin install must not write downstream top-level skills")
+        if (target / "skills").exists():
+            raise AssertionError("plugin install created downstream top-level skills")
+        if not (target / "plugins" / "loom" / "skills" / "registry.json").exists():
+            raise AssertionError("plugin install did not write embedded plugin skills")
+
+        state = json.loads((target / ".loom" / "installed-state.json").read_text(encoding="utf-8"))
+        layer_paths = {layer.get("installed_path") for layer in state.get("layers", []) if isinstance(layer, dict)}
+        layer_types = {layer.get("layer_type") for layer in state.get("layers", []) if isinstance(layer, dict)}
+        if "skills" in layer_paths:
+            raise AssertionError("plugin-mode installed-state must not require top-level skills")
+        if "plugins/loom/skills" not in layer_paths or "plugin-embedded-skills" not in layer_types:
+            raise AssertionError("plugin-mode installed-state must model embedded plugin skills")
+        edges = state.get("installation_graph", {}).get("edges", [])
+        if {"from": "host-adapter", "to": "plugin-embedded-skills", "relationship": "consumes"} not in edges:
+            raise AssertionError("host adapter must consume embedded plugin skills")
+
+        _, host_verify = run_json(["host", "verify", "--host", "codex", "--mode", "plugin", "--target", str(target), "--json"], expect=0)
+        verify_paths = {check["path"] for check in host_verify.get("checks", [])}
+        if "skills/registry.json" in verify_paths:
+            raise AssertionError("host verify must not require downstream top-level skills")
+        if "plugins/loom/skills/registry.json" not in verify_paths:
+            raise AssertionError("host verify must check embedded plugin skills")
+
+        _, skills_check = run_json(["skills", "check", "--target", str(target), "--json"], expect=0)
+        embedded_check_output = json.loads(skills_check["checks"][0]["stdout"])
+        skill_check_paths = {check["path"] for check in embedded_check_output}
+        if "skills/registry.json" in skill_check_paths:
+            raise AssertionError("skills check must not assume full-repo mode for plugin targets")
+        if "plugins/loom/skills/registry.json" not in skill_check_paths:
+            raise AssertionError("skills check must validate embedded plugin skills for plugin targets")
+
+        _, detected = run_json(["detect", "--target", str(target), "--json"], expect=0)
+        detected_kinds = {surface["kind"] for surface in detected["surfaces"]}
+        if detected["classification"] != "current" or "full-repo-skills" in detected_kinds:
+            raise AssertionError("plugin target without top-level skills must classify as current")
+
+        old_layout = tmp / "downstream-old-plugin-layout"
+        old_layout.mkdir()
+        run_json(["host", "install", "--host", "codex", "--mode", "plugin", "--target", str(old_layout), "--apply", "--json"], expect=0)
+        shutil.copytree(REPO_ROOT / "skills", old_layout / "skills")
+        (old_layout / ".agents").mkdir()
+        shutil.copytree(REPO_ROOT / "skills", old_layout / ".agents" / "skills")
+        _, old_verify = run_json(["host", "verify", "--host", "codex", "--mode", "plugin", "--target", str(old_layout), "--json"], expect=0)
+        if any(check["status"] != "pass" for check in old_verify.get("checks", [])):
+            raise AssertionError("plugin verify must pass even when old top-level Loom skills residue exists")
+        _, repair_plan = run_json(["repair", "plan", "--target", str(old_layout), "--json"], expect=0)
+        repair_actions = {action["id"]: action for action in repair_plan.get("actions", [])}
+        migration = repair_actions.get("plan-top-level-loom-skills-migration")
+        if not migration or migration.get("surface", {}).get("ownership") != "loom-generated" or migration.get("mutates") is not False:
+            raise AssertionError("old plugin layout must produce a non-mutating top-level Loom skills migration plan")
+        _, upgrade_plan = run_json(["upgrade-plan", "--target", str(old_layout), "--json"], expect=0)
+        if "plan-top-level-loom-skills-migration" not in {action["id"] for action in upgrade_plan.get("actions", [])}:
+            raise AssertionError("upgrade-plan must include top-level Loom skills migration guidance")
+
+        mixed_layout = tmp / "downstream-mixed-skills-layout"
+        mixed_layout.mkdir()
+        run_json(["host", "install", "--host", "codex", "--mode", "plugin", "--target", str(mixed_layout), "--apply", "--json"], expect=0)
+        shutil.copytree(REPO_ROOT / "skills", mixed_layout / "skills")
+        custom_skill = mixed_layout / "skills" / "target-owned-skill"
+        custom_skill.mkdir()
+        (custom_skill / "SKILL.md").write_text("# Target Owned Skill\n", encoding="utf-8")
+        _, mixed_repair = run_json(["repair", "plan", "--target", str(mixed_layout), "--json"], expect=0)
+        mixed_actions = {action["id"]: action for action in mixed_repair.get("actions", [])}
+        ownership_review = mixed_actions.get("review-top-level-skills-ownership")
+        if not ownership_review or ownership_review.get("surface", {}).get("ownership") != "mixed-or-target-owned":
+            raise AssertionError("mixed top-level skills ownership must fail closed to manual review")
 
 
 def valid_state(target: Path) -> dict[str, Any]:
@@ -3021,12 +3101,16 @@ def main() -> int:
         managed_target.mkdir()
         _, managed_install = run_json(["host", "install", "--host", "codex", "--target", str(managed_target), "--apply", "--json"], expect=0)
         managed_writes = set(managed_install.get("managed_writes", []))
-        for expected_write in ("skills", "plugins/loom/.codex-plugin/plugin.json", "plugins/loom/skills", ".loom/installed-state.json"):
+        if "skills" in managed_writes:
+            raise AssertionError("host plugin install must not write downstream top-level skills")
+        for expected_write in ("plugins/loom/.codex-plugin/plugin.json", "plugins/loom/skills", ".loom/installed-state.json"):
             if expected_write not in managed_writes:
                 raise AssertionError(f"host install did not write {expected_write}")
+        if (managed_target / "skills").exists():
+            raise AssertionError("host plugin install created downstream top-level skills")
         _, managed_verify = run_json(["host", "verify", "--host", "codex", "--target", str(managed_target), "--json"], expect=0)
         if managed_verify["result"] != "pass" or any(check["status"] != "pass" for check in managed_verify["checks"]):
-            raise AssertionError("host verify did not validate CLI-managed plugin/SKILLS payload")
+            raise AssertionError("host verify did not validate CLI-managed plugin payload")
         if managed_verify.get("verifies") != "target-repository-payload":
             raise AssertionError("host verify must explicitly verify target repository payload, not workstation registration")
         isolated_home = tmp / "isolated-codex-home"
@@ -3278,6 +3362,7 @@ def main() -> int:
         if status == 0 or not any(error["path"].endswith(".to") for error in bad_edge_payload["errors"]):
             raise AssertionError("unknown graph edge endpoint did not fail closed")
         assert_legacy_fixture_contract(tmp)
+        assert_downstream_plugin_layout_contract(tmp)
 
     print("cli contract checks passed")
     return 0

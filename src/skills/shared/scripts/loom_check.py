@@ -5131,14 +5131,20 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
             failures.append(Failure(category, "`skills/loom-init/contract.json` routing priority order drifted from the stable contract"))
 
     installation_commands = (
-        "npx @mc-and-his-agents/loom-installer add plugin",
-        "npx @mc-and-his-agents/loom-installer add skill <skill-id>",
+        "npm install -g @mc-and-his-agents/loom",
+        "loom host install --host codex --mode plugin --target . --apply --json",
+        "loom host verify --host codex --mode plugin --target . --json",
     )
     for command in installation_commands:
         if command not in skills_readme:
             failures.append(Failure(category, f"`skills/README.md` must document `{command}`"))
         if command not in skills_readme_zh:
             failures.append(Failure(category, f"`skills/README.zh-CN.md` must document `{command}`"))
+    plugin_embedded_payload = "plugins/loom/skills/"
+    if plugin_embedded_payload not in skills_readme:
+        failures.append(Failure(category, "`skills/README.md` must document downstream plugin embedded skills payload"))
+    if plugin_embedded_payload not in skills_readme_zh:
+        failures.append(Failure(category, "`skills/README.zh-CN.md` must document downstream plugin embedded skills payload"))
     if "git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom" not in readme:
         failures.append(Failure(category, "`README.md` must document native skills-library installation"))
     if "git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom" not in readme_zh:

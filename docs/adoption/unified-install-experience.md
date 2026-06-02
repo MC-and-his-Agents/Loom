@@ -7,7 +7,7 @@ This document is the user-facing distribution target for Loom.
 Loom defaults to a single root CLI install model:
 
 - install `@mc-and-his-agents/loom`
-- use `loom host install` to install host plugin/SKILLS payloads into the target repository
+- use `loom host install` to install host plugin payloads into the target repository
 - use `loom host verify`, `loom skills check`, and `loom doctor` to verify the target repository payload
 - use an explicit host registration command when a workstation, such as Codex Desktop, needs user-level plugin registration
 - start from `loom-init`
@@ -19,19 +19,23 @@ evidence only.
 
 Install path status:
 
-- Default: root `loom` CLI install plus CLI-managed host plugin/SKILLS payloads.
-- Managed payload: generated `skills/` and `plugins/` surfaces installed or verified by `loom`.
+- Default: root `loom` CLI install plus CLI-managed host plugin payloads.
+- Managed payload: the Loom source repository's generated `skills/` surface and
+  downstream host plugin payloads installed or verified by `loom`.
 - Historical: `@mc-and-his-agents/loom-installer` references retained only for deprecated evidence and compatibility records.
 - Unsupported: presenting plugin install, SKILLS install, single-skill install, or installer commands as an independent primary Loom install surface.
 
 ## Source And Generated Surfaces
 
 - `src/skills/` is the only editable source truth for Loom skills.
-- `skills/` is a checked-in generated payload surface.
+- `skills/` is the Loom source repository's checked-in generated payload surface.
 - `skills/<skill-id>` is directly consumable by host-native skill discovery after the root CLI installs or synchronizes it.
 - `skills/<skill-id>` is also a self-contained skill payload.
 - `skills/<skill-id>/loom-package.json` is the machine-readable package metadata location.
 - `skills/<skill-id>/.loom-runtime/` is the package-internal runtime closure.
+- Downstream Codex plugin mode embeds this generated payload at
+  `plugins/loom/skills/` and does not write or require downstream top-level
+  `skills/` by default.
 
 Do not hand-edit generated `skills/` content. Rebuild it with:
 
@@ -45,9 +49,10 @@ Verify it with:
 make skills-check
 ```
 
-This payload surface is distinct from target repository `.loom` governance
-carriers. When Loom adopts a target repository, stable `.loom` carriers must
-follow [loom-surfaces-version-control.md](./loom-surfaces-version-control.md);
+This source repository payload surface is distinct from target repository
+`.loom` governance carriers. When Loom adopts a target repository, stable
+`.loom` carriers must follow
+[loom-surfaces-version-control.md](./loom-surfaces-version-control.md);
 CLI-managed host payloads must not hide them with a blanket `.loom/` ignore.
 
 ## CLI-Managed Install
@@ -67,18 +72,19 @@ source remains the development truth, but user install guidance goes through the
 root CLI and its managed payloads.
 
 CLI-managed install does not mean every host uses the same filesystem path. It
-means each host exposes the same generated `skills/` surface, preserves
+means each host exposes the same Loom scenario skills payload, preserves
 `loom-init` as the default entry, and keeps host-specific discovery, bootstrap,
 tool mapping, and verification behind `loom host ...` and `loom skills ...`
-commands.
+commands. For downstream Codex plugin mode, that payload lives under
+`plugins/loom/skills/`.
 
 ## Target Payload Versus Workstation Registration
 
 Loom separates two first-class states:
 
 - Target repository payload install state: the repository-local Loom payload,
-  including `.loom/installed-state.json`, generated `skills/`, and
-  `plugins/loom/`.
+  including `.loom/installed-state.json`, `plugins/loom/.codex-plugin/plugin.json`,
+  and embedded `plugins/loom/skills/` for Codex plugin mode.
 - Developer workstation host registration state: host-private user state that
   lets a local application discover or enable the payload, such as Codex
   Desktop's personal marketplace entry, user plugin cache payload, and config
@@ -100,6 +106,12 @@ and upgrade planning may recommend it when the target repository payload is
 current but local Codex registration is missing. `loom doctor` may report both
 states, but Codex Desktop private registration state must not become target
 repository truth.
+
+If an adopted downstream repository still has Loom-generated top-level
+`skills/` from the older plugin layout, plugin mode treats it as legacy residue.
+`loom repair plan` and `loom upgrade-plan` may recommend a safe migration only
+when ownership is clear. Mixed or target-owned top-level `skills/` fails closed
+to manual review and must not be deleted automatically.
 
 After applying registration, start a new Codex session or restart Codex Desktop
 if discovery was already loaded. Loom does not claim current-session hot reload.

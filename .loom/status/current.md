@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1203
-- Goal: Close out release readiness for Codex workstation registration by bumping Loom CLI version to an unpublished release after PR #1212 changed CLI behavior.
-- Scope: WI-1203 owns only release-readiness closeout for #1196 after PR #1212: VERSION, package.json, skills/*/loom-package.json repo_version metadata, WI-1203 Loom carriers, PR/CI/release evidence, and issue closeout comments. Ownership excludes #1204 downstream plugin layout implementation, target repository layout migrations, command naming changes, user-level Codex config semantics, and any change to workstation registration behavior.
-- Execution Path: issue #1203 -> branch work/1203-release-version-bump -> PR pending -> main release workflow validation.
+- Item ID: WI-1204
+- Goal: Make Codex plugin layout the default downstream Loom install surface so plugin mode uses `plugins/loom/skills/` and no longer writes or requires downstream top-level `skills/`.
+- Scope: WI-1204 owns the downstream plugin layout change across `tools/loom.py`, `tools/check_cli_contract.py`, `tools/check_release_surface.py`, `tools/check_npm_package.py`, `package.json`, `VERSION`, `README.md`, `README.zh-CN.md`, `docs/adoption/codex-install.md`, `docs/adoption/unified-install-experience.md`, `docs/adoption/host-adapter-matrix.md`, `docs/adoption/loom-installed-state-v2.md`, `src/skills/README.md`, `src/skills/README.zh-CN.md`, `src/skills/shared/scripts/loom_check.py`, generated `skills/README.md`, generated `skills/README.zh-CN.md`, generated `skills/*/loom-package.json`, generated `skills/*/.loom-runtime/README.md`, generated `skills/*/.loom-runtime/README.zh-CN.md`, generated `skills/*/.loom-runtime/shared/scripts/loom_check.py`, stable demo bootstrap fixture files under `examples/new-project/.loom/`, repo-local `.loom/bin/loom_init.py`, repo-local `.loom/bin/fact_chain_support.py`, `.loom/bootstrap/manifest.json`, `.loom/shadow/merge-ready-loom.json`, `.loom/shadow/closeout-loom.json`, `.loom/progress/WI-1203.md`, `.loom/status/current.md`, and `.loom` WI-1204 carriers. Ownership includes #1214 release version bump for the root `@mc-and-his-agents/loom` CLI and #1215 bytecode-cache prevention for repo-local and installed runtime surfaces. Ownership excludes #1196 workstation registration semantics, Codex Desktop user-level registration truth, npm installer revival, destructive removal of downstream target-owned `skills/`, and any change outside the #1204-#1211/#1214/#1215 issue tree.
+- Execution Path: issue #1204 -> branch work/1204-plugin-layout-default -> PR/CI -> target branch validation -> child-to-parent issue closeout.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1203.md
-- Review Entry: .loom/reviews/WI-1203.json
-- Validation Entry: python3 tools/version_surface_check.py; python3 tools/check_release_surface.py; python3 tools/check_npm_package.py; python3 tools/check_cli_contract.py; git diff --check; PR/CI; main release workflow.
-- Closing Condition: #1203 has closeout evidence, release workflow on main passes for merge commit after version bump, and #1197-#1203 then #1196 issue tree is closed with evidence.
-- Current Checkpoint: merge
-- Current Stop: Release version bump to v0.13.8 is implemented on branch `work/1203-release-version-bump`; local release/version/npm/CLI/diff checks, suite gates, spec review, and implementation review are passing under WI-1203 scope.
-- Next Step: Open PR, merge after CI, validate main release workflow, then close #1197-#1203 and #1196 with evidence.
+- Recovery Entry: .loom/progress/WI-1204.md
+- Review Entry: .loom/reviews/WI-1204.json
+- Validation Entry: make loom-check; python3 tools/check_cli_contract.py; python3 tools/check_release_surface.py; python3 tools/skills_surface.py check; loom host install/verify fixture; loom installed-state validate fixture; loom doctor fixture; loom repair plan fixture; HotCP-style fixture checks; docs surface checks; git diff --check; PR/CI.
+- Closing Condition: #1205-#1211, #1214, #1215, and #1204 have closeout evidence, target PR is merged, target branch validates plugin mode without writing or requiring downstream top-level `skills/`, repo-local/downstream runtime checks do not generate `__pycache__` or `.pyc`, and the issue tree is closed from child items to parent.
+- Current Checkpoint: local-validation
+- Current Stop: Local implementation and regression validation passed for downstream Codex plugin layout, plugin-embedded skills installed-state, non-destructive legacy top-level skills handling, docs/release surfaces, npm payload hygiene, repo-local bytecode-cache prevention, and HotCP-style fixture coverage.
+- Next Step: Record final review/merge-ready evidence, open PR, validate CI, merge, validate target branch, publish `@mc-and-his-agents/loom@0.13.9` or record the explicit publish block, and close #1205-#1211/#1214/#1215 then #1204 with evidence.
 - Blockers: None recorded.
-- Latest Validation Summary: Passing: `python3 .loom/bin/loom_flow.py purity-check --target . --item WI-1203`; `python3 .loom/bin/loom_flow.py checkpoint build --target . --item WI-1203`; `python3 tools/loom.py suite validate --target . --item WI-1203 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1203 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1203 --json`; `python3 .loom/bin/loom_flow.py review record --target . --item WI-1203 --decision allow --kind spec_review ...`; `python3 .loom/bin/loom_flow.py review record --target . --item WI-1203 --decision allow --kind code_review ...`; `python3 tools/check_cli_contract.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; `git diff --check`. Pending: merge checkpoint re-consumption, PR/CI, main release workflow, and issue closeout.
-- Recovery Boundary: WI-1203 owns only release-readiness version metadata and closeout evidence for #1196 after PR #1212. It must not implement #1204 downstream plugin layout, alter workstation registration behavior, rename commands, or change user-level Codex configuration semantics.
-- Current Lane: loom-hardening/codex-workstation-registration/release-closeout
+- Latest Validation Summary: Passing local evidence: `python3 tools/skills_surface.py check`; `python3 tools/check_cli_contract.py`; `python3 tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; `npm pack --dry-run --json --ignore-scripts` for `@mc-and-his-agents/loom@0.13.9` with 2277 payload entries; plugin fixture `/tmp/loom-1204-fixture.vYoi9M` install wrote only `plugins/loom/.codex-plugin/plugin.json`, `plugins/loom/skills`, and `.loom/installed-state.json`; fixture root `skills/` absent; fixture `host verify`, `installed-state validate`, `doctor`, `repair plan`, `upgrade-plan`, and `skills check` passed; repo-local `python3 .loom/bin/loom_init.py verify --target .`, `fact-chain`, `shadow-parity`, `adopt verify`, and `closeout check --skip-gate` passed; `make loom-check` passed with 40 source/distribution surfaces; `git diff --check` passed; cache scan for `__pycache__`/`.pyc`/`.pyo` was empty after repo-local and fixture checks. Remaining: PR/CI, merge, target branch validation, npm publish or publish-block evidence, and child-to-parent issue closeout.
+- Recovery Boundary: Do not change #1196 workstation registration command semantics, do not write Codex Desktop user registration state into target repository truth, do not revive `@mc-and-his-agents/loom-installer` as a primary path, and do not delete or overwrite target-owned non-Loom `skills/`.
+- Current Lane: loom-hardening/downstream-plugin-layout-default
 
 ## Runtime Evidence
 
@@ -25,11 +25,11 @@
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
 - Verification Entry: make loom-check
-- Lane Entry: loom-hardening/codex-workstation-registration/release-closeout
+- Lane Entry: loom-hardening/downstream-plugin-layout-default
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1203.md
-- Dynamic Truth: .loom/progress/WI-1203.md
+- Static Truth: .loom/work-items/WI-1204.md
+- Dynamic Truth: .loom/progress/WI-1204.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

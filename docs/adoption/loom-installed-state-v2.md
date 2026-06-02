@@ -101,6 +101,49 @@ not make suite validation universally blocking.
 The graph exists so `loom upgrade-plan`, `loom repair plan`, host adapters, skills sync, and installer shims can reason about layer ordering without reading unrelated governance files.
 Every edge endpoint must reference a known layer id. Unknown edge endpoints fail closed because repair and upgrade ordering would otherwise be ambiguous.
 
+## Codex Plugin Mode
+
+For downstream Codex plugin mode, the target repository does not need a
+top-level `skills` layer. The plugin layout models Loom skills as an embedded
+plugin payload:
+
+```json
+{
+  "layers": [
+    {
+      "id": "runtime",
+      "layer_type": "full-repo-runtime",
+      "installed_path": ".loom/bin"
+    },
+    {
+      "id": "plugin-embedded-skills",
+      "layer_type": "plugin-embedded-skills",
+      "installed_path": "plugins/loom/skills",
+      "consumes": ["runtime"]
+    },
+    {
+      "id": "host-adapter",
+      "layer_type": "host-adapter-plugin",
+      "installed_path": "plugins/loom",
+      "consumes": ["plugin-embedded-skills"]
+    }
+  ],
+  "installation_graph": {
+    "layers": ["runtime", "plugin-embedded-skills", "host-adapter"],
+    "edges": [
+      {"from": "plugin-embedded-skills", "to": "runtime", "relationship": "consumes"},
+      {"from": "host-adapter", "to": "plugin-embedded-skills", "relationship": "consumes"}
+    ]
+  }
+}
+```
+
+Downstream top-level `skills/` is not a required plugin-mode layer. If it exists
+beside a current plugin-mode installed-state, Loom diagnostics treat it as
+legacy residue or target-owned surface until ownership is proven. Repair and
+upgrade plans must not delete or overwrite target-owned non-Loom skills
+automatically.
+
 ## CLI Semantics
 
 ```bash

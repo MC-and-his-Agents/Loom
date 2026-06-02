@@ -52,10 +52,11 @@ loom doctor --target . --json
 ```
 
 `loom host install` and `loom host verify` manage and verify the target
-repository payload: `.loom/installed-state.json`, generated `skills/`, and the
-repo-local `plugins/loom/` Codex plugin payload. They do not prove that Codex
-Desktop on the current workstation has registered, enabled, or loaded the
-plugin.
+repository plugin payload: `.loom/installed-state.json`,
+`plugins/loom/.codex-plugin/plugin.json`, and the embedded
+`plugins/loom/skills/` skills payload. They do not write or require downstream
+top-level `skills/` in plugin mode, and they do not prove that Codex Desktop on
+the current workstation has registered, enabled, or loaded the plugin.
 
 On a second development machine for an already adopted repository, register the
 repo-local plugin payload with the local Codex Desktop workstation explicitly:
@@ -126,7 +127,16 @@ Loom exposes one root entry and ten scenario skills:
 | `loom-merge-ready` | Validates merge readiness. |
 | `loom-retire` | Cleans up and exits without discarding user changes. |
 
-The editable skills source lives under `src/skills/`. The generated and checked-in payload surface lives under [skills/](./skills/). Each `skills/<skill-id>` directory is a self-contained skill payload with `loom-package.json` and `.loom-runtime/`, managed by the root CLI. The canonical Codex plugin manifest lives under [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/) and is installed or verified through `loom host ...`.
+The editable skills source lives under `src/skills/`. The Loom source
+repository's generated and checked-in payload surface lives under
+[skills/](./skills/). Each `skills/<skill-id>` directory is a self-contained
+skill payload with `loom-package.json` and `.loom-runtime/`, managed by the root
+CLI. Downstream Codex plugin installs embed that payload under
+`plugins/loom/skills/`; downstream top-level `skills/` belongs to the target
+repository namespace unless an explicit future profile owns it. The canonical
+Codex plugin manifest lives under
+[plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/) and is installed
+or verified through `loom host ...`.
 
 ## Maintainer Docs
 
