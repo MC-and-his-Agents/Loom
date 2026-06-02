@@ -1,6 +1,7 @@
 # Installing Loom for Codex
 
-Use the root `loom` CLI as the only primary install entry. For Codex plugin
+Use the root `loom` CLI as the only primary install entry. CLI-managed payloads
+are written by the CLI, not by the legacy installer. For Codex plugin
 mode, the CLI installs and verifies the target repository's repo-local Codex
 plugin payload, including embedded Loom skills under `plugins/loom/skills/`.
 
