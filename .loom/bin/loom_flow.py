@@ -6594,11 +6594,15 @@ def shadow_evidence_paths_for_sources(target_root: Path, source_paths: set[str])
 
 
 def allowed_post_review_carrier_paths(context: dict[str, Any], *review_paths: str) -> set[str]:
+    item_id = context.get("item_id")
+    spec_review_path = f".loom/reviews/{item_id}.spec.json" if isinstance(item_id, str) and item_id.strip() else None
     source_paths = {
         *review_paths,
         str(context["report"]["fact_chain"]["entry_points"]["recovery_entry"]),
         str(context["report"]["fact_chain"]["entry_points"]["status_surface"]),
     }
+    if spec_review_path:
+        source_paths.add(spec_review_path)
     allowed = {
         *source_paths,
     }
@@ -6612,7 +6616,6 @@ def allowed_post_review_carrier_paths(context: dict[str, Any], *review_paths: st
                 continue
             if isinstance(payload, dict):
                 allowed.add(evidence_path.relative_to(context["target_root"]).as_posix())
-    item_id = context.get("item_id")
     if isinstance(item_id, str) and item_id.strip():
         for runtime_root in OWNED_RUNTIME_EVIDENCE_ROOTS:
             item_runtime_root = context["target_root"] / runtime_root / item_id
