@@ -14217,7 +14217,11 @@ def pre_review_readiness_cost_guard_payload(
     dirty_entries = git_dirty_entries(target_root)
     if dirty_entries:
         dirty_paths = [entry["path"] for entry in dirty_entries if isinstance(entry, dict) and entry.get("path")]
-        missing_inputs.append("dirty worktree has uncommitted paths before review: " + ", ".join(dirty_paths[:8]))
+        dirty_message = "dirty worktree has uncommitted paths before review: " + ", ".join(dirty_paths[:8])
+        if enforce:
+            missing_inputs.append(dirty_message)
+        else:
+            advisory_inputs.append(dirty_message)
 
     changed = changed_paths_for_readiness(target_root)
     changed_paths = changed["changed_paths"] if isinstance(changed.get("changed_paths"), list) else []
@@ -14225,7 +14229,8 @@ def pre_review_readiness_cost_guard_payload(
     required_tokens = pre_review_required_validation_tokens(changed_paths)
     validation_checks = [validation_summary_token_status(validation_summary, token) for token in required_tokens]
     missing_tokens = [check["token"] for check in validation_checks if check.get("status") == "missing"]
-    if enforce and missing_tokens:
+    deterministic_checks_are_blocking = enforce and (pr_intent or bool(changed_paths))
+    if deterministic_checks_are_blocking and missing_tokens:
         missing_inputs.append(
             "Latest Validation Summary is missing deterministic review-readiness evidence: "
             + ", ".join(missing_tokens)
