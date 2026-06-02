@@ -23,7 +23,7 @@ for the target repository.
    loom host install --host codex --mode plugin --target . --apply --json
    ```
 
-3. Verify the installed payload:
+3. Verify the target repository payload:
 
    ```bash
    loom host verify --host codex --mode plugin --target . --json
@@ -31,8 +31,29 @@ for the target repository.
    loom doctor --target . --json
    ```
 
+`loom host verify --host codex --mode plugin` verifies the target repository
+payload only. It checks `.loom/installed-state.json`, generated `skills/`, and
+repo-local `plugins/loom/`; it does not prove Codex Desktop has registered,
+enabled, or loaded the plugin on the current workstation.
+
+4. Register the repo-local Codex plugin payload with this workstation when the
+   repository is used in Codex Desktop:
+
+   ```bash
+   loom host register --host codex --source ./plugins/loom --scope user --dry-run --json
+   loom host register --host codex --source ./plugins/loom --scope user --apply --json
+   ```
+
 Codex should start from `loom-init` after host discovery reloads. The plugin and
-SKILLS directories are CLI-managed payloads, not separate user install surfaces.
+SKILLS directories are CLI-managed payloads in the target repository, not
+separate user install surfaces. Workstation registration is a user-level Codex Desktop state:
+personal marketplace entry, user plugin cache payload, and Codex config
+enablement. It is reported by `loom doctor` but is not written into target
+repository truth.
+
+If Codex Desktop already loaded its plugin list, start a new Codex session or
+restart Codex Desktop after registration. Loom reports this reload requirement;
+it does not claim that the current session hot-loads newly registered plugins.
 
 This installs Loom's generated skill and plugin payloads for the target
 repository. It does not define which `.loom` files an adopted target repository
@@ -45,6 +66,8 @@ should commit. Target repository `.loom` carrier visibility is defined in
 npm update -g @mc-and-his-agents/loom
 loom host install --host codex --mode plugin --target . --apply --force --json
 loom host verify --host codex --mode plugin --target . --json
+loom host register --host codex --source ./plugins/loom --scope user --dry-run --json
+loom host register --host codex --source ./plugins/loom --scope user --apply --json
 ```
 
 ## Compatibility

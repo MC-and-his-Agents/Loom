@@ -7,8 +7,9 @@ This document is the user-facing distribution target for Loom.
 Loom defaults to a single root CLI install model:
 
 - install `@mc-and-his-agents/loom`
-- use `loom host install` to install host plugin/SKILLS payloads
-- use `loom host verify`, `loom skills check`, and `loom doctor` to verify the target repository
+- use `loom host install` to install host plugin/SKILLS payloads into the target repository
+- use `loom host verify`, `loom skills check`, and `loom doctor` to verify the target repository payload
+- use an explicit host registration command when a workstation, such as Codex Desktop, needs user-level plugin registration
 - start from `loom-init`
 - keep host-specific wiring in CLI-managed adapter surfaces
 
@@ -70,6 +71,38 @@ means each host exposes the same generated `skills/` surface, preserves
 `loom-init` as the default entry, and keeps host-specific discovery, bootstrap,
 tool mapping, and verification behind `loom host ...` and `loom skills ...`
 commands.
+
+## Target Payload Versus Workstation Registration
+
+Loom separates two first-class states:
+
+- Target repository payload install state: the repository-local Loom payload,
+  including `.loom/installed-state.json`, generated `skills/`, and
+  `plugins/loom/`.
+- Developer workstation host registration state: host-private user state that
+  lets a local application discover or enable the payload, such as Codex
+  Desktop's personal marketplace entry, user plugin cache payload, and config
+  enablement.
+
+`loom host verify --host codex --mode plugin --target . --json` verifies the
+target repository payload. It is not evidence that Codex Desktop on this machine
+has registered, enabled, loaded, or hot-loaded the plugin.
+
+For Codex Desktop, use the explicit workstation registration surface:
+
+```bash
+loom host register --host codex --source ./plugins/loom --scope user --dry-run --json
+loom host register --host codex --source ./plugins/loom --scope user --apply --json
+```
+
+Registration is a user workstation mutation and must require `--apply`. Repair
+and upgrade planning may recommend it when the target repository payload is
+current but local Codex registration is missing. `loom doctor` may report both
+states, but Codex Desktop private registration state must not become target
+repository truth.
+
+After applying registration, start a new Codex session or restart Codex Desktop
+if discovery was already loaded. Loom does not claim current-session hot reload.
 
 ## Single-Skill Install
 

@@ -4,7 +4,7 @@ This matrix defines consistent Loom semantics across supported hosts. Implementa
 
 | Host | Support status | Default install path | Discovery surface | Bootstrap/session-start surface | Tool mapping surface | Upgrade surface | Verification surface |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Codex | primary | `npm install -g @mc-and-his-agents/loom`; `loom host install --host codex --mode plugin --target . --apply --json` | CLI-managed `skills/` and `plugins/loom/` payloads in the target repository | host discovery reloads, then start from `loom-init` | Codex tools remain host-owned; Loom skills describe required actions | update root CLI, then rerun `loom host install ... --force` | `loom host verify --host codex --mode plugin --target . --json`; `loom skills check --target . --json` |
+| Codex | primary | `npm install -g @mc-and-his-agents/loom`; `loom host install --host codex --mode plugin --target . --apply --json`; `loom host register --host codex --source ./plugins/loom --scope user --apply --json` when Codex Desktop workstation registration is needed | CLI-managed `skills/` and `plugins/loom/` payloads in the target repository; user workstation registration is separate | new Codex session or Codex Desktop restart after registration, then start from `loom-init` | Codex tools remain host-owned; Loom skills describe required actions | update root CLI, rerun `loom host install ... --force`, then rerun workstation registration if needed | target payload: `loom host verify --host codex --mode plugin --target . --json`; workstation: `loom host register --host codex --source ./plugins/loom --scope user --dry-run --json`; `loom skills check --target . --json` |
 | Claude Code | adapter | root `loom` CLI plus CLI-managed Claude plugin or project skills registration | CLI-managed generated `skills/` payload or host plugin | plugin/session guidance must point to `loom-init` | Claude tools remain adapter-owned | update root CLI, then rerun host install/verify | host verify plus static plugin/skills checks |
 | OpenCode | adapter contract | root `loom` CLI plus CLI-managed OpenCode plugin/path injection | configured skills path pointing at CLI-managed generated `skills/` | plugin injects startup guidance for `loom-init` | plugin maps OpenCode tools to Loom host-action expectations | update root CLI and reload plugin | static adapter check until OpenCode CLI is available |
 | Gemini | adapter contract | root `loom` CLI plus CLI-managed extension/context import | extension/context references CLI-managed generated `skills/` | context import names `loom-init` as root entry | Gemini tool use is documented as adapter mapping | update root CLI and reload extension/context | static adapter check until Gemini extension CLI is available |
@@ -14,6 +14,15 @@ Each supported host has exactly one default path: the root `loom` CLI installs
 and verifies host plugin/SKILLS payloads. Single-skill payload consumption is
 compatibility-only. Installer-driven plugin installation is deprecated legacy
 behavior and must not be described as a default path.
+
+For Codex, the target repository payload install state and the Codex Desktop
+workstation registration state are separate. The repo-local `plugins/loom/`
+payload being valid is not proof that Codex Desktop has registered, enabled, or
+loaded the plugin on the current machine. Workstation registration is explicit,
+user-scoped, and mutating only with `--apply`; it writes Codex user state such as
+the personal marketplace entry, user plugin cache payload, and config
+enablement. It must not write Codex Desktop private state into target repository
+truth.
 
 ## Required Fields
 
@@ -34,6 +43,7 @@ Each host adapter must define:
 - `verification_surface`
 - `fail_closed_conditions`
 - `version_metadata_location`
+- `workstation_registration_surface` when host discovery needs user-level state
 
 ## Single-Skill Boundary
 

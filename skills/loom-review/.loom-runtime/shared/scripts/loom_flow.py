@@ -6846,7 +6846,7 @@ def spec_suite_validation_payload(context: dict[str, Any]) -> dict[str, Any]:
         try:
             completed = run_process(
                 [
-                    "python3",
+                    sys.executable,
                     str(command),
                     "suite",
                     "validate",
@@ -7831,6 +7831,7 @@ def build_review_flow_payload(
     expected_item: str | None,
     *,
     operation: str = "review",
+    require_review_entry: bool = True,
     owner: str | None = None,
     repo_name: str | None = None,
     pr_number: int | None = None,
@@ -8029,14 +8030,16 @@ def build_review_flow_payload(
                 }
             )
         review_step_name = "review-entry"
-        review_step_result = "pass" if review_record and not review_errors else "block"
+        review_step_result = "pass" if (review_record and not review_errors) or not require_review_entry else "block"
         review_step_summary = (
             "formal review artifact is readable."
             if review_record and not review_errors
+            else "formal review artifact will be authored from this review run."
+            if not require_review_entry
             else "formal review artifact is missing or invalid."
         )
-        review_step_missing = review_errors or ([] if review_record else [f"missing review artifact: {review_path}"])
-        review_step_fallback = "build" if (review_errors or review_record is None) else None
+        review_step_missing = [] if not require_review_entry and not review_errors else review_errors or ([] if review_record else [f"missing review artifact: {review_path}"])
+        review_step_fallback = "build" if require_review_entry and (review_errors or review_record is None) else None
     steps.extend(
         [
             {
@@ -9912,6 +9915,15 @@ def codex_app_binding_summary(
     }
 
 
+def codex_app_thread_cwd_matches_target(target_root: Path, thread_cwd: str | None) -> bool:
+    if not non_empty_str(thread_cwd):
+        return False
+    try:
+        return Path(str(thread_cwd)).expanduser().resolve() == target_root
+    except OSError:
+        return False
+
+
 def select_review_adapter(
     args: argparse.Namespace,
     target_root: Path,
@@ -9942,6 +9954,16 @@ def select_review_adapter(
     missing_host_proof = codex_app_missing_host_proof(bindings)
     ci_env_present = truthy_env("CI") or truthy_env("CODEX_CI")
     if not missing_host_proof:
+        if not raw_file and not codex_app_thread_cwd_matches_target(target_root, thread_cwd):
+            return {
+                "adapter": DEFAULT_REVIEW_ADAPTER,
+                "selection_source": "host-proof-fallback",
+                "fallback_reason": "thread-cwd-target-mismatch",
+                **bindings,
+                "ci_env_present": ci_env_present,
+                "missing_host_proof": ["thread cwd matching target root"],
+                "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **binding_values),
+            }
         if not raw_file and not codex_app_endpoint_is_live_capable(app_server):
             return {
                 "adapter": DEFAULT_REVIEW_ADAPTER,
@@ -19140,7 +19162,13 @@ def handle_review(args: argparse.Namespace) -> int:
                     "manual_review": manual_review,
                 }
             )
-        flow_payload = build_review_flow_payload(target_root, args.output, args.item, operation=flow_operation)
+        flow_payload = build_review_flow_payload(
+            target_root,
+            args.output,
+            args.item,
+            operation=flow_operation,
+            require_review_entry=inferred_spec_review,
+        )
         review_surface = flow_payload.get("review") or (flow_payload.get("spec_review") if inferred_spec_review else None)
         if flow_payload["result"] != "pass":
             manual_review = manual_review_payload(

@@ -20,6 +20,30 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+try:
+    import tomllib as _tomllib
+except ModuleNotFoundError:
+    _tomllib = None
+    try:
+        import tomli as _tomli
+    except ModuleNotFoundError:
+        _tomli = None
+else:
+    _tomli = None
+
+
+class TomlDecodeError(ValueError):
+    pass
+
+
+def parse_toml_text(raw: str) -> dict[str, Any]:
+    if _tomllib is not None:
+        return _tomllib.loads(raw)
+    if _tomli is not None:
+        return _tomli.loads(raw)
+    raise TomlDecodeError("TOML parsing requires Python 3.11+ tomllib or the tomli package")
+
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TOOLS_ROOT = REPO_ROOT / "tools"
 VERSION_FILE = REPO_ROOT / "VERSION"
@@ -34,6 +58,7 @@ REPAIR_PLAN_SCHEMA = "loom-installed-surface-repair-plan/v1"
 WORKSPACE_SCHEMA = "loom-workspace-control/v1"
 HOST_OBJECT_SCHEMA = "loom-host-object-control/v1"
 HOST_SCHEMA = "loom-host-orchestration/v1"
+WORKSTATION_SCHEMA = "loom-workstation-registration/v1"
 SKILLS_SCHEMA = "loom-skills-surface/v1"
 SCENARIO_SCHEMA = "loom-scenario-control/v1"
 PROFILE_SCHEMA = "loom-governance-profile-control/v1"
@@ -158,6 +183,13 @@ COMMANDS: list[dict[str, Any]] = [
     {"command": "host doctor", "domain": "host", "status": "implemented", "json": True},
     {"command": "host install", "domain": "host", "status": "implemented", "json": True},
     {"command": "host verify", "domain": "host", "status": "implemented", "json": True},
+    {
+        "command": "host register",
+        "domain": "host",
+        "status": "implemented",
+        "json": True,
+        "summary": "Inspect or explicitly register a target repo Codex plugin payload with the local workstation.",
+    },
     {"command": "host upgrade", "domain": "host", "status": "implemented", "json": True},
     {"command": "host remove", "domain": "host", "status": "implemented", "json": True},
     {"command": "skills list", "domain": "skills", "status": "implemented", "json": True},
@@ -1022,6 +1054,20 @@ def doctor_payload(target: Path) -> dict[str, Any]:
             }
         )
         checks.append(suite_command_surface_check(state))
+    has_codex_plugin_payload = (target / "plugins" / "loom" / ".codex-plugin" / "plugin.json").exists()
+    declares_host_adapter = any(isinstance(layer, dict) and layer.get("layer_type") == "host-adapter-plugin" for layer in (state or {}).get("layers", [])) if isinstance(state, dict) else False
+    if has_codex_plugin_payload or declares_host_adapter:
+        codex_registration = codex_workstation_registration_status(host_plugin_path(target, "codex"))
+        checks.append(
+            {
+                "name": "codex-workstation-registration",
+                "result": codex_registration["result"],
+                "summary": "Codex Desktop workstation registration is present." if codex_registration["result"] == "pass" else "Codex Desktop workstation registration is missing or incomplete.",
+                "workstation_registration": codex_registration,
+                "failed_layer": None if codex_registration["result"] == "pass" else "workstation-registration",
+                "fallback_to": None if codex_registration["result"] == "pass" else ["loom host register --host codex --source <repo>/plugins/loom --scope user --dry-run --json"],
+            }
+        )
     legacy_surfaces = [item for item in detection["surfaces"] if item.get("migration_status") == "legacy" or str(item.get("kind", "")).startswith("symlink-")]
     if legacy_surfaces:
         checks.append(
@@ -1097,6 +1143,9 @@ def repair_plan_payload(target: Path) -> dict[str, Any]:
     _, state, installed_error = load_installed_state(target)
     installed_errors = [{"path": "installed-state", "reason": installed_error["fail_closed_reason"]}] if installed_error else validate_installed_state(state)
     actions = repair_actions(detection, installed_errors)
+    registration_action = workstation_registration_action(target)
+    if registration_action:
+        actions.append(registration_action)
     result = "pass" if detection["surface_count"] or actions else "block"
     return output(
         "repair plan",
@@ -1224,6 +1273,258 @@ def verify_cli_managed_surfaces(target: Path, *, host: str, mode: str, skill_id:
     if mode == "skill":
         check(f".agents/skills/{skill_id or 'missing'}/SKILL.md", "single-skill")
     return all(item["status"] == "pass" for item in checks), checks
+
+
+def codex_workstation_paths(home: Path | None = None, codex_home: Path | None = None) -> dict[str, Path | str]:
+    resolved_home = (home or Path.home()).expanduser().resolve()
+    resolved_codex_home = Path(os.environ.get("CODEX_HOME", str(resolved_home / ".codex"))).expanduser().resolve()
+    if codex_home is not None:
+        resolved_codex_home = codex_home.expanduser().resolve()
+    marketplace_name = "local-user-plugins"
+    return {
+        "home": resolved_home,
+        "codex_home": resolved_codex_home,
+        "marketplace_name": marketplace_name,
+        "marketplace_root": resolved_home,
+        "marketplace_path": resolved_home / ".agents" / "plugins" / "marketplace.json",
+        "plugin_cache_path": resolved_home / "plugins" / "loom",
+        "config_path": resolved_codex_home / "config.toml",
+        "config_plugin_key": f"loom@{marketplace_name}",
+    }
+
+
+def codex_marketplace_plugin_entry() -> dict[str, Any]:
+    return {
+        "name": "loom",
+        "source": {
+            "source": "local",
+            "path": "./plugins/loom",
+        },
+        "policy": {
+            "installation": "AVAILABLE",
+            "authentication": "ON_INSTALL",
+        },
+        "category": "Productivity",
+    }
+
+
+def codex_workstation_registration_status(source: Path) -> dict[str, Any]:
+    paths = codex_workstation_paths()
+    marketplace_path = paths["marketplace_path"]
+    plugin_cache_path = paths["plugin_cache_path"]
+    config_path = paths["config_path"]
+    marketplace_name = str(paths["marketplace_name"])
+    config_plugin_key = str(paths["config_plugin_key"])
+    expected_source = codex_marketplace_plugin_entry()["source"]
+
+    source_manifest = source / ".codex-plugin" / "plugin.json"
+    plugin_cache_manifest = Path(plugin_cache_path) / ".codex-plugin" / "plugin.json"
+    checks: list[dict[str, Any]] = [
+        {
+            "name": "source-payload",
+            "result": "pass" if source_manifest.exists() else "block",
+            "path": str(source_manifest),
+            "summary": "Repo-local Codex plugin payload is readable." if source_manifest.exists() else "Repo-local Codex plugin payload is missing.",
+        }
+    ]
+
+    marketplace_entry = None
+    marketplace_error = None
+    marketplace = None
+    if Path(marketplace_path).exists():
+        try:
+            marketplace = read_json(Path(marketplace_path))
+            plugins = marketplace.get("plugins", []) if isinstance(marketplace, dict) else []
+            marketplace_entry = next((entry for entry in plugins if isinstance(entry, dict) and entry.get("name") == "loom"), None)
+        except (OSError, json.JSONDecodeError) as exc:
+            marketplace_error = str(exc)
+    marketplace_ok = (
+        isinstance(marketplace, dict)
+        and marketplace.get("name") == marketplace_name
+        and isinstance(marketplace_entry, dict)
+        and marketplace_entry.get("source") == expected_source
+    )
+    checks.append(
+        {
+            "name": "user-marketplace-entry",
+            "result": "pass" if marketplace_ok else "block",
+            "path": str(marketplace_path),
+            "marketplace_name": marketplace.get("name") if isinstance(marketplace, dict) else None,
+            "entry": marketplace_entry,
+            "summary": "Codex personal marketplace contains the Loom plugin entry." if marketplace_ok else "Codex personal marketplace is missing the Loom plugin entry.",
+            "error": marketplace_error,
+        }
+    )
+
+    cache_ok = plugin_cache_manifest.exists()
+    checks.append(
+        {
+            "name": "user-plugin-cache",
+            "result": "pass" if cache_ok else "block",
+            "path": str(plugin_cache_path),
+            "summary": "User plugin cache contains a Loom plugin payload." if cache_ok else "User plugin cache is missing the Loom plugin payload.",
+        }
+    )
+
+    config_data = None
+    config_error = None
+    if Path(config_path).exists():
+        try:
+            config_data = parse_toml_text(Path(config_path).read_text(encoding="utf-8"))
+        except (OSError, TomlDecodeError, ValueError) as exc:
+            config_error = str(exc)
+    marketplaces = config_data.get("marketplaces", {}) if isinstance(config_data, dict) else {}
+    plugins = config_data.get("plugins", {}) if isinstance(config_data, dict) else {}
+    marketplace_config = marketplaces.get(marketplace_name) if isinstance(marketplaces, dict) else None
+    plugin_config = plugins.get(config_plugin_key) if isinstance(plugins, dict) else None
+    config_enabled = isinstance(plugin_config, dict) and plugin_config.get("enabled") is True
+    config_marketplace_ok = isinstance(marketplace_config, dict) and marketplace_config.get("source_type") == "local" and str(marketplace_config.get("source")) == str(paths["marketplace_root"])
+    checks.append(
+        {
+            "name": "codex-config-marketplace",
+            "result": "pass" if config_marketplace_ok else "block",
+            "path": str(config_path),
+            "marketplace": marketplace_name,
+            "summary": "Codex config points at the local user plugin marketplace." if config_marketplace_ok else "Codex config is missing the local user plugin marketplace.",
+            "error": config_error,
+        }
+    )
+    checks.append(
+        {
+            "name": "codex-config-enabled",
+            "result": "pass" if config_enabled else "block",
+            "path": str(config_path),
+            "plugin": config_plugin_key,
+            "enabled": config_enabled,
+            "summary": "Codex config enables the Loom plugin." if config_enabled else "Codex config does not enable the Loom plugin.",
+            "error": config_error,
+        }
+    )
+
+    blocking = [check for check in checks if check["result"] != "pass"]
+    return {
+        "schema": WORKSTATION_SCHEMA,
+        "host": "codex",
+        "scope": "user",
+        "source": str(source),
+        "status": "registered" if not blocking else "missing",
+        "result": "pass" if not blocking else "block",
+        "paths": {key: str(value) for key, value in paths.items() if isinstance(value, Path)},
+        "marketplace_name": marketplace_name,
+        "config_plugin_key": config_plugin_key,
+        "checks": checks,
+        "reload_required": True,
+        "reload_guidance": "Start a new Codex session, or restart Codex Desktop if the plugin list was already loaded.",
+        "authority_boundary": {
+            "kind": "developer-workstation-registration-state",
+            "does_not_write_repo_truth": True,
+            "repo_payload_verify_command": "loom host verify --host codex --mode plugin --target <repo> --json",
+        },
+    }
+
+
+def update_codex_marketplace(marketplace_path: Path) -> None:
+    if marketplace_path.exists():
+        marketplace = read_json(marketplace_path)
+        if not isinstance(marketplace, dict):
+            raise RuntimeError(f"marketplace is not a JSON object: {marketplace_path}")
+    else:
+        marketplace = {
+            "name": "local-user-plugins",
+            "interface": {
+                "displayName": "Local User Plugins",
+            },
+            "plugins": [],
+        }
+    marketplace.setdefault("name", "local-user-plugins")
+    marketplace.setdefault("interface", {"displayName": "Local User Plugins"})
+    plugins = marketplace.setdefault("plugins", [])
+    if not isinstance(plugins, list):
+        raise RuntimeError(f"marketplace plugins must be an array: {marketplace_path}")
+    entry = codex_marketplace_plugin_entry()
+    for index, existing in enumerate(plugins):
+        if isinstance(existing, dict) and existing.get("name") == "loom":
+            plugins[index] = entry
+            break
+    else:
+        plugins.append(entry)
+    write_json(marketplace_path, marketplace)
+
+
+def set_toml_table_value(text: str, table: str, assignments: dict[str, str]) -> str:
+    lines = text.splitlines()
+    header = f"[{table}]"
+    start = next((index for index, line in enumerate(lines) if line.strip() == header), None)
+    rendered = [f"{key} = {value}" for key, value in assignments.items()]
+    if start is None:
+        prefix = lines + ([""] if lines and lines[-1] else [])
+        return "\n".join([*prefix, header, *rendered]) + "\n"
+    end = start + 1
+    while end < len(lines) and not (lines[end].startswith("[") and lines[end].endswith("]")):
+        end += 1
+    body = lines[start + 1 : end]
+    remaining = dict(assignments)
+    updated_body = []
+    for line in body:
+        stripped = line.strip()
+        key = stripped.split("=", 1)[0].strip() if "=" in stripped else None
+        if key in remaining:
+            updated_body.append(f"{key} = {remaining.pop(key)}")
+        else:
+            updated_body.append(line)
+    updated_body.extend(f"{key} = {value}" for key, value in remaining.items())
+    return "\n".join([*lines[: start + 1], *updated_body, *lines[end:]]) + "\n"
+
+
+def update_codex_config(config_path: Path, marketplace_root: Path, marketplace_name: str, plugin_key: str) -> None:
+    text = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
+    text = set_toml_table_value(
+        text,
+        f"marketplaces.{marketplace_name}",
+        {
+            "last_updated": json.dumps(now_iso()),
+            "source_type": json.dumps("local"),
+            "source": json.dumps(str(marketplace_root)),
+        },
+    )
+    text = set_toml_table_value(text, f'plugins."{plugin_key}"', {"enabled": "true"})
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(text, encoding="utf-8")
+
+
+def register_codex_workstation(source: Path) -> list[str]:
+    paths = codex_workstation_paths()
+    if not (source / ".codex-plugin" / "plugin.json").exists():
+        raise RuntimeError(f"Codex plugin source is missing .codex-plugin/plugin.json: {source}")
+    plugin_cache_path = Path(paths["plugin_cache_path"])
+    copy_tree(source, plugin_cache_path)
+    update_codex_marketplace(Path(paths["marketplace_path"]))
+    update_codex_config(Path(paths["config_path"]), Path(paths["marketplace_root"]), str(paths["marketplace_name"]), str(paths["config_plugin_key"]))
+    return [
+        str(plugin_cache_path),
+        str(paths["marketplace_path"]),
+        str(paths["config_path"]),
+    ]
+
+
+def workstation_registration_action(target: Path, source: Path | None = None) -> dict[str, Any] | None:
+    plugin_source = source or host_plugin_path(target, "codex")
+    repo_ok, _ = verify_cli_managed_surfaces(target, host="codex", mode="plugin")
+    registration = codex_workstation_registration_status(plugin_source)
+    if repo_ok and registration["result"] != "pass":
+        return {
+            "id": "register-codex-workstation-plugin",
+            "kind": "workstation-registration",
+            "status": "recommended",
+            "reason": "target repository plugin payload is current, but Codex Desktop workstation registration is missing",
+            "command": f"loom host register --host codex --source {relative_to_target(plugin_source, target)} --scope user --dry-run --json",
+            "apply_command": f"loom host register --host codex --source {relative_to_target(plugin_source, target)} --scope user --apply --json",
+            "mutates": False,
+            "apply_mutates": True,
+            "reload_required": registration["reload_required"],
+            "reload_note": registration["reload_guidance"],
+        }
+    return None
 
 
 def handle_delivery(command: str, argv: list[str]) -> int:
@@ -1354,6 +1655,9 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                     "command": "loom verify --target <repo> --json",
                 }
             )
+        registration_action = workstation_registration_action(target)
+        if registration_action:
+            actions.append(registration_action)
         return emit(
             output(
                 command,
@@ -1479,6 +1783,9 @@ def handle_delivery_payload_for_upgrade_plan(target: Path) -> dict[str, Any]:
         actions.append({"id": "repair-installed-state", "status": "required"})
     if legacy_surfaces:
         actions.append({"id": "classify-legacy-surfaces", "status": "required", "surface_count": len(legacy_surfaces)})
+    registration_action = workstation_registration_action(target)
+    if registration_action:
+        actions.append(registration_action)
     return output(
         "upgrade-plan",
         "pass",
@@ -1784,6 +2091,7 @@ def handle_reconcile(argv: list[str]) -> int:
 def supported_hosts(target: Path) -> list[dict[str, Any]]:
     home = Path.home()
     codex_home = Path(os.environ.get("CODEX_HOME", home / ".codex"))
+    codex_paths = codex_workstation_paths(home=home, codex_home=codex_home)
     claude_home = Path(os.environ.get("CLAUDE_CONFIG_DIR", home / ".claude"))
     hosts = [
         {
@@ -1792,7 +2100,10 @@ def supported_hosts(target: Path) -> list[dict[str, Any]]:
             "detected": codex_home.exists(),
             "default_mode": "full-repo",
             "native_skill_path": str(home / ".agents" / "skills"),
-            "plugin_path": str(target / "plugins" / "loom"),
+            "repo_payload_plugin_path": str(target / "plugins" / "loom"),
+            "workstation_plugin_cache_path": str(codex_paths["plugin_cache_path"]),
+            "workstation_marketplace_path": str(codex_paths["marketplace_path"]),
+            "workstation_config_path": str(codex_paths["config_path"]),
         },
         {
             "id": "claude",
@@ -1811,11 +2122,14 @@ def supported_hosts(target: Path) -> list[dict[str, Any]]:
 
 def handle_host(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="loom host")
-    parser.add_argument("action", choices=("list", "doctor", "install", "verify", "upgrade", "remove"))
+    parser.add_argument("action", choices=("list", "doctor", "install", "verify", "register", "upgrade", "remove"))
     parser.add_argument("--host", default="auto", choices=("auto", "codex", "claude", "opencode", "gemini", "cursor"))
     parser.add_argument("--mode", default="plugin", choices=("full-repo", "plugin", "skill"))
     parser.add_argument("--skill-id")
     parser.add_argument("--target", default=".")
+    parser.add_argument("--source")
+    parser.add_argument("--scope", default="user", choices=("user",))
+    parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--json", action="store_true")
@@ -1833,8 +2147,79 @@ def handle_host(argv: list[str]) -> int:
     if args.action == "doctor":
         warnings = []
         if host == "codex" and args.mode == "plugin":
-            warnings.append("Codex default remains full-repo/native skills discovery; plugin mode is adapter-managed.")
-        return emit(output(command, "pass", schema=HOST_SCHEMA, summary="Host adapter contract is readable.", target=str(target), host=host, mode=args.mode, hosts=hosts, warnings=warnings, verification=["docs/adoption/host-adapter-matrix.md", "tools/host_adapter_check.py"], fallback_to=None))
+            warnings.append("Codex repo payload verification is separate from Codex Desktop workstation registration.")
+        registration = codex_workstation_registration_status(resolve_target(args.source) if args.source else host_plugin_path(target, "codex")) if host == "codex" else None
+        return emit(output(command, "pass", schema=HOST_SCHEMA, summary="Host adapter contract is readable.", target=str(target), host=host, mode=args.mode, hosts=hosts, warnings=warnings, workstation_registration=registration, verification=["docs/adoption/host-adapter-matrix.md", "tools/host_adapter_check.py"], fallback_to=None))
+    if args.action == "register":
+        if host != "codex":
+            return emit(output(command, "block", schema=HOST_SCHEMA, summary="Workstation registration is implemented for Codex only.", target=str(target), host=host, scope=args.scope, mutates=False, failed_layer="workstation-registration", fail_closed_reason="unsupported host for workstation registration", fallback_to=["docs/adoption/host-adapter-matrix.md"]))
+        source = resolve_target(args.source) if args.source else host_plugin_path(target, "codex")
+        registration = codex_workstation_registration_status(source)
+        paths = codex_workstation_paths()
+        planned_writes = [str(paths["plugin_cache_path"]), str(paths["marketplace_path"]), str(paths["config_path"])]
+        if args.dry_run and not args.apply:
+            return emit(
+                output(
+                    command,
+                    "pass",
+                    schema=HOST_SCHEMA,
+                    summary="Codex workstation registration plan generated without mutating user state.",
+                    target=str(target),
+                    host=host,
+                    scope=args.scope,
+                    source=str(source),
+                    mutates=False,
+                    planned_writes=planned_writes,
+                    workstation_registration=registration,
+                    reload_required=True,
+                    reload_guidance=registration["reload_guidance"],
+                    fallback_to=["loom host register --host codex --source <repo>/plugins/loom --scope user --apply --json"],
+                )
+            )
+        if not args.apply:
+            return emit(
+                output(
+                    command,
+                    "block",
+                    schema=HOST_SCHEMA,
+                    summary="Codex workstation registration is mutating and requires --apply or --dry-run.",
+                    target=str(target),
+                    host=host,
+                    scope=args.scope,
+                    source=str(source),
+                    mutates=True,
+                    planned_writes=planned_writes,
+                    workstation_registration=registration,
+                    failed_layer="workstation-registration",
+                    fail_closed_reason="explicit --apply is required before writing user Codex registration state",
+                    fallback_to=["loom host register --host codex --source <repo>/plugins/loom --scope user --dry-run --json"],
+                )
+            )
+        try:
+            writes = register_codex_workstation(source)
+        except RuntimeError as exc:
+            return emit(output(command, "block", schema=HOST_SCHEMA, summary="Codex workstation registration could not be applied.", target=str(target), host=host, scope=args.scope, source=str(source), mutates=True, failed_layer="workstation-registration", fail_closed_reason=str(exc), fallback_to=["loom host verify --host codex --mode plugin --target <repo> --json"]))
+        updated = codex_workstation_registration_status(source)
+        return emit(
+            output(
+                command,
+                "pass" if updated["result"] == "pass" else "block",
+                schema=HOST_SCHEMA,
+                summary="Codex workstation registration applied." if updated["result"] == "pass" else "Codex workstation registration writes completed but verification still failed.",
+                target=str(target),
+                host=host,
+                scope=args.scope,
+                source=str(source),
+                mutates=True,
+                writes=writes,
+                workstation_registration=updated,
+                reload_required=True,
+                reload_guidance=updated["reload_guidance"],
+                failed_layer=None if updated["result"] == "pass" else "workstation-registration",
+                fail_closed_reason=None if updated["result"] == "pass" else "workstation registration verification failed after apply",
+                fallback_to=None if updated["result"] == "pass" else ["loom host doctor --host codex --target <repo> --json"],
+            )
+        )
     if args.mode == "full-repo" and args.action in {"install", "upgrade", "remove"}:
         return emit(output(command, "block", schema=HOST_SCHEMA, summary="Full-repo host lifecycle remains operator-owned.", target=str(target), host=host, mode=args.mode, mutates=args.action != "verify", failed_layer="host-lifecycle", fail_closed_reason="CLI does not mutate full-repo clone/discovery state", fallback_to=["docs/adoption/host-adapter-matrix.md", "loom host verify --host <host> --mode plugin --json"]))
     if args.action in {"install", "upgrade", "remove"} and not args.apply:
@@ -1853,7 +2238,7 @@ def handle_host(argv: list[str]) -> int:
         managed_writes.append(relative_to_target(state_path, target))
         return emit(output(command, "pass", schema=HOST_SCHEMA, summary="Host plugin/SKILLS payload installed by the Loom CLI.", target=str(target), host=host, mode=args.mode, mutates=True, managed_writes=managed_writes, installed_state_path=str(state_path), fallback_to=None))
     ok, checks = verify_cli_managed_surfaces(target, host=host, mode=args.mode, skill_id=args.skill_id)
-    return emit(output(command, "pass" if ok else "block", schema=HOST_SCHEMA, summary="Host plugin/SKILLS payload verified." if ok else "Host plugin/SKILLS payload is incomplete.", target=str(target), host=host, mode=args.mode, mutates=False, checks=checks, failed_layer=None if ok else "host-payload", fail_closed_reason=None if ok else "one or more CLI-managed host payload checks failed", fallback_to=None if ok else ["loom host install --host <host> --apply --json", "loom skills sync --target <repo> --apply --json"]))
+    return emit(output(command, "pass" if ok else "block", schema=HOST_SCHEMA, summary="Target repository plugin/SKILLS payload verified; workstation registration is reported separately." if ok else "Target repository plugin/SKILLS payload is incomplete.", target=str(target), host=host, mode=args.mode, mutates=False, verifies="target-repository-payload", workstation_registration_command="loom host register --host codex --source <repo>/plugins/loom --scope user --dry-run --json" if host == "codex" and args.mode == "plugin" else None, checks=checks, failed_layer=None if ok else "host-payload", fail_closed_reason=None if ok else "one or more CLI-managed target repository payload checks failed", fallback_to=None if ok else ["loom host install --host <host> --apply --json", "loom skills sync --target <repo> --apply --json"]))
 
 
 def handle_skills(argv: list[str]) -> int:

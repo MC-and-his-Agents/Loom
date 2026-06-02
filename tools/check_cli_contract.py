@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import hashlib
 import importlib.util
+import os
 import shutil
 import subprocess
 import sys
@@ -92,6 +93,7 @@ REQUIRED_COMMANDS = {
     "host doctor",
     "host install",
     "host verify",
+    "host register",
     "host upgrade",
     "host remove",
     "workspace create",
@@ -223,6 +225,25 @@ def preserved_repo_paths(relatives: tuple[str, ...]):
                     shutil.copytree(snapshot, source)
                 else:
                     shutil.copy2(snapshot, source)
+
+
+@contextmanager
+def isolated_codex_workstation(home: Path):
+    old_home = os.environ.get("HOME")
+    old_codex_home = os.environ.get("CODEX_HOME")
+    os.environ["HOME"] = str(home)
+    os.environ["CODEX_HOME"] = str(home / ".codex")
+    try:
+        yield
+    finally:
+        if old_home is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = old_home
+        if old_codex_home is None:
+            os.environ.pop("CODEX_HOME", None)
+        else:
+            os.environ["CODEX_HOME"] = old_codex_home
 
 
 def assert_suite_gate_consumption(payload: dict[str, Any], *, expected_surface: str) -> None:
@@ -1590,6 +1611,7 @@ def main() -> int:
         "reconcile",
         "host list",
         "host doctor",
+        "host register",
         "skills list",
         "skills check",
         "skills release-check",
@@ -3005,6 +3027,60 @@ def main() -> int:
         _, managed_verify = run_json(["host", "verify", "--host", "codex", "--target", str(managed_target), "--json"], expect=0)
         if managed_verify["result"] != "pass" or any(check["status"] != "pass" for check in managed_verify["checks"]):
             raise AssertionError("host verify did not validate CLI-managed plugin/SKILLS payload")
+        if managed_verify.get("verifies") != "target-repository-payload":
+            raise AssertionError("host verify must explicitly verify target repository payload, not workstation registration")
+        isolated_home = tmp / "isolated-codex-home"
+        isolated_home.mkdir()
+        with isolated_codex_workstation(isolated_home):
+            _, fixture_verify = run_json(["host", "verify", "--host", "codex", "--mode", "plugin", "--target", str(managed_target), "--json"], expect=0)
+            if fixture_verify.get("result") != "pass":
+                raise AssertionError("HotCP-style fixture host verify should pass with repo payload current")
+            status, fixture_doctor = run_json(["doctor", "--target", str(managed_target), "--json"])
+            workstation_check = next((check for check in fixture_doctor.get("checks", []) if check.get("name") == "codex-workstation-registration"), None)
+            if (
+                status == 0
+                or fixture_doctor.get("result") != "block"
+                or fixture_doctor.get("failed_layer") != "workstation-registration"
+                or not workstation_check
+                or workstation_check.get("workstation_registration", {}).get("status") != "missing"
+            ):
+                raise AssertionError("HotCP-style fixture doctor did not report missing workstation registration separately")
+            _, fixture_repair = run_json(["repair", "plan", "--target", str(managed_target), "--json"], expect=0)
+            repair_action = next((action for action in fixture_repair.get("actions", []) if action.get("id") == "register-codex-workstation-plugin"), None)
+            if not repair_action or repair_action.get("mutates") is not False or repair_action.get("apply_mutates") is not True:
+                raise AssertionError("repair plan did not recommend non-mutating Codex workstation registration")
+            _, fixture_upgrade = run_json(["upgrade-plan", "--target", str(managed_target), "--json"], expect=0)
+            if not any(action.get("id") == "register-codex-workstation-plugin" for action in fixture_upgrade.get("actions", [])):
+                raise AssertionError("upgrade-plan did not recommend Codex workstation registration")
+            source = managed_target / "plugins" / "loom"
+            _, register_dry_run = run_json(
+                ["host", "register", "--host", "codex", "--source", str(source), "--scope", "user", "--dry-run", "--json"],
+                expect=0,
+            )
+            if (
+                register_dry_run.get("mutates") is not False
+                or not register_dry_run.get("planned_writes")
+                or (isolated_home / "plugins" / "loom").exists()
+                or (isolated_home / ".agents" / "plugins" / "marketplace.json").exists()
+            ):
+                raise AssertionError("host register dry-run mutated isolated workstation state")
+            _, register_apply = run_json(
+                ["host", "register", "--host", "codex", "--source", str(source), "--scope", "user", "--apply", "--json"],
+                expect=0,
+            )
+            registration = register_apply.get("workstation_registration", {})
+            if (
+                register_apply.get("mutates") is not True
+                or registration.get("status") != "registered"
+                or not (isolated_home / "plugins" / "loom" / ".codex-plugin" / "plugin.json").exists()
+                or not (isolated_home / ".agents" / "plugins" / "marketplace.json").exists()
+                or 'plugins."loom@local-user-plugins"' not in (isolated_home / ".codex" / "config.toml").read_text(encoding="utf-8")
+            ):
+                raise AssertionError("host register apply did not create isolated Codex workstation registration")
+            _, registered_doctor = run_json(["doctor", "--target", str(managed_target), "--json"], expect=0)
+            registered_check = next((check for check in registered_doctor.get("checks", []) if check.get("name") == "codex-workstation-registration"), None)
+            if registered_check.get("workstation_registration", {}).get("status") != "registered":
+                raise AssertionError("doctor did not pass after isolated Codex workstation registration")
         _, managed_skills = run_json(["skills", "check", "--target", str(managed_target), "--json"], expect=0)
         if managed_skills["result"] != "pass":
             raise AssertionError("skills check did not validate CLI-managed target payload")
