@@ -11,7 +11,7 @@
 - Review Entry: .loom/reviews/WI-1204.json
 - Validation Entry: make loom-check; python3 tools/check_cli_contract.py; python3 tools/check_release_surface.py; python3 tools/skills_surface.py check; loom host install/verify fixture; loom installed-state validate fixture; loom doctor fixture; loom repair plan fixture; HotCP-style fixture checks; docs surface checks; git diff --check; PR/CI.
 - Closing Condition: #1205-#1211, #1214, #1215, and #1204 have closeout evidence, target PR is merged, target branch validates plugin mode without writing or requiring downstream top-level `skills/`, repo-local/downstream runtime checks do not generate `__pycache__` or `.pyc`, and the issue tree is closed from child items to parent.
-- Current Checkpoint: build
+- Current Checkpoint: merge
 - Current Stop: PR #1216 is open for `work/1204-plugin-layout-default` at head `4d6f2297`; local validation passed, GitHub authentication is restored, and CI merge-gate/doc-sync failures are being repaired.
 - Next Step: Refresh PR body, review records, and docs sync evidence; push the repair commit; validate CI; merge; validate target branch; publish `@mc-and-his-agents/loom@0.13.9` or record the explicit publish block; then close #1205-#1211/#1214/#1215 and #1204 with evidence.
 - Blockers: None recorded.

@@ -79,6 +79,10 @@ loom skills check --target . --json
 loom host install --host codex --mode skill --skill-id <skill-id> --target . --apply --json
 ```
 
+历史兼容证据仍可引用
+`npx @mc-and-his-agents/loom-installer add skill <skill-id>`，但该命令不是
+primary install path，也不得替代根 `loom` CLI flow。
+
 单独安装的 skill 只会向宿主暴露该 skill 本身。除非安装的就是 `loom-init`，否则它不会暴露完整的 `loom-init` 路由面，也不应被表述成完整的 Loom 体验。
 
 每个生成 single-skill package 都包含 `loom-package.json`、包内 `.loom-runtime/`，以及从包内解析 runtime 的 launcher。
