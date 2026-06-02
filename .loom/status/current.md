@@ -11,7 +11,7 @@
 - Review Entry: .loom/reviews/WI-1204.json
 - Validation Entry: make loom-check; python3 tools/check_cli_contract.py; python3 tools/check_release_surface.py; python3 tools/skills_surface.py check; loom host install/verify fixture; loom installed-state validate fixture; loom doctor fixture; loom repair plan fixture; HotCP-style fixture checks; docs surface checks; git diff --check; PR/CI.
 - Closing Condition: #1205-#1211, #1214, #1215, and #1204 have closeout evidence, target PR is merged, target branch validates plugin mode without writing or requiring downstream top-level `skills/`, repo-local/downstream runtime checks do not generate `__pycache__` or `.pyc`, and the issue tree is closed from child items to parent.
-- Current Checkpoint: local-validation
+- Current Checkpoint: build
 - Current Stop: Local implementation and regression validation passed and branch `work/1204-plugin-layout-default` was pushed at commit `9d46a5fa`, but PR creation/CI/merge/issue closeout is blocked by invalid local GitHub CLI authentication.
 - Next Step: Restore `gh` authentication, create the PR from `work/1204-plugin-layout-default` to `main`, validate CI, merge, validate target branch, publish `@mc-and-his-agents/loom@0.13.9` or record the explicit publish block, and close #1205-#1211/#1214/#1215 then #1204 with evidence.
 - Blockers: `gh auth status` reports the active github.com keyring token for account `mcontheway` is invalid; `gh pr create`, `gh api user`, and `gh repo view` failed, so PR creation, CI inspection, merge, GitHub issue closeout, and npm publish permission confirmation cannot proceed in this session.
