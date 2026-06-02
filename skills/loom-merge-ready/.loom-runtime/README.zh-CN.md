@@ -2,7 +2,7 @@
 
 语言：中文 | [English version](./README.md)
 
-`skills/` 是 Loom 源仓库生成且提交的 skills payload surface。可编辑源码真相位于 `src/skills/`。
+`skills/` 是 Loom 源仓库生成且提交的 skills install surface。可编辑源码真相位于 `src/skills/`。
 
 每个 `skills/<skill-id>` 也都是自包含 single-skill package。下游 Codex plugin 安装会把同一生成 payload 内嵌到 `plugins/loom/skills/`，而不是要求目标仓库顶层 `skills/`。方法论和架构文档位于这层之后，用户通常应该从 skills 进入，而不是先读内部治理文档。
 
@@ -78,6 +78,10 @@ loom skills check --target . --json
 ```bash
 loom host install --host codex --mode skill --skill-id <skill-id> --target . --apply --json
 ```
+
+历史兼容证据仍可引用
+`npx @mc-and-his-agents/loom-installer add skill <skill-id>`，但该命令不是
+primary install path，也不得替代根 `loom` CLI flow。
 
 单独安装的 skill 只会向宿主暴露该 skill 本身。除非安装的就是 `loom-init`，否则它不会暴露完整的 `loom-init` 路由面，也不应被表述成完整的 Loom 体验。
 

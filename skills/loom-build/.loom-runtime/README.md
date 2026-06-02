@@ -86,6 +86,10 @@ Single-skill installation is supported for advanced compatibility, not as the de
 loom host install --host codex --mode skill --skill-id <skill-id> --target . --apply --json
 ```
 
+Legacy compatibility evidence may still refer to
+`npx @mc-and-his-agents/loom-installer add skill <skill-id>`, but that command
+is not the primary install path and must not replace the root `loom` CLI flow.
+
 A single installed skill only exposes that named skill to the host. It does not expose the full `loom-init` routing surface unless `loom-init` itself is installed, and it should not be presented as the complete Loom experience.
 
 Every generated single-skill package contains `loom-package.json`, a package-internal `.loom-runtime/`, and a launcher that resolves runtime from inside the package.
