@@ -4,7 +4,13 @@ Language: English | [中文版本](./README.zh-CN.md)
 
 `skills/` is the generated, checked-in Loom skills install surface. The editable source truth lives in `src/skills/`.
 
-When Loom is installed through Codex native skill discovery, a host plugin, or the npm installer, this directory is the user-facing execution surface. Each `skills/<skill-id>` directory is also a self-contained single-skill package. Methodology and architecture documents stay behind this layer; users should enter through skills instead of internal governance docs.
+This directory is the Loom source repository's generated skill payload surface.
+Each `skills/<skill-id>` directory is also a self-contained single-skill
+package. Downstream Codex plugin installs consume the same generated payload
+embedded under `plugins/loom/skills/`, not as a required target-repository
+top-level `skills/` directory. Methodology and architecture documents stay
+behind this layer; users should enter through skills instead of internal
+governance docs.
 
 By default, start from `loom-init`. It is the unique root entry for Loom and is responsible for two things:
 
@@ -58,33 +64,31 @@ Routing only decides the scene skill. It does not replace the stable control pla
 
 ## Install Model
 
-The primary install model is the complete Loom skills library:
+The primary install model is the root `loom` CLI:
 
 ```bash
-git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom
-mkdir -p ~/.agents/skills
-for skill in ~/.codex/loom/skills/loom-*; do
-  ln -sfn "$skill" "$HOME/.agents/skills/$(basename "$skill")"
-done
+npm install -g @mc-and-his-agents/loom
+loom host install --host codex --mode plugin --target . --apply --json
+loom host verify --host codex --mode plugin --target . --json
+loom skills check --target . --json
 ```
 
-The npm installer can also install the complete plugin surface:
-
-```bash
-npx @mc-and-his-agents/loom-installer add plugin --host codex
-npx @mc-and-his-agents/loom-installer add plugin --host claude
-```
-
-The npm installer is an adapter/helper path, not the Codex default.
+For downstream Codex plugin mode, `loom host install` writes
+`plugins/loom/.codex-plugin/plugin.json`, `plugins/loom/skills/`, and
+`.loom/installed-state.json`. It does not write or require downstream top-level
+`skills/` by default.
 
 ## Advanced / Compatibility
 
 Single-skill installation is supported for advanced compatibility, not as the default user journey:
 
 ```bash
-npx @mc-and-his-agents/loom-installer add skill <skill-id> --host codex
-npx @mc-and-his-agents/loom-installer add skill <skill-id> --host claude
+loom host install --host codex --mode skill --skill-id <skill-id> --target . --apply --json
 ```
+
+Legacy compatibility evidence may still refer to
+`npx @mc-and-his-agents/loom-installer add skill <skill-id>`, but that command
+is not the primary install path and must not replace the root `loom` CLI flow.
 
 A single installed skill only exposes that named skill to the host. It does not expose the full `loom-init` routing surface unless `loom-init` itself is installed, and it should not be presented as the complete Loom experience.
 

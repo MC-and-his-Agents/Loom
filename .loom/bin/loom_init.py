@@ -13,6 +13,8 @@ import sys
 from functools import lru_cache
 from pathlib import Path
 
+sys.dont_write_bytecode = True
+
 from fact_chain_support import inspect_fact_chain
 from governance_surface import build_governance_surface, workspace_lifecycle_expectations
 from runtime_paths import registry_path, shared_asset

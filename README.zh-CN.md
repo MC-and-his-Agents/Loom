@@ -48,6 +48,11 @@ loom skills check --target . --json
 loom doctor --target . --json
 ```
 
+`loom host install` 和 `loom host verify` 管理并验证目标仓库的 plugin
+payload：`.loom/installed-state.json`、`plugins/loom/.codex-plugin/plugin.json`
+以及内嵌的 `plugins/loom/skills/` skills payload。Codex plugin mode 不再默认写入
+或要求下游仓库顶层 `skills/`；如果下游仓库存在顶层 `skills/`，它默认属于目标仓库命名空间，旧 Loom 生成残留只通过 repair / upgrade plan 给出安全迁移建议。
+
 `npx @mc-and-his-agents/loom ...` 只能作为临时运行同一个根 `loom` CLI 的方式。
 
 要求：
@@ -101,7 +106,7 @@ Loom 当前暴露一个 root entry 和十个 scenario skills：
 | `loom-merge-ready` | 验证 merge readiness。 |
 | `loom-retire` | 在不丢弃用户改动的前提下清理并退场。 |
 
-可编辑 skills 源码真相位于 `src/skills/`。生成且提交的 payload 表面位于 [skills/](./skills/)。每个 `skills/<skill-id>` 都是带 `loom-package.json` 和 `.loom-runtime/` 的自包含 skill payload，由根 CLI 管理。Canonical Codex plugin manifest 位于 [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/)，并通过 `loom host ...` 安装或验证。
+可编辑 skills 源码真相位于 `src/skills/`。Loom 源仓库生成且提交的 payload 表面位于 [skills/](./skills/)。每个 `skills/<skill-id>` 都是带 `loom-package.json` 和 `.loom-runtime/` 的自包含 skill payload，由根 CLI 管理。下游 Codex plugin 安装把这份 payload 内嵌到 `plugins/loom/skills/`；下游顶层 `skills/` 不再是默认 Loom plugin 安装面。Canonical Codex plugin manifest 位于 [plugins/loom/.codex-plugin/](./plugins/loom/.codex-plugin/)，并通过 `loom host ...` 安装或验证。
 
 ## 维护者文档
 

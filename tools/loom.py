@@ -718,24 +718,48 @@ def build_installed_state(target: Path, *, host: str, mode: str, skill_id: str |
             },
             "consumes": [],
         },
-        {
-            "id": "skills",
-            "layer_type": "generated-skills",
-            "installed_path": "skills",
-            "version_context": {
-                "skills_registry_version": versions["skills_registry_version"],
-                "skill_package_version": versions["skill_package_version"],
-            },
-            "runtime_state": "ready",
-            "upgrade_eligibility": "current",
-            "provides": ["scenario skills"],
-            "consumes": ["runtime"],
-        },
     ]
-    graph_layers = ["runtime", "skills"]
-    graph_edges = [{"from": "skills", "to": "runtime", "relationship": "consumes"}]
+    graph_layers = ["runtime"]
+    graph_edges: list[dict[str, str]] = []
+    if mode in {"full-repo", "skill"}:
+        layers.append(
+            {
+                "id": "skills",
+                "layer_type": "generated-skills",
+                "installed_path": "skills",
+                "version_context": {
+                    "skills_registry_version": versions["skills_registry_version"],
+                    "skill_package_version": versions["skill_package_version"],
+                },
+                "runtime_state": "ready",
+                "upgrade_eligibility": "current",
+                "provides": ["scenario skills"],
+                "consumes": ["runtime"],
+            }
+        )
+        graph_layers.append("skills")
+        graph_edges.append({"from": "skills", "to": "runtime", "relationship": "consumes"})
+    if mode == "plugin":
+        layers.append(
+            {
+                "id": "plugin-embedded-skills",
+                "layer_type": "plugin-embedded-skills",
+                "installed_path": "plugins/loom/skills",
+                "version_context": {
+                    "skills_registry_version": versions["skills_registry_version"],
+                    "skill_package_version": versions["skill_package_version"],
+                },
+                "runtime_state": "ready",
+                "upgrade_eligibility": "current",
+                "provides": ["scenario skills embedded in the Codex plugin payload"],
+                "consumes": ["runtime"],
+            }
+        )
+        graph_layers.append("plugin-embedded-skills")
+        graph_edges.append({"from": "plugin-embedded-skills", "to": "runtime", "relationship": "consumes"})
     if mode in {"plugin", "skill"}:
         layer_id = "host-adapter" if mode == "plugin" else "single-skill"
+        consumed_layer = "plugin-embedded-skills" if mode == "plugin" else "runtime"
         layers.append(
             {
                 "id": layer_id,
@@ -748,11 +772,11 @@ def build_installed_state(target: Path, *, host: str, mode: str, skill_id: str |
                 "runtime_state": "ready",
                 "upgrade_eligibility": "current",
                 "provides": [f"{host} {mode} discovery surface"],
-                "consumes": ["skills"],
+                "consumes": [consumed_layer],
             }
         )
         graph_layers.append(layer_id)
-        graph_edges.append({"from": layer_id, "to": "skills", "relationship": "consumes"})
+        graph_edges.append({"from": layer_id, "to": consumed_layer, "relationship": "consumes"})
     return {
         "schema_version": INSTALLED_STATE_SCHEMA,
         "installation_id": f"loom-{target.name or 'repo'}",
@@ -886,9 +910,9 @@ def detect_surfaces(target: Path) -> list[dict[str, Any]]:
             "skills/registry.json",
             "full-repo-skills",
             "skills",
-            "loom-distribution",
+            "target-repo-namespace",
             "legacy",
-            "Full-repo skills registry is present.",
+            "Top-level skills registry is present in the target repository namespace.",
         ),
         (
             "plugins/loom/.codex-plugin/plugin.json",
@@ -1143,6 +1167,9 @@ def repair_plan_payload(target: Path) -> dict[str, Any]:
     _, state, installed_error = load_installed_state(target)
     installed_errors = [{"path": "installed-state", "reason": installed_error["fail_closed_reason"]}] if installed_error else validate_installed_state(state)
     actions = repair_actions(detection, installed_errors)
+    migration_action = downstream_top_level_skills_migration_action(target)
+    if migration_action:
+        actions.append(migration_action)
     registration_action = workstation_registration_action(target)
     if registration_action:
         actions.append(registration_action)
@@ -1221,10 +1248,10 @@ def install_host_plugin_payload(target: Path, host: str) -> list[str]:
 
 
 def install_cli_managed_surfaces(target: Path, *, host: str, mode: str, skill_id: str | None = None) -> list[str]:
-    writes = sync_skills_payload(target)
     if mode == "plugin":
-        writes.extend(install_host_plugin_payload(target, host))
-    elif mode == "skill":
+        return install_host_plugin_payload(target, host)
+    writes = sync_skills_payload(target)
+    if mode == "skill":
         if not skill_id:
             raise RuntimeError("skill mode requires --skill-id")
         skill_source = SKILLS_ROOT / skill_id
@@ -1237,7 +1264,7 @@ def install_cli_managed_surfaces(target: Path, *, host: str, mode: str, skill_id
 
 
 def planned_cli_managed_writes(*, mode: str, skill_id: str | None = None) -> list[str]:
-    writes = ["skills"]
+    writes = [] if mode == "plugin" else ["skills"]
     if mode == "plugin":
         writes.append("plugins/loom")
     elif mode == "skill":
@@ -1253,26 +1280,118 @@ def verify_cli_managed_surfaces(target: Path, *, host: str, mode: str, skill_id:
         checks.append({"kind": kind, "path": relative, "status": "pass" if path.exists() else "missing"})
 
     check(".loom/installed-state.json", "installed-state")
-    check("skills/registry.json", "skills-registry")
-    registry_path = target / "skills" / "registry.json"
+    skills_root = target / "plugins" / "loom" / "skills" if mode == "plugin" else target / "skills"
+    registry_relative = "plugins/loom/skills/registry.json" if mode == "plugin" else "skills/registry.json"
+    check(registry_relative, "host-plugin-skills" if mode == "plugin" else "skills-registry")
+    registry_path = skills_root / "registry.json"
     if registry_path.exists():
         try:
             registry = read_json(registry_path)
             entries = registry.get("entries", []) if isinstance(registry, dict) else []
             for entry in entries:
                 if isinstance(entry, dict) and isinstance(entry.get("id"), str):
-                    check(f"skills/{entry['id']}/SKILL.md", "skill")
+                    skill_relative = f"plugins/loom/skills/{entry['id']}/SKILL.md" if mode == "plugin" else f"skills/{entry['id']}/SKILL.md"
+                    check(skill_relative, "host-plugin-skill" if mode == "plugin" else "skill")
         except (OSError, json.JSONDecodeError):
-            checks.append({"kind": "skills-registry-json", "path": "skills/registry.json", "status": "invalid"})
+            checks.append({"kind": "skills-registry-json", "path": registry_relative, "status": "invalid"})
     if mode == "plugin":
         if host == "codex":
             check("plugins/loom/.codex-plugin/plugin.json", "host-plugin")
-            check("plugins/loom/skills/registry.json", "host-plugin-skills")
         else:
             checks.append({"kind": "host-plugin", "path": host, "status": "unsupported"})
     if mode == "skill":
         check(f".agents/skills/{skill_id or 'missing'}/SKILL.md", "single-skill")
     return all(item["status"] == "pass" for item in checks), checks
+
+
+def declares_plugin_mode(target: Path) -> bool:
+    state_path = installed_state_path(target)
+    if state_path is None:
+        return False
+    try:
+        state = read_json(state_path)
+    except (OSError, json.JSONDecodeError):
+        return False
+    layers = state.get("layers", []) if isinstance(state, dict) else []
+    return any(
+        isinstance(layer, dict)
+        and layer.get("layer_type") in {"plugin-embedded-skills", "host-adapter-plugin"}
+        and str(layer.get("installed_path", "")).startswith("plugins/loom")
+        for layer in layers
+    )
+
+
+def skills_check_mode(target: Path) -> str:
+    return "plugin" if declares_plugin_mode(target) else "full-repo"
+
+
+def top_level_skills_assessment(target: Path) -> dict[str, Any] | None:
+    skills_root = target / "skills"
+    registry_path = skills_root / "registry.json"
+    if not registry_path.exists():
+        return None
+    expected_registry = read_optional_json(SKILLS_ROOT / "registry.json") or {}
+    actual_registry = read_optional_json(registry_path) or {}
+    expected_ids = {
+        entry.get("id")
+        for entry in expected_registry.get("entries", [])
+        if isinstance(entry, dict) and isinstance(entry.get("id"), str)
+    }
+    actual_ids = {
+        entry.get("id")
+        for entry in actual_registry.get("entries", [])
+        if isinstance(entry, dict) and isinstance(entry.get("id"), str)
+    }
+    skill_dirs = {
+        path.name
+        for path in skills_root.iterdir()
+        if path.is_dir() and (path / "SKILL.md").exists()
+    }
+    unknown_ids = sorted((actual_ids | skill_dirs) - expected_ids)
+    missing_ids = sorted(expected_ids - actual_ids)
+    if actual_ids == expected_ids and skill_dirs <= expected_ids:
+        ownership = "loom-generated"
+        result = "migration-recommended"
+        summary = "Top-level skills appears to be Loom-generated residue from the old downstream plugin layout."
+    else:
+        ownership = "mixed-or-target-owned"
+        result = "manual-review-required"
+        summary = "Top-level skills cannot be proven Loom-owned and must not be removed automatically."
+    return {
+        "path": "skills",
+        "ownership": ownership,
+        "result": result,
+        "unknown_skill_ids": unknown_ids,
+        "missing_loom_skill_ids": missing_ids,
+        "summary": summary,
+    }
+
+
+def downstream_top_level_skills_migration_action(target: Path) -> dict[str, Any] | None:
+    if not declares_plugin_mode(target):
+        return None
+    assessment = top_level_skills_assessment(target)
+    if assessment is None:
+        return None
+    if assessment["ownership"] == "loom-generated":
+        return {
+            "id": "plan-top-level-loom-skills-migration",
+            "kind": "legacy-plugin-layout-migration",
+            "status": "recommended",
+            "surface": assessment,
+            "reason": "plugin mode now uses plugins/loom/skills; downstream top-level Loom skills is legacy residue",
+            "command": "review target-owned skills/ before any explicit removal; do not delete automatically",
+            "mutates": False,
+        }
+    return {
+        "id": "review-top-level-skills-ownership",
+        "kind": "manual-migration-judgment",
+        "status": "required",
+        "surface": assessment,
+        "reason": "target repository skills/ ownership is mixed or unknown",
+        "command": "inspect skills/ before planning any migration",
+        "mutates": False,
+    }
 
 
 def codex_workstation_paths(home: Path | None = None, codex_home: Path | None = None) -> dict[str, Path | str]:
@@ -1610,7 +1729,7 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                 command,
                 "pass",
                 schema=DELIVERY_SCHEMA,
-                summary="CLI-managed plugin/SKILLS payload and installed-state metadata were written.",
+                summary="CLI-managed plugin payload and installed-state metadata were written.",
                 target=str(target),
                 host=args.host,
                 mode=args.mode,
@@ -1645,6 +1764,9 @@ def handle_delivery(command: str, argv: list[str]) -> int:
                     "command": "loom repair plan --target <repo> --json",
                 }
             )
+        migration_action = downstream_top_level_skills_migration_action(target)
+        if migration_action:
+            actions.append(migration_action)
         if installed_ready and not legacy_surfaces:
             actions.append(
                 {
@@ -2098,7 +2220,7 @@ def supported_hosts(target: Path) -> list[dict[str, Any]]:
             "id": "codex",
             "support_status": "primary",
             "detected": codex_home.exists(),
-            "default_mode": "full-repo",
+            "default_mode": "plugin",
             "native_skill_path": str(home / ".agents" / "skills"),
             "repo_payload_plugin_path": str(target / "plugins" / "loom"),
             "workstation_plugin_cache_path": str(codex_paths["plugin_cache_path"]),
@@ -2236,9 +2358,9 @@ def handle_host(argv: list[str]) -> int:
         state_path = target / ".loom" / "installed-state.json"
         write_json(state_path, build_installed_state(target, host=host, mode=args.mode, skill_id=args.skill_id))
         managed_writes.append(relative_to_target(state_path, target))
-        return emit(output(command, "pass", schema=HOST_SCHEMA, summary="Host plugin/SKILLS payload installed by the Loom CLI.", target=str(target), host=host, mode=args.mode, mutates=True, managed_writes=managed_writes, installed_state_path=str(state_path), fallback_to=None))
+        return emit(output(command, "pass", schema=HOST_SCHEMA, summary="Host plugin payload installed by the Loom CLI.", target=str(target), host=host, mode=args.mode, mutates=True, managed_writes=managed_writes, installed_state_path=str(state_path), fallback_to=None))
     ok, checks = verify_cli_managed_surfaces(target, host=host, mode=args.mode, skill_id=args.skill_id)
-    return emit(output(command, "pass" if ok else "block", schema=HOST_SCHEMA, summary="Target repository plugin/SKILLS payload verified; workstation registration is reported separately." if ok else "Target repository plugin/SKILLS payload is incomplete.", target=str(target), host=host, mode=args.mode, mutates=False, verifies="target-repository-payload", workstation_registration_command="loom host register --host codex --source <repo>/plugins/loom --scope user --dry-run --json" if host == "codex" and args.mode == "plugin" else None, checks=checks, failed_layer=None if ok else "host-payload", fail_closed_reason=None if ok else "one or more CLI-managed target repository payload checks failed", fallback_to=None if ok else ["loom host install --host <host> --apply --json", "loom skills sync --target <repo> --apply --json"]))
+    return emit(output(command, "pass" if ok else "block", schema=HOST_SCHEMA, summary="Target repository plugin payload verified; workstation registration is reported separately." if ok else "Target repository plugin payload is incomplete.", target=str(target), host=host, mode=args.mode, mutates=False, verifies="target-repository-payload", workstation_registration_command="loom host register --host codex --source <repo>/plugins/loom --scope user --dry-run --json" if host == "codex" and args.mode == "plugin" else None, checks=checks, failed_layer=None if ok else "host-payload", fail_closed_reason=None if ok else "one or more CLI-managed target repository payload checks failed", fallback_to=None if ok else ["loom host install --host <host> --apply --json", "loom skills sync --target <repo> --apply --json"]))
 
 
 def handle_skills(argv: list[str]) -> int:
@@ -2267,7 +2389,8 @@ def handle_skills(argv: list[str]) -> int:
         if target.resolve() == REPO_ROOT.resolve():
             checks.append([sys.executable, str(TOOLS_ROOT / "skills_surface.py"), "check"])
         else:
-            ok, managed_checks = verify_cli_managed_surfaces(target, host="codex", mode="full-repo")
+            mode = skills_check_mode(target)
+            ok, managed_checks = verify_cli_managed_surfaces(target, host="codex", mode=mode)
             checks.append({"command": "loom skills check installed payload", "returncode": 0 if ok else 1, "stdout": json.dumps(managed_checks, ensure_ascii=False), "stderr": "" if ok else "installed skills payload is incomplete"})
         if args.action == "release-check":
             checks.extend(

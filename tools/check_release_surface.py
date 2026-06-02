@@ -233,9 +233,9 @@ def main() -> int:
     )
     require_needles(README, ("Loom CLI release surface", "loom-installer deprecated legacy line", "users do not install them as a separate surface"), errors)
     require_needles(README_ZH, ("Loom CLI 发布面", "loom-installer deprecated legacy line", "用户不再把它们作为独立安装面安装"), errors)
-    require_needles(CODEX_INSTALL, ("The npm installer is not the Codex default path", "The plugin and\nSKILLS directories are CLI-managed payloads"), errors)
-    require_needles(UNIFIED_INSTALL, ("use `loom host install` to install host plugin/SKILLS payloads", "Historical: `@mc-and-his-agents/loom-installer` references retained only for deprecated evidence"), errors)
-    require_needles(HOST_ADAPTER_MATRIX, ("CLI-managed `skills/` and `plugins/loom/` payloads", "update root CLI, then rerun"), errors)
+    require_needles(CODEX_INSTALL, ("The npm installer is not the Codex default path", "plugins/loom/skills/"), errors)
+    require_needles(UNIFIED_INSTALL, ("use `loom host install` to install host plugin payloads", "Historical: `@mc-and-his-agents/loom-installer` references retained only for deprecated evidence"), errors)
+    require_needles(HOST_ADAPTER_MATRIX, ("embedded skills at `plugins/loom/skills/`", "update root CLI, rerun"), errors)
 
     for path in ACTIVE_SURFACE_DOCS:
         forbid_active_installer_evidence(path, errors)

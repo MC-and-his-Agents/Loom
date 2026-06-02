@@ -2,9 +2,9 @@
 
 语言：中文 | [English version](./README.md)
 
-`skills/` 是 Loom 生成且提交的 skills install surface。可编辑源码真相位于 `src/skills/`。
+`skills/` 是 Loom 源仓库生成且提交的 skills install surface。可编辑源码真相位于 `src/skills/`。
 
-当 Loom 通过 Codex 原生 skill discovery、宿主 plugin 或 npm installer 安装时，这个目录就是面向用户的执行表面。每个 `skills/<skill-id>` 也都是自包含 single-skill package。方法论和架构文档位于这层之后，用户通常应该从 skills 进入，而不是先读内部治理文档。
+每个 `skills/<skill-id>` 也都是自包含 single-skill package。下游 Codex plugin 安装会把同一生成 payload 内嵌到 `plugins/loom/skills/`，而不是要求目标仓库顶层 `skills/`。方法论和架构文档位于这层之后，用户通常应该从 skills 进入，而不是先读内部治理文档。
 
 默认从 `loom-init` 开始。它是 Loom 唯一的 root entry，负责两件事：
 
@@ -58,33 +58,30 @@ Loom 支持两种入口模式：
 
 ## Install Model
 
-主安装路径是完整 Loom skills library：
+主安装路径是根 `loom` CLI：
 
 ```bash
-git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom
-mkdir -p ~/.agents/skills
-for skill in ~/.codex/loom/skills/loom-*; do
-  ln -sfn "$skill" "$HOME/.agents/skills/$(basename "$skill")"
-done
+npm install -g @mc-and-his-agents/loom
+loom host install --host codex --mode plugin --target . --apply --json
+loom host verify --host codex --mode plugin --target . --json
+loom skills check --target . --json
 ```
 
-npm installer 也可以安装完整 plugin surface：
-
-```bash
-npx @mc-and-his-agents/loom-installer add plugin --host codex
-npx @mc-and-his-agents/loom-installer add plugin --host claude
-```
-
-npm installer 是 adapter/helper 路径，不是 Codex 默认路径。
+对下游 Codex plugin mode，`loom host install` 写入
+`plugins/loom/.codex-plugin/plugin.json`、`plugins/loom/skills/` 和
+`.loom/installed-state.json`。它默认不写入或要求下游顶层 `skills/`。
 
 ## Advanced / Compatibility
 
 单 skill 安装保留为高级兼容路径，但不再是默认用户路径：
 
 ```bash
-npx @mc-and-his-agents/loom-installer add skill <skill-id> --host codex
-npx @mc-and-his-agents/loom-installer add skill <skill-id> --host claude
+loom host install --host codex --mode skill --skill-id <skill-id> --target . --apply --json
 ```
+
+历史兼容证据仍可引用
+`npx @mc-and-his-agents/loom-installer add skill <skill-id>`，但该命令不是
+primary install path，也不得替代根 `loom` CLI flow。
 
 单独安装的 skill 只会向宿主暴露该 skill 本身。除非安装的就是 `loom-init`，否则它不会暴露完整的 `loom-init` 路由面，也不应被表述成完整的 Loom 体验。
 
