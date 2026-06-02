@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-875
-- Goal: Cover PR metadata Markdown drift, broken machine carrier diagnostics, and legacy migration fixtures.
-- Scope: #875 only: focused parser fixture hardening for Markdown drift, negative carrier envelopes, unsupported parser version, readback hash drift, and advisory/dual_read legacy migration. Do not implement #957 readiness/cost guard or #1107 full spec suite CLI tree.
-- Execution Path: issue #875 -> branch work/875-pr-metadata-drift-legacy-fixtures -> workspace `.` -> PR #1194.
+- Item ID: WI-957
+- Goal: Add pre-review readiness and cost guard before expensive semantic review.
+- Scope: #957 only: implement a pre-review readiness / cost guard that consumes PR metadata preflight, PR head alignment, dirty state, deterministic validation evidence, generated skills surface evidence, #969 review profile proof, closeout preview, and post-review carrier-only policy. Do not implement #1107 full spec suite CLI tree, do not rewrite frozen core contracts, and do not let parser or CLI output replace Work Item, review, merge-ready, closeout, or docs/source truth.
+- Execution Path: issue #957 -> branch work/957-pre-review-readiness-cost-guard -> workspace `.` -> PR pending.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-875.md
-- Review Entry: .loom/reviews/WI-875.json
-- Validation Entry: git diff --check; focused rg; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_cli_contract.py
-- Closing Condition: PR #1194 merged to main, issue #875 closed completed, Project Loom Done, and closeout evidence records PR, head SHA, merge commit, target branch, validation, and Project truth.
-- Current Checkpoint: merge
-- Current Stop: PR #1194 is open for #875 with implementation, spec/code review, fact-chain, suite, shadow parity, loom_check, CLI contract, and CI root-cause validation passing locally; required GitHub checks are running on head c284a2a90e243b62c778e4f70d3cb7b76c281ea8.
-- Next Step: Wait for required checks, rerun PR gate, then run controlled merge, reconciliation, and closeout.
+- Recovery Entry: .loom/progress/WI-957.md
+- Review Entry: .loom/reviews/WI-957.json
+- Validation Entry: git diff --check; focused rg; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_cli_contract.py; release/version/package surface checks if package or release surfaces change
+- Closing Condition: PR for #957 merged to main, issue #957 closed completed, Project Loom Done, and closeout evidence records PR, head SHA, merge commit, target branch, validation, reconciliation, and Project truth.
+- Current Checkpoint: merge checkpoint
+- Current Stop: PR #1195 local head 0332b364 is ready after fixing pre-review readiness conditional blocking; local validation including full make loom-check passes.
+- Next Step: Push branch, wait for required GitHub checks, run PR gate / controlled merge, then close out #957 and sync Project Done.
 - Blockers: None recorded.
-- Latest Validation Summary: Passing local evidence on 2026-06-01 for PR #1194 head c284a2a90e243b62c778e4f70d3cb7b76c281ea8: `git diff --check`; focused `rg` for `PR_METADATA_SUPPORTED_PARSER_VERSIONS`, `unsupported parser_version`, `missing-schema`, `dual-read-legacy`, `raw_excerpt_sha256`, `gh_pr_edit_body_file_readback`, and shell command substitution fixture text; `python3 tools/skills_surface.py check`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 tools/check_cli_contract.py`; `python3 tools/loom.py suite validate --target . --item WI-875 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-875 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-875 --json`; `python3 tools/loom.py fact-chain --target . --json`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --blocking`; `make loom-demo-new-project-check`; `python3 .loom/bin/loom_flow.py runtime-parity validate --target .`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-875`; direct unsupported parser-version smoke returned blocking diagnostics with block locator and expected parser version.
-- Recovery Boundary: #875 owns parser/fixture hardening only; #957 readiness/cost guard, #1107 full spec suite CLI tree, and any replacement of Work Item/review/merge-ready/closeout truth remain out of scope.
-- Current Lane: loom-hardening/pr-metadata-drift-legacy-fixtures
+- Latest Validation Summary: Passing local evidence on 2026-06-02 for WI-957 head 0332b364f794ffeeabad9452d20f0f8325ba554c: git diff --check; focused rg for readiness/cost guard contract tokens; python3 tools/skills_surface.py check; python3 tools/loom_check.py --profile source --source-surface contract-only .; python3 tools/check_cli_contract.py; make loom-demo-new-project-check; python3 tools/loom_flow.py shadow-parity --target . --blocking; python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/loom.py pre-review --target . --item WI-957 --json; python3 tools/loom.py suite validate/evidence validate/carrier validate --target . --item WI-957 --json; make loom-check passed including daily-execution-cli and node-installer distribution surface after dirty-state and no-diff deterministic token readiness fixes.
+- Recovery Boundary: #957 owns pre-review readiness/cost guard only; #1107 full spec suite CLI tree, frozen core contract rewrites, parser truth promotion, and replacement of Work Item/review/merge-ready/closeout/docs truth remain out of scope.
+- Current Lane: loom-hardening/pre-review-readiness-cost-guard
 
 ## Runtime Evidence
 
@@ -25,11 +25,11 @@
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
 - Verification Entry: python3 tools/loom_check.py --profile source --source-surface contract-only .
-- Lane Entry: loom-hardening/pr-metadata-drift-legacy-fixtures
+- Lane Entry: loom-hardening/pre-review-readiness-cost-guard
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-875.md
-- Dynamic Truth: .loom/progress/WI-875.md
+- Static Truth: .loom/work-items/WI-957.md
+- Dynamic Truth: .loom/progress/WI-957.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

@@ -21,7 +21,18 @@
     blocking/advisory 分类
   - minimal path 的 `not_applicable` rationale、consumer boundary、recheck condition
   - full path 缺必需输入或 minimal path 无有效 rationale 时必须 fail-closed
+- `readiness_cost_guard`
+  - schema 固定为 `loom-pre-review-readiness-cost-guard/v1`
+  - 在 PR 绑定或 build checkpoint 存在时以 blocking 模式消费 review 前成本信号
+  - 消费 checkout HEAD / PR head alignment、dirty worktree、`Latest Validation
+    Summary` 中的 deterministic checks、generated skills surface、release/package
+    surface、PR metadata preflight、#969 review profile proof、closeout preview 和
+    post-review carrier-only policy
+  - 输出 `result`、`missing_inputs`、`failure_taxonomy`、`fallback_to` 与
+    `summary`
+  - 不替代 `Work Item`、review record、merge-ready result、closeout evidence 或
+    docs/source truth
 - `steps`
-  - 固定按 `runtime-state -> fact-chain -> state-check -> runtime-evidence -> checkpoint-admission -> workspace-locate -> governance-lint` 顺序列出
+  - 固定按 `runtime-state -> fact-chain -> state-check -> runtime-evidence -> checkpoint-admission -> workspace-locate -> suite-evidence-validate -> suite-carrier-validate -> governance-lint -> pr-metadata-preflight -> pre-review-readiness-cost-guard` 顺序列出
 
 这个 skill 不产生 reviewer 结论；它只提供进入 review 前的统一机械判断。
