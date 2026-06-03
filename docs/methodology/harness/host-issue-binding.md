@@ -39,7 +39,9 @@ Loom 必须能稳定回答：
 - `Work Item -> git worktree`
 - `Work Item -> host PR`
 - `Work Item -> current head_sha`
+- `Work Item -> review authority boundary`
 - `PR -> reviewed head_sha`
+- `PR -> semantic review disposition`
 - `PR -> merge commit`
 - `merge commit -> target branch`
 
@@ -50,11 +52,11 @@ GitHub profile 下，这些对象通常由 issue、sub-issue、PR、branch 与 m
 所有正式 gate 只允许消费同一 binding surface：
 
 - implementation review
-  - 消费 `Work Item`、当前 `head_sha`、关联 PR
+  - 消费 `Work Item`、当前 `head_sha`、关联 PR、review authority boundary
 - `merge-ready`
-  - 消费 `Work Item -> PR -> reviewed head_sha`
+  - 消费 `Work Item -> PR -> reviewed head_sha -> semantic review disposition`
 - `controlled merge`
-  - 消费 `Work Item -> PR -> merge commit`
+  - 消费 `Work Item -> PR -> reviewed head_sha -> semantic review disposition -> merge commit`
 - `closeout`
   - 消费 `Work Item -> PR -> merge commit -> target branch`
 
@@ -96,6 +98,8 @@ GitHub host 下默认要求至少能证明：
   - 必需绑定缺失、冲突或无法证明
 - `head_drift`
   - 当前受审 `head_sha` 与绑定链不一致
+- `review_authority_drift`
+  - 当前 PR head、reviewed head 与 authored semantic review disposition 无法证明属于同一条交付链
 - `host_signal_drift`
   - PR、merge commit、主干或宿主状态互相冲突
 - `merge_signal_drift`
@@ -107,3 +111,6 @@ GitHub host 下默认要求至少能证明：
 - 本文件不把 GitHub 字段名提升为 Loom core 唯一术语
 - 本文件不把 `absorbed` 直接等同于 `closed_out`
 - 本文件不允许 `FR`、PR 或 merge commit 越权替代 `Work Item`
+- repo companion、guardian、PR comment、CI check 或 host review comment 只能提供 mirror / evidence；
+  它们不得替代 `Work Item -> PR -> reviewed head_sha -> semantic_review_disposition`
+  这条通用绑定链
