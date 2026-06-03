@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1217
-- Goal: Make metadata-only repository adoption a first-class Loom mode while preserving explicit embedded payload compatibility.
-- Scope: WI-1217 owns the metadata-only adoption iteration across `docs/adoption/installation-taxonomy.md`, `docs/adoption/README.md`, `docs/adoption/codex-install.md`, `docs/adoption/host-adapter-matrix.md`, `docs/adoption/loom-installed-state-v2.md`, `docs/adoption/unified-install-experience.md`, `docs/methodology/harness/cli-command-matrix.md`, `plugins/loom/.codex-plugin/plugin.json`, `tools/loom.py`, `tools/check_cli_contract.py`, `skills/shared/scripts/loom_check.py`, `src/skills/shared/scripts/loom_check.py`, `skills/loom-adopt/.loom-runtime/shared/scripts/loom_check.py`, `skills/loom-build/.loom-runtime/shared/scripts/loom_check.py`, `skills/loom-handoff/.loom-runtime/shared/scripts/loom_check.py`, `skills/loom-init/.loom-runtime/shared/scripts/loom_check.py`, `skills/loom-merge-ready/.loom-runtime/shared/scripts/loom_check.py`, `skills/loom-pre-review/.loom-runtime/shared/scripts/loom_check.py`, `skills/loom-resume/.loom-runtime/shared/scripts/loom_check.py`, `skills/loom-retire/.loom-runtime/shared/scripts/loom_check.py`, `skills/loom-review/.loom-runtime/shared/scripts/loom_check.py`, `skills/loom-spec-review/.loom-runtime/shared/scripts/loom_check.py`, `skills/loom-story/.loom-runtime/shared/scripts/loom_check.py`, `examples/new-project/.loom/bin/loom_check.py`, `examples/new-project/.loom/bootstrap/init-result.json`, `examples/new-project/.loom/bootstrap/manifest.json`, `.loom/bootstrap/init-result.json`, `.loom/status/current.md`, `.loom/work-items/WI-1217.md`, `.loom/progress/WI-1217.md`, `.loom/progress/WI-1217-build-evidence.json`, `.loom/progress/WI-1204.md`, `.loom/reviews/WI-1217.json`, `.loom/reviews/WI-1217.spec.json`, `.loom/shadow/merge-ready-loom.json`, `.loom/shadow/closeout-loom.json`, `.loom/specs/WI-1217/spec.md`, `.loom/specs/WI-1217/plan.md`, `.loom/specs/WI-1217/implementation-contract.md`, `.loom/specs/WI-1217/evidence-map.md`, and `.loom/specs/WI-1217/task-carrier.md`. Ownership includes #1218-#1226 closeout evidence and release or no-release decision records, plus retiring the stale WI-1204 active progress marker after #1204/#1216 completed. Ownership excludes destructive migration of downstream repo-owned governance evidence, deleting target-owned skills, changing Codex Desktop private state semantics, and publishing without explicit release credentials and release readiness evidence.
-- Execution Path: issue #1217 -> branch work/1217-metadata-only-adoption -> PR #1227 / CI -> target branch validation -> child issue closeout -> release or no-release decision.
+- Item ID: WI-1294
+- Goal: Publish the #1217/#1227 metadata-only adoption CLI and skills changes through a follow-up Loom CLI release.
+- Scope: WI-1294 owns the minimal release follow-up for issue #1294: bump root `VERSION` to `v0.13.10`, bump root `package.json` to `0.13.10`, regenerate `skills/*/loom-package.json` `repo_version` surfaces, mark the stale WI-1217 progress carrier terminal after #1217 closeout, keep metadata-only behavior unchanged, verify release/version/package/CLI contracts, merge a follow-up PR, verify `loom-cli-release` publishes `v0.13.10` tag/GitHub Release/npm package, and record final release evidence back on #1217. Ownership includes `.loom/bootstrap/init-result.json`, `.loom/status/current.md`, `.loom/work-items/WI-1294.md`, `.loom/progress/WI-1294.md`, `.loom/progress/WI-1217.md`, `.loom/specs/WI-1294/*`, `.loom/specs/WI-1294/implementation-contract.md`, `.loom/reviews/WI-1294*.json`, `VERSION`, `package.json`, and generated `skills/*/loom-package.json` files. Ownership excludes metadata-only adoption behavior changes, installer release reactivation, package rename, unrelated governance cleanup, or rewriting #1217 implementation evidence.
+- Execution Path: issue #1294 -> branch work/1294-release-followup -> PR -> CI -> merge -> main `loom-cli-release` publish verification -> #1217/#1294 closeout evidence.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1217.md
-- Review Entry: .loom/reviews/WI-1217.json
-- Validation Entry: make loom-check; python3 tools/check_cli_contract.py; python3 tools/check_release_surface.py; python3 tools/skills_surface.py check; metadata-only fixture install/validate/host verify/skills check/detect; embedded payload fixture host install/verify; docs checks; git diff --check; PR/CI.
-- Closing Condition: #1218-#1226 and #1217 have closeout evidence, target PR or PRs are merged, target branch validates metadata-only adoption without requiring repo skills payload, embedded payload mode remains valid, and release is published or no-release decision is recorded.
+- Recovery Entry: .loom/progress/WI-1294.md
+- Review Entry: .loom/reviews/WI-1294.json
+- Validation Entry: python3 tools/check_release_surface.py; python3 tools/version_surface_check.py; python3 tools/check_npm_package.py; python3 tools/check_cli_contract.py; npm pack --dry-run --json --ignore-scripts; python3 tools/skills_surface.py check; python3 tools/loom.py skills check --target . --json; git diff --check; PR/CI; main `loom-cli-release`; npm/tag/release smoke.
+- Closing Condition: PR is merged, `v0.13.10` tag and GitHub Release point at the follow-up merge commit, `@mc-and-his-agents/loom@0.13.10` is published on npm, #1217 has corrected final release evidence, and #1294 is closed.
 - Current Checkpoint: merge
-- Current Stop: PR #1227 is open for `work/1217-metadata-only-adoption`; short chain, focused gates, full `make loom-check`, supplemental checks, and refreshed spec/code review records passed locally; review records bind to implementation head `7de5f7c2e1e7709fb4889f86ce7dc4ec1c909093`.
-- Next Step: Push refreshed review and merge-readiness carriers, validate PR #1227 CI, then continue issue closeout and release/no-release decision after target branch validation.
-- Blockers: none
-- Latest Validation Summary: Passing local evidence: `python3 tools/skills_surface.py check`; `python3 tools/loom.py skills check --target . --json`; `python3 .loom/bin/loom_flow.py shadow-parity --target .`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1217`; `python3 tools/loom_check.py --source-surface bootstrap-regression`; `python3 tools/loom_check.py --source-surface source-self-fixture`; full `make loom-check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py`; `python3 tools/check_release_surface.py`; `git diff --check`; targeted metadata-only fixture passed `loom install --mode metadata-only --apply`, `installed-state validate`, `host verify --mode metadata-only`, `skills check`, and `detect`; targeted metadata-only pollution fixture blocked unexpected `plugins/loom/skills`; targeted embedded fixture passed `host install --mode plugin --apply` and `host verify --mode plugin`. Pending evidence: PR/CI, target branch validation, issue closeout, and release/no-release record.
-- Recovery Boundary: Do not make metadata-only write or require `plugins/loom/skills`, `.agents/skills`, or root `skills`; do not encode user workstation registration as repo truth; do not delete downstream repo-owned governance evidence; preserve embedded payload mode compatibility.
-- Current Lane: loom-metadata-only-adoption
+- Current Stop: Follow-up PR #1295 is open for `work/1294-release-followup`; local pre-PR validation passed; PR body is bound to `Loom Work Item: WI-1294`; spec and code review records are present for implementation head `188121ac3543056f4047063616d3d1f96a88ac48`.
+- Next Step: Push review-carrier update, validate PR #1295 CI and merge gate, merge after green, then verify tag/GitHub Release/npm publication.
+- Blockers: None recorded.
+- Latest Validation Summary: Initial evidence: #1227 post-merge `loom-cli-release` push run https://github.com/MC-and-his-Agents/Loom/actions/runs/26888581620 failed closed with `AUTO_PUBLISH_ALLOWED=true` because tag `v0.13.9` points to `18036d7b9555ca4ecf7e007b747a7f3ab0d77edd`, while #1227 merged at `442778ca1f47426a850c4f39bf06b6a1e750700b`. Local v0.13.10 pre-PR evidence passed: `python3 tools/check_release_surface.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_npm_package.py`; `python3 tools/check_cli_contract.py`; `python3 tools/skills_surface.py check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills check --target . --json`; `npm pack --dry-run --json --ignore-scripts` produced `mc-and-his-agents-loom-0.13.10.tgz`; `git diff --check`; fact-chain/suite validate/suite evidence validate; and shared scripts pycache check found no `skills/shared/scripts` or `src/skills/shared/scripts` `__pycache__`. Review records `.loom/reviews/WI-1294.spec.json` and `.loom/reviews/WI-1294.json` allow implementation head `188121ac3543056f4047063616d3d1f96a88ac48`; PR #1295 body is bound to WI-1294. Post-merge evidence remains pending and must be added after merge: main `loom-cli-release`, `v0.13.10` tag, GitHub Release, npm package, #1217 final comment, and #1294 closeout.
+- Recovery Boundary: Do not change metadata-only adoption semantics, do not reactivate installer release, do not overwrite existing tags/releases/npm versions, and do not rewrite #1217 implementation evidence.
+- Current Lane: release-followup
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: make loom-check
-- Lane Entry: loom-metadata-only-adoption
+- Verification Entry: release/version/package/CLI checks
+- Lane Entry: release-followup
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1217.md
-- Dynamic Truth: .loom/progress/WI-1217.md
+- Static Truth: .loom/work-items/WI-1294.md
+- Dynamic Truth: .loom/progress/WI-1294.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

@@ -1,0 +1,52 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1294",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Code review allows WI-1294 at head 188121ac3543056f4047063616d3d1f96a88ac48: the change is a minimal release follow-up with version surfaces, Loom carriers, and review/status evidence only; release/version/package/CLI/skills/npm dry-run/diff checks passed and post-merge publish evidence remains explicitly pending for closeout.",
+  "reviewer": "codex",
+  "reviewed_head": "188121ac3543056f4047063616d3d1f96a88ac48",
+  "reviewed_validation_summary": "Initial evidence: #1227 post-merge `loom-cli-release` push run https://github.com/MC-and-his-Agents/Loom/actions/runs/26888581620 failed closed with `AUTO_PUBLISH_ALLOWED=true` because tag `v0.13.9` points to `18036d7b9555ca4ecf7e007b747a7f3ab0d77edd`, while #1227 merged at `442778ca1f47426a850c4f39bf06b6a1e750700b`. Local v0.13.10 pre-PR evidence passed: `python3 tools/check_release_surface.py`; `python3 tools/version_surface_check.py`; `python3 tools/check_npm_package.py`; `python3 tools/check_cli_contract.py`; `python3 tools/skills_surface.py check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills check --target . --json`; `npm pack --dry-run --json --ignore-scripts` produced `mc-and-his-agents-loom-0.13.10.tgz`; `git diff --check`; fact-chain/suite validate/suite evidence validate; and shared scripts pycache check found no `skills/shared/scripts` or `src/skills/shared/scripts` `__pycache__`. Review records `.loom/reviews/WI-1294.spec.json` and `.loom/reviews/WI-1294.json` allow implementation head `188121ac3543056f4047063616d3d1f96a88ac48`; PR #1295 body is bound to WI-1294. Post-merge evidence remains pending and must be added after merge: main `loom-cli-release`, `v0.13.10` tag, GitHub Release, npm package, #1217 final comment, and #1294 closeout.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1294.md",
+    "recovery_entry": ".loom/progress/WI-1294.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom --item WI-1294 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom --item WI-1294 --json",
+    "suite_evidence_map": ".loom/specs/WI-1294/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1294/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  }
+}
