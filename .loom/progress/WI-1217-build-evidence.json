@@ -1,0 +1,64 @@
+{
+  "schema_version": "loom-build-evidence/v1",
+  "delegations": [
+    {
+      "id": "WI-1217-cli-docs-exploration",
+      "task_goal": "Explore existing CLI, installed-state, skills provider, docs, and downstream metadata-only constraints before implementation.",
+      "context_locators": [
+        "tools/loom.py",
+        "tools/check_cli_contract.py",
+        "docs/adoption/",
+        "docs/methodology/harness/cli-command-matrix.md",
+        "plugins/loom/.codex-plugin/plugin.json",
+        "issues #1217-#1226"
+      ],
+      "read_scope": [
+        "Read-only exploration of CLI/adoption docs",
+        "Read-only exploration of downstream HotCP/Syvert/WebEnvoy constraints"
+      ],
+      "write_ownership": [
+        "read-only/no-write"
+      ],
+      "non_goals": [
+        "No file edits by subagents",
+        "No long validation runs",
+        "No downstream repository mutation"
+      ],
+      "validation_expectation": "Main executor integrates conclusions into docs, CLI behavior, fixtures, and verification evidence.",
+      "output_format": "Summary with evidence paths, line references, current gaps, and implementation suggestions.",
+      "integration_target": [
+        "docs/adoption/installation-taxonomy.md",
+        "tools/loom.py",
+        "tools/check_cli_contract.py",
+        "docs/adoption/*"
+      ],
+      "status": "integrated",
+      "summary": "Read-only subagent findings were integrated into the metadata-only taxonomy, installed-state mode, CLI mode split, diagnostics, docs, manifest, and fixtures."
+    }
+  ],
+  "integration_evidence": [
+    {
+      "id": "WI-1217-local-build",
+      "status": "integrated",
+      "summary": "Main executor integrated metadata-only adoption mode into installed-state generation, install/verify/check diagnostics, docs, plugin manifest metadata, regression fixtures, and root governance carriers while preserving embedded payload compatibility.",
+      "locators": [
+        "tools/loom.py",
+        "tools/check_cli_contract.py",
+        "plugins/loom/.codex-plugin/plugin.json",
+        "docs/adoption/installation-taxonomy.md",
+        "docs/adoption/codex-install.md",
+        "docs/adoption/unified-install-experience.md",
+        "docs/adoption/host-adapter-matrix.md",
+        "docs/adoption/loom-installed-state-v2.md",
+        "docs/methodology/harness/cli-command-matrix.md",
+        ".loom/work-items/WI-1217.md",
+        ".loom/progress/WI-1217.md",
+        ".loom/progress/WI-1217-build-evidence.json",
+        ".loom/specs/WI-1217/spec.md",
+        ".loom/specs/WI-1217/plan.md",
+        ".loom/specs/WI-1217/evidence-map.md",
+        ".loom/specs/WI-1217/task-carrier.md"
+      ]
+    }
+  ]
+}

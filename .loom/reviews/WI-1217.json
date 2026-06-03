@@ -1,0 +1,52 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1217",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Code review allows WI-1217 after fresh short-chain, focused gates, full make loom-check, CLI contract, release surface, skills surface, and diff whitespace validation; implementation keeps metadata-only adoption from writing or requiring repo skills payload, preserves embedded plugin mode, and separates user-level provider registration from repository installed-state truth.",
+  "reviewer": "codex",
+  "reviewed_head": "b208139730208e1baeca12f241908f4f0d3a2628",
+  "reviewed_validation_summary": "Passing local evidence: `python3 tools/skills_surface.py check`; `python3 tools/loom.py skills check --target . --json`; `python3 .loom/bin/loom_flow.py shadow-parity --target .`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1217`; `python3 tools/loom_check.py --source-surface bootstrap-regression`; `python3 tools/loom_check.py --source-surface source-self-fixture`; full `make loom-check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py`; `python3 tools/check_release_surface.py`; `git diff --check`; targeted metadata-only fixture passed `loom install --mode metadata-only --apply`, `installed-state validate`, `host verify --mode metadata-only`, `skills check`, and `detect`; targeted metadata-only pollution fixture blocked unexpected `plugins/loom/skills`; targeted embedded fixture passed `host install --mode plugin --apply` and `host verify --mode plugin`. Pending evidence: PR/CI, target branch validation, issue closeout, and release/no-release record.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1217.md",
+    "recovery_entry": ".loom/progress/WI-1217.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom --item WI-1217 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom --item WI-1217 --json",
+    "suite_evidence_map": ".loom/specs/WI-1217/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1217/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  }
+}

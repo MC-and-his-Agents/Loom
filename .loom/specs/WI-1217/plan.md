@@ -37,7 +37,7 @@
 - AC-4 -> behavior evidence: `tools/loom.py` provider mode and doctor/workstation separation.
 - AC-5 -> manual evidence: README/adoption/CLI docs and plugin manifest self-description.
 - AC-6 -> test evidence: metadata-only, pollution, and embedded fixtures.
-- AC-7 -> test evidence: `git diff --check`, `check_release_surface.py`, `skills_surface.py check`, `check_cli_contract.py`, `make loom-check`, PR/CI, target branch validation, and release/no-release record.
+- AC-7 -> test evidence: `.loom/progress/WI-1217-build-evidence.json`, `git diff --check`, `check_release_surface.py`, `skills_surface.py check`, `check_cli_contract.py`, `make loom-check`, PR/CI, target branch validation, and release/no-release record.
 
 ## Applicability Boundary
 
