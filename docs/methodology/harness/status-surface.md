@@ -98,11 +98,32 @@ Approval / sandbox policy 也只能派生读取：
   - required policy 的 `missing` / `conflict` / `unsafe` 可阻断对应 execution surface；optional / advisory policy risk 只作为 review input
   - 不申请权限、不修改 sandbox、不替代宿主权限系统
 
+## 2.1 idle / no-active-item 读面
+
+状态面必须允许仓库处于 `idle`，并把该状态作为派生读面显式展示出来。
+
+最小规则：
+
+- `item.status`
+  - 允许值为 `active | idle`
+- 当 `item.status = idle` 时：
+  - `item.id = no_active_item`
+  - 不伪造 `goal`、`scope`、`execution_path`、`workspace_entry`、`recovery_entry`
+  - 这些 active-only 字段必须展示为 `not_applicable`，并保留 provenance 指向 `fact_chain.mode = idle`
+- `checkpoint`、`recovery`、`execution_ledger`
+  - 允许整体展示为 `not_applicable`
+  - 不得因为缺少 active carrier 而直接把仓库判成 drift 或 gate failure
+- `gates.*`
+  - 可展示为 `not_applicable`、`blocked_by_missing_active_item` 或等价派生结果，但必须区分“当前没有 active item”和“active item 事实链损坏”
+
+idle 不是 terminal 历史事项摘要。若需要展示最近完成事项、host closed item 或 retained closeout basis，它们只能进入 host/control-plane mirror 或 retained result provenance，不得回填成当前 active item。
+
 ## 3. 必备展示面
 
 统一状态面至少要展示：
 
 - 当前 `Work Item`
+- 当前 repository execution state（`active` 或 `idle`）
 - 当前 gate 与下一 gate
 - 当前恢复停点
 - formal spec 路径是否需要 `spec_review`
@@ -337,6 +358,9 @@ Approval / sandbox policy 也只能派生读取：
 
 例如：
 
+- 当前仓库为 `idle`
+  - `taxonomy.active_failures` 不得仅因缺少 active carrier 自动填入 `drift`
+  - 需要 active item 的 gate 必须显式说明 `missing_active_item` 或 `not_applicable`
 - formal spec 路径存在，但 `spec_review` 未批准
   - `gates.spec_review.status = block`
   - `taxonomy.active_failures` 必须含 `missing_prerequisite_gate`

@@ -125,6 +125,10 @@ Loom 当前固定以下命名规则：
   - 只表示 Loom 的放行前状态，不等于 host merge
 - `closeout`
   - 只表示进入主干后的收口阶段，不等于 merge
+- `idle repository state`
+  - 只表示当前没有 active Work Item 的 repository execution state，不等于某个历史 Work Item 已 terminal
+- `terminal Work Item`
+  - 只表示单个历史事项自己的 terminal checkpoint，不等于仓库已经进入 idle 或 closeout 完成
 
 ## 8. 合同命名约束
 
