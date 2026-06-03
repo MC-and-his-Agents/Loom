@@ -1079,6 +1079,8 @@ def assert_metadata_only_adoption_contract(tmp: Path) -> None:
     _, validate = run_json(["installed-state", "validate", "--target", str(target), "--json"], expect=0)
     if validate.get("runtime_state") != "ready":
         raise AssertionError("metadata-only installed-state validate did not pass")
+    if validate.get("result") != "pass":
+        raise AssertionError("metadata-only installed-state validate must keep provider/workstation dependency diagnostics outside repository metadata validity")
 
     _, host_verify = run_json(["host", "verify", "--host", "codex", "--mode", "metadata-only", "--target", str(target), "--json"], expect=0)
     if host_verify.get("verifies") != "repository-adoption-metadata":

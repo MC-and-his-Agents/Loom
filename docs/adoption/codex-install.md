@@ -57,6 +57,12 @@ the embedded `plugins/loom/skills/` payload. Neither mode requires downstream
 top-level `skills/`, and neither mode proves Codex Desktop has registered,
 enabled, or loaded the plugin on the current workstation.
 
+If the repository still carries `.loom/bin` or another repo-local wrapper
+surface, treat that as a diagnosable compatibility carrier. It may provide
+starter aliases or migration handshakes, but it is not automatic proof that the
+active runtime/provider is repo-local; the active provider may still be the
+global `loom` CLI runtime or the user-level Codex Loom plugin.
+
 4. Register the repo-local Codex plugin payload with this workstation when the
    repository is used in Codex Desktop:
 
@@ -74,6 +80,11 @@ to the target repository namespace unless explicit Loom ownership is proven;
 a user-level Codex Desktop state: personal marketplace entry, user plugin cache
 payload, and Codex config enablement. It is reported by `loom doctor` but is not
 written into target repository truth.
+
+Global CLI runtime availability is a separate provider dependency from Codex
+Desktop registration. A repository may depend on both during migration or
+compatibility mode, and Loom should report those gaps separately instead of
+collapsing them into generic repository payload drift.
 
 If Codex Desktop already loaded its plugin list, start a new Codex session or
 restart Codex Desktop after registration. Loom reports this reload requirement;
