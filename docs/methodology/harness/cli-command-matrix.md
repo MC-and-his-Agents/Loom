@@ -8,6 +8,8 @@ python3 tools/loom.py help --json
 
 The JSON output is the canonical machine-readable matrix for tests and downstream consumers. This document freezes the naming rules and command families for human review.
 
+Regression bucket / named surface / fast-vs-full validation semantics for long-running black-box checks are frozen in [regression-surface-contract.md](./regression-surface-contract.md). The command matrix may expose selectors or aggregate outputs for those surfaces, but it does not redefine that vocabulary here.
+
 ## Naming Rules
 
 - Commands are verb-first where the domain is implicit: `loom detect`, `loom doctor`, `loom verify`.

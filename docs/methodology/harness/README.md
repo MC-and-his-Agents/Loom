@@ -57,6 +57,8 @@
   - 定义 `single-workspace`、`per-item-worktree`、`attach-existing` 三类默认现场装配 profile
 - [repo-local-gate-starter.md](./repo-local-gate-starter.md)
   - 定义新仓库可用的本地 gate starter aliases，并明确它们不是宿主强制门禁
+- [regression-surface-contract.md](./regression-surface-contract.md)
+  - 定义 regression bucket、named surface、最小 evidence schema，以及 fast/full validation 的共享合同
 - `workspace-lifecycle.md`
 - `worker-backend-contract.md`
   - 定义 `create`、`locate`、`cleanup`、`retire` 与 `purity-check` 的生命周期合同

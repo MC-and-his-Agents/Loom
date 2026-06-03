@@ -20,7 +20,7 @@
 - `consumer` profile 检查 bootstrapped consumer repo，必须只消费 consumer runtime/adoption surface，不得回退到 Loom source self-check。
 - `auto` 只负责选择 `source` 或 `consumer`，不得因为宿主环境变量或 live host proof 改变 profile。
 
-`source` profile 还支持 `--source-surface full|contract-only|source-self-fixture|bootstrap-regression|distribution-regression`：
+`source` profile 还支持 `--source-surface full|contract-only|source-self-fixture|bootstrap-regression|distribution-regression`。这些 selector 的 shared vocabulary、最小 evidence schema 与 fast/full policy 见 [regression-surface-contract.md](./regression-surface-contract.md)：
 
 - `full` 是默认值，等价于既有完整 source/distribution self-check。
 - `contract-only` 面向普通本地 closeout 与快速合同验证，只消费文档、schema、fixture contract、routing、profile 和 link 检查。
