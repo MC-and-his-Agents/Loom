@@ -1,0 +1,11 @@
+# Evidence Map
+
+| evidence_id | evidence_type | source_locator | consumes | binding | freshness | consumer_boundary | remediation_direction |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| EV-001 | behavior_evidence | tools/loom.py | .loom/specs/WI-1217/spec.md S1 S2 S3 S4 S5 / AC-2 AC-3 AC-4 | WI-1217 / metadata-only CLI behavior | present | build / review / merge-ready | Re-run metadata-only and embedded fixtures after CLI changes. |
+| EV-002 | test_evidence | tools/check_cli_contract.py | .loom/specs/WI-1217/plan.md Steps 3 4 8 / AC-3 AC-6 | WI-1217 / regression fixtures | present | build / review / merge-ready | Re-run `python3 tools/check_cli_contract.py` after fixture or CLI contract changes. |
+| EV-003 | docs_evidence | docs/adoption/installation-taxonomy.md; docs/adoption/codex-install.md; docs/adoption/unified-install-experience.md; docs/adoption/host-adapter-matrix.md; docs/adoption/loom-installed-state-v2.md; docs/methodology/harness/cli-command-matrix.md | .loom/specs/WI-1217/spec.md S6 / AC-1 AC-5 | WI-1217 / docs surface | present | review / closeout | Re-run release/docs/skills surface checks after docs changes. |
+| EV-004 | manifest_evidence | plugins/loom/.codex-plugin/plugin.json | .loom/specs/WI-1217/spec.md S6 / AC-4 AC-5 | WI-1217 / Codex provider manifest | present | build / review / release | Re-run JSON validation and release surface checks after manifest changes. |
+| EV-005 | fresh_verification_input | .loom/progress/WI-1217.md | EV-001 EV-002 EV-003 EV-004 | WI-1217 / local validation summary | present | build / review | Refresh after local validation, PR/CI, target branch validation, and issue closeout. |
+| EV-006 | test_evidence | .loom/progress/WI-1217.md | .loom/specs/WI-1217/spec.md AC-7 | WI-1217 / gate blocker evidence | present | merge-ready / closeout | Refresh after full `check_cli_contract.py`, `make loom-check`, CI, target branch validation, and release/no-release decision. |
+| EV-007 | fresh_verification_input | .loom/progress/WI-1217-build-evidence.json | EV-001 EV-002 EV-003 EV-004 EV-005 | WI-1217 / build integration evidence | present | build / review | Refresh when implementation, docs, fixtures, or delegated findings change. |

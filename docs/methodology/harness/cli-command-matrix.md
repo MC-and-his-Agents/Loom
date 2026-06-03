@@ -25,8 +25,8 @@ The JSON output is the canonical machine-readable matrix for tests and downstrea
 | `loom installed-state show` | implemented | Reads `loom-installed-state/v2` from the target repo. |
 | `loom installed-state validate` | implemented | Validates schema, layers, graph, and version metadata. |
 | `loom installed-state export` | implemented | Emits valid installed-state plus installation graph. |
-| `loom detect` | implemented | Detects current, legacy, symlink, single-skill, plugin, and mixed installed surfaces. |
-| `loom doctor` | implemented | Diagnoses installed-state and legacy surface readiness with fail-closed repair fallback. |
+| `loom detect` | implemented | Detects current, legacy, symlink, single-skill, metadata-only, embedded plugin, and mixed installed surfaces. |
+| `loom doctor` | implemented | Diagnoses installed-state, declared adoption mode, provider readiness, and legacy surface readiness with fail-closed repair fallback. |
 | `loom repair plan` | implemented | Emits a non-mutating repair plan for missing, invalid, or legacy installed surfaces. |
 | `loom repair apply` | implemented | Fails closed until write ownership and rollback semantics are approved by a later Work Item. |
 
@@ -97,7 +97,18 @@ loom rollback
 loom verify
 ```
 
-`install` writes `loom-installed-state/v2` only when `--apply` is present. `upgrade-plan` is non-mutating and emits ordered repair / legacy-classification / no-op actions. `verify` consumes `doctor` so installed-state and legacy-surface readiness stay aligned. `upgrade` requires `--apply` and refuses to mutate while installed-state is invalid or legacy surfaces remain unclassified. `rollback` remains a structured fail-closed command because rollback/delete ownership cannot be inferred from installed surface detection.
+`install` writes `loom-installed-state/v2` only when `--apply` is present and
+the target artifact/scope is explicit. Metadata-only repository adoption,
+embedded repository payload, compatibility skills export, single-skill export,
+workstation registration, and runtime carrier changes are separate operations
+under the [installation taxonomy](../../adoption/installation-taxonomy.md).
+`upgrade-plan` is non-mutating and emits ordered repair /
+legacy-classification / no-op actions. `verify` consumes `doctor` so
+installed-state, declared adoption mode, provider readiness, and legacy-surface
+readiness stay aligned. `upgrade` requires `--apply` and refuses to mutate while
+installed-state is invalid or legacy surfaces remain unclassified. `rollback`
+remains a structured fail-closed command because rollback/delete ownership
+cannot be inferred from installed surface detection.
 
 ## Scenario Commands
 

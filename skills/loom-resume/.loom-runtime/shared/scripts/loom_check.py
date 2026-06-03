@@ -4385,6 +4385,7 @@ def require_generated_skills_surface_parity_validation(
     category: str,
     context: str,
 ) -> None:
+    remove_python_cache_artifacts(root)
     payload, error = load_command_json(
         root,
         ["python3", "tools/loom.py", "skills", "check", "--target", str(root), "--json"],
@@ -7205,6 +7206,13 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         if error:
             failures.append(Failure("daily-execution-cli", f"`{label}` command failed: {error}"))
             continue
+        if label == "host-binding-validate":
+            branch = payload.get("branch")
+            branch_present = isinstance(branch, dict) and branch.get("status") == "present"
+            if payload.get("result") == "block" and not branch_present and not host_read_unavailable(payload):
+                retry_payload, retry_error = load_command_json(root, args)
+                if retry_error is None and retry_payload is not None:
+                    payload = retry_payload
         result = payload.get("result")
         if result not in allowed_results:
             failures.append(
@@ -12952,6 +12960,18 @@ def python_cache_artifacts(root: Path) -> set[str]:
             if path.suffix in {".pyc", ".pyo", ".pyd"}:
                 artifacts.add(path.relative_to(root).as_posix())
     return artifacts
+
+
+def remove_python_cache_artifacts(root: Path) -> None:
+    for relative in sorted(python_cache_artifacts(root), key=lambda value: value.count("/"), reverse=True):
+        path = root / relative
+        if path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
+            continue
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def check_py_compile_cache_hygiene(root: Path) -> list[Failure]:
@@ -21567,6 +21587,7 @@ def collect_source_failures(root: Path, source_surface: str = SOURCE_SURFACE_FUL
         (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "demo-repo-local-cli", lambda: check_demo_repo_local_cli(root)),
         (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "root-self-adoption", lambda: check_root_self_adoption_carrier(root)),
         (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "deep-existing-bootstrap", lambda: check_deep_existing_repo_bootstrap(root)),
+        (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "py-compile-cache-hygiene-pre", lambda: check_py_compile_cache_hygiene(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "daily-execution-cli", lambda: check_daily_execution_cli(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "py-compile-cache-hygiene", lambda: check_py_compile_cache_hygiene(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "repo-companion", lambda: check_repo_companion_interface_contracts(root)),

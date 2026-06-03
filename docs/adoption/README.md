@@ -30,6 +30,7 @@
 - 统一安装体验：[unified-install-experience.md](./unified-install-experience.md)
 - CLI-only 安装合同：[cli-only-install-contract.md](./cli-only-install-contract.md)
 - 宿主适配矩阵：`host-adapter-matrix.md`
+- 安装 taxonomy 与权威边界：[installation-taxonomy.md](./installation-taxonomy.md)
 - 单 skill 安装合同：[single-skill-contract.md](./single-skill-contract.md)
 - 已安装 Loom status 与升级演练：[installed-loom-status.md](./installed-loom-status.md)
 - CLI-first installed-state 合同：[loom-installed-state-v2.md](./loom-installed-state-v2.md)

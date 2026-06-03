@@ -4,32 +4,38 @@ This matrix defines consistent Loom semantics across supported hosts. Implementa
 
 | Host | Support status | Default install path | Discovery surface | Bootstrap/session-start surface | Tool mapping surface | Upgrade surface | Verification surface |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Codex | primary | `npm install -g @mc-and-his-agents/loom`; `loom host install --host codex --mode plugin --target . --apply --json`; `loom host register --host codex --source ./plugins/loom --scope user --apply --json` when Codex Desktop workstation registration is needed | CLI-managed `plugins/loom/` payload in the target repository, with embedded skills at `plugins/loom/skills/`; user workstation registration is separate | new Codex session or Codex Desktop restart after registration, then start from `loom-init` | Codex tools remain host-owned; Loom skills describe required actions | update root CLI, rerun `loom host install ... --force`, then rerun workstation registration if needed | target payload: `loom host verify --host codex --mode plugin --target . --json`; workstation: `loom host register --host codex --source ./plugins/loom --scope user --dry-run --json`; `loom skills check --target . --json` |
+| Codex | primary | `npm install -g @mc-and-his-agents/loom`; default downstream repository adoption uses `loom install --mode metadata-only --target . --apply --json`; embedded repository payload remains explicit opt-in through `loom host install --host codex --mode plugin --target . --apply --json`; `loom host register --host codex --source <plugin-source> --scope user --apply --json` when Codex Desktop workstation registration is needed | metadata-only repositories consume the user-level Codex Loom plugin provider; embedded repositories carry CLI-managed `plugins/loom/` payload with embedded skills at `plugins/loom/skills/`; user workstation registration is separate | new Codex session or Codex Desktop restart after registration, then start from `loom-init` | Codex tools remain host-owned; Loom skills describe required actions | update root CLI, rerun installed-state validation, then rerun workstation registration if needed; embedded payload repos also rerun `loom host install ... --force` | metadata-only: `loom host verify --host codex --mode metadata-only --target . --json`; embedded payload: `loom host verify --host codex --mode plugin --target . --json`; workstation: `loom host register --host codex --source <plugin-source> --scope user --dry-run --json`; `loom skills check --target . --json` |
 | Claude Code | adapter | root `loom` CLI plus CLI-managed Claude plugin or project skills registration | CLI-managed generated `skills/` payload or host plugin | plugin/session guidance must point to `loom-init` | Claude tools remain adapter-owned | update root CLI, then rerun host install/verify | host verify plus static plugin/skills checks |
 | OpenCode | adapter contract | root `loom` CLI plus CLI-managed OpenCode plugin/path injection | configured skills path pointing at CLI-managed generated `skills/` | plugin injects startup guidance for `loom-init` | plugin maps OpenCode tools to Loom host-action expectations | update root CLI and reload plugin | static adapter check until OpenCode CLI is available |
 | Gemini | adapter contract | root `loom` CLI plus CLI-managed extension/context import | extension/context references CLI-managed generated `skills/` | context import names `loom-init` as root entry | Gemini tool use is documented as adapter mapping | update root CLI and reload extension/context | static adapter check until Gemini extension CLI is available |
 | Cursor | adapter contract | root `loom` CLI plus CLI-managed Cursor plugin/hooks | plugin manifest points at CLI-managed generated `skills/` | hooks surface `loom-init` startup guidance | Cursor tool mapping is adapter-owned | update root CLI and reload plugin/hooks | static adapter check until Cursor plugin CLI is available |
 
-Each supported host has exactly one default path: the root `loom` CLI installs
-and verifies host plugin payloads. Single-skill payload consumption is
+Each supported host has exactly one primary entry: the root `loom` CLI.
+Repository adoption mode can still differ by explicit artifact scope. For
+Codex, metadata-only repository adoption is the default downstream mode, while
+embedded repository payload is opt-in. Single-skill payload consumption is
 compatibility-only. Installer-driven plugin installation is deprecated legacy
 behavior and must not be described as a default path.
 
-For Codex, the target repository payload install state and the Codex Desktop
-workstation registration state are separate. The repo-local `plugins/loom/`
-payload being valid is not proof that Codex Desktop has registered, enabled, or
-loaded the plugin on the current machine. Workstation registration is explicit,
-user-scoped, and mutating only with `--apply`; it writes Codex user state such as
-the personal marketplace entry, user plugin cache payload, and config
-enablement. It must not write Codex Desktop private state into target repository
-truth.
+For Codex, repository adoption truth and Codex Desktop workstation registration
+state are separate. In metadata-only mode, repository truth is
+`.loom/installed-state.json` plus repo-owned governance residue; the user-level
+Codex Loom plugin provides skills. In embedded mode, the repo-local
+`plugins/loom/` payload being valid is not proof that Codex Desktop has
+registered, enabled, or loaded the plugin on the current machine. Workstation
+registration is explicit, user-scoped, and mutating only with `--apply`; it
+writes Codex user state such as the personal marketplace entry, user plugin
+cache payload, and config enablement. It must not write Codex Desktop private
+state into target repository truth.
 
-For downstream Codex plugin mode, `plugins/loom/skills/` is the canonical Loom
-skills payload. Downstream top-level `skills/` is not written or required by
-default and belongs to the target repository namespace unless an explicit future
-profile owns it. Existing Loom-generated top-level `skills/` from older plugin
-installs is migration residue; mixed or target-owned `skills/` must fail closed
-to manual review.
+For downstream metadata-only mode, `plugins/loom/skills/`, `.agents/skills`,
+and root `skills/` are intentionally absent unless an explicit compatibility
+export or embedded payload action owns them. For downstream embedded plugin
+mode, `plugins/loom/skills/` is the canonical Loom skills payload. Downstream
+top-level `skills/` is not written or required by default and belongs to the
+target repository namespace unless explicit Loom ownership is proven. Existing
+Loom-generated top-level `skills/` from older plugin installs is migration
+residue; mixed or target-owned `skills/` must fail closed to manual review.
 
 ## Required Fields
 

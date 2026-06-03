@@ -1,6 +1,8 @@
 # loom-installed-state/v2
 
 `loom-installed-state/v2` describes which Loom layers a target repository consumes. It is installation metadata, not backlog truth and not governance truth.
+Artifact type, scope, authority, adoption mode, and skills granularity terms are
+defined by [installation-taxonomy.md](./installation-taxonomy.md).
 
 The canonical target path is:
 
@@ -103,9 +105,70 @@ Every edge endpoint must reference a known layer id. Unknown edge endpoints fail
 
 ## Codex Plugin Mode
 
-For downstream Codex plugin mode, the target repository does not need a
-top-level `skills` layer. The plugin layout models Loom skills as an embedded
-plugin payload:
+For downstream Codex plugin mode, installed-state must distinguish embedded
+repository payload from metadata-only adoption.
+
+### Metadata-Only Mode
+
+Metadata-only adoption records repository adoption truth without requiring a
+repo-embedded skills payload. The user-level Codex Loom plugin provides the
+skills/provider surface, and workstation registration is verified separately
+from repository truth:
+
+```json
+{
+  "repo_payload": {
+    "mode": "metadata-only",
+    "intentional_absent_paths": [
+      "plugins/loom/skills",
+      ".agents/skills",
+      "skills"
+    ]
+  },
+  "skills_provider": {
+    "provider": "codex-loom-plugin",
+    "scope": "user",
+    "required": true,
+    "registration_authority": "workstation"
+  },
+  "layers": [
+    {
+      "id": "adoption-metadata",
+      "layer_type": "repository-adoption-metadata",
+      "installed_path": ".loom/installed-state.json",
+      "runtime_state": "ready",
+      "upgrade_eligibility": "current",
+      "provides": ["repository adoption truth"],
+      "consumes": ["user-skills-provider"]
+    },
+    {
+      "id": "user-skills-provider",
+      "layer_type": "user-level-skills-provider",
+      "installed_path": "workstation:codex-loom-plugin",
+      "runtime_state": "unknown",
+      "upgrade_eligibility": "unknown",
+      "provides": ["Loom scenario skills"],
+      "consumes": []
+    }
+  ],
+  "installation_graph": {
+    "layers": ["adoption-metadata", "user-skills-provider"],
+    "edges": [
+      {"from": "adoption-metadata", "to": "user-skills-provider", "relationship": "requires-external-provider"}
+    ]
+  }
+}
+```
+
+`installed-state validate` validates repository metadata and mode semantics. It
+must not fail metadata-only repositories merely because `plugins/loom/skills/`
+is absent. `doctor`, `host verify`, and `skills check` report missing
+workstation registration as a provider/workstation gap, not as missing
+repository payload.
+
+### Embedded Payload Mode
+
+Embedded payload mode models Loom skills as a repository plugin payload:
 
 ```json
 {
@@ -143,6 +206,9 @@ beside a current plugin-mode installed-state, Loom diagnostics treat it as
 legacy residue or target-owned surface until ownership is proven. Repair and
 upgrade plans must not delete or overwrite target-owned non-Loom skills
 automatically.
+
+`.agents/skills` is likewise a compatibility export surface, not a default Loom
+downstream layer.
 
 ## CLI Semantics
 

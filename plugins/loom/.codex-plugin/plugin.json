@@ -15,7 +15,12 @@
     "host_adapter_version": "1.0.0",
     "version_authority": "docs/adoption/version-authority-map.md",
     "default_entry": "loom-init",
-    "distribution_model": "full-repo-native-skill-discovery"
+    "distribution_model": "codex-skills-provider",
+    "repository_payload_modes": [
+      "metadata-only",
+      "embedded"
+    ],
+    "default_repository_payload_mode": "metadata-only"
   },
   "keywords": [
     "loom",

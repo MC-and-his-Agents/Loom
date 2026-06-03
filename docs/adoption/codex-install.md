@@ -1,9 +1,10 @@
 # Installing Loom for Codex
 
 Use the root `loom` CLI as the only primary install entry. CLI-managed payloads
-are written by the CLI, not by the legacy installer. For Codex plugin
-mode, the CLI installs and verifies the target repository's repo-local Codex
-plugin payload, including embedded Loom skills under `plugins/loom/skills/`.
+are written by the CLI, not by the legacy installer. Codex adoption has two
+repository modes: metadata-only adoption with a user-level Codex Loom plugin
+provider, and explicit embedded repository payload mode. The authority terms are
+defined in [installation-taxonomy.md](./installation-taxonomy.md).
 
 ## Prerequisites
 
@@ -18,13 +19,28 @@ plugin payload, including embedded Loom skills under `plugins/loom/skills/`.
    npm install -g @mc-and-his-agents/loom
    ```
 
-2. Install the Codex host payload into the target repository:
+2. Choose the repository adoption mode.
+
+Metadata-only adoption records repository adoption truth and relies on the
+user-level Codex Loom plugin provider. It must not write `plugins/loom/skills/`,
+`.agents/skills`, or root `skills/`:
+
+   ```bash
+   loom install --target . --mode metadata-only --apply --json
+   loom installed-state validate --target . --json
+   loom host verify --host codex --mode metadata-only --target . --json
+   loom skills check --target . --json
+   loom doctor --target . --json
+   ```
+
+Embedded payload mode is explicit opt-in for repositories that need a
+self-contained repo-local plugin payload:
 
    ```bash
    loom host install --host codex --mode plugin --target . --apply --json
    ```
 
-3. Verify the target repository payload:
+3. Verify the selected target repository mode:
 
    ```bash
    loom host verify --host codex --mode plugin --target . --json
@@ -32,12 +48,14 @@ plugin payload, including embedded Loom skills under `plugins/loom/skills/`.
    loom doctor --target . --json
    ```
 
-`loom host verify --host codex --mode plugin` verifies the target repository
-plugin payload only. It checks `.loom/installed-state.json`,
-`plugins/loom/.codex-plugin/plugin.json`, and the embedded
-`plugins/loom/skills/` payload; it does not require downstream top-level
-`skills/`, and it does not prove Codex Desktop has registered, enabled, or
-loaded the plugin on the current workstation.
+`loom host verify --host codex --mode metadata-only` verifies repository
+adoption metadata and reports the user-level provider requirement separately.
+`loom host verify --host codex --mode plugin` verifies the embedded target
+repository plugin payload only. In embedded mode it checks
+`.loom/installed-state.json`, `plugins/loom/.codex-plugin/plugin.json`, and
+the embedded `plugins/loom/skills/` payload. Neither mode requires downstream
+top-level `skills/`, and neither mode proves Codex Desktop has registered,
+enabled, or loaded the plugin on the current workstation.
 
 4. Register the repo-local Codex plugin payload with this workstation when the
    repository is used in Codex Desktop:
@@ -47,14 +65,15 @@ loaded the plugin on the current workstation.
    loom host register --host codex --source ./plugins/loom --scope user --apply --json
    ```
 
-Codex should start from `loom-init` after host discovery reloads. The plugin
-directory is the CLI-managed payload in the target repository; its embedded
-`plugins/loom/skills/` directory is the Loom skills payload for plugin mode.
-Downstream top-level `skills/` belongs to the target repository namespace unless
-an explicit future profile owns it. Workstation registration is a user-level Codex Desktop state:
-personal marketplace entry, user plugin cache payload, and Codex config
-enablement. It is reported by `loom doctor` but is not written into target
-repository truth.
+Codex should start from `loom-init` after host discovery reloads. In
+metadata-only adoption, the user-level Codex Loom plugin is the skills provider.
+In embedded payload mode, the target repository plugin directory contains the
+embedded `plugins/loom/skills/` payload. Downstream top-level `skills/` belongs
+to the target repository namespace unless explicit Loom ownership is proven;
+`.agents/skills` is an opt-in compatibility export. Workstation registration is
+a user-level Codex Desktop state: personal marketplace entry, user plugin cache
+payload, and Codex config enablement. It is reported by `loom doctor` but is not
+written into target repository truth.
 
 If Codex Desktop already loaded its plugin list, start a new Codex session or
 restart Codex Desktop after registration. Loom reports this reload requirement;

@@ -7,8 +7,11 @@ This document is the user-facing distribution target for Loom.
 Loom defaults to a single root CLI install model:
 
 - install `@mc-and-his-agents/loom`
-- use `loom host install` to install host plugin payloads into the target repository
-- use `loom host verify`, `loom skills check`, and `loom doctor` to verify the target repository payload
+- use `loom host install` to install host plugin payloads when embedded
+  repository payload mode is explicitly selected
+- use `loom install --mode metadata-only` for default downstream repository adoption
+- use `loom host install --mode plugin` only when an embedded repository payload is explicitly needed
+- use `loom installed-state validate`, `loom host verify`, `loom skills check`, and `loom doctor` to verify the selected repository mode
 - use an explicit host registration command when a workstation, such as Codex Desktop, needs user-level plugin registration
 - start from `loom-init`
 - keep host-specific wiring in CLI-managed adapter surfaces
@@ -19,9 +22,9 @@ evidence only.
 
 Install path status:
 
-- Default: root `loom` CLI install plus CLI-managed host plugin payloads.
+- Default: root `loom` CLI install plus metadata-only repository adoption with a user-level skills provider.
 - Managed payload: the Loom source repository's generated `skills/` surface and
-  downstream host plugin payloads installed or verified by `loom`.
+  explicit embedded downstream host plugin payloads installed or verified by `loom`.
 - Historical: `@mc-and-his-agents/loom-installer` references retained only for deprecated evidence and compatibility records.
 - Unsupported: presenting plugin install, SKILLS install, single-skill install, or installer commands as an independent primary Loom install surface.
 
@@ -33,7 +36,10 @@ Install path status:
 - `skills/<skill-id>` is also a self-contained skill payload.
 - `skills/<skill-id>/loom-package.json` is the machine-readable package metadata location.
 - `skills/<skill-id>/.loom-runtime/` is the package-internal runtime closure.
-- Downstream Codex plugin mode embeds this generated payload at
+- Downstream metadata-only adoption consumes the user-level Codex Loom plugin as
+  its skills provider and does not write `plugins/loom/skills/`,
+  `.agents/skills`, or downstream top-level `skills/` by default.
+- Downstream embedded Codex plugin mode embeds this generated payload at
   `plugins/loom/skills/` and does not write or require downstream top-level
   `skills/` by default.
 
@@ -58,7 +64,8 @@ CLI-managed host payloads must not hide them with a blanket `.loom/` ignore.
 ## CLI-Managed Install
 
 The root CLI install is the default user journey. It exposes the complete Loom
-scenario surface through CLI-managed host payloads:
+scenario surface through user-level providers or explicit CLI-managed host
+payloads:
 
 - root entry: `loom-init`
 - scenario skills: `loom-adopt`, `loom-resume`, `loom-pre-review`, `loom-spec-review`, `loom-review`, `loom-merge-ready`, `loom-handoff`, `loom-retire`
@@ -75,24 +82,28 @@ CLI-managed install does not mean every host uses the same filesystem path. It
 means each host exposes the same Loom scenario skills payload, preserves
 `loom-init` as the default entry, and keeps host-specific discovery, bootstrap,
 tool mapping, and verification behind `loom host ...` and `loom skills ...`
-commands. For downstream Codex plugin mode, that payload lives under
-`plugins/loom/skills/`.
+commands. For downstream metadata-only Codex adoption, the payload comes from
+the user-level Codex Loom plugin provider. For downstream embedded Codex plugin
+mode, that payload lives under `plugins/loom/skills/`.
 
 ## Target Payload Versus Workstation Registration
 
 Loom separates two first-class states:
 
-- Target repository payload install state: the repository-local Loom payload,
-  including `.loom/installed-state.json`, `plugins/loom/.codex-plugin/plugin.json`,
-  and embedded `plugins/loom/skills/` for Codex plugin mode.
+- Target repository adoption state: `.loom/installed-state.json` plus
+  repo-owned governance residue for metadata-only adoption, or the explicit
+  embedded repository payload including `plugins/loom/.codex-plugin/plugin.json`
+  and `plugins/loom/skills/` for Codex plugin mode.
 - Developer workstation host registration state: host-private user state that
   lets a local application discover or enable the payload, such as Codex
   Desktop's personal marketplace entry, user plugin cache payload, and config
   enablement.
 
-`loom host verify --host codex --mode plugin --target . --json` verifies the
-target repository payload. It is not evidence that Codex Desktop on this machine
-has registered, enabled, loaded, or hot-loaded the plugin.
+`loom host verify --host codex --mode metadata-only --target . --json` verifies
+repository adoption metadata. `loom host verify --host codex --mode plugin
+--target . --json` verifies the embedded target repository payload. Neither is
+evidence that Codex Desktop on this machine has registered, enabled, loaded, or
+hot-loaded the plugin.
 
 For Codex Desktop, use the explicit workstation registration surface:
 
