@@ -939,6 +939,63 @@ def assert_downstream_plugin_layout_contract(tmp: Path) -> None:
             raise AssertionError("mixed top-level skills ownership must fail closed to manual review")
 
 
+def assert_metadata_only_adoption_contract(tmp: Path) -> None:
+    target = tmp / "metadata-only-adoption"
+    target.mkdir()
+    _, installed = run_json(
+        ["install", "--target", str(target), "--mode", "metadata-only", "--apply", "--json"],
+        expect=0,
+    )
+    managed_writes = set(installed.get("managed_writes", []))
+    if managed_writes != {".loom/installed-state.json"}:
+        raise AssertionError(f"metadata-only install wrote unexpected artifacts: {sorted(managed_writes)}")
+    for unexpected in ("plugins/loom/skills", ".agents/skills", "skills"):
+        if (target / unexpected).exists():
+            raise AssertionError(f"metadata-only install created {unexpected}")
+
+    state = json.loads((target / ".loom" / "installed-state.json").read_text(encoding="utf-8"))
+    if state.get("repo_payload", {}).get("mode") != "metadata-only":
+        raise AssertionError("metadata-only installed-state did not declare repo_payload.mode")
+    if state.get("skills_provider", {}).get("scope") != "user":
+        raise AssertionError("metadata-only installed-state did not declare user skills provider")
+    layer_paths = {layer.get("installed_path") for layer in state.get("layers", []) if isinstance(layer, dict)}
+    layer_types = {layer.get("layer_type") for layer in state.get("layers", []) if isinstance(layer, dict)}
+    if "plugins/loom/skills" in layer_paths or "plugin-embedded-skills" in layer_types:
+        raise AssertionError("metadata-only installed-state declared embedded plugin skills")
+    if "workstation:codex-loom-plugin" not in layer_paths or "user-level-skills-provider" not in layer_types:
+        raise AssertionError("metadata-only installed-state did not model user-level skills provider")
+
+    _, validate = run_json(["installed-state", "validate", "--target", str(target), "--json"], expect=0)
+    if validate.get("runtime_state") != "ready":
+        raise AssertionError("metadata-only installed-state validate did not pass")
+
+    _, host_verify = run_json(["host", "verify", "--host", "codex", "--mode", "metadata-only", "--target", str(target), "--json"], expect=0)
+    if host_verify.get("verifies") != "repository-adoption-metadata":
+        raise AssertionError("metadata-only host verify did not verify repository adoption metadata")
+    host_paths = {check["path"]: check["status"] for check in host_verify.get("checks", [])}
+    if host_paths.get(".loom/installed-state.json") != "pass":
+        raise AssertionError("metadata-only host verify did not check installed-state")
+    for absent in ("plugins/loom/skills", ".agents/skills", "skills"):
+        if host_paths.get(absent) != "pass":
+            raise AssertionError(f"metadata-only host verify did not treat absent {absent} as intentional")
+
+    _, skills_check = run_json(["skills", "check", "--target", str(target), "--json"], expect=0)
+    metadata_check_output = json.loads(skills_check["checks"][0]["stdout"])
+    skill_check_paths = {check["path"]: check["status"] for check in metadata_check_output}
+    if skill_check_paths.get("plugins/loom/skills") != "pass" or skill_check_paths.get("skills") != "pass":
+        raise AssertionError("metadata-only skills check required a repo skills payload")
+
+    _, detected = run_json(["detect", "--target", str(target), "--json"], expect=0)
+    if detected["classification"] != "current":
+        raise AssertionError("metadata-only target was not classified as current")
+
+    plugin_payload = target / "plugins" / "loom" / "skills"
+    plugin_payload.mkdir(parents=True)
+    status, polluted_verify = run_json(["host", "verify", "--host", "codex", "--mode", "metadata-only", "--target", str(target), "--json"])
+    if status == 0 or polluted_verify.get("result") != "block":
+        raise AssertionError("metadata-only host verify did not block unexpected embedded skills payload")
+
+
 def valid_state(target: Path) -> dict[str, Any]:
     return {
         "schema_version": "loom-installed-state/v2",
@@ -3363,6 +3420,7 @@ def main() -> int:
             raise AssertionError("unknown graph edge endpoint did not fail closed")
         assert_legacy_fixture_contract(tmp)
         assert_downstream_plugin_layout_contract(tmp)
+        assert_metadata_only_adoption_contract(tmp)
 
     print("cli contract checks passed")
     return 0
