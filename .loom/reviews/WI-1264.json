@@ -1,0 +1,44 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1264",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review for WI-1264 at c8733a1e: regression surface contract docs freeze taxonomy, minimum evidence schema, and fast/full validation policy only; diff remains limited to WI-1264 carriers, formal suite not_applicable locator, and harness docs cross-links; no runtime behavior, inventory, implementation split, release, or fake minimal suite artifacts were introduced. Validation passed: git diff --check; fact-chain for WI-1264; suite validate result=not_applicable with no blocking gaps; shadow-parity blocking pass; carrier refresh dry-run shows only the prior stale review.",
+  "reviewer": "codex-main",
+  "reviewed_head": "c8733a1ee469009256608bf106a4c3f587abf4a0",
+  "reviewed_validation_summary": "`git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1264; `python3 tools/loom.py suite validate --target . --item WI-1264 --json` returned `result=not_applicable` with no blocking gaps and valid suite-level rationale.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1264.md",
+    "recovery_entry": ".loom/progress/WI-1264.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "unavailable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github check-runs read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/commits/main/check-runs\": EOF; github rulesets read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/rulesets\": EOF",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_control_plane",
+        "error_count": 2
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  }
+}
