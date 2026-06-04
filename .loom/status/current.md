@@ -11,21 +11,21 @@
 - Review Entry: .loom/reviews/WI-1239.json
 - Validation Entry: git diff --check; tools/loom.py help --json; PR CI.
 - Closing Condition: PR #1300 is merged to main, #1239 is closed with contract evidence, and follow-up global-cli provider implementation issues remain explicitly out of scope.
-- Current Checkpoint: merge
-- Current Stop: Merge checkpoint inputs are assembled for the docs-only global CLI provider contract batch: build checkpoint passes, fact-chain, suite not_applicable, command surface, shadow parity, runtime carrier refresh dry-run, targeted bootstrap-regression, and current-head review evidence are ready for PR #1300 hosted checks.
-- Next Step: Push the refreshed WI-1239 head to PR #1300, rerun local/hosted pr-gate against the pushed head, and merge once hosted checks pass.
+- Current Checkpoint: closed
+- Current Stop: PR #1300 merged to main at 2026-06-04T20:14:25Z with merge commit 1676694c1f94f7bb384abbd6f9f890e3704d6729; issue #1239 closed at 2026-06-04T20:16:35Z; local pr-gate and hosted release-judgment, loom-pr-merge-gate, node-installer-pr-gate, and loom-check passed before merge.
+- Next Step: None; WI-1239 is terminal and retained only as global CLI runtime provider contract evidence for the #1238 implementation sequence.
 - Blockers: None
-- Latest Validation Summary: `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1239; `python3 tools/loom.py suite validate --target . --item WI-1239 --json` returned `result=not_applicable` with no blocking gaps and valid suite-level rationale; `python3 tools/loom.py help --json` returned a readable command surface; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed; `python3 tools/check_cli_contract.py` passed; `python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run` returned `result=pass` with empty `refresh_needed`; `python3 tools/loom_check.py --profile source --source-surface bootstrap-regression .` passed.
-- Recovery Boundary: Keep this PR limited to WI-1239 carriers, formal suite not_applicable locator, global-cli provider contract documentation, adoption documentation, README contract pointers, release-judgment checker alignment for not_applicable suite consumption, and validation evidence. Do not change installed-state/doctor/verify/repair behavior, migration behavior, plugin registration behavior, runtime execution semantics, release evidence, or unrelated root Loom state.
-- Current Lane: pre-review/global-cli-provider-contract
+- Latest Validation Summary: Post-merge closeout sync validation passed `git diff --check`, `python3 tools/loom.py fact-chain --target . --json`, and `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; pre-merge PR #1300 passed local pr-gate and hosted required checks on head 96b0c851ecf73ffa775ce5c7c3f4b0fec0b0a35d before merge.
+- Recovery Boundary: Terminal closeout carrier only. Do not resume WI-1239 implementation here; installed-state, doctor/verify, migration, repair, and downstream runtime work continue through separate #1238 follow-up issues.
+- Current Lane: terminal-closeout
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: PR #1300 validation section and hosted CI
-- Lane Entry: pre-review/global-cli-provider-contract
+- Verification Entry: PR #1300 local pr-gate, hosted required checks, and merge commit 1676694c1f94f7bb384abbd6f9f890e3704d6729
+- Lane Entry: terminal-closeout
 
 ## Sources
 
