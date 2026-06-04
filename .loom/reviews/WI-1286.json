@@ -6,7 +6,7 @@
   "summary": "Post-merge closeout sync review for WI-1286 at 4760dec8: diff only terminalizes WI-1286 recovery/status carrier after PR #1299 merged and refreshes closeout/merge-ready shadow hashes. It does not change review-head-binding docs, runtime code, downstream repository rules, release scope, or A-D PR branches.",
   "reviewer": "codex-main",
   "reviewed_head": "4760dec89856fff7d2c840d7d551b21ebacb29fb",
-  "reviewed_validation_summary": "Post-merge closeout sync at head 4760dec89856fff7d2c840d7d551b21ebacb29fb passed `git diff --check`, `python3 tools/loom.py fact-chain --target . --json`, and `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`.",
+  "reviewed_validation_summary": "Post-merge closeout sync validation passed `git diff --check`, `python3 tools/loom.py fact-chain --target . --json`, and `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
