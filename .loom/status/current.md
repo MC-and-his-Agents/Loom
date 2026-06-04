@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1304.json
 - Validation Entry: git diff --check; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py governance-profile status --target /Users/mc/dev/Loom-worktrees/1264-regression-surface-contract --host github; python3 tools/loom_check.py --profile source --source-surface bootstrap-regression .
 - Closing Condition: PR for #1304 is merged and PR-A can consume docs-only not_applicable maturity after rebasing onto main.
-- Current Checkpoint: merge
-- Current Stop: Local implementation, fixture sync, fact-chain, suite, review, metadata, release-judgment contract check, and pr-gate inputs are ready for PR #1305 merge-gate consumption.
-- Next Step: Refresh WI-1304 current-head review after the release-judgment fix, push PR #1305, wait for hosted checks, then run merge-ready/controlled merge readback before returning to PR-A.
-- Blockers: None
-- Latest Validation Summary: Passed on 2026-06-04 at head a463c31d33c6188193ede3e7dae9a2fca6b6f57b: git diff --check; python3 -m py_compile tools/check_cli_contract.py; python3 tools/check_cli_contract.py; python3 tools/loom.py suite validate --target . --item WI-1304 --json; python3 tools/loom.py suite evidence validate --target . --item WI-1304 --json; python3 tools/loom.py suite carrier validate --target . --item WI-1304 --json; python3 .loom/bin/loom_flow.py fact-chain --target .; python3 .loom/bin/loom_flow.py shadow-parity --target .; Pending after review refresh: carrier refresh dry-run, pr-gate, hosted CI.
-- Recovery Boundary: Keep #1304 limited to governance maturity consumption of docs-only not_applicable suite path decisions, runtime copy/hash sync, and release-judgment contract-check fixture isolation. Do not change suite validation, PR head binding, implementation review, CI, fact-chain, closeout, or A-D contract PR content.
-- Current Lane: gate-unblocker/docs-only-governance-maturity
+- Current Checkpoint: local gates pass after generated skills surface sync
+- Current Stop: ready for current-head review record
+- Next Step: record WI-1304 implementation review against current head, commit carrier/review, update PR #1305 head metadata, run pr-gate, then wait hosted CI
+- Blockers: none
+- Latest Validation Summary: 2026-06-04 local validation pass: skills_surface check, git diff --check, check_demo_bootstrap_fixture.py, carrier refresh dry-run, loom_check contract-only, and make loom-check all passed after syncing generated skills runtime surface.
+- Recovery Boundary: WI-1304 unblocker only; A-D PR branches remain read-only until #1305 is green or merged
+- Current Lane: merge-ready-prep
 
 ## Runtime Evidence
 
