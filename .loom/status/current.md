@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1264
-- Goal: Freeze the regression surface core contract batch for #1264, #1265, and #1266.
-- Scope: Define the regression bucket and named surface taxonomy, the minimum surface evidence schema, and the fast/full validation policy for the #1255 regression split tree. Ownership is limited to contract documentation, the formal suite `not_applicable` locator, and minimal cross-links in harness documentation for PR #1297. Implementation splits, inventories, release work, and runtime behavior changes remain out of scope.
-- Execution Path: issues #1264/#1265/#1266 -> branch work/1264-regression-surface-contract -> PR #1297 -> CI/review -> merge to main.
+- Item ID: WI-1286
+- Goal: Freeze the review disposition and PR head binding contract for parent #1285.
+- Scope: Define `semantic_review_disposition`, PR head binding, PR gate, merge check/run, closeout sync responsibility boundaries, allowed bypass types, and fail-closed conditions. Runtime implementation for #1287/#1288/#1289, downstream repository rule changes, and gate behavior changes remain out of scope.
+- Execution Path: issue #1286 -> branch work/1286-review-head-binding-contract -> PR #1299 -> CI/review -> merge to main.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1264.md
-- Review Entry: .loom/reviews/WI-1264.json
-- Validation Entry: git diff --check; manual contract readback for taxonomy, evidence schema, and fast/full policy; PR CI.
-- Closing Condition: PR #1297 is merged to main, #1264/#1265/#1266 are closed with contract evidence, and follow-up inventory/implementation issues remain explicitly out of scope.
-- Current Checkpoint: closed
-- Current Stop: PR #1297 merged to main at 2026-06-04T17:29:52Z with merge commit b3d23c40bef7b8f29e5319447ae93ba05ad01472; issues #1264, #1265, and #1266 closed at 2026-06-04T17:29:53Z/17:29:54Z/17:29:54Z; controlled merge and hosted checks passed before closeout sync.
-- Next Step: None; WI-1264 is terminal and retained only as regression surface contract evidence for the #1255 implementation sequence.
+- Recovery Entry: .loom/progress/WI-1286.md
+- Review Entry: .loom/reviews/WI-1286.json
+- Validation Entry: git diff --check; focused rg for review disposition/head-binding contract terms; PR CI.
+- Closing Condition: PR #1299 is merged to main, #1286 is closed with contract evidence, and follow-up gate/runtime implementation issues remain explicitly out of scope.
+- Current Checkpoint: pre-review
+- Current Stop: PR #1299 has the review disposition and PR head binding contract documentation implemented, is rebased on main after #1307, and carries formal WI-1286 suite path and spec review records instead of fake minimal suite artifacts.
+- Next Step: Refresh retained carriers, rerun root-self-governance and PR gate against the pushed head, and consume hosted checks.
 - Blockers: None
-- Latest Validation Summary: Post-merge closeout sync PR #1307 at head 563f5953b0ab6d098a85f1286537197021be9b7b passed `git diff --check`, `python3 tools/loom.py fact-chain --target . --json`, and `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`.
-- Recovery Boundary: Terminal closeout carrier only. Do not resume WI-1264 implementation here; inventory and implementation work continue through separate #1255 follow-up issues.
-- Current Lane: terminal-closeout
+- Latest Validation Summary: `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1286; `python3 tools/loom.py suite validate --target . --item WI-1286 --json` returned `result=not_applicable` with no blocking gaps and valid suite-level rationale; `.loom/reviews/WI-1286.spec.json` approves the docs-only suite path decision at head 382e32d6556eaf77d00c70550b52e3e7b2adc0b1.
+- Recovery Boundary: Keep this PR limited to WI-1286 carriers, formal suite not_applicable locator, review disposition/head-binding contract docs, repo companion boundary wording, and validation evidence. Do not implement #1287/#1288/#1289, change pr-gate/merge-gate runtime behavior, add downstream repository rules, or add fake minimal suite artifacts.
+- Current Lane: pre-review/review-head-binding-contract
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: PR #1297 local pr-gate, controlled merge check, hosted required checks, and merge commit b3d23c40bef7b8f29e5319447ae93ba05ad01472
-- Lane Entry: terminal-closeout
+- Verification Entry: PR #1299 validation section and hosted CI
+- Lane Entry: pre-review/review-head-binding-contract
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1264.md
-- Dynamic Truth: .loom/progress/WI-1264.md
+- Static Truth: .loom/work-items/WI-1286.md
+- Dynamic Truth: .loom/progress/WI-1286.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

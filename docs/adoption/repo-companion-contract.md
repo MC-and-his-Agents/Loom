@@ -173,6 +173,8 @@
 - `host_truth_locators` 只在 `v2` 合法，且只能声明宿主事实源 locator，例如 GitHub Issue、GitHub Project、PR review / guardian、PR metadata 与 issue state
 - `v2` 不改变 `repo_specific_requirements` 与 `specialized_gates` 的既有纪律
 - `v2` 不把 repo runtime state、progress/current stop、review verdict、review summary、validation status、closeout result 或 retained host action result 写入 `repo-interface.json`
+- `v2` 不把 `semantic_review_disposition`、PR head binding verdict、guardian verdict 或
+  post-merge review repair state 写入 `repo-interface.json`
 - 默认治理 scaffold 与缺失 review instruction 的处理策略见 [../methodology/templates/default-governance-scaffold-policy.md](../methodology/templates/default-governance-scaffold-policy.md)
 
 ### 4.3 通用字段纪律
@@ -232,6 +234,9 @@
 - 不得把 `spec_review.md`、`code_review.md` 或任何 repo-specific review instruction 路径硬编码成 Loom 默认查找路径
 - repo-owned instruction 应说明该仓库如何检查 behavior evidence、test evidence 与 fresh verification evidence
 - `review_instruction_locators` 只定位 review instruction，不承载 review verdict、review summary、finding disposition、validation status 或 retained host action result
+- `review_instruction_locators`、repo-owned guardian instruction 与 companion metadata 都不得替代
+  Loom 通用 `semantic_review_disposition`，也不得把 repo-owned guardian verdict 提升为
+  `passed`、`not_applicable` 或 `waived`
 - missing、unreadable 或 unsafe locator 在 mature / deep-existing 仓库中必须 fail closed；轻量仓库必须显式声明 `loom_default` 才能走默认 instruction
 
 ### 4.5 `dynamic_tool_locators`
@@ -675,6 +680,8 @@ external-runtime 迁移路径固定属于 [external-runtime-companion-contract.m
 - `manifest.json` 仍 locator-only
 - `repo-interface.json` 仍不承载运行态、review summary、current stop、validation status 或 host action result
 - `review_instruction_locators` 只承接 repo-owned review instruction 入口，不得承接 review disposition 或 review result
+- repo companion、guardian adapter 或 repo-specific wrapper 只能提供附加 instruction、mirror 或 evidence；
+  不得替代 Loom 通用 `semantic_review_disposition` 与 PR head binding
 - `dynamic_tool_locators` 只承接 dynamic tool availability locator，不得承接 attempt-time result 或 host action result
 - `policy_locators` 只承接 approval / sandbox policy read locator，不得承接权限请求、sandbox mutation 或 host action result
 - `release_targets` 只承接目标仓库 release/version authored truth locator，不得承接 release verdict、closeout result 或 host action result

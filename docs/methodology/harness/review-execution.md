@@ -32,6 +32,10 @@ Loom 把 review 分成三层：
 - fresh verification evidence
   - 检查 behavior evidence / test evidence 是否绑定当前 `reviewed_head` 与当前验证摘要
 
+在这条证据链里，Loom 对 merge 前语义审查结论冻结统一术语
+`semantic_review_disposition`。它不是第二份 artifact，也不是新的状态机；它只是
+单一 `review_entry` review record 内、可被后续 gate 消费的稳定处置边界。
+
 Full spec path 下，正式 review 还必须消费 pre-review 已暴露的 gate-chain
 输入：
 
@@ -213,6 +217,9 @@ review record 至少应包含：
 其中：
 
 - `findings` 是正式审查结论的权威数组
+- `semantic_review_disposition` 只能从同一 `review_entry` review record 派生读取，
+  不得由 PR body、CI、GitHub review comment、guardian、shadow review、runtime
+  review evidence 或 repo companion 直接 author
 - 每条 finding 至少应包含 `id`、`summary`、`severity`、`rebuttal`、`disposition`
 - `severity` 当前稳定值为 `warn`、`block`
 - `rebuttal` 当前稳定值为 `null` 或非空字符串
@@ -220,6 +227,8 @@ review record 至少应包含：
 - `disposition.status = accepted` 表示 finding 已确认需要处理，必须由后续实现、验证或 follow-up 承接
 - `disposition.status = rejected` 必须包含可审查理由，并且不得遮蔽仍然缺失的 behavior/test evidence
 - `disposition.status = deferred` 必须绑定后续事项或显式非当前范围理由，不得作为 merge-ready 默认放行
+- finding-level `disposition` 只表示单条 finding 的处理状态；它不得替代 review-level
+  `semantic_review_disposition`
 - `blocking_issues` / `follow_ups` 只是从 `findings` 投影出的兼容字段，不构成第二真相源
 - `consumed_inputs.engine_adapter`、`consumed_inputs.engine_evidence`、`consumed_inputs.normalized_findings`
   - 只记录 evidence 来源，不构成第二 authored truth
@@ -236,6 +245,41 @@ review record 至少应包含：
 - `consumed_inputs.consistency_analysis`
   - 只记录 classification、blocking/advisory 结论、remediation direction 与
     source locator，不构成第二 authored truth
+
+### 3.1 `semantic_review_disposition` 稳定合同
+
+`semantic_review_disposition` 是 Loom merge 前消费的稳定语义审查处置合同。当前只允许：
+
+- `required`
+  - 当前变更必须先形成针对当前受审对象的 authored semantic review disposition；缺失时
+    后续 gate 必须 fail closed
+- `passed`
+  - 当前 PR head 已有 fresh authored semantic review approval，可继续被
+    `pr-gate`、`merge-ready` 与 `controlled merge` 消费
+- `not_applicable`
+  - 当前事项在明确 change class 下无需实现型语义 review，但必须留下原因、替代验证与
+    authority；缺任一字段都按 review 缺失处理
+- `waived`
+  - 当前事项经显式 authority 批准跳过默认语义 review；它不是隐式 bypass，必须留下
+    可审查 authority、原因和替代验证边界
+
+稳定约束：
+
+- `required`、`passed`、`not_applicable`、`waived` 是 merge 前可消费的唯一状态集合
+- `pending`、`commented`、`ci_passed`、`guardian_green`、`post_merge_recorded` 或其他
+  宿主/工具状态都不得映射成 `passed`
+- `not_applicable` 与 `waived` 至少必须绑定：
+  - `reason`
+  - `change_class`
+  - `substitute_validation`
+  - `authority`
+- `authority` 只说明谁批准了当前 disposition，不把 authority object 本身提升成第二真相源
+- `substitute_validation` 只说明替代验证为何足以覆盖当前 bypass；它不能把 CI success、
+  guardian 结果或 repo companion signal 升级成 authored semantic approval
+- 若 formal review 已要求实现型语义审查，则 `not_applicable` 与 `waived` 不得用来掩盖
+  缺失的 behavior evidence、test evidence、fresh verification evidence 或 stale review
+- `semantic_review_disposition` 只能存在于同一 review record 内；不得再创建第二份
+  `semantic_review_disposition` artifact、carrier 或状态机
 
 ## 4. repeated blocker 与 root cause
 
@@ -268,6 +312,8 @@ subagent 输出只能作为 review 输入证据。主执行者必须先把它整
 - `decision: fallback` 按 `fallback_to` 返回 `fallback`
 - 如需读取阻断或后续事项，只能优先消费同一 review record 内的 `findings`
 - 如需读取 review disposition，只能消费同一 review record 中的 `findings[].disposition`
+- 如需读取 merge 前语义审查处置，只能消费同一 review record 派生出的
+  `semantic_review_disposition`
 
 若 review record 中的 full suite / evidence-map / consistency-analysis
 backlink 缺失、stale、head mismatch，或指向的 blocking consistency gap 尚未被
@@ -299,5 +345,5 @@ backlink 缺失、stale、head mismatch，或指向的 blocking consistency gap 
 - 不把 review 结论写回 recovery entry 或 status surface
 - 不让 PR 模板充当正式 review 真相
 - 不让 merge-ready 替代正式 review
-- 不为 rebuttal / disposition 再创建第二份 review artifact 或新状态机
+- 不为 rebuttal / disposition / `semantic_review_disposition` 再创建第二份 review artifact 或新状态机
 - 不把 Loom 扩写成 multi-engine marketplace

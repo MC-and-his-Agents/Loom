@@ -12,6 +12,8 @@ It answers one question:
 
 - Does the current PR head have a fresh authored Loom review approval that `merge-ready` can consume?
 
+The binding subject is always the current PR head, not local checkout `HEAD` as an indirect substitute.
+
 It does not run semantic review, does not inspect raw reviewer transcripts, and does not infer approval from CI or GitHub check success.
 
 ## 2. Required Inputs
@@ -25,6 +27,7 @@ The gate must be able to read:
 - current Loom fact chain for that Work Item
 - `work_item.review_entry`
 - authored review record at `review_entry`
+- authored `semantic_review_disposition` derived from that same review record
 - current `latest_validation_summary`
 - local checkout `HEAD`
 - host required-check and branch-protection readback when running in controlled merge mode
@@ -41,6 +44,21 @@ If the PR body and CLI argument disagree about the Work Item, the gate fails clo
 
 Only the authored Loom review record referenced by `review_entry` can satisfy semantic approval.
 
+The gate must treat `semantic_review_disposition` as the stable approval boundary for the current PR head:
+
+- `required`
+  - approval is still missing; gate must block
+- `passed`
+  - approval may satisfy the gate if every other freshness and binding condition passes
+- `not_applicable`
+  - only consumable when the same authored review record carries machine-readable
+    `reason`、`change_class`、`substitute_validation`、`authority`
+- `waived`
+  - only consumable when the same authored review record carries machine-readable
+    `reason`、`change_class`、`substitute_validation`、`authority`
+
+`not_applicable` and `waived` are bypass-with-proof states, not silent skips.
+
 The following can be retained as evidence but cannot satisfy approval:
 
 - raw Codex App review output
@@ -56,6 +74,8 @@ The minimum pass condition is:
 - `review_entry` exists and is readable
 - review record schema is `loom-review/v1`
 - `decision == allow`
+- `semantic_review_disposition == passed`, or the same authored review record proves
+  `not_applicable` / `waived` with valid reason, change class, substitute validation, and authority
 - `reviewed_head` covers the current PR head
 - `reviewed_validation_summary` equals current `latest_validation_summary`
 - `kind` is `general_review` or `code_review`
@@ -107,6 +127,8 @@ The retained envelope is fresh only when the current PR readback still reports t
 - `pr_body_summary_satisfies_approval`
 - `ci_success_satisfies_approval`
 - `github_review_comments_satisfy_approval`
+- `repo_companion_satisfies_approval`
+- `guardian_satisfies_approval`
 
 ## 5. Failure Taxonomy
 
@@ -119,11 +141,15 @@ The gate must fail closed for:
 - `review_missing`
 - `review_schema_invalid`
 - `review_not_approved`
+- `semantic_review_disposition_missing`
+- `semantic_review_disposition_invalid`
 - `review_stale`
 - `validation_summary_drift`
 - `head_binding_drift`
 - `checkout_head_drift`
 - `raw_evidence_bypass`
+- `post_merge_review_bypass`
+- `ci_only_merge_bypass`
 - `pr_metadata_preflight_failed`
 - `host_enforcement_unverified`
 - `retained_result_missing`
@@ -131,6 +157,8 @@ The gate must fail closed for:
 - `retained_result_stale`
 
 `raw_evidence_bypass` means raw or shadow evidence is present without an authored `review_entry` approval. This is always a block, never a pass.
+
+`post_merge_review_bypass` means the review record or disposition was authored only after the merge-relevant PR head had already advanced or merged. `ci_only_merge_bypass` means CI / required checks passed without a consumable authored semantic review disposition for the same PR head.
 
 `pr_metadata_preflight_failed` means a repo companion declared a blocking PR metadata machine carrier and the PR body machine block is malformed, missing required fields, or required but absent. The gate must report parser diagnostics instead of collapsing the failure into generic missing metadata fields.
 
@@ -171,3 +199,4 @@ Bare `gh pr merge` bypasses Loom's semantic review approval bridge unless the ho
 - Do not copy a downstream repository's guardian implementation into Loom core.
 - Do not require GitHub human review approval as a substitute for Loom `review_entry`.
 - Do not let raw review evidence or CI success author semantic approval.
+- Do not let repo companion, guardian, or any repo-owned wrapper replace Loom's generic `semantic_review_disposition` boundary.
