@@ -1,0 +1,43 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1229",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review for WI-1229 at 2e564e2460f8067f97805a417a1c209b03bbfd78: idle fact-chain/status contract docs freeze canonical active, terminal, and idle execution-state semantics, no-active-item carrier behavior, provenance and retained-item boundaries, and host/governance status taxonomy while staying limited to WI-1229 carriers, suite not_applicable locator, contract documentation, taxonomy boundary documentation, and validation evidence. The diff does not introduce terminal metadata writing, command split implementation, carrier closeout sync behavior, repair/apply behavior, runtime status/fact-chain implementation, release behavior, or fake minimal suite artifacts.",
+  "reviewer": "codex-main",
+  "reviewed_head": "2e564e2460f8067f97805a417a1c209b03bbfd78",
+  "reviewed_validation_summary": "`git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1229; `python3 tools/loom.py suite validate --target . --item WI-1229 --json` returned `result=not_applicable` with no blocking gaps and valid suite-level rationale; `python3 tools/check_loom_check_runtime_regressions.py` passed; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed; `python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run` returned `result=pass` with empty `refresh_needed`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1229.md",
+    "recovery_entry": ".loom/progress/WI-1229.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  }
+}
