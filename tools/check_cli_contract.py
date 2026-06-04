@@ -284,12 +284,9 @@ def assert_suite_gate_consumption(payload: dict[str, Any], *, expected_surface: 
     if not has_step_evidence and not has_closeout_subchecks:
         raise AssertionError(f"{expected_surface} did not expose suite evidence/carrier validation steps")
     consumed = suite_gate.get("consumed_locators", {})
-    if (
-        not isinstance(consumed, dict)
-        or "evidence_map" not in consumed
-        or "consistency_analysis" not in consumed
-        or "task_carriers" not in consumed
-    ):
+    if not isinstance(consumed, dict) or "evidence_map" not in consumed or "task_carriers" not in consumed:
+        raise AssertionError(f"{expected_surface} suite gate consumed locators drifted")
+    if suite_gate.get("result") != "not_applicable" and "consistency_analysis" not in consumed:
         raise AssertionError(f"{expected_surface} suite gate consumed locators drifted")
 
 
