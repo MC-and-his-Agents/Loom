@@ -1,0 +1,50 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1239",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review for WI-1239 at cdc5b88a29682f88bd0ad69803cdb51433c0a306: global CLI runtime provider contract docs freeze provider taxonomy, authority boundaries, metadata-only adoption relationship, compatibility mode, and migration boundary wording, with narrow release-judgment checker alignment for not_applicable suite consumption, refreshed runtime carrier provenance, and synchronized validation/status carriers. Diff remains limited to WI-1239 carriers, formal suite not_applicable locator, provider/adoption documentation, README contract pointers, checker validation alignment, runtime carrier provenance, and validation evidence; no installed-state/doctor/verify/repair behavior, migration execution, plugin registration behavior, runtime execution semantics, release behavior, or fake minimal suite artifacts were introduced.",
+  "reviewer": "codex-main",
+  "reviewed_head": "cdc5b88a29682f88bd0ad69803cdb51433c0a306",
+  "reviewed_validation_summary": "`git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1239; `python3 tools/loom.py suite validate --target . --item WI-1239 --json` returned `result=not_applicable` with no blocking gaps and valid suite-level rationale; `python3 tools/loom.py help --json` returned a readable command surface; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed; `python3 tools/check_cli_contract.py` passed; `python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run` returned `result=pass` with empty `refresh_needed`; `python3 tools/loom_check.py --profile source --source-surface bootstrap-regression .` passed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1239.md",
+    "recovery_entry": ".loom/progress/WI-1239.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_path_decision": ".loom/specs/WI-1239/spec.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}

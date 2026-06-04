@@ -58,6 +58,12 @@ repository plugin payload: `.loom/installed-state.json`,
 top-level `skills/` in plugin mode, and they do not prove that Codex Desktop on
 the current workstation has registered, enabled, or loaded the plugin.
 
+When a repository still carries repo-local wrappers or vendored runtime residue
+such as `.loom/bin`, treat those surfaces as repository/runtime-carrier facts,
+not as automatic proof of the active provider. The active provider may instead
+be the global `loom` CLI runtime or a workstation/user-level skills provider,
+and Loom diagnostics must keep those boundaries explicit.
+
 On a second development machine for an already adopted repository, register the
 repo-local plugin payload with the local Codex Desktop workstation explicitly:
 
@@ -73,6 +79,11 @@ Codex marketplace entry, user plugin cache payload, and Codex config enablement.
 It does not write target repository truth. Start a new Codex session, or restart
 Codex Desktop if the plugin list was already loaded; Loom does not claim that an
 existing session hot-loads newly registered plugins.
+
+This means compatibility mode stays diagnosable: repo-local wrapper residue,
+global CLI runtime availability, and workstation registration are separate
+states, even when the same adopted repository depends on all three during a
+migration window.
 
 Use `npx @mc-and-his-agents/loom ...` only as an ephemeral way to run the same root `loom` CLI.
 

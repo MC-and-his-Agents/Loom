@@ -1,8 +1,9 @@
 # loom-installed-state/v2
 
 `loom-installed-state/v2` describes which Loom layers a target repository consumes. It is installation metadata, not backlog truth and not governance truth.
-Artifact type, scope, authority, adoption mode, and skills granularity terms are
-defined by [installation-taxonomy.md](./installation-taxonomy.md).
+Artifact type, scope, authority, adoption mode, skills granularity, and
+compatibility-mode terms are defined by
+[installation-taxonomy.md](./installation-taxonomy.md).
 
 The canonical target path is:
 
@@ -80,6 +81,27 @@ When suite command support is not declared, `loom doctor` does not require the
 suite surface. When support is declared, `loom doctor` compares those command
 names with `loom help --json` and fails closed if the command matrix is missing
 commands or exposes the wrong domain/status/JSON capability.
+
+Layers may also declare provider dependencies when the repository consumes an
+external runtime/provider surface without owning it:
+
+```json
+{
+  "provider_requirements": {
+    "global_cli": {
+      "required": true,
+      "provider": "loom-cli",
+      "authority": "workstation",
+      "compatibility_mode_allowed": true
+    }
+  }
+}
+```
+
+This dependency expresses a target-state boundary only: it allows diagnostics,
+repair planning, and verification to explain that the repository depends on the
+global CLI runtime provider. It does not make the workstation provider state
+part of repository truth.
 
 Targets may separately declare verify/profile requirements:
 
@@ -166,6 +188,14 @@ is absent. `doctor`, `host verify`, and `skills check` report missing
 workstation registration as a provider/workstation gap, not as missing
 repository payload.
 
+When metadata-only repositories also depend on the global CLI runtime provider,
+installed-state must keep the two dependencies separate:
+
+- repository truth records the dependency in metadata;
+- workstation/user plugin registration remains a workstation-truth check;
+- global CLI runtime availability remains a provider/runtime check;
+- neither check may be rewritten as embedded repository payload drift.
+
 ### Embedded Payload Mode
 
 Embedded payload mode models Loom skills as a repository plugin payload:
@@ -210,6 +240,85 @@ automatically.
 `.agents/skills` is likewise a compatibility export surface, not a default Loom
 downstream layer.
 
+## Repo-Local Wrapper And Global CLI Provider
+
+Installed-state may describe repositories that still carry a repo-local wrapper
+while the active runtime/provider is the global CLI:
+
+```json
+{
+  "provider_requirements": {
+    "global_cli": {
+      "required": true,
+      "provider": "loom-cli",
+      "authority": "workstation",
+      "compatibility_mode_allowed": true
+    }
+  },
+  "layers": [
+    {
+      "id": "repo-local-wrapper",
+      "layer_type": "repo-local-wrapper",
+      "installed_path": ".loom/bin",
+      "runtime_state": "ready",
+      "upgrade_eligibility": "current",
+      "provides": ["compatibility starter aliases"],
+      "consumes": ["global-cli-provider"]
+    },
+    {
+      "id": "global-cli-provider",
+      "layer_type": "global-cli-runtime-provider",
+      "installed_path": "workstation:loom-cli",
+      "runtime_state": "unknown",
+      "upgrade_eligibility": "unknown",
+      "provides": ["loom command semantics", "runtime provider"],
+      "consumes": []
+    }
+  ],
+  "installation_graph": {
+    "layers": ["repo-local-wrapper", "global-cli-provider"],
+    "edges": [
+      {"from": "repo-local-wrapper", "to": "global-cli-provider", "relationship": "delegates-to-provider"}
+    ]
+  }
+}
+```
+
+This mode means:
+
+- `.loom/bin` may remain present as a compatibility carrier;
+- the wrapper does not become the authority for runtime/provider version truth;
+- the global CLI provider remains external workstation/user state;
+- diagnostics must explain whether a failure belongs to wrapper residue,
+  provider availability, or repository metadata drift.
+
+Detected `.loom/bin` by itself is still only a hint. It becomes meaningful only
+when installed-state explicitly models a current, retained, audit, obsolete, or
+compatibility-only carrier state.
+
+## Compatibility Mode
+
+Compatibility mode is valid installed-state only when the metadata says so. It
+is not inferred from legacy residue alone.
+
+Typical compatibility-mode cases:
+
+- a repo-local wrapper remains while execution is delegated to the global CLI
+  runtime provider;
+- `.loom/bin` is retained for audit or gate parity but is not the active
+  provider;
+- workstation/provider registration is required but separate from repository
+  truth.
+
+Compatibility mode must stay diagnosable:
+
+- `installed-state validate` checks that repository metadata is internally
+  coherent;
+- `doctor` explains whether the gap is repository truth, provider/runtime, or
+  workstation registration;
+- `verify` consumes the same boundary and must not silently convert provider
+  gaps into repository payload success.
+
 ## CLI Semantics
 
 ```bash
@@ -221,6 +330,17 @@ python3 tools/loom.py installed-state export --target <repo> --json
 All three commands fail closed when metadata is missing, unreadable, or invalid. Missing metadata may include `legacy_surface_hints` such as `.loom/bin`, `.agents/skills`, `skills/registry.json`, plugin manifests, or old installer status files. Those hints are diagnostic input for `loom detect`, `loom doctor`, and `loom repair plan`; they are not treated as valid installed-state by themselves.
 
 `loom detect --target <repo> --json` may report legacy or mixed surfaces even when installed-state is missing. This is a diagnostic pass, not an install-state pass. `loom doctor` turns missing, invalid, legacy, or mixed surfaces into `result: block` with `fallback_to: ["loom repair plan"]`. `loom repair plan` is non-mutating. `loom repair apply` remains fail-closed until a later Work Item approves write ownership and rollback semantics.
+
+The target-state boundary for migration, `doctor`, and `verify` is therefore:
+
+- repository truth must explicitly model whether a repo-local wrapper is
+  current, retained, audit-only, obsolete, or compatibility-only;
+- repository truth may declare a dependency on the global CLI runtime provider
+  or a workstation/user-level skills provider without owning either one;
+- stale `.loom/bin`, mixed legacy surfaces, or missing provider state remain
+  diagnosable blocking outputs until the declared target state is satisfied;
+- diagnostics must identify which authority owns the next action instead of
+  collapsing all failures into generic repository drift.
 
 ## Work Item Consumption
 

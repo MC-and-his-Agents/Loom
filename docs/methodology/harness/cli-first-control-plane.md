@@ -10,7 +10,13 @@ Loom's CLI owns executable operating semantics. Skills, plugins, installer shims
 | `SKILLS` | Agent-facing scenario entry and host discovery text. They call CLI commands or consume CLI JSON. | Core algorithms, upgrade truth, or hidden state transitions. |
 | Plugins / host adapters | Native host discovery, tool mapping, bootstrap wiring, and adapter version metadata. | Installation graph truth or governance truth. |
 | `.loom/` | Repo execution facts: companion contracts, work items, review evidence, status, checkpoints, and installed-state metadata when adopted. | Global Loom distribution truth or external backlog truth. |
+| Global CLI runtime provider | Workstation/user executable plus shipped runtime | Provider/runtime version provenance, command entry, and CLI-owned fallback semantics. | Repository truth, repo-owned governance residue, or workstation registration truth. |
 | `loom-installer` | Legacy compatibility shim and adapter-managed install path. | Primary command semantics after CLI-first adoption. |
+
+The repo-local wrapper is a compatibility surface inside this split. It can
+expose repo-local starter aliases or delegated runtime entrypoints, but it does
+not replace the global CLI runtime provider as the owner of `loom` command
+semantics.
 
 ## Command Contract
 
@@ -29,6 +35,11 @@ Reserved commands must return structured JSON with:
 - `fallback_to`
 
 They must not silently call an unrelated legacy wrapper. This keeps future command names stable without pretending that later phase work is complete.
+
+Delegated commands are compatibility routes only. A delegated command may call a
+repo-local wrapper when that wrapper is the current compatibility carrier, but
+the wrapper must preserve CLI-owned fail-closed behavior and must not silently
+reinterpret stale vendored runtime files as the active provider.
 
 ## JSON Output
 
@@ -74,6 +85,14 @@ This contract is the stable output of #898 and #900. Later Work Items may move r
 - `mixed-legacy`
 
 Detected surfaces are evidence, not authority by themselves. Legacy `.loom/bin`, repo-local `.agents/skills`, generated skills registries, plugin manifests, single-skill packages, installer status files, and symlinked surfaces must not be promoted to valid installed-state unless `loom-installed-state/v2` validates.
+
+When a repository carries both repo-local wrapper residue and a declared global
+CLI runtime provider dependency, diagnostics must keep the two facts separate:
+
+- wrapper presence is repository/runtime-carrier evidence;
+- provider availability is workstation/user-level provider evidence;
+- either one may block independently;
+- neither one silently overrides installed-state authority.
 
 `loom doctor --target <repo> --json` consumes detection plus installed-state validation. It passes only when versioned installed-state is valid and no blocking legacy surface remains.
 
@@ -121,6 +140,14 @@ The delivery layer is the CLI-owned install-state control plane:
 
 Installer-managed host adapter installs may still be delegated through `loom host install|upgrade|verify`; top-level delivery commands own the repository installed-state boundary and do not infer host lifecycle mutations.
 
+Delivery commands therefore freeze the following provider boundary:
+
+- repo-local wrappers and vendored runtime carriers may be diagnosed,
+  compared, retained, or retired;
+- the global CLI runtime provider may be required, blocked, or incompatible;
+- command semantics still belong to the CLI, not to whichever residue was
+  detected first inside the repository.
+
 ## Skills Commands
 
 `loom skills list`, `loom skills generate`, `loom skills sync`, `loom skills check`, `loom skills doctor`, `loom skills package`, and `loom skills release-check` implement the #895 generated SKILLS surface with `loom-skills-surface/v1`.
@@ -139,6 +166,12 @@ These commands keep the CLI as the user-facing control plane while preserving th
 - `loom profile ...` delegates to governance-profile status, upgrade-plan, and upgrade. Upgrade remains dry-run by default through the underlying runtime.
 
 Fail-closed outputs cover missing operations, unsupported adoption/profile operations, unreadable target carriers, and invalid delegated JSON.
+
+If the delegated runtime is reached through a repo-local wrapper, that path is a
+diagnosable compatibility mode. The wrapper may remain current for migration or
+starter-alias reasons, but it must not hide whether the repository ultimately
+depends on vendored runtime, embedded payload, workstation registration, or the
+global CLI runtime provider.
 
 ## Fact Chain And Gate Commands
 
