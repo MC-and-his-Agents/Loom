@@ -346,6 +346,11 @@ REPO_INTERFACE_GATE_TYPES = {
     "closeout",
 }
 REPO_INTERFACE_CONTEXT_TYPES = {"string", "integer", "number", "boolean"}
+REPO_METADATA_MACHINE_CARRIER_TYPES = {"pr_body_html_comment_json"}
+REPO_METADATA_MACHINE_CARRIER_SCHEMAS = {"loom-repo-pr-metadata/v1"}
+REPO_METADATA_MACHINE_CARRIER_MIGRATION_MODES = {"advisory_legacy", "dual_read", "required"}
+REPO_METADATA_MACHINE_CARRIER_PREFLIGHT_SURFACES = {"pre_review", "review", "merge_ready"}
+REPO_METADATA_MACHINE_CARRIER_FAILURE_MODES = {"blocking", "advisory"}
 REPO_INTERFACE_MANIFEST_KEYS = {"schema_version", "companion_entry", "repo_interface"}
 REPO_INTERFACE_V1_KEYS = {"schema_version", "companion_entry", "repo_specific_requirements", "specialized_gates"}
 REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {
@@ -357,6 +362,21 @@ REPO_INTERFACE_V2_KEYS = REPO_INTERFACE_V1_KEYS | {
     "hook_locators",
     "release_targets",
     "host_truth_locators",
+    "advanced_lint_locators",
+}
+ADVANCED_LINT_TYPES = {"architecture_boundary", "bounded_context", "legacy_access", "host_state_access", "companion_boundary"}
+ADVANCED_LINT_RESULT_SCHEMA = "loom-governance-lint-result/v1"
+FORBIDDEN_COMPANION_TRUTH_FIELDS = {
+    "runtime_state",
+    "review_verdict",
+    "review_decision",
+    "validation_status",
+    "merge_ready",
+    "merge_result",
+    "closeout_result",
+    "guardian_verdict",
+    "host_action_result",
+    "final_verdict",
 }
 DECLARED_LOCATOR_REQUIREMENTS = {"required", "optional", "advisory"}
 DECLARED_LOCATOR_OWNERS = {"repo", "repo-companion", "host", "host-adapter", "platform", "external-tool"}
@@ -683,32 +703,42 @@ ADOPTION_GATE_ROLLOUT_MODES = {
 
 
 def adoption_gate_rollout_status(*, maturity_current: str) -> dict[str, Any]:
+    strong_maturity_passed = maturity_current == "strong"
     blocking_preconditions = [
         {
             "id": "strong_maturity",
-            "status": "pass" if maturity_current == "strong" else "missing",
+            "status": "pass" if strong_maturity_passed else "missing",
             "layer": "github-profile",
+            "evidence_locator": ".loom/companion/interop.json" if strong_maturity_passed else None,
+            "version_controlled": strong_maturity_passed,
             "recommended_action": "upgrade the repository to strong maturity before enabling blocking gates",
         },
         {
             "id": "adversarial_adoption_checks",
             "status": "missing",
             "layer": "core",
+            "evidence_locator": None,
+            "version_controlled": False,
             "recommended_action": "run the Loom-owned strong-governance adversarial adoption fixture and record the validation evidence",
         },
         {
             "id": "rollback_switch",
             "status": "pass",
             "layer": "core",
+            "evidence_locator": "docs/adoption/github-profile-upgrade.md",
+            "version_controlled": True,
             "recommended_action": "keep rollback available by switching gate mode back to advisory and rerunning governance-profile status",
         },
     ]
     blocking_allowed = all(entry["status"] == "pass" for entry in blocking_preconditions)
+    target_mode = "blocking" if blocking_allowed else "advisory"
     return {
         "schema_version": "loom-adoption-gate-rollout/v1",
         "default_mode": "advisory",
         "current_mode": "advisory",
-        "recommended_mode": "blocking" if blocking_allowed else "advisory",
+        "current_mode_source": "default",
+        "recommended_mode": target_mode,
+        "target_mode": target_mode,
         "allowed_modes": ADOPTION_GATE_ROLLOUT_MODES,
         "blocking_allowed": blocking_allowed,
         "blocking_preconditions": blocking_preconditions,
@@ -716,13 +746,144 @@ def adoption_gate_rollout_status(*, maturity_current: str) -> dict[str, Any]:
             "mode": "rollback",
             "switch_to": "advisory",
             "recommended_action": "disable blocking consumption, preserve evidence, repair drift, then rerun adversarial adoption checks before re-enabling blocking",
+            "conditions": [
+                {
+                    "id": "runtime_drift",
+                    "signal": "runtime-state or runtime parity fails for the installed Loom runtime",
+                    "recommended_action": "restore the last known-good runtime or rebootstrap before consuming blocking gates again",
+                },
+                {
+                    "id": "evidence_drift",
+                    "signal": "version-controlled evidence locators are missing, stale, or no longer match the generated profile plan",
+                    "recommended_action": "repair evidence carriers and rerun adversarial adoption checks before re-enabling blocking",
+                },
+                {
+                    "id": "host_binding_drift",
+                    "signal": "GitHub issue, PR, branch, project, merge commit, or branch-protection bindings no longer match the recorded profile state",
+                    "recommended_action": "return to advisory and reconcile host bindings before consuming gate results as blocking",
+                },
+                {
+                    "id": "review_head_drift",
+                    "signal": "spec or implementation review records no longer bind to the expected review head",
+                    "recommended_action": "refresh review records against the current head and repeat the gate rollout check",
+                },
+                {
+                    "id": "metadata_parsing_drift",
+                    "signal": "Work Item, Project, PR, or companion metadata cannot be parsed into the expected Loom contracts",
+                    "recommended_action": "repair metadata parsing or carrier format before restoring blocking consumption",
+                },
+            ],
         },
+    }
+
+
+def maturity_judgment_payload(
+    *,
+    current: str,
+    carrier_summary: dict[str, dict[str, str]],
+    github_control_plane: dict[str, Any],
+    host_binding: dict[str, Any],
+) -> dict[str, Any]:
+    evidence: list[dict[str, str]] = []
+    for key in ("work_item", "recovery", "status_surface", "review", "spec_path", "plan_path"):
+        row = carrier_summary.get(key, {})
+        evidence.append(
+            {
+                "id": key,
+                "status": str(row.get("status", "missing")),
+                "locator": str(row.get("locator", "unknown")),
+                "authority": "loom fact chain",
+            }
+        )
+
+    api_snapshot = github_control_plane.get("api_snapshot")
+    api_errors: list[str] = []
+    if isinstance(api_snapshot, dict):
+        raw_errors = api_snapshot.get("errors")
+        if isinstance(raw_errors, list):
+            api_errors = [str(error) for error in raw_errors if str(error)]
+        evidence.append(
+            {
+                "id": "github_api_snapshot",
+                "status": str(api_snapshot.get("verification_status", "unverified")),
+                "locator": "github_control_plane.api_snapshot",
+                "authority": "github",
+            }
+        )
+
+    host_enforcement = github_control_plane.get("host_enforcement")
+    if isinstance(host_enforcement, dict):
+        evidence.append(
+            {
+                "id": "host_enforcement",
+                "status": str(host_enforcement.get("verification_status", "unverified")),
+                "locator": "github_control_plane.host_enforcement",
+                "authority": "github",
+            }
+        )
+
+    required_objects = host_binding.get("required_objects")
+    if isinstance(required_objects, dict):
+        for key in ("branch", "worktree", "implementation_pr", "merge_commit", "closeout"):
+            row = required_objects.get(key)
+            if isinstance(row, dict):
+                evidence.append(
+                    {
+                        "id": f"host_binding.{key}",
+                        "status": str(row.get("status", "unknown")),
+                        "locator": str(row.get("locator", "unknown")),
+                        "authority": str(row.get("authority", "host")),
+                    }
+                )
+
+    blockers: list[dict[str, str]] = []
+    critical_carriers = [
+        entry["id"]
+        for entry in evidence
+        if entry["authority"] == "loom fact chain"
+        and entry["id"] in {"work_item", "recovery", "status_surface", "review"}
+        and entry["status"] != "present"
+    ]
+    if current == "unadopted" and critical_carriers:
+        blockers.append(
+            {
+                "id": "critical_carriers_unreadable",
+                "reason": "required light maturity carriers are missing or unreadable",
+                "source_locator": ", ".join(sorted(critical_carriers)),
+                "fallback_to": "admission",
+            }
+        )
+    if api_errors:
+        blockers.append(
+            {
+                "id": "github_host_signals_unreadable",
+                "reason": "GitHub host signals could not be read reliably",
+                "source_locator": "github_control_plane.api_snapshot.errors",
+                "fallback_to": "github-profile-binding",
+            }
+        )
+
+    judgment = "blocked" if blockers else current
+    return {
+        "schema_version": "loom-github-profile-maturity-judgment/v1",
+        "judgment": judgment,
+        "current": current,
+        "blocked": bool(blockers),
+        "blockers": blockers,
+        "evidence": evidence,
+        "summary": (
+            "GitHub profile maturity is blocked by unreadable or conflicting required signals."
+            if blockers
+            else f"GitHub profile maturity judgment is `{current}`."
+        ),
     }
 
 
 def run_process(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(args, cwd=cwd, check=False, capture_output=True, text=True, timeout=15)
+    except FileNotFoundError as exc:
+        return subprocess.CompletedProcess(args=args, returncode=127, stdout="", stderr=str(exc))
     except subprocess.TimeoutExpired:
         return subprocess.CompletedProcess(args=args, returncode=124, stdout="", stderr="command timed out after 15s")
 
@@ -1068,7 +1229,129 @@ def validate_metadata_contract(
                 missing_inputs.append(locator_boundary_error(field.get(locator_field), label=f"{field_prefix} `{locator_field}`"))
             elif not target.exists():
                 missing_inputs.append(f"{field_prefix} `{locator_field}` points to missing path `{locator}`")
+        field_id = str(field.get("id") or "").lower()
+        for forbidden in FORBIDDEN_COMPANION_TRUTH_FIELDS:
+            if forbidden in field_id:
+                missing_inputs.append(f"{field_prefix} must not declare authored truth field `{forbidden}`")
+        machine_carrier = field.get("machine_carrier")
+        if machine_carrier is not None:
+            missing_inputs.extend(
+                validate_metadata_machine_carrier(
+                    root=root,
+                    entry=machine_carrier,
+                    prefix=f"{field_prefix}.machine_carrier",
+                )
+            )
     return missing_inputs
+
+
+def validate_metadata_machine_carrier(
+    *,
+    root: Path,
+    entry: object,
+    prefix: str,
+) -> list[str]:
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"]
+    missing_inputs: list[str] = []
+    if entry.get("type") not in REPO_METADATA_MACHINE_CARRIER_TYPES:
+        missing_inputs.append(f"{prefix}.type must be `pr_body_html_comment_json`")
+    if entry.get("schema_version") not in REPO_METADATA_MACHINE_CARRIER_SCHEMAS:
+        missing_inputs.append(f"{prefix}.schema_version must be `loom-repo-pr-metadata/v1`")
+    marker = entry.get("marker")
+    if not isinstance(marker, str) or not marker.strip():
+        missing_inputs.append(f"{prefix} missing `marker`")
+    required_fields = entry.get("required_fields")
+    if not isinstance(required_fields, list):
+        missing_inputs.append(f"{prefix}.required_fields must be a list")
+    else:
+        for index, required_field in enumerate(required_fields):
+            if not isinstance(required_field, str) or not required_field.strip():
+                missing_inputs.append(f"{prefix}.required_fields[{index}] must be a non-empty string")
+            lowered = str(required_field).lower()
+            for forbidden in FORBIDDEN_COMPANION_TRUTH_FIELDS:
+                if forbidden in lowered:
+                    missing_inputs.append(f"{prefix}.required_fields[{index}] must not declare authored truth field `{forbidden}`")
+    migration_mode = entry.get("migration_mode", "advisory_legacy")
+    if migration_mode not in REPO_METADATA_MACHINE_CARRIER_MIGRATION_MODES:
+        missing_inputs.append(f"{prefix}.migration_mode must be `advisory_legacy`, `dual_read`, or `required`")
+    preflight = entry.get("preflight")
+    if not isinstance(preflight, dict):
+        missing_inputs.append(f"{prefix} must include `preflight`")
+    else:
+        required_before = preflight.get("required_before")
+        if not isinstance(required_before, list) or not required_before:
+            missing_inputs.append(f"{prefix}.preflight.required_before must be a non-empty list")
+        else:
+            for index, surface in enumerate(required_before):
+                if surface not in REPO_METADATA_MACHINE_CARRIER_PREFLIGHT_SURFACES:
+                    missing_inputs.append(
+                        f"{prefix}.preflight.required_before[{index}] must be `pre_review`, `review`, or `merge_ready`"
+                    )
+        if preflight.get("failure_mode") not in REPO_METADATA_MACHINE_CARRIER_FAILURE_MODES:
+            missing_inputs.append(f"{prefix}.preflight.failure_mode must be `blocking` or `advisory`")
+        command_locator = preflight.get("command_locator")
+        locator, target = resolve_locator(root, command_locator)
+        if locator is None or target is None:
+            missing_inputs.append(locator_boundary_error(command_locator, label=f"{prefix}.preflight.command_locator"))
+        elif not target.exists():
+            missing_inputs.append(f"{prefix}.preflight.command_locator points to missing path `{locator}`")
+    diagnostics = entry.get("diagnostics")
+    if not isinstance(diagnostics, dict):
+        missing_inputs.append(f"{prefix} must include `diagnostics`")
+    else:
+        required_diagnostics = {
+            "block_locator",
+            "parse_error",
+            "missing_fields",
+            "expected_format",
+            "suggested_fix",
+        }
+        for key in sorted(required_diagnostics):
+            if diagnostics.get(key) is not True:
+                missing_inputs.append(f"{prefix}.diagnostics.{key} must be true")
+    return missing_inputs
+
+
+def validate_advanced_lint_locator(
+    *,
+    root: Path,
+    entry: object,
+    index: int,
+) -> tuple[list[str], list[str]]:
+    prefix = f"advanced_lint_locators[{index}]"
+    if not isinstance(entry, dict):
+        return [f"{prefix} must be an object"], []
+    missing_inputs: list[str] = []
+    missing_optional: list[str] = []
+    for field in ("id", "summary", "lint_type", "locator", "owner", "requirement", "surface", "fallback_to", "result_envelope_schema"):
+        value = entry.get(field)
+        if not isinstance(value, str) or not value.strip():
+            missing_inputs.append(f"{prefix} missing `{field}`")
+    if entry.get("lint_type") not in ADVANCED_LINT_TYPES:
+        missing_inputs.append(f"{prefix} lint_type must stay within the advanced architecture/boundary lint vocabulary")
+    if entry.get("owner") not in DECLARED_LOCATOR_OWNERS:
+        missing_inputs.append(f"{prefix} owner must be repo/host/platform-owned, not Loom core")
+    requirement = entry.get("requirement")
+    if requirement not in DECLARED_LOCATOR_REQUIREMENTS:
+        missing_inputs.append(f"{prefix} requirement must be `required`, `optional`, or `advisory`")
+    if entry.get("surface") not in REPO_INTERFACE_GATE_TYPES:
+        missing_inputs.append(f"{prefix} surface must be a known Loom gate surface")
+    if entry.get("result_envelope_schema") != ADVANCED_LINT_RESULT_SCHEMA:
+        missing_inputs.append(f"{prefix} result_envelope_schema must be `{ADVANCED_LINT_RESULT_SCHEMA}`")
+    locator, target = resolve_locator(root, entry.get("locator"))
+    locator_error: str | None = None
+    locator_error_is_optional = requirement in {"optional", "advisory"}
+    if locator is None or target is None:
+        locator_error = locator_boundary_error(entry.get("locator"), label=f"{prefix} locator")
+    elif not target.exists():
+        locator_error = f"{prefix} locator points to missing path `{locator}`"
+    if locator_error:
+        if locator_error_is_optional:
+            missing_optional.append(locator_error)
+        else:
+            missing_inputs.append(locator_error)
+    return missing_inputs, missing_optional
 
 
 def validate_context_schema(
@@ -1118,6 +1401,21 @@ def validate_dynamic_tool_locator(
     prefix = f"dynamic_tool_locators[{index}]"
     if not isinstance(entry, dict):
         return [f"{prefix} must be an object"], []
+    forbidden_keys = {
+        "dynamic_tool_locators",
+        "policy_locators",
+        "review_instruction_locators",
+        "blocking_owner",
+        "override_decision",
+        "final_verdict",
+        "runtime_state",
+        "review_verdict",
+        "validation_status",
+        "closeout_result",
+    }
+    present_forbidden = sorted(set(entry) & forbidden_keys)
+    if present_forbidden:
+        return [f"{prefix} must not carry repo companion/runtime truth fields: {', '.join(present_forbidden)}"], []
     entry_id = entry.get("id")
     locator_label = f"{prefix} `{entry_id}` locator" if isinstance(entry_id, str) and entry_id.strip() else f"{prefix} locator"
     blocking: list[str] = []
@@ -2171,6 +2469,7 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
         "dynamic_tool_locators": carrier_entry("missing", "unknown", "repo companion interface"),
         "policy_locators": carrier_entry("missing", "unknown", "repo companion interface"),
         "hook_locators": carrier_entry("missing", "unknown", "repo companion interface"),
+        "advanced_lint_locators": carrier_entry("missing", "unknown", "repo companion interface"),
         "release_targets": empty_release_targets_surface(),
         "tool_availability": empty_tool_availability(),
         "policy_readiness": empty_policy_readiness(),
@@ -2372,6 +2671,24 @@ def detect_repo_interface(root: Path) -> tuple[dict[str, Any], list[str]]:
                         ".loom/companion/repo-interface.json",
                         "repo companion interface",
                     )
+                advanced_lint_locators = interface_payload.get("advanced_lint_locators")
+                if advanced_lint_locators is not None:
+                    repo_interface_surface["advanced_lint_locators"] = carrier_entry(
+                        "present",
+                        ".loom/companion/repo-interface.json",
+                        "repo companion interface",
+                    )
+                    if not isinstance(advanced_lint_locators, list):
+                        missing_inputs.append("advanced_lint_locators must be a list")
+                    else:
+                        for index, entry in enumerate(advanced_lint_locators):
+                            blocking, optional = validate_advanced_lint_locator(
+                                root=root,
+                                entry=entry,
+                                index=index,
+                            )
+                            missing_inputs.extend(blocking)
+                            missing_optional.extend(optional)
                 release_targets = interface_payload.get("release_targets")
                 if release_targets is not None:
                     blocking_inputs = validate_release_targets(root=root, entry=release_targets)
@@ -2741,6 +3058,38 @@ def bootstrap_host_binding_branch(root: Path) -> str:
     return ""
 
 
+def suite_path_decision(path: Path) -> str:
+    if not path.exists():
+        return ""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    for line in text.splitlines():
+        match = re.match(r"\s*-\s*Suite path:\s*([A-Za-z0-9_-]+)\s*$", line)
+        if match:
+            value = match.group(1).strip()
+            if value in {"full", "minimal", "not_applicable"}:
+                return value
+    return ""
+
+
+def approved_spec_review_locator(root: Path, active_item_id: str) -> str:
+    path = root / ".loom/reviews" / f"{active_item_id}.spec.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    if (
+        payload.get("schema_version") == "loom-review/v1"
+        and payload.get("item_id") == active_item_id
+        and payload.get("kind") == "spec_review"
+        and payload.get("decision") == "allow"
+    ):
+        return relative_locator(path, root)
+    return ""
+
+
 def detect_carrier_summary(root: Path, *, repository_mode: str, planning_mode: bool) -> dict[str, dict[str, str]]:
     active = active_entry_points(root)
     active_item_id = active.get("current_item_id") or "INIT-0001"
@@ -2770,6 +3119,25 @@ def detect_carrier_summary(root: Path, *, repository_mode: str, planning_mode: b
         else:
             summary[key] = carrier_entry("missing", "unknown", "repository scan")
     return summary
+
+
+def detect_spec_gate_inputs(root: Path, active_item_id: str) -> dict[str, dict[str, str]]:
+    spec_path = root / f".loom/specs/{active_item_id}/spec.md"
+    suite_path = suite_path_decision(spec_path)
+    suite_locator = relative_locator(spec_path, root) if suite_path == "not_applicable" else ""
+    spec_review = approved_spec_review_locator(root, active_item_id)
+    return {
+        "suite_path_decision": carrier_entry(
+            "present" if suite_locator else "missing",
+            suite_locator or "unknown",
+            "suite path decision",
+        ),
+        "spec_review": carrier_entry(
+            "present" if spec_review else "missing",
+            spec_review or "unknown",
+            "review record",
+        ),
+    }
 
 
 def detect_execution_entry(root: Path, loom_state: str, *, bootstrap_mode: bool, active_item_id: str = "INIT-0001") -> str:
@@ -3098,6 +3466,7 @@ def maturity_status(
     *,
     repository_mode: str,
     carrier_summary: dict[str, dict[str, str]],
+    spec_gate_inputs: dict[str, dict[str, str]] | None = None,
     repo_interface: dict[str, Any],
     repo_interop: dict[str, Any],
     github_control_plane: dict[str, Any],
@@ -3107,10 +3476,18 @@ def maturity_status(
         key: value.get("status") == "present"
         for key, value in carrier_summary.items()
     }
+    spec_gate_present_inputs = {
+        key: value.get("status") == "present"
+        for key, value in (spec_gate_inputs or {}).items()
+    }
+    formal_spec_or_not_applicable_present = carrier_present.get("plan_path", False) or (
+        spec_gate_present_inputs.get("suite_path_decision", False)
+        and spec_gate_present_inputs.get("spec_review", False)
+    )
     spec_gate_present = (
         carrier_present.get("review", False)
         and carrier_present.get("spec_path", False)
-        and carrier_present.get("plan_path", False)
+        and formal_spec_or_not_applicable_present
     )
     repo_interface_present = repo_interface.get("availability") == "present"
     repo_interop_present = repo_interop.get("availability") == "present"
@@ -3142,6 +3519,7 @@ def maturity_status(
     )
     facts = {
         **carrier_present,
+        "plan_path": formal_spec_or_not_applicable_present,
         "light": False,
         "standard": False,
         "fr_work_item_layer": repo_interface_present and repository_mode != "new",
@@ -3190,6 +3568,12 @@ def maturity_status(
     return {
         "schema_version": "loom-governance-maturity/v1",
         "current": current,
+        "judgment": maturity_judgment_payload(
+            current=current,
+            carrier_summary=carrier_summary,
+            github_control_plane=github_control_plane,
+            host_binding=host_binding,
+        ),
         "achieved": achieved,
         "next": next_level,
         "levels": MATURITY_LEVELS,
@@ -3209,6 +3593,7 @@ def governance_control_plane(
     *,
     repository_mode: str,
     carrier_summary: dict[str, dict[str, str]],
+    spec_gate_inputs: dict[str, dict[str, str]],
     github_control_plane: dict[str, Any],
     repo_interface: dict[str, Any],
     repo_interop: dict[str, Any],
@@ -3231,6 +3616,7 @@ def governance_control_plane(
         "maturity": maturity_status(
             repository_mode=repository_mode,
             carrier_summary=carrier_summary,
+            spec_gate_inputs=spec_gate_inputs,
             repo_interface=repo_interface,
             repo_interop=repo_interop,
             github_control_plane=github_control_plane,
@@ -3250,6 +3636,7 @@ def build_governance_surface(
     planning_mode = bootstrap_mode and repository_mode == "new" and loom_state != "active"
     active_item_id = active_entry_points(root).get("current_item_id", "INIT-0001")
     carrier_summary = detect_carrier_summary(root, repository_mode=repository_mode, planning_mode=planning_mode)
+    spec_gate_inputs = detect_spec_gate_inputs(root, active_item_id)
     github_control_plane, github_missing = detect_github_control_plane(root)
     execution_entry = detect_execution_entry(root, loom_state, bootstrap_mode=bootstrap_mode, active_item_id=active_item_id)
     validation_entry = detect_validation_entry(loom_state, bootstrap_mode=bootstrap_mode)
@@ -3268,6 +3655,7 @@ def build_governance_surface(
     control_plane = governance_control_plane(
         repository_mode=repository_mode,
         carrier_summary=carrier_summary,
+        spec_gate_inputs=spec_gate_inputs,
         github_control_plane=github_control_plane,
         repo_interface=repo_interface,
         repo_interop=repo_interop,

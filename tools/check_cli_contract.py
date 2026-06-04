@@ -257,7 +257,7 @@ def assert_suite_gate_consumption(payload: dict[str, Any], *, expected_surface: 
         raise AssertionError(f"{expected_surface} suite gate validation schema drifted")
     if suite_gate.get("surface") != expected_surface:
         raise AssertionError(f"{expected_surface} suite gate validation surface drifted")
-    if suite_gate.get("result") not in {"pass", "block", "fallback"}:
+    if suite_gate.get("result") not in {"pass", "block", "fallback", "not_applicable"}:
         raise AssertionError(f"{expected_surface} suite gate validation result drifted")
     authority = suite_gate.get("authority_boundary", {})
     if authority.get("role") != "gate_input_evidence" or "review_record" not in authority.get("does_not_replace", []):
@@ -270,7 +270,8 @@ def assert_suite_gate_consumption(payload: dict[str, Any], *, expected_surface: 
         validation = validations.get(domain)
         if not isinstance(validation, dict):
             raise AssertionError(f"{expected_surface} missing {domain} validation payload")
-        if command_fragment not in str(validation.get("command", "")):
+        command = str(validation.get("command", ""))
+        if command != "not_applicable" and command_fragment not in command:
             raise AssertionError(f"{expected_surface} {domain} validation command drifted")
     step_names = {step.get("name") for step in payload.get("steps", []) if isinstance(step, dict)}
     subcheck_names = {
@@ -283,12 +284,9 @@ def assert_suite_gate_consumption(payload: dict[str, Any], *, expected_surface: 
     if not has_step_evidence and not has_closeout_subchecks:
         raise AssertionError(f"{expected_surface} did not expose suite evidence/carrier validation steps")
     consumed = suite_gate.get("consumed_locators", {})
-    if (
-        not isinstance(consumed, dict)
-        or "evidence_map" not in consumed
-        or "consistency_analysis" not in consumed
-        or "task_carriers" not in consumed
-    ):
+    if not isinstance(consumed, dict) or "evidence_map" not in consumed or "task_carriers" not in consumed:
+        raise AssertionError(f"{expected_surface} suite gate consumed locators drifted")
+    if suite_gate.get("result") != "not_applicable" and "consistency_analysis" not in consumed:
         raise AssertionError(f"{expected_surface} suite gate consumed locators drifted")
 
 
@@ -319,7 +317,11 @@ def assert_suite_build_consumption(payload: dict[str, Any]) -> None:
 def assert_review_record_consumed_locators(active_item: str) -> None:
     spec_review = REPO_ROOT / ".loom" / "reviews" / f"{active_item}.spec.json"
     implementation_review = REPO_ROOT / ".loom" / "reviews" / f"{active_item}.json"
-    with preserved_repo_paths((spec_review.relative_to(REPO_ROOT).as_posix(), implementation_review.relative_to(REPO_ROOT).as_posix())):
+    expected_spec = f".loom/specs/{active_item}/spec.md"
+    expected_plan = f".loom/specs/{active_item}/plan.md"
+    expected_evidence = f".loom/specs/{active_item}/evidence-map.md"
+    expected_carrier = f".loom/specs/{active_item}/task-carrier.md"
+    with preserved_repo_paths((spec_review.relative_to(REPO_ROOT).as_posix(),)):
         _, spec_record_payload = run_json(
             [
                 "review",
@@ -343,10 +345,6 @@ def assert_review_record_consumed_locators(active_item: str) -> None:
             raise AssertionError("spec review record fixture did not pass")
         spec_record = json.loads(spec_review.read_text(encoding="utf-8"))
         spec_consumed = spec_record.get("consumed_inputs", {})
-        expected_spec = f".loom/specs/{active_item}/spec.md"
-        expected_plan = f".loom/specs/{active_item}/plan.md"
-        expected_evidence = f".loom/specs/{active_item}/evidence-map.md"
-        expected_carrier = f".loom/specs/{active_item}/task-carrier.md"
         if (
             spec_consumed.get("suite_validation") != "suite validate"
             or spec_consumed.get("suite_validator_mode") != "repo-local-cli"
@@ -357,6 +355,7 @@ def assert_review_record_consumed_locators(active_item: str) -> None:
             or expected_carrier not in spec_consumed.get("suite_task_carriers", [])
         ):
             raise AssertionError("spec review record consumed suite locators drifted")
+    with preserved_repo_paths((implementation_review.relative_to(REPO_ROOT).as_posix(),)):
         _, implementation_record_payload = run_json(
             [
                 "review",

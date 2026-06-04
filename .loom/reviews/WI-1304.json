@@ -1,0 +1,52 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1304",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review for WI-1304 at 8cdf48fd: final hosted checks are green, local pr-gate passed, docs-only not_applicable gate contract is represented without widening carrier_summary, and remaining changes after implementation review are Loom carrier/status/shadow evidence only.",
+  "reviewer": "codex-main",
+  "reviewed_head": "8cdf48fd81983a8c3baec31dcb07781bab7c746f",
+  "reviewed_validation_summary": "2026-06-04 final validation at d8f62124: local pr-gate passed; hosted checks all passed for PR #1305 including py-compile, demo-bootstrap, repo-local-cli, root-self-governance, loom-pr-merge-gate, release-judgment, node installer gate, and two loom-check jobs.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1304.md",
+    "recovery_entry": ".loom/progress/WI-1304.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1304-docs-only-governance-maturity/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-worktrees/1304-docs-only-governance-maturity --item WI-1304 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1304-docs-only-governance-maturity/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-worktrees/1304-docs-only-governance-maturity --item WI-1304 --json",
+    "suite_evidence_map": ".loom/specs/WI-1304/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1304/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  }
+}

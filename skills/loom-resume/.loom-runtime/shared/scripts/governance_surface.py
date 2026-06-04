@@ -3058,6 +3058,38 @@ def bootstrap_host_binding_branch(root: Path) -> str:
     return ""
 
 
+def suite_path_decision(path: Path) -> str:
+    if not path.exists():
+        return ""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    for line in text.splitlines():
+        match = re.match(r"\s*-\s*Suite path:\s*([A-Za-z0-9_-]+)\s*$", line)
+        if match:
+            value = match.group(1).strip()
+            if value in {"full", "minimal", "not_applicable"}:
+                return value
+    return ""
+
+
+def approved_spec_review_locator(root: Path, active_item_id: str) -> str:
+    path = root / ".loom/reviews" / f"{active_item_id}.spec.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    if (
+        payload.get("schema_version") == "loom-review/v1"
+        and payload.get("item_id") == active_item_id
+        and payload.get("kind") == "spec_review"
+        and payload.get("decision") == "allow"
+    ):
+        return relative_locator(path, root)
+    return ""
+
+
 def detect_carrier_summary(root: Path, *, repository_mode: str, planning_mode: bool) -> dict[str, dict[str, str]]:
     active = active_entry_points(root)
     active_item_id = active.get("current_item_id") or "INIT-0001"
@@ -3087,6 +3119,25 @@ def detect_carrier_summary(root: Path, *, repository_mode: str, planning_mode: b
         else:
             summary[key] = carrier_entry("missing", "unknown", "repository scan")
     return summary
+
+
+def detect_spec_gate_inputs(root: Path, active_item_id: str) -> dict[str, dict[str, str]]:
+    spec_path = root / f".loom/specs/{active_item_id}/spec.md"
+    suite_path = suite_path_decision(spec_path)
+    suite_locator = relative_locator(spec_path, root) if suite_path == "not_applicable" else ""
+    spec_review = approved_spec_review_locator(root, active_item_id)
+    return {
+        "suite_path_decision": carrier_entry(
+            "present" if suite_locator else "missing",
+            suite_locator or "unknown",
+            "suite path decision",
+        ),
+        "spec_review": carrier_entry(
+            "present" if spec_review else "missing",
+            spec_review or "unknown",
+            "review record",
+        ),
+    }
 
 
 def detect_execution_entry(root: Path, loom_state: str, *, bootstrap_mode: bool, active_item_id: str = "INIT-0001") -> str:
@@ -3415,6 +3466,7 @@ def maturity_status(
     *,
     repository_mode: str,
     carrier_summary: dict[str, dict[str, str]],
+    spec_gate_inputs: dict[str, dict[str, str]] | None = None,
     repo_interface: dict[str, Any],
     repo_interop: dict[str, Any],
     github_control_plane: dict[str, Any],
@@ -3424,10 +3476,18 @@ def maturity_status(
         key: value.get("status") == "present"
         for key, value in carrier_summary.items()
     }
+    spec_gate_present_inputs = {
+        key: value.get("status") == "present"
+        for key, value in (spec_gate_inputs or {}).items()
+    }
+    formal_spec_or_not_applicable_present = carrier_present.get("plan_path", False) or (
+        spec_gate_present_inputs.get("suite_path_decision", False)
+        and spec_gate_present_inputs.get("spec_review", False)
+    )
     spec_gate_present = (
         carrier_present.get("review", False)
         and carrier_present.get("spec_path", False)
-        and carrier_present.get("plan_path", False)
+        and formal_spec_or_not_applicable_present
     )
     repo_interface_present = repo_interface.get("availability") == "present"
     repo_interop_present = repo_interop.get("availability") == "present"
@@ -3459,6 +3519,7 @@ def maturity_status(
     )
     facts = {
         **carrier_present,
+        "plan_path": formal_spec_or_not_applicable_present,
         "light": False,
         "standard": False,
         "fr_work_item_layer": repo_interface_present and repository_mode != "new",
@@ -3532,6 +3593,7 @@ def governance_control_plane(
     *,
     repository_mode: str,
     carrier_summary: dict[str, dict[str, str]],
+    spec_gate_inputs: dict[str, dict[str, str]],
     github_control_plane: dict[str, Any],
     repo_interface: dict[str, Any],
     repo_interop: dict[str, Any],
@@ -3554,6 +3616,7 @@ def governance_control_plane(
         "maturity": maturity_status(
             repository_mode=repository_mode,
             carrier_summary=carrier_summary,
+            spec_gate_inputs=spec_gate_inputs,
             repo_interface=repo_interface,
             repo_interop=repo_interop,
             github_control_plane=github_control_plane,
@@ -3573,6 +3636,7 @@ def build_governance_surface(
     planning_mode = bootstrap_mode and repository_mode == "new" and loom_state != "active"
     active_item_id = active_entry_points(root).get("current_item_id", "INIT-0001")
     carrier_summary = detect_carrier_summary(root, repository_mode=repository_mode, planning_mode=planning_mode)
+    spec_gate_inputs = detect_spec_gate_inputs(root, active_item_id)
     github_control_plane, github_missing = detect_github_control_plane(root)
     execution_entry = detect_execution_entry(root, loom_state, bootstrap_mode=bootstrap_mode, active_item_id=active_item_id)
     validation_entry = detect_validation_entry(loom_state, bootstrap_mode=bootstrap_mode)
@@ -3591,6 +3655,7 @@ def build_governance_surface(
     control_plane = governance_control_plane(
         repository_mode=repository_mode,
         carrier_summary=carrier_summary,
+        spec_gate_inputs=spec_gate_inputs,
         github_control_plane=github_control_plane,
         repo_interface=repo_interface,
         repo_interop=repo_interop,
