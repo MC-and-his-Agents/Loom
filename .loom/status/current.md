@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1304
-- Goal: Teach governance maturity to consume docs-only suite_path not_applicable when an approved spec_review record exists.
-- Scope: Update governance_surface maturity detection so formal_spec_or_not_applicable can satisfy the standard spec gate without requiring plan.md for docs-only contract freeze work. Keep review, PR head binding, CI, fact-chain, closeout, and suite rationale requirements intact.
-- Execution Path: issue #1304 -> branch work/1304-docs-only-governance-maturity -> PR -> CI/review -> merge to main.
+- Item ID: WI-1264
+- Goal: Freeze the regression surface core contract batch for #1264, #1265, and #1266.
+- Scope: Define the regression bucket and named surface taxonomy, the minimum surface evidence schema, and the fast/full validation policy for the #1255 regression split tree. Ownership is limited to contract documentation and minimal cross-links in harness documentation for PR #1297. Implementation splits, inventories, release work, and runtime behavior changes remain out of scope.
+- Execution Path: issues #1264/#1265/#1266 -> branch work/1264-regression-surface-contract -> PR #1297 -> CI/review -> merge to main.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1304.md
-- Review Entry: .loom/reviews/WI-1304.json
-- Validation Entry: git diff --check; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py governance-profile status --target /Users/mc/dev/Loom-worktrees/1264-regression-surface-contract --host github; python3 tools/loom_check.py --profile source --source-surface bootstrap-regression .
-- Closing Condition: PR for #1304 is merged and PR-A can consume docs-only not_applicable maturity after rebasing onto main.
-- Current Checkpoint: closed
-- Current Stop: PR #1305 merged to main at 2026-06-04T16:13:33Z with merge commit 444cc71ed1d5d828ee85a122ac1216d4e6d217eb; issue #1304 closed at 2026-06-04T16:13:34Z; closeout check/sync passed before returning to A-D PR closeout.
-- Next Step: None; WI-1304 is terminal and retained only as post-merge closeout evidence for the A-D PR sequence.
-- Blockers: None
-- Latest Validation Summary: 2026-06-04 final validation at d8f62124: local pr-gate passed; hosted checks all passed for PR #1305 including py-compile, demo-bootstrap, repo-local-cli, root-self-governance, loom-pr-merge-gate, release-judgment, node installer gate, and two loom-check jobs.
-- Recovery Boundary: Terminal closeout carrier only. Do not resume WI-1304 implementation here; A-D PR closeout continues on their own branches.
-- Current Lane: terminal-closeout
+- Recovery Entry: .loom/progress/WI-1264.md
+- Review Entry: .loom/reviews/WI-1264.json
+- Validation Entry: git diff --check; manual contract readback for taxonomy, evidence schema, and fast/full policy; PR CI.
+- Closing Condition: PR #1297 is merged to main, #1264/#1265/#1266 are closed with contract evidence, and follow-up inventory/implementation issues remain explicitly out of scope.
+- Current Checkpoint: pre-review
+- Current Stop: PR #1297 has the regression surface core contract documentation implemented; this carrier-only update binds the branch fact-chain to WI-1264 after WI-1294 terminal closeout landed on main.
+- Next Step: Resolve the real pre-review/merge gate policy for docs-only contract freezes: either perform a true current-head review with a supported suite path decision, or mark the formal suite not_applicable through a gate-supported contract. Do not add fake minimal suite artifacts only to satisfy the gate.
+- Blockers: The WI mismatch is resolved locally; PR gate still needs a real authored review/suite policy decision for this docs-only contract PR.
+- Latest Validation Summary: Carrier-only local evidence: `python3 tools/loom.py fact-chain --target . --json` reads WI-1264 instead of terminal WI-1294. `git diff --check` passes. The PR gate is expected to continue blocking until real review/suite policy is resolved.
+- Recovery Boundary: Carrier refresh only. Do not change regression contract prose, inventories, implementation split behavior, release evidence, or unrelated root Loom state.
+- Current Lane: pre-review/regression-surface-contract
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: git diff --check; suite validate; tools/check_cli_contract.py; PR/CI
-- Lane Entry: implementation
+- Verification Entry: PR #1297 validation section and hosted CI
+- Lane Entry: pre-review/regression-surface-contract
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1304.md
-- Dynamic Truth: .loom/progress/WI-1304.md
+- Static Truth: .loom/work-items/WI-1264.md
+- Dynamic Truth: .loom/progress/WI-1264.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
