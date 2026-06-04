@@ -3,9 +3,9 @@
   "item_id": "WI-1304",
   "decision": "allow",
   "kind": "spec_review",
-  "summary": "WI-1304 minimal suite is approved: scope is limited to governance maturity consuming an authored docs-only suite decision with approved spec review, while preserving suite validate, implementation review, PR head binding, CI, fact-chain, and closeout gates.",
+  "summary": "WI-1304 formal suite is approved: spec, plan, and implementation contract define a narrow governance maturity consumption fix, preserve existing gates, and bind validation to runtime verify, suite validate, carrier refresh, governance-profile status, and bootstrap-regression.",
   "reviewer": "codex-main-agent",
-  "reviewed_head": "e8b477fe5093842067f3a7cf60be286fcd9e6dd0",
+  "reviewed_head": "357e5fa90e11bfbcd50bdf7d7b917f7af8d67984",
   "reviewed_validation_summary": "Passed: git diff --check; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py governance-profile status --target /Users/mc/dev/Loom-worktrees/1264-regression-surface-contract --host github returned strong; python3 tools/loom_check.py --profile source --source-surface bootstrap-regression . passed before WI-1304 carrier activation.",
   "fallback_to": null,
   "findings": [],
@@ -18,16 +18,15 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "unavailable",
+      "status": "not_applicable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
-      "budget_summary": "github check-runs read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/commits/main/check-runs\": EOF; github rulesets read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/rulesets\": EOF",
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_control_plane",
-        "error_count": 2
+        "source": "github_host"
       }
     },
     "engine_adapter": null,
