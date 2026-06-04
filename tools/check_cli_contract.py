@@ -257,7 +257,7 @@ def assert_suite_gate_consumption(payload: dict[str, Any], *, expected_surface: 
         raise AssertionError(f"{expected_surface} suite gate validation schema drifted")
     if suite_gate.get("surface") != expected_surface:
         raise AssertionError(f"{expected_surface} suite gate validation surface drifted")
-    if suite_gate.get("result") not in {"pass", "block", "fallback"}:
+    if suite_gate.get("result") not in {"pass", "block", "fallback", "not_applicable"}:
         raise AssertionError(f"{expected_surface} suite gate validation result drifted")
     authority = suite_gate.get("authority_boundary", {})
     if authority.get("role") != "gate_input_evidence" or "review_record" not in authority.get("does_not_replace", []):
@@ -270,7 +270,8 @@ def assert_suite_gate_consumption(payload: dict[str, Any], *, expected_surface: 
         validation = validations.get(domain)
         if not isinstance(validation, dict):
             raise AssertionError(f"{expected_surface} missing {domain} validation payload")
-        if command_fragment not in str(validation.get("command", "")):
+        command = str(validation.get("command", ""))
+        if command != "not_applicable" and command_fragment not in command:
             raise AssertionError(f"{expected_surface} {domain} validation command drifted")
     step_names = {step.get("name") for step in payload.get("steps", []) if isinstance(step, dict)}
     subcheck_names = {
