@@ -3,10 +3,10 @@
   "item_id": "WI-1229",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review for WI-1229 at 2e564e2460f8067f97805a417a1c209b03bbfd78: idle fact-chain/status contract docs freeze canonical active, terminal, and idle execution-state semantics, no-active-item carrier behavior, provenance and retained-item boundaries, and host/governance status taxonomy while staying limited to WI-1229 carriers, suite not_applicable locator, contract documentation, taxonomy boundary documentation, and validation evidence. The diff does not introduce terminal metadata writing, command split implementation, carrier closeout sync behavior, repair/apply behavior, runtime status/fact-chain implementation, release behavior, or fake minimal suite artifacts.",
+  "summary": "Post-merge closeout sync review for WI-1229 at 63fd3118: diff only terminalizes WI-1229 recovery/status carrier after PR #1298 merged and issue #1229 closed, then refreshes closeout/merge-ready shadow hashes. It does not change idle fact-chain/status contract docs, runtime status/fact-chain behavior, terminal metadata writing, command split behavior, carrier closeout sync implementation, repair/apply behavior, release scope, or A-D PR branches.",
   "reviewer": "codex-main",
-  "reviewed_head": "2e564e2460f8067f97805a417a1c209b03bbfd78",
-  "reviewed_validation_summary": "`git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1229; `python3 tools/loom.py suite validate --target . --item WI-1229 --json` returned `result=not_applicable` with no blocking gaps and valid suite-level rationale; `python3 tools/check_loom_check_runtime_regressions.py` passed; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed; `python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run` returned `result=pass` with empty `refresh_needed`.",
+  "reviewed_head": "63fd3118f67e7e52c4dcbd76ec7276bb724f1b15",
+  "reviewed_validation_summary": "Post-merge closeout sync validation passed `git diff --check`, `python3 tools/loom.py fact-chain --target . --json`, and `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; pre-merge PR #1298 passed local pr-gate and hosted required checks on head 563e5cb925af93e4c76125d700ccf0bafbf018d1 before merge.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -18,15 +18,15 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "not_applicable",
+      "status": "unavailable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
-      "budget_summary": "execution budget is not collected for this invocation.",
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "post-merge closeout sync uses local carrier/shadow validation only; hosted checks will be consumed from the closeout PR.",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_host"
+        "source": "github_control_plane"
       }
     },
     "engine_adapter": null,

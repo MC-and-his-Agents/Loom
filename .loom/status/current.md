@@ -11,21 +11,21 @@
 - Review Entry: .loom/reviews/WI-1229.json
 - Validation Entry: git diff --check; tools/check_loom_check_runtime_regressions.py; PR CI.
 - Closing Condition: PR #1298 is merged to main, #1229 is closed with contract evidence, and follow-up idle implementation issues remain explicitly out of scope.
-- Current Checkpoint: merge
-- Current Stop: Merge checkpoint inputs are assembled for the docs-only idle fact-chain/status contract batch: build checkpoint passes, fact-chain, suite not_applicable, shadow parity, runtime carrier refresh dry-run, targeted runtime regression check, and current-head review evidence are ready for PR #1298 hosted checks.
-- Next Step: Push the refreshed WI-1229 head to PR #1298, rerun local/hosted pr-gate against the pushed head, and merge once hosted checks pass.
+- Current Checkpoint: closed
+- Current Stop: PR #1298 merged to main at 2026-06-04T21:08:32Z with merge commit b230263f908195f1ff12a59f7f123ed3afe187cc; issue #1229 closed at 2026-06-04T21:08:33Z; local pr-gate and hosted loom-pr-merge-gate, loom-check, root-self-governance, repo-local-cli, py-compile, and demo-bootstrap passed before merge.
+- Next Step: None; WI-1229 is terminal and retained only as idle/no-active-item fact-chain and status surface contract evidence for the #1228 implementation sequence.
 - Blockers: None
-- Latest Validation Summary: `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1229; `python3 tools/loom.py suite validate --target . --item WI-1229 --json` returned `result=not_applicable` with no blocking gaps and valid suite-level rationale; `python3 tools/check_loom_check_runtime_regressions.py` passed; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed; `python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run` returned `result=pass` with empty `refresh_needed`.
-- Recovery Boundary: Keep this PR limited to WI-1229 carriers, formal suite not_applicable locator, idle fact-chain/status contract documentation, taxonomy boundary documentation, and validation evidence. Do not change terminal metadata writing, command split behavior, carrier closeout sync behavior, repair/apply behavior, release behavior, or unrelated root Loom state.
-- Current Lane: pre-review/idle-fact-chain-contract
+- Latest Validation Summary: Post-merge closeout sync validation passed `git diff --check`, `python3 tools/loom.py fact-chain --target . --json`, and `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; pre-merge PR #1298 passed local pr-gate and hosted required checks on head 563e5cb925af93e4c76125d700ccf0bafbf018d1 before merge.
+- Recovery Boundary: Terminal closeout carrier only. Do not resume WI-1229 implementation here; terminal metadata writing, command split behavior, carrier closeout sync behavior, repair/apply behavior, runtime status/fact-chain implementation, release behavior, and #1230-#1237/#1296 follow-up work continue through separate #1228 child issues.
+- Current Lane: terminal-closeout
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: PR #1298 validation section and hosted CI
-- Lane Entry: pre-review/idle-fact-chain-contract
+- Verification Entry: PR #1298 local pr-gate, hosted required checks, and merge commit b230263f908195f1ff12a59f7f123ed3afe187cc
+- Lane Entry: terminal-closeout
 
 ## Sources
 
