@@ -7,6 +7,7 @@ import json
 import hashlib
 import importlib.util
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -321,6 +322,7 @@ def assert_review_record_consumed_locators(active_item: str) -> None:
     expected_plan = f".loom/specs/{active_item}/plan.md"
     expected_evidence = f".loom/specs/{active_item}/evidence-map.md"
     expected_carrier = f".loom/specs/{active_item}/task-carrier.md"
+    suite_not_applicable = active_suite_path_not_applicable(active_item)
     with preserved_repo_paths((spec_review.relative_to(REPO_ROOT).as_posix(),)):
         _, spec_record_payload = run_json(
             [
@@ -345,15 +347,24 @@ def assert_review_record_consumed_locators(active_item: str) -> None:
             raise AssertionError("spec review record fixture did not pass")
         spec_record = json.loads(spec_review.read_text(encoding="utf-8"))
         spec_consumed = spec_record.get("consumed_inputs", {})
-        if (
-            spec_consumed.get("suite_validation") != "suite validate"
-            or spec_consumed.get("suite_validator_mode") != "repo-local-cli"
-            or spec_consumed.get("suite_spec") != expected_spec
-            or spec_consumed.get("suite_plan") != expected_plan
-            or spec_consumed.get("suite_evidence_map") != expected_evidence
-            or "suite_consistency_analysis" not in spec_consumed
-            or expected_carrier not in spec_consumed.get("suite_task_carriers", [])
-        ):
+        base_spec_consumed = (
+            spec_consumed.get("suite_validation") == "suite validate"
+            and spec_consumed.get("suite_validator_mode") == "repo-local-cli"
+            and spec_consumed.get("suite_spec") == expected_spec
+            and "suite_consistency_analysis" in spec_consumed
+        )
+        not_applicable_spec_consumed = (
+            suite_not_applicable
+            and spec_consumed.get("suite_plan") is None
+            and spec_consumed.get("suite_evidence_map") is None
+            and spec_consumed.get("suite_task_carriers") == []
+        )
+        full_or_minimal_spec_consumed = (
+            spec_consumed.get("suite_plan") == expected_plan
+            and spec_consumed.get("suite_evidence_map") == expected_evidence
+            and expected_carrier in spec_consumed.get("suite_task_carriers", [])
+        )
+        if not base_spec_consumed or not (not_applicable_spec_consumed or full_or_minimal_spec_consumed):
             raise AssertionError("spec review record consumed suite locators drifted")
     with preserved_repo_paths((implementation_review.relative_to(REPO_ROOT).as_posix(),)):
         _, implementation_record_payload = run_json(
@@ -379,19 +390,37 @@ def assert_review_record_consumed_locators(active_item: str) -> None:
             raise AssertionError("implementation review record fixture did not pass")
         implementation_record = json.loads(implementation_review.read_text(encoding="utf-8"))
         implementation_consumed = implementation_record.get("consumed_inputs", {})
+        not_applicable_implementation_consumed = (
+            suite_not_applicable
+            and implementation_consumed.get("suite_evidence_validation") == "not_applicable"
+            and implementation_consumed.get("suite_carrier_validation") == "not_applicable"
+            and implementation_consumed.get("suite_evidence_map") is None
+            and implementation_consumed.get("suite_task_carriers") == []
+        )
+        full_or_minimal_implementation_consumed = (
+            "suite evidence validate" in str(implementation_consumed.get("suite_evidence_validation", ""))
+            and "suite carrier validate" in str(implementation_consumed.get("suite_carrier_validation", ""))
+            and implementation_consumed.get("suite_evidence_map") == expected_evidence
+            and expected_carrier in implementation_consumed.get("suite_task_carriers", [])
+        )
         if (
-            "suite evidence validate" not in str(implementation_consumed.get("suite_evidence_validation", ""))
-            or "suite carrier validate" not in str(implementation_consumed.get("suite_carrier_validation", ""))
-            or implementation_consumed.get("suite_evidence_map") != expected_evidence
-            or "suite_consistency_analysis" not in implementation_consumed
-            or expected_carrier not in implementation_consumed.get("suite_task_carriers", [])
+            "suite_consistency_analysis" not in implementation_consumed
             or not isinstance(implementation_consumed.get("suite_evidence_consumed_contracts"), list)
             or not isinstance(implementation_consumed.get("suite_carrier_consumed_contracts"), list)
+            or not (not_applicable_implementation_consumed or full_or_minimal_implementation_consumed)
         ):
             raise AssertionError("implementation review record consumed suite/evidence locators drifted")
 
 
+def active_suite_path_not_applicable(active_item: str) -> bool:
+    spec_path = REPO_ROOT / ".loom" / "specs" / active_item / "spec.md"
+    spec_text = spec_path.read_text(encoding="utf-8") if spec_path.exists() else ""
+    return bool(re.search(r"(?im)^\s*(?:[-*]\s*)?suite path\s*:\s*not_applicable\b", spec_text))
+
+
 def assert_closeout_blocks_missing_suite_evidence(active_item: str) -> None:
+    if active_suite_path_not_applicable(active_item):
+        return
     evidence_map = f".loom/specs/{active_item}/evidence-map.md"
     with preserved_repo_paths((evidence_map,)):
         path = REPO_ROOT / evidence_map
