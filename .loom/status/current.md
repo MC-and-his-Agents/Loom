@@ -11,8 +11,8 @@
 - Review Entry: .loom/reviews/WI-1239.json
 - Validation Entry: git diff --check; tools/loom.py help --json; PR CI.
 - Closing Condition: PR #1300 is merged to main, #1239 is closed with contract evidence, and follow-up global-cli provider implementation issues remain explicitly out of scope.
-- Current Checkpoint: build
-- Current Stop: Build checkpoint material is complete for the docs-only global CLI provider contract batch: fact-chain, suite not_applicable, command surface, and shadow parity validation passed.
+- Current Checkpoint: merge
+- Current Stop: Merge checkpoint inputs are assembled for the docs-only global CLI provider contract batch: build checkpoint passes, fact-chain, suite not_applicable, command surface, and shadow parity validation passed, and current-head review artifacts are being refreshed.
 - Next Step: Refresh current-head spec and implementation review artifacts, update PR #1300 head metadata, then rerun local pr-gate and hosted checks.
 - Blockers: None
 - Latest Validation Summary: `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1239; `python3 tools/loom.py suite validate --target . --item WI-1239 --json` returned `result=not_applicable` with no blocking gaps and valid suite-level rationale; `python3 tools/loom.py help --json` returned a readable command surface; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed.
