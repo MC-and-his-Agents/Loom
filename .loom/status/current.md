@@ -15,7 +15,7 @@
 - Current Stop: Local implementation, validation, spec review, and implementation review passed for the narrow gate/runtime unblocker.
 - Next Step: Consume hosted CI/checks and merge gate for PR #1302.
 - Blockers: None
-- Latest Validation Summary: `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed; `python3 tools/loom.py suite validate --target . --item WI-1302 --json` passed; focused `assert_docs_contract_suite_not_applicable_gate_contract` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py` passed.
+- Latest Validation Summary: `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed; `python3 tools/loom.py suite validate --target . --item WI-1302 --json` passed; `python3 tools/check_demo_bootstrap_fixture.py` passed after stable fixture sync; focused `assert_docs_contract_suite_not_applicable_gate_contract` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py` passed before fixture sync.
 - Recovery Boundary: Keep this PR limited to gate/runtime consumption of legal suite `not_applicable`, generated runtime synchronization, and regression coverage. Do not modify A-D PR branches or author fake suite/review evidence.
 - Current Lane: implementation
 
