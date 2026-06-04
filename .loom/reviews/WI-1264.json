@@ -1,0 +1,43 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1264",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1264 current-head contract review: allow. Head cc35da077c1bda75ef8ce807d1399902bd11bdc4 is limited to regression surface contract documentation, WI-1264 carriers, and the formal suite not_applicable locator; it does not add fake minimal suite artifacts, runtime behavior, inventory, release work, or implementation splits. Read-only subagent diff review returned ALLOW, fact-chain passed, and suite validate returned not_applicable with valid rationale.",
+  "reviewer": "codex-main-thread",
+  "reviewed_head": "cc35da077c1bda75ef8ce807d1399902bd11bdc4",
+  "reviewed_validation_summary": "`git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1264; `python3 tools/loom.py suite validate --target . --item WI-1264 --json` returned `result=not_applicable` with no blocking gaps and valid suite-level rationale.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1264.md",
+    "recovery_entry": ".loom/progress/WI-1264.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  }
+}

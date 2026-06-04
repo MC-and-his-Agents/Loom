@@ -11,12 +11,12 @@
 - Review Entry: .loom/reviews/WI-1264.json
 - Validation Entry: git diff --check; manual contract readback for taxonomy, evidence schema, and fast/full policy; PR CI.
 - Closing Condition: PR #1297 is merged to main, #1264/#1265/#1266 are closed with contract evidence, and follow-up inventory/implementation issues remain explicitly out of scope.
-- Current Checkpoint: pre-review
-- Current Stop: PR #1297 has the regression surface core contract documentation implemented; this carrier-only update binds the branch fact-chain to WI-1264 after WI-1294 terminal closeout landed on main.
-- Next Step: Resolve the real pre-review/merge gate policy for docs-only contract freezes: either perform a true current-head review with a supported suite path decision, or mark the formal suite not_applicable through a gate-supported contract. Do not add fake minimal suite artifacts only to satisfy the gate.
-- Blockers: The WI mismatch is resolved locally; PR gate still needs a real authored review/suite policy decision for this docs-only contract PR.
-- Latest Validation Summary: Carrier-only local evidence: `python3 tools/loom.py fact-chain --target . --json` reads WI-1264 instead of terminal WI-1294. `git diff --check` passes. The PR gate is expected to continue blocking until real review/suite policy is resolved.
-- Recovery Boundary: Carrier refresh only. Do not change regression contract prose, inventories, implementation split behavior, release evidence, or unrelated root Loom state.
+- Current Checkpoint: review
+- Current Stop: PR #1297 has consumed the merged docs-only suite `not_applicable` gate contract from #1302 and now carries a formal WI-1264 suite path decision instead of fake minimal suite artifacts.
+- Next Step: Record a true current-head implementation review for PR #1297, run PR gate against the pushed head, and consume hosted checks.
+- Blockers: None
+- Latest Validation Summary: `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1264; `python3 tools/loom.py suite validate --target . --item WI-1264 --json` returned `result=not_applicable` with no blocking gaps and valid suite-level rationale.
+- Recovery Boundary: Keep this PR limited to WI-1264 carriers, formal suite not_applicable locator, and regression contract docs. Do not add inventory, implementation splits, release work, runtime behavior changes, or fake minimal suite artifacts.
 - Current Lane: pre-review/regression-surface-contract
 
 ## Runtime Evidence
