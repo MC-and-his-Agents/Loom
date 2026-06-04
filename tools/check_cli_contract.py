@@ -319,7 +319,11 @@ def assert_suite_build_consumption(payload: dict[str, Any]) -> None:
 def assert_review_record_consumed_locators(active_item: str) -> None:
     spec_review = REPO_ROOT / ".loom" / "reviews" / f"{active_item}.spec.json"
     implementation_review = REPO_ROOT / ".loom" / "reviews" / f"{active_item}.json"
-    with preserved_repo_paths((spec_review.relative_to(REPO_ROOT).as_posix(), implementation_review.relative_to(REPO_ROOT).as_posix())):
+    expected_spec = f".loom/specs/{active_item}/spec.md"
+    expected_plan = f".loom/specs/{active_item}/plan.md"
+    expected_evidence = f".loom/specs/{active_item}/evidence-map.md"
+    expected_carrier = f".loom/specs/{active_item}/task-carrier.md"
+    with preserved_repo_paths((spec_review.relative_to(REPO_ROOT).as_posix(),)):
         _, spec_record_payload = run_json(
             [
                 "review",
@@ -343,10 +347,6 @@ def assert_review_record_consumed_locators(active_item: str) -> None:
             raise AssertionError("spec review record fixture did not pass")
         spec_record = json.loads(spec_review.read_text(encoding="utf-8"))
         spec_consumed = spec_record.get("consumed_inputs", {})
-        expected_spec = f".loom/specs/{active_item}/spec.md"
-        expected_plan = f".loom/specs/{active_item}/plan.md"
-        expected_evidence = f".loom/specs/{active_item}/evidence-map.md"
-        expected_carrier = f".loom/specs/{active_item}/task-carrier.md"
         if (
             spec_consumed.get("suite_validation") != "suite validate"
             or spec_consumed.get("suite_validator_mode") != "repo-local-cli"
@@ -357,6 +357,7 @@ def assert_review_record_consumed_locators(active_item: str) -> None:
             or expected_carrier not in spec_consumed.get("suite_task_carriers", [])
         ):
             raise AssertionError("spec review record consumed suite locators drifted")
+    with preserved_repo_paths((implementation_review.relative_to(REPO_ROOT).as_posix(),)):
         _, implementation_record_payload = run_json(
             [
                 "review",
