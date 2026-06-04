@@ -11,21 +11,21 @@
 - Review Entry: .loom/reviews/WI-1264.json
 - Validation Entry: git diff --check; manual contract readback for taxonomy, evidence schema, and fast/full policy; PR CI.
 - Closing Condition: PR #1297 is merged to main, #1264/#1265/#1266 are closed with contract evidence, and follow-up inventory/implementation issues remain explicitly out of scope.
-- Current Checkpoint: review
-- Current Stop: PR #1297 has consumed the merged docs-only suite `not_applicable` gate contract from #1305 and now carries a formal WI-1264 suite path decision instead of fake minimal suite artifacts.
-- Next Step: Record a true current-head implementation review for PR #1297, run PR gate against the pushed head, and consume hosted checks.
+- Current Checkpoint: closed
+- Current Stop: PR #1297 merged to main at 2026-06-04T17:29:52Z with merge commit b3d23c40bef7b8f29e5319447ae93ba05ad01472; issues #1264, #1265, and #1266 closed at 2026-06-04T17:29:53Z/17:29:54Z/17:29:54Z; controlled merge and hosted checks passed before closeout sync.
+- Next Step: None; WI-1264 is terminal and retained only as regression surface contract evidence for the #1255 implementation sequence.
 - Blockers: None
-- Latest Validation Summary: `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1264; `python3 tools/loom.py suite validate --target . --item WI-1264 --json` returned `result=not_applicable` with no blocking gaps and valid suite-level rationale.
-- Recovery Boundary: Keep this PR limited to WI-1264 carriers, formal suite not_applicable locator, and regression contract docs. Do not add inventory, implementation splits, release work, runtime behavior changes, or fake minimal suite artifacts.
-- Current Lane: pre-review/regression-surface-contract
+- Latest Validation Summary: Post-merge closeout sync PR #1307 at head 563f5953b0ab6d098a85f1286537197021be9b7b passed `git diff --check`, `python3 tools/loom.py fact-chain --target . --json`, and `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`.
+- Recovery Boundary: Terminal closeout carrier only. Do not resume WI-1264 implementation here; inventory and implementation work continue through separate #1255 follow-up issues.
+- Current Lane: terminal-closeout
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: PR #1297 validation section and hosted CI
-- Lane Entry: pre-review/regression-surface-contract
+- Verification Entry: PR #1297 local pr-gate, controlled merge check, hosted required checks, and merge commit b3d23c40bef7b8f29e5319447ae93ba05ad01472
+- Lane Entry: terminal-closeout
 
 ## Sources
 
