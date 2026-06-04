@@ -12,11 +12,11 @@
 - Validation Entry: git diff --check; focused rg for review disposition/head-binding contract terms; PR CI.
 - Closing Condition: PR #1299 is merged to main, #1286 is closed with contract evidence, and follow-up gate/runtime implementation issues remain explicitly out of scope.
 - Current Checkpoint: pre-review
-- Current Stop: PR #1299 has the review disposition and PR head binding contract documentation implemented; this carrier-only update binds the branch fact-chain to WI-1286 after WI-1294 terminal closeout landed on main.
-- Next Step: Resolve the real pre-review/merge gate policy for docs-only contract freezes: either perform a true current-head review with a supported suite path decision, or mark the formal suite not_applicable through a gate-supported contract. Do not add fake minimal suite artifacts only to satisfy the gate.
-- Blockers: The WI mismatch should be resolved by this carrier binding; PR gate still needs a real authored review/suite policy decision for this docs-only contract PR.
-- Latest Validation Summary: Carrier-only expected evidence: fact-chain should read WI-1286 instead of terminal WI-1294; git diff --check should pass. The PR gate is expected to continue blocking until real review/suite policy is resolved.
-- Recovery Boundary: Carrier refresh only. Do not change review disposition contract prose, pr-gate/merge-gate runtime behavior, downstream repository rules, release evidence, or unrelated root Loom state.
+- Current Stop: PR #1299 has the review disposition and PR head binding contract documentation implemented, is rebased on main after #1307, and carries a formal WI-1286 suite path decision instead of fake minimal suite artifacts.
+- Next Step: Record a true current-head implementation review for PR #1299, refresh retained carriers, run PR gate against the pushed head, and consume hosted checks.
+- Blockers: None
+- Latest Validation Summary: `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1286; `python3 tools/loom.py suite validate --target . --item WI-1286 --json` returned `result=not_applicable` with no blocking gaps and valid suite-level rationale.
+- Recovery Boundary: Keep this PR limited to WI-1286 carriers, formal suite not_applicable locator, review disposition/head-binding contract docs, repo companion boundary wording, and validation evidence. Do not implement #1287/#1288/#1289, change pr-gate/merge-gate runtime behavior, add downstream repository rules, or add fake minimal suite artifacts.
 - Current Lane: pre-review/review-head-binding-contract
 
 ## Runtime Evidence
