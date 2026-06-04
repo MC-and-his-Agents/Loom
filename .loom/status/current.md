@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1286
-- Goal: Freeze the review disposition and PR head binding contract for parent #1285.
-- Scope: Define `semantic_review_disposition`, PR head binding, PR gate, merge check/run, closeout sync responsibility boundaries, allowed bypass types, and fail-closed conditions. Runtime implementation for #1287/#1288/#1289, downstream repository rule changes, and gate behavior changes remain out of scope.
-- Execution Path: issue #1286 -> branch work/1286-review-head-binding-contract -> PR #1299 -> CI/review -> merge to main.
+- Item ID: WI-1239
+- Goal: Freeze the global CLI runtime provider contract for downstream repositories under parent #1238.
+- Scope: Define runtime provider taxonomy, provider authority boundaries, required `global-cli` command surface, metadata-only adoption relationship, compatibility mode, and migration boundary wording. Installed-state, doctor, verify, repair, migration, plugin registration, runtime execution behavior changes, and #1240-#1246 implementation work remain out of scope.
+- Execution Path: issue #1239 -> branch work/1239-global-cli-provider-contract -> PR #1300 -> CI/review -> merge to main.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1286.md
-- Review Entry: .loom/reviews/WI-1286.json
-- Validation Entry: git diff --check; focused rg for review disposition/head-binding contract terms; PR CI.
-- Closing Condition: PR #1299 is merged to main, #1286 is closed with contract evidence, and follow-up gate/runtime implementation issues remain explicitly out of scope.
-- Current Checkpoint: closed
-- Current Stop: PR #1299 merged to main at 2026-06-04T18:36:17Z with merge commit 71d0451ffdc02f817f94c70904181c0dbf0c9462; issue #1286 closed at 2026-06-04T18:36:18Z; controlled merge and hosted checks passed before closeout sync.
-- Next Step: None; WI-1286 is terminal and retained only as review disposition / PR head binding contract evidence for the #1285 implementation sequence.
-- Blockers: None
-- Latest Validation Summary: Post-merge closeout sync validation passed `git diff --check`, `python3 tools/loom.py fact-chain --target . --json`, and `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`.
-- Recovery Boundary: Terminal closeout carrier only. Do not resume WI-1286 implementation here; PR gate, merge check/run, and closeout runtime work continue through separate #1285 follow-up issues.
-- Current Lane: terminal-closeout
+- Recovery Entry: .loom/progress/WI-1239.md
+- Review Entry: .loom/reviews/WI-1239.json
+- Validation Entry: git diff --check; tools/loom.py help --json; PR CI.
+- Closing Condition: PR #1300 is merged to main, #1239 is closed with contract evidence, and follow-up global-cli provider implementation issues remain explicitly out of scope.
+- Current Checkpoint: pre-review
+- Current Stop: PR #1300 has the global CLI runtime provider contract documentation implemented; this carrier-only update binds the branch fact-chain to WI-1239 after WI-1294 terminal closeout landed on main.
+- Next Step: Resolve the real pre-review/merge gate policy for docs-only contract freezes: either perform a true current-head review with a supported suite path decision, or mark the formal suite not_applicable through a gate-supported contract. Do not add fake minimal suite artifacts only to satisfy the gate.
+- Blockers: The WI mismatch should be resolved by this carrier binding; PR gate still needs a real authored review/suite policy decision for this docs-only contract PR.
+- Latest Validation Summary: Carrier-only expected evidence: fact-chain should read WI-1239 instead of terminal WI-1294; git diff --check should pass. The PR gate is expected to continue blocking until real review/suite policy is resolved.
+- Recovery Boundary: Carrier refresh only. Do not change global-cli contract prose, installed-state/doctor/verify/repair behavior, migration behavior, release evidence, or unrelated root Loom state.
+- Current Lane: pre-review/global-cli-provider-contract
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: PR #1299 local pr-gate, hosted required checks, and merge commit 71d0451ffdc02f817f94c70904181c0dbf0c9462
-- Lane Entry: terminal-closeout
+- Verification Entry: PR #1300 validation section and hosted CI
+- Lane Entry: pre-review/global-cli-provider-contract
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1286.md
-- Dynamic Truth: .loom/progress/WI-1286.md
+- Static Truth: .loom/work-items/WI-1239.md
+- Dynamic Truth: .loom/progress/WI-1239.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
