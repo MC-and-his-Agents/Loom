@@ -87,6 +87,15 @@ loom gate pre-review|spec-review|review|pr|merge|closeout
 
 `status` and `fact-chain` are derived reads over the existing Loom carriers. `checkpoint` commands consume the established checkpoint payloads. `gate merge` checks host merge readiness through controlled-merge check but does not execute a merge. `gate closeout` checks closeout state but does not sync or close host objects.
 
+For #1229, the contract now reserves an explicit idle repository state for these read surfaces:
+
+- `loom fact-chain`
+  - may return `fact_chain.mode = idle` with `current_item_id = no_active_item`
+- `loom status`
+  - may render repository execution state `idle` without inventing an active Work Item
+
+This batch does not add new sync commands, terminal metadata writers, or repair/apply flows. `workspace retire` remains local-only, and carrier closeout sync stays a later Work Item.
+
 ## Delivery Commands
 
 #889 implements the install, upgrade, rollback, and verify command family:

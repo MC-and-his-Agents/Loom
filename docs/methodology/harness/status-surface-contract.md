@@ -63,6 +63,7 @@ Governance lint result 也只能作为 derived evidence 被第 4 层展示和映
 
 至少包含：
 
+- `status`
 - `id`
 - `goal`
 - `scope`
@@ -73,6 +74,15 @@ Governance lint result 也只能作为 derived evidence 被第 4 层展示和映
 - `review_entry`
 - `validation_entry`
 
+其中：
+
+- `status`
+  - 固定为 `active | idle`
+- 当 `status = idle` 时：
+  - `id` 固定为 `no_active_item`
+  - 其余 active-only authored truth 字段必须为 `not_applicable`
+  - 该结果必须回链到 `fact_chain.mode = idle` 与 `init-result.fact_chain.entry_points`
+
 ### 3.2 `checkpoint`
 
 至少包含：
@@ -81,6 +91,8 @@ Governance lint result 也只能作为 derived evidence 被第 4 层展示和映
 - `normalized`
 - `current_gate`
 - `next_gate`
+
+当 repository execution state 为 `idle` 时，`checkpoint` 字段组允许整体为 `not_applicable`，但必须保留 provenance 与 consumer boundary。
 
 ### 3.3 `recovery`
 
@@ -92,6 +104,8 @@ Governance lint result 也只能作为 derived evidence 被第 4 层展示和映
 - `latest_validation_summary`
 - `recovery_boundary`
 - `current_lane`
+
+当 repository execution state 为 `idle` 时，`recovery` 字段组允许整体为 `not_applicable`；字段缺失不等于 idle。
 
 ### 3.4 `execution_ledger`
 
@@ -112,6 +126,7 @@ Governance lint result 也只能作为 derived evidence 被第 4 层展示和映
 - `forbidden_authored_fields`
 
 该字段组只展示 recovery-bound ledger 的派生结论。它不得 authored `next_step`、`blockers` 或 `latest_validation_summary`。
+当 repository execution state 为 `idle` 时，该字段组允许返回 `not_applicable`，但不得伪造空 ledger 充当 active recovery。
 
 ### 3.5 `gates`
 
