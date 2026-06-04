@@ -15,7 +15,7 @@
 - Current Stop: PR #1297 merged to main at 2026-06-04T17:29:52Z with merge commit b3d23c40bef7b8f29e5319447ae93ba05ad01472; issues #1264, #1265, and #1266 closed at 2026-06-04T17:29:53Z/17:29:54Z/17:29:54Z; controlled merge and hosted checks passed before closeout sync.
 - Next Step: None; WI-1264 is terminal and retained only as regression surface contract evidence for the #1255 implementation sequence.
 - Blockers: None
-- Latest Validation Summary: PR #1297 at head 9671a09ef07d0e05c78dc4cdd3b0523454aa1b92 passed local pr-gate, controlled-merge check, hosted py-compile, demo-bootstrap, repo-local-cli, root-self-governance, loom-pr-merge-gate, and two loom-check jobs before squash merge.
+- Latest Validation Summary: Post-merge closeout sync PR #1307 at head 563f5953b0ab6d098a85f1286537197021be9b7b passed `git diff --check`, `python3 tools/loom.py fact-chain --target . --json`, and `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`.
 - Recovery Boundary: Terminal closeout carrier only. Do not resume WI-1264 implementation here; inventory and implementation work continue through separate #1255 follow-up issues.
 - Current Lane: terminal-closeout
 
