@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1304.json
 - Validation Entry: git diff --check; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py governance-profile status --target /Users/mc/dev/Loom-worktrees/1264-regression-surface-contract --host github; python3 tools/loom_check.py --profile source --source-surface bootstrap-regression .
 - Closing Condition: PR for #1304 is merged and PR-A can consume docs-only not_applicable maturity after rebasing onto main.
-- Current Checkpoint: merge
-- Current Stop: hosted checks green and local pr-gate passed; ready for controlled merge readback
-- Next Step: merge PR #1305, then run closeout/readback before returning to A-D PR sequence
-- Blockers: none
+- Current Checkpoint: closed
+- Current Stop: PR #1305 merged to main at 2026-06-04T16:13:33Z with merge commit 444cc71ed1d5d828ee85a122ac1216d4e6d217eb; issue #1304 closed at 2026-06-04T16:13:34Z; closeout check/sync passed before returning to A-D PR closeout.
+- Next Step: None; WI-1304 is terminal and retained only as post-merge closeout evidence for the A-D PR sequence.
+- Blockers: None
 - Latest Validation Summary: 2026-06-04 final validation at d8f62124: local pr-gate passed; hosted checks all passed for PR #1305 including py-compile, demo-bootstrap, repo-local-cli, root-self-governance, loom-pr-merge-gate, release-judgment, node installer gate, and two loom-check jobs.
-- Recovery Boundary: WI-1304 unblocker only; A-D PR branches remain read-only until #1305 is merged
-- Current Lane: merge-ready
+- Recovery Boundary: Terminal closeout carrier only. Do not resume WI-1304 implementation here; A-D PR closeout continues on their own branches.
+- Current Lane: terminal-closeout
 
 ## Runtime Evidence
 
