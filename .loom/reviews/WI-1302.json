@@ -1,0 +1,52 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1302",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1302 current-head implementation review: allow. Current head 5b1e58d5e8460a893874f3da7a4ed0afbecdc8e7 keeps the docs-only suite not_applicable gate fix intact, synchronizes the generated demo runtime copy and bootstrap/shadow hashes, does not add fake minimal suites, does not weaken implementation review, fact-chain, CI, pr-gate, or closeout, and the local validation set passed for diff check, fact-chain, suite validate, demo bootstrap, runtime parity/adopt verify/carrier refresh dry-run.",
+  "reviewer": "codex-main-thread",
+  "reviewed_head": "5b1e58d5e8460a893874f3da7a4ed0afbecdc8e7",
+  "reviewed_validation_summary": "`git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed; `python3 tools/loom.py suite validate --target . --item WI-1302 --json` passed; focused `assert_docs_contract_suite_not_applicable_gate_contract` passed after review/merge-ready suite NA routing fix; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py` passed after routing fix; `python3 tools/check_demo_bootstrap_fixture.py` passed after stable fixture sync; `python3 tools/loom_check.py --profile source --source-surface bootstrap-regression .` passed after root runtime carrier refresh.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1302.md",
+    "recovery_entry": ".loom/progress/WI-1302.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1302-docs-only-suite-not-applicable/tools/loom.py suite evidence validate --target /Users/mc/dev/Loom-worktrees/1302-docs-only-suite-not-applicable --item WI-1302 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/dev/Loom-worktrees/1302-docs-only-suite-not-applicable/tools/loom.py suite carrier validate --target /Users/mc/dev/Loom-worktrees/1302-docs-only-suite-not-applicable --item WI-1302 --json",
+    "suite_evidence_map": ".loom/specs/WI-1302/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1302/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  }
+}

@@ -124,6 +124,7 @@ CLOSEOUT_HEAVY_PROFILES = {
 PR_METADATA_PREFLIGHT_SCHEMA = "loom-pr-metadata-preflight/v1"
 PR_METADATA_MACHINE_SCHEMA = "loom-repo-pr-metadata/v1"
 PR_METADATA_PARSER_VERSION = "loom-pr-metadata-parser/v1"
+PR_METADATA_SUPPORTED_PARSER_VERSIONS = (PR_METADATA_PARSER_VERSION, "repo-parser/v1")
 
 PROJECT_DRIFT_KINDS = {
     "project_missing_item",
@@ -584,13 +585,20 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     pr_metadata = subparsers.add_parser("pr-metadata", help="Validate repo-specific PR metadata machine carriers")
     pr_metadata.add_argument("operation", choices=("preflight",))
     pr_metadata.add_argument("--target", required=True, help="Target repository root")
-    pr_metadata.add_argument("--surface", choices=("review", "merge_ready"), required=True, help="Gate surface that consumes the metadata preflight")
+    pr_metadata.add_argument(
+        "--surface",
+        choices=("pre_review", "review", "merge_ready"),
+        required=True,
+        help="Gate surface that consumes the metadata preflight",
+    )
     pr_metadata.add_argument("--owner", help="GitHub owner; auto-detected from origin when omitted")
     pr_metadata.add_argument("--repo", dest="repo_name", help="GitHub repository name; auto-detected from origin when omitted")
     pr_metadata.add_argument("--pr", type=int, help="GitHub implementation PR number")
     pr_metadata.add_argument("--head-sha", help="Expected PR head SHA")
     pr_metadata.add_argument("--branch", help="Optional PR branch/ref used to infer a PR number")
     pr_metadata.add_argument("--pr-payload-file", help="Optional repo-relative PR payload JSON fixture")
+    pr_metadata.add_argument("--body-file", help="Optional repo-relative rendered PR body markdown to validate before gh pr edit")
+    pr_metadata.add_argument("--compare-body-file", help="Optional repo-relative post-edit/readback PR body markdown to compare against --body-file")
 
     controlled_merge = subparsers.add_parser("controlled-merge", help="Check or execute Loom-controlled PR merge")
     controlled_merge.add_argument("operation", choices=("check", "merge"))
@@ -5068,6 +5076,14 @@ def git_changed_paths(root: Path, base: str, head: str) -> tuple[list[str], list
     return paths, []
 
 
+def git_merge_base(root: Path, base_ref: str, head_ref: str = "HEAD") -> str | None:
+    result = run_git(root, ["merge-base", base_ref, head_ref])
+    if result is None or result.returncode != 0:
+        return None
+    sha = result.stdout.strip()
+    return sha or None
+
+
 def git_tracked_diff_fingerprint(root: Path) -> tuple[str | None, list[str]]:
     result = run_git(root, ["diff", "--binary", "--no-ext-diff", "HEAD", "--"])
     if result is None:
@@ -6677,7 +6693,7 @@ def spec_suite_paths(context: dict[str, Any]) -> dict[str, str]:
     return candidates[0]
 
 
-SPEC_REVIEW_SUITE_READY_RESULTS = {"pass", "advisory"}
+SPEC_REVIEW_SUITE_READY_RESULTS = {"pass", "advisory", "not_applicable"}
 
 
 def suite_validate_command_candidates(context: dict[str, Any]) -> list[Path]:
@@ -6778,6 +6794,16 @@ def suite_gate_not_applicable_payload(context: dict[str, Any], *, surface: str) 
     }
 
 
+def suite_gate_payload_for_surface(context: dict[str, Any], *, surface: str) -> dict[str, Any]:
+    if suite_gate_required_for_surface(context, surface=surface):
+        return suite_gate_validation_payload(context, surface=surface)
+    return suite_gate_not_applicable_payload(context, surface=surface)
+
+
+def spec_review_gate_ready_for_implementation_review(spec_gate: dict[str, Any]) -> bool:
+    return spec_gate.get("result") in SPEC_REVIEW_SUITE_READY_RESULTS
+
+
 def normalize_suite_validate_payload(payload: dict[str, Any], *, validator: str, mode: str) -> dict[str, Any]:
     normalized = dict(payload)
     nested_payload = normalized.get("payload")
@@ -6833,7 +6859,7 @@ def spec_suite_validation_payload(context: dict[str, Any]) -> dict[str, Any]:
         try:
             completed = run_process(
                 [
-                    "python3",
+                    sys.executable,
                     str(command),
                     "suite",
                     "validate",
@@ -7107,18 +7133,24 @@ def review_gate_payload(
 def spec_review_gate_payload(context: dict[str, Any]) -> dict[str, Any]:
     suite, missing_suite_paths = formal_spec_suite_status(context)
     suite_validation = spec_suite_validation_payload(context)
+    suite_not_applicable = suite_validation.get("result") == "not_applicable"
     spec_path = suite["spec"] if not missing_suite_paths else formal_spec_path(context)
     payload = review_gate_payload(
         context,
         review_path=default_spec_review_path(context["item_id"]),
         expected_kind="spec_review",
         gate_name="spec_review",
-        required=not missing_suite_paths,
+        required=not missing_suite_paths and not suite_not_applicable,
         path_label=spec_path,
     )
     payload["formal_spec_suite"] = suite
     payload["suite_validation"] = suite_validation
-    if missing_suite_paths:
+    if suite_not_applicable:
+        payload["result"] = "not_applicable"
+        payload["summary"] = "spec review is not applicable because suite validation consumed a formal suite not_applicable path decision."
+        payload["missing_inputs"] = []
+        payload["fallback_to"] = None
+    elif missing_suite_paths:
         payload["result"] = "block"
         payload["summary"] = "spec review is blocked until the complete formal spec suite is present."
         payload["missing_inputs"] = [
@@ -7818,6 +7850,12 @@ def build_review_flow_payload(
     expected_item: str | None,
     *,
     operation: str = "review",
+    require_review_entry: bool = True,
+    owner: str | None = None,
+    repo_name: str | None = None,
+    pr_number: int | None = None,
+    branch_name: str | None = None,
+    pr_payload_file: str | None = None,
 ) -> dict[str, Any]:
     runtime_state = runtime_state_payload(target_root)
     steps: list[dict[str, Any]] = [
@@ -7917,6 +7955,20 @@ def build_review_flow_payload(
         target_root=target_root,
         surface=surface_name,
     )
+    pr_metadata_preflight = (
+        pr_metadata_preflight_payload(
+            target_root=target_root,
+            surface="review",
+            owner=owner,
+            repo_name=repo_name,
+            pr_number=pr_number,
+            branch_name=branch_name,
+            pr_payload_file=pr_payload_file,
+            governance_surface=governance_surface,
+        )
+        if operation == "review"
+        else None
+    )
     suite_gate_validation: dict[str, Any] | None = None
     if operation == "spec-review":
         review_path = default_spec_review_path(context["item_id"])
@@ -7969,7 +8021,7 @@ def build_review_flow_payload(
             authority_after="loom review record",
         )
         spec_gate = spec_review_gate_payload(context)
-        suite_gate_validation = suite_gate_validation_payload(context, surface="review")
+        suite_gate_validation = suite_gate_payload_for_surface(context, surface="review")
         extra_steps = [
             {
                 "name": "spec-review-gate",
@@ -7985,15 +8037,28 @@ def build_review_flow_payload(
             suite_gate_step("suite-evidence-validate", suite_gate_validation, "evidence"),
             suite_gate_step("suite-carrier-validate", suite_gate_validation, "carrier"),
         ]
+        if isinstance(pr_metadata_preflight, dict):
+            extra_steps.append(
+                {
+                    "name": "pr-metadata-preflight",
+                    "result": pr_metadata_preflight["result"],
+                    "summary": pr_metadata_preflight["summary"],
+                    "missing_inputs": pr_metadata_preflight["missing_inputs"],
+                    "fallback_to": pr_metadata_preflight["fallback_to"],
+                    "pr_metadata_preflight": pr_metadata_preflight,
+                }
+            )
         review_step_name = "review-entry"
-        review_step_result = "pass" if review_record and not review_errors else "block"
+        review_step_result = "pass" if (review_record and not review_errors) or not require_review_entry else "block"
         review_step_summary = (
             "formal review artifact is readable."
             if review_record and not review_errors
+            else "formal review artifact will be authored from this review run."
+            if not require_review_entry
             else "formal review artifact is missing or invalid."
         )
-        review_step_missing = review_errors or ([] if review_record else [f"missing review artifact: {review_path}"])
-        review_step_fallback = "build" if (review_errors or review_record is None) else None
+        review_step_missing = [] if not require_review_entry and not review_errors else review_errors or ([] if review_record else [f"missing review artifact: {review_path}"])
+        review_step_fallback = "build" if require_review_entry and (review_errors or review_record is None) else None
     steps.extend(
         [
             {
@@ -8028,6 +8093,13 @@ def build_review_flow_payload(
     if result != "block" and repo_specific_requirements["result"] == "block":
         result = "block"
         fallback_to = fallback_to or repo_specific_requirements["fallback_to"]
+    if (
+        operation == "review"
+        and isinstance(pr_metadata_preflight, dict)
+        and pr_metadata_preflight.get("result") == "block"
+    ):
+        result = "block"
+        fallback_to = pr_metadata_preflight.get("fallback_to") or fallback_to
 
     if result == "block" and repo_specific_requirements["result"] == "block":
         summary = (
@@ -8058,6 +8130,14 @@ def build_review_flow_payload(
                     missing_inputs.append(message)
     if repo_specific_requirements["result"] == "block":
         for message in repo_specific_requirements.get("missing_inputs", []):
+            if message not in missing_inputs:
+                missing_inputs.append(message)
+    if (
+        operation == "review"
+        and isinstance(pr_metadata_preflight, dict)
+        and pr_metadata_preflight.get("result") == "block"
+    ):
+        for message in pr_metadata_preflight.get("missing_inputs", []):
             if message not in missing_inputs:
                 missing_inputs.append(message)
     recovery_readiness = report_recovery_readiness(context["report"])
@@ -8117,6 +8197,7 @@ def build_review_flow_payload(
             }
         ),
         "repo_specific_requirements": repo_specific_requirements,
+        **({"pr_metadata_preflight": pr_metadata_preflight} if isinstance(pr_metadata_preflight, dict) else {}),
         "current_checkpoint": {
             "raw": context["current_checkpoint_raw"],
             "normalized": context["current_checkpoint"],
@@ -9853,6 +9934,15 @@ def codex_app_binding_summary(
     }
 
 
+def codex_app_thread_cwd_matches_target(target_root: Path, thread_cwd: str | None) -> bool:
+    if not non_empty_str(thread_cwd):
+        return False
+    try:
+        return Path(str(thread_cwd)).expanduser().resolve() == target_root
+    except OSError:
+        return False
+
+
 def select_review_adapter(
     args: argparse.Namespace,
     target_root: Path,
@@ -9883,6 +9973,16 @@ def select_review_adapter(
     missing_host_proof = codex_app_missing_host_proof(bindings)
     ci_env_present = truthy_env("CI") or truthy_env("CODEX_CI")
     if not missing_host_proof:
+        if not raw_file and not codex_app_thread_cwd_matches_target(target_root, thread_cwd):
+            return {
+                "adapter": DEFAULT_REVIEW_ADAPTER,
+                "selection_source": "host-proof-fallback",
+                "fallback_reason": "thread-cwd-target-mismatch",
+                **bindings,
+                "ci_env_present": ci_env_present,
+                "missing_host_proof": ["thread cwd matching target root"],
+                "binding_summary": codex_app_binding_summary(target_root, reviewed_head=reviewed_head, **binding_values),
+            }
         if not raw_file and not codex_app_endpoint_is_live_capable(app_server):
             return {
                 "adapter": DEFAULT_REVIEW_ADAPTER,
@@ -13370,6 +13470,21 @@ def load_optional_json_fixture(target_root: Path, fixture: str | None, *, label:
         return None, [f"invalid {label} `{fixture}`: {exc}"]
 
 
+def load_optional_text_fixture(target_root: Path, fixture: str | None, *, label: str) -> tuple[str | None, list[str]]:
+    if not fixture:
+        return None, []
+    path, errors = resolve_repo_relative_path(target_root, fixture, label=label)
+    if errors:
+        return None, errors
+    assert path is not None
+    if not path.exists() or not path.is_file():
+        return None, [f"{label} points to a missing file: {fixture}"]
+    try:
+        return path.read_text(encoding="utf-8"), []
+    except OSError as exc:
+        return None, [f"invalid {label} `{fixture}`: {exc}"]
+
+
 def normalize_pr_fixture_payload(payload: Any) -> tuple[dict[str, Any] | None, list[str]]:
     if not isinstance(payload, dict):
         return None, ["PR payload fixture must be a JSON object"]
@@ -13449,12 +13564,14 @@ def pr_body_mentions_item(body: Any, item_id: str) -> bool:
 
 
 def pr_metadata_block_locator(body: str, start: int, end: int, marker: str) -> dict[str, Any]:
+    raw_excerpt = body[start:end]
     return {
         "marker": marker,
         "start_offset": start,
         "end_offset": end,
         "start_line": body.count("\n", 0, start) + 1,
         "end_line": body.count("\n", 0, end) + 1,
+        "raw_excerpt_sha256": hashlib.sha256(raw_excerpt.encode("utf-8")).hexdigest(),
     }
 
 
@@ -13544,11 +13661,87 @@ def pr_metadata_html_comment_blocks(body: str, marker: str) -> list[dict[str, An
     return blocks
 
 
+def pr_metadata_block_fingerprints(body: str, marker: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "index": index,
+            "start_line": block["locator"].get("start_line"),
+            "end_line": block["locator"].get("end_line"),
+            "raw_excerpt_sha256": block["locator"].get("raw_excerpt_sha256"),
+        }
+        for index, block in enumerate(pr_metadata_html_comment_blocks(body, marker))
+    ]
+
+
+def pr_metadata_body_artifact_payload(
+    *,
+    body_file: str | None,
+    body: str | None,
+    compare_body_file: str | None,
+    compare_body: str | None,
+    applicable_contracts: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    if body_file is None and compare_body_file is None:
+        return None
+    body_sha256 = hashlib.sha256(body.encode("utf-8")).hexdigest() if isinstance(body, str) else None
+    compare_sha256 = hashlib.sha256(compare_body.encode("utf-8")).hexdigest() if isinstance(compare_body, str) else None
+    comparisons: list[dict[str, Any]] = []
+    missing_inputs: list[str] = []
+    for field in applicable_contracts:
+        contract_id = str(field.get("id") or "unknown")
+        machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
+        marker = str(machine_carrier.get("marker") or "loom:repo-pr-metadata")
+        before_blocks = pr_metadata_block_fingerprints(body, marker) if isinstance(body, str) else []
+        after_blocks = pr_metadata_block_fingerprints(compare_body, marker) if isinstance(compare_body, str) else []
+        status = "not_compared"
+        if compare_body_file is not None:
+            before_hashes = [block.get("raw_excerpt_sha256") for block in before_blocks]
+            after_hashes = [block.get("raw_excerpt_sha256") for block in after_blocks]
+            status = "match" if before_hashes == after_hashes else "mismatch"
+            if status == "mismatch":
+                missing_inputs.append(f"PR metadata machine block drift after body edit: {contract_id}")
+        comparisons.append(
+            {
+                "metadata_contract_id": contract_id,
+                "marker": marker,
+                "status": status,
+                "rendered_blocks": before_blocks,
+                "post_edit_blocks": after_blocks if compare_body_file is not None else [],
+            }
+        )
+    result = "pass" if not missing_inputs else "block"
+    return {
+        "schema_version": "loom-pr-body-metadata-artifact/v1",
+        "result": result,
+        "summary": (
+            "rendered PR body metadata artifact is readable and post-edit machine blocks match."
+            if result == "pass" and compare_body_file is not None
+            else "rendered PR body metadata artifact is readable."
+            if result == "pass"
+            else "post-edit PR body readback changed declared metadata machine blocks."
+        ),
+        "body_file": body_file,
+        "body_sha256": body_sha256,
+        "compare_body_file": compare_body_file,
+        "compare_body_sha256": compare_sha256,
+        "preflight_body_source": "compare_body_file" if compare_body_file else "body_file",
+        "machine_block_comparisons": comparisons,
+        "missing_inputs": missing_inputs,
+        "fallback_to": "gh_pr_edit_body_file_readback" if missing_inputs else None,
+        "safe_update_strategy": "render PR body to a file, update with `gh pr edit --body-file <file>`, read back the PR body, then rerun metadata preflight with --body-file and --compare-body-file.",
+    }
+
+
 def pr_metadata_diagnostic(
     *,
     contract_id: str,
     marker: str,
     reason: str,
+    source_locator: str | None = None,
+    source_range_or_hash: str | None = None,
+    expected_schema: str | None = None,
+    expected_parser_version: str | None = None,
+    fallback_to: str = "update_pr_body",
     block_locator: dict[str, Any] | None = None,
     parse_error: str | None = None,
     missing_fields: list[str] | None = None,
@@ -13556,10 +13749,15 @@ def pr_metadata_diagnostic(
     return {
         "metadata_contract_id": contract_id,
         "block_locator": block_locator,
+        "source_locator": source_locator,
+        "source_range_or_hash": source_range_or_hash,
         "parse_error": parse_error,
         "missing_fields": missing_fields or [],
+        "expected_schema": expected_schema or PR_METADATA_MACHINE_SCHEMA,
+        "expected_parser_version": expected_parser_version or PR_METADATA_PARSER_VERSION,
         "expected_format": pr_metadata_expected_format(marker),
         "suggested_fix": "rewrite the PR metadata HTML comment JSON block with the declared schema, surface, contract id, and required fields.",
+        "fallback_to": fallback_to,
         "reason": reason,
     }
 
@@ -13574,6 +13772,17 @@ def validate_pr_metadata_envelope(
     contract_id = str(field.get("id") or "")
     machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
     marker = str(machine_carrier.get("marker") or "loom:repo-pr-metadata")
+    authority_locator = field.get("authority_locator") if isinstance(field.get("authority_locator"), str) else None
+    source_range_or_hash = (
+        machine_carrier.get("source_range_or_hash")
+        if isinstance(machine_carrier.get("source_range_or_hash"), str)
+        else None
+    )
+    expected_schema = (
+        machine_carrier.get("schema_version")
+        if isinstance(machine_carrier.get("schema_version"), str) and machine_carrier.get("schema_version")
+        else PR_METADATA_MACHINE_SCHEMA
+    )
     diagnostics: list[dict[str, Any]] = []
     if not isinstance(envelope, dict):
         diagnostics.append(
@@ -13581,6 +13790,9 @@ def validate_pr_metadata_envelope(
                 contract_id=contract_id,
                 marker=marker,
                 reason="machine block JSON must decode to an object",
+                source_locator=authority_locator,
+                source_range_or_hash=source_range_or_hash,
+                expected_schema=expected_schema,
                 block_locator=block_locator,
                 parse_error="decoded JSON is not an object",
             )
@@ -13590,7 +13802,7 @@ def validate_pr_metadata_envelope(
         return None, []
 
     missing_fields: list[str] = []
-    if envelope.get("schema_version") != PR_METADATA_MACHINE_SCHEMA:
+    if envelope.get("schema_version") != expected_schema:
         missing_fields.append("schema_version")
     fields = envelope.get("fields")
     if not isinstance(fields, dict):
@@ -13599,8 +13811,13 @@ def validate_pr_metadata_envelope(
     source = envelope.get("source")
     if not isinstance(source, dict) or not isinstance(source.get("rendered_hash"), str) or not source.get("rendered_hash"):
         missing_fields.append("source.rendered_hash")
-    if not isinstance(envelope.get("parser_version"), str) or not envelope.get("parser_version"):
+    parser_version = envelope.get("parser_version")
+    unsupported_parser_version = False
+    if not isinstance(parser_version, str) or not parser_version:
         missing_fields.append("parser_version")
+    elif parser_version not in PR_METADATA_SUPPORTED_PARSER_VERSIONS:
+        missing_fields.append("parser_version")
+        unsupported_parser_version = True
     required_fields = machine_carrier.get("required_fields")
     if isinstance(required_fields, list):
         for required_field in required_fields:
@@ -13612,7 +13829,14 @@ def validate_pr_metadata_envelope(
             pr_metadata_diagnostic(
                 contract_id=contract_id,
                 marker=marker,
-                reason="machine block is missing required envelope or repo-specific fields",
+                reason=(
+                    f"unsupported parser_version: {parser_version}"
+                    if unsupported_parser_version
+                    else "machine block is missing required envelope or repo-specific fields"
+                ),
+                source_locator=authority_locator,
+                source_range_or_hash=source_range_or_hash,
+                expected_schema=expected_schema,
                 block_locator=block_locator,
                 missing_fields=missing_fields,
             )
@@ -13640,6 +13864,17 @@ def pr_metadata_contract_preflight(
     machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
     marker = str(machine_carrier.get("marker") or "loom:repo-pr-metadata")
     migration_mode = str(machine_carrier.get("migration_mode") or "advisory_legacy")
+    authority_locator = field.get("authority_locator") if isinstance(field.get("authority_locator"), str) else None
+    source_range_or_hash = (
+        machine_carrier.get("source_range_or_hash")
+        if isinstance(machine_carrier.get("source_range_or_hash"), str)
+        else None
+    )
+    expected_schema = (
+        machine_carrier.get("schema_version")
+        if isinstance(machine_carrier.get("schema_version"), str) and machine_carrier.get("schema_version")
+        else PR_METADATA_MACHINE_SCHEMA
+    )
     required_fields = [
         required_field
         for required_field in machine_carrier.get("required_fields", [])
@@ -13651,7 +13886,9 @@ def pr_metadata_contract_preflight(
         "marker": marker,
         "required_fields": required_fields,
         "migration_mode": migration_mode,
-        "schema_version": machine_carrier.get("schema_version"),
+        "schema_version": expected_schema,
+        "authority_locator": authority_locator,
+        "source_range_or_hash": source_range_or_hash,
         "parser_version": PR_METADATA_PARSER_VERSION,
         "diagnostics": [],
         "envelope": None,
@@ -13661,6 +13898,9 @@ def pr_metadata_contract_preflight(
             contract_id=contract_id,
             marker=marker,
             reason="PR body is unavailable for metadata preflight",
+            source_locator=authority_locator,
+            source_range_or_hash=source_range_or_hash,
+            expected_schema=expected_schema,
             missing_fields=["pr.body"],
         )
         result = "block" if migration_mode == "required" else "pass"
@@ -13684,6 +13924,9 @@ def pr_metadata_contract_preflight(
             contract_id=contract_id,
             marker=marker,
             reason="PR body does not contain the declared metadata machine block",
+            source_locator=authority_locator,
+            source_range_or_hash=source_range_or_hash,
+            expected_schema=expected_schema,
             missing_fields=["metadata_block"],
         )
         result = "block" if migration_mode == "required" else "pass"
@@ -13711,6 +13954,9 @@ def pr_metadata_contract_preflight(
                     contract_id=contract_id,
                     marker=marker,
                     reason="metadata machine block JSON is malformed",
+                    source_locator=authority_locator,
+                    source_range_or_hash=source_range_or_hash,
+                    expected_schema=expected_schema,
                     block_locator=block["locator"],
                     parse_error=exc.msg,
                 )
@@ -13749,6 +13995,9 @@ def pr_metadata_contract_preflight(
         contract_id=contract_id,
         marker=marker,
         reason="PR metadata machine blocks did not match the expected contract id and surface",
+        source_locator=authority_locator,
+        source_range_or_hash=source_range_or_hash,
+        expected_schema=expected_schema,
         missing_fields=["metadata_contract_id", "surface"],
     )
     result = "block" if migration_mode == "required" else "pass"
@@ -13777,6 +14026,8 @@ def pr_metadata_preflight_payload(
     head_sha: str | None = None,
     branch_name: str | None = None,
     pr_payload_file: str | None = None,
+    body_file: str | None = None,
+    compare_body_file: str | None = None,
     pr_payload: dict[str, Any] | None = None,
     effective_pr: int | None = None,
     governance_surface: dict[str, Any] | None = None,
@@ -13788,9 +14039,20 @@ def pr_metadata_preflight_payload(
     if contract_errors:
         missing_inputs.extend(str(message) for message in contract_errors)
 
+    body_artifact, body_errors = load_optional_text_fixture(target_root, body_file, label="PR body file")
+    compare_body_artifact, compare_body_errors = load_optional_text_fixture(
+        target_root,
+        compare_body_file,
+        label="post-edit PR body file",
+    )
+    missing_inputs.extend(str(message) for message in body_errors)
+    missing_inputs.extend(str(message) for message in compare_body_errors)
+    if compare_body_file and not body_file:
+        missing_inputs.append("--compare-body-file requires --body-file")
+
     pr_errors: list[str] = []
     inferences: list[dict[str, Any]] = []
-    if applicable_contracts and pr_payload is None and not contract_errors:
+    if applicable_contracts and pr_payload is None and body_artifact is None and compare_body_artifact is None and not contract_errors:
         detected_owner, detected_repo = detect_github_repo(target_root)
         pr_payload, effective_pr, pr_errors, inferences = load_pr_payload_for_gate(
             target_root=target_root,
@@ -13803,7 +14065,18 @@ def pr_metadata_preflight_payload(
         )
         missing_inputs.extend(f"pr: {message}" for message in pr_errors)
 
-    body = pr_payload.get("body") if isinstance(pr_payload, dict) else None
+    body = compare_body_artifact if compare_body_artifact is not None else body_artifact
+    if body is None:
+        body = pr_payload.get("body") if isinstance(pr_payload, dict) else None
+    body_artifact_result = pr_metadata_body_artifact_payload(
+        body_file=body_file,
+        body=body_artifact,
+        compare_body_file=compare_body_file,
+        compare_body=compare_body_artifact,
+        applicable_contracts=applicable_contracts,
+    )
+    if isinstance(body_artifact_result, dict):
+        missing_inputs.extend(str(message) for message in body_artifact_result.get("missing_inputs", []))
     contract_results = [
         pr_metadata_contract_preflight(field=field, body=body if isinstance(body, str) else None, surface=surface)
         for field in applicable_contracts
@@ -13845,7 +14118,271 @@ def pr_metadata_preflight_payload(
             "head_sha": pr_payload.get("headRefOid") if isinstance(pr_payload, dict) else head_sha,
             "has_body": isinstance(body, str),
         },
+        "body_artifact": body_artifact_result,
         "inferences": inferences,
+    }
+
+
+PRE_REVIEW_REQUIRED_VALIDATION_TOKENS = (
+    "git diff --check",
+    "tools/skills_surface.py check",
+    "tools/loom_check.py --profile source --source-surface contract-only",
+)
+
+PRE_REVIEW_RUNTIME_VALIDATION_TOKENS = (
+    "tools/check_cli_contract.py",
+)
+
+PRE_REVIEW_RELEASE_VALIDATION_TOKENS = (
+    "tools/check_release_surface.py",
+    "tools/version_surface_check.py",
+    "tools/check_npm_package.py",
+)
+
+PRE_REVIEW_RUNTIME_PATH_PREFIXES = (
+    "tools/",
+    "src/skills/",
+    "skills/",
+)
+
+PRE_REVIEW_RELEASE_PATH_PREFIXES = (
+    "VERSION",
+    "package.json",
+    "package-lock.json",
+    "packages/",
+    "plugins/",
+    "skills/registry.json",
+)
+
+
+def validation_summary_token_status(summary: str, token: str) -> dict[str, Any]:
+    present = token in summary
+    return {
+        "token": token,
+        "status": "present" if present else "missing",
+        "evidence_locator": "Latest Validation Summary",
+    }
+
+
+def changed_paths_for_readiness(target_root: Path) -> dict[str, Any]:
+    head = git_head_sha(target_root)
+    base = git_merge_base(target_root, "origin/main", "HEAD")
+    changed_paths: list[str] = []
+    errors: list[str] = []
+    if head and base:
+        changed_paths, errors = git_changed_paths(target_root, base, head)
+    return {
+        "base_ref": "origin/main",
+        "base_sha": base,
+        "head_sha": head,
+        "changed_paths": changed_paths,
+        "errors": errors,
+    }
+
+
+def pre_review_required_validation_tokens(changed_paths: list[str]) -> list[str]:
+    tokens = list(PRE_REVIEW_REQUIRED_VALIDATION_TOKENS)
+    if any(path.startswith(PRE_REVIEW_RUNTIME_PATH_PREFIXES) for path in changed_paths):
+        tokens.extend(PRE_REVIEW_RUNTIME_VALIDATION_TOKENS)
+    if any(path == prefix or path.startswith(prefix) for path in changed_paths for prefix in PRE_REVIEW_RELEASE_PATH_PREFIXES):
+        tokens.extend(PRE_REVIEW_RELEASE_VALIDATION_TOKENS)
+    return dedupe_strings(tokens)
+
+
+def pre_review_failure_taxonomy(missing_inputs: list[str]) -> list[str]:
+    categories: set[str] = set()
+    for message in missing_inputs:
+        lowered = str(message).lower()
+        if "dirty worktree" in lowered or "uncommitted" in lowered:
+            categories.add("dirty_worktree")
+        if "checkout head" in lowered or "pr head" in lowered or "head sha" in lowered:
+            categories.add("checkout_head_drift")
+        if "validation summary" in lowered or "deterministic" in lowered:
+            categories.add("deterministic_validation_missing")
+        if "skills_surface" in lowered or "generated skills" in lowered:
+            categories.add("generated_skills_surface_unverified")
+        if "version_surface" in lowered or "check_npm_package" in lowered or "release surface" in lowered:
+            categories.add("release_or_package_surface_unverified")
+        if "pr metadata" in lowered:
+            categories.add("pr_metadata_preflight_failed")
+        if "closeout" in lowered or "reconciliation" in lowered:
+            categories.add("closeout_preview_gap")
+        if "model proof" in lowered or "review engine profile" in lowered:
+            categories.add("review_model_proof_unavailable")
+    return sorted(categories)
+
+
+def pre_review_readiness_cost_guard_payload(
+    context: dict[str, Any],
+    *,
+    target_root: Path,
+    owner: str | None,
+    repo_name: str | None,
+    pr_number: int | None,
+    branch_name: str | None,
+    pr_payload_file: str | None,
+    pr_metadata_preflight: dict[str, Any] | None,
+) -> dict[str, Any]:
+    missing_inputs: list[str] = []
+    advisory_inputs: list[str] = []
+    current_head = git_head_sha(target_root)
+    current_branch = git_branch(target_root)
+    checkpoint_requires_review_readiness = checkpoint_rank(context["current_checkpoint"]) >= checkpoint_rank("build")
+    pr_intent = bool(pr_number or branch_name or pr_payload_file)
+    enforce = checkpoint_requires_review_readiness or pr_intent
+
+    detected_owner, detected_repo = detect_github_repo(target_root)
+    if pr_intent:
+        pr_payload, effective_pr, pr_errors, inferences = load_pr_payload_for_gate(
+            target_root=target_root,
+            owner=owner or detected_owner,
+            repo_name=repo_name or detected_repo,
+            pr_number=pr_number,
+            head_sha=None,
+            branch_name=branch_name,
+            pr_payload_file=pr_payload_file,
+        )
+    else:
+        pr_payload, effective_pr, pr_errors, inferences = None, None, [], []
+    if pr_errors and pr_intent:
+        missing_inputs.extend(f"pr: {message}" for message in pr_errors)
+    elif pr_errors:
+        advisory_inputs.extend(f"pr: {message}" for message in pr_errors)
+
+    pr_head = pr_payload.get("headRefOid") if isinstance(pr_payload, dict) else None
+    if isinstance(pr_head, str) and current_head and pr_head != current_head:
+        missing_inputs.append("checkout head does not match PR head; push_or_refresh_pr_head before review")
+    elif enforce and pr_intent and not isinstance(pr_head, str):
+        missing_inputs.append("PR head SHA is unavailable before review")
+
+    dirty_entries = git_dirty_entries(target_root)
+    if dirty_entries:
+        dirty_paths = [entry["path"] for entry in dirty_entries if isinstance(entry, dict) and entry.get("path")]
+        dirty_message = "dirty worktree has uncommitted paths before review: " + ", ".join(dirty_paths[:8])
+        if enforce:
+            missing_inputs.append(dirty_message)
+        else:
+            advisory_inputs.append(dirty_message)
+
+    changed = changed_paths_for_readiness(target_root)
+    changed_paths = changed["changed_paths"] if isinstance(changed.get("changed_paths"), list) else []
+    validation_summary = str(context.get("latest_validation_summary") or "")
+    required_tokens = pre_review_required_validation_tokens(changed_paths)
+    validation_checks = [validation_summary_token_status(validation_summary, token) for token in required_tokens]
+    missing_tokens = [check["token"] for check in validation_checks if check.get("status") == "missing"]
+    deterministic_checks_are_blocking = enforce and (pr_intent or bool(changed_paths))
+    if deterministic_checks_are_blocking and missing_tokens:
+        missing_inputs.append(
+            "Latest Validation Summary is missing deterministic review-readiness evidence: "
+            + ", ".join(missing_tokens)
+        )
+    elif missing_tokens:
+        advisory_inputs.append(
+            "Latest Validation Summary has not yet recorded deterministic review-readiness evidence: "
+            + ", ".join(missing_tokens)
+        )
+
+    metadata_result = pr_metadata_preflight.get("result") if isinstance(pr_metadata_preflight, dict) else "unavailable"
+    if metadata_result == "block":
+        missing_inputs.extend(str(message) for message in pr_metadata_preflight.get("missing_inputs", []))
+
+    engine_profile, profile_errors = resolve_review_engine_profile(
+        context,
+        "implementation",
+        adapter=DEFAULT_REVIEW_ADAPTER,
+    )
+    model_proof_contract = {
+        "schema_version": "loom-review-model-proof-consumption/v1",
+        "source_issue": "#969",
+        "status": "profile_resolved" if not profile_errors else "profile_unresolved",
+        "resolved_profile": engine_profile,
+        "missing_inputs": profile_errors,
+        "authority_boundary": "pre-review consumes profile proof but does not own model policy",
+    }
+    if profile_errors:
+        missing_inputs.extend(f"review engine profile: {message}" for message in profile_errors)
+
+    closeout_preview = {
+        "schema_version": "loom-closeout-preview/v1",
+        "result": "advisory",
+        "summary": "closeout preview is limited to early branch/PR/head/readiness signals; closeout remains authoritative later.",
+        "dry_run": True,
+        "checks": {
+            "work_item": context["item_id"],
+            "branch": branch_name or current_branch,
+            "pr": effective_pr,
+            "head_sha": current_head,
+            "project_status_authority": "closeout/reconciliation",
+        },
+        "does_not_replace": ["closeout_gate", "reconciliation_audit", "issue_closeout_comment"],
+    }
+
+    result = "block" if missing_inputs else "pass"
+    failure_taxonomy = pre_review_failure_taxonomy(missing_inputs)
+    if result == "pass" and not enforce:
+        summary = "pre-review readiness/cost guard is advisory until a PR binding or build checkpoint is present."
+    elif result == "pass":
+        summary = "pre-review readiness/cost guard passed; deterministic inputs are stable enough to spend semantic review."
+    else:
+        summary = "pre-review readiness/cost guard blocked before spending semantic review."
+    return {
+        "schema_version": "loom-pre-review-readiness-cost-guard/v1",
+        "result": result,
+        "summary": summary,
+        "missing_inputs": missing_inputs,
+        "advisory_inputs": advisory_inputs,
+        "failure_taxonomy": failure_taxonomy,
+        "fallback_to": "push_or_refresh_pr_head" if "checkout_head_drift" in failure_taxonomy else "build" if result == "block" else None,
+        "enforcement": {
+            "mode": "blocking" if enforce else "advisory",
+            "reason": "build checkpoint or PR binding present" if enforce else "no PR binding and current checkpoint is before build",
+        },
+        "authority_boundary": {
+            "role": "review_cost_guard_input",
+            "does_not_replace": [
+                "work_item",
+                "review_record",
+                "merge_ready_result",
+                "closeout_evidence",
+                "docs_source_truth",
+            ],
+        },
+        "head_alignment": {
+            "current_head": current_head,
+            "current_branch": current_branch,
+            "pr": effective_pr,
+            "pr_head": pr_head,
+            "inferences": inferences,
+            "status": (
+                "aligned"
+                if isinstance(pr_head, str) and current_head == pr_head
+                else "drift"
+                if isinstance(pr_head, str) and current_head and current_head != pr_head
+                else "not_applicable"
+            ),
+        },
+        "dirty_state": {
+            "result": "block" if dirty_entries else "pass",
+            "entries": dirty_entries,
+        },
+        "changed_paths": changed,
+        "deterministic_checks": {
+            "source": "Latest Validation Summary",
+            "required_tokens": required_tokens,
+            "checks": validation_checks,
+            "missing_tokens": missing_tokens,
+            "generated_skills_surface_required": "tools/skills_surface.py check" in required_tokens,
+            "release_or_package_surface_required": any(token in required_tokens for token in PRE_REVIEW_RELEASE_VALIDATION_TOKENS),
+        },
+        "pr_metadata_preflight": pr_metadata_preflight,
+        "post_review_carrier_policy": {
+            "schema_version": "loom-post-review-carrier-policy/v1",
+            "allowed_paths_source": "allowed_post_review_carrier_paths(context, review_path)",
+            "carrier_only_status": "retained_review_allowed",
+            "semantic_path_drift_status": "review_required",
+        },
+        "model_profile_proof": model_proof_contract,
+        "closeout_preview": closeout_preview,
     }
 
 
@@ -14342,6 +14879,8 @@ def handle_pr_metadata(args: argparse.Namespace) -> int:
             head_sha=args.head_sha,
             branch_name=args.branch,
             pr_payload_file=args.pr_payload_file,
+            body_file=args.body_file,
+            compare_body_file=args.compare_body_file,
         )
     )
 
@@ -18642,7 +19181,13 @@ def handle_review(args: argparse.Namespace) -> int:
                     "manual_review": manual_review,
                 }
             )
-        flow_payload = build_review_flow_payload(target_root, args.output, args.item, operation=flow_operation)
+        flow_payload = build_review_flow_payload(
+            target_root,
+            args.output,
+            args.item,
+            operation=flow_operation,
+            require_review_entry=inferred_spec_review,
+        )
         review_surface = flow_payload.get("review") or (flow_payload.get("spec_review") if inferred_spec_review else None)
         if flow_payload["result"] != "pass":
             manual_review = manual_review_payload(
@@ -18837,7 +19382,7 @@ def handle_review(args: argparse.Namespace) -> int:
     suite_gate_validation: dict[str, Any] | None = None
     if args.decision == "allow" and args.kind != "spec_review":
         spec_gate = spec_review_gate_payload(context)
-        if spec_gate["result"] != "pass":
+        if not spec_review_gate_ready_for_implementation_review(spec_gate):
             return emit(
                 {
                     "command": "review",
@@ -18850,8 +19395,8 @@ def handle_review(args: argparse.Namespace) -> int:
                     "spec_review": spec_gate,
                 }
             )
-        suite_gate_validation = suite_gate_validation_payload(context, surface="review")
-        if suite_gate_validation["result"] != "pass":
+        suite_gate_validation = suite_gate_payload_for_surface(context, surface="review")
+        if suite_gate_validation["result"] not in {"pass", "not_applicable"}:
             return emit(
                 {
                     "command": "review",
@@ -19788,7 +20333,17 @@ def handle_flow(args: argparse.Namespace) -> int:
             }
         )
     if args.operation in {"review", "spec-review"}:
-        payload = build_review_flow_payload(target_root, args.output, args.item, operation=args.operation)
+        payload = build_review_flow_payload(
+            target_root,
+            args.output,
+            args.item,
+            operation=args.operation,
+            owner=args.owner,
+            repo_name=args.repo_name,
+            pr_number=args.pr,
+            branch_name=args.branch,
+            pr_payload_file=args.pr_payload_file,
+        )
         payload["execution_attempt"] = persist_execution_attempt(
             context,
             command="flow",
@@ -19831,6 +20386,7 @@ def handle_flow(args: argparse.Namespace) -> int:
     retained_host_signals: dict[str, Any] | None = None
     pr_metadata_preflight: dict[str, Any] | None = None
     suite_gate_validation: dict[str, Any] | None = None
+    readiness_cost_guard: dict[str, Any] | None = None
     governance_surface = build_governance_surface(target_root)
     upgrade_path = maturity_upgrade_path(governance_surface, target_root)
     repo_interface = governance_surface.get("repo_interface")
@@ -19948,7 +20504,7 @@ def handle_flow(args: argparse.Namespace) -> int:
         elif args.operation == "merge-ready":
             build_payload = checkpoint_payload("build", context)
             merge_payload = checkpoint_payload("merge", context)
-            suite_gate_validation = suite_gate_validation_payload(context, surface="merge_ready")
+            suite_gate_validation = suite_gate_payload_for_surface(context, surface="merge_ready")
             repo_specific_requirements = repo_specific_requirements_payload(
                 repo_interface,
                 target_root=target_root,
@@ -20063,10 +20619,30 @@ def handle_flow(args: argparse.Namespace) -> int:
                     target_root=target_root,
                     surface="pre_review",
                 )
+                pr_metadata_preflight = pr_metadata_preflight_payload(
+                    target_root=target_root,
+                    surface="pre_review",
+                    owner=flow_owner,
+                    repo_name=flow_repo_name,
+                    pr_number=args.pr,
+                    branch_name=args.branch,
+                    pr_payload_file=args.pr_payload_file,
+                    governance_surface=governance_surface,
+                )
                 governance_lint = flow_governance_lint_status(
                     context,
                     surface="pre_review",
                     repo_specific_requirements=repo_specific_requirements,
+                )
+                readiness_cost_guard = pre_review_readiness_cost_guard_payload(
+                    context,
+                    target_root=target_root,
+                    owner=flow_owner,
+                    repo_name=flow_repo_name,
+                    pr_number=args.pr,
+                    branch_name=args.branch,
+                    pr_payload_file=args.pr_payload_file,
+                    pr_metadata_preflight=pr_metadata_preflight,
                 )
             locate_payload = base_workspace_payload(context, "locate")
             locate_result = "pass" if not locate_payload["purity"]["hard_failures"] else "block"
@@ -20105,6 +20681,28 @@ def handle_flow(args: argparse.Namespace) -> int:
                         "governance_lint": governance_lint,
                     }
                 )
+                if isinstance(pr_metadata_preflight, dict):
+                    steps.append(
+                        {
+                            "name": "pr-metadata-preflight",
+                            "result": pr_metadata_preflight["result"],
+                            "summary": pr_metadata_preflight["summary"],
+                            "missing_inputs": pr_metadata_preflight["missing_inputs"],
+                            "fallback_to": pr_metadata_preflight["fallback_to"],
+                            "pr_metadata_preflight": pr_metadata_preflight,
+                        }
+                    )
+                if isinstance(readiness_cost_guard, dict):
+                    steps.append(
+                        {
+                            "name": "pre-review-readiness-cost-guard",
+                            "result": readiness_cost_guard["result"],
+                            "summary": readiness_cost_guard["summary"],
+                            "missing_inputs": readiness_cost_guard["missing_inputs"],
+                            "fallback_to": readiness_cost_guard["fallback_to"],
+                            "readiness_cost_guard": readiness_cost_guard,
+                        }
+                    )
 
     if args.operation in {"resume", "pre-review", "merge-ready"} and args.project is not None:
         project_step_result = (
@@ -20218,6 +20816,20 @@ def handle_flow(args: argparse.Namespace) -> int:
     ):
         result = "block"
         fallback_to = retained_host_signals.get("fallback_to") or fallback_to
+    if (
+        args.operation in {"pre-review", "merge-ready"}
+        and isinstance(pr_metadata_preflight, dict)
+        and pr_metadata_preflight.get("result") == "block"
+    ):
+        result = "block"
+        fallback_to = pr_metadata_preflight.get("fallback_to") or fallback_to
+    if (
+        args.operation == "pre-review"
+        and isinstance(readiness_cost_guard, dict)
+        and readiness_cost_guard.get("result") == "block"
+    ):
+        result = "block"
+        fallback_to = readiness_cost_guard.get("fallback_to") or fallback_to
     if result != "block" and isinstance(repo_specific_requirements, dict) and repo_specific_requirements["result"] == "block":
         result = "block"
         fallback_to = fallback_to or repo_specific_requirements["fallback_to"]
@@ -20278,6 +20890,22 @@ def handle_flow(args: argparse.Namespace) -> int:
                 missing_inputs.append(message)
     if args.operation == "merge-ready" and isinstance(retained_host_signals, dict) and retained_host_signals.get("result") == "block":
         for message in retained_host_signals.get("missing_inputs", []):
+            if message not in missing_inputs:
+                missing_inputs.append(message)
+    if (
+        args.operation in {"pre-review", "merge-ready"}
+        and isinstance(pr_metadata_preflight, dict)
+        and pr_metadata_preflight.get("result") == "block"
+    ):
+        for message in pr_metadata_preflight.get("missing_inputs", []):
+            if message not in missing_inputs:
+                missing_inputs.append(message)
+    if (
+        args.operation == "pre-review"
+        and isinstance(readiness_cost_guard, dict)
+        and readiness_cost_guard.get("result") == "block"
+    ):
+        for message in readiness_cost_guard.get("missing_inputs", []):
             if message not in missing_inputs:
                 missing_inputs.append(message)
     if args.operation == "resume":
@@ -20350,7 +20978,8 @@ def handle_flow(args: argparse.Namespace) -> int:
             "blocking_failures": blocking_failures,
             "project_drift": flow_project_drift,
             **({"governance_lint": governance_lint} if args.operation in {"pre-review", "merge-ready"} else {}),
-            **({"pr_metadata_preflight": pr_metadata_preflight} if args.operation == "merge-ready" else {}),
+            **({"pr_metadata_preflight": pr_metadata_preflight} if args.operation in {"pre-review", "merge-ready"} else {}),
+            **({"readiness_cost_guard": readiness_cost_guard} if args.operation == "pre-review" else {}),
             **({"goal_execution_contract": goal_contract, "goal_readiness": goal_readiness} if args.operation == "resume" else {}),
             **({"governance_surface": governance_surface} if args.operation == "resume" else {}),
             **({"maturity_upgrade_path": upgrade_path} if args.operation == "resume" else {}),
@@ -20463,6 +21092,7 @@ def handle_flow(args: argparse.Namespace) -> int:
                     "review": review_payload,
                     "repo_specific_requirements": repo_specific_requirements,
                     "suite_gate_validation": suite_gate_validation,
+                    "readiness_cost_guard": readiness_cost_guard,
                     "current_checkpoint": {
                         "raw": context["current_checkpoint_raw"],
                         "normalized": context["current_checkpoint"],

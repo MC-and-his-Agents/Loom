@@ -516,6 +516,118 @@ def assert_reconciliation_suite_taxonomy_contract() -> None:
         raise AssertionError("reconciliation did not classify missing suite gate drift")
 
 
+def assert_docs_contract_suite_not_applicable_gate_contract(tmp: Path) -> None:
+    loom_flow = load_loom_flow_module()
+    target = tmp / "docs-contract-suite-not-applicable"
+    (target / ".loom/specs/WI-docs").mkdir(parents=True)
+    (target / ".loom/reviews").mkdir(parents=True)
+    (target / ".loom/specs/WI-docs/spec.md").write_text(
+        "# Spec\n\n"
+        "- Suite path: not_applicable\n\n"
+        "- Suite-level not_applicable: rationale: docs-only contract freeze does not require a formal suite; "
+        "consumer boundary: suite validate, spec review, pr-gate, merge-ready, and closeout may consume this only "
+        "as formal suite non-applicability and must still require Work Item truth, current-head implementation review, "
+        "CI, release/no-release evidence, and closeout evidence; "
+        "recheck condition: scope expands beyond docs-only contract or carrier updates.\n",
+        encoding="utf-8",
+    )
+    context = {
+        "target_root": target,
+        "item_id": "WI-docs",
+        "review_entry": ".loom/reviews/WI-docs.json",
+        "current_checkpoint": "merge",
+        "associated_artifacts": [],
+    }
+    original_spec_suite_validation_payload = loom_flow.spec_suite_validation_payload
+    original_git_head_sha = loom_flow.git_head_sha
+    original_suite_gate_validation_payload = loom_flow.suite_gate_validation_payload
+    try:
+        loom_flow.git_head_sha = lambda _target_root: "current-head"
+        loom_flow.spec_suite_validation_payload = lambda _context: {
+            "schema_version": "loom-suite-validation-consumption/v1",
+            "command": "suite validate",
+            "result": "not_applicable",
+            "summary": "Suite validate found a not_applicable suite path decision.",
+            "missing_inputs": [],
+            "blocking_gaps": [],
+            "payload": {
+                "suite_path": "not_applicable",
+                "path_decision_locator": ".loom/specs/WI-docs/spec.md",
+                "not_applicable_rationale": [
+                    {
+                        "artifact": "suite",
+                        "locator": ".loom/specs/WI-docs/spec.md:block-3",
+                        "rationale": "docs-only contract freeze",
+                        "consumer_boundary": "suite validate and pr-gate consume only formal suite non-applicability",
+                        "recheck_condition": "scope expands beyond docs-only contract or carrier updates",
+                    }
+                ],
+            },
+        }
+        spec_gate = loom_flow.spec_review_gate_payload(context)
+        if (
+            spec_gate.get("result") != "not_applicable"
+            or spec_gate.get("required") is not False
+            or spec_gate.get("missing_inputs")
+            or spec_gate.get("fallback_to") is not None
+        ):
+            raise AssertionError("spec review gate did not consume suite not_applicable as non-applicable")
+        implementation_gate = loom_flow.implementation_review_status_payload(context)
+        if (
+            implementation_gate.get("result") != "block"
+            or ".loom/reviews/WI-docs.json" not in " ".join(implementation_gate.get("missing_inputs", []))
+        ):
+            raise AssertionError("suite not_applicable must not bypass implementation review")
+        if not loom_flow.spec_review_gate_ready_for_implementation_review(spec_gate):
+            raise AssertionError("suite not_applicable must allow implementation review recording after spec gate")
+
+        def unexpected_suite_gate_validation(_context: dict[str, Any], *, surface: str) -> dict[str, Any]:
+            raise AssertionError(f"docs-only suite not_applicable must not call suite gate validators for {surface}")
+
+        loom_flow.suite_gate_validation_payload = unexpected_suite_gate_validation
+        review_suite_gate = loom_flow.suite_gate_payload_for_surface(context, surface="review")
+        merge_ready_suite_gate = loom_flow.suite_gate_payload_for_surface(context, surface="merge_ready")
+        if review_suite_gate.get("result") != "not_applicable" or merge_ready_suite_gate.get("result") != "not_applicable":
+            raise AssertionError("review and merge-ready must consume docs-only suite not_applicable")
+        for gate in (review_suite_gate, merge_ready_suite_gate):
+            if gate.get("missing_inputs") or gate.get("fallback_to") is not None:
+                raise AssertionError("suite not_applicable gate must not require evidence/carrier fallback inputs")
+        loom_flow.suite_gate_validation_payload = original_suite_gate_validation_payload
+
+        loom_flow.spec_suite_validation_payload = lambda _context: {
+            "schema_version": "loom-suite-validation-consumption/v1",
+            "command": "suite validate",
+            "result": "block",
+            "summary": "suite validation blocked invalid not_applicable rationale",
+            "missing_inputs": ["not_applicable_rationale:.loom/specs/WI-docs/spec.md:block-3:rationale"],
+            "blocking_gaps": [
+                {
+                    "failure_kind": "invalid_not_applicable_rationale",
+                    "source_locator": ".loom/specs/WI-docs/spec.md:block-3",
+                    "remediation_direction": "Author suite-level not_applicable rationale.",
+                }
+            ],
+            "fallback_to": "loom suite validate --target <repo> --item <item> --json",
+        }
+        (target / ".loom/specs/WI-docs/plan.md").write_text("# Plan\n", encoding="utf-8")
+        (target / ".loom/specs/WI-docs/implementation-contract.md").write_text(
+            "# Implementation Contract\n",
+            encoding="utf-8",
+        )
+        blocked_spec_gate = loom_flow.spec_review_gate_payload(context)
+        if (
+            blocked_spec_gate.get("result") != "block"
+            or not any("invalid_not_applicable_rationale" in str(message) for message in blocked_spec_gate.get("missing_inputs", []))
+        ):
+            raise AssertionError("invalid suite not_applicable rationale did not fail closed")
+        if loom_flow.spec_review_gate_ready_for_implementation_review(blocked_spec_gate):
+            raise AssertionError("blocked suite validation must not allow implementation review recording")
+    finally:
+        loom_flow.spec_suite_validation_payload = original_spec_suite_validation_payload
+        loom_flow.suite_gate_validation_payload = original_suite_gate_validation_payload
+        loom_flow.git_head_sha = original_git_head_sha
+
+
 def snapshot_tree(target: Path) -> list[str]:
     return sorted(path.relative_to(target).as_posix() for path in target.rglob("*"))
 
@@ -3383,6 +3495,7 @@ def main() -> int:
         assert_suite_gate_consumption(closeout_payload, expected_surface="closeout")
         assert_closeout_blocks_missing_suite_evidence(active_item)
         assert_reconciliation_suite_taxonomy_contract()
+        assert_docs_contract_suite_not_applicable_gate_contract(tmp)
         assert_governance_chain_closeout_fixture(tmp)
         _, checkpoint_admission = run_json(["checkpoint", "admission", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"])
         if checkpoint_admission["command"] != "checkpoint admission" or checkpoint_admission.get("checkpoint") != "admission":

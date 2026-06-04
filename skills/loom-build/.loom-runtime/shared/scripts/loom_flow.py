@@ -6693,7 +6693,7 @@ def spec_suite_paths(context: dict[str, Any]) -> dict[str, str]:
     return candidates[0]
 
 
-SPEC_REVIEW_SUITE_READY_RESULTS = {"pass", "advisory"}
+SPEC_REVIEW_SUITE_READY_RESULTS = {"pass", "advisory", "not_applicable"}
 
 
 def suite_validate_command_candidates(context: dict[str, Any]) -> list[Path]:
@@ -6792,6 +6792,16 @@ def suite_gate_not_applicable_payload(context: dict[str, Any], *, surface: str) 
             "carrier": dict(validation),
         },
     }
+
+
+def suite_gate_payload_for_surface(context: dict[str, Any], *, surface: str) -> dict[str, Any]:
+    if suite_gate_required_for_surface(context, surface=surface):
+        return suite_gate_validation_payload(context, surface=surface)
+    return suite_gate_not_applicable_payload(context, surface=surface)
+
+
+def spec_review_gate_ready_for_implementation_review(spec_gate: dict[str, Any]) -> bool:
+    return spec_gate.get("result") in SPEC_REVIEW_SUITE_READY_RESULTS
 
 
 def normalize_suite_validate_payload(payload: dict[str, Any], *, validator: str, mode: str) -> dict[str, Any]:
@@ -7123,18 +7133,24 @@ def review_gate_payload(
 def spec_review_gate_payload(context: dict[str, Any]) -> dict[str, Any]:
     suite, missing_suite_paths = formal_spec_suite_status(context)
     suite_validation = spec_suite_validation_payload(context)
+    suite_not_applicable = suite_validation.get("result") == "not_applicable"
     spec_path = suite["spec"] if not missing_suite_paths else formal_spec_path(context)
     payload = review_gate_payload(
         context,
         review_path=default_spec_review_path(context["item_id"]),
         expected_kind="spec_review",
         gate_name="spec_review",
-        required=not missing_suite_paths,
+        required=not missing_suite_paths and not suite_not_applicable,
         path_label=spec_path,
     )
     payload["formal_spec_suite"] = suite
     payload["suite_validation"] = suite_validation
-    if missing_suite_paths:
+    if suite_not_applicable:
+        payload["result"] = "not_applicable"
+        payload["summary"] = "spec review is not applicable because suite validation consumed a formal suite not_applicable path decision."
+        payload["missing_inputs"] = []
+        payload["fallback_to"] = None
+    elif missing_suite_paths:
         payload["result"] = "block"
         payload["summary"] = "spec review is blocked until the complete formal spec suite is present."
         payload["missing_inputs"] = [
@@ -8005,7 +8021,7 @@ def build_review_flow_payload(
             authority_after="loom review record",
         )
         spec_gate = spec_review_gate_payload(context)
-        suite_gate_validation = suite_gate_validation_payload(context, surface="review")
+        suite_gate_validation = suite_gate_payload_for_surface(context, surface="review")
         extra_steps = [
             {
                 "name": "spec-review-gate",
@@ -19366,7 +19382,7 @@ def handle_review(args: argparse.Namespace) -> int:
     suite_gate_validation: dict[str, Any] | None = None
     if args.decision == "allow" and args.kind != "spec_review":
         spec_gate = spec_review_gate_payload(context)
-        if spec_gate["result"] != "pass":
+        if not spec_review_gate_ready_for_implementation_review(spec_gate):
             return emit(
                 {
                     "command": "review",
@@ -19379,8 +19395,8 @@ def handle_review(args: argparse.Namespace) -> int:
                     "spec_review": spec_gate,
                 }
             )
-        suite_gate_validation = suite_gate_validation_payload(context, surface="review")
-        if suite_gate_validation["result"] != "pass":
+        suite_gate_validation = suite_gate_payload_for_surface(context, surface="review")
+        if suite_gate_validation["result"] not in {"pass", "not_applicable"}:
             return emit(
                 {
                     "command": "review",
@@ -20488,7 +20504,7 @@ def handle_flow(args: argparse.Namespace) -> int:
         elif args.operation == "merge-ready":
             build_payload = checkpoint_payload("build", context)
             merge_payload = checkpoint_payload("merge", context)
-            suite_gate_validation = suite_gate_validation_payload(context, surface="merge_ready")
+            suite_gate_validation = suite_gate_payload_for_surface(context, surface="merge_ready")
             repo_specific_requirements = repo_specific_requirements_payload(
                 repo_interface,
                 target_root=target_root,
