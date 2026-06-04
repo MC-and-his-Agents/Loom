@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1239
-- Goal: Freeze the global CLI runtime provider contract for downstream repositories under parent #1238.
-- Scope: Define runtime provider taxonomy, provider authority boundaries, required `global-cli` command surface, metadata-only adoption relationship, compatibility mode, and migration boundary wording. Installed-state, doctor, verify, repair, migration, plugin registration, runtime execution behavior changes, and #1240-#1246 implementation work remain out of scope.
-- Execution Path: issue #1239 -> branch work/1239-global-cli-provider-contract -> PR #1300 -> CI/review -> merge to main.
+- Item ID: WI-1229
+- Goal: Freeze the idle/no-active-item fact-chain schema and status surface contract for parent #1228.
+- Scope: Define canonical active, terminal, and idle repository execution state; specify how `.loom/bootstrap/init-result.json` and `.loom/status/current.md` represent idle without fake active locators; document provenance, backward compatibility, retained items, and governance status boundaries. Terminal metadata writing, command split implementation, carrier closeout sync, repair/apply flows, and later #1230-#1237/#1296 work remain out of scope.
+- Execution Path: issue #1229 -> branch work/1229-idle-fact-chain-contract -> PR #1298 -> CI/review -> merge to main.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1239.md
-- Review Entry: .loom/reviews/WI-1239.json
-- Validation Entry: git diff --check; tools/loom.py help --json; PR CI.
-- Closing Condition: PR #1300 is merged to main, #1239 is closed with contract evidence, and follow-up global-cli provider implementation issues remain explicitly out of scope.
-- Current Checkpoint: closed
-- Current Stop: PR #1300 merged to main at 2026-06-04T20:14:25Z with merge commit 1676694c1f94f7bb384abbd6f9f890e3704d6729; issue #1239 closed at 2026-06-04T20:16:35Z; local pr-gate and hosted release-judgment, loom-pr-merge-gate, node-installer-pr-gate, and loom-check passed before merge.
-- Next Step: None; WI-1239 is terminal and retained only as global CLI runtime provider contract evidence for the #1238 implementation sequence.
-- Blockers: None
-- Latest Validation Summary: Post-merge closeout sync validation passed `git diff --check`, `python3 tools/loom.py fact-chain --target . --json`, and `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; pre-merge PR #1300 passed local pr-gate and hosted required checks on head 96b0c851ecf73ffa775ce5c7c3f4b0fec0b0a35d before merge.
-- Recovery Boundary: Terminal closeout carrier only. Do not resume WI-1239 implementation here; installed-state, doctor/verify, migration, repair, and downstream runtime work continue through separate #1238 follow-up issues.
-- Current Lane: terminal-closeout
+- Recovery Entry: .loom/progress/WI-1229.md
+- Review Entry: .loom/reviews/WI-1229.json
+- Validation Entry: git diff --check; tools/check_loom_check_runtime_regressions.py; PR CI.
+- Closing Condition: PR #1298 is merged to main, #1229 is closed with contract evidence, and follow-up idle implementation issues remain explicitly out of scope.
+- Current Checkpoint: pre-review
+- Current Stop: PR #1298 has the idle fact-chain/status contract documentation implemented; this carrier-only update binds the branch fact-chain to WI-1229 after WI-1294 terminal closeout landed on main.
+- Next Step: Resolve the real pre-review/merge gate policy for docs-only contract freezes: either perform a true current-head review with a supported suite path decision, or mark the formal suite not_applicable through a gate-supported contract. Do not add fake minimal suite artifacts only to satisfy the gate.
+- Blockers: The WI mismatch should be resolved by this carrier binding; PR gate still needs a real authored review/suite policy decision for this docs-only contract PR.
+- Latest Validation Summary: Carrier-only expected evidence: fact-chain should read WI-1229 instead of terminal WI-1294; git diff --check should pass. The PR gate is expected to continue blocking until real review/suite policy is resolved.
+- Recovery Boundary: Carrier refresh only. Do not change idle contract prose, terminal closeout implementation, sync/repair behavior, release evidence, or unrelated root Loom state.
+- Current Lane: pre-review/idle-fact-chain-contract
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: PR #1300 local pr-gate, hosted required checks, and merge commit 1676694c1f94f7bb384abbd6f9f890e3704d6729
-- Lane Entry: terminal-closeout
+- Verification Entry: PR #1298 validation section and hosted CI
+- Lane Entry: pre-review/idle-fact-chain-contract
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1239.md
-- Dynamic Truth: .loom/progress/WI-1239.md
+- Static Truth: .loom/work-items/WI-1229.md
+- Dynamic Truth: .loom/progress/WI-1229.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
