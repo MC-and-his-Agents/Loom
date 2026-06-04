@@ -1,0 +1,50 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1286",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review for WI-1286 at c7fe6afb: review disposition and PR head binding contract docs freeze `semantic_review_disposition`, allowed dispositions, PR head binding, gate consumption boundaries, and repo companion / guardian evidence-only boundaries. Diff remains limited to WI-1286 carriers, formal suite not_applicable locator, review/head-binding documentation, repo companion boundary wording, and validation evidence; no runtime pr-gate/merge-gate behavior, downstream repository rules, release behavior, or fake minimal suite artifacts were introduced.",
+  "reviewer": "codex-main",
+  "reviewed_head": "c7fe6afb8a372a34c374574810d27b5950140508",
+  "reviewed_validation_summary": "`git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1286; `python3 tools/loom.py suite validate --target . --item WI-1286 --json` returned `result=not_applicable` with no blocking gaps and valid suite-level rationale.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1286.md",
+    "recovery_entry": ".loom/progress/WI-1286.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_path_decision": ".loom/specs/WI-1286/spec.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}
