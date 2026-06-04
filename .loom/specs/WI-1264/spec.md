@@ -1,0 +1,5 @@
+# WI-1264 Suite Path Decision
+
+- Suite path: not_applicable
+
+- Formal-suite not_applicable: rationale: WI-1264 is a docs-only contract freeze for the #1255 regression surface taxonomy, evidence schema, and fast/full policy; it does not introduce runtime behavior, executable regression surfaces, inventory output, release mechanics, or migration/repair behavior. consumer boundary: suite validate, review, merge-ready, PR gate, hosted CI, and issue closeout consume this locator only as the formal spec suite decision; implementation review, fact-chain, CI, PR head binding, release/no-release evidence, and closeout evidence remain required. recheck condition: require a full or minimal suite if this PR starts changing executable validation behavior, checker code, fixtures, inventory generation, release behavior, or any consumer beyond docs contract wording and cross-links. scope proof: `git diff origin/main...HEAD` must remain limited to WI-1264 carriers and regression surface contract documentation. review requirement: `.loom/reviews/WI-1264.json` must review the current PR head before merge-ready.
