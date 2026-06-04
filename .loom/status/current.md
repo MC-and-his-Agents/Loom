@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1304.json
 - Validation Entry: git diff --check; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py governance-profile status --target /Users/mc/dev/Loom-worktrees/1264-regression-surface-contract --host github; python3 tools/loom_check.py --profile source --source-surface bootstrap-regression .
 - Closing Condition: PR for #1304 is merged and PR-A can consume docs-only not_applicable maturity after rebasing onto main.
-- Current Checkpoint: release-judgment contract check fixed
-- Current Stop: ready for current-head review refresh after check_cli_contract fix
-- Next Step: record WI-1304 implementation review against current head f8e9f148, push PR #1305, update PR metadata, rerun pr-gate, then wait hosted CI
+- Current Checkpoint: merge
+- Current Stop: hosted checks green and local pr-gate passed; ready for controlled merge readback
+- Next Step: merge PR #1305, then run closeout/readback before returning to A-D PR sequence
 - Blockers: none
-- Latest Validation Summary: 2026-06-04 local validation pass at f8e9f148: skills_surface check, git diff --check, check_demo_bootstrap_fixture.py, carrier refresh dry-run, loom_check contract-only, full make loom-check before release-judgment fixture fix, and python3 tools/check_cli_contract.py after the fixture fix.
-- Recovery Boundary: WI-1304 unblocker only; A-D PR branches remain read-only until #1305 is green or merged
-- Current Lane: merge-ready-prep
+- Latest Validation Summary: 2026-06-04 final validation at d8f62124: local pr-gate passed; hosted checks all passed for PR #1305 including py-compile, demo-bootstrap, repo-local-cli, root-self-governance, loom-pr-merge-gate, release-judgment, node installer gate, and two loom-check jobs.
+- Recovery Boundary: WI-1304 unblocker only; A-D PR branches remain read-only until #1305 is merged
+- Current Lane: merge-ready
 
 ## Runtime Evidence
 
