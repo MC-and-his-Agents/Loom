@@ -11,9 +11,9 @@
 - Review Entry: .loom/reviews/WI-1302.json
 - Validation Entry: git diff --check; python3 tools/loom.py suite validate --target . --item WI-1302 --json; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py; PR/CI.
 - Closing Condition: Unblocker PR is merged, the gate consumes legal `not_applicable` only for spec-review non-applicability, implementation review remains required, and A-D PR closeout can proceed without fake suites.
-- Current Checkpoint: build
-- Current Stop: Local implementation and validation passed for the narrow gate/runtime unblocker.
-- Next Step: Commit, push, open the unblocker PR, then consume hosted CI/review.
+- Current Checkpoint: merge
+- Current Stop: Local implementation, validation, spec review, and implementation review passed for the narrow gate/runtime unblocker.
+- Next Step: Consume hosted CI/checks and merge gate for PR #1302.
 - Blockers: None
 - Latest Validation Summary: `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed; `python3 tools/loom.py suite validate --target . --item WI-1302 --json` passed; focused `assert_docs_contract_suite_not_applicable_gate_contract` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py` passed.
 - Recovery Boundary: Keep this PR limited to gate/runtime consumption of legal suite `not_applicable`, generated runtime synchronization, and regression coverage. Do not modify A-D PR branches or author fake suite/review evidence.
