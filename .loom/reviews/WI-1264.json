@@ -3,9 +3,9 @@
   "item_id": "WI-1264",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1264 current-head contract review: allow. Head cc35da077c1bda75ef8ce807d1399902bd11bdc4 is limited to regression surface contract documentation, WI-1264 carriers, and the formal suite not_applicable locator; it does not add fake minimal suite artifacts, runtime behavior, inventory, release work, or implementation splits. Read-only subagent diff review returned ALLOW, fact-chain passed, and suite validate returned not_applicable with valid rationale.",
-  "reviewer": "codex-main-thread",
-  "reviewed_head": "cc35da077c1bda75ef8ce807d1399902bd11bdc4",
+  "summary": "Implementation review for WI-1264 at c8733a1e: regression surface contract docs freeze taxonomy, minimum evidence schema, and fast/full validation policy only; diff remains limited to WI-1264 carriers, formal suite not_applicable locator, and harness docs cross-links; no runtime behavior, inventory, implementation split, release, or fake minimal suite artifacts were introduced. Validation passed: git diff --check; fact-chain for WI-1264; suite validate result=not_applicable with no blocking gaps; shadow-parity blocking pass; carrier refresh dry-run shows only the prior stale review.",
+  "reviewer": "codex-main",
+  "reviewed_head": "c8733a1ee469009256608bf106a4c3f587abf4a0",
   "reviewed_validation_summary": "`git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1264; `python3 tools/loom.py suite validate --target . --item WI-1264 --json` returned `result=not_applicable` with no blocking gaps and valid suite-level rationale.",
   "fallback_to": null,
   "findings": [],
@@ -18,15 +18,16 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "not_applicable",
+      "status": "unavailable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
-      "budget_summary": "execution budget is not collected for this invocation.",
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github check-runs read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/commits/main/check-runs\": EOF; github rulesets read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/rulesets\": EOF",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_host"
+        "source": "github_control_plane",
+        "error_count": 2
       }
     },
     "engine_adapter": null,
