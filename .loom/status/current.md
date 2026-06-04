@@ -11,21 +11,21 @@
 - Review Entry: .loom/reviews/WI-1286.json
 - Validation Entry: git diff --check; focused rg for review disposition/head-binding contract terms; PR CI.
 - Closing Condition: PR #1299 is merged to main, #1286 is closed with contract evidence, and follow-up gate/runtime implementation issues remain explicitly out of scope.
-- Current Checkpoint: pre-review
-- Current Stop: PR #1299 has the review disposition and PR head binding contract documentation implemented, is rebased on main after #1307, and carries formal WI-1286 suite path and spec review records instead of fake minimal suite artifacts.
-- Next Step: Refresh retained carriers, rerun root-self-governance and PR gate against the pushed head, and consume hosted checks.
+- Current Checkpoint: closed
+- Current Stop: PR #1299 merged to main at 2026-06-04T18:36:17Z with merge commit 71d0451ffdc02f817f94c70904181c0dbf0c9462; issue #1286 closed at 2026-06-04T18:36:18Z; controlled merge and hosted checks passed before closeout sync.
+- Next Step: None; WI-1286 is terminal and retained only as review disposition / PR head binding contract evidence for the #1285 implementation sequence.
 - Blockers: None
-- Latest Validation Summary: `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1286; `python3 tools/loom.py suite validate --target . --item WI-1286 --json` returned `result=not_applicable` with no blocking gaps and valid suite-level rationale; `.loom/reviews/WI-1286.spec.json` approves the docs-only suite path decision at head 382e32d6556eaf77d00c70550b52e3e7b2adc0b1.
-- Recovery Boundary: Keep this PR limited to WI-1286 carriers, formal suite not_applicable locator, review disposition/head-binding contract docs, repo companion boundary wording, and validation evidence. Do not implement #1287/#1288/#1289, change pr-gate/merge-gate runtime behavior, add downstream repository rules, or add fake minimal suite artifacts.
-- Current Lane: pre-review/review-head-binding-contract
+- Latest Validation Summary: Post-merge closeout sync validation passed `git diff --check`, `python3 tools/loom.py fact-chain --target . --json`, and `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`.
+- Recovery Boundary: Terminal closeout carrier only. Do not resume WI-1286 implementation here; PR gate, merge check/run, and closeout runtime work continue through separate #1285 follow-up issues.
+- Current Lane: terminal-closeout
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: PR #1299 validation section and hosted CI
-- Lane Entry: pre-review/review-head-binding-contract
+- Verification Entry: PR #1299 local pr-gate, hosted required checks, and merge commit 71d0451ffdc02f817f94c70904181c0dbf0c9462
+- Lane Entry: terminal-closeout
 
 ## Sources
 
