@@ -6794,6 +6794,16 @@ def suite_gate_not_applicable_payload(context: dict[str, Any], *, surface: str) 
     }
 
 
+def suite_gate_payload_for_surface(context: dict[str, Any], *, surface: str) -> dict[str, Any]:
+    if suite_gate_required_for_surface(context, surface=surface):
+        return suite_gate_validation_payload(context, surface=surface)
+    return suite_gate_not_applicable_payload(context, surface=surface)
+
+
+def spec_review_gate_ready_for_implementation_review(spec_gate: dict[str, Any]) -> bool:
+    return spec_gate.get("result") in SPEC_REVIEW_SUITE_READY_RESULTS
+
+
 def normalize_suite_validate_payload(payload: dict[str, Any], *, validator: str, mode: str) -> dict[str, Any]:
     normalized = dict(payload)
     nested_payload = normalized.get("payload")
@@ -8011,7 +8021,7 @@ def build_review_flow_payload(
             authority_after="loom review record",
         )
         spec_gate = spec_review_gate_payload(context)
-        suite_gate_validation = suite_gate_validation_payload(context, surface="review")
+        suite_gate_validation = suite_gate_payload_for_surface(context, surface="review")
         extra_steps = [
             {
                 "name": "spec-review-gate",
@@ -19372,7 +19382,7 @@ def handle_review(args: argparse.Namespace) -> int:
     suite_gate_validation: dict[str, Any] | None = None
     if args.decision == "allow" and args.kind != "spec_review":
         spec_gate = spec_review_gate_payload(context)
-        if spec_gate["result"] != "pass":
+        if not spec_review_gate_ready_for_implementation_review(spec_gate):
             return emit(
                 {
                     "command": "review",
@@ -19385,8 +19395,8 @@ def handle_review(args: argparse.Namespace) -> int:
                     "spec_review": spec_gate,
                 }
             )
-        suite_gate_validation = suite_gate_validation_payload(context, surface="review")
-        if suite_gate_validation["result"] != "pass":
+        suite_gate_validation = suite_gate_payload_for_surface(context, surface="review")
+        if suite_gate_validation["result"] not in {"pass", "not_applicable"}:
             return emit(
                 {
                     "command": "review",
@@ -20494,7 +20504,7 @@ def handle_flow(args: argparse.Namespace) -> int:
         elif args.operation == "merge-ready":
             build_payload = checkpoint_payload("build", context)
             merge_payload = checkpoint_payload("merge", context)
-            suite_gate_validation = suite_gate_validation_payload(context, surface="merge_ready")
+            suite_gate_validation = suite_gate_payload_for_surface(context, surface="merge_ready")
             repo_specific_requirements = repo_specific_requirements_payload(
                 repo_interface,
                 target_root=target_root,
