@@ -23,6 +23,8 @@ CARRIER_KEYS = (
     "status_surface",
     "spec_path",
     "plan_path",
+    "suite_path_decision",
+    "spec_review",
 )
 
 PLANNED_LOCATORS = {
@@ -32,6 +34,8 @@ PLANNED_LOCATORS = {
     "status_surface": ".loom/status/current.md",
     "spec_path": ".loom/specs/INIT-0001/spec.md",
     "plan_path": ".loom/specs/INIT-0001/plan.md",
+    "suite_path_decision": ".loom/specs/INIT-0001/spec.md",
+    "spec_review": ".loom/reviews/INIT-0001.spec.json",
 }
 
 REPO_INTERFACE_SURFACES = ("review", "merge_ready", "closeout")
@@ -3058,6 +3062,38 @@ def bootstrap_host_binding_branch(root: Path) -> str:
     return ""
 
 
+def suite_path_decision(path: Path) -> str:
+    if not path.exists():
+        return ""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    for line in text.splitlines():
+        match = re.match(r"\s*-\s*Suite path:\s*([A-Za-z0-9_-]+)\s*$", line)
+        if match:
+            value = match.group(1).strip()
+            if value in {"full", "minimal", "not_applicable"}:
+                return value
+    return ""
+
+
+def approved_spec_review_locator(root: Path, active_item_id: str) -> str:
+    path = root / ".loom/reviews" / f"{active_item_id}.spec.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    if (
+        payload.get("schema_version") == "loom-review/v1"
+        and payload.get("item_id") == active_item_id
+        and payload.get("kind") == "spec_review"
+        and payload.get("decision") == "allow"
+    ):
+        return relative_locator(path, root)
+    return ""
+
+
 def detect_carrier_summary(root: Path, *, repository_mode: str, planning_mode: bool) -> dict[str, dict[str, str]]:
     active = active_entry_points(root)
     active_item_id = active.get("current_item_id") or "INIT-0001"
@@ -3067,6 +3103,7 @@ def detect_carrier_summary(root: Path, *, repository_mode: str, planning_mode: b
     status_locator = active.get("status_surface") or ".loom/status/current.md"
     spec_path = root / f".loom/specs/{active_item_id}/spec.md"
     plan_path = root / f".loom/specs/{active_item_id}/plan.md"
+    suite_path = suite_path_decision(spec_path)
 
     present_locators = {
         "work_item": active_or_first(root, active.get("work_item"), item_dir, ".md"),
@@ -3075,6 +3112,8 @@ def detect_carrier_summary(root: Path, *, repository_mode: str, planning_mode: b
         "status_surface": existing_locator(root, status_locator),
         "spec_path": relative_locator(spec_path, root) if spec_path.exists() else "",
         "plan_path": relative_locator(plan_path, root) if plan_path.exists() else "",
+        "suite_path_decision": relative_locator(spec_path, root) if suite_path == "not_applicable" else "",
+        "spec_review": approved_spec_review_locator(root, active_item_id),
     }
 
     summary: dict[str, dict[str, str]] = {}
@@ -3424,10 +3463,14 @@ def maturity_status(
         key: value.get("status") == "present"
         for key, value in carrier_summary.items()
     }
+    formal_spec_or_not_applicable_present = carrier_present.get("plan_path", False) or (
+        carrier_present.get("suite_path_decision", False)
+        and carrier_present.get("spec_review", False)
+    )
     spec_gate_present = (
         carrier_present.get("review", False)
         and carrier_present.get("spec_path", False)
-        and carrier_present.get("plan_path", False)
+        and formal_spec_or_not_applicable_present
     )
     repo_interface_present = repo_interface.get("availability") == "present"
     repo_interop_present = repo_interop.get("availability") == "present"
@@ -3459,6 +3502,7 @@ def maturity_status(
     )
     facts = {
         **carrier_present,
+        "plan_path": formal_spec_or_not_applicable_present,
         "light": False,
         "standard": False,
         "fr_work_item_layer": repo_interface_present and repository_mode != "new",

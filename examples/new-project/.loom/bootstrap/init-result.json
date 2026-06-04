@@ -426,7 +426,7 @@
       "path": ".loom/bin/governance_surface.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/governance_surface.py",
-      "sha256": "69148b353c9e3db296de51a25bd0b2170325749f0ec5d21056eddf6cb9f30700"
+      "sha256": "4423f7a1a3ca801aaf6474145d685d0c96cd234710bccb59bbc9f3566f37b348"
     },
     {
       "path": ".loom/bin/loom_flow.py",
@@ -688,6 +688,16 @@
       "plan_path": {
         "status": "present",
         "locator": ".loom/specs/INIT-0001/plan.md",
+        "source": "repository scan"
+      },
+      "suite_path_decision": {
+        "status": "missing",
+        "locator": "unknown",
+        "source": "repository scan"
+      },
+      "spec_review": {
+        "status": "missing",
+        "locator": "unknown",
         "source": "repository scan"
       }
     },
