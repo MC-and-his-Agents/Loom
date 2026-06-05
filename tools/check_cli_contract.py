@@ -1181,6 +1181,118 @@ def valid_state(target: Path) -> dict[str, Any]:
     }
 
 
+GLOBAL_CLI_REQUIRED_COMMANDS = [
+    "installed-state validate",
+    "detect",
+    "doctor",
+    "verify",
+    "fact-chain",
+    "status",
+    "story",
+]
+
+
+def global_cli_state(target: Path) -> dict[str, Any]:
+    return {
+        "schema_version": "loom-installed-state/v2",
+        "installation_id": "fixture-global-cli",
+        "target": str(target),
+        "upgrade_eligibility": "current",
+        "runtime_provider": "global-cli",
+        "provider_requirements": {
+            "global_cli": {
+                "required": True,
+                "provider": "loom-cli",
+                "authority": "workstation",
+                "package": "@mc-and-his-agents/loom",
+                "executable": "loom",
+                "version_requirement": "v0.13.0",
+                "required_commands": GLOBAL_CLI_REQUIRED_COMMANDS,
+                "compatibility_mode_allowed": True,
+            }
+        },
+        "repo_payload": {
+            "mode": "metadata-only",
+            "intentional_absent_paths": ["plugins/loom/skills", ".agents/skills", "skills", ".loom/bin"],
+        },
+        "layers": [
+            {
+                "id": "adoption-metadata",
+                "layer_type": "repository-adoption-metadata",
+                "installed_path": ".loom/installed-state.json",
+                "version_context": {
+                    "repo_version": "v0.13.0",
+                    "installed_state_schema": "loom-installed-state/v2",
+                },
+                "runtime_state": "ready",
+                "upgrade_eligibility": "current",
+                "provides": ["repository adoption truth"],
+                "consumes": ["user-skills-provider", "global-cli-provider"],
+            },
+            {
+                "id": "user-skills-provider",
+                "layer_type": "user-level-skills-provider",
+                "installed_path": "workstation:codex-loom-plugin",
+                "version_context": {
+                    "plugin_surface_version": "v0.13.0",
+                    "host_adapter_version": "v0.13.0",
+                },
+                "runtime_state": "ready",
+                "upgrade_eligibility": "current",
+                "provides": ["Loom scenario skills from user-level Codex plugin"],
+                "consumes": [],
+            },
+            {
+                "id": "global-cli-provider",
+                "layer_type": "global-cli-runtime-provider",
+                "installed_path": "workstation:loom-cli",
+                "version_context": {
+                    "package": "@mc-and-his-agents/loom",
+                    "version_requirement": "v0.13.0",
+                },
+                "runtime_state": "unknown",
+                "upgrade_eligibility": "unknown",
+                "provides": ["loom command semantics", "runtime provider"],
+                "declared_support": {"commands": GLOBAL_CLI_REQUIRED_COMMANDS},
+                "consumes": [],
+            },
+        ],
+        "installation_graph": {
+            "layers": ["adoption-metadata", "user-skills-provider", "global-cli-provider"],
+            "edges": [
+                {"from": "adoption-metadata", "to": "user-skills-provider", "relationship": "requires-external-provider"},
+                {"from": "adoption-metadata", "to": "global-cli-provider", "relationship": "requires-runtime-provider"},
+            ],
+        },
+        "skills_provider": {
+            "provider": "codex-loom-plugin",
+            "scope": "user",
+            "required": True,
+            "registration_authority": "workstation",
+        },
+    }
+
+
+def write_global_cli_fact_chain_fixture(target: Path) -> None:
+    replacements = {
+        "python3 .loom/bin/loom_init.py verify --target .": "loom verify --target . --json",
+        "python3 .loom/bin/loom_init.py fact-chain --target .": "loom fact-chain --target . --json",
+    }
+    fixture_files = {
+        ".loom/work-items/INIT-0001.md": REPO_ROOT / "examples/new-project/.loom/work-items/INIT-0001.md",
+        ".loom/progress/INIT-0001.md": REPO_ROOT / "examples/new-project/.loom/progress/INIT-0001.md",
+        ".loom/status/current.md": REPO_ROOT / "examples/new-project/.loom/status/current.md",
+        ".loom/bootstrap/init-result.json": REPO_ROOT / "examples/new-project/.loom/bootstrap/init-result.json",
+    }
+    for relative, source in fixture_files.items():
+        destination = target / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        text = source.read_text(encoding="utf-8")
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+        destination.write_text(text, encoding="utf-8")
+
+
 def write_minimal_suite(target: Path, item: str) -> None:
     suite_dir = target / ".loom" / "specs" / item
     suite_dir.mkdir(parents=True)
@@ -3617,6 +3729,86 @@ def main() -> int:
             raise AssertionError("verify did not consume doctor success")
         if verify_payload.get("suite_validation") is not None or verify_payload.get("suite_validation_requirement", {}).get("required") is not False:
             raise AssertionError("verify should not require suite validation without profile or Work Item demand")
+        global_cli_target = tmp / "global-cli-no-bin"
+        global_cli_target.mkdir()
+        write_state(global_cli_target, global_cli_state(global_cli_target))
+        write_global_cli_fact_chain_fixture(global_cli_target)
+        if (global_cli_target / ".loom" / "bin").exists():
+            raise AssertionError("global-cli fixture must not carry .loom/bin")
+        _, global_validate = run_json(["installed-state", "validate", "--target", str(global_cli_target), "--json"], expect=0)
+        if global_validate.get("runtime_state") != "ready":
+            raise AssertionError("global-cli installed-state validate did not pass")
+        _, global_detect = run_json(["detect", "--target", str(global_cli_target), "--json"], expect=0)
+        if global_detect["classification"] != "current":
+            raise AssertionError("global-cli no-bin fixture was not classified as current")
+        global_cli_home = tmp / "global-cli-codex-home"
+        global_cli_home.mkdir()
+        with isolated_codex_workstation(global_cli_home):
+            run_json(
+                [
+                    "host",
+                    "register",
+                    "--host",
+                    "codex",
+                    "--source",
+                    str(REPO_ROOT / "plugins" / "loom"),
+                    "--scope",
+                    "user",
+                    "--apply",
+                    "--json",
+                ],
+                expect=0,
+            )
+            _, global_doctor = run_json(["doctor", "--target", str(global_cli_target), "--json"], expect=0)
+            provider_check = next((check for check in global_doctor.get("checks", []) if check.get("name") == "global-cli-runtime-provider"), None)
+            if global_doctor.get("result") != "pass" or not provider_check or provider_check.get("result") != "pass":
+                raise AssertionError("global-cli no-bin doctor did not pass provider diagnostics")
+            _, global_verify = run_json(["verify", "--target", str(global_cli_target), "--json"], expect=0)
+            if global_verify.get("result") != "pass" or global_verify.get("doctor", {}).get("result") != "pass":
+                raise AssertionError("global-cli no-bin verify did not consume doctor success")
+        _, global_fact_chain = run_json(["fact-chain", "--target", str(global_cli_target), "--json"], expect=0)
+        read_entry = global_fact_chain.get("report", {}).get("fact_chain", {}).get("read_entry")
+        if not isinstance(read_entry, str) or ".loom/bin" in read_entry or not read_entry.startswith("loom fact-chain "):
+            raise AssertionError(f"global-cli fact-chain read_entry was not a global loom command: {read_entry}")
+        _, global_status = run_json(["status", "--target", str(global_cli_target), "--json"])
+        if ".loom/bin" in str(global_status.get("current_runtime_entrypoint", "")) or not str(global_status.get("status_entrypoint", "")).startswith("loom status "):
+            raise AssertionError("global-cli status did not report global loom entrypoint")
+        governance_spec = importlib.util.spec_from_file_location(
+            "governance_surface_contract",
+            REPO_ROOT / "tools" / "governance_surface.py",
+        )
+        if governance_spec is None or governance_spec.loader is None:
+            raise AssertionError("could not load governance_surface module")
+        governance_surface = importlib.util.module_from_spec(governance_spec)
+        governance_spec.loader.exec_module(governance_surface)
+        if governance_surface.command_prefix(global_cli_target, "loom_flow.py") != "loom":
+            raise AssertionError("global-cli governance command prefix must leave subcommand selection to the caller")
+        _, global_story = run_json(["story", "--target", str(global_cli_target), "--item", "INIT-0001", "--json"], expect=0)
+        if ".loom/bin" in str(global_story.get("story_carrier_entrypoint", "")) or not str(global_story.get("story_carrier_entrypoint", "")).startswith("loom story "):
+            raise AssertionError("global-cli story did not report global loom entrypoint")
+        stale_bin_target = tmp / "global-cli-stale-bin"
+        shutil.copytree(global_cli_target, stale_bin_target)
+        (stale_bin_target / ".loom" / "bin").mkdir(parents=True)
+        (stale_bin_target / ".loom" / "bin" / "loom_flow.py").write_text("# stale fixture\n", encoding="utf-8")
+        _, stale_detect = run_json(["detect", "--target", str(stale_bin_target), "--json"], expect=0)
+        retained = [surface for surface in stale_detect.get("surfaces", []) if surface.get("kind") == "retained-loom-bin"]
+        if stale_detect.get("classification") != "current-with-repairable-residue" or not retained:
+            raise AssertionError("global-cli stale .loom/bin was not classified as repairable residue")
+        with isolated_codex_workstation(global_cli_home):
+            _, stale_doctor = run_json(["doctor", "--target", str(stale_bin_target), "--json"], expect=0)
+            if stale_doctor.get("result") != "pass":
+                raise AssertionError("global-cli stale .loom/bin should not block doctor as current provider proof")
+        _, stale_repair = run_json(["repair", "plan", "--target", str(stale_bin_target), "--json"], expect=0)
+        if not any(action.get("id") == "classify-repairable-runtime-residue-1" for action in stale_repair.get("actions", [])):
+            raise AssertionError("global-cli stale .loom/bin did not produce repairable residue plan")
+        malformed_target = tmp / "global-cli-malformed"
+        malformed_target.mkdir()
+        malformed_state = global_cli_state(malformed_target)
+        malformed_state["provider_requirements"]["global_cli"].pop("required_commands")
+        write_state(malformed_target, malformed_state)
+        status, malformed_validate = run_json(["installed-state", "validate", "--target", str(malformed_target), "--json"])
+        if status == 0 or malformed_validate.get("result") != "block" or not any(error.get("path") == "provider_requirements.global_cli.required_commands" for error in malformed_validate.get("errors", [])):
+            raise AssertionError("malformed global-cli provider requirements did not fail closed")
         declared_target = tmp / "declared-suite-support"
         declared_target.mkdir()
         declared_state = valid_state(declared_target)

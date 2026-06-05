@@ -65,6 +65,19 @@ PROFILE_SCHEMA = "loom-governance-profile-control/v1"
 GATE_SCHEMA = "loom-gate-control/v1"
 DELIVERY_SCHEMA = "loom-delivery-control/v1"
 
+RUNTIME_PROVIDER_GLOBAL_CLI = "global-cli"
+RUNTIME_PROVIDER_REPO_LOCAL_WRAPPER = "repo-local-wrapper"
+GLOBAL_CLI_PROVIDER_LAYER = "global-cli-runtime-provider"
+GLOBAL_CLI_REQUIRED_COMMANDS = [
+    "installed-state validate",
+    "detect",
+    "doctor",
+    "verify",
+    "fact-chain",
+    "status",
+    "story",
+]
+
 
 COMMANDS: list[dict[str, Any]] = [
     {
@@ -430,6 +443,48 @@ def strip_json_flag(argv: list[str]) -> list[str]:
     return [arg for arg in argv if arg != "--json"]
 
 
+def target_from_args(argv: list[str]) -> Path:
+    for index, arg in enumerate(argv):
+        if arg == "--target" and index + 1 < len(argv):
+            return resolve_target(argv[index + 1])
+        if arg.startswith("--target="):
+            return resolve_target(arg.split("=", 1)[1])
+    return resolve_target(".")
+
+
+def global_cli_command_entry(command: str, target: Path, argv: list[str]) -> str:
+    forwarded = strip_json_flag(argv)
+    if "--target" not in forwarded and not any(arg.startswith("--target=") for arg in forwarded):
+        forwarded = [*forwarded, "--target", str(target)]
+    return " ".join(["loom", command, *forwarded, "--json"])
+
+
+def annotate_global_cli_runtime_entrypoint(payload: dict[str, Any], *, command: str, target: Path, argv: list[str]) -> None:
+    if target_runtime_provider(target) != RUNTIME_PROVIDER_GLOBAL_CLI:
+        return
+    entry = global_cli_command_entry(command, target, argv)
+    payload["runtime_provider"] = RUNTIME_PROVIDER_GLOBAL_CLI
+    payload["current_runtime_entrypoint"] = entry
+    if command == "fact-chain":
+        fact_chain = payload.get("fact_chain")
+        if isinstance(fact_chain, dict):
+            old_read_entry = fact_chain.get("read_entry")
+            if isinstance(old_read_entry, str) and old_read_entry and old_read_entry != entry:
+                payload.setdefault("retained_provenance", []).append(
+                    {
+                        "kind": "historical-runtime-entrypoint",
+                        "locator": old_read_entry,
+                        "classification": "retained-provenance",
+                        "reason": "installed-state declares global-cli as the current runtime provider",
+                    }
+                )
+            fact_chain["read_entry"] = entry
+    elif command == "status":
+        payload["status_entrypoint"] = entry
+    elif command == "story":
+        payload["story_carrier_entrypoint"] = entry
+
+
 def command_matrix() -> list[dict[str, Any]]:
     return [
         {
@@ -710,6 +765,7 @@ def build_installed_state(target: Path, *, host: str, mode: str, skill_id: str |
     layers: list[dict[str, Any]] = []
     graph_layers: list[str] = []
     graph_edges: list[dict[str, str]] = []
+    runtime_provider = RUNTIME_PROVIDER_GLOBAL_CLI if mode == "metadata-only" else RUNTIME_PROVIDER_REPO_LOCAL_WRAPPER
     if mode == "metadata-only":
         layers.extend(
             [
@@ -724,7 +780,7 @@ def build_installed_state(target: Path, *, host: str, mode: str, skill_id: str |
                     "runtime_state": "ready",
                     "upgrade_eligibility": "current",
                     "provides": ["repository adoption truth"],
-                    "consumes": ["user-skills-provider"],
+                    "consumes": ["user-skills-provider", "global-cli-provider"],
                 },
                 {
                     "id": "user-skills-provider",
@@ -739,10 +795,25 @@ def build_installed_state(target: Path, *, host: str, mode: str, skill_id: str |
                     "provides": ["Loom scenario skills from user-level Codex plugin"],
                     "consumes": [],
                 },
+                {
+                    "id": "global-cli-provider",
+                    "layer_type": GLOBAL_CLI_PROVIDER_LAYER,
+                    "installed_path": "workstation:loom-cli",
+                    "version_context": {
+                        "package": "@mc-and-his-agents/loom",
+                        "version_requirement": versions["repo_version"],
+                    },
+                    "runtime_state": "unknown",
+                    "upgrade_eligibility": "unknown",
+                    "provides": ["loom command semantics", "runtime provider"],
+                    "declared_support": {"commands": GLOBAL_CLI_REQUIRED_COMMANDS},
+                    "consumes": [],
+                },
             ]
         )
-        graph_layers.extend(["adoption-metadata", "user-skills-provider"])
+        graph_layers.extend(["adoption-metadata", "user-skills-provider", "global-cli-provider"])
         graph_edges.append({"from": "adoption-metadata", "to": "user-skills-provider", "relationship": "requires-external-provider"})
+        graph_edges.append({"from": "adoption-metadata", "to": "global-cli-provider", "relationship": "requires-runtime-provider"})
     else:
         layers.append(
             {
@@ -826,9 +897,22 @@ def build_installed_state(target: Path, *, host: str, mode: str, skill_id: str |
         "installed_at": now_iso(),
         "installing_command": f"loom install --mode {mode}",
         "upgrade_eligibility": "current",
+        "runtime_provider": runtime_provider,
+        "provider_requirements": {
+            "global_cli": {
+                "required": runtime_provider == RUNTIME_PROVIDER_GLOBAL_CLI,
+                "provider": "loom-cli",
+                "authority": "workstation",
+                "package": "@mc-and-his-agents/loom",
+                "executable": "loom",
+                "version_requirement": versions["repo_version"],
+                "required_commands": GLOBAL_CLI_REQUIRED_COMMANDS,
+                "compatibility_mode_allowed": True,
+            }
+        },
         "repo_payload": {
             "mode": "metadata-only" if mode == "metadata-only" else "embedded" if mode == "plugin" else mode,
-            "intentional_absent_paths": ["plugins/loom/skills", ".agents/skills", "skills"] if mode == "metadata-only" else [],
+            "intentional_absent_paths": ["plugins/loom/skills", ".agents/skills", "skills", ".loom/bin"] if mode == "metadata-only" else [],
         },
         "skills_provider": {
             "provider": "codex-loom-plugin",
@@ -862,6 +946,77 @@ def installed_layer_paths(target: Path) -> set[str]:
         if isinstance(installed_path, str) and installed_path:
             paths.add(installed_path.rstrip("/"))
     return paths
+
+
+def installed_state_runtime_provider(state: Any) -> str | None:
+    if not isinstance(state, dict):
+        return None
+    provider = state.get("runtime_provider")
+    if isinstance(provider, str) and provider.strip():
+        return provider.strip()
+    layers = state.get("layers", [])
+    if isinstance(layers, list):
+        if any(isinstance(layer, dict) and layer.get("layer_type") == GLOBAL_CLI_PROVIDER_LAYER for layer in layers):
+            return RUNTIME_PROVIDER_GLOBAL_CLI
+        if any(isinstance(layer, dict) and layer.get("installed_path") == ".loom/bin" for layer in layers):
+            return RUNTIME_PROVIDER_REPO_LOCAL_WRAPPER
+    return None
+
+
+def target_runtime_provider(target: Path) -> str | None:
+    path = installed_state_path(target)
+    if path is None:
+        return None
+    try:
+        return installed_state_runtime_provider(read_json(path))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def global_cli_provider_requirement(state: Any) -> dict[str, Any] | None:
+    if not isinstance(state, dict):
+        return None
+    requirements = state.get("provider_requirements")
+    if not isinstance(requirements, dict):
+        return None
+    global_cli = requirements.get("global_cli")
+    return global_cli if isinstance(global_cli, dict) else None
+
+
+def global_cli_provider_check(state: Any) -> dict[str, Any]:
+    requirement = global_cli_provider_requirement(state)
+    if installed_state_runtime_provider(state) != RUNTIME_PROVIDER_GLOBAL_CLI and not (
+        requirement and requirement.get("required") is True
+    ):
+        return {
+            "name": "global-cli-runtime-provider",
+            "result": "pass",
+            "summary": "Global CLI runtime provider is not required by this installed-state.",
+            "required": False,
+        }
+    command_names = {entry["command"] for entry in COMMANDS if entry.get("status") == "implemented"}
+    required_commands = requirement.get("required_commands") if isinstance(requirement, dict) else None
+    missing_commands = [
+        command
+        for command in (required_commands if isinstance(required_commands, list) else GLOBAL_CLI_REQUIRED_COMMANDS)
+        if not isinstance(command, str) or command not in command_names
+    ]
+    return {
+        "name": "global-cli-runtime-provider",
+        "result": "pass" if not missing_commands else "block",
+        "summary": (
+            "Global CLI runtime provider requirement is declared and the current CLI exposes the required command surface."
+            if not missing_commands
+            else "Global CLI runtime provider requirement is declared but required commands are missing."
+        ),
+        "required": True,
+        "authority": "workstation",
+        "runtime_provider": RUNTIME_PROVIDER_GLOBAL_CLI,
+        "required_commands": required_commands if isinstance(required_commands, list) else GLOBAL_CLI_REQUIRED_COMMANDS,
+        "missing_commands": missing_commands,
+        "failed_layer": None if not missing_commands else "global-cli-runtime-provider",
+        "fallback_to": None if not missing_commands else ["loom help --json", "loom installed-state validate --target <repo> --json"],
+    }
 
 
 def is_managed_path(relative: str, managed_paths: set[str]) -> bool:
@@ -912,6 +1067,7 @@ def detect_surfaces(target: Path) -> list[dict[str, Any]]:
     surfaces: list[dict[str, Any]] = []
     state_path = installed_state_path(target)
     managed_paths = installed_layer_paths(target)
+    runtime_provider = target_runtime_provider(target)
     if state_path is not None:
         surfaces.append(
             surface(
@@ -1006,6 +1162,11 @@ def detect_surfaces(target: Path) -> list[dict[str, Any]]:
                 migration = "current"
                 authority = "loom-cli"
                 summary = f"CLI-managed {summary[0].lower()}{summary[1:]}"
+            elif relative == ".loom/bin" and runtime_provider == RUNTIME_PROVIDER_GLOBAL_CLI:
+                kind = "retained-loom-bin"
+                authority = "repo-runtime-carrier"
+                migration = "repairable-residue"
+                summary = "Repo-local runtime wrappers are retained residue while installed-state declares global-cli as the active runtime provider."
             surfaces.append(surface(path, target, kind=kind, layer=layer, authority=authority, migration=migration, summary=summary))
 
     skill_dirs = target / "skills"
@@ -1038,8 +1199,11 @@ def classify_installation(surfaces: list[dict[str, Any]]) -> tuple[str, str]:
         return "uninstalled", "No Loom installation surfaces were detected."
     has_current = any(item["kind"] == "installed-state-v2" for item in surfaces)
     legacy = [item for item in surfaces if item.get("migration_status") == "legacy" or str(item.get("kind", "")).startswith("symlink-")]
+    repairable = [item for item in surfaces if item.get("migration_status") == "repairable-residue"]
     authorities = {item.get("authority") for item in surfaces if item.get("authority")}
     if has_current and not legacy:
+        if repairable:
+            return "current-with-repairable-residue", "Versioned installed-state is present with repairable runtime-carrier residue."
         return "current", "Versioned installed-state is present and no legacy surface was detected."
     if has_current and legacy:
         return "mixed", "Versioned installed-state and legacy surfaces are both present."
@@ -1129,6 +1293,7 @@ def doctor_payload(target: Path) -> dict[str, Any]:
                 "installed_state_path": str(path),
             }
         )
+        checks.append(global_cli_provider_check(state))
         checks.append(suite_command_surface_check(state))
     has_codex_plugin_payload = (target / "plugins" / "loom" / ".codex-plugin" / "plugin.json").exists()
     declares_host_adapter = any(isinstance(layer, dict) and layer.get("layer_type") == "host-adapter-plugin" for layer in (state or {}).get("layers", [])) if isinstance(state, dict) else False
@@ -1147,6 +1312,17 @@ def doctor_payload(target: Path) -> dict[str, Any]:
             }
         )
     legacy_surfaces = [item for item in detection["surfaces"] if item.get("migration_status") == "legacy" or str(item.get("kind", "")).startswith("symlink-")]
+    repairable_surfaces = [item for item in detection["surfaces"] if item.get("migration_status") == "repairable-residue"]
+    if repairable_surfaces:
+        checks.append(
+            {
+                "name": "repairable-runtime-residue",
+                "result": "pass",
+                "summary": "Runtime-carrier residue is present but installed-state declares global-cli as the active provider; repair planning may classify or retire it later.",
+                "surfaces": repairable_surfaces,
+                "fallback_to": ["loom repair plan"],
+            }
+        )
     if legacy_surfaces:
         checks.append(
             {
@@ -1202,6 +1378,10 @@ def repair_actions(detection: dict[str, Any], installed_errors: list[dict[str, s
         item for item in detection["surfaces"]
         if item.get("migration_status") == "legacy" or str(item.get("kind", "")).startswith("symlink-")
     ]
+    repairable = [
+        item for item in detection["surfaces"]
+        if item.get("migration_status") == "repairable-residue"
+    ]
     for index, item in enumerate(legacy, start=1):
         actions.append(
             {
@@ -1210,6 +1390,17 @@ def repair_actions(detection: dict[str, Any], installed_errors: list[dict[str, s
                 "status": "planned",
                 "surface": item,
                 "reason": "legacy surface must be classified before Loom can apply mutating repair",
+                "command": "loom doctor --target <repo> --json",
+            }
+        )
+    for index, item in enumerate(repairable, start=1):
+        actions.append(
+            {
+                "id": f"classify-repairable-runtime-residue-{index}",
+                "kind": "runtime-carrier-residue-judgment",
+                "status": "planned",
+                "surface": item,
+                "reason": "global-cli installed-state treats this repo-local runtime carrier as residue, not current provider proof",
                 "command": "loom doctor --target <repo> --json",
             }
         )
@@ -2075,7 +2266,9 @@ def validate_installed_state(state: Any) -> list[dict[str, str]]:
         elif any(value in (None, "", "unknown") for value in version.values()):
             errors.append({"path": f"{path}.version_context", "reason": "version metadata must not be missing or unknown"})
         if layer.get("runtime_state") != "ready":
-            if not layer.get("fail_closed_reason") or not layer.get("failed_layer"):
+            if layer.get("layer_type") == GLOBAL_CLI_PROVIDER_LAYER and layer.get("runtime_state") == "unknown":
+                pass
+            elif not layer.get("fail_closed_reason") or not layer.get("failed_layer"):
                 errors.append({"path": path, "reason": "non-ready layers must include failed_layer and fail_closed_reason"})
     graph = state.get("installation_graph")
     if isinstance(graph, dict):
@@ -2098,6 +2291,39 @@ def validate_installed_state(state: Any) -> list[dict[str, str]]:
             errors.append({"path": "installation_graph.edges", "reason": "must be an array when present"})
     else:
         errors.append({"path": "installation_graph", "reason": "must be an object"})
+    runtime_provider = state.get("runtime_provider")
+    if runtime_provider is not None and runtime_provider not in {RUNTIME_PROVIDER_GLOBAL_CLI, RUNTIME_PROVIDER_REPO_LOCAL_WRAPPER}:
+        errors.append({"path": "runtime_provider", "reason": "unsupported runtime provider"})
+    inferred_runtime_provider = installed_state_runtime_provider(state)
+    requires_global_cli = runtime_provider == RUNTIME_PROVIDER_GLOBAL_CLI or GLOBAL_CLI_PROVIDER_LAYER in layer_types
+    global_cli_requirement = global_cli_provider_requirement(state)
+    if requires_global_cli:
+        if global_cli_requirement is None:
+            errors.append({"path": "provider_requirements.global_cli", "reason": "global-cli runtime provider must declare provider requirements"})
+        else:
+            expected_scalars = {
+                "required": True,
+                "provider": "loom-cli",
+                "authority": "workstation",
+                "package": "@mc-and-his-agents/loom",
+                "executable": "loom",
+            }
+            for key, expected in expected_scalars.items():
+                if global_cli_requirement.get(key) != expected:
+                    errors.append({"path": f"provider_requirements.global_cli.{key}", "reason": f"must be {expected!r}"})
+            version_requirement = global_cli_requirement.get("version_requirement")
+            if not isinstance(version_requirement, str) or not version_requirement.strip():
+                errors.append({"path": "provider_requirements.global_cli.version_requirement", "reason": "must be a non-empty string"})
+            required_commands = global_cli_requirement.get("required_commands")
+            if not isinstance(required_commands, list) or not required_commands:
+                errors.append({"path": "provider_requirements.global_cli.required_commands", "reason": "must be a non-empty array"})
+            else:
+                command_set = {command for command in required_commands if isinstance(command, str)}
+                missing_commands = sorted(set(GLOBAL_CLI_REQUIRED_COMMANDS) - command_set)
+                if missing_commands:
+                    errors.append({"path": "provider_requirements.global_cli.required_commands", "reason": f"missing required commands: {', '.join(missing_commands)}"})
+    if inferred_runtime_provider == RUNTIME_PROVIDER_REPO_LOCAL_WRAPPER and GLOBAL_CLI_PROVIDER_LAYER in layer_types and runtime_provider != RUNTIME_PROVIDER_GLOBAL_CLI:
+        errors.append({"path": "runtime_provider", "reason": "global-cli provider layer requires runtime_provider global-cli"})
     repo_payload = state.get("repo_payload")
     if isinstance(repo_payload, dict):
         mode = repo_payload.get("mode")
@@ -2580,11 +2806,25 @@ def handle_route(argv: list[str]) -> int:
 
 
 def handle_status(argv: list[str]) -> int:
-    return emit_delegated("status", "loom_status.py", strip_json_flag(argv), failed_layer="loom-status", fallback_to=["loom fact-chain --target <repo> --json", "loom checkpoint admission --target <repo> --json"])
+    target = target_from_args(argv)
+    payload = delegated_payload("status", "loom_status.py", strip_json_flag(argv), failed_layer="loom-status", fallback_to=["loom fact-chain --target <repo> --json", "loom checkpoint admission --target <repo> --json"])
+    payload.setdefault("schema_version", OUTPUT_SCHEMA)
+    if payload.get("command") and payload.get("command") != "status":
+        payload["wrapped_command"] = payload.get("command")
+    payload["command"] = "status"
+    annotate_global_cli_runtime_entrypoint(payload, command="status", target=target, argv=argv)
+    return emit(payload)
 
 
 def handle_fact_chain(argv: list[str]) -> int:
-    return emit_flow("fact-chain", ["fact-chain", *strip_json_flag(argv)], fallback_to=["loom init verify --target <repo> --json", "loom status --target <repo> --json"])
+    target = target_from_args(argv)
+    payload = flow_payload("fact-chain", ["fact-chain", *strip_json_flag(argv)], fallback_to=["loom init verify --target <repo> --json", "loom status --target <repo> --json"])
+    payload.setdefault("schema_version", OUTPUT_SCHEMA)
+    if payload.get("command") and payload.get("command") != "fact-chain":
+        payload["wrapped_command"] = payload.get("command")
+    payload["command"] = "fact-chain"
+    annotate_global_cli_runtime_entrypoint(payload, command="fact-chain", target=target, argv=argv)
+    return emit(payload)
 
 
 def handle_profile(argv: list[str]) -> int:
@@ -2670,6 +2910,8 @@ def handle_scenario(command: str, argv: list[str]) -> int:
         if payload.get("command") and payload.get("command") != command:
             payload["wrapped_command"] = payload.get("command")
         payload["command"] = command
+        if command == "story":
+            annotate_global_cli_runtime_entrypoint(payload, command="story", target=target, argv=argv)
         if command == "retire":
             payload["retire_contract"] = {
                 "mutates": False,
