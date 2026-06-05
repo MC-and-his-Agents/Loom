@@ -11,11 +11,11 @@
 - Review Entry: .loom/reviews/WI-1311.json
 - Validation Entry: git diff --check; rg excluded incident-specific details; PR CI.
 - Closing Condition: PR is merged to main, issue #1311 is closed with evidence, and the change remains limited to AGENTS.md governance rules.
-- Current Checkpoint: build
-- Current Stop: AGENTS.md now carries the reusable merge-ready and closeout discipline rules for docs-only contract freeze, suite not_applicable, review artifact timing, carrier/PR metadata alignment, post-merge closeout sync, shared gate blocker ownership, long-running checks, and host readback.
-- Next Step: Run local validation, record review evidence, update PR metadata, and consume hosted checks before merge.
+- Current Checkpoint: merge
+- Current Stop: Merge checkpoint inputs are assembled for the WI-1311 governance docs update: AGENTS.md rules, Work Item carrier, suite not_applicable locator, fact-chain, shadow parity, validation summary, PR metadata, and review evidence are ready for hosted checks.
+- Next Step: Push the refreshed WI-1311 head to PR #1312, rerun local/hosted pr-gate against the pushed head, and merge once hosted checks pass.
 - Blockers: None
-- Latest Validation Summary: `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1311; `python3 tools/loom.py suite validate --target . --item WI-1311 --json` returned `result=not_applicable` with no blocking gaps; excluded incident-specific detail scan passed for AGENTS.md.
+- Latest Validation Summary: `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1311; `python3 tools/loom.py suite validate --target . --item WI-1311 --json` returned `result=not_applicable` with no blocking gaps; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed; excluded incident-specific detail scan passed for AGENTS.md.
 - Recovery Boundary: Keep this PR limited to AGENTS.md governance discipline and WI-1311 Loom carriers. Do not change runtime behavior, gates, templates, skills, release behavior, or documentation outside AGENTS.md.
 - Current Lane: governance-docs/merge-closeout-discipline
 
