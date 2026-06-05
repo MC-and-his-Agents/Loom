@@ -1,0 +1,30 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1315",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review for WI-1315 at head b2afe021: formal suite path is not_applicable because the change freezes a docs-only generic governance methodology contract and does not introduce implementation behavior or executable contract consumers. The not_applicable locator states rationale, consumer boundary, recheck condition, scope proof, and review requirement. The WI-1315 workspace locator is portable for hosted gate consumption. The latest-main merge only brings target-main WI-1255 closeout artifacts into the branch and does not alter the WI-1315 spec path decision or generic model contract.",
+  "reviewer": "codex-main",
+  "reviewed_head": "b2afe02139e066e132f3042a48f38a6480015bf8",
+  "reviewed_validation_summary": "Head b2afe02139e066e132f3042a48f38a6480015bf8 passed `git diff --check`; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1315 with portable workspace entry `.`; `python3 tools/loom.py suite validate --target . --item WI-1315 --json` returned result `not_applicable` with zero blocking gaps and locator `.loom/specs/WI-1315/spec.md`; latest-main merge conflict resolution preserves WI-1315 as the active current item while retaining target-main WI-1255 closeout artifacts; refreshed WI-1315 implementation and spec review records bind to b2afe02139e066e132f3042a48f38a6480015bf8; docs review verified risk dimensions, `light` / `standard` / `reinforced` tiers, upgrade triggers, minimum light-path evidence, downgrade prohibitions, and project mapping boundaries; Loom-specific term scan found no `.loom`, `Work Item`, `pr-gate`, `loom_check`, `guardian`, `suite validate`, or `git worktree` terms in the generic model body; PR body records no-release evidence and head b2afe02139e066e132f3042a48f38a6480015bf8.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1315.md",
+    "recovery_entry": ".loom/progress/WI-1315.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "suite_validation": "suite validate",
+    "suite_spec": ".loom/specs/WI-1315/spec.md",
+    "suite_plan": null,
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}

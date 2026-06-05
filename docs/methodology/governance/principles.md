@@ -24,6 +24,7 @@
 - 机械化治理最小能力边界
 
 审查职责与 checkpoint 审查分工见 [review-model.md](./review-model.md)。
+变更治理强度的风险维度、档位和升级触发见 [change-governance-intensity.md](./change-governance-intensity.md)。
 formal `spec review` 与 implementation 分离规则见 [spec-implementation-separation.md](./spec-implementation-separation.md)。
 GitHub 默认交付漏斗见 [github-delivery-funnel.md](./github-delivery-funnel.md)。
 成熟度与关闭语义见 [maturity-and-closing.md](./maturity-and-closing.md)。
@@ -85,7 +86,7 @@ GitHub 默认交付漏斗见 [github-delivery-funnel.md](./github-delivery-funne
 最小分流：
 
 - 轻量事项
-  - 默认可直接实现，但不得改动共享契约或运行模型
+  - 默认可直接实现，但不得改动共享契约或运行模型；最低证据见变更治理强度模型
 - 中等事项
   - 进入实现前需要简化设计说明
 - 边界事项
