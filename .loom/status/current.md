@@ -6,7 +6,7 @@
 - Goal: Define a project-neutral change governance intensity model.
 - Scope: Add the generic governance methodology contract for risk dimensions, `light` / `standard` / `reinforced` intensity tiers, upgrade triggers, minimum evidence for light paths, downgrade prohibitions, and project mapping boundaries. Link it from governance landing docs. Do not implement Loom gate behavior, CLI metadata, fixtures, generated skills, runtime behavior, release behavior, or AGENTS.md rules.
 - Execution Path: issue #1315 -> branch work/1315-generic-governance-intensity -> PR #1325 -> docs review -> CI/review -> merge to main.
-- Workspace Entry: /Users/mc/dev/Loom-1315-generic-governance-intensity
+- Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1315.md
 - Review Entry: .loom/reviews/WI-1315.json
 - Validation Entry: git diff --check; docs contract review; Loom-specific term scan; suite validate not_applicable; PR CI.
