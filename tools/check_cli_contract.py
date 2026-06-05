@@ -2020,12 +2020,42 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
     target = tmp / "semantic-review-pr-gate"
     target.mkdir()
     fixture = write_semantic_review_pr_gate_fixture(target)
+    loom_flow = load_loom_flow_module()
+    parser_cases = {
+        "Loom Work Item: WI-1287\n": "WI-1287",
+        "Loom Work Item: WI-1240-1242\n": "WI-1240-1242",
+        "Loom Work Item: INIT-0001\n": "INIT-0001",
+    }
+    for body, expected in parser_cases.items():
+        if loom_flow.pr_work_item_from_body(body) != expected:
+            raise AssertionError(f"PR body Work Item parser did not preserve `{expected}`")
+
     pass_payload = semantic_pr_gate_fixture_payload(target, fixture)
     if pass_payload.get("result") != "pass":
         raise AssertionError(f"semantic review disposition pass fixture blocked: {pass_payload.get('missing_inputs')}")
     disposition = pass_payload.get("review_approval", {}).get("semantic_review_disposition", {})
     if disposition.get("status") != "passed" or disposition.get("consumable") is not True:
         raise AssertionError("pr-gate did not consume passed semantic_review_disposition")
+    if pass_payload.get("pr", {}).get("work_item_from_body") != fixture["item"]:
+        raise AssertionError("pr-gate did not preserve single Work Item id parsing")
+
+    pr_path = target / fixture["pr_file"]
+    original_pr_payload = json.loads(pr_path.read_text(encoding="utf-8"))
+    aggregate_item = "WI-1240-1242"
+    aggregate_pr_payload = dict(original_pr_payload)
+    aggregate_pr_payload["body"] = (
+        f"Loom Work Item: {aggregate_item}\n"
+        f"Branch: {fixture['branch']}\n"
+        f"Head SHA: {original_pr_payload['headRefOid']}\n"
+    )
+    pr_path.write_text(json.dumps(aggregate_pr_payload, indent=2) + "\n", encoding="utf-8")
+    aggregate_payload = semantic_pr_gate_fixture_payload(target, {**fixture, "item": aggregate_item})
+    if aggregate_payload.get("pr", {}).get("work_item_from_body") != aggregate_item:
+        raise AssertionError("pr-gate did not parse aggregate Work Item id from PR body")
+    aggregate_taxonomy = aggregate_payload.get("failure_taxonomy", [])
+    if aggregate_payload.get("result") != "block" or "work_item_binding_missing" in aggregate_taxonomy:
+        raise AssertionError("aggregate Work Item id parser fixture must consume the PR body Work Item binding")
+    pr_path.write_text(json.dumps(original_pr_payload, indent=2) + "\n", encoding="utf-8")
 
     review_path = target / fixture["review_path"]
     review_payload = json.loads(review_path.read_text(encoding="utf-8"))

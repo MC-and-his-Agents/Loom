@@ -13560,10 +13560,11 @@ def infer_pr_number_from_ref(ref: str | None) -> int | None:
 def pr_work_item_from_body(body: Any) -> str | None:
     if not isinstance(body, str):
         return None
+    work_item_id = r"(?:[A-Z]+-\d+(?:-\d+)*|INIT-\d+)"
     patterns = (
-        r"(?im)^\s*[-*]?\s*Loom Work Item\s*:\s*`?([A-Z]+-\d+|INIT-\d+)`?\s*$",
-        r"(?im)^\s*[-*]?\s*Work Item\s*:\s*`?([A-Z]+-\d+|INIT-\d+)`?\s*$",
-        r"(?im)^\s*[-*]?\s*Loom-Work-Item\s*:\s*`?([A-Z]+-\d+|INIT-\d+)`?\s*$",
+        rf"(?im)^\s*[-*]?\s*Loom Work Item\s*:\s*`?({work_item_id})`?\s*$",
+        rf"(?im)^\s*[-*]?\s*Work Item\s*:\s*`?({work_item_id})`?\s*$",
+        rf"(?im)^\s*[-*]?\s*Loom-Work-Item\s*:\s*`?({work_item_id})`?\s*$",
     )
     for pattern in patterns:
         match = re.search(pattern, body)
