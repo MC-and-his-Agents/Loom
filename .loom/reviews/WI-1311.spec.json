@@ -3,10 +3,10 @@
   "item_id": "WI-1311",
   "decision": "allow",
   "kind": "spec_review",
-  "summary": "Spec review for WI-1311 at 38fa67055c906ba5789dead36c11cc528fc1e418: docs-only governance update uses a formal suite not_applicable locator for AGENTS.md discipline rules, with consumer boundary, recheck condition, scope proof, and review requirement. It does not introduce runtime behavior, gate implementation, templates, skills, release behavior, or fake minimal suite artifacts.",
+  "summary": "Spec review refresh for WI-1311 at 7d82a7093113ac3b3085cad56862a3411321da83: docs-only governance update keeps the formal suite not_applicable locator, merge checkpoint carrier, validation summary, and shadow evidence aligned; no fake minimal suite artifacts or runtime/gate/template/skill/release changes are introduced.",
   "reviewer": "codex-main",
-  "reviewed_head": "38fa67055c906ba5789dead36c11cc528fc1e418",
-  "reviewed_validation_summary": "`git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1311; `python3 tools/loom.py suite validate --target . --item WI-1311 --json` returned `result=not_applicable` with no blocking gaps; excluded incident-specific detail scan passed for AGENTS.md.",
+  "reviewed_head": "7d82a7093113ac3b3085cad56862a3411321da83",
+  "reviewed_validation_summary": "`git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1311; `python3 tools/loom.py suite validate --target . --item WI-1311 --json` returned `result=not_applicable` with no blocking gaps; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed; excluded incident-specific detail scan passed for AGENTS.md.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -18,16 +18,15 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "unavailable",
+      "status": "not_applicable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
-      "budget_summary": "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom\": EOF",
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_control_plane",
-        "error_count": 1
+        "source": "github_host"
       }
     },
     "engine_adapter": null,
