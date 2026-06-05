@@ -3,10 +3,10 @@
   "item_id": "WI-1287",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Current-head implementation review approves #1287/#1288 semantic_review_disposition carrier and PR head binding enforcement after demo bootstrap fixture sync. Scope remains limited to review disposition validation, PR body/head carrier consistency, generated runtime sync, repo-local runtime sync, demo bootstrap fixture sync, and focused pr-gate contract fixtures; #1289/#1291 merge check/run and companion/guardian adapter fixtures are not implemented.",
+  "summary": "Current-head implementation review approves #1287/#1288 semantic_review_disposition carrier and PR head binding enforcement after runtime fixture, manifest, carrier, PR body, and demo bootstrap sync. Scope remains limited to review disposition validation, PR body/head carrier consistency, generated runtime sync, repo-local runtime sync, demo bootstrap fixture sync, and focused pr-gate contract fixtures; #1289/#1291 merge check/run and companion/guardian adapter fixtures are not implemented.",
   "reviewer": "codex T2",
-  "reviewed_head": "04bb0c021678a0f27c2ef999085aae7def0e1d3b",
-  "reviewed_validation_summary": "Restabilization validation passed `make loom-demo-new-project-check`, `git diff --check`, `python3 tools/check_cli_contract.py`, `python3 tools/loom.py skills release-check --json`, and prior targeted review-record/semantic disposition fixtures; local aggregate `make loom-check` was terminated after a long hang in `tools/loom_check.py` and is not used as pass evidence.",
+  "reviewed_head": "2054d3fdb58af7e0cc6a2af33d288b521350e967",
+  "reviewed_validation_summary": "Passed after fixture sync: git diff --check; python3 tools/loom.py skills release-check --json; python3 tools/check_cli_contract.py; python3 tools/loom.py fact-chain --target . --json; python3 tools/loom.py suite validate --target . --item WI-1287 --json returned not_applicable with valid rationale; python3 .loom/bin/loom_init.py verify --target .; python3 tools/check_demo_bootstrap_fixture.py. Targeted source-self-fixture loom_check hung in daily-execution-cli and was classified as environment/tool hang, not pass evidence.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -42,6 +42,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current #1287/#1288 semantic_review_disposition and PR head binding enforcement head after demo bootstrap fixture sync."
+    "reason": "Authored implementation review approved the current #1287/#1288 semantic_review_disposition and PR head binding enforcement head after runtime fixture, manifest, carrier, PR body, and demo bootstrap sync."
   }
 }
