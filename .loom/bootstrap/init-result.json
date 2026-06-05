@@ -7,7 +7,7 @@
     "contract_version": "1.3.0"
   },
   "run": {
-    "target": "/Users/mc/dev/Loom-worktrees/1152-generated-skills-surface-parity",
+    "target": "/Users/mc/dev/Loom-1287-review-head-binding",
     "scenario": "复杂既有仓库",
     "scenario_key": "complex-existing",
     "integration_mode": "companion",
@@ -74,9 +74,9 @@
     "mode": "work-item + recovery-entry + derived status-surface",
     "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
     "entry_points": {
-      "current_item_id": "WI-1315",
-      "work_item": ".loom/work-items/WI-1315.md",
-      "recovery_entry": ".loom/progress/WI-1315.md",
+      "current_item_id": "WI-1287",
+      "work_item": ".loom/work-items/WI-1287.md",
+      "recovery_entry": ".loom/progress/WI-1287.md",
       "status_surface": ".loom/status/current.md"
     }
   },
@@ -128,7 +128,7 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "e4c8289fb52b45e6734b98dc22964c309fea98666eb453d1f66330f79c9b9132"
+      "sha256": "d0ac491b594c0e18ba1279b98890605dc60bb8d2796c733907c6a0a053b584bc"
     },
     {
       "path": ".loom/bin/loom_status.py",
