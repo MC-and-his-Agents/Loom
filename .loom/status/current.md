@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1287.json
 - Validation Entry: git diff --check; targeted semantic review disposition fixture; py_compile_clean; skills surface/release checks; tools/check_cli_contract.py; fact-chain; suite validate/not_applicable rationale; pr-gate dry check; hosted checks; post-merge closeout sync verification.
 - Closing Condition: PR #1328 is merged into `main`, the merge commit is consumed by Loom closeout sync, issues #1287/#1288 reflect completed state, and WI-1287 carrier/current/progress/review/shadow plus release/no-release evidence agree with the PR head, target branch, and merge commit.
-- Current Checkpoint: closeout
-- Current Stop: PR #1328 merged into main at 9e3b6fe075d09dbc26b1d90c363d16d6fe2865e4; post-merge closeout sync consumed PR merged state, target main, #1287/#1288 CLOSED/COMPLETED issue state, current-head review artifact, shadow parity, and release/no-release not_applicable evidence. Process note: host merge was performed via gh pr merge --merge after merge-ready readback, not via Loom controlled-merge wrapper; required checks/readback had passed before merge, so this is recorded as a process-ordering anomaly, not a gate bypass.
-- Next Step: Closeout-only carrier PR should be merged to version this post-merge evidence; no implementation work remains for #1287/#1288.
+- Current Checkpoint: closed
+- Current Stop: PR #1328 merged into main at 9e3b6fe075d09dbc26b1d90c363d16d6fe2865e4; closeout-only carrier PR #1331 merged into main at 057499e1c52f3497da29aab1a72c97c90fcaea40; WI-1287/WI-1288 issues are CLOSED/COMPLETED; main now retains terminal closeout evidence for semantic_review_disposition and PR head binding enforcement. Process note retained: #1328 host merge was performed via gh pr merge --merge after merge-ready readback, not via Loom controlled-merge wrapper; required checks/readback had passed before merge, so this remains recorded as a process-ordering anomaly, not a gate bypass.
+- Next Step: Terminal; no WI-1287 implementation or closeout-carrier merge work remains. Downstream work such as T3/#1327 may proceed without WI-1287 being treated as an active workspace binding.
 - Blockers: None
 - Latest Validation Summary: Passed after carrier metadata repair: python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1287; python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --mode blocking; python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run; python3 tools/loom.py fact-chain --target . --json; python3 tools/loom.py suite validate --target . --item WI-1287 --json returned not_applicable with valid rationale and no blocking gaps. Previous post-main-merge checks also passed: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --json; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py runtime-parity validate --target .; python3 tools/check_demo_bootstrap_fixture.py.
-- Recovery Boundary: Closeout-only sync for #1287/#1288 after PR #1328 merge. Do not change implementation, do not repeat merge, do not implement #1289/#1291 merge check/run behavior, and do not add companion or guardian adapter fixtures.
-- Current Lane: review-head-binding
+- Recovery Boundary: Terminal closeout carrier repair only after #1331 merge. Do not change #1287/#1288 implementation, parser/gate/review-head semantics, #1289/#1291 merge check/run behavior, companion/guardian fixtures, or T3 provider files. Repair validation evidence is post-review closeout metadata and must not replace the retained implementation review validation summary.
+- Current Lane: terminal-closeout
 
 ## Runtime Evidence
 
