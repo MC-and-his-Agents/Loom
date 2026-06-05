@@ -6,16 +6,16 @@
 - Goal: Freeze regression inventories and boundary confirmation for #1248/#1268/#1275/#1281 without changing runner behavior.
 - Scope: Add inventory-only evidence for daily-execution-cli, check_cli_contract.py, non-daily source-self fixtures, and repo-local-cli CI command boundaries under #1255. Do not change regression runner behavior, split actual suites, adjust CI semantics, or mark unknowns as confirmed.
 - Execution Path: issues #1255/#1248/#1268/#1275/#1281 -> branch work/1255-regression-inventory -> PR #1326 -> CI/review -> merge to main.
-- Workspace Entry: /Users/mc/dev/Loom-1255-regression-inventory
+- Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1255.md
 - Review Entry: .loom/reviews/WI-1255.json
 - Validation Entry: git diff --check; issue/body readback; regression surface locator readback; PR metadata preflight; hosted CI.
 - Closing Condition: PR #1326 is merge-ready and merged to main with inventory evidence, no-release judgment, and follow-up PR-L/M/N boundaries preserved.
 - Current Checkpoint: build
-- Current Stop: Inventory evidence and WI-1255 carriers are committed and pushed for PR #1326 at head 3f1baa79d1d24ad152503bb801f3aac475c12ef9; current-head review is next.
-- Next Step: Record current-head review evidence for PR #1326, commit the review record, then rerun PR gate and hosted check readback.
-- Blockers: None for inventory content. Earlier hosted root-self-governance and loom-pr-merge-gate failures were carrier/PR body binding failures before WI-1255 existed in this PR.
-- Latest Validation Summary: Passed: git diff --check at head 3f1baa79d1d24ad152503bb801f3aac475c12ef9; python3 .loom/bin/loom_init.py fact-chain --target . readback reports WI-1255 and recovery_readiness pass; PR #1326 REST readback reports head work/1255-regression-inventory at 3f1baa79d1d24ad152503bb801f3aac475c12ef9 and exact Loom Work Item: WI-1255 body binding; python3 tools/loom_flow.py pr-metadata preflight --target . --surface merge_ready --owner MC-and-his-Agents --repo Loom --pr 1326 --head-sha 3f1baa79d1d24ad152503bb801f3aac475c12ef9 --branch work/1255-regression-inventory returned pass.
+- Current Stop: Inventory evidence and WI-1255 carriers are committed and pushed for PR #1326 at head 76f21f7fa4afb3748d92470059da22dcfdaecbbf; workspace entry has been corrected to repo-relative '.' for CI fact-chain consumption.
+- Next Step: Commit and push repo-relative workspace carrier fix, record current-head review evidence, then rerun PR gate and hosted check readback.
+- Blockers: Hosted loom-pr-merge-gate and root-self-governance blocked because WI-1255 Workspace Entry used a local absolute path that escaped the CI target root; fixing to repo-relative '.'. PR is still draft until review/gates pass.
+- Latest Validation Summary: Passed: git diff --check at head 76f21f7fa4afb3748d92470059da22dcfdaecbbf before workspace-entry fix; python3 .loom/bin/loom_init.py fact-chain --target . readback reports WI-1255 and recovery_readiness pass locally; PR #1326 REST readback reports head work/1255-regression-inventory at 76f21f7fa4afb3748d92470059da22dcfdaecbbf and exact Loom Work Item: WI-1255 body binding; python3 tools/loom_flow.py pr-metadata preflight --target . --surface merge_ready --owner MC-and-his-Agents --repo Loom --pr 1326 --head-sha 76f21f7fa4afb3748d92470059da22dcfdaecbbf --branch work/1255-regression-inventory returned pass; hosted py-compile, demo-bootstrap, and repo-local-cli passed; hosted root-self-governance and loom-pr-merge-gate blocked on absolute Workspace Entry and draft PR before this carrier fix.
 - Recovery Boundary: Inventory-only PR. Do not implement #1269/#1276/#1282, change regression runner behavior, split suites, adjust CI semantics, or mark unknowns as confirmed.
 - Current Lane: inventory-review
 
