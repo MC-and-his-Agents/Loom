@@ -1,0 +1,43 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1315",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review for WI-1315 at docs head 2da81f8a: the PR adds a project-neutral change governance intensity model plus minimal governance landing links. The model separates change intensity from repository maturity, defines risk dimensions and light/standard/reinforced tiers, preserves light-path minimum evidence, and keeps Loom-specific mechanisms out of the generic model body. No gate, CLI metadata, fixtures, generated skills, runtime behavior, release behavior, or AGENTS.md rules are implemented.",
+  "reviewer": "codex-main",
+  "reviewed_head": "2da81f8a393d9683cd71ca7c767b7e21b574659e",
+  "reviewed_validation_summary": "Docs head 2da81f8a393d9683cd71ca7c767b7e21b574659e passed `git diff --check`; docs review verified risk dimensions, `light` / `standard` / `reinforced` tiers, upgrade triggers, minimum light-path evidence, downgrade prohibitions, and project mapping boundaries; Loom-specific term scan found no `.loom`, `Work Item`, `pr-gate`, `loom_check`, `guardian`, `suite validate`, or `git worktree` terms in the generic model body; PR body records no-release evidence.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1315.md",
+    "recovery_entry": ".loom/progress/WI-1315.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable for this docs-only contract freeze; budget risk remains advisory and non-blocking",
+      "budget_summary": "WI-1315 modifies generic governance methodology docs and carrier evidence only.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_control_plane"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  }
+}

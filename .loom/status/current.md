@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1311
-- Goal: Codify reusable merge-ready and closeout discipline in AGENTS.md.
-- Scope: Add principle-level repository operating rules for docs-only contract freeze, suite not_applicable, review artifact timing, carrier/fact-chain/PR metadata alignment, post-merge closeout sync, shared gate blocker ownership, long-running check handling, and external host readback. Do not change runtime behavior, gates, templates, skills, release behavior, or documentation outside AGENTS.md.
-- Execution Path: issue #1311 -> branch work/1311-agents-merge-closeout-discipline -> PR -> CI/review -> merge to main.
-- Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1311.md
-- Review Entry: .loom/reviews/WI-1311.json
-- Validation Entry: git diff --check; rg excluded incident-specific details; PR CI.
-- Closing Condition: PR is merged to main, issue #1311 is closed with evidence, and the change remains limited to AGENTS.md governance rules.
-- Current Checkpoint: closed
-- Current Stop: PR #1312 merged to main at 2026-06-05T03:14:43Z with merge commit eae9f9753745cf0c1ec1a7a623904c4decd5315b; issue #1311 closed at 2026-06-05T03:14:45Z; local pr-gate and hosted loom-pr-merge-gate, loom-check, root-self-governance, repo-local-cli, py-compile, and demo-bootstrap passed before merge.
-- Next Step: None; WI-1311 is terminal and retained only as AGENTS.md merge-ready/closeout discipline evidence.
-- Blockers: None
-- Latest Validation Summary: Post-merge closeout sync validation passed `git diff --check`, `python3 tools/loom.py fact-chain --target . --json`, and `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; pre-merge PR #1312 passed local pr-gate and hosted required checks on head b729f052ef2fe66a48644e4139af4db2355da67e before merge.
-- Recovery Boundary: Terminal closeout carrier only. Do not resume WI-1311 implementation here; future AGENTS.md governance changes require separate issue-scoped work.
-- Current Lane: terminal-closeout
+- Item ID: WI-1315
+- Goal: Define a project-neutral change governance intensity model.
+- Scope: Add the generic governance methodology contract for risk dimensions, `light` / `standard` / `reinforced` intensity tiers, upgrade triggers, minimum evidence for light paths, downgrade prohibitions, and project mapping boundaries. Link it from governance landing docs. Do not implement Loom gate behavior, CLI metadata, fixtures, generated skills, runtime behavior, release behavior, or AGENTS.md rules.
+- Execution Path: issue #1315 -> branch work/1315-generic-governance-intensity -> PR #1325 -> docs review -> CI/review -> merge to main.
+- Workspace Entry: /Users/mc/dev/Loom-1315-generic-governance-intensity
+- Recovery Entry: .loom/progress/WI-1315.md
+- Review Entry: .loom/reviews/WI-1315.json
+- Validation Entry: git diff --check; docs contract review; Loom-specific term scan; suite validate not_applicable; PR CI.
+- Closing Condition: PR #1325 is merge-ready, merged to main, #1315 is closed with validation and no-release evidence, and #1316/#1317 can reference the frozen generic model without redefining its tiers.
+- Current Checkpoint: merge_ready
+- Current Stop: Generic change governance intensity model is frozen in docs at head 2da81f8a393d9683cd71ca7c767b7e21b574659e; follow-up carrier-only commit binds WI-1315 fact-chain, formal suite not_applicable, and review evidence for PR #1325.
+- Next Step: Run local fact-chain, suite validate, pr-gate, root self-governance, and hosted PR checks for PR #1325; if all pass, proceed to merge-ready handoff.
+- Blockers: None after carrier alignment; hosted checks still need readback on the updated PR head.
+- Latest Validation Summary: Docs head 2da81f8a393d9683cd71ca7c767b7e21b574659e passed `git diff --check`; docs review verified risk dimensions, `light` / `standard` / `reinforced` tiers, upgrade triggers, minimum light-path evidence, downgrade prohibitions, and project mapping boundaries; Loom-specific term scan found no `.loom`, `Work Item`, `pr-gate`, `loom_check`, `guardian`, `suite validate`, or `git worktree` terms in the generic model body; PR body records no-release evidence.
+- Recovery Boundary: This Work Item only owns #1315 generic governance methodology docs, landing links, and WI-1315 readiness carriers. Do not implement Loom gate behavior, CLI metadata, fixtures, generated skills, runtime behavior, release behavior, or AGENTS.md rules here.
+- Current Lane: merge-ready
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: PR #1312 local pr-gate, hosted required checks, and merge commit eae9f9753745cf0c1ec1a7a623904c4decd5315b
-- Lane Entry: terminal-closeout
+- Verification Entry: local docs review, `git diff --check`, Loom-specific term scan, suite validate not_applicable, and PR #1325 hosted checks
+- Lane Entry: merge-ready
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1311.md
-- Dynamic Truth: .loom/progress/WI-1311.md
+- Static Truth: .loom/work-items/WI-1315.md
+- Dynamic Truth: .loom/progress/WI-1315.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
