@@ -910,6 +910,9 @@ def safe_read_json(path: Path) -> dict[str, Any] | None:
 
 
 def command_prefix(root: Path, tool_name: str) -> str:
+    installed_state = safe_read_json(root / ".loom" / "installed-state.json")
+    if isinstance(installed_state, dict) and installed_state.get("runtime_provider") == "global-cli":
+        return "loom"
     loom_tool = root / ".loom/bin" / tool_name
     if loom_tool.exists():
         return f"python3 .loom/bin/{tool_name}"
