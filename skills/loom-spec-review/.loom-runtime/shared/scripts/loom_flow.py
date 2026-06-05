@@ -19672,6 +19672,11 @@ def handle_review(args: argparse.Namespace) -> int:
             "normalized_findings": args.normalized_findings,
         },
     }
+    if args.decision == "allow" and args.kind in IMPLEMENTATION_REVIEW_KINDS:
+        review_payload["semantic_review_disposition"] = {
+            "status": "passed",
+            "reason": "Authored implementation review approved the current head for merge checkpoint consumption.",
+        }
     if isinstance(suite_gate_validation, dict):
         review_payload["consumed_inputs"].update(suite_gate_consumed_inputs(suite_gate_validation))
     if isinstance(suite_validation, dict):

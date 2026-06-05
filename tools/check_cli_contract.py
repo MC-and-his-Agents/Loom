@@ -2030,6 +2030,32 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
         if loom_flow.pr_work_item_from_body(body) != expected:
             raise AssertionError(f"PR body Work Item parser did not preserve `{expected}`")
 
+    _, record_payload = run_flow_json(
+        [
+            "review",
+            "record",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--review-file",
+            fixture["review_path"],
+            "--decision",
+            "allow",
+            "--kind",
+            "code_review",
+            "--summary",
+            "Fixture implementation review approves the current head.",
+            "--reviewer",
+            "contract-test",
+        ]
+    )
+    if record_payload.get("result") != "pass":
+        raise AssertionError(f"review record fixture failed: {record_payload.get('missing_inputs')}")
+    recorded_disposition = record_payload.get("review", {}).get("record", {}).get("semantic_review_disposition", {})
+    if recorded_disposition.get("status") != "passed":
+        raise AssertionError("review record did not write passed semantic_review_disposition")
+
     pass_payload = semantic_pr_gate_fixture_payload(target, fixture)
     if pass_payload.get("result") != "pass":
         raise AssertionError(f"semantic review disposition pass fixture blocked: {pass_payload.get('missing_inputs')}")

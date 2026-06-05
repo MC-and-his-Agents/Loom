@@ -128,7 +128,7 @@
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "4b296ee6e71ca559b7912febf0e586a550402b04b5e9b927d2196c2c772bc341"
+      "sha256": "d0ac491b594c0e18ba1279b98890605dc60bb8d2796c733907c6a0a053b584bc"
     },
     {
       "path": ".loom/bin/loom_status.py",
