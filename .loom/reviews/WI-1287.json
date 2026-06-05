@@ -3,10 +3,10 @@
   "item_id": "WI-1287",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Current-head implementation review approves #1287/#1288 semantic_review_disposition carrier and PR head binding enforcement after runtime fixture, manifest, carrier, PR body, and demo bootstrap sync. Scope remains limited to review disposition validation, PR body/head carrier consistency, generated runtime sync, repo-local runtime sync, demo bootstrap fixture sync, and focused pr-gate contract fixtures; #1289/#1291 merge check/run and companion/guardian adapter fixtures are not implemented.",
+  "summary": "Current-head implementation review approves #1287/#1288 semantic_review_disposition carrier and PR head binding enforcement at PR head 1757bfe69b5b3c4483f539a881b3e85a7ca33ac4. Reviewed scope includes semantic_review_disposition gate enforcement, PR body/head binding, the scheduler-approved minimal PR body Work Item parser contract extension for multi-part numeric suffixes such as WI-1240-1242, review-record generation of passed semantic_review_disposition, root/demo/generated runtime sync, repo-relative Workspace Entry carrier portability, bootstrap hash sync, and focused pr-gate/parser/review-record fixtures. Scope remains limited to #1287/#1288 plus the approved T3 blocker unblock; #1289/#1291 merge check/run and companion/guardian adapter fixtures are not implemented. Validation consumed: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --json; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py runtime-parity validate --target .; python3 tools/check_demo_bootstrap_fixture.py; python3 tools/loom.py fact-chain --target . --json; python3 tools/loom.py suite validate --target . --item WI-1287 --json returned not_applicable with valid rationale and no blocking gaps.",
   "reviewer": "codex T2",
-  "reviewed_head": "2054d3fdb58af7e0cc6a2af33d288b521350e967",
-  "reviewed_validation_summary": "Passed after fixture sync: git diff --check; python3 tools/loom.py skills release-check --json; python3 tools/check_cli_contract.py; python3 tools/loom.py fact-chain --target . --json; python3 tools/loom.py suite validate --target . --item WI-1287 --json returned not_applicable with valid rationale; python3 .loom/bin/loom_init.py verify --target .; python3 tools/check_demo_bootstrap_fixture.py. Targeted source-self-fixture loom_check hung in daily-execution-cli and was classified as environment/tool hang, not pass evidence.",
+  "reviewed_head": "1757bfe69b5b3c4483f539a881b3e85a7ca33ac4",
+  "reviewed_validation_summary": "Passed: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py including WI-1287/WI-1240-1242/INIT-0001 parser cases, aggregate PR gate fixture, and review record writing passed semantic_review_disposition; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --json; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py runtime-parity validate --target .; python3 tools/check_demo_bootstrap_fixture.py; python3 tools/loom.py fact-chain --target . --json; python3 tools/loom.py suite validate --target . --item WI-1287 --json returned not_applicable with valid rationale and no blocking gaps.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -42,6 +42,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current #1287/#1288 semantic_review_disposition and PR head binding enforcement head after runtime fixture, manifest, carrier, PR body, and demo bootstrap sync."
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
   }
 }
