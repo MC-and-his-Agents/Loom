@@ -1,0 +1,43 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1255",
+  "decision": "allow",
+  "kind": "general_review",
+  "summary": "WI-1255 inventory-only review allows PR #1326 at head dd157eb9336a160ccfc5ac7cc57f0d3a2fa0f51b: diff adds regression surface inventory evidence and WI-1255 carriers, preserves formal suite not_applicable, keeps unknowns explicit, and does not change regression runner behavior, suite membership, CI semantics, release behavior, or package/runtime output.",
+  "reviewer": "codex-worker-019e9625-a8f4-7c61-af4c-c73938ac2ac1",
+  "reviewed_head": "dd157eb9336a160ccfc5ac7cc57f0d3a2fa0f51b",
+  "reviewed_validation_summary": "Passed: git diff --check before carrier sync; python3 .loom/bin/loom_init.py fact-chain --target . readback reports WI-1255, Workspace Entry '.', and recovery_readiness pass; PR #1326 REST readback reports head work/1255-regression-inventory at dd157eb9336a160ccfc5ac7cc57f0d3a2fa0f51b; python3 tools/loom_flow.py pr-metadata preflight --target . --surface merge_ready --owner MC-and-his-Agents --repo Loom --pr 1326 --head-sha dd157eb9336a160ccfc5ac7cc57f0d3a2fa0f51b --branch work/1255-regression-inventory returned pass; python3 tools/loom_flow.py checkpoint build --target . --item WI-1255 returned pass.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1255.md",
+    "recovery_entry": ".loom/progress/WI-1255.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  }
+}

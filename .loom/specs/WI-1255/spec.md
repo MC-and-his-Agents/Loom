@@ -1,0 +1,5 @@
+# WI-1255 Suite Path Decision
+
+- Suite path: not_applicable
+
+- Formal-suite not_applicable: rationale: WI-1255 is a docs-only regression inventory and boundary confirmation for #1248, #1268, #1275, and #1281 under #1255; it records current surfaces, unknowns, risk boundaries, and later PR slicing without changing runner behavior, suite membership, CI semantics, release behavior, or package/runtime output. consumer boundary: suite validate, review, merge-ready, PR gate, hosted CI, and issue closeout consume this locator only as the formal spec suite decision; implementation review, fact-chain readback, PR metadata, CI, no-release evidence, and closeout evidence remain required. recheck condition: require a minimal or full suite if this PR starts changing executable validation behavior, regression runner code, fixture behavior, CI workflow semantics, release behavior, or any implementation split beyond inventory documentation. scope proof: `git diff origin/main...HEAD` must remain limited to WI-1255 carriers and `docs/evidence/regression-surface-inventory.md`. review requirement: `.loom/reviews/WI-1255.json` must review the current PR head before merge-ready.
