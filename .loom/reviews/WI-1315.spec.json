@@ -1,0 +1,30 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1315",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec and closeout evidence review for WI-1315 at merge commit bbb01778: formal suite path is not_applicable because the change freezes a docs-only generic governance methodology contract and does not introduce implementation behavior or executable contract consumers. The not_applicable locator states rationale, consumer boundary, recheck condition, scope proof, and review requirement. The WI-1315 workspace locator is portable for hosted gate consumption. Post-merge closeout records PR #1325, merge commit, target main containment, closed issue #1315, and downstream #1316/#1317 consumption readiness; it does not alter the WI-1315 spec path decision or generic model contract.",
+  "reviewer": "codex-main",
+  "reviewed_head": "dfe6b0f07f9a29b1ee60dd1bcf985af4c4f53639",
+  "reviewed_validation_summary": "Post-merge closeout evidence, 2026-06-05: PR #1325 merged/closed with head `dfe6b0f07f9a29b1ee60dd1bcf985af4c4f53639` and merge commit `bbb01778626f9783e4fc068c506c5aa09f30a92f`; `origin/main` readback returned the same merge commit; hosted checks passed (`loom-pr-merge-gate`, two aggregate `loom-check` runs, `py-compile`, `demo-bootstrap`, `repo-local-cli`, `root-self-governance`); `python3 .loom/bin/loom_flow.py pr-gate check --target . --item WI-1315 --pr 1325 --head-sha dfe6b0f07f9a29b1ee60dd1bcf985af4c4f53639` passed; `python3 .loom/bin/loom_flow.py controlled-merge check --target . --item WI-1315 --pr 1325 --head-sha dfe6b0f07f9a29b1ee60dd1bcf985af4c4f53639 --merge-method merge --delete-branch` passed; controlled merge wrapper delegated host merge and PR #1325 merged; `python3 .loom/bin/loom_flow.py reconciliation sync --target . --issue 1315 --pr 1325 --branch work/1315-generic-governance-intensity --apply` added post-merge evidence and closed #1315; `python3 .loom/bin/loom_flow.py closeout check --target . --issue 1315 --pr 1325 --branch work/1315-generic-governance-intensity --gate-profile closeout-contract` passed; issue closeout comment recorded at https://github.com/MC-and-his-Agents/Loom/issues/1315#issuecomment-4629547759; no-release evidence is recorded in PR #1325 and the issue closeout comment.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1315.md",
+    "recovery_entry": ".loom/progress/WI-1315.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "suite_validation": "suite validate",
+    "suite_spec": ".loom/specs/WI-1315/spec.md",
+    "suite_plan": null,
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}
