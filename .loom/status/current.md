@@ -12,10 +12,10 @@
 - Validation Entry: git diff --check; issue/body readback; regression surface locator readback; PR metadata preflight; hosted CI.
 - Closing Condition: PR #1326 is merge-ready and merged to main with inventory evidence, no-release judgment, and follow-up PR-L/M/N boundaries preserved.
 - Current Checkpoint: build
-- Current Stop: Inventory evidence and WI-1255 carriers are committed and pushed for PR #1326 at head b1752dcc493fe0a3252eb33e9711123e9102de90; current-head review is next and PR remains draft until review and required checks pass.
-- Next Step: Record current-head review evidence for PR #1326, commit the review record, then rerun PR gate and hosted check readback.
+- Current Stop: Inventory evidence and WI-1255 carriers are committed and pushed for PR #1326 at head dd157eb9336a160ccfc5ac7cc57f0d3a2fa0f51b; current-head review was recorded and PR remains draft until the review carrier is committed and required checks pass.
+- Next Step: Commit and push the review carrier, then rerun PR gate and hosted check readback.
 - Blockers: None
-- Latest Validation Summary: Passed: git diff --check at head b1752dcc493fe0a3252eb33e9711123e9102de90; python3 .loom/bin/loom_init.py fact-chain --target . readback reports WI-1255, Workspace Entry '.', and recovery_readiness pass; PR #1326 REST readback reports head work/1255-regression-inventory at b1752dcc493fe0a3252eb33e9711123e9102de90; python3 tools/loom_flow.py pr-metadata preflight --target . --surface merge_ready --owner MC-and-his-Agents --repo Loom --pr 1326 --head-sha b1752dcc493fe0a3252eb33e9711123e9102de90 --branch work/1255-regression-inventory returned pass.
+- Latest Validation Summary: Passed: git diff --check before carrier sync; python3 .loom/bin/loom_init.py fact-chain --target . readback reports WI-1255, Workspace Entry '.', and recovery_readiness pass; PR #1326 REST readback reports head work/1255-regression-inventory at dd157eb9336a160ccfc5ac7cc57f0d3a2fa0f51b; python3 tools/loom_flow.py pr-metadata preflight --target . --surface merge_ready --owner MC-and-his-Agents --repo Loom --pr 1326 --head-sha dd157eb9336a160ccfc5ac7cc57f0d3a2fa0f51b --branch work/1255-regression-inventory returned pass; python3 tools/loom_flow.py checkpoint build --target . --item WI-1255 returned pass.
 - Recovery Boundary: Inventory-only PR. Do not implement #1269/#1276/#1282, change regression runner behavior, split suites, adjust CI semantics, or mark unknowns as confirmed.
 - Current Lane: inventory-review
 
