@@ -315,101 +315,105 @@ def assert_suite_build_consumption(payload: dict[str, Any]) -> None:
         raise AssertionError("build did not expose suite validation steps")
 
 
-def assert_review_record_consumed_locators(active_item: str) -> None:
-    spec_review = REPO_ROOT / ".loom" / "reviews" / f"{active_item}.spec.json"
-    implementation_review = REPO_ROOT / ".loom" / "reviews" / f"{active_item}.json"
+def assert_review_record_consumed_locators(tmp: Path) -> None:
+    target = tmp / "review-record-consumed-locators"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target)
+    active_item = fixture["item"]
+    spec_review = target / ".loom" / "reviews" / f"{active_item}.spec.json"
+    implementation_review = target / ".loom" / "reviews" / f"{active_item}.json"
     expected_spec = f".loom/specs/{active_item}/spec.md"
     expected_plan = f".loom/specs/{active_item}/plan.md"
     expected_evidence = f".loom/specs/{active_item}/evidence-map.md"
     expected_carrier = f".loom/specs/{active_item}/task-carrier.md"
-    suite_not_applicable = active_suite_path_not_applicable(active_item)
-    with preserved_repo_paths((spec_review.relative_to(REPO_ROOT).as_posix(),)):
-        _, spec_record_payload = run_json(
-            [
-                "review",
-                "record",
-                "--target",
-                str(REPO_ROOT),
-                "--item",
-                active_item,
-                "--decision",
-                "allow",
-                "--kind",
-                "spec_review",
-                "--summary",
-                "Contract fixture spec review allow.",
-                "--reviewer",
-                "contract-check",
-            ],
-            expect=0,
-        )
-        if spec_record_payload.get("result") != "pass":
-            raise AssertionError("spec review record fixture did not pass")
-        spec_record = json.loads(spec_review.read_text(encoding="utf-8"))
-        spec_consumed = spec_record.get("consumed_inputs", {})
-        base_spec_consumed = (
-            spec_consumed.get("suite_validation") == "suite validate"
-            and spec_consumed.get("suite_validator_mode") == "repo-local-cli"
-            and spec_consumed.get("suite_spec") == expected_spec
-            and "suite_consistency_analysis" in spec_consumed
-        )
-        not_applicable_spec_consumed = (
-            suite_not_applicable
-            and spec_consumed.get("suite_plan") is None
-            and spec_consumed.get("suite_evidence_map") is None
-            and spec_consumed.get("suite_task_carriers") == []
-        )
-        full_or_minimal_spec_consumed = (
-            spec_consumed.get("suite_plan") == expected_plan
-            and spec_consumed.get("suite_evidence_map") == expected_evidence
-            and expected_carrier in spec_consumed.get("suite_task_carriers", [])
-        )
-        if not base_spec_consumed or not (not_applicable_spec_consumed or full_or_minimal_spec_consumed):
-            raise AssertionError("spec review record consumed suite locators drifted")
-    with preserved_repo_paths((implementation_review.relative_to(REPO_ROOT).as_posix(),)):
-        _, implementation_record_payload = run_json(
-            [
-                "review",
-                "record",
-                "--target",
-                str(REPO_ROOT),
-                "--item",
-                active_item,
-                "--decision",
-                "allow",
-                "--kind",
-                "code_review",
-                "--summary",
-                "Contract fixture implementation review allow.",
-                "--reviewer",
-                "contract-check",
-            ],
-            expect=0,
-        )
-        if implementation_record_payload.get("result") != "pass":
-            raise AssertionError("implementation review record fixture did not pass")
-        implementation_record = json.loads(implementation_review.read_text(encoding="utf-8"))
-        implementation_consumed = implementation_record.get("consumed_inputs", {})
-        not_applicable_implementation_consumed = (
-            suite_not_applicable
-            and implementation_consumed.get("suite_evidence_validation") == "not_applicable"
-            and implementation_consumed.get("suite_carrier_validation") == "not_applicable"
-            and implementation_consumed.get("suite_evidence_map") is None
-            and implementation_consumed.get("suite_task_carriers") == []
-        )
-        full_or_minimal_implementation_consumed = (
-            "suite evidence validate" in str(implementation_consumed.get("suite_evidence_validation", ""))
-            and "suite carrier validate" in str(implementation_consumed.get("suite_carrier_validation", ""))
-            and implementation_consumed.get("suite_evidence_map") == expected_evidence
-            and expected_carrier in implementation_consumed.get("suite_task_carriers", [])
-        )
-        if (
-            "suite_consistency_analysis" not in implementation_consumed
-            or not isinstance(implementation_consumed.get("suite_evidence_consumed_contracts"), list)
-            or not isinstance(implementation_consumed.get("suite_carrier_consumed_contracts"), list)
-            or not (not_applicable_implementation_consumed or full_or_minimal_implementation_consumed)
-        ):
-            raise AssertionError("implementation review record consumed suite/evidence locators drifted")
+    suite_not_applicable = False
+    _, spec_record_payload = run_json(
+        [
+            "review",
+            "record",
+            "--target",
+            str(target),
+            "--item",
+            active_item,
+            "--decision",
+            "allow",
+            "--kind",
+            "spec_review",
+            "--summary",
+            "Contract fixture spec review allow.",
+            "--reviewer",
+            "contract-check",
+        ],
+        expect=0,
+    )
+    if spec_record_payload.get("result") != "pass":
+        raise AssertionError("spec review record fixture did not pass")
+    spec_record = json.loads(spec_review.read_text(encoding="utf-8"))
+    spec_consumed = spec_record.get("consumed_inputs", {})
+    base_spec_consumed = (
+        spec_consumed.get("suite_validation") == "suite validate"
+        and spec_consumed.get("suite_validator_mode") == "repo-local-cli"
+        and spec_consumed.get("suite_spec") == expected_spec
+        and "suite_consistency_analysis" in spec_consumed
+    )
+    not_applicable_spec_consumed = (
+        suite_not_applicable
+        and spec_consumed.get("suite_plan") is None
+        and spec_consumed.get("suite_evidence_map") is None
+        and spec_consumed.get("suite_task_carriers") == []
+    )
+    full_or_minimal_spec_consumed = (
+        spec_consumed.get("suite_plan") == expected_plan
+        and spec_consumed.get("suite_evidence_map") == expected_evidence
+        and expected_carrier in spec_consumed.get("suite_task_carriers", [])
+    )
+    if not base_spec_consumed or not (not_applicable_spec_consumed or full_or_minimal_spec_consumed):
+        raise AssertionError("spec review record consumed suite locators drifted")
+    commit_fixture_file(target, spec_review.relative_to(target).as_posix(), "fixture spec review record")
+
+    _, implementation_record_payload = run_json(
+        [
+            "review",
+            "record",
+            "--target",
+            str(target),
+            "--item",
+            active_item,
+            "--decision",
+            "allow",
+            "--kind",
+            "code_review",
+            "--summary",
+            "Contract fixture implementation review allow.",
+            "--reviewer",
+            "contract-check",
+        ],
+        expect=0,
+    )
+    if implementation_record_payload.get("result") != "pass":
+        raise AssertionError("implementation review record fixture did not pass")
+    implementation_record = json.loads(implementation_review.read_text(encoding="utf-8"))
+    implementation_consumed = implementation_record.get("consumed_inputs", {})
+    not_applicable_implementation_consumed = (
+        suite_not_applicable
+        and implementation_consumed.get("suite_evidence_validation") == "not_applicable"
+        and implementation_consumed.get("suite_carrier_validation") == "not_applicable"
+        and implementation_consumed.get("suite_evidence_map") is None
+        and implementation_consumed.get("suite_task_carriers") == []
+    )
+    full_or_minimal_implementation_consumed = (
+        "suite evidence validate" in str(implementation_consumed.get("suite_evidence_validation", ""))
+        and "suite carrier validate" in str(implementation_consumed.get("suite_carrier_validation", ""))
+        and implementation_consumed.get("suite_evidence_map") == expected_evidence
+        and expected_carrier in implementation_consumed.get("suite_task_carriers", [])
+    )
+    if (
+        "suite_consistency_analysis" not in implementation_consumed
+        or not isinstance(implementation_consumed.get("suite_evidence_consumed_contracts"), list)
+        or not isinstance(implementation_consumed.get("suite_carrier_consumed_contracts"), list)
+        or not (not_applicable_implementation_consumed or full_or_minimal_implementation_consumed)
+    ):
+        raise AssertionError("implementation review record consumed suite/evidence locators drifted")
 
 
 def active_suite_path_not_applicable(active_item: str) -> bool:
@@ -1753,6 +1757,10 @@ def write_governance_chain_fixture(target: Path, *, issue_open: bool = False, pr
                 "reviewer": "codex",
                 "reviewed_head": head_sha,
                 "reviewed_validation_summary": validation_summary,
+                "semantic_review_disposition": {
+                    "status": "passed",
+                    "reason": "authored implementation review approved the fixture.",
+                },
                 "fallback_to": None,
                 "findings": [],
                 "blocking_issues": [],
@@ -1878,6 +1886,398 @@ def write_governance_chain_fixture(target: Path, *, issue_open: bool = False, pr
         "branch_protection_file": ".loom/fixtures/WI-1153/branch-protection.json",
         "ruleset_file": ".loom/fixtures/WI-1153/ruleset.json",
     }
+
+
+def write_semantic_review_pr_gate_fixture(target: Path) -> dict[str, str]:
+    item = "WI-1287"
+    branch = "work/1287-1288-review-head-binding"
+    validation_summary = "git diff --check; targeted pr-gate semantic review disposition fixtures passed."
+    write_full_suite(target, item)
+    suite_dir = target / ".loom" / "specs" / item
+    (suite_dir / "implementation-contract.md").write_text(
+        "# Implementation Contract\n\n"
+        "- Contract: pr-gate consumes semantic_review_disposition from the authored review record.\n"
+        "- Boundary: PR payload fixture binds only Work Item, branch, and head SHA.\n",
+        encoding="utf-8",
+    )
+    (target / ".github").mkdir(parents=True, exist_ok=True)
+    (target / ".github" / "PULL_REQUEST_TEMPLATE.md").write_text(
+        "## Summary\n\n- Problem:\n- Scope:\n\n"
+        "## Validation\n\n- [ ] Verified locally\n\n"
+        "## Risks And Follow-ups\n\n- Risks:\n- Follow-ups:\n\n"
+        "## Related Work\n\n- Loom Work Item:\n",
+        encoding="utf-8",
+    )
+    (target / ".gitignore").write_text(".loom/fixtures/\n", encoding="utf-8")
+    work_item = target / ".loom" / "work-items" / f"{item}.md"
+    work_item.write_text(
+        f"# {item}\n\n"
+        "## Static Facts\n\n"
+        f"- Item ID: {item}\n"
+        "- Goal: Fixture proves semantic_review_disposition and PR head binding enforcement.\n"
+        "- Scope: `fixture-change.txt`, `.loom/reviews/WI-1287.json`, and PR payload fixture only.\n"
+        f"- Execution Path: issue #1287/#1288 -> branch {branch} -> target-local workspace `.` -> PR #1288.\n"
+        "- Workspace Entry: .\n"
+        f"- Recovery Entry: .loom/progress/{item}.md\n"
+        f"- Review Entry: .loom/reviews/{item}.json\n"
+        f"- Validation Entry: {validation_summary}\n"
+        "- Closing Condition: pr-gate consumes current-head semantic review disposition.\n"
+        "\n## Associated Artifacts\n\n"
+        f"- `.loom/work-items/{item}.md`\n"
+        f"- `.loom/progress/{item}.md`\n"
+        f"- `.loom/reviews/{item}.json`\n"
+        f"- `.loom/specs/{item}/spec.md`\n"
+        f"- `.loom/specs/{item}/plan.md`\n",
+        encoding="utf-8",
+    )
+    progress = target / ".loom" / "progress" / f"{item}.md"
+    progress.write_text(
+        f"# {item} Progress\n\n"
+        "## Dynamic Facts\n\n"
+        f"- Item ID: {item}\n"
+        "- Current Checkpoint: merge\n"
+        "- Current Stop: Fixture is ready for pr-gate semantic disposition checks.\n"
+        "- Next Step: Run pr-gate semantic disposition fixtures.\n"
+        "- Blockers: None recorded.\n"
+        f"- Latest Validation Summary: {validation_summary}\n"
+        "- Recovery Boundary: Fixture only; no host writes.\n"
+        "- Current Lane: pr-gate-fixture\n"
+        "\n## Execution Ledger\n\n"
+        "- Ledger Binding: recovery_entry\n"
+        f"- Plan Locator: .loom/specs/{item}/plan.md\n"
+        f"- Acceptance Locator: .loom/specs/{item}/spec.md\n"
+        f"- Validation Evidence Locator: .loom/specs/{item}/evidence-map.md\n"
+        "- Handoff Notes Locator: not_applicable\n"
+        "- Evidence Freshness: current\n",
+        encoding="utf-8",
+    )
+    status = target / ".loom" / "status" / "current.md"
+    status.parent.mkdir(parents=True, exist_ok=True)
+    status.write_text(
+        "# Current Status\n\n"
+        "## Derived Fact Chain View\n\n"
+        f"- Item ID: {item}\n"
+        "- Goal: Fixture proves semantic_review_disposition and PR head binding enforcement.\n"
+        "- Scope: `fixture-change.txt`, `.loom/reviews/WI-1287.json`, and PR payload fixture only.\n"
+        f"- Execution Path: issue #1287/#1288 -> branch {branch} -> target-local workspace `.` -> PR #1288.\n"
+        "- Workspace Entry: .\n"
+        f"- Recovery Entry: .loom/progress/{item}.md\n"
+        f"- Review Entry: .loom/reviews/{item}.json\n"
+        f"- Validation Entry: {validation_summary}\n"
+        "- Closing Condition: pr-gate consumes current-head semantic review disposition.\n"
+        "- Current Checkpoint: merge\n"
+        "- Current Stop: Fixture is ready for pr-gate semantic disposition checks.\n"
+        "- Next Step: Run pr-gate semantic disposition fixtures.\n"
+        "- Blockers: None recorded.\n"
+        f"- Latest Validation Summary: {validation_summary}\n"
+        "- Recovery Boundary: Fixture only; no host writes.\n"
+        "- Current Lane: pr-gate-fixture\n\n"
+        "## Runtime Evidence\n\n"
+        "- Run Entry: not_applicable\n"
+        "- Logs Entry: not_applicable\n"
+        "- Diagnostics Entry: not_applicable\n"
+        "- Verification Entry: targeted pr-gate semantic disposition fixture\n"
+        "- Lane Entry: pr-gate-fixture\n\n"
+        "## Sources\n\n"
+        f"- Static Truth: .loom/work-items/{item}.md\n"
+        f"- Dynamic Truth: .loom/progress/{item}.md\n"
+        "- Locator Truth: .loom/bootstrap/init-result.json\n"
+        "- Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .\n",
+        encoding="utf-8",
+    )
+    init_result = target / ".loom" / "bootstrap" / "init-result.json"
+    init_result.parent.mkdir(parents=True, exist_ok=True)
+    init_result.write_text(
+        json.dumps(
+            {
+                "fact_chain": {
+                    "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
+                    "mode": "fixture",
+                    "entry_points": {
+                        "current_item_id": item,
+                        "work_item": f".loom/work-items/{item}.md",
+                        "recovery_entry": f".loom/progress/{item}.md",
+                        "status_surface": ".loom/status/current.md",
+                    },
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "init", "-b", "main"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["git", "config", "user.email", "loom@example.invalid"], cwd=target, check=True)
+    subprocess.run(["git", "config", "user.name", "Loom Fixture"], cwd=target, check=True)
+    subprocess.run(["git", "checkout", "-b", branch], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    (target / "fixture-change.txt").write_text("semantic review disposition fixture\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=target, check=True)
+    subprocess.run(["git", "commit", "-m", "fixture reviewed head"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    reviewed_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+    review_path = target / ".loom" / "reviews" / f"{item}.json"
+    review_path.parent.mkdir(parents=True, exist_ok=True)
+    spec_review_payload = {
+        "schema_version": "loom-review/v1",
+        "item_id": item,
+        "decision": "allow",
+        "kind": "spec_review",
+        "summary": "Fixture spec review allows semantic disposition fixture consumption.",
+        "reviewer": "codex",
+        "reviewed_head": reviewed_head,
+        "reviewed_validation_summary": validation_summary,
+        "fallback_to": None,
+        "findings": [],
+        "blocking_issues": [],
+        "follow_ups": [],
+        "consumed_inputs": {
+            "work_item": f".loom/work-items/{item}.md",
+            "spec": f".loom/specs/{item}/spec.md",
+            "plan": f".loom/specs/{item}/plan.md",
+            "implementation_contract": f".loom/specs/{item}/implementation-contract.md",
+        },
+    }
+    (target / ".loom" / "reviews" / f"{item}.spec.json").write_text(
+        json.dumps(spec_review_payload, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    review_payload = {
+        "schema_version": "loom-review/v1",
+        "item_id": item,
+        "decision": "allow",
+        "kind": "code_review",
+        "summary": "Fixture implementation review allows semantic disposition gate consumption.",
+        "reviewer": "codex",
+        "reviewed_head": reviewed_head,
+        "reviewed_validation_summary": validation_summary,
+        "semantic_review_disposition": {
+            "status": "passed",
+            "reason": "authored implementation review approved the fixture.",
+        },
+        "fallback_to": None,
+        "findings": [],
+        "blocking_issues": [],
+        "follow_ups": [],
+        "consumed_inputs": {
+            "work_item": f".loom/work-items/{item}.md",
+            "recovery_entry": f".loom/progress/{item}.md",
+            "suite_evidence_map": f".loom/specs/{item}/evidence-map.md",
+            "suite_task_carriers": [f".loom/specs/{item}/task-carrier.md"],
+        },
+    }
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=target, check=True)
+    subprocess.run(["git", "commit", "-m", "fixture review carrier"], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+    fixture_dir = target / ".loom" / "fixtures" / item
+    fixture_dir.mkdir(parents=True, exist_ok=True)
+    pr_file = fixture_dir / "pr.json"
+    pr_payload = {
+        "number": 1288,
+        "state": "OPEN",
+        "title": "semantic review disposition fixture",
+        "body": f"Loom Work Item: {item}\nBranch: {branch}\nHead SHA: {head_sha}\n",
+        "url": "https://github.com/owner/repo/pull/1288",
+        "isDraft": False,
+        "headRefName": branch,
+        "headRefOid": head_sha,
+        "baseRefName": "main",
+    }
+    pr_file.write_text(json.dumps(pr_payload, indent=2) + "\n", encoding="utf-8")
+    return {
+        "item": item,
+        "branch": branch,
+        "review_path": f".loom/reviews/{item}.json",
+        "pr_file": f".loom/fixtures/{item}/pr.json",
+        "reviewed_head": reviewed_head,
+        "head_sha": head_sha,
+        "validation_summary": validation_summary,
+    }
+
+
+def commit_fixture_file(target: Path, path: str, message: str) -> str:
+    subprocess.run(["git", "add", path], cwd=target, check=True)
+    subprocess.run(["git", "commit", "-m", message], cwd=target, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+
+
+def update_fixture_pr_head(target: Path, fixture: dict[str, str], *, state: str = "OPEN", extra: dict[str, Any] | None = None) -> None:
+    pr_path = target / fixture["pr_file"]
+    payload = json.loads(pr_path.read_text(encoding="utf-8"))
+    head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
+    payload["state"] = state
+    payload["headRefOid"] = head_sha
+    payload["body"] = f"Loom Work Item: {fixture['item']}\nBranch: {fixture['branch']}\nHead SHA: {head_sha}\n"
+    if extra:
+        payload.update(extra)
+    pr_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def semantic_pr_gate_fixture_payload(target: Path, fixture: dict[str, str]) -> dict[str, Any]:
+    _, payload = run_flow_json(
+        [
+            "pr-gate",
+            "check",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--pr-payload-file",
+            fixture["pr_file"],
+        ]
+    )
+    return payload
+
+
+def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
+    target = tmp / "semantic-review-pr-gate"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target)
+    loom_flow = load_loom_flow_module()
+    parser_cases = {
+        "Loom Work Item: WI-1287\n": "WI-1287",
+        "Loom Work Item: WI-1240-1242\n": "WI-1240-1242",
+        "Loom Work Item: INIT-0001\n": "INIT-0001",
+    }
+    for body, expected in parser_cases.items():
+        if loom_flow.pr_work_item_from_body(body) != expected:
+            raise AssertionError(f"PR body Work Item parser did not preserve `{expected}`")
+
+    _, record_payload = run_flow_json(
+        [
+            "review",
+            "record",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--review-file",
+            fixture["review_path"],
+            "--decision",
+            "allow",
+            "--kind",
+            "code_review",
+            "--summary",
+            "Fixture implementation review approves the current head.",
+            "--reviewer",
+            "contract-test",
+        ]
+    )
+    if record_payload.get("result") != "pass":
+        raise AssertionError(f"review record fixture failed: {record_payload.get('missing_inputs')}")
+    recorded_disposition = record_payload.get("review", {}).get("record", {}).get("semantic_review_disposition", {})
+    if recorded_disposition.get("status") != "passed":
+        raise AssertionError("review record did not write passed semantic_review_disposition")
+
+    pass_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if pass_payload.get("result") != "pass":
+        raise AssertionError(f"semantic review disposition pass fixture blocked: {pass_payload.get('missing_inputs')}")
+    disposition = pass_payload.get("review_approval", {}).get("semantic_review_disposition", {})
+    if disposition.get("status") != "passed" or disposition.get("consumable") is not True:
+        raise AssertionError("pr-gate did not consume passed semantic_review_disposition")
+    if pass_payload.get("pr", {}).get("work_item_from_body") != fixture["item"]:
+        raise AssertionError("pr-gate did not preserve single Work Item id parsing")
+
+    pr_path = target / fixture["pr_file"]
+    original_pr_payload = json.loads(pr_path.read_text(encoding="utf-8"))
+    aggregate_item = "WI-1240-1242"
+    aggregate_pr_payload = dict(original_pr_payload)
+    aggregate_pr_payload["body"] = (
+        f"Loom Work Item: {aggregate_item}\n"
+        f"Branch: {fixture['branch']}\n"
+        f"Head SHA: {original_pr_payload['headRefOid']}\n"
+    )
+    pr_path.write_text(json.dumps(aggregate_pr_payload, indent=2) + "\n", encoding="utf-8")
+    aggregate_payload = semantic_pr_gate_fixture_payload(target, {**fixture, "item": aggregate_item})
+    if aggregate_payload.get("pr", {}).get("work_item_from_body") != aggregate_item:
+        raise AssertionError("pr-gate did not parse aggregate Work Item id from PR body")
+    aggregate_taxonomy = aggregate_payload.get("failure_taxonomy", [])
+    if aggregate_payload.get("result") != "block" or "work_item_binding_missing" in aggregate_taxonomy:
+        raise AssertionError("aggregate Work Item id parser fixture must consume the PR body Work Item binding")
+    pr_path.write_text(json.dumps(original_pr_payload, indent=2) + "\n", encoding="utf-8")
+
+    review_path = target / fixture["review_path"]
+    review_payload = json.loads(review_path.read_text(encoding="utf-8"))
+    review_payload.pop("semantic_review_disposition", None)
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    commit_fixture_file(target, fixture["review_path"], "fixture missing semantic disposition")
+    update_fixture_pr_head(target, fixture)
+    missing_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if missing_payload.get("result") != "block" or "semantic_review_disposition_missing" not in missing_payload.get("failure_taxonomy", []):
+        raise AssertionError("missing semantic_review_disposition did not fail closed")
+
+    review_payload["semantic_review_disposition"] = {"status": "commented"}
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    commit_fixture_file(target, fixture["review_path"], "fixture unknown semantic disposition")
+    update_fixture_pr_head(target, fixture)
+    unknown_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if unknown_payload.get("result") != "block" or "semantic_review_disposition_invalid" not in unknown_payload.get("failure_taxonomy", []):
+        raise AssertionError("unknown semantic_review_disposition did not fail closed")
+
+    review_payload["semantic_review_disposition"] = {"status": "not_applicable", "reason": "docs-only fixture"}
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    commit_fixture_file(target, fixture["review_path"], "fixture incomplete not applicable disposition")
+    update_fixture_pr_head(target, fixture)
+    incomplete_na = semantic_pr_gate_fixture_payload(target, fixture)
+    if incomplete_na.get("result") != "block" or "semantic_review_disposition_invalid" not in incomplete_na.get("failure_taxonomy", []):
+        raise AssertionError("incomplete not_applicable semantic_review_disposition did not fail closed")
+
+    review_payload["semantic_review_disposition"] = {
+        "status": "waived",
+        "reason": "explicit fixture waiver",
+        "change_class": "harness_fixture",
+        "substitute_validation": "targeted fixture validation",
+        "authority": "fixture-owner",
+        "risk_acceptance": "bounded fixture risk",
+        "one_shot": True,
+    }
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    commit_fixture_file(target, fixture["review_path"], "fixture waived semantic disposition")
+    update_fixture_pr_head(target, fixture)
+    waived_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if waived_payload.get("result") != "pass" or waived_payload.get("review_approval", {}).get("semantic_review_disposition", {}).get("status") != "waived":
+        raise AssertionError("complete waived semantic_review_disposition was not consumable")
+
+    update_fixture_pr_head(target, fixture)
+    pr_path = target / fixture["pr_file"]
+    pr_payload = json.loads(pr_path.read_text(encoding="utf-8"))
+    pr_payload["body"] = f"Loom Work Item: {fixture['item']}\nBranch: {fixture['branch']}\n"
+    pr_path.write_text(json.dumps(pr_payload, indent=2) + "\n", encoding="utf-8")
+    missing_body_head = semantic_pr_gate_fixture_payload(target, fixture)
+    if missing_body_head.get("result") != "block" or "head_binding_drift" not in missing_body_head.get("failure_taxonomy", []):
+        raise AssertionError("missing PR body Head SHA machine carrier did not fail closed")
+
+    update_fixture_pr_head(target, fixture)
+    pr_payload = json.loads(pr_path.read_text(encoding="utf-8"))
+    pr_payload["body"] = f"Loom Work Item: {fixture['item']}\nBranch: wrong-branch\nHead SHA: {pr_payload['headRefOid']}\n"
+    pr_path.write_text(json.dumps(pr_payload, indent=2) + "\n", encoding="utf-8")
+    wrong_body_branch = semantic_pr_gate_fixture_payload(target, fixture)
+    if wrong_body_branch.get("result") != "block" or "head_binding_drift" not in wrong_body_branch.get("failure_taxonomy", []):
+        raise AssertionError("mismatched PR body Branch machine carrier did not fail closed")
+
+    (target / "implementation-drift.txt").write_text("unreviewed drift\n", encoding="utf-8")
+    commit_fixture_file(target, "implementation-drift.txt", "fixture implementation drift after review")
+    update_fixture_pr_head(target, fixture)
+    stale_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    taxonomy = stale_payload.get("failure_taxonomy", [])
+    if stale_payload.get("result") != "block" or "review_stale" not in taxonomy or "head_binding_drift" not in taxonomy:
+        raise AssertionError("stale PR head was not classified as review_stale/head_binding_drift")
+
+    update_fixture_pr_head(target, fixture, state="MERGED")
+    post_merge_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if "post_merge_review" not in post_merge_payload.get("failure_taxonomy", []):
+        raise AssertionError("merged PR payload did not expose post_merge_review taxonomy")
+
+    review_payload["semantic_review_disposition"] = {"status": "required"}
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    commit_fixture_file(target, fixture["review_path"], "fixture ci only semantic disposition")
+    update_fixture_pr_head(
+        target,
+        fixture,
+        extra={"statusCheckRollup": [{"name": "ci", "conclusion": "SUCCESS", "status": "COMPLETED"}]},
+    )
+    ci_only_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if ci_only_payload.get("result") != "block" or "ci_only_bypass" not in ci_only_payload.get("failure_taxonomy", []):
+        raise AssertionError("CI-only bypass did not fail closed with ci_only_bypass taxonomy")
 
 
 def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
@@ -3642,7 +4042,7 @@ def main() -> int:
             item=active_item,
         )
         assert_suite_build_consumption(active_build)
-        assert_review_record_consumed_locators(active_item)
+        assert_review_record_consumed_locators(tmp)
         _, active_pre_review = run_json_preserving_attempts(
             ["pre-review", "--target", str(REPO_ROOT), "--item", active_item, "--json"],
             item=active_item,
@@ -3716,6 +4116,7 @@ def main() -> int:
         assert_closeout_blocks_missing_suite_evidence(active_item)
         assert_reconciliation_suite_taxonomy_contract()
         assert_docs_contract_suite_not_applicable_gate_contract(tmp)
+        assert_semantic_review_disposition_pr_gate_fixture(tmp)
         assert_governance_chain_closeout_fixture(tmp)
         _, checkpoint_admission = run_json(["checkpoint", "admission", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"])
         if checkpoint_admission["command"] != "checkpoint admission" or checkpoint_admission.get("checkpoint") != "admission":

@@ -11276,6 +11276,17 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                             context="`installed review record allow` review.record",
                             payload=review.get("record"),
                         )
+                    review_path = positive_target / ".loom/reviews/INIT-0001.json"
+                    try:
+                        review_record = json.loads(review_path.read_text(encoding="utf-8"))
+                    except (OSError, json.JSONDecodeError):
+                        review_record = {}
+                    if isinstance(review_record, dict):
+                        review_record["semantic_review_disposition"] = {
+                            "status": "passed",
+                            "reason": "Installed daily-execution positive fixture authored a current implementation review.",
+                        }
+                        review_path.write_text(json.dumps(review_record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
                 payload, error = load_command_json(
                     root,
@@ -11339,14 +11350,16 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     return relative
 
                 def pr_gate_fixture(target: Path, *, number: int = 1, merge_state_status: str | None = None, host_review_state: str | None = None) -> str:
+                    head_ref_name = "feature/pr-gate"
+                    head_ref_oid = current_head(target)
                     payload = {
                         "number": number,
                         "state": "OPEN",
                         "isDraft": False,
-                        "headRefName": "feature/pr-gate",
+                        "headRefName": head_ref_name,
                         "baseRefName": "main",
-                        "headRefOid": current_head(target),
-                        "body": "## Related Work\n\n- Loom Work Item: INIT-0001\n",
+                        "headRefOid": head_ref_oid,
+                        "body": f"## Related Work\n\n- Loom Work Item: INIT-0001\n- Branch: {head_ref_name}\n- Head SHA: {head_ref_oid}\n",
                         "url": f"https://github.example/owner/repo/pull/{number}",
                     }
                     if merge_state_status:
