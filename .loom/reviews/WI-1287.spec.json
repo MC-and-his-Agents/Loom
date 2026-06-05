@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1287",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review for WI-1287 at head 93f5c737b9d7a7802c498ed9e8bd2eafb6120ec6: formal suite path is not_applicable because #1287/#1288 implements review disposition carrier and PR head binding gate enforcement using the frozen #1286 contract and focused repo-local fixtures, without adding a formal spec suite, #1289/#1291 merge check/run behavior, or companion/guardian adapter fixtures. The not_applicable rationale in .loom/specs/WI-1287/spec.md is valid and was consumed by suite validate; implementation review and pr-gate remain required and are not replaced by this spec review record.",
+  "reviewer": "codex T2",
+  "reviewed_head": "93f5c737b9d7a7802c498ed9e8bd2eafb6120ec6",
+  "reviewed_validation_summary": "Passed after merging origin/main 175da1eb0d94857b3fa8fb114d7c754cfe6efe6d: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py including WI-1287/WI-1240-1242/INIT-0001 parser cases, aggregate PR gate fixture, and review record writing passed semantic_review_disposition; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills release-check --json; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py runtime-parity validate --target .; python3 tools/check_demo_bootstrap_fixture.py; python3 tools/loom.py fact-chain --target . --json; python3 tools/loom.py suite validate --target . --item WI-1287 --json returned not_applicable with valid rationale and no blocking gaps.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1287.md",
+    "recovery_entry": ".loom/progress/WI-1287.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/dev/Loom-1287-review-head-binding/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1287/spec.md",
+    "suite_plan": null,
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}
