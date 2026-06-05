@@ -3,9 +3,9 @@
   "item_id": "WI-1240-1242",
   "decision": "allow",
   "kind": "spec_review",
-  "summary": "Spec review passed for WI-1240-1242 minimal suite: #1239 contract, #1240/#1241/#1242 scenarios, plan mappings, task carrier, and implementation contract are present; exclusions for #1243/#1244 and #1245/#1246 are explicit.",
+  "summary": "Spec review passed for WI-1240-1242 minimal suite: #1239 contract, #1240/#1241/#1242 scenarios, plan mappings, implementation contract, task carrier, and evidence map are present; exclusions for #1243/#1244 and #1245/#1246 are explicit.",
   "reviewer": "codex-T3",
-  "reviewed_head": "1d9a1ff3386f0db070761f84aeb065743766e525",
+  "reviewed_head": "40f681139c8b6b6cc85c092709f0a50f01771099",
   "reviewed_validation_summary": "Passed locally on 2026-06-05: git diff --check; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/loom.py tools/check_cli_contract.py tools/governance_surface.py src/skills/shared/scripts/governance_surface.py skills/shared/scripts/governance_surface.py tools/check_demo_bootstrap_fixture.py -> py_compile_clean OK; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills check --target . --json -> pass generated_at=2026-06-05T06:33:51Z; make loom-demo-new-project-check -> demo bootstrap fixture OK; targeted global-cli smoke -> TARGETED_GLOBAL_CLI_CHECKS_PASS; python3 tools/loom.py suite validate --target . --item WI-1240-1242 --json -> pass generated_at=2026-06-05T06:28:32Z; python3 tools/loom.py suite carrier validate --target . --item WI-1240-1242 --json -> pass generated_at=2026-06-05T06:27:55Z; python3 .loom/bin/loom_flow.py flow build --target . --item WI-1240-1242 --build-evidence .loom/progress/WI-1240-1242-build-evidence.json -> pass generated_at=2026-06-05T06:29:39Z; python3 .loom/bin/loom_flow.py runtime-evidence --target . --item WI-1240-1242 -> pass; python3 tools/loom.py fact-chain --target . --json -> pass. Full tools/check_cli_contract.py remains classified as environment/carrier-state failure because self-repo carrier state consumed terminal WI-1311 and uncommitted carrier purity before WI-1240-1242 carrier sync.",
   "fallback_to": null,
   "findings": [],
@@ -37,7 +37,7 @@
     "suite_validator_mode": "repo-local-cli",
     "suite_spec": ".loom/specs/WI-1240-1242/spec.md",
     "suite_plan": ".loom/specs/WI-1240-1242/plan.md",
-    "suite_evidence_map": null,
+    "suite_evidence_map": ".loom/specs/WI-1240-1242/evidence-map.md",
     "suite_consistency_analysis": null,
     "suite_task_carriers": [
       ".loom/specs/WI-1240-1242/task-carrier.md"
