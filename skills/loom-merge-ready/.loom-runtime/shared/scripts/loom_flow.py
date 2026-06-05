@@ -163,6 +163,21 @@ REVIEW_KINDS = {"general_review", "code_review", "spec_review"}
 IMPLEMENTATION_REVIEW_KINDS = {"general_review", "code_review"}
 REVIEW_FINDING_SEVERITIES = {"warn", "block"}
 REVIEW_FINDING_DISPOSITION_STATUSES = {"accepted", "rejected", "deferred"}
+SEMANTIC_REVIEW_DISPOSITION_STATUSES = {"required", "passed", "not_applicable", "waived"}
+SEMANTIC_REVIEW_NOT_APPLICABLE_REQUIRED_FIELDS = (
+    "reason",
+    "change_class",
+    "non_behavioral_scope",
+    "substitute_validation",
+    "authority",
+)
+SEMANTIC_REVIEW_WAIVED_REQUIRED_FIELDS = (
+    "reason",
+    "change_class",
+    "substitute_validation",
+    "authority",
+    "risk_acceptance",
+)
 DEFAULT_REVIEW_ENGINE = "codex"
 DEFAULT_REVIEW_ADAPTER = "loom/default-codex-exec"
 CODEX_APP_REVIEW_ADAPTER = "loom/codex-app-review"
@@ -13557,6 +13572,17 @@ def pr_work_item_from_body(body: Any) -> str | None:
     return None
 
 
+def pr_body_field_value(body: Any, label: str) -> str | None:
+    if not isinstance(body, str):
+        return None
+    pattern = rf"(?im)^\s*[-*]?\s*{re.escape(label)}\s*:\s*`?([^`\n]+?)`?\s*$"
+    match = re.search(pattern, body)
+    if not match:
+        return None
+    value = match.group(1).strip()
+    return value or None
+
+
 def pr_body_mentions_item(body: Any, item_id: str) -> bool:
     if not isinstance(body, str):
         return False
@@ -14444,6 +14470,18 @@ def pr_gate_failure_taxonomy(missing_inputs: list[str], gate_result: str) -> lis
             categories.add("review_missing")
         if "schema_version" in lowered or "invalid review" in lowered:
             categories.add("review_schema_invalid")
+        if "semantic_review_disposition missing" in lowered:
+            categories.add("semantic_review_disposition_missing")
+            categories.add("review_missing")
+        if "semantic_review_disposition invalid" in lowered or "semantic_review_disposition unknown" in lowered:
+            categories.add("semantic_review_disposition_invalid")
+        if "semantic_review_disposition" in lowered and (
+            "missing `" in lowered
+            or "requires" in lowered
+            or "not bound" in lowered
+            or "validation summary" in lowered
+        ):
+            categories.add("semantic_review_disposition_invalid")
         if "implementation review kind" in lowered or "cannot satisfy implementation approval" in lowered:
             categories.add("review_not_approved")
         if "decision is blocking" in lowered or "decision is fallback" in lowered or "not approved" in lowered:
@@ -14452,12 +14490,20 @@ def pr_gate_failure_taxonomy(missing_inputs: list[str], gate_result: str) -> lis
             categories.add("review_stale")
         if "validation summary" in lowered:
             categories.add("validation_summary_drift")
-        if "reviewed_head" in lowered or "head binding" in lowered:
+        if "reviewed_head" in lowered or "head binding" in lowered or "not bound to the current pr head" in lowered:
+            categories.add("head_binding_drift")
+        if "pr body head sha" in lowered or "pr body branch" in lowered or "payload headrefoid" in lowered:
             categories.add("head_binding_drift")
         if "checkout head" in lowered:
             categories.add("checkout_head_drift")
         if "raw" in lowered or "shadow" in lowered:
             categories.add("raw_evidence_bypass")
+        if "post-merge review" in lowered or "already merged" in lowered:
+            categories.add("post_merge_review")
+            categories.add("post_merge_review_bypass")
+        if "ci-only" in lowered or "ci only" in lowered:
+            categories.add("ci_only_bypass")
+            categories.add("ci_only_merge_bypass")
         if "required check" in lowered or "branch protection" in lowered or "ruleset" in lowered:
             categories.add("host_enforcement_unverified")
         if "pr metadata" in lowered:
@@ -14476,9 +14522,95 @@ def approval_boundary_payload(*, raw_evidence_present: bool) -> dict[str, Any]:
         "pr_body_summary_satisfies_approval": False,
         "ci_success_satisfies_approval": False,
         "github_review_comments_satisfy_approval": False,
+        "repo_companion_satisfies_approval": False,
+        "guardian_satisfies_approval": False,
         "raw_evidence_present": raw_evidence_present,
         "required_authored_review_kinds": sorted(IMPLEMENTATION_REVIEW_KINDS),
     }
+
+
+def semantic_review_disposition_payload(
+    *,
+    review_record: dict[str, Any],
+    review_path: str,
+    pr_head: str | None,
+    head_binding: dict[str, Any],
+    current_validation_summary: str | None,
+) -> tuple[dict[str, Any], list[str]]:
+    raw_disposition = review_record.get("semantic_review_disposition")
+    errors: list[str] = []
+    base = {
+        "status": "missing",
+        "source": "review_record",
+        "path": review_path,
+        "reviewed_head": review_record.get("reviewed_head"),
+        "pr_head": pr_head,
+        "reviewed_validation_summary": review_record.get("reviewed_validation_summary"),
+        "current_validation_summary": current_validation_summary,
+        "head_binding": head_binding,
+        "consumable": False,
+        "details": {},
+    }
+    if raw_disposition is None:
+        return base, [f"semantic_review_disposition missing in review artifact `{review_path}`"]
+    if isinstance(raw_disposition, str):
+        disposition = {"status": raw_disposition}
+    elif isinstance(raw_disposition, dict):
+        disposition = dict(raw_disposition)
+    else:
+        return base, [f"semantic_review_disposition invalid in review artifact `{review_path}`"]
+
+    status = disposition.get("status")
+    if not isinstance(status, str) or status not in SEMANTIC_REVIEW_DISPOSITION_STATUSES:
+        base["status"] = status if isinstance(status, str) else "invalid"
+        base["details"] = disposition
+        return base, [f"semantic_review_disposition unknown disposition `{status}` in review artifact `{review_path}`"]
+
+    payload = {**base, "status": status, "details": disposition}
+    if status == "required":
+        return payload, [f"semantic_review_disposition required in review artifact `{review_path}`"]
+
+    if status == "passed":
+        if review_record.get("decision") != "allow":
+            errors.append("semantic_review_disposition passed requires review decision allow")
+        if review_record.get("kind") not in IMPLEMENTATION_REVIEW_KINDS:
+            errors.append("semantic_review_disposition passed requires an implementation review kind")
+        if head_binding.get("stale") is True or head_binding.get("status") not in {"fresh", "carrier-only"}:
+            errors.append("semantic_review_disposition passed is not bound to the current PR head")
+        if (
+            isinstance(current_validation_summary, str)
+            and current_validation_summary
+            and review_record.get("reviewed_validation_summary") != current_validation_summary
+        ):
+            errors.append("semantic_review_disposition passed validation summary does not match current recovery")
+        payload["consumable"] = not errors
+        return payload, errors
+
+    required = (
+        SEMANTIC_REVIEW_NOT_APPLICABLE_REQUIRED_FIELDS
+        if status == "not_applicable"
+        else SEMANTIC_REVIEW_WAIVED_REQUIRED_FIELDS
+    )
+    for field in required:
+        value = disposition.get(field)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"semantic_review_disposition {status} missing `{field}`")
+    if status == "waived":
+        expiry = disposition.get("expiry")
+        one_shot = disposition.get("one_shot")
+        if (not isinstance(expiry, str) or not expiry.strip()) and one_shot is not True:
+            errors.append("semantic_review_disposition waived missing `expiry` or one-shot true")
+    if head_binding.get("stale") is True:
+        errors.append(f"semantic_review_disposition {status} is not bound to the current PR head")
+    if (
+        isinstance(current_validation_summary, str)
+        and current_validation_summary
+        and isinstance(review_record.get("reviewed_validation_summary"), str)
+        and review_record.get("reviewed_validation_summary") != current_validation_summary
+    ):
+        errors.append(f"semantic_review_disposition {status} validation summary does not match current recovery")
+    payload["consumable"] = not errors
+    return payload, errors
 
 
 def approval_boundary_lint_status(
@@ -14657,10 +14789,24 @@ def pr_gate_payload(
     if pr_payload is not None:
         if pr_state not in {"OPEN"}:
             missing_inputs.append(f"PR state must be OPEN before controlled merge: {pr_state}")
+            if pr_state == "MERGED":
+                missing_inputs.append("post-merge review consumption is not valid for pr-gate")
         if pr_payload.get("isDraft") is True:
             missing_inputs.append("PR is draft")
         if context and not pr_body_mentions_item(pr_payload.get("body"), context["item_id"]):
             missing_inputs.append(f"PR body does not mention Loom Work Item `{context['item_id']}`")
+        body_head = pr_body_field_value(pr_payload.get("body"), "Head SHA")
+        if not body_head:
+            missing_inputs.append("PR body Head SHA is missing from PR machine carrier")
+        elif pr_head and body_head != pr_head:
+            missing_inputs.append("PR body Head SHA does not match PR payload headRefOid")
+        body_branch = pr_body_field_value(pr_payload.get("body"), "Branch")
+        payload_branch = pr_payload.get("headRefName")
+        expected_branch = payload_branch if isinstance(payload_branch, str) and payload_branch else branch_name
+        if not body_branch:
+            missing_inputs.append("PR body Branch is missing from PR machine carrier")
+        elif isinstance(expected_branch, str) and expected_branch and body_branch != expected_branch:
+            missing_inputs.append("PR body Branch does not match PR payload headRefName")
 
     current_head = git_head_sha(target_root)
     if pr_head and current_head and pr_head != current_head:
@@ -14678,6 +14824,7 @@ def pr_gate_payload(
         "decision": None,
         "reviewed_head": None,
         "head_binding": None,
+        "semantic_review_disposition": None,
     }
     if context:
         merge_checkpoint = checkpoint_payload("merge", context)
@@ -14690,15 +14837,32 @@ def pr_gate_payload(
                 "kind": None,
                 "reviewed_head": None,
                 "head_binding": None,
+                "semantic_review_disposition": None,
                 "missing_inputs": review_errors or [f"missing review artifact: {review_path}"],
             }
+            missing_inputs.extend(review_approval["missing_inputs"])
         else:
             review_kind = review_record.get("kind")
+            head_binding_payload, head_binding_errors = review_head_binding_for_head(
+                target_root,
+                reviewed_head=review_record.get("reviewed_head"),
+                target_head=pr_head,
+                allowed_paths=allowed_post_review_carrier_paths(context, review_path),
+            )
+            disposition, disposition_errors = semantic_review_disposition_payload(
+                review_record=review_record,
+                review_path=review_path,
+                pr_head=pr_head,
+                head_binding=head_binding_payload,
+                current_validation_summary=context.get("latest_validation_summary"),
+            )
+            approval_errors = [*review_errors, *head_binding_errors, *disposition_errors]
             approval_status = (
                 "approved"
                 if review_record.get("decision") == "allow"
-                and not review_errors
+                and not approval_errors
                 and review_kind in IMPLEMENTATION_REVIEW_KINDS
+                and disposition.get("consumable") is True
                 else "not_approved"
             )
             review_approval = {
@@ -14708,9 +14872,11 @@ def pr_gate_payload(
                 "kind": review_kind,
                 "reviewed_head": review_record.get("reviewed_head"),
                 "reviewed_validation_summary": review_record.get("reviewed_validation_summary"),
-                "head_binding": review_record.get("head_binding"),
-                "missing_inputs": review_errors,
+                "head_binding": head_binding_payload,
+                "semantic_review_disposition": disposition,
+                "missing_inputs": approval_errors,
             }
+            missing_inputs.extend(str(message) for message in approval_errors)
         terminal_closed_checkpoint = (
             merge_checkpoint.get("result") == "fallback"
             and merge_checkpoint.get("fallback_to") == "closed"
@@ -14780,6 +14946,20 @@ def pr_gate_payload(
     failure_taxonomy = pr_gate_failure_taxonomy(missing_inputs, result)
     if raw_evidence_present and review_approval.get("status") != "approved" and "raw_evidence_bypass" not in failure_taxonomy:
         failure_taxonomy.append("raw_evidence_bypass")
+    ci_or_host_review_signal_present = False
+    if isinstance(pr_payload, dict):
+        ci_or_host_review_signal_present = any(
+            key in pr_payload and pr_payload.get(key) not in (None, [], {})
+            for key in ("statusCheckRollup", "checks", "latestReviews", "reviewDecision", "mergeStateStatus")
+        )
+    if ci_or_host_review_signal_present and review_approval.get("status") != "approved":
+        missing_inputs.append("ci-only or host-review signal cannot satisfy semantic_review_disposition")
+        for category in ("ci_only_bypass", "ci_only_merge_bypass"):
+            if category not in failure_taxonomy:
+                failure_taxonomy.append(category)
+    if missing_inputs and result == "pass":
+        result = "block"
+        fallback_to = fallback_to or "build"
     approval_boundary = approval_boundary_payload(raw_evidence_present=raw_evidence_present)
     governance_lint = (
         approval_boundary_lint_status(
@@ -14997,6 +15177,11 @@ def retained_pr_gate_consumption(
     retained_head = retained_pr.get("head_sha")
     current_head = current_pr.get("headRefOid")
     retained_item = retained_work_item.get("id")
+    semantic_disposition = (
+        review_approval.get("semantic_review_disposition")
+        if isinstance(review_approval.get("semantic_review_disposition"), dict)
+        else {}
+    )
 
     if not isinstance(retained, dict):
         missing_inputs.append("retained pr-gate result is unreadable")
@@ -15017,6 +15202,19 @@ def retained_pr_gate_consumption(
             missing_inputs.append("retained pr-gate does not carry authored allow review approval")
         if review_approval.get("kind") not in IMPLEMENTATION_REVIEW_KINDS:
             missing_inputs.append("retained pr-gate review kind cannot satisfy implementation approval")
+        if semantic_disposition.get("status") not in {"passed", "not_applicable", "waived"} or semantic_disposition.get("consumable") is not True:
+            missing_inputs.append("retained pr-gate semantic_review_disposition is not consumable")
+        if (
+            isinstance(retained_head, str)
+            and retained_head
+            and review_approval.get("reviewed_head") != retained_head
+            and not (
+                isinstance(review_approval.get("head_binding"), dict)
+                and review_approval["head_binding"].get("status") == "carrier-only"
+                and review_approval["head_binding"].get("stale") is False
+            )
+        ):
+            missing_inputs.append("retained pr-gate reviewed_head does not bind to retained PR head")
         if merge_checkpoint.get("result") not in {None, "pass"}:
             missing_inputs.append("retained pr-gate merge checkpoint is not pass")
 
@@ -15042,6 +15240,7 @@ def retained_pr_gate_consumption(
             "review_entry": retained_work_item.get("review_entry"),
             "reviewed_head": review_approval.get("reviewed_head"),
             "reviewed_validation_summary": review_approval.get("reviewed_validation_summary"),
+            "semantic_review_disposition": semantic_disposition,
         },
     }
 

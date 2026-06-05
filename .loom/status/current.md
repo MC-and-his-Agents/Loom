@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1311
-- Goal: Codify reusable merge-ready and closeout discipline in AGENTS.md.
-- Scope: Add principle-level repository operating rules for docs-only contract freeze, suite not_applicable, review artifact timing, carrier/fact-chain/PR metadata alignment, post-merge closeout sync, shared gate blocker ownership, long-running check handling, and external host readback. Do not change runtime behavior, gates, templates, skills, release behavior, or documentation outside AGENTS.md.
-- Execution Path: issue #1311 -> branch work/1311-agents-merge-closeout-discipline -> PR -> CI/review -> merge to main.
-- Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1311.md
-- Review Entry: .loom/reviews/WI-1311.json
-- Validation Entry: git diff --check; rg excluded incident-specific details; PR CI.
-- Closing Condition: PR is merged to main, issue #1311 is closed with evidence, and the change remains limited to AGENTS.md governance rules.
-- Current Checkpoint: closed
-- Current Stop: PR #1312 merged to main at 2026-06-05T03:14:43Z with merge commit eae9f9753745cf0c1ec1a7a623904c4decd5315b; issue #1311 closed at 2026-06-05T03:14:45Z; local pr-gate and hosted loom-pr-merge-gate, loom-check, root-self-governance, repo-local-cli, py-compile, and demo-bootstrap passed before merge.
-- Next Step: None; WI-1311 is terminal and retained only as AGENTS.md merge-ready/closeout discipline evidence.
-- Blockers: None
-- Latest Validation Summary: Post-merge closeout sync validation passed `git diff --check`, `python3 tools/loom.py fact-chain --target . --json`, and `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; pre-merge PR #1312 passed local pr-gate and hosted required checks on head b729f052ef2fe66a48644e4139af4db2355da67e before merge.
-- Recovery Boundary: Terminal closeout carrier only. Do not resume WI-1311 implementation here; future AGENTS.md governance changes require separate issue-scoped work.
-- Current Lane: terminal-closeout
+- Item ID: WI-1287
+- Goal: Implement the `semantic_review_disposition` carrier and PR head binding enforcement for issues #1287 and #1288 under parent #1285.
+- Scope: Add repo-local CLI/runtime validation for `semantic_review_disposition` statuses and required fields, require PR body machine carrier `Branch` and `Head SHA` consistency, bind authored implementation review artifacts to the current PR head, and add focused contract fixtures for missing, unknown, incomplete, stale, post-merge, and CI-only bypass cases. Do not implement #1289/#1291 merge check/run behavior and do not add companion or guardian adapter fixtures.
+- Execution Path: issues #1287/#1288 -> branch work/1287-1288-review-head-binding -> official worktree /Users/mc/dev/Loom-1287-review-head-binding -> PR -> current-head review -> pr-gate/merge-ready.
+- Workspace Entry: /Users/mc/dev/Loom-1287-review-head-binding
+- Recovery Entry: .loom/progress/WI-1287.md
+- Review Entry: .loom/reviews/WI-1287.json
+- Validation Entry: git diff --check; targeted semantic review disposition fixture; py_compile_clean; skills surface/release checks; tools/check_cli_contract.py; fact-chain; suite validate; pr-gate dry check.
+- Closing Condition: #1287 and #1288 have a PR whose body machine carrier matches the branch and head SHA, whose current-head implementation review record is consumed by pr-gate, and whose merge-ready evidence rejects stale review, unknown disposition, incomplete waive/not_applicable rationale, PR body/carrier mismatch, and CI-only bypass.
+- Current Checkpoint: review
+- Current Stop: Code and generated runtime changes for #1287/#1288 are prepared with focused and full CLI contract validation passing; carrier binding is being aligned before commit and current-head review.
+- Next Step: Commit stable code/generated runtime/carrier, rerun fact-chain, suite validate, and pr-gate dry check, then write `.loom/reviews/WI-1287.json` against the committed PR head.
+- Blockers: None currently; implementation review is intentionally not written until code, generated runtime, carrier, and PR body machine carrier are stable.
+- Latest Validation Summary: Pre-carrier validation passed targeted review-record and semantic disposition fixtures, `git diff --check`, `python3 tools/py_compile_clean.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py tools/check_cli_contract.py`, `python3 tools/skills_surface.py check`, `python3 tools/loom.py skills release-check --json`, and `python3 tools/check_cli_contract.py`.
+- Recovery Boundary: Only #1287/#1288 review disposition carrier and PR head binding enforcement are in scope. Do not implement #1289/#1291 merge check/run behavior, do not add companion/guardian adapter fixtures, and do not treat CI/checks/guardian/companion evidence as a substitute for `semantic_review_disposition`.
+- Current Lane: review-head-binding
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: PR #1312 local pr-gate, hosted required checks, and merge commit eae9f9753745cf0c1ec1a7a623904c4decd5315b
-- Lane Entry: terminal-closeout
+- Verification Entry: targeted fixture and CLI contract outputs in this branch before review record
+- Lane Entry: review-head-binding
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1311.md
-- Dynamic Truth: .loom/progress/WI-1311.md
+- Static Truth: .loom/work-items/WI-1287.md
+- Dynamic Truth: .loom/progress/WI-1287.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
