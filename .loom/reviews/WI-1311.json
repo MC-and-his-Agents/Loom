@@ -1,39 +1,43 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1311",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "266eda12fba87ad4756bfdb3950950994c05e2d6",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review for WI-1311 at fec5931ad99a40e133115b2f2a6dc1d2a3bac8c6: AGENTS.md adds reusable repository-level merge-ready and closeout discipline for docs-only contract freeze, formal suite not_applicable, review artifact timing, carrier/fact-chain/PR metadata alignment, PR body readback, post-merge closeout sync, shared gate blocker ownership, long-running check handling, and host readback. The diff remains limited to AGENTS.md and WI-1311 Loom carriers/review evidence; it does not add runtime behavior, gate implementation, templates, skills, release behavior, or incident-specific PR/log details.",
+  "reviewer": "codex-main",
+  "reviewed_head": "fec5931ad99a40e133115b2f2a6dc1d2a3bac8c6",
+  "reviewed_validation_summary": "`git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1311; `python3 tools/loom.py suite validate --target . --item WI-1311 --json` returned `result=not_applicable` with no blocking gaps; excluded incident-specific detail scan passed for AGENTS.md.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1311.md",
+    "recovery_entry": ".loom/progress/WI-1311.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  }
 }
