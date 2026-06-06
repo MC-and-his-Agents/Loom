@@ -3,11 +3,11 @@
   "item_id": "WI-1289-1291",
   "decision": "allow",
   "kind": "spec_review",
-  "summary": "Spec review re-consumed the minimal suite for WI-1289/WI-1291 after the closeout backlink diagnostic repair. The existing acceptance boundaries remain unchanged; the repair narrows closeout consumption semantics without expanding scope.",
+  "summary": "Spec review re-consumed the minimal suite for WI-1289/WI-1291 after the closeout backlink diagnostic repair and merge-from-main head 6aa385fa083aceab0655cfaea83d7f43bc71a700. The existing acceptance boundaries remain unchanged; the repair narrows closeout consumption semantics without expanding scope.",
   "reviewer": "R2-T2c",
-  "authored_at": "2026-06-06T16:24:00Z",
-  "reviewed_head": "2555946bf47f6004b806b22ce72e51e68c9ada38",
-  "reviewed_validation_summary": "Suite scope unchanged at implementation head 2555946bf47f6004b806b22ce72e51e68c9ada38; focused adversarial adoption fixture failures=0 and suite artifacts remain present.",
+  "authored_at": "2026-06-06T16:53:17Z",
+  "reviewed_head": "6aa385fa083aceab0655cfaea83d7f43bc71a700",
+  "reviewed_validation_summary": "Suite scope unchanged at merge-from-main head 6aa385fa083aceab0655cfaea83d7f43bc71a700; focused adversarial adoption fixture failures=0 and suite artifacts remain present.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -19,7 +19,7 @@
     "evidence_map": ".loom/specs/WI-1289-1291/evidence-map.md",
     "task_carrier": ".loom/specs/WI-1289-1291/task-carrier.md",
     "engine_adapter": "codex-app/R2-T2c",
-    "engine_evidence": "suite scope unchanged; focused adversarial adoption fixture failures=0; suite artifacts retained",
+    "engine_evidence": "head 6aa385fa083aceab0655cfaea83d7f43bc71a700; suite scope unchanged; focused adversarial adoption fixture failures=0; suite artifacts retained",
     "normalized_findings": null
   }
 }

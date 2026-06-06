@@ -12,10 +12,10 @@
 - Validation Entry: python3 tools/check_cli_contract.py; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/check_npm_package.py
 - Closing Condition: PR #1336 merges through the controlled merge path and closeout consumes merged PR, target branch, issue states, review, gate, and release-impact evidence for #1289/#1291.
 - Current Checkpoint: merge-ready
-- Current Stop: Implementation PR #1336 is locally repaired at implementation head 2555946bf47f6004b806b22ce72e51e68c9ada38 plus carrier-only review/status/progress refresh through 08a65333fcce5089ec523bfcbb9aff6af8c8e2bc; hosted checks must be rerun after push/readback.
-- Next Step: Push repair, rerun hosted checks, consume controlled merge, then complete post-merge closeout for #1289/#1291.
+- Current Stop: Implementation PR #1336 is locally repaired and merged with latest origin/main at validated implementation head 6aa385fa083aceab0655cfaea83d7f43bc71a700; carrier-only review/status/shadow refresh is pending commit before push.
+- Next Step: Commit carrier refresh, update PR #1336 body to the pushed PR head, wait for hosted checks, consume controlled merge, then complete post-merge closeout for #1289/#1291.
 - Blockers: None
-- Latest Validation Summary: Local validation passed on 2026-06-06 for implementation head 2555946bf47f6004b806b22ce72e51e68c9ada38: focused adversarial adoption fixture returned failures=0; py_compile_clean OK; tools/check_cli_contract.py passed; runtime-parity validate OK; check_demo_bootstrap_fixture OK; tools/skills_surface.py check OK; check_release_surface.py OK; check_npm_package.py passed; git diff --check OK.
+- Latest Validation Summary: Local validation passed on 2026-06-06 for merge-from-main head 6aa385fa083aceab0655cfaea83d7f43bc71a700: git diff --check OK; py_compile_clean OK; tools/check_cli_contract.py passed; runtime-parity validate OK; check_demo_bootstrap_fixture OK; tools/skills_surface.py check OK; check_release_surface.py OK; check_npm_package.py passed; focused adversarial adoption fixture returned failures=0.
 - Recovery Boundary: Scope remains WI-1289/WI-1291 implementation, generated runtime parity, PR metadata, review/merge gate evidence, controlled merge, and closeout carriers only.
 - Current Lane: R2-T2 merge-check-run-pr-gate
 
