@@ -2242,6 +2242,93 @@ def semantic_pr_gate_fixture_payload(target: Path, fixture: dict[str, str]) -> d
     return payload
 
 
+def append_pr_metadata_surface(target: Path, fixture: dict[str, str], *, surface: str) -> None:
+    pr_path = target / fixture["pr_file"]
+    payload = json.loads(pr_path.read_text(encoding="utf-8"))
+    head_sha = payload["headRefOid"]
+    payload["body"] = (
+        f"Loom Work Item: {fixture['item']}\n"
+        f"Branch: {fixture['branch']}\n"
+        f"Head SHA: {head_sha}\n\n"
+        "<!-- loom:repo-pr-metadata\n"
+        "{\n"
+        '  "schema_version": "loom-repo-pr-metadata/v1",\n'
+        '  "metadata_contract_id": "loom-default-pr-binding",\n'
+        f'  "surface": "{surface}",\n'
+        '  "fields": {\n'
+        f'    "loom_work_item": "{fixture["item"]}",\n'
+        f'    "branch": "{fixture["branch"]}",\n'
+        f'    "head_sha": "{head_sha}"\n'
+        "  },\n"
+        '  "source": {"rendered_hash": "sha256:fixture"},\n'
+        '  "parser_version": "repo-parser/v1"\n'
+        "}\n"
+        "-->\n"
+    )
+    pr_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
+    target = tmp / "terminal-closeout-pr-gate"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target)
+    item = fixture["item"]
+    progress_path = target / ".loom" / "progress" / f"{item}.md"
+    status_path = target / ".loom" / "status" / "current.md"
+    task_carrier_path = target / ".loom" / "specs" / item / "task-carrier.md"
+    progress_text = progress_path.read_text(encoding="utf-8").replace(
+        "- Current Checkpoint: merge",
+        "- Current Checkpoint: closed_out",
+    ).replace(
+        "- Current Stop: Fixture is ready for pr-gate semantic disposition checks.",
+        "- Current Stop: Fixture implementation PR is merged and closeout carrier sync is pending.",
+    ).replace(
+        "- Next Step: Run pr-gate semantic disposition fixtures.",
+        "- Next Step: Merge the closeout-only carrier sync.",
+    ).replace(
+        "- Current Lane: pr-gate-fixture",
+        "- Current Lane: post-merge-closeout-consumed",
+    )
+    progress_path.write_text(progress_text, encoding="utf-8")
+    status_text = status_path.read_text(encoding="utf-8").replace(
+        "- Current Checkpoint: merge",
+        "- Current Checkpoint: closed_out",
+    ).replace(
+        "- Current Stop: Fixture is ready for pr-gate semantic disposition checks.",
+        "- Current Stop: Fixture implementation PR is merged and closeout carrier sync is pending.",
+    ).replace(
+        "- Next Step: Run pr-gate semantic disposition fixtures.",
+        "- Next Step: Merge the closeout-only carrier sync.",
+    ).replace(
+        "- Current Lane: pr-gate-fixture",
+        "- Current Lane: post-merge-closeout-consumed",
+    )
+    status_path.write_text(status_text, encoding="utf-8")
+    task_carrier_path.write_text(
+        task_carrier_path.read_text(encoding="utf-8")
+        + "\n| closeout_carrier | fixture PR merged / closeout sync pending | done | primary |\n",
+        encoding="utf-8",
+    )
+    commit_fixture_file(target, f".loom/progress/{item}.md", "fixture terminal closeout progress")
+    commit_fixture_file(target, ".loom/status/current.md", "fixture terminal closeout status")
+    commit_fixture_file(target, f".loom/specs/{item}/task-carrier.md", "fixture terminal closeout task carrier")
+    update_fixture_pr_head(target, fixture)
+    append_pr_metadata_surface(target, fixture, surface="closeout")
+    closeout_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if (
+        closeout_payload.get("result") != "pass"
+        or closeout_payload.get("review_approval", {}).get("status") != "terminal_closeout_retained"
+        or closeout_payload.get("terminal_closeout_consumption", {}).get("result") != "pass"
+        or closeout_payload.get("steps", [{}])[1].get("terminal_closed_checkpoint") is not True
+    ):
+        raise AssertionError(f"terminal closeout pr-gate fixture did not pass: {closeout_payload.get('missing_inputs')}")
+
+    append_pr_metadata_surface(target, fixture, surface="merge_ready")
+    merge_ready_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if merge_ready_payload.get("result") == "pass" or merge_ready_payload.get("terminal_closeout_consumption", {}).get("result") != "block":
+        raise AssertionError("terminal closeout retained review bypassed a non-closeout PR metadata surface")
+
+
 def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
     target = tmp / "semantic-review-pr-gate"
     target.mkdir()
@@ -2290,6 +2377,7 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
         raise AssertionError("pr-gate did not consume passed semantic_review_disposition")
     if pass_payload.get("pr", {}).get("work_item_from_body") != fixture["item"]:
         raise AssertionError("pr-gate did not preserve single Work Item id parsing")
+    assert_terminal_closeout_pr_gate_fixture(tmp)
 
     pr_path = target / fixture["pr_file"]
     merge_target = tmp / "semantic-review-controlled-merge"
