@@ -103,6 +103,7 @@ Required payload fields:
 - `review_approval`
 - `merge_checkpoint`
 - `pr_metadata_preflight`
+- `post_merge_review_diagnostic`
 - `governance_lint`
 - `host_enforcement`
 - `approval_boundary`
@@ -160,6 +161,8 @@ The gate must fail closed for:
 
 `post_merge_review_bypass` means the review record or disposition was authored only after the merge-relevant PR head had already advanced or merged. `ci_only_merge_bypass` means CI / required checks passed without a consumable authored semantic review disposition for the same PR head.
 
+When the PR is already merged, `post_merge_review_diagnostic` compares PR `mergedAt` with review record `authored_at` / `created_at` / `recorded_at` / submitted timestamp fields. If the review timestamp is later than `mergedAt`, the diagnostic must block and emit a repair plan that records the evidence as post-merge closeout evidence, preserves future protection through the controlled merge path, and forbids backdating or promoting historical bypass evidence into merge-before-review compliance.
+
 `pr_metadata_preflight_failed` means a repo companion declared a blocking PR metadata machine carrier and the PR body machine block is malformed, missing required fields, or required but absent. The gate must report parser diagnostics instead of collapsing the failure into generic missing metadata fields.
 
 Parser diagnostics must keep the machine-carrier boundary explicit: block locator, line/range, raw excerpt hash, declared source locator or source hash, expected schema/parser version, missing fields, parse error, repair hint, and fallback target. Those diagnostics prove the carrier is readable; they do not replace Work Item, review, merge-ready, closeout, or docs/source truth.
@@ -188,6 +191,8 @@ The default GitHub workflow runs on `pull_request` and checks out the PR head SH
 `controlled merge` must run or consume this PR gate before delegating to `gh pr merge`.
 
 When it consumes a retained `pr-gate` result, it must still perform drift-only readback for the current PR head, required checks, branch protection or active ruleset, mergeability, and merge method. The retained result only avoids re-reading the full semantic review and merge-ready decision.
+
+The controlled merge wrapper must consume its own `controlled_merge_consumption` result before host delegation. Missing fresh PR gate evidence, retained PR gate drift, required-check drift, target mismatch, or stale head binding must block `loom merge run --apply`; those conditions may not be reported as advisory-only diagnostics.
 
 In that drift-only readback, GitHub `BLOCKED` mergeability is not semantic approval truth and is not by itself a Loom readiness failure. It can be carried as a host policy signal only after the authored review record, `loom-pr-merge-gate`, required checks, PR head binding, and host enforcement readback have passed. GitHub review comments, including an author `COMMENTED` state, remain evidence-only and must not satisfy approval.
 

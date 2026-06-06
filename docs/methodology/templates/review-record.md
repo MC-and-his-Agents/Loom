@@ -9,6 +9,7 @@
 - `decision`
 - `summary`
 - `reviewer`
+- `authored_at`
 - `fallback_to`
 - `findings`
 - `blocking_issues`
@@ -24,6 +25,7 @@
 约束：
 
 - `fallback_to` 只在 `decision: fallback` 时使用
+- `authored_at` 记录 review record 被正式作者化的 UTC 时间；closeout / reconciliation 可用它和 PR `mergedAt` 判断是否存在 post-merge review evidence
 - `reviewed_head` 与 `reviewed_validation_summary` 必须对应本次审查基线
 - `findings` 是权威 findings / rebuttal / disposition 数组；每条至少包含 `id`、`summary`、`severity`、`rebuttal`、`disposition`
 - `severity` 当前稳定值为 `warn`、`block`

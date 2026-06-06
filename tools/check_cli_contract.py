@@ -1755,6 +1755,7 @@ def write_governance_chain_fixture(target: Path, *, issue_open: bool = False, pr
                 "kind": "code_review",
                 "summary": "Fixture implementation review allows closeout integration consumption.",
                 "reviewer": "codex",
+                "authored_at": "2026-05-29T00:00:00Z",
                 "reviewed_head": head_sha,
                 "reviewed_validation_summary": validation_summary,
                 "semantic_review_disposition": {
@@ -2047,6 +2048,7 @@ def write_semantic_review_pr_gate_fixture(target: Path) -> dict[str, str]:
         "kind": "code_review",
         "summary": "Fixture implementation review allows semantic disposition gate consumption.",
         "reviewer": "codex",
+        "authored_at": "2026-05-29T00:00:00Z",
         "reviewed_head": reviewed_head,
         "reviewed_validation_summary": validation_summary,
         "semantic_review_disposition": {
@@ -2178,6 +2180,93 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
         raise AssertionError("pr-gate did not preserve single Work Item id parsing")
 
     pr_path = target / fixture["pr_file"]
+    merge_target = tmp / "semantic-review-controlled-merge"
+    merge_target.mkdir()
+    merge_fixture = write_semantic_review_pr_gate_fixture(merge_target)
+    merge_pass_payload = semantic_pr_gate_fixture_payload(merge_target, merge_fixture)
+    if merge_pass_payload.get("result") != "pass":
+        raise AssertionError("controlled-merge fixture could not produce a retained pr-gate pass")
+    fixture_dir = merge_target / ".loom" / "fixtures" / "WI-1287"
+    checks_file = fixture_dir / "checks.json"
+    branch_protection_file = fixture_dir / "branch-protection.json"
+    ruleset_file = fixture_dir / "ruleset.json"
+    checks_file.write_text(
+        json.dumps(
+            [{"name": "loom-pr-merge-gate", "conclusion": "SUCCESS", "status": "COMPLETED"}],
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    branch_protection_file.write_text(
+        json.dumps({"required_status_checks": {"contexts": ["loom-pr-merge-gate"]}}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    ruleset_file.write_text(json.dumps([], indent=2) + "\n", encoding="utf-8")
+    _, merge_check_payload = run_flow_json(
+        [
+            "controlled-merge",
+            "check",
+            "--target",
+            str(merge_target),
+            "--item",
+            merge_fixture["item"],
+            "--pr",
+            "1288",
+            "--head-sha",
+            merge_fixture["head_sha"],
+            "--pr-payload-file",
+            merge_fixture["pr_file"],
+            "--status-checks-file",
+            ".loom/fixtures/WI-1287/checks.json",
+            "--branch-protection-file",
+            ".loom/fixtures/WI-1287/branch-protection.json",
+            "--ruleset-file",
+            ".loom/fixtures/WI-1287/ruleset.json",
+        ],
+        expect=0,
+    )
+    if (
+        merge_check_payload.get("result") != "pass"
+        or merge_check_payload.get("pr_gate", {}).get("result") != "pass"
+        or merge_check_payload.get("controlled_merge_consumption", {}).get("result") != "pass"
+    ):
+        raise AssertionError("controlled-merge did not consume inline pr-gate pass before host merge")
+    retained_gate_file = fixture_dir / "pr-gate-pass.json"
+    retained_gate_file.write_text(json.dumps(merge_pass_payload, indent=2) + "\n", encoding="utf-8")
+    (merge_target / "retained-gate-drift.txt").write_text("drift after retained pr-gate\n", encoding="utf-8")
+    commit_fixture_file(merge_target, "retained-gate-drift.txt", "fixture retained pr gate drift")
+    update_fixture_pr_head(merge_target, merge_fixture)
+    _, retained_drift_payload = run_flow_json(
+        [
+            "controlled-merge",
+            "check",
+            "--target",
+            str(merge_target),
+            "--item",
+            merge_fixture["item"],
+            "--pr",
+            "1288",
+            "--pr-payload-file",
+            merge_fixture["pr_file"],
+            "--status-checks-file",
+            ".loom/fixtures/WI-1287/checks.json",
+            "--branch-protection-file",
+            ".loom/fixtures/WI-1287/branch-protection.json",
+            "--ruleset-file",
+            ".loom/fixtures/WI-1287/ruleset.json",
+            "--pr-gate-result-file",
+            ".loom/fixtures/WI-1287/pr-gate-pass.json",
+        ]
+    )
+    if (
+        retained_drift_payload.get("result") != "block"
+        or retained_drift_payload.get("retained_results", {}).get("pr_gate", {}).get("consumption", {}).get("result") != "block"
+        or "controlled merge consumption: fresh retained PR gate consumption"
+        not in retained_drift_payload.get("missing_inputs", [])
+    ):
+        raise AssertionError("controlled-merge did not block retained pr-gate head drift before host merge")
+
     original_pr_payload = json.loads(pr_path.read_text(encoding="utf-8"))
     aggregate_item = "WI-1240-1242"
     aggregate_pr_payload = dict(original_pr_payload)
@@ -2262,10 +2351,19 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
     if stale_payload.get("result") != "block" or "review_stale" not in taxonomy or "head_binding_drift" not in taxonomy:
         raise AssertionError("stale PR head was not classified as review_stale/head_binding_drift")
 
-    update_fixture_pr_head(target, fixture, state="MERGED")
+    review_payload["authored_at"] = "2026-05-31T00:00:00Z"
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    commit_fixture_file(target, fixture["review_path"], "fixture post merge authored review")
+    update_fixture_pr_head(target, fixture, state="MERGED", extra={"mergedAt": "2026-05-30T00:00:00Z"})
     post_merge_payload = semantic_pr_gate_fixture_payload(target, fixture)
-    if "post_merge_review" not in post_merge_payload.get("failure_taxonomy", []):
-        raise AssertionError("merged PR payload did not expose post_merge_review taxonomy")
+    post_merge_diagnostic = post_merge_payload.get("post_merge_review_diagnostic", {})
+    if (
+        "post_merge_review_bypass" not in post_merge_payload.get("failure_taxonomy", [])
+        or post_merge_diagnostic.get("result") != "block"
+        or post_merge_diagnostic.get("finding", {}).get("kind") != "post_merge_review_bypass"
+        or "repair_plan" not in post_merge_diagnostic
+    ):
+        raise AssertionError("merged PR payload did not expose post-merge review bypass diagnostics and repair plan")
 
     review_payload["semantic_review_disposition"] = {"status": "required"}
     review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
@@ -2357,6 +2455,61 @@ def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
     )
     if reconciliation_payload.get("result") != "pass" or reconciliation_payload.get("findings"):
         raise AssertionError("governance chain reconciliation pass fixture drifted")
+
+    review_path = pass_target / ".loom" / "reviews" / f"{fixture['item']}.json"
+    review_payload = json.loads(review_path.read_text(encoding="utf-8"))
+    review_payload["authored_at"] = "2026-05-31T00:00:00Z"
+    review_path.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    _, post_merge_closeout = run_flow_json(command)
+    review_subcheck = next(
+        (
+            entry
+            for entry in post_merge_closeout.get("gate", {}).get("subchecks", [])
+            if isinstance(entry, dict) and entry.get("id") == "review_record"
+        ),
+        {},
+    )
+    review_diagnostic = review_subcheck.get("post_merge_review_diagnostic", {})
+    if (
+        post_merge_closeout.get("result") != "block"
+        or review_diagnostic.get("result") != "block"
+        or review_diagnostic.get("finding", {}).get("kind") != "post_merge_review_bypass"
+        or "repair_plan" not in review_diagnostic
+    ):
+        raise AssertionError("closeout did not block post-merge review bypass with diagnostics and repair plan")
+    _, post_merge_reconciliation = run_flow_json(
+        [
+            "reconciliation",
+            "audit",
+            "--target",
+            str(pass_target),
+            "--issue",
+            fixture["issue"],
+            "--pr",
+            fixture["pr"],
+            "--project",
+            "4",
+            "--branch",
+            fixture["branch"],
+            "--owner",
+            "owner",
+            "--repo",
+            "repo",
+            "--issue-payload-file",
+            fixture["issue_file"],
+            "--pr-payload-file",
+            fixture["pr_file"],
+            "--project-payload-file",
+            fixture["project_file"],
+        ]
+    )
+    if not any(
+        isinstance(finding, dict)
+        and finding.get("kind") == "post_merge_review_bypass"
+        and isinstance(finding.get("repair_plan"), dict)
+        for finding in post_merge_reconciliation.get("findings", [])
+    ):
+        raise AssertionError("reconciliation audit did not expose post-merge review bypass repair plan")
 
     negative_target = tmp / "governance-chain-pr-merged-alone"
     negative_target.mkdir()

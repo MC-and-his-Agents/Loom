@@ -206,6 +206,7 @@ REVIEW_AUTHORITY_MIGRATION_SCHEMA = "loom-review-authority-migration/v1"
 SPEC_REVIEW_AUTHORITY_MIGRATION_SCHEMA = "loom-spec-review-authority-migration/v1"
 RETAINED_HOST_SIGNAL_SCHEMA = "loom-retained-host-signal/v1"
 CONTROLLED_MERGE_CONSUMPTION_SCHEMA = "loom-controlled-merge-consumption/v1"
+POST_MERGE_REVIEW_DIAGNOSTIC_SCHEMA = "loom-post-merge-review-diagnostic/v1"
 REVIEW_ENGINE_POLICY_SCHEMA = "loom-review-profiles/v1"
 REVIEW_ENGINE_POLICY_RELATIVE = ".loom/review-profiles.json"
 REVIEW_ENGINE_PROFILE_IDS = {"default", "high-risk", "spec-review", "repeated-blocker"}
@@ -4886,6 +4887,16 @@ def closeout_backlink_subchecks(
                 allowed_paths=allowed_post_review_carrier_paths(context, review_path),
             )
             review_missing.extend(review_head_errors)
+    post_merge_review_diagnostic = post_merge_review_diagnostic_payload(
+        pr_payload=pr_payload,
+        review_record=review_record,
+        review_path=review_path,
+    )
+    if post_merge_review_diagnostic.get("result") in {"block", "fallback"}:
+        review_missing.extend(
+            f"post-merge review diagnostic: {message}"
+            for message in post_merge_review_diagnostic.get("missing_inputs", [])
+        )
     subchecks.append(
         closeout_subcheck(
             check_id="review_record",
@@ -4902,6 +4913,7 @@ def closeout_backlink_subchecks(
             head_sha=pr_head,
             head_binding=review_head_binding_payload,
             validation_summary_digest=validation_digest,
+            post_merge_review_diagnostic=post_merge_review_diagnostic,
         )
     )
 
@@ -13518,6 +13530,10 @@ def normalize_pr_fixture_payload(payload: Any) -> tuple[dict[str, Any] | None, l
         base = normalized.get("base") if isinstance(normalized.get("base"), dict) else None
         if isinstance(base, dict) and isinstance(base.get("ref"), str):
             normalized["baseRefName"] = base.get("ref")
+    if "mergedAt" not in normalized and isinstance(normalized.get("merged_at"), str):
+        normalized["mergedAt"] = normalized.get("merged_at")
+    if "mergeCommit" not in normalized and isinstance(normalized.get("merge_commit_sha"), str):
+        normalized["mergeCommit"] = {"oid": normalized.get("merge_commit_sha")}
     if "state" in normalized:
         normalized["state"] = str(normalized.get("state") or "unknown").upper()
     else:
@@ -14502,6 +14518,9 @@ def pr_gate_failure_taxonomy(missing_inputs: list[str], gate_result: str) -> lis
         if "post-merge review" in lowered or "already merged" in lowered:
             categories.add("post_merge_review")
             categories.add("post_merge_review_bypass")
+        if "semantic review disposition is missing for merged pr" in lowered or "semantic review bypass" in lowered:
+            categories.add("semantic_review_bypass")
+            categories.add("post_merge_review_bypass")
         if "ci-only" in lowered or "ci only" in lowered:
             categories.add("ci_only_bypass")
             categories.add("ci_only_merge_bypass")
@@ -14612,6 +14631,151 @@ def semantic_review_disposition_payload(
         errors.append(f"semantic_review_disposition {status} validation summary does not match current recovery")
     payload["consumable"] = not errors
     return payload, errors
+
+
+def parse_github_timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    if text.endswith("Z"):
+        text = f"{text[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def review_record_time_value(review_record: dict[str, Any]) -> str | None:
+    for field in ("authored_at", "created_at", "recorded_at", "submittedAt", "submitted_at"):
+        value = review_record.get(field)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def post_merge_review_repair_plan(*, pr_number: int | None, review_path: str | None) -> dict[str, Any]:
+    return {
+        "summary": "Do not promote post-merge review evidence into merge-before-review compliance.",
+        "actions": [
+            {
+                "kind": "closeout_evidence",
+                "description": "Record explicit post-merge closeout evidence that the historical bypass was diagnosed after merge.",
+                "target": f"PR #{pr_number}" if pr_number is not None else "merged PR",
+            },
+            {
+                "kind": "forward_guard",
+                "description": "Require future merges to pass `loom pr gate` and `loom merge check/run` against the current PR head before host merge.",
+                "target": "controlled merge path",
+            },
+            {
+                "kind": "review_record",
+                "description": "Keep the authored review record as post-merge evidence only; rerun review before a future merge instead of rewriting history.",
+                "target": review_path or "review record",
+            },
+        ],
+        "forbidden_repairs": [
+            "backdate review evidence",
+            "treat GitHub review/check status as authored Loom review approval",
+            "mark historical raw host merge as merge-ready compliant",
+        ],
+    }
+
+
+def post_merge_review_diagnostic_payload(
+    *,
+    pr_payload: dict[str, Any] | None,
+    review_record: dict[str, Any] | None,
+    review_path: str | None,
+) -> dict[str, Any]:
+    pr_number = pr_payload.get("number") if isinstance(pr_payload, dict) and isinstance(pr_payload.get("number"), int) else None
+    merged_at_raw = pr_payload.get("mergedAt") if isinstance(pr_payload, dict) else None
+    review_time_raw = review_record_time_value(review_record) if isinstance(review_record, dict) else None
+    merged_at = parse_github_timestamp(merged_at_raw)
+    review_time = parse_github_timestamp(review_time_raw)
+    missing_inputs: list[str] = []
+    finding: dict[str, Any] | None = None
+    result = "pass"
+    summary = "review timing does not indicate post-merge review bypass."
+
+    if not isinstance(pr_payload, dict) or pr_payload.get("state") != "MERGED":
+        result = "not_applicable"
+        summary = "PR is not merged; post-merge review bypass timing is not applicable yet."
+    elif review_record is None:
+        result = "block"
+        summary = "merged PR has no authored Loom review disposition."
+        missing_inputs.append("semantic review disposition is missing for merged PR")
+        finding = {
+            "kind": "semantic_review_bypass",
+            "severity": "block",
+            "subject": f"PR #{pr_number}" if pr_number is not None else "merged PR",
+            "evidence": {
+                "pr_state": pr_payload.get("state"),
+                "mergedAt": merged_at_raw,
+                "review_path": review_path,
+                "review_time": None,
+            },
+            "recommended_action": "Record post-merge closeout evidence and keep future merges behind the PR gate; do not treat missing review as compliant.",
+            "fallback_to": "manual-reconciliation",
+        }
+    elif merged_at is None:
+        result = "fallback"
+        summary = "merged PR has no readable mergedAt timestamp for review timing diagnostics."
+        missing_inputs.append("mergedAt timestamp")
+    elif review_time is None:
+        result = "fallback"
+        summary = "review record has no readable authored timestamp for post-merge diagnostics."
+        missing_inputs.append("review authored timestamp")
+    elif review_time > merged_at:
+        result = "block"
+        summary = "authored review evidence was recorded after the PR was merged."
+        missing_inputs.append("post-merge review evidence cannot satisfy merge-before-review compliance")
+        finding = {
+            "kind": "post_merge_review_bypass",
+            "severity": "block",
+            "subject": f"PR #{pr_number}" if pr_number is not None else "merged PR",
+            "evidence": {
+                "pr_state": pr_payload.get("state"),
+                "mergedAt": merged_at_raw,
+                "review_path": review_path,
+                "review_time": review_time_raw,
+            },
+            "recommended_action": "Record this as post-merge closeout evidence and rely on controlled merge for future protection.",
+            "fallback_to": "manual-reconciliation",
+        }
+
+    return {
+        "schema_version": POST_MERGE_REVIEW_DIAGNOSTIC_SCHEMA,
+        "result": result,
+        "summary": summary,
+        "missing_inputs": missing_inputs,
+        "fallback_to": None if result in {"pass", "not_applicable"} else "manual-reconciliation",
+        "pr": {
+            "number": pr_number,
+            "state": pr_payload.get("state") if isinstance(pr_payload, dict) else None,
+            "mergedAt": merged_at_raw,
+            "headRefOid": pr_payload.get("headRefOid") if isinstance(pr_payload, dict) else None,
+        },
+        "review": {
+            "path": review_path,
+            "time": review_time_raw,
+            "time_field": next(
+                (
+                    field
+                    for field in ("authored_at", "created_at", "recorded_at", "submittedAt", "submitted_at")
+                    if isinstance(review_record, dict) and isinstance(review_record.get(field), str) and review_record.get(field).strip()
+                ),
+                None,
+            ),
+            "decision": review_record.get("decision") if isinstance(review_record, dict) else None,
+            "kind": review_record.get("kind") if isinstance(review_record, dict) else None,
+            "reviewed_head": review_record.get("reviewed_head") if isinstance(review_record, dict) else None,
+        },
+        "finding": finding,
+        "repair_plan": post_merge_review_repair_plan(pr_number=pr_number, review_path=review_path),
+    }
 
 
 def approval_boundary_lint_status(
@@ -14827,9 +14991,13 @@ def pr_gate_payload(
         "head_binding": None,
         "semantic_review_disposition": None,
     }
+    timing_review_record: dict[str, Any] | None = None
+    timing_review_path: str | None = None
     if context:
         merge_checkpoint = checkpoint_payload("merge", context)
         review_record, review_path, review_errors = load_review_record(target_root, context["item_id"], context["review_entry"])
+        timing_review_record = review_record
+        timing_review_path = review_path
         if review_record is None:
             review_approval = {
                 "status": "missing",
@@ -14929,6 +15097,16 @@ def pr_gate_payload(
             "pr_metadata_preflight": pr_metadata_preflight,
         }
     )
+    post_merge_review_diagnostic = post_merge_review_diagnostic_payload(
+        pr_payload=pr_payload if isinstance(pr_payload, dict) else None,
+        review_record=timing_review_record,
+        review_path=timing_review_path,
+    )
+    if post_merge_review_diagnostic.get("result") in {"block", "fallback"}:
+        missing_inputs.extend(
+            f"post-merge review diagnostic: {message}"
+            for message in post_merge_review_diagnostic.get("missing_inputs", [])
+        )
 
     result = "pass"
     fallback_to: str | None = None
@@ -15018,6 +15196,7 @@ def pr_gate_payload(
         "review_approval": review_approval,
         "merge_checkpoint": merge_checkpoint,
         "pr_metadata_preflight": pr_metadata_preflight,
+        "post_merge_review_diagnostic": post_merge_review_diagnostic,
         "governance_lint": governance_lint,
         "host_enforcement": {
             "stable_check_name": PR_MERGE_GATE_CHECK_NAME,
@@ -15627,22 +15806,6 @@ def controlled_merge_payload(
     if missing_inputs and result == "pass":
         result = "block"
         fallback_to = fallback_to or "merge"
-    if result == "pass" and execute:
-        command = ["gh", "pr", "merge", str(pr_number), f"--{merge_method}"]
-        if delete_branch:
-            command.append("--delete-branch")
-        completed = run_process(command, target_root)
-        merge_result["attempted"] = True
-        merge_result["command"] = command
-        merge_result["returncode"] = completed.returncode
-        merge_result["stdout"] = completed.stdout.strip()
-        merge_result["stderr"] = completed.stderr.strip()
-        if completed.returncode == 0:
-            merge_result["executed"] = True
-        else:
-            result = "block"
-            fallback_to = "merge"
-            missing_inputs.append(completed.stderr.strip() or completed.stdout.strip() or "gh pr merge failed")
     drift_readback = current_pr_drift_readback(
         current_pr=pr_payload if isinstance(pr_payload, dict) else {},
         pr_number=pr_number,
@@ -15657,6 +15820,9 @@ def controlled_merge_payload(
     merge_ready_consumption_missing: list[str] = []
     if pr_gate.get("result") != "pass":
         merge_ready_consumption_missing.append("fresh Loom merge-ready / PR merge gate allow result")
+    pr_gate_consumption = retained_results["pr_gate"]["consumption"]
+    if isinstance(pr_gate_consumption, dict) and pr_gate_consumption.get("result") != "pass":
+        merge_ready_consumption_missing.append("fresh retained PR gate consumption")
     if required_checks["result"] != "pass":
         merge_ready_consumption_missing.append("required checks readback")
     pr_head = (
@@ -15693,6 +15859,29 @@ def controlled_merge_payload(
             "malformed-merge-ready-result",
         ],
     }
+    if controlled_merge_consumption["result"] != "pass":
+        result = "block"
+        fallback_to = controlled_merge_consumption["fallback_to"] or fallback_to or "merge_ready"
+        missing_inputs.extend(
+            f"controlled merge consumption: {message}"
+            for message in controlled_merge_consumption["missing_inputs"]
+        )
+    if result == "pass" and execute:
+        command = ["gh", "pr", "merge", str(pr_number), f"--{merge_method}"]
+        if delete_branch:
+            command.append("--delete-branch")
+        completed = run_process(command, target_root)
+        merge_result["attempted"] = True
+        merge_result["command"] = command
+        merge_result["returncode"] = completed.returncode
+        merge_result["stdout"] = completed.stdout.strip()
+        merge_result["stderr"] = completed.stderr.strip()
+        if completed.returncode == 0:
+            merge_result["executed"] = True
+        else:
+            result = "block"
+            fallback_to = "merge"
+            missing_inputs.append(completed.stderr.strip() or completed.stdout.strip() or "gh pr merge failed")
 
     return {
         "command": "controlled-merge",
@@ -16644,6 +16833,7 @@ def make_reconciliation_finding(
     recommended_action: str,
     category: str = "drift",
     fallback_to: str | None = None,
+    **extra: Any,
 ) -> dict[str, Any]:
     if fallback_to is None:
         fallback_to = "manual-reconciliation" if severity == "block" else "reconciliation-sync"
@@ -16655,6 +16845,7 @@ def make_reconciliation_finding(
         "evidence": evidence,
         "recommended_action": recommended_action,
         "fallback_to": fallback_to,
+        **extra,
     }
 
 
@@ -16998,6 +17189,38 @@ def reconciliation_audit_payload(
                         fallback_to="manual-reconciliation",
                     )
                 )
+            if pr_payload.get("state") == "MERGED" and expected_reconciliation_item is not None:
+                review_context, review_context_errors = load_retained_item_context(
+                    target_root,
+                    ".loom/bootstrap/init-result.json",
+                    expected_reconciliation_item,
+                )
+                review_record = None
+                review_path = None
+                if not review_context_errors:
+                    review_record, review_path, _review_errors = load_review_record(
+                        target_root,
+                        expected_reconciliation_item,
+                        review_context["review_entry"],
+                    )
+                diagnostic = post_merge_review_diagnostic_payload(
+                    pr_payload=pr_payload,
+                    review_record=review_record,
+                    review_path=review_path,
+                )
+                if isinstance(diagnostic.get("finding"), dict):
+                    findings.append(
+                        make_reconciliation_finding(
+                            kind=str(diagnostic["finding"].get("kind") or "post_merge_review_bypass"),
+                            severity="block",
+                            subject=str(diagnostic["finding"].get("subject") or f"PR #{pr_number}"),
+                            evidence=diagnostic["finding"].get("evidence", {}),
+                            recommended_action=str(diagnostic["finding"].get("recommended_action")),
+                            category="review_bypass",
+                            fallback_to="manual-reconciliation",
+                            repair_plan=diagnostic.get("repair_plan"),
+                        )
+                    )
 
     merged_issue_open = False
     if issue_payload is not None and pr_payload is not None:
@@ -18598,6 +18821,16 @@ def closeout_payload(
             if subcheck.get("required_for_closeout") is True and subcheck.get("result") == "block":
                 for message in subcheck.get("missing_inputs", []):
                     missing_inputs.append(f"{subcheck.get('id')}: {message}")
+            diagnostic = subcheck.get("post_merge_review_diagnostic")
+            if isinstance(diagnostic, dict) and isinstance(diagnostic.get("finding"), dict):
+                closeout_findings.append(
+                    {
+                        **diagnostic["finding"],
+                        "category": "review_bypass",
+                        "why_blocking": diagnostic.get("summary"),
+                        "repair_plan": diagnostic.get("repair_plan"),
+                    }
+                )
 
     project_payload: dict[str, Any] | None = None
     if project_number is not None:
@@ -19655,6 +19888,7 @@ def handle_review(args: argparse.Namespace) -> int:
         "kind": args.kind,
         "summary": args.summary,
         "reviewer": args.reviewer,
+        "authored_at": utc_now_iso(),
         "reviewed_head": git_head_sha(target_root) or "unknown",
         "reviewed_validation_summary": context["latest_validation_summary"],
         "fallback_to": args.fallback_to,
