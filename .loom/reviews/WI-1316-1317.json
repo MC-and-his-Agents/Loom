@@ -3,10 +3,10 @@
   "item_id": "WI-1316-1317",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1316-1317 implementation review refreshed after merging origin/main 8519ad6f: the PR still only adds Loom governance mapping docs, tiered gate consumption contract docs, and WI-1316-1317 evidence carriers. The inherited WI-1269 files and tools/check_cli_contract.py change are already-merged main content from PR #1334 and are not claimed as WI-1316-1317 implementation. No runtime, parser, fixture, generated .loom/bin, release, AGENTS.md, or downstream #1319/#1321/#1322/#1323/#1324 implementation changes are introduced by this review.",
-  "reviewer": "codex-worker-R2-T1",
-  "reviewed_head": "efc720e7fe89796db3347fabb3e585c8b181999f",
-  "reviewed_validation_summary": "2026-06-06 post-main-merge local validation at head `a794429d6a93eca9c11333f459f97de79e493c15`: `git diff --check` passed; `python3 .loom/bin/loom_init.py verify --target .` passed; `python3 .loom/bin/loom_flow.py governance-profile status --target .` returned `pass` with `strong` maturity; `python3 .loom/bin/loom_flow.py runtime-parity validate --target .` passed; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1316-1317` passed; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1316-1317 --dry-run` reported shadow carriers current before the main merge and only review freshness drift after merging `origin/main`; `python3 tools/loom.py fact-chain --target . --json` returned `pass`; `python3 tools/loom.py suite validate --target . --item WI-1316-1317 --json` returned `not_applicable` with no missing inputs or blocking gaps. PR #1334 was read back as merged at 2026-06-06T09:19:42Z with merge commit `8519ad6fb28b3fde44af765996b7e420ee39775c`; #1269 remains open for its own closeout and was not handled by this Work Item.",
+  "summary": "WI-1316-1317 review refreshed at head 5a65ca2989bb66f67c69bed6c12939592f4ecf21 after integrating origin/main cd7a73d66978c2a9fceeb0f53081c811d8f1961d. The PR-owned change remains the docs-only governance-intensity mapping and tiered gate consumption contract plus WI-1316-1317 carriers. Runtime/script, WI-1269, and WI-1230-1231 files in the diff are consumed already-merged main content or terminal carrier compatibility, not new WI-1316-1317 implementation. No parser, generated runtime behavior, fixtures, release mechanics, or downstream #1319/#1321/#1322/#1323/#1324 work is implemented.",
+  "reviewer": "codex-worker-R2-T1c",
+  "reviewed_head": "5a65ca2989bb66f67c69bed6c12939592f4ecf21",
+  "reviewed_validation_summary": "2026-06-06 takeover and latest-main integration at head `e23b447122dfd99b1167ddf61e608dd6edee2dbc`: worktree `/Users/mc/.codex/worktrees/0103/Loom`, branch `work/1316-1317-governance-mapping-gate-contract`, fetched `origin/main` `cd7a73d66978c2a9fceeb0f53081c811d8f1961d`; PR #1335 was OPEN/DIRTY before integration with required checks previously successful at `e1790fa08fd0829dccc5972c609f1d9afe0de403`; issues #1316 and #1317 were OPEN. Merge conflicts from `origin/main` were classified as Loom carrier/status conflicts only and resolved without runtime implementation scope expansion. `git diff --check` passed after merge; `python3 tools/loom.py suite validate --target . --item WI-1316-1317 --json` returned `not_applicable` with zero missing inputs and zero blocking gaps. `python3 tools/loom.py fact-chain --target . --json` initially blocked only because status had drifted from this recovery entry; carrier sync is being refreshed before PR gate.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -18,15 +18,16 @@
     "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
-      "status": "not_applicable",
+      "status": "unavailable",
       "enforcement": "advisory",
       "highest_risk": "none",
       "risk_dimensions": [],
-      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
-      "budget_summary": "execution budget is not collected for this invocation.",
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom\": EOF",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_host"
+        "source": "github_control_plane",
+        "error_count": 1
       }
     },
     "engine_adapter": null,
