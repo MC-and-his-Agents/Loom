@@ -3,23 +3,21 @@
   "item_id": "WI-1289-1291",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Terminal closeout review refresh for PR #1342 at closeout carrier head a989f03e96459411217ee3704d0d110e2a81e15e. The retained implementation/gate repair review remains anchored at head addea74dd6c19561f5f3719867d1a6aa01aa50dc, while the PR #1342 review scope is limited to terminal closeout carrier files after #1343 landed on main. The closeout carrier records PR #1336 merge, #1343 gate repair availability, #1289/#1291 closed state, stale blockedBy removal, and no release surface requirement. No blocking findings remain for closeout-only merge.",
+  "summary": "Terminal closeout review refresh for post-merge readback carrier head 6d3e6af2003d281e1c1ef8083c167eb8fdfe85ff. The retained implementation/gate repair review remains anchored at head addea74dd6c19561f5f3719867d1a6aa01aa50dc. The final closeout carrier records PR #1336 merge, PR #1343 gate repair availability, PR #1342 merge to main at 2fd18f033592d5e0377e6e561967afa0fd7b16f0, #1289/#1291 closed state, stale blockedBy removal, and no release surface requirement. No blocking findings remain for terminal closeout readback.",
   "reviewer": "R2-T2c",
-  "authored_at": "2026-06-06T19:05:00Z",
-  "reviewed_head": "a989f03e96459411217ee3704d0d110e2a81e15e",
-  "reviewed_validation_summary": "Local closeout-only PR #1342 validation passed on 2026-06-06 after PR #1343 reached main at 720ff8972bba082333ade31612d29b66d6c85314: git diff --check OK; shadow-parity --surface all --blocking OK; runtime-parity validate OK; PR diff vs origin/main is limited to Loom closeout carrier/shadow/task-carrier/status files.",
+  "authored_at": "2026-06-06T19:21:00Z",
+  "reviewed_head": "6d3e6af2003d281e1c1ef8083c167eb8fdfe85ff",
+  "reviewed_validation_summary": "Post-merge readback on 2026-06-06: PR #1342 is MERGED at 2fd18f033592d5e0377e6e561967afa0fd7b16f0; origin/main points at 2fd18f033592d5e0377e6e561967afa0fd7b16f0; local tree matches origin/main; git diff --check OK; carrier refresh dry-run OK; issues #1289/#1291 remain CLOSED.",
   "fallback_to": null,
   "semantic_review_disposition": {
     "status": "passed"
   },
   "findings": [],
   "blocking_issues": [],
-  "follow_ups": [
-    "Merge this gate repair before rerunning closeout-only PR #1342."
-  ],
+  "follow_ups": [],
   "consumed_inputs": {
     "engine_adapter": "codex-app/R2-T2c",
-    "engine_evidence": "retained implementation/gate repair review head addea74dd6c19561f5f3719867d1a6aa01aa50dc; closeout carrier review head a989f03e96459411217ee3704d0d110e2a81e15e; git diff --check; shadow-parity blocking; runtime-parity validate; PR diff closeout-only",
+    "engine_evidence": "retained implementation/gate repair review head addea74dd6c19561f5f3719867d1a6aa01aa50dc; terminal closeout readback carrier head 6d3e6af2003d281e1c1ef8083c167eb8fdfe85ff; PR #1342 merge readback 2fd18f033592d5e0377e6e561967afa0fd7b16f0; git diff --check; carrier refresh dry-run; shadow-parity blocking; issues #1289/#1291 closed readback",
     "normalized_findings": null
   }
 }
