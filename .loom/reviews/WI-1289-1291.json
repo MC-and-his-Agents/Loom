@@ -3,11 +3,11 @@
   "item_id": "WI-1289-1291",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review consumed the current WI-1289/WI-1291 runtime diff through merge-from-main head 6aa385fa083aceab0655cfaea83d7f43bc71a700. Closeout backlink diagnostics now keep unreadable timing as diagnostic fallback evidence instead of blocking otherwise valid retained closeout evidence; retained merge-ready attempt selection prefers versioned attempts while preserving latest-only compatibility. The branch also consumes origin/main through f80511a3ebf97e0d8fdd4d7c03fc5fdb599c2469 without changing the WI-1289/WI-1291 runtime repair semantics. No blocking findings remain before rerunning hosted checks.",
+  "summary": "Implementation review consumed the current WI-1289/WI-1291 runtime diff through purity repair head f7779994803659743f96ad8c4bc8936a8e5ad054. Closeout backlink diagnostics keep unreadable timing as diagnostic fallback evidence instead of blocking otherwise valid retained closeout evidence; retained merge-ready attempt selection prefers versioned attempts while preserving latest-only compatibility. The latest repair treats `closed_out` as a terminal checkpoint so unrelated closed-out carriers do not block PR merge gate purity. No blocking findings remain before rerunning hosted checks.",
   "reviewer": "R2-T2c",
-  "authored_at": "2026-06-06T16:53:17Z",
-  "reviewed_head": "6aa385fa083aceab0655cfaea83d7f43bc71a700",
-  "reviewed_validation_summary": "Local validation passed on 2026-06-06 for merge-from-main head 6aa385fa083aceab0655cfaea83d7f43bc71a700: git diff --check OK; py_compile_clean OK; tools/check_cli_contract.py passed; runtime-parity validate OK; check_demo_bootstrap_fixture OK; tools/skills_surface.py check OK; check_release_surface.py OK; check_npm_package.py passed; focused adversarial adoption fixture returned failures=0.",
+  "authored_at": "2026-06-06T17:15:00Z",
+  "reviewed_head": "f7779994803659743f96ad8c4bc8936a8e5ad054",
+  "reviewed_validation_summary": "Local validation passed on 2026-06-06 for purity repair head f7779994803659743f96ad8c4bc8936a8e5ad054: git diff --check OK; py_compile_clean OK; tools/check_cli_contract.py passed; runtime-parity validate OK; check_demo_bootstrap_fixture OK; tools/skills_surface.py check OK; check_release_surface.py OK; check_npm_package.py passed; purity-check passed with hard_failures=[] and blocking_diag=0.",
   "fallback_to": null,
   "semantic_review_disposition": {
     "status": "passed"
@@ -19,7 +19,7 @@
   ],
   "consumed_inputs": {
     "engine_adapter": "codex-app/R2-T2c",
-    "engine_evidence": "head 6aa385fa083aceab0655cfaea83d7f43bc71a700; git diff --check; py_compile_clean; check_cli_contract; runtime-parity validate; check_demo_bootstrap_fixture; skills_surface check; check_release_surface; check_npm_package; focused adversarial adoption fixture failures=0",
+    "engine_evidence": "head f7779994803659743f96ad8c4bc8936a8e5ad054; git diff --check; py_compile_clean; check_cli_contract; runtime-parity validate; check_demo_bootstrap_fixture; skills_surface check; check_release_surface; check_npm_package; purity-check hard_failures=[] blocking_diag=0",
     "normalized_findings": null
   }
 }
