@@ -157,6 +157,13 @@ COMMANDS: list[dict[str, Any]] = [
     {"command": "init", "domain": "scenario", "status": "implemented", "json": True},
     {"command": "adopt", "domain": "scenario", "status": "implemented", "json": True},
     {"command": "route", "domain": "scenario", "status": "implemented", "json": True},
+    {
+        "command": "carrier closeout-sync",
+        "domain": "harness",
+        "status": "implemented",
+        "json": True,
+        "summary": "Explicitly write structured terminal closeout metadata to versioned progress carriers without mutating host state.",
+    },
     {"command": "status", "domain": "harness", "status": "implemented", "json": True},
     {"command": "fact-chain", "domain": "harness", "status": "implemented", "json": True},
     {"command": "profile status", "domain": "profile", "status": "implemented", "json": True},
@@ -378,7 +385,9 @@ def output(command: str, result: str, **fields: Any) -> dict[str, Any]:
 
 
 def run_capture(args: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(args, cwd=cwd, check=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    env = os.environ.copy()
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    return subprocess.run(args, cwd=cwd, env=env, check=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
 def parse_json_or_block(command: str, completed: subprocess.CompletedProcess[str], *, failed_layer: str, fallback_to: list[str]) -> dict[str, Any]:
@@ -2553,6 +2562,49 @@ def handle_reconcile(argv: list[str]) -> int:
     if args.pr:
         flow_args.extend(["--pr", args.pr])
     return emit_flow("reconcile", flow_args, fallback_to=["manual-reconciliation"])
+
+
+def handle_carrier(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="loom carrier")
+    parser.add_argument("action", choices=("closeout-sync",))
+    parser.add_argument("--target", default=".")
+    parser.add_argument("--item")
+    parser.add_argument("--output")
+    parser.add_argument("--terminal-state")
+    parser.add_argument("--issue")
+    parser.add_argument("--pr")
+    parser.add_argument("--merge-commit")
+    parser.add_argument("--target-branch")
+    parser.add_argument("--closed-at")
+    parser.add_argument("--evidence-locator")
+    parser.add_argument("--dry-run", action="store_true", default=True)
+    parser.add_argument("--apply", dest="dry_run", action="store_false")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    target = resolve_target(args.target)
+    flow_args = ["carrier", args.action, "--target", str(target)]
+    for flag, value in (
+        ("--item", args.item),
+        ("--output", args.output),
+        ("--terminal-state", args.terminal_state),
+        ("--issue", args.issue),
+        ("--pr", args.pr),
+        ("--merge-commit", args.merge_commit),
+        ("--target-branch", args.target_branch),
+        ("--closed-at", args.closed_at),
+        ("--evidence-locator", args.evidence_locator),
+    ):
+        if value is not None:
+            flow_args.extend([flag, str(value)])
+    if not args.dry_run:
+        flow_args.append("--apply")
+    command = f"carrier {args.action}"
+    payload = flow_payload(command, flow_args, fallback_to=["loom closeout --target <repo> --json"])
+    payload.setdefault("schema_version", OUTPUT_SCHEMA)
+    if payload.get("command") and payload.get("command") != command:
+        payload["wrapped_command"] = payload.get("command")
+    payload["command"] = command
+    return emit(payload)
 
 
 def supported_hosts(target: Path) -> list[dict[str, Any]]:
@@ -5768,6 +5820,9 @@ def main(argv: list[str]) -> int:
         return handle_merge(merge_args)
     if command == "reconcile":
         return handle_reconcile(forwarded)
+    if command == "carrier" or command.startswith("carrier "):
+        carrier_args = command.split()[1:] + forwarded if command.startswith("carrier ") else forwarded
+        return handle_carrier(carrier_args)
     if command == "host" or command.startswith("host "):
         host_args = command.split()[1:] + forwarded if command.startswith("host ") else forwarded
         return handle_host(host_args)
