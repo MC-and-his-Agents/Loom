@@ -4693,7 +4693,8 @@ def latest_successful_execution_attempt(
     attempts_dir = execution_attempt_directory(target_root, item_id)
     if not attempts_dir.exists():
         return None, None, [f"missing execution_attempt directory: {relative_to_root(attempts_dir, target_root)}"]
-    candidates: list[tuple[float, str, dict[str, Any]]] = []
+    versioned_candidates: list[tuple[float, str, dict[str, Any]]] = []
+    latest_candidates: list[tuple[float, str, dict[str, Any]]] = []
     errors: list[str] = []
     for path in sorted(attempts_dir.glob("*.json")):
         relative = relative_to_root(path, target_root)
@@ -4709,7 +4710,9 @@ def latest_successful_execution_attempt(
             continue
         if payload.get("operation") != operation or payload.get("result") != "pass":
             continue
+        candidates = latest_candidates if path.name == "latest.json" else versioned_candidates
         candidates.append((path.stat().st_mtime, relative, payload))
+    candidates = versioned_candidates or latest_candidates
     if not candidates:
         return None, None, errors or [f"missing successful `{operation}` execution_attempt for `{item_id}`"]
     _, relative, payload = sorted(candidates, key=lambda entry: (entry[0], entry[1]))[-1]
@@ -4892,7 +4895,7 @@ def closeout_backlink_subchecks(
         review_record=review_record,
         review_path=review_path,
     )
-    if post_merge_review_diagnostic.get("result") in {"block", "fallback"}:
+    if post_merge_review_diagnostic.get("result") == "block":
         review_missing.extend(
             f"post-merge review diagnostic: {message}"
             for message in post_merge_review_diagnostic.get("missing_inputs", [])
