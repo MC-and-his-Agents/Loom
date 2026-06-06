@@ -11,6 +11,9 @@
 
 本模型定义的是单个变更的治理强度，不是仓库治理成熟度。仓库可以具备不同成熟度，并把本模型映射到自己的执行入口、审查方式和自动化检查；映射层不得反向改写本文件的通用语义。
 
+Loom 仓库自身的执行路径映射见
+[loom-governance-intensity-mapping.md](./loom-governance-intensity-mapping.md)。
+
 ## 1. 文档定位
 
 `change-governance-intensity.md` 是变更治理强度的唯一通用落点。

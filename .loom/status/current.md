@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1230-1231
-- Goal: Complete WI-1230 and WI-1231 by adding structured terminal closeout metadata to progress carriers and splitting local retire, host closeout sync, and carrier closeout sync command responsibilities.
-- Scope: CLI/runtime source, schema/docs/tests/fixtures, generated runtime copies, and Loom carriers for issues #1230 and #1231. Preserve local-only workspace retire, host closeout/reconciliation sync, and explicit versioned carrier closeout sync boundaries.
-- Execution Path: issues #1230/#1231 -> branch work/1230-1231-idle-closeout-command-foundation -> PR -> CI/review -> controlled merge -> post-merge closeout for both issues.
-- Workspace Entry: ./././.
-- Recovery Entry: .loom/progress/WI-1230-1231.md
-- Review Entry: .loom/reviews/WI-1230-1231.json
-- Validation Entry: git diff --check; py_compile_clean targeted runtime; tools/check_cli_contract.py targeted/full as feasible; loom_check contract/source surfaces; PR gate; hosted checks.
-- Closing Condition: Implementation PR is merged through the controlled wrapper, terminal metadata and command responsibility split are consumed by review and closeout gates, and #1230/#1231 are closed with post-merge closeout evidence.
+- Item ID: WI-1316-1317
+- Goal: Complete WI-1316 + WI-1317: create and merge the Loom governance-intensity mapping and tiered gate consumption contract PR, then complete post-merge closeout consumed for both issues.
+- Scope: Freeze Loom-specific governance-intensity mapping for issue #1316 and the tiered gate consumption contract for issue #1317. Allowed changes are methodology docs, governance/harness docs, PR body/schema contract examples if needed, and Loom carrier/review/status evidence required for this docs-only contract PR. Excludes runtime behavior changes, tools gate implementation, `.loom/bin` generated runtime, fixtures, and #1319/#1321/#1322/#1323/#1324 implementation.
+- Execution Path: issues #1316/#1317 -> branch work/1316-1317-governance-mapping-gate-contract -> PR -> docs review -> CI/review -> controlled merge wrapper -> post-merge closeout for both issues.
+- Workspace Entry: .
+- Recovery Entry: .loom/progress/WI-1316-1317.md
+- Review Entry: .loom/reviews/WI-1316-1317.json
+- Validation Entry: git diff --check; docs contract review; suite validate not_applicable; fact-chain; PR metadata/readback; PR gate; hosted checks; release/no-release evidence; closeout check/sync for #1316 and #1317.
+- Closing Condition: The PR for #1316/#1317 is merged through the controlled merge wrapper, both issues are closed/completed with post-merge closeout evidence, and repo carriers show WI-1316-1317 terminal closeout consumed without implying #1319/#1321/#1322/#1323/#1324 implementation is complete.
 - Current Checkpoint: merge
-- Current Stop: PR #1338 is open at head d5ebf265777ca46138220a1110000f8c1aa2e9d2 after implementation, demo fixture sync, PR body readback, metadata preflight, authored review, workspace carrier isolation from WI-1269, and local PR gate pass were recorded.
-- Next Step: Rerun local PR gate, wait for hosted checks, merge through controlled wrapper, then complete post-merge closeout for #1230/#1231.
-- Blockers: None recorded.
-- Latest Validation Summary: Validation passed for WI-1230-1231 on 2026-06-06 after demo fixture sync and implementation-contract refresh: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py tools/check_cli_contract.py src/skills/shared/scripts/fact_chain_support.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/fact_chain_support.py skills/shared/scripts/loom_flow.py .loom/bin/fact_chain_support.py .loom/bin/loom_flow.py`; runtime parity cmp across src/skills/shared, skills/shared, .loom/bin, and all skills/loom-* runtime copies; `python3 tools/loom.py skills check --target /Users/mc/.codex/worktrees/df54/Loom --json`; `python3 tools/loom.py suite validate --target /Users/mc/.codex/worktrees/df54/Loom --item WI-1230-1231 --json`; `python3 tools/loom.py suite carrier validate --target /Users/mc/.codex/worktrees/df54/Loom --item WI-1230-1231 --json`; `python3 tools/loom.py suite evidence validate --target /Users/mc/.codex/worktrees/df54/Loom --item WI-1230-1231 --json`; `python3 tools/loom.py carrier closeout-sync --target /Users/mc/.codex/worktrees/df54/Loom --item WI-1230-1231 --terminal-state not_applicable --issue 1230 --pr not_applicable --merge-commit not_applicable --target-branch main --closed-at not_applicable --evidence-locator not_applicable --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py` -> `cli contract checks passed`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate` passed in 186.19s after merging origin/main; `make loom-demo-new-project-check` -> `demo bootstrap fixture: OK (examples/new-project)`; `python3 tools/loom.py closeout --target /Users/mc/.codex/worktrees/df54/Loom --json` -> `result=pass` before PR creation. Hosted checks for PR #1338 initially failed because demo bootstrap fixture drift was present before this sync; rerun is required for head 2cc5405625b74ea74cda2a3a82c895a67191dafa.
-- Recovery Boundary: Keep scope limited to #1230/#1231 terminal metadata and command responsibility split. Do not change unrelated closeout behavior, unsafe host mutation semantics, repair/apply flows, or main workspace state.
-- Current Lane: implementation-merge-ready
+- Current Stop: PR #1335 branch has integrated latest `origin/main` `cd7a73d66978c2a9fceeb0f53081c811d8f1961d` in merge commit `e23b447122dfd99b1167ddf61e608dd6edee2dbc`; conflicts were limited to Loom carrier/status files. Inherited WI-1269 and WI-1230-1231 carrier facts are consumed from main, while WI-1316-1317 remains the single active Work Item in this worktree.
+- Next Step: Refresh WI-1316-1317 review binding for the resolved head, rerun local PR metadata/readback and PR gate, push the current branch head, wait for hosted checks, use controlled merge wrapper, then complete post-merge closeout for #1316 and #1317.
+- Blockers: None
+- Latest Validation Summary: 2026-06-06 takeover and latest-main integration at head `e23b447122dfd99b1167ddf61e608dd6edee2dbc`: worktree `/Users/mc/.codex/worktrees/0103/Loom`, branch `work/1316-1317-governance-mapping-gate-contract`, fetched `origin/main` `cd7a73d66978c2a9fceeb0f53081c811d8f1961d`; PR #1335 was OPEN/DIRTY before integration with required checks previously successful at `e1790fa08fd0829dccc5972c609f1d9afe0de403`; issues #1316 and #1317 were OPEN. Merge conflicts from `origin/main` were classified as Loom carrier/status conflicts only and resolved without runtime implementation scope expansion. `git diff --check` passed after merge; `python3 tools/loom.py suite validate --target . --item WI-1316-1317 --json` returned `not_applicable` with zero missing inputs and zero blocking gaps. `python3 tools/loom.py fact-chain --target . --json` initially blocked only because status had drifted from this recovery entry; carrier sync is being refreshed before PR gate.
+- Recovery Boundary: This Work Item only owns #1316/#1317 docs-only contract freeze, Loom carrier evidence, PR metadata, review, merge-ready, controlled merge, and closeout. Do not implement runtime behavior, tools gate parser, `.loom/bin` generated runtime, fixtures, #1319 docs-governance checklist, #1321 metadata carrier, #1322 light gate behavior, #1323 fixtures, or #1324 release/docs closeout work.
+- Current Lane: docs-contract-merge-ready
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: git diff --check; py_compile; runtime parity; skills check; suite validate; suite carrier validate; suite evidence validate; carrier closeout-sync dry-run; tools/check_cli_contract.py
-- Lane Entry: implementation-merge-ready
+- Verification Entry: git diff --check; fact-chain pass; suite validate not_applicable with valid rationale; root-self-governance equivalent checks pass after main merge except expected review refresh drift. Pending refreshed review binding, PR metadata/readback, PR gate, hosted checks, release/no-release evidence, controlled merge, and closeout.
+- Lane Entry: docs-contract-merge-ready
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1230-1231.md
-- Dynamic Truth: .loom/progress/WI-1230-1231.md
+- Static Truth: .loom/work-items/WI-1316-1317.md
+- Dynamic Truth: .loom/progress/WI-1316-1317.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
