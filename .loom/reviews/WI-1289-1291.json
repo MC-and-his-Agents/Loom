@@ -3,11 +3,11 @@
   "item_id": "WI-1289-1291",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review refreshed for terminal closeout PR gate repair at head addea74dd6c19561f5f3719867d1a6aa01aa50dc. The additional commit only synchronized generated demo bootstrap fixtures and root shadow parity after the runtime repair; the gate semantics remain fail-closed for ordinary merge-ready PRs and only permit retained review consumption for terminal closeout carrier PRs under the explicit closeout policy. No blocking findings remain before hosted checks.",
+  "summary": "Terminal closeout review refresh for PR #1342 at closeout carrier head a989f03e96459411217ee3704d0d110e2a81e15e. The retained implementation/gate repair review remains anchored at head addea74dd6c19561f5f3719867d1a6aa01aa50dc, while the PR #1342 review scope is limited to terminal closeout carrier files after #1343 landed on main. The closeout carrier records PR #1336 merge, #1343 gate repair availability, #1289/#1291 closed state, stale blockedBy removal, and no release surface requirement. No blocking findings remain for closeout-only merge.",
   "reviewer": "R2-T2c",
-  "authored_at": "2026-06-06T18:36:00Z",
-  "reviewed_head": "addea74dd6c19561f5f3719867d1a6aa01aa50dc",
-  "reviewed_validation_summary": "Local validation passed on 2026-06-06 for terminal closeout gate repair head addea74dd6c19561f5f3719867d1a6aa01aa50dc: git diff --check OK; tools/check_demo_bootstrap_fixture.py OK; tools/skills_surface.py check OK; runtime-parity validate OK; shadow-parity --surface all --blocking OK; tools/check_cli_contract.py passed in 177.71s.",
+  "authored_at": "2026-06-06T19:05:00Z",
+  "reviewed_head": "a989f03e96459411217ee3704d0d110e2a81e15e",
+  "reviewed_validation_summary": "Local closeout-only PR #1342 validation passed on 2026-06-06 after PR #1343 reached main at 720ff8972bba082333ade31612d29b66d6c85314: git diff --check OK; shadow-parity --surface all --blocking OK; runtime-parity validate OK; PR diff vs origin/main is limited to Loom closeout carrier/shadow/task-carrier/status files.",
   "fallback_to": null,
   "semantic_review_disposition": {
     "status": "passed"
@@ -19,7 +19,7 @@
   ],
   "consumed_inputs": {
     "engine_adapter": "codex-app/R2-T2c",
-    "engine_evidence": "head addea74dd6c19561f5f3719867d1a6aa01aa50dc; git diff --check; check_demo_bootstrap_fixture; skills_surface check; runtime-parity validate; shadow-parity blocking; check_cli_contract",
+    "engine_evidence": "retained implementation/gate repair review head addea74dd6c19561f5f3719867d1a6aa01aa50dc; closeout carrier review head a989f03e96459411217ee3704d0d110e2a81e15e; git diff --check; shadow-parity blocking; runtime-parity validate; PR diff closeout-only",
     "normalized_findings": null
   }
 }
