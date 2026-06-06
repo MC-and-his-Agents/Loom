@@ -3,11 +3,11 @@
   "item_id": "WI-1289-1291",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review consumed the terminal closeout PR gate repair at head e65b5ec44bb6bfdf1fe89d801aa7c740aed6ee34. The repair only permits retained review consumption for PRs explicitly marked as closeout, already at a terminal closed_out checkpoint, and whose drift is limited to terminal closeout carrier paths; ordinary merge-ready PRs and runtime/script drift still require current-head review. No blocking findings remain before hosted checks.",
+  "summary": "Implementation review refreshed for terminal closeout PR gate repair at head addea74dd6c19561f5f3719867d1a6aa01aa50dc. The additional commit only synchronized generated demo bootstrap fixtures and root shadow parity after the runtime repair; the gate semantics remain fail-closed for ordinary merge-ready PRs and only permit retained review consumption for terminal closeout carrier PRs under the explicit closeout policy. No blocking findings remain before hosted checks.",
   "reviewer": "R2-T2c",
-  "authored_at": "2026-06-06T18:20:00Z",
-  "reviewed_head": "e65b5ec44bb6bfdf1fe89d801aa7c740aed6ee34",
-  "reviewed_validation_summary": "Local validation passed on 2026-06-06 for terminal closeout gate repair head e65b5ec44bb6bfdf1fe89d801aa7c740aed6ee34: git diff --check OK; py_compile OK; tools/check_cli_contract.py passed; runtime-parity validate OK; tools/skills_surface.py check OK; check_release_surface.py OK; check_npm_package.py passed.",
+  "authored_at": "2026-06-06T18:36:00Z",
+  "reviewed_head": "addea74dd6c19561f5f3719867d1a6aa01aa50dc",
+  "reviewed_validation_summary": "Local validation passed on 2026-06-06 for terminal closeout gate repair head addea74dd6c19561f5f3719867d1a6aa01aa50dc: git diff --check OK; tools/check_demo_bootstrap_fixture.py OK; tools/skills_surface.py check OK; runtime-parity validate OK; shadow-parity --surface all --blocking OK; tools/check_cli_contract.py passed in 177.71s.",
   "fallback_to": null,
   "semantic_review_disposition": {
     "status": "passed"
@@ -19,7 +19,7 @@
   ],
   "consumed_inputs": {
     "engine_adapter": "codex-app/R2-T2c",
-    "engine_evidence": "head e65b5ec44bb6bfdf1fe89d801aa7c740aed6ee34; git diff --check; py_compile; check_cli_contract; runtime-parity validate; skills_surface check; check_release_surface; check_npm_package",
+    "engine_evidence": "head addea74dd6c19561f5f3719867d1a6aa01aa50dc; git diff --check; check_demo_bootstrap_fixture; skills_surface check; runtime-parity validate; shadow-parity blocking; check_cli_contract",
     "normalized_findings": null
   }
 }
