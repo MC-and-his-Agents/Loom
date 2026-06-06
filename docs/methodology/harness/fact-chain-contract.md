@@ -164,6 +164,7 @@ Loom 的执行真相只允许沿一条事实链流动：
 - repository 当前 execution state 只能是 `active` 或 `idle`
 - `idle` 不表示 closeout 已完成、host truth 已同步，或历史 carrier 可以忽略；它只表示“当前无 active item”
 - `workspace retire` 不是进入 `idle` 的版本化写入口；它仍只产生 local-only evidence
+- `carrier closeout-sync` 是版本化 terminal metadata 写入口；它不改变 host state，也不替代 closeout check / reconciliation sync
 
 ## 2.7 idle schema
 
@@ -190,7 +191,27 @@ Backward compatibility:
 
 - 现有 `active` payload 不变
 - 读取方在未实现 idle 消费前，必须把 `mode = idle` 视为“合同已声明但当前 consumer 未升级”，而不是把 idle 仓库误判成 active drift
-- #1229 只冻结 schema 与消费边界；不在本批次引入 terminal metadata、新 sync 命令或 repair/apply 流程
+- #1229 只冻结 schema 与消费边界；terminal metadata 与明确 carrier sync 命令由 #1230/#1231 承接
+
+## 2.8 terminal closeout metadata
+
+Progress carriers may include an optional `## Terminal Closeout Metadata` section:
+
+```text
+## Terminal Closeout Metadata
+
+- Terminal State: closed_out | absorbed | merged | retired | deferred | not_applicable
+- Issue: <issue locator or not_applicable>
+- PR: <PR locator or not_applicable>
+- Merge Commit: <merge commit SHA or not_applicable>
+- Target Branch: <target branch or not_applicable>
+- Closed At: <timestamp or not_applicable>
+- Evidence Locator: <repo or host closeout evidence locator>
+```
+
+The section is optional for legacy carriers. When absent, consumers may still read legacy `Current Checkpoint` values such as `retired`, `merged`, `closed`, or `done`, but terminal closeout should prefer the structured fields when present.
+
+Only `carrier closeout-sync` writes this section. Host closeout sync and workspace retire must not author it.
 
 ## 3. 派生读面
 

@@ -1,0 +1,33 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1230-1231",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review for WI-1230-1231: minimal suite is appropriate for bounded CLI/runtime/docs/test carrier work. The suite defines terminal closeout metadata parsing, explicit carrier closeout-sync apply semantics, dry-run default, no host mutations, and the local retire / host closeout sync / carrier closeout sync responsibility split.",
+  "reviewer": "codex-R2-T3b",
+  "reviewed_head": "working-tree-precommit",
+  "reviewed_validation_summary": "Suite validation passed for WI-1230-1231 on 2026-06-06 with `python3 tools/loom.py suite validate --target /Users/mc/.codex/worktrees/df54/Loom --item WI-1230-1231 --json`; suite carrier and evidence validation also passed after evidence-map rows were marked present.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1230-1231.md",
+    "recovery_entry": ".loom/progress/WI-1230-1231.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/.codex/worktrees/df54/Loom/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1230-1231/spec.md",
+    "suite_plan": ".loom/specs/WI-1230-1231/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1230-1231/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1230-1231/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}
