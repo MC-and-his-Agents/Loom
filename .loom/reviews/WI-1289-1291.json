@@ -1,0 +1,25 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1289-1291",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Implementation review consumed the current WI-1289/WI-1291 runtime diff through purity repair head f7779994803659743f96ad8c4bc8936a8e5ad054. Closeout backlink diagnostics keep unreadable timing as diagnostic fallback evidence instead of blocking otherwise valid retained closeout evidence; retained merge-ready attempt selection prefers versioned attempts while preserving latest-only compatibility. The latest repair treats `closed_out` as a terminal checkpoint so unrelated closed-out carriers do not block PR merge gate purity. No blocking findings remain before rerunning hosted checks.",
+  "reviewer": "R2-T2c",
+  "authored_at": "2026-06-06T17:15:00Z",
+  "reviewed_head": "f7779994803659743f96ad8c4bc8936a8e5ad054",
+  "reviewed_validation_summary": "Local validation passed on 2026-06-06 for purity repair head f7779994803659743f96ad8c4bc8936a8e5ad054: git diff --check OK; py_compile_clean OK; tools/check_cli_contract.py passed; runtime-parity validate OK; check_demo_bootstrap_fixture OK; tools/skills_surface.py check OK; check_release_surface.py OK; check_npm_package.py passed; purity-check passed with hard_failures=[] and blocking_diag=0.",
+  "fallback_to": null,
+  "semantic_review_disposition": {
+    "status": "passed"
+  },
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "Rerun hosted checks after the repair commit and consume the current PR head through controlled merge."
+  ],
+  "consumed_inputs": {
+    "engine_adapter": "codex-app/R2-T2c",
+    "engine_evidence": "head f7779994803659743f96ad8c4bc8936a8e5ad054; git diff --check; py_compile_clean; check_cli_contract; runtime-parity validate; check_demo_bootstrap_fixture; skills_surface check; check_release_surface; check_npm_package; purity-check hard_failures=[] blocking_diag=0",
+    "normalized_findings": null
+  }
+}

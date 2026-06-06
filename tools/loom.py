@@ -2536,13 +2536,45 @@ def handle_merge(argv: list[str]) -> int:
     parser.add_argument("action", choices=("check", "run"))
     parser.add_argument("pr")
     parser.add_argument("--head-sha")
+    parser.add_argument("--work-item")
+    parser.add_argument("--merge-method", choices=("squash", "merge", "rebase"), default="merge")
+    parser.add_argument("--delete-branch", action="store_true")
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--pr-payload-file")
+    parser.add_argument("--status-checks-file")
+    parser.add_argument("--branch-protection-file")
+    parser.add_argument("--ruleset-file")
+    parser.add_argument("--pr-gate-result-file")
+    parser.add_argument("--merge-gate-result-file")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     command = f"merge {args.action}"
-    flow_args = ["controlled-merge", "merge" if args.action == "run" else "check", "--target", ".", "--pr", args.pr, "--merge-method", "merge", "--delete-branch"]
+    flow_args = [
+        "controlled-merge",
+        "merge" if args.action == "run" else "check",
+        "--target",
+        ".",
+        "--pr",
+        args.pr,
+        "--merge-method",
+        args.merge_method,
+    ]
+    if args.delete_branch:
+        flow_args.append("--delete-branch")
     if args.head_sha:
         flow_args.extend(["--head-sha", args.head_sha])
+    if args.work_item:
+        flow_args.extend(["--item", args.work_item])
+    for option, value in (
+        ("--pr-payload-file", args.pr_payload_file),
+        ("--status-checks-file", args.status_checks_file),
+        ("--branch-protection-file", args.branch_protection_file),
+        ("--ruleset-file", args.ruleset_file),
+        ("--pr-gate-result-file", args.pr_gate_result_file),
+        ("--merge-gate-result-file", args.merge_gate_result_file),
+    ):
+        if value:
+            flow_args.extend([option, value])
     if args.action == "run" and args.apply:
         flow_args.append("--execute")
     return emit_flow(command, flow_args, fallback_to=["loom pr gate <pr> --json", "loom merge check <pr> --json"])

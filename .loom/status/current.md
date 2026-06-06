@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1316-1317
-- Goal: Complete WI-1316 + WI-1317: create and merge the Loom governance-intensity mapping and tiered gate consumption contract PR, then complete post-merge closeout consumed for both issues.
-- Scope: Freeze Loom-specific governance-intensity mapping for issue #1316 and the tiered gate consumption contract for issue #1317. Allowed changes are methodology docs, governance/harness docs, PR body/schema contract examples if needed, and Loom carrier/review/status evidence required for this docs-only contract PR. Excludes runtime behavior changes, tools gate implementation, `.loom/bin` generated runtime, fixtures, and #1319/#1321/#1322/#1323/#1324 implementation.
-- Execution Path: issues #1316/#1317 -> branch work/1316-1317-governance-mapping-gate-contract -> PR -> docs review -> CI/review -> controlled merge wrapper -> post-merge closeout for both issues.
+- Item ID: WI-1289-1291
+- Goal: Implement merge check/run consumption of PR gate and post-merge review bypass diagnostics for issues #1289 and #1291.
+- Scope: CLI/runtime changes for loom pr gate, controlled merge, post-merge diagnostics, repair plan output, generated runtime parity, docs contract, and CLI contract fixtures.
+- Execution Path: issues #1289/#1291 -> branch work/1289-1291-merge-check-run-pr-gate -> PR #1336 -> hosted checks -> controlled merge -> post-merge closeout.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1316-1317.md
-- Review Entry: .loom/reviews/WI-1316-1317.json
-- Validation Entry: git diff --check; docs contract review; suite validate not_applicable; fact-chain; PR metadata/readback; PR gate; hosted checks; release/no-release evidence; closeout check/sync for #1316 and #1317.
-- Closing Condition: The PR for #1316/#1317 is merged through the controlled merge wrapper, both issues are closed/completed with post-merge closeout evidence, and repo carriers show WI-1316-1317 terminal closeout consumed without implying #1319/#1321/#1322/#1323/#1324 implementation is complete.
-- Current Checkpoint: closed_out
-- Current Stop: Post-merge closeout is fully consumed on `main`: PR #1335 merged at `52bbff388384e8fa3f0928be83c53aef5501dc9c`, closeout carrier PR #1340 merged at `fee58c997a1ba42ba8a7cd3e6e0810f19ee0c421`, issues #1316 and #1317 are CLOSED, and stale `blockedBy #1315` edges have been removed.
-- Next Step: None; WI-1316-1317 is closed out. Downstream #1319/#1321/#1322/#1323/#1324 implementation work remains separate and is not completed by this item.
+- Recovery Entry: .loom/progress/WI-1289-1291.md
+- Review Entry: .loom/reviews/WI-1289-1291.json
+- Validation Entry: python3 tools/check_cli_contract.py; python3 tools/skills_surface.py check; python3 tools/check_release_surface.py; python3 tools/check_npm_package.py
+- Closing Condition: PR #1336 merges through the controlled merge path and closeout consumes merged PR, target branch, issue states, review, gate, and release-impact evidence for #1289/#1291.
+- Current Checkpoint: merge-ready
+- Current Stop: Implementation PR #1336 is locally repaired through validated purity repair head f7779994803659743f96ad8c4bc8936a8e5ad054; carrier-only review/status/shadow refresh is pending commit before push.
+- Next Step: Commit carrier refresh, update PR #1336 body to the pushed PR head, wait for hosted checks, consume controlled merge, then complete post-merge closeout for #1289/#1291.
 - Blockers: None
-- Latest Validation Summary: 2026-06-06 final closeout readback: PR #1335 merged at 2026-06-06T15:16:22Z with merge commit `52bbff388384e8fa3f0928be83c53aef5501dc9c`; closeout carrier PR #1340 merged at 2026-06-06T15:44:28Z with merge commit `fee58c997a1ba42ba8a7cd3e6e0810f19ee0c421`; `origin/main` contains both commits. GitHub readback shows #1316 CLOSED, #1317 CLOSED, and both `blockedBy` lists empty. Terminal metadata is present in `.loom/progress/WI-1316-1317.md`; `python3 tools/loom.py fact-chain --target . --json` passed on the final closeout sync branch.
-- Recovery Boundary: This Work Item only owns #1316/#1317 docs-only contract freeze, Loom carrier evidence, PR metadata, review, merge-ready, controlled merge, and closeout. Do not implement runtime behavior, tools gate parser, `.loom/bin` generated runtime, fixtures, #1319 docs-governance checklist, #1321 metadata carrier, #1322 light gate behavior, #1323 fixtures, or #1324 release/docs closeout work.
-- Current Lane: post-merge-closeout-consumed
+- Latest Validation Summary: Local validation passed on 2026-06-06 for purity repair head f7779994803659743f96ad8c4bc8936a8e5ad054: git diff --check OK; py_compile_clean OK; tools/check_cli_contract.py passed; runtime-parity validate OK; check_demo_bootstrap_fixture OK; tools/skills_surface.py check OK; check_release_surface.py OK; check_npm_package.py passed; purity-check passed with hard_failures=[] and blocking_diag=0.
+- Recovery Boundary: Scope remains WI-1289/WI-1291 implementation, generated runtime parity, PR metadata, review/merge gate evidence, controlled merge, and closeout carriers only.
+- Current Lane: R2-T2 merge-check-run-pr-gate
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: PR #1335 merged by controlled wrapper; PR #1340 merged closeout carrier to main; #1316/#1317 CLOSED; stale #1315 blockedBy edges removed; terminal carrier metadata present on main.
-- Lane Entry: post-merge-closeout-consumed
+- Verification Entry: post-merge PR/issue/main readback; controlled-merge merge; closeout check; retained targeted global-cli smoke; git diff --check; py_compile; skills check; hosted checks; release-judgment
+- Lane Entry: R2-T2 merge-check-run-pr-gate
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1316-1317.md
-- Dynamic Truth: .loom/progress/WI-1316-1317.md
+- Static Truth: .loom/work-items/WI-1289-1291.md
+- Dynamic Truth: .loom/progress/WI-1289-1291.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
