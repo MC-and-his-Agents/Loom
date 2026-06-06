@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import argparse
 import hashlib
 import importlib.util
 import os
@@ -12,9 +13,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
 sys.dont_write_bytecode = True
@@ -131,6 +134,105 @@ REQUIRED_COMMANDS = {
     "suite carrier inspect",
     "suite carrier validate",
 }
+
+
+@dataclass(frozen=True)
+class SurfaceCheck:
+    name: str
+    fixture_group: str
+    run: Callable[[], None]
+
+
+def format_duration(seconds: float) -> str:
+    return f"{seconds:.2f}s"
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run Loom CLI contract checks.",
+    )
+    parser.add_argument(
+        "--surface",
+        action="append",
+        dest="surfaces",
+        help="Run only the named surface. May be passed more than once.",
+    )
+    parser.add_argument(
+        "--fixture-group",
+        action="append",
+        dest="fixture_groups",
+        help="Run only checks in the named fixture group. May be passed more than once.",
+    )
+    parser.add_argument(
+        "--list-surfaces",
+        action="store_true",
+        help="List available surface names and fixture groups without running checks.",
+    )
+    return parser.parse_args(argv)
+
+
+def selected_surface_checks(
+    checks: tuple[SurfaceCheck, ...],
+    *,
+    surfaces: list[str] | None,
+    fixture_groups: list[str] | None,
+) -> tuple[SurfaceCheck, ...]:
+    selected = checks
+    if surfaces:
+        wanted = set(surfaces)
+        selected = tuple(check for check in selected if check.name in wanted)
+        missing = wanted - {check.name for check in checks}
+        if missing:
+            raise ValueError("unknown surface(s): " + ", ".join(sorted(missing)))
+    if fixture_groups:
+        wanted_groups = set(fixture_groups)
+        selected = tuple(check for check in selected if check.fixture_group in wanted_groups)
+        missing_groups = wanted_groups - {check.fixture_group for check in checks}
+        if missing_groups:
+            raise ValueError("unknown fixture group(s): " + ", ".join(sorted(missing_groups)))
+    if not selected:
+        raise ValueError("surface filters selected no checks")
+    return selected
+
+
+def run_surface_checks(checks: tuple[SurfaceCheck, ...]) -> int:
+    failures: list[tuple[SurfaceCheck, float, Exception]] = []
+    suite_start = time.perf_counter()
+    total = len(checks)
+    for index, check in enumerate(checks, start=1):
+        start = time.perf_counter()
+        print(
+            f"[{index}/{total}] surface={check.name} fixture_group={check.fixture_group} start",
+            file=sys.stderr,
+        )
+        try:
+            check.run()
+        except Exception as exc:
+            elapsed = time.perf_counter() - start
+            failures.append((check, elapsed, exc))
+            print(
+                f"[{index}/{total}] surface={check.name} fixture_group={check.fixture_group} failed in {format_duration(elapsed)}",
+                file=sys.stderr,
+            )
+        else:
+            elapsed = time.perf_counter() - start
+            print(
+                f"[{index}/{total}] surface={check.name} fixture_group={check.fixture_group} passed in {format_duration(elapsed)}",
+                file=sys.stderr,
+            )
+
+    total_elapsed = time.perf_counter() - suite_start
+    if failures:
+        print("cli contract failures:", file=sys.stderr)
+        for check, elapsed, exc in failures:
+            print(
+                f"- surface={check.name} fixture_group={check.fixture_group} duration={format_duration(elapsed)}: {exc}",
+                file=sys.stderr,
+            )
+        print(f"cli contract checks failed in {format_duration(total_elapsed)}", file=sys.stderr)
+        return 1
+    print(f"cli contract surfaces passed in {format_duration(total_elapsed)}", file=sys.stderr)
+    return 0
 
 
 def run_json(args: list[str], *, expect: int | None = None) -> tuple[int, dict[str, Any]]:
@@ -2381,7 +2483,7 @@ def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
         raise AssertionError("PR merged alone negative fixture must block closeout until issue and Project closeout evidence are present")
 
 
-def main() -> int:
+def run_aggregate_cli_contract() -> None:
     _, help_payload = run_json(["help", "--json"], expect=0)
     matrix = {entry["command"]: entry for entry in help_payload["commands"]}
     commands = set(matrix)
@@ -4157,7 +4259,35 @@ def main() -> int:
         assert_metadata_only_adoption_contract(tmp)
 
     print("cli contract checks passed")
-    return 0
+
+
+def available_surface_checks() -> tuple[SurfaceCheck, ...]:
+    return (
+        SurfaceCheck(
+            name="aggregate",
+            fixture_group="check-cli-contract",
+            run=run_aggregate_cli_contract,
+        ),
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    checks = available_surface_checks()
+    args = parse_args(sys.argv[1:] if argv is None else argv)
+    if args.list_surfaces:
+        for check in checks:
+            print(f"{check.name}\t{check.fixture_group}")
+        return 0
+    try:
+        selected = selected_surface_checks(
+            checks,
+            surfaces=args.surfaces,
+            fixture_groups=args.fixture_groups,
+        )
+    except ValueError as exc:
+        print(f"cli contract surface selection failed: {exc}", file=sys.stderr)
+        return 2
+    return run_surface_checks(selected)
 
 
 if __name__ == "__main__":
