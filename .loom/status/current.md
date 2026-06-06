@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1269.json
 - Validation Entry: python3 tools/py_compile_clean.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --list-surfaces; python3 tools/check_cli_contract.py --surface missing; python3 tools/check_cli_contract.py --surface aggregate; PR metadata preflight; hosted checks; controlled merge gate.
 - Closing Condition: PR #1334 is merged through controlled merge, issue #1269 is closed, and post-merge closeout consumes PR, issue, branch, head, target-main, review, and validation evidence.
-- Current Checkpoint: merge
-- Current Stop: PR #1334 is open at head b62a77a1d11549f847bf50692ed664076e9462f4 after implementation, WI-1269 carrier sync, PR body readback, metadata preflight, build checkpoint, and authored implementation review were recorded. Local PR gate consumed review approval but required this merge checkpoint carrier update before host merge.
-- Next Step: Rerun local PR gate, wait for hosted checks, then execute controlled merge and post-merge closeout for #1269 only.
+- Current Checkpoint: closed_out
+- Current Stop: Post-merge closeout consumed: PR #1334 is merged, issue #1269 is closed as completed, stale closed blocker edges from #1266 and #1268 were removed, and reconciliation audit now passes with no findings.
+- Next Step: None; WI-1269 post-merge closeout is consumed. Follow-up split issues #1270-#1274 remain open and out of scope.
 - Blockers: None
-- Latest Validation Summary: Pre-carrier implementation validation on 2026-06-06: `python3 tools/py_compile_clean.py tools/check_cli_contract.py` passed; `python3 tools/check_cli_contract.py --list-surfaces` listed `aggregate	check-cli-contract`; `python3 tools/check_cli_contract.py --surface missing` exited 2 with unknown surface selection failure; `python3 tools/check_cli_contract.py --surface aggregate` passed with `surface=aggregate fixture_group=check-cli-contract` in 193.12s. PR metadata preflight passed for PR #1334 body/readback at head b1d085b79587e46fefcbdfc3f1d39062e7fecadb.
-- Recovery Boundary: Do not handle #1270-#1274, #1276-#1280, or unrelated regression surface splits. Do not write `/Users/mc/dev/Loom` main.
-- Current Lane: implementation-merge-ready
+- Latest Validation Summary: Post-merge closeout evidence on 2026-06-06: PR #1334 state MERGED at 2026-06-06T09:19:42Z, head 29c4f6931c77d0393fd5b1d257938c3adf3ceb79, merge commit 8519ad6fb28b3fde44af765996b7e420ee39775c contained in origin/main; issue #1269 CLOSED at 2026-06-06T10:34:57Z with closeout comment https://github.com/MC-and-his-Agents/Loom/issues/1269#issuecomment-4638262459; GitHub native blockedBy edges to closed #1266/#1268 removed by removeBlockedBy GraphQL mutation; reconciliation audit passed with no findings; closeout check consumed retained review .loom/reviews/WI-1269.json, hosted required checks demo-bootstrap/loom-check/loom-pr-merge-gate/py-compile/repo-local-cli, suite not_applicable closeout gate, and PR merge backlink.
+- Recovery Boundary: Closeout-only for #1269 / PR #1334. Do not handle #1270-#1274, #1276-#1280, or unrelated regression surface splits. Do not write /Users/mc/dev/Loom main.
+- Current Lane: post-merge-closeout-consumed
 
 ## Runtime Evidence
 
