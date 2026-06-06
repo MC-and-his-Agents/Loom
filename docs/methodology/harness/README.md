@@ -49,6 +49,8 @@
   - 定义 execution breakdown unit 如何由 GitHub issue、Project item、checklist、`tasks.md`、external tracker 或 `not_applicable` 承接，并保护 `Work Item` truth
 - [gate-chain.md](./gate-chain.md)
   - 定义 implementation review、`merge-ready`、`controlled merge`、`closeout` 的强前置消费链
+- [tiered-gate-consumption-contract.md](./tiered-gate-consumption-contract.md)
+  - 定义治理强度字段、`suite_path: not_applicable` 与 fail-closed gate 消费合同
 - `checkpoint-model.md`
   - 定义 `admission` / `build` checkpoint 的输入、输出、失败语义与回退去向
 - [workspace-model.md](./workspace-model.md)
