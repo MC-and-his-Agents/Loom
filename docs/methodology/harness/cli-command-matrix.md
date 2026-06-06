@@ -94,7 +94,15 @@ For #1229, the contract now reserves an explicit idle repository state for these
 - `loom status`
   - may render repository execution state `idle` without inventing an active Work Item
 
-This batch does not add new sync commands, terminal metadata writers, or repair/apply flows. `workspace retire` remains local-only, and carrier closeout sync stays a later Work Item.
+`workspace retire` remains local-only. Versioned terminal carrier updates use the explicit `carrier closeout-sync` command so local cleanup, host closeout sync, and repo carrier closeout sync do not share an ambiguous command name.
+
+## Carrier Commands
+
+```text
+loom carrier closeout-sync
+```
+
+`carrier closeout-sync` writes structured terminal closeout metadata to versioned `.loom/progress/<item>.md` carriers only under explicit `--apply` semantics. Its default dry-run emits the planned carrier diff and never mutates GitHub, Project, PR, issue, worktree, or other host state.
 
 ## Delivery Commands
 
@@ -136,7 +144,7 @@ loom handoff
 loom retire
 ```
 
-`story`, `build`, `pre-review`, and `handoff` wrap the existing `loom_flow.py flow` runtime and preserve structured JSON. `spec` and `plan` expose the expected `.loom/specs/<item>/` locators and fail closed when authoring carriers are absent. `closeout` wraps the closeout check surface and does not close host objects. `retire` exposes a non-mutating handoff / cleanup contract and points callers to `workspace retire` for explicit worksite lifecycle handling.
+`story`, `build`, `pre-review`, and `handoff` wrap the existing `loom_flow.py flow` runtime and preserve structured JSON. `spec` and `plan` expose the expected `.loom/specs/<item>/` locators and fail closed when authoring carriers are absent. `closeout` wraps the closeout check surface and does not close host objects. `retire` exposes a non-mutating handoff / cleanup contract and points callers to `workspace retire` for explicit worksite lifecycle handling; it does not write terminal carrier metadata.
 
 ## Reserved Phase Commands
 

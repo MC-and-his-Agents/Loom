@@ -89,6 +89,15 @@ TERMINAL_CHECKPOINTS = {
     "archived",
 }
 
+TERMINAL_CLOSEOUT_STATES = {
+    "not_applicable",
+    "absorbed",
+    "closed_out",
+    "merged",
+    "retired",
+    "deferred",
+}
+
 RUNTIME_EVIDENCE_FIELDS = (
     "run_entry",
     "logs_entry",
@@ -528,7 +537,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
 
     carrier = subparsers.add_parser("carrier", help="Refresh Loom-owned carrier metadata")
-    carrier.add_argument("operation", choices=("refresh",))
+    carrier.add_argument("operation", choices=("refresh", "closeout-sync"))
     carrier.add_argument("--target", required=True, help="Target repository root")
     carrier.add_argument("--item", help="Expected current item id")
     carrier.add_argument(
@@ -538,6 +547,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     carrier.add_argument("--dry-run", action="store_true", default=True, help="Preview refresh actions without writing files; this is the default")
     carrier.add_argument("--write", dest="dry_run", action="store_false", help="Write Loom-owned carrier metadata refreshes")
+    carrier.add_argument("--apply", dest="dry_run", action="store_false", help="Apply explicit versioned carrier closeout metadata writes")
+    carrier.add_argument("--terminal-state", choices=tuple(sorted(TERMINAL_CLOSEOUT_STATES)), help="Terminal closeout state to write")
+    carrier.add_argument("--issue", help="Issue locator or number bound to terminal closeout")
+    carrier.add_argument("--pr", help="PR locator or number bound to terminal closeout")
+    carrier.add_argument("--merge-commit", help="Merge commit SHA bound to terminal closeout")
+    carrier.add_argument("--target-branch", help="Target branch containing the merge commit")
+    carrier.add_argument("--closed-at", help="Closeout timestamp or not_applicable")
+    carrier.add_argument("--evidence-locator", help="Repo or host locator for closeout evidence")
 
     host_binding = subparsers.add_parser("host-binding", help="Validate or inspect host issue, PR, branch, SHA, Project, and dependency bindings")
     host_binding.add_argument("operation", choices=("validate", "inspect"))
@@ -13049,8 +13066,114 @@ def carrier_refresh_payload(target_root: Path, output_relative: str, expected_it
     }
 
 
+def terminal_state_from_checkpoint(checkpoint: str) -> str | None:
+    normalized = normalize_checkpoint(checkpoint)
+    if normalized in {"closed", "done"}:
+        return "closed_out"
+    if normalized == "merged":
+        return "merged"
+    if normalized == "retired":
+        return "retired"
+    if normalized == "archived":
+        return "deferred"
+    return None
+
+
+def render_terminal_closeout_metadata(metadata: dict[str, str]) -> list[str]:
+    return [
+        "## Terminal Closeout Metadata",
+        "",
+        f"- Terminal State: {metadata['terminal_state']}",
+        f"- Issue: {metadata['issue']}",
+        f"- PR: {metadata['pr']}",
+        f"- Merge Commit: {metadata['merge_commit']}",
+        f"- Target Branch: {metadata['target_branch']}",
+        f"- Closed At: {metadata['closed_at']}",
+        f"- Evidence Locator: {metadata['evidence_locator']}",
+    ]
+
+
+def write_terminal_closeout_metadata(path: Path, metadata: dict[str, str]) -> None:
+    text = path.read_text(encoding="utf-8")
+    rendered = "\n".join(render_terminal_closeout_metadata(metadata)).rstrip() + "\n"
+    pattern = re.compile(r"(?ms)^## Terminal Closeout Metadata\n\n.*?(?=^## |\Z)")
+    if pattern.search(text):
+        updated = pattern.sub(rendered, text, count=1)
+    else:
+        updated = text.rstrip() + "\n\n" + rendered
+    path.write_text(updated, encoding="utf-8")
+
+
+def carrier_closeout_sync_payload(target_root: Path, output_relative: str, expected_item: str | None, args: argparse.Namespace) -> dict[str, Any]:
+    context, context_errors = load_context(target_root, output_relative, expected_item)
+    missing_inputs: list[str] = [f"fact-chain: {message}" for message in context_errors]
+    if context_errors:
+        return {
+            "command": "carrier",
+            "operation": "closeout-sync",
+            "schema_version": "loom-carrier-closeout-sync/v1",
+            "result": "block",
+            "summary": "carrier closeout sync could not read the target progress carrier.",
+            "missing_inputs": missing_inputs,
+            "fallback_to": "admission",
+            "dry_run": args.dry_run,
+            "host_mutations": False,
+            "host_actions": [],
+            "versioned_carrier_updates": [],
+        }
+    assert context
+    inferred_state = terminal_state_from_checkpoint(context["current_checkpoint"])
+    terminal_state = args.terminal_state or inferred_state
+    if terminal_state is None:
+        missing_inputs.append("terminal-state is required when current checkpoint is not terminal")
+    metadata = {
+        "terminal_state": terminal_state or "not_applicable",
+        "issue": args.issue or "not_applicable",
+        "pr": args.pr or "not_applicable",
+        "merge_commit": args.merge_commit or "not_applicable",
+        "target_branch": args.target_branch or "not_applicable",
+        "closed_at": args.closed_at or "not_applicable",
+        "evidence_locator": args.evidence_locator or "not_applicable",
+    }
+    if metadata["terminal_state"] in {"closed_out", "merged", "absorbed"}:
+        for field_name in ("issue", "pr", "merge_commit", "target_branch", "closed_at", "evidence_locator"):
+            if metadata[field_name] == "not_applicable":
+                missing_inputs.append(f"{field_name.replace('_', '-')} is required for terminal state `{metadata['terminal_state']}`")
+    update = {
+        "path": relative_to_root(context["recovery_path"], target_root),
+        "kind": "terminal-closeout-metadata",
+        "planned_action": "write" if not args.dry_run else "preview",
+        "metadata": metadata,
+    }
+    if not args.dry_run and not missing_inputs:
+        write_terminal_closeout_metadata(context["recovery_path"], metadata)
+    result = "block" if missing_inputs else "pass"
+    return {
+        "command": "carrier",
+        "operation": "closeout-sync",
+        "schema_version": "loom-carrier-closeout-sync/v1",
+        "result": result,
+        "summary": (
+            "carrier closeout sync wrote structured terminal metadata to versioned progress carriers."
+            if result == "pass" and not args.dry_run
+            else "carrier closeout sync dry-run produced versioned progress carrier updates."
+            if result == "pass"
+            else "carrier closeout sync is blocked until terminal metadata inputs are explicit."
+        ),
+        "missing_inputs": missing_inputs,
+        "fallback_to": None if result == "pass" else "closeout",
+        "dry_run": args.dry_run,
+        "host_mutations": False,
+        "host_actions": [],
+        "versioned_carrier_updates": [update],
+        "item": {"id": context["item_id"]},
+    }
+
+
 def handle_carrier(args: argparse.Namespace) -> int:
     target_root = Path(args.target).expanduser().resolve()
+    if args.operation == "closeout-sync":
+        return emit(carrier_closeout_sync_payload(target_root, args.output, args.item, args))
     return emit(carrier_refresh_payload(target_root, args.output, args.item, dry_run=args.dry_run))
 
 

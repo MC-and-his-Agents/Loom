@@ -139,6 +139,7 @@ closeout truth 与 workspace retire 必须分层：
 - 版本化 closeout truth 必须在 merge 前通过 review / merge-ready / closeout basis 进入可审查载体
 - merge 后 `closeout check|sync` 只消费 PR、merge commit、target branch、issue、Project 与 repo-authored artifacts 的一致性
 - `workspace retire` 只做 local cleanup / runtime evidence，不写 `.loom/progress/**` 或 `.loom/status/current.md`
+- `carrier closeout-sync` 是唯一用于写入结构化 terminal closeout metadata 的版本化 carrier sync 入口；默认 dry-run，只有显式 `--apply` 才写 `.loom/progress/<item>.md`
 - post-merge retire 不得制造新的需要再开 PR 合入 main 的 carrier diff
 
 这里的 `absorbed` 只表示 host merge 后可证明的实现吸收结论，不等于 `closed_out`。
@@ -172,6 +173,8 @@ closeout truth 与 workspace retire 必须分层：
 `closeout sync` 仍保持 closeout 控制面对齐入口，但不得绕过已显式暴露的 reconciliation 结果。
 
 `closeout sync` 也只允许返回 `pass` 或 `block`。若同步前置不满足，或同步后仍无法把控制面对齐，必须继续显式指向 `reconciliation-sync`、`manual-reconciliation` 或 `merge`，而不是产出新的 host action 结果词表。
+
+`carrier closeout-sync` 不得调用 GitHub、关闭 issue、修改 Project、合并 PR 或删除 worktree。它只消费调用者显式提供的 terminal closeout metadata，并产出 reviewable repo diff。
 
 若 parent issue 通过 child issue 的 `closed_out` / `absorbed` 结果完成自身 closeout 判断，`sync` 只负责把这一已成立结论写回控制面，不替代 parent 对剩余缺口的判断。
 
