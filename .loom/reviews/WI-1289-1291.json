@@ -7,7 +7,7 @@
   "reviewer": "R2-T2c",
   "authored_at": "2026-06-06T19:21:00Z",
   "reviewed_head": "6d3e6af2003d281e1c1ef8083c167eb8fdfe85ff",
-  "reviewed_validation_summary": "Terminal closeout readback carrier validation passed on 2026-06-06: PR #1342 readback MERGED at 2fd18f033592d5e0377e6e561967afa0fd7b16f0; origin/main points at 2fd18f033592d5e0377e6e561967afa0fd7b16f0; git diff --check OK; carrier refresh dry-run OK; shadow-parity --surface all --blocking OK; issues #1289/#1291 CLOSED.",
+  "reviewed_validation_summary": "Post-merge readback on 2026-06-06: PR #1342 is MERGED at 2fd18f033592d5e0377e6e561967afa0fd7b16f0; origin/main points at 2fd18f033592d5e0377e6e561967afa0fd7b16f0; local tree matches origin/main; git diff --check OK; carrier refresh dry-run OK; issues #1289/#1291 remain CLOSED.",
   "fallback_to": null,
   "semantic_review_disposition": {
     "status": "passed"
