@@ -1,0 +1,47 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1269",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1269 code review allow at PR #1334 head 647d75e2: diff is limited to tools/check_cli_contract.py and WI-1269 carriers. The runner adds named surface selection, fixture-group filtering, list output, progress/timing, and failure grouping while preserving the existing aggregate check body. Local py_compile, list-surfaces, missing-surface failure, aggregate surface, fact-chain, build checkpoint, and PR metadata preflight passed.",
+  "reviewer": "codex-worker",
+  "reviewed_head": "647d75e21c9929413f1014358930c983ed2fd4b7",
+  "reviewed_validation_summary": "Pre-carrier implementation validation on 2026-06-06: `python3 tools/py_compile_clean.py tools/check_cli_contract.py` passed; `python3 tools/check_cli_contract.py --list-surfaces` listed `aggregate\tcheck-cli-contract`; `python3 tools/check_cli_contract.py --surface missing` exited 2 with unknown surface selection failure; `python3 tools/check_cli_contract.py --surface aggregate` passed with `surface=aggregate fixture_group=check-cli-contract` in 193.12s. PR metadata preflight passed for PR #1334 body/readback at head b1d085b79587e46fefcbdfc3f1d39062e7fecadb.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1269.md",
+    "recovery_entry": ".loom/progress/WI-1269.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
