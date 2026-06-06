@@ -17,6 +17,8 @@
   - `EXT-0001` `EXT-0002` `EXT-0006` `EXT-0023`
 - [change-governance-intensity.md](./change-governance-intensity.md)
   - `#1315`
+- [loom-governance-intensity-mapping.md](./loom-governance-intensity-mapping.md)
+  - `#1316`
 - [review-model.md](./review-model.md)
   - `EXT-0004` `EXT-0014` `EXT-0018`
 - [github-delivery-funnel.md](./github-delivery-funnel.md)

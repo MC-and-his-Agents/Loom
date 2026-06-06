@@ -193,7 +193,7 @@ Loom 当前日常执行 CLI 至少提供以下入口：
 post-merge retire 只能说明当前本地现场不再继续执行。
 
 `idle` / `no_active_item` repository state 不由 `workspace retire` 写入版本化 carrier。
-若仓库后续需要把 host-complete terminal item 收敛为 versioned idle fact-chain，必须走独立的 carrier closeout / sync 入口；该入口不在 #1229 范围内。
+若仓库需要把 host-complete terminal item 收敛为 versioned terminal carrier，必须走独立的 `carrier closeout-sync` 入口；该入口只写版本化 progress carrier，不做 host closeout sync。
 
 ### 6.2 成功语义
 

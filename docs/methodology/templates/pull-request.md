@@ -62,3 +62,9 @@ Loom 支持结构化 PR 模板，但必须满足：
 - 写入前对渲染文件运行 `loom pr metadata-preflight --body-file <rendered> --surface <surface>`。
 - 写入后读取 GitHub PR body 到独立文件，再运行 `loom pr metadata-preflight --body-file <rendered> --compare-body-file <readback> --surface <surface>`；该检查必须比较 machine block 的 locator/hash，并在 machine block 漂移时 fail closed。
 - `--body-file` / `--compare-body-file` 只是 render/edit preflight evidence，不能替代 Work Item、review、merge-ready、closeout 或 docs/source truth。
+
+若 PR machine carrier 承载治理强度字段，它只能作为 gate 消费的结构化输入。
+字段语义以
+[tiered-gate-consumption-contract.md](../harness/tiered-gate-consumption-contract.md)
+为准；PR 摘要、自由 Markdown、CI 状态或 GitHub review comment 都不得替代
+Work Item、review record、merge-ready、release / no-release 或 closeout truth。

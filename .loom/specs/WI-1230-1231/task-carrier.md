@@ -1,0 +1,6 @@
+# Task Carrier
+
+| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1230 | issue open / branch active / PR pending | in_progress | primary | .loom/work-items/WI-1230-1231.md | .loom/specs/WI-1230-1231/plan.md#unit-1230-terminal-metadata | .loom/specs/WI-1230-1231/spec.md#scenarios | .loom/specs/WI-1230-1231/plan.md#steps | .loom/specs/WI-1230-1231/plan.md#acceptance-mapping | #1230 required work; terminal metadata fields | Recheck issue, PR, head, carrier metadata, and closeout evidence before final closeout. |
+| github_issue | https://github.com/MC-and-his-Agents/Loom/issues/1231 | issue open / branch active / PR pending | in_progress | primary | .loom/work-items/WI-1230-1231.md | .loom/specs/WI-1230-1231/plan.md#unit-1231-command-split | .loom/specs/WI-1230-1231/spec.md#scenarios | .loom/specs/WI-1230-1231/plan.md#steps | .loom/specs/WI-1230-1231/plan.md#acceptance-mapping | #1231 required work; command responsibility split | Recheck issue, PR, head, command boundaries, and closeout evidence before final closeout. |

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import argparse
 import hashlib
 import importlib.util
 import os
@@ -12,9 +13,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
 sys.dont_write_bytecode = True
@@ -79,6 +82,7 @@ REQUIRED_COMMANDS = {
     "init",
     "adopt",
     "route",
+    "carrier closeout-sync",
     "status",
     "fact-chain",
     "profile status",
@@ -133,10 +137,115 @@ REQUIRED_COMMANDS = {
 }
 
 
+@dataclass(frozen=True)
+class SurfaceCheck:
+    name: str
+    fixture_group: str
+    run: Callable[[], None]
+
+
+def format_duration(seconds: float) -> str:
+    return f"{seconds:.2f}s"
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run Loom CLI contract checks.",
+    )
+    parser.add_argument(
+        "--surface",
+        action="append",
+        dest="surfaces",
+        help="Run only the named surface. May be passed more than once.",
+    )
+    parser.add_argument(
+        "--fixture-group",
+        action="append",
+        dest="fixture_groups",
+        help="Run only checks in the named fixture group. May be passed more than once.",
+    )
+    parser.add_argument(
+        "--list-surfaces",
+        action="store_true",
+        help="List available surface names and fixture groups without running checks.",
+    )
+    return parser.parse_args(argv)
+
+
+def selected_surface_checks(
+    checks: tuple[SurfaceCheck, ...],
+    *,
+    surfaces: list[str] | None,
+    fixture_groups: list[str] | None,
+) -> tuple[SurfaceCheck, ...]:
+    selected = checks
+    if surfaces:
+        wanted = set(surfaces)
+        selected = tuple(check for check in selected if check.name in wanted)
+        missing = wanted - {check.name for check in checks}
+        if missing:
+            raise ValueError("unknown surface(s): " + ", ".join(sorted(missing)))
+    if fixture_groups:
+        wanted_groups = set(fixture_groups)
+        selected = tuple(check for check in selected if check.fixture_group in wanted_groups)
+        missing_groups = wanted_groups - {check.fixture_group for check in checks}
+        if missing_groups:
+            raise ValueError("unknown fixture group(s): " + ", ".join(sorted(missing_groups)))
+    if not selected:
+        raise ValueError("surface filters selected no checks")
+    return selected
+
+
+def run_surface_checks(checks: tuple[SurfaceCheck, ...]) -> int:
+    failures: list[tuple[SurfaceCheck, float, Exception]] = []
+    suite_start = time.perf_counter()
+    total = len(checks)
+    for index, check in enumerate(checks, start=1):
+        start = time.perf_counter()
+        print(
+            f"[{index}/{total}] surface={check.name} fixture_group={check.fixture_group} start",
+            file=sys.stderr,
+        )
+        try:
+            check.run()
+        except Exception as exc:
+            elapsed = time.perf_counter() - start
+            failures.append((check, elapsed, exc))
+            print(
+                f"[{index}/{total}] surface={check.name} fixture_group={check.fixture_group} failed in {format_duration(elapsed)}",
+                file=sys.stderr,
+            )
+        else:
+            elapsed = time.perf_counter() - start
+            print(
+                f"[{index}/{total}] surface={check.name} fixture_group={check.fixture_group} passed in {format_duration(elapsed)}",
+                file=sys.stderr,
+            )
+
+    total_elapsed = time.perf_counter() - suite_start
+    if failures:
+        print("cli contract failures:", file=sys.stderr)
+        for check, elapsed, exc in failures:
+            print(
+                f"- surface={check.name} fixture_group={check.fixture_group} duration={format_duration(elapsed)}: {exc}",
+                file=sys.stderr,
+            )
+        print(f"cli contract checks failed in {format_duration(total_elapsed)}", file=sys.stderr)
+        return 1
+    print(f"cli contract surfaces passed in {format_duration(total_elapsed)}", file=sys.stderr)
+    return 0
+
+
 def run_json(args: list[str], *, expect: int | None = None) -> tuple[int, dict[str, Any]]:
+    if args[:2] == ["skills", "check"]:
+        for cache_dir in REPO_ROOT.rglob("__pycache__"):
+            shutil.rmtree(cache_dir)
+    env = os.environ.copy()
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     completed = subprocess.run(
         [sys.executable, str(LOOM), *args],
         cwd=REPO_ROOT,
+        env=env,
         check=False,
         text=True,
         stdout=subprocess.PIPE,
@@ -153,9 +262,12 @@ def run_json(args: list[str], *, expect: int | None = None) -> tuple[int, dict[s
 
 
 def run_flow_json(args: list[str], *, cwd: Path = REPO_ROOT, expect: int | None = None) -> tuple[int, dict[str, Any]]:
+    env = os.environ.copy()
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     completed = subprocess.run(
         [sys.executable, str(REPO_ROOT / "tools" / "loom_flow.py"), *args],
         cwd=cwd,
+        env=env,
         check=False,
         text=True,
         stdout=subprocess.PIPE,
@@ -2534,7 +2646,196 @@ def assert_governance_chain_closeout_fixture(tmp: Path) -> None:
         raise AssertionError("PR merged alone negative fixture must block closeout until issue and Project closeout evidence are present")
 
 
-def main() -> int:
+def write_terminal_carrier_target(target: Path, item: str) -> None:
+    (target / ".loom" / "bootstrap").mkdir(parents=True)
+    (target / ".loom" / "work-items").mkdir(parents=True)
+    (target / ".loom" / "progress").mkdir(parents=True)
+    (target / ".loom" / "status").mkdir(parents=True)
+    goal = "Fixture for explicit carrier closeout sync."
+    scope = "Versioned carrier metadata only; no host mutation."
+    execution_path = "fixture -> carrier closeout-sync"
+    validation_entry = "carrier closeout-sync fixture"
+    closing_condition = "Structured terminal metadata is written only under explicit apply semantics."
+    current_stop = "Fixture terminal closeout can be recorded."
+    next_step = "None."
+    blockers = "None."
+    validation_summary = "Fixture validation passed."
+    recovery_boundary = "Carrier-only closeout fixture."
+    current_lane = "terminal-closeout"
+    work_item = target / ".loom" / "work-items" / f"{item}.md"
+    progress = target / ".loom" / "progress" / f"{item}.md"
+    status = target / ".loom" / "status" / "current.md"
+    work_item.write_text(
+        f"# {item}\n\n"
+        "## Static Facts\n\n"
+        f"- Item ID: {item}\n"
+        f"- Goal: {goal}\n"
+        f"- Scope: {scope}\n"
+        f"- Execution Path: {execution_path}\n"
+        "- Workspace Entry: .\n"
+        f"- Recovery Entry: .loom/progress/{item}.md\n"
+        f"- Review Entry: .loom/reviews/{item}.json\n"
+        f"- Validation Entry: {validation_entry}\n"
+        f"- Closing Condition: {closing_condition}\n\n"
+        "## Associated Artifacts\n\n"
+        f"- `.loom/work-items/{item}.md`\n"
+        f"- `.loom/progress/{item}.md`\n"
+        "- `.loom/status/current.md`\n",
+        encoding="utf-8",
+    )
+    progress.write_text(
+        f"# {item} Progress\n\n"
+        "## Dynamic Facts\n\n"
+        f"- Item ID: {item}\n"
+        "- Current Checkpoint: closed\n"
+        f"- Current Stop: {current_stop}\n"
+        f"- Next Step: {next_step}\n"
+        f"- Blockers: {blockers}\n"
+        f"- Latest Validation Summary: {validation_summary}\n"
+        f"- Recovery Boundary: {recovery_boundary}\n"
+        f"- Current Lane: {current_lane}\n\n"
+        "## Execution Ledger\n\n"
+        "- Ledger Binding: recovery_entry\n"
+        "- Plan Locator: not_applicable\n"
+        "- Acceptance Locator: not_applicable\n"
+        "- Validation Evidence Locator: not_applicable\n"
+        "- Handoff Notes Locator: not_applicable\n"
+        "- Evidence Freshness: current\n",
+        encoding="utf-8",
+    )
+    status.write_text(
+        "# Current Status\n\n"
+        "## Derived Fact Chain View\n\n"
+        f"- Item ID: {item}\n"
+        f"- Goal: {goal}\n"
+        f"- Scope: {scope}\n"
+        f"- Execution Path: {execution_path}\n"
+        "- Workspace Entry: .\n"
+        f"- Recovery Entry: .loom/progress/{item}.md\n"
+        f"- Review Entry: .loom/reviews/{item}.json\n"
+        f"- Validation Entry: {validation_entry}\n"
+        f"- Closing Condition: {closing_condition}\n"
+        "- Current Checkpoint: closed\n"
+        f"- Current Stop: {current_stop}\n"
+        f"- Next Step: {next_step}\n"
+        f"- Blockers: {blockers}\n"
+        f"- Latest Validation Summary: {validation_summary}\n"
+        f"- Recovery Boundary: {recovery_boundary}\n"
+        f"- Current Lane: {current_lane}\n\n"
+        "## Runtime Evidence\n\n"
+        "- Run Entry: not_applicable\n"
+        "- Logs Entry: not_applicable\n"
+        "- Diagnostics Entry: not_applicable\n"
+        "- Verification Entry: not_applicable\n"
+        "- Lane Entry: not_applicable\n\n"
+        "## Sources\n\n"
+        f"- Static Truth: .loom/work-items/{item}.md\n"
+        f"- Dynamic Truth: .loom/progress/{item}.md\n"
+        "- Locator Truth: .loom/bootstrap/init-result.json\n"
+        "- Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .\n",
+        encoding="utf-8",
+    )
+    (target / ".loom" / "bootstrap" / "init-result.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "loom-init-output/v1",
+                "fact_chain": {
+                    "mode": "work-item + recovery-entry + derived status-surface",
+                    "read_entry": "python3 .loom/bin/loom_init.py fact-chain --target .",
+                    "entry_points": {
+                        "current_item_id": item,
+                        "work_item": f".loom/work-items/{item}.md",
+                        "recovery_entry": f".loom/progress/{item}.md",
+                        "status_surface": ".loom/status/current.md",
+                    },
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def assert_carrier_closeout_sync_contract(tmp: Path) -> None:
+    target = tmp / "terminal-carrier"
+    target.mkdir()
+    item = "WI-terminal"
+    write_terminal_carrier_target(target, item)
+    progress = target / ".loom" / "progress" / f"{item}.md"
+    before = progress.read_text(encoding="utf-8")
+    _, dry_run = run_json(
+        [
+            "carrier",
+            "closeout-sync",
+            "--target",
+            str(target),
+            "--item",
+            item,
+            "--issue",
+            "1230",
+            "--pr",
+            "1299",
+            "--merge-commit",
+            "abc123",
+            "--target-branch",
+            "main",
+            "--closed-at",
+            "2026-06-06T00:00:00Z",
+            "--evidence-locator",
+            "PR #1299 closeout",
+            "--json",
+        ],
+        expect=0,
+    )
+    if (
+        dry_run.get("command") != "carrier closeout-sync"
+        or dry_run.get("wrapped_command") != "carrier"
+        or dry_run.get("operation") != "closeout-sync"
+        or dry_run.get("host_mutations") is not False
+        or dry_run.get("host_actions") != []
+        or progress.read_text(encoding="utf-8") != before
+    ):
+        raise AssertionError("carrier closeout-sync dry-run contract drifted")
+    _, applied = run_json(
+        [
+            "carrier",
+            "closeout-sync",
+            "--target",
+            str(target),
+            "--item",
+            item,
+            "--issue",
+            "1230",
+            "--pr",
+            "1299",
+            "--merge-commit",
+            "abc123",
+            "--target-branch",
+            "main",
+            "--closed-at",
+            "2026-06-06T00:00:00Z",
+            "--evidence-locator",
+            "PR #1299 closeout",
+            "--apply",
+            "--json",
+        ],
+        expect=0,
+    )
+    text = progress.read_text(encoding="utf-8")
+    if (
+        applied.get("result") != "pass"
+        or applied.get("dry_run") is not False
+        or applied.get("host_mutations") is not False
+        or applied.get("host_actions") != []
+        or "## Terminal Closeout Metadata" not in text
+        or "- Terminal State: closed_out" not in text
+        or "- Issue: 1230" not in text
+        or "- PR: 1299" not in text
+    ):
+        raise AssertionError("carrier closeout-sync apply did not write structured terminal metadata")
+
+def run_aggregate_cli_contract() -> None:
     _, help_payload = run_json(["help", "--json"], expect=0)
     matrix = {entry["command"]: entry for entry in help_payload["commands"]}
     commands = set(matrix)
@@ -2618,6 +2919,8 @@ def main() -> int:
         raise AssertionError("suite carrier inspect must be declared in help matrix for #1131")
     if matrix["suite carrier validate"]["status"] != "implemented" or matrix["suite carrier validate"]["domain"] != "suite":
         raise AssertionError("suite carrier validate must be declared in help matrix for #1131")
+    if matrix["carrier closeout-sync"]["status"] != "implemented" or matrix["carrier closeout-sync"]["domain"] != "harness":
+        raise AssertionError("carrier closeout-sync must be declared as a harness command for #1231")
 
     _, version_payload = run_json(["version", "--json"], expect=0)
     if version_payload["result"] != "pass" or not version_payload["versions"]["repo_version"]:
@@ -4271,6 +4574,7 @@ def main() -> int:
         assert_docs_contract_suite_not_applicable_gate_contract(tmp)
         assert_semantic_review_disposition_pr_gate_fixture(tmp)
         assert_governance_chain_closeout_fixture(tmp)
+        assert_carrier_closeout_sync_contract(tmp)
         _, checkpoint_admission = run_json(["checkpoint", "admission", "--target", str(REPO_ROOT), "--item", "WI-915", "--json"])
         if checkpoint_admission["command"] != "checkpoint admission" or checkpoint_admission.get("checkpoint") != "admission":
             raise AssertionError("checkpoint admission did not wrap checkpoint JSON")
@@ -4310,7 +4614,35 @@ def main() -> int:
         assert_metadata_only_adoption_contract(tmp)
 
     print("cli contract checks passed")
-    return 0
+
+
+def available_surface_checks() -> tuple[SurfaceCheck, ...]:
+    return (
+        SurfaceCheck(
+            name="aggregate",
+            fixture_group="check-cli-contract",
+            run=run_aggregate_cli_contract,
+        ),
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    checks = available_surface_checks()
+    args = parse_args(sys.argv[1:] if argv is None else argv)
+    if args.list_surfaces:
+        for check in checks:
+            print(f"{check.name}\t{check.fixture_group}")
+        return 0
+    try:
+        selected = selected_surface_checks(
+            checks,
+            surfaces=args.surfaces,
+            fixture_groups=args.fixture_groups,
+        )
+    except ValueError as exc:
+        print(f"cli contract surface selection failed: {exc}", file=sys.stderr)
+        return 2
+    return run_surface_checks(selected)
 
 
 if __name__ == "__main__":

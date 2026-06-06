@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1316-1317",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1316-1317 spec gate approves the documented Suite path: not_applicable decision for this docs-only governance mapping and tiered gate consumption contract. The approval is limited to methodology docs, landing README links, and WI readiness carriers; it does not approve or imply runtime, parser, fixture, generated .loom/bin, skills distribution, release behavior, AGENTS.md, or downstream #1319/#1321/#1322/#1323/#1324 implementation changes.",
+  "reviewer": "codex-worker-R2-T1",
+  "reviewed_head": "fc5317a38d413bf4323e9a621cd0410faee18fa5",
+  "reviewed_validation_summary": "2026-06-06 local build validation passed before review: `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` returned `pass`; `python3 tools/loom.py suite validate --target . --item WI-1316-1317 --json` returned `not_applicable` with no missing inputs or blocking gaps and a valid rationale at `.loom/specs/WI-1316-1317/spec.md`; `python3 .loom/bin/loom_flow.py checkpoint build --target . --item WI-1316-1317` returned `pass`. Manual docs contract review found the new Loom mapping does not redefine the #1315 generic model, the gate contract is fail-closed, and #1319/#1321/#1322/#1323/#1324 remain future implementation / validation consumers. Initial worksite confirmation also passed for pwd `/Users/mc/.codex/worktrees/0103/Loom`, branch `work/1316-1317-governance-mapping-gate-contract`, base HEAD `26c1600f4a2872fbca1a3391916f495db55b03eb`, origin/main `26c1600f4a2872fbca1a3391916f495db55b03eb`, issue #1316 OPEN, issue #1317 OPEN, and no existing PR for the branch.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1316-1317.md",
+    "recovery_entry": ".loom/progress/WI-1316-1317.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/.codex/worktrees/0103/Loom/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1316-1317/spec.md",
+    "suite_plan": null,
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}
