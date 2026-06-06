@@ -6689,6 +6689,19 @@ def allowed_post_review_carrier_paths(context: dict[str, Any], *review_paths: st
     return allowed
 
 
+def allowed_terminal_closeout_carrier_paths(context: dict[str, Any], *review_paths: str) -> set[str]:
+    allowed = allowed_post_review_carrier_paths(context, *review_paths)
+    item_id = context.get("item_id")
+    if isinstance(item_id, str) and item_id.strip():
+        allowed.update(
+            {
+                f".loom/specs/{item_id}/task-carrier.md",
+                f".loom/work-items/{item_id}.md",
+            }
+        )
+    return allowed
+
+
 def formal_spec_path(context: dict[str, Any]) -> str | None:
     preferred = f".loom/specs/{context['item_id']}/spec.md"
     if (context["target_root"] / preferred).exists():
@@ -13733,6 +13746,22 @@ def pr_body_mentions_item(body: Any, item_id: str) -> bool:
     return bool(re.search(rf"(?<![A-Z0-9-]){re.escape(item_id)}(?![A-Z0-9-])", body))
 
 
+def pr_body_machine_surface(body: Any) -> str | None:
+    if not isinstance(body, str):
+        return None
+    for block in pr_metadata_html_comment_blocks(body, "loom:repo-pr-metadata"):
+        try:
+            envelope = json.loads(block["raw"])
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(envelope, dict):
+            continue
+        surface = envelope.get("surface")
+        if isinstance(surface, str) and surface.strip():
+            return surface.strip()
+    return None
+
+
 def pr_metadata_block_locator(body: str, start: int, end: int, marker: str) -> dict[str, Any]:
     raw_excerpt = body[start:end]
     return {
@@ -15054,6 +15083,7 @@ def pr_gate_payload(
         missing_inputs.extend(f"pr: {message}" for message in pr_errors)
 
     body_item = pr_work_item_from_body(pr_payload.get("body") if isinstance(pr_payload, dict) else None)
+    body_surface = pr_body_machine_surface(pr_payload.get("body") if isinstance(pr_payload, dict) else None)
     effective_item = expected_item or body_item
     if expected_item and body_item and expected_item != body_item:
         missing_inputs.append(f"PR body Work Item `{body_item}` does not match expected `{expected_item}`")
@@ -15118,6 +15148,12 @@ def pr_gate_payload(
         "head_binding": None,
         "semantic_review_disposition": None,
     }
+    terminal_closeout_consumption: dict[str, Any] = {
+        "result": "not_applicable",
+        "summary": "PR gate is not evaluating a terminal closeout carrier PR.",
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
     timing_review_record: dict[str, Any] | None = None
     timing_review_path: str | None = None
     if context:
@@ -15152,13 +15188,62 @@ def pr_gate_payload(
                 head_binding=head_binding_payload,
                 current_validation_summary=context.get("latest_validation_summary"),
             )
+            terminal_closeout_binding, terminal_closeout_binding_errors = review_head_binding_for_head(
+                target_root,
+                reviewed_head=review_record.get("reviewed_head"),
+                target_head=pr_head,
+                allowed_paths=allowed_terminal_closeout_carrier_paths(context, review_path),
+            )
+            merge_checkpoint_missing = [
+                str(message)
+                for message in merge_checkpoint.get("missing_inputs", [])
+                if str(message).strip()
+            ]
+            terminal_closeout_missing: list[str] = []
+            if body_surface != "closeout":
+                terminal_closeout_missing.append("PR metadata surface is not closeout")
+            if merge_checkpoint.get("result") != "fallback" or merge_checkpoint.get("fallback_to") not in {"closed", "closed_out"}:
+                terminal_closeout_missing.append("merge checkpoint is not terminal closeout")
+            if normalize_checkpoint(str(context.get("current_checkpoint", ""))) not in {"closed", "closed_out", "done"}:
+                terminal_closeout_missing.append("current checkpoint is not terminal closed_out")
+            if terminal_closeout_binding.get("status") not in {"fresh", "carrier-only"} or terminal_closeout_binding.get("stale") is True:
+                terminal_closeout_missing.extend(terminal_closeout_binding_errors or ["terminal closeout carrier drift is not review-safe"])
+            non_review_checkpoint_missing = [
+                message
+                for message in merge_checkpoint_missing
+                if "review artifact is stale" not in message and "reviewed_head" not in message and "head binding" not in message
+            ]
+            terminal_closeout_missing.extend(non_review_checkpoint_missing)
+            terminal_closeout_consumption = {
+                "result": "pass" if not terminal_closeout_missing else "block",
+                "summary": (
+                    "terminal closeout carrier PR consumed retained implementation review and closeout-only carrier drift."
+                    if not terminal_closeout_missing
+                    else "terminal closeout carrier PR is not eligible to bypass current-head implementation review binding."
+                ),
+                "missing_inputs": terminal_closeout_missing,
+                "fallback_to": None if not terminal_closeout_missing else "review",
+                "surface": body_surface,
+                "checkpoint": context.get("current_checkpoint"),
+                "head_binding": terminal_closeout_binding,
+                "retained_review": {
+                    "path": review_path,
+                    "reviewed_head": review_record.get("reviewed_head"),
+                    "decision": review_record.get("decision"),
+                    "kind": review_kind,
+                },
+                "allowed_paths_policy": "terminal closeout carrier paths only; does not apply to merge-ready implementation PRs",
+            }
             approval_errors = [*review_errors, *head_binding_errors, *disposition_errors]
+            terminal_closeout_pass = terminal_closeout_consumption.get("result") == "pass"
             approval_status = (
                 "approved"
                 if review_record.get("decision") == "allow"
                 and not approval_errors
                 and review_kind in IMPLEMENTATION_REVIEW_KINDS
                 and disposition.get("consumable") is True
+                else "terminal_closeout_retained"
+                if terminal_closeout_pass
                 else "not_approved"
             )
             review_approval = {
@@ -15172,11 +15257,12 @@ def pr_gate_payload(
                 "semantic_review_disposition": disposition,
                 "missing_inputs": approval_errors,
             }
-            missing_inputs.extend(str(message) for message in approval_errors)
+            if not terminal_closeout_pass:
+                missing_inputs.extend(str(message) for message in approval_errors)
         terminal_closed_checkpoint = (
             merge_checkpoint.get("result") == "fallback"
-            and merge_checkpoint.get("fallback_to") == "closed"
-            and not merge_checkpoint.get("missing_inputs")
+            and merge_checkpoint.get("fallback_to") in {"closed", "closed_out"}
+            and terminal_closeout_consumption.get("result") == "pass"
         )
         if merge_checkpoint.get("result") in {"block", "fallback"} and not terminal_closed_checkpoint:
             missing_inputs.extend(str(message) for message in merge_checkpoint.get("missing_inputs", []))
@@ -15259,10 +15345,13 @@ def pr_gate_payload(
             for key in ("statusCheckRollup", "checks", "latestReviews", "reviewDecision", "mergeStateStatus")
         )
     if ci_or_host_review_signal_present and review_approval.get("status") != "approved":
-        missing_inputs.append("ci-only or host-review signal cannot satisfy semantic_review_disposition")
-        for category in ("ci_only_bypass", "ci_only_merge_bypass"):
-            if category not in failure_taxonomy:
-                failure_taxonomy.append(category)
+        if review_approval.get("status") == "terminal_closeout_retained":
+            pass
+        else:
+            missing_inputs.append("ci-only or host-review signal cannot satisfy semantic_review_disposition")
+            for category in ("ci_only_bypass", "ci_only_merge_bypass"):
+                if category not in failure_taxonomy:
+                    failure_taxonomy.append(category)
     if missing_inputs and result == "pass":
         result = "block"
         fallback_to = fallback_to or "build"
@@ -15289,12 +15378,55 @@ def pr_gate_payload(
             "provenance": [],
         }
     )
+    if context and terminal_closeout_consumption.get("result") == "pass":
+        governance_lint = {
+            "schema_version": GOVERNANCE_LINT_STATUS_SCHEMA,
+            "surface": "closeout",
+            "result": "pass",
+            "result_summary": "terminal closeout carrier PR retains implementation review evidence without promoting it to current-head merge-ready approval.",
+            "blocking_results": [],
+            "advisory_results": [],
+            "repo_specific_results": [],
+            "not_applicable_results": [
+                {
+                    "schema_version": GOVERNANCE_LINT_RESULT_SCHEMA,
+                    "id": "terminal_closeout_retained_review",
+                    "kind": "closeout_retained_review",
+                    "surface": "closeout",
+                    "subject": "work_item.review_entry",
+                    "strength": "not_applicable",
+                    "summary": "Closeout-only carrier drift is terminal and does not replace implementation PR review/head binding.",
+                    "mapped_failure": {
+                        "category": "not_applicable",
+                        "kind": "terminal_closeout",
+                    },
+                    "provenance": {
+                        "source_layer": "authored_truth",
+                        "source_owner": "loom",
+                        "source_locator": context.get("review_entry"),
+                        "source_binding": "work_item.review_entry",
+                        "freshness": "retained",
+                    },
+                    "bindings": {
+                        "item_id": context.get("item_id"),
+                        "head_sha": pr_head,
+                        "reviewed_head_sha": review_approval.get("reviewed_head"),
+                    },
+                    "fallback_to": None,
+                }
+            ],
+            "mapped_failures": [],
+            "provenance": [],
+        }
     return {
         "command": "pr-gate",
         "operation": "check",
         "schema_version": PR_MERGE_GATE_SCHEMA,
         "result": result,
         "summary": (
+            "PR merge gate consumed terminal closeout carrier drift with retained implementation review evidence."
+            if result == "pass" and terminal_closeout_consumption.get("result") == "pass"
+            else
             "PR merge gate found fresh authored semantic review approval for the current PR head."
             if result == "pass"
             else "PR merge gate is blocked or falling back before host merge."
@@ -15324,6 +15456,7 @@ def pr_gate_payload(
         "merge_checkpoint": merge_checkpoint,
         "pr_metadata_preflight": pr_metadata_preflight,
         "post_merge_review_diagnostic": post_merge_review_diagnostic,
+        "terminal_closeout_consumption": terminal_closeout_consumption,
         "governance_lint": governance_lint,
         "host_enforcement": {
             "stable_check_name": PR_MERGE_GATE_CHECK_NAME,
