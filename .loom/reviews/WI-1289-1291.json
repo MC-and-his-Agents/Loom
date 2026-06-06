@@ -3,11 +3,11 @@
   "item_id": "WI-1289-1291",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review consumed the WI-1289/WI-1291 diff, carrier repair, subagent failure classification, and targeted local validation. The merge check/run PR gate consumption and post-merge review bypass diagnostics remain fail-closed; no blocking findings remain before rerunning hosted checks.",
+  "summary": "Implementation review consumed the current WI-1289/WI-1291 runtime diff through head 2555946bf47f6004b806b22ce72e51e68c9ada38. Closeout backlink diagnostics now keep unreadable timing as diagnostic fallback evidence instead of blocking otherwise valid retained closeout evidence; retained merge-ready attempt selection prefers versioned attempts while preserving latest-only compatibility. No blocking findings remain before rerunning hosted checks.",
   "reviewer": "R2-T2c",
-  "authored_at": "2026-06-06T15:10:26Z",
-  "reviewed_head": "062bc8a2b83c460ff78a600097f987e845d1ef04",
-  "reviewed_validation_summary": "Local validation passed on 2026-06-06 for implementation head 062bc8a2b83c460ff78a600097f987e845d1ef04 before carrier-only refresh: py_compile_clean OK; demo bootstrap fixture OK; root runtime-parity validate OK; adopt verify OK; carrier refresh --dry-run OK; suite validate/evidence/carrier validate OK; tools/check_cli_contract.py passed; skills_surface.py check OK; check_release_surface.py OK; check_npm_package.py OK; git diff --check OK.",
+  "authored_at": "2026-06-06T16:24:00Z",
+  "reviewed_head": "2555946bf47f6004b806b22ce72e51e68c9ada38",
+  "reviewed_validation_summary": "Local validation passed on 2026-06-06 for implementation head 2555946bf47f6004b806b22ce72e51e68c9ada38: focused adversarial adoption fixture returned failures=0; py_compile_clean OK; tools/check_cli_contract.py passed; runtime-parity validate OK; check_demo_bootstrap_fixture OK; tools/skills_surface.py check OK; check_release_surface.py OK; check_npm_package.py passed; git diff --check OK.",
   "fallback_to": null,
   "semantic_review_disposition": {
     "status": "passed"
@@ -19,7 +19,7 @@
   ],
   "consumed_inputs": {
     "engine_adapter": "codex-app/R2-T2c",
-    "engine_evidence": "subagent reports 019e9d6a-7b43-7912-8d30-2d31597a4561 and 019e9d6a-e546-73d0-810f-0ad9aa74fcb2; local commands py_compile_clean, check_demo_bootstrap_fixture, runtime-parity validate, adopt verify, carrier refresh --dry-run, suite validate/evidence/carrier validate, check_cli_contract, skills/release/package checks, git diff --check",
+    "engine_evidence": "focused adversarial adoption fixture failures=0; py_compile_clean; check_cli_contract; runtime-parity validate; check_demo_bootstrap_fixture; skills_surface check; check_release_surface; check_npm_package; git diff --check",
     "normalized_findings": null
   }
 }

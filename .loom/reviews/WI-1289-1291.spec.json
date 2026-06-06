@@ -3,11 +3,11 @@
   "item_id": "WI-1289-1291",
   "decision": "allow",
   "kind": "spec_review",
-  "summary": "Spec review consumed the minimal suite, implementation contract, evidence map, and task carrier for WI-1289/WI-1291. The suite scope is bounded to merge check/run PR gate consumption and post-merge review bypass diagnostics; no spec blockers remain.",
+  "summary": "Spec review re-consumed the minimal suite for WI-1289/WI-1291 after the closeout backlink diagnostic repair. The existing acceptance boundaries remain unchanged; the repair narrows closeout consumption semantics without expanding scope.",
   "reviewer": "R2-T2c",
-  "authored_at": "2026-06-06T15:10:26Z",
-  "reviewed_head": "062bc8a2b83c460ff78a600097f987e845d1ef04",
-  "reviewed_validation_summary": "Suite validation passed on 2026-06-06 for implementation head 062bc8a2b83c460ff78a600097f987e845d1ef04: suite validate OK; suite evidence validate OK; suite carrier validate OK; implementation-contract present; no blocking suite findings remain.",
+  "authored_at": "2026-06-06T16:24:00Z",
+  "reviewed_head": "2555946bf47f6004b806b22ce72e51e68c9ada38",
+  "reviewed_validation_summary": "Suite scope unchanged at implementation head 2555946bf47f6004b806b22ce72e51e68c9ada38; focused adversarial adoption fixture failures=0 and suite artifacts remain present.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -19,7 +19,7 @@
     "evidence_map": ".loom/specs/WI-1289-1291/evidence-map.md",
     "task_carrier": ".loom/specs/WI-1289-1291/task-carrier.md",
     "engine_adapter": "codex-app/R2-T2c",
-    "engine_evidence": "suite validate/evidence/carrier validate all passed locally",
+    "engine_evidence": "suite scope unchanged; focused adversarial adoption fixture failures=0; suite artifacts retained",
     "normalized_findings": null
   }
 }
