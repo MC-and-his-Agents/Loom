@@ -80,6 +80,16 @@ EXECUTION_LEDGER_FIELDS = {
     "Evidence Freshness": "evidence_freshness",
 }
 
+TERMINAL_CLOSEOUT_FIELDS = {
+    "Terminal State": "terminal_state",
+    "Issue": "issue",
+    "PR": "pr",
+    "Merge Commit": "merge_commit",
+    "Target Branch": "target_branch",
+    "Closed At": "closed_at",
+    "Evidence Locator": "evidence_locator",
+}
+
 PROVENANCE_KINDS = {
     "authored_truth",
     "host_control_mirror",
@@ -127,6 +137,7 @@ FIELD_LABELS = {
 
 RUNTIME_EVIDENCE_FIELD_LABELS = {canonical: label for label, canonical in RUNTIME_EVIDENCE_FIELDS.items()}
 EXECUTION_LEDGER_FIELD_LABELS = {canonical: label for label, canonical in EXECUTION_LEDGER_FIELDS.items()}
+TERMINAL_CLOSEOUT_FIELD_LABELS = {canonical: label for label, canonical in TERMINAL_CLOSEOUT_FIELDS.items()}
 
 
 def load_json_file(path: Path) -> dict[str, object]:
@@ -357,7 +368,42 @@ def parse_recovery_entry(path: Path, root: Path, recovery_ref: str | None = None
 
     if execution_ledger:
         dynamic_facts["execution_ledger"] = execution_ledger
+    terminal_metadata, terminal_errors = parse_optional_terminal_closeout_metadata(sections, relative_path)
+    errors.extend(terminal_errors)
+    if terminal_metadata:
+        dynamic_facts["terminal_closeout"] = terminal_metadata
     return dynamic_facts, errors
+
+
+def parse_optional_terminal_closeout_metadata(
+    sections: dict[str, list[str]],
+    relative_path: str,
+) -> tuple[dict[str, str], list[str]]:
+    if "Terminal Closeout Metadata" not in sections:
+        return {}, []
+    metadata, errors = parse_key_value_section(
+        sections,
+        "Terminal Closeout Metadata",
+        TERMINAL_CLOSEOUT_FIELDS,
+        relative_path,
+    )
+    if errors:
+        return metadata, errors
+    allowed_states = {"not_applicable", "absorbed", "closed_out", "merged", "retired", "deferred"}
+    state = metadata["terminal_state"].strip().lower()
+    if state not in allowed_states:
+        errors.append(
+            f"{relative_path}: `Terminal Closeout Metadata` `Terminal State` must be one of "
+            f"{', '.join(sorted(allowed_states))}, got `{metadata['terminal_state']}`"
+        )
+    for field_name in ("issue", "pr", "merge_commit", "target_branch", "closed_at", "evidence_locator"):
+        value = metadata[field_name].strip()
+        if not value:
+            errors.append(
+                f"{relative_path}: `Terminal Closeout Metadata` `{TERMINAL_CLOSEOUT_FIELD_LABELS[field_name]}` "
+                "must be non-empty or `not_applicable`"
+            )
+    return metadata, errors
 
 
 def validate_runtime_evidence(runtime_evidence: dict[str, str], relative_path: str) -> list[str]:
