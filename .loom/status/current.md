@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1240-1242
-- Goal: Implement the first global-cli runtime provider executable support batch for issues #1240, #1241, and #1242.
-- Scope: Model global-cli runtime provider in installed-state, make detect/doctor/verify accept no-.loom/bin repositories only when the provider contract is satisfied, classify stale .loom/bin as repairable residue, and report fact-chain/status/story-carrier current entrypoints through global loom commands while preserving repo-local wrapper compatibility. Ownership constraints are limited to #1240/#1241/#1242 implementation, generated runtime parity, demo fixture parity, and current WI/PR carriers. Excludes #1243/#1244 migration repair/fixtures and #1245/#1246 docs/release closeout.
-- Execution Path: issues #1240/#1241/#1242 -> branch work/1240-1242-global-cli-runtime-provider -> PR #1327 -> CI/review -> merge to main.
+- Item ID: WI-1269
+- Goal: Add the check_cli_contract.py named surface runner with filters, progress/timing, and failure grouping while preserving aggregate behavior.
+- Scope: Implement the reusable named surface runner in `tools/check_cli_contract.py`, add optional `--surface` and `--fixture-group` filters plus `--list-surfaces`, report progress/timing, and group failures by surface and fixture group. Preserve full `python3 tools/check_cli_contract.py` aggregate behavior. Excludes #1270-#1274 and #1276-#1280 regression surface splits.
+- Execution Path: issue #1269 -> branch work/1269-cli-contract-surface-runner -> PR #1334 -> hosted checks/review -> controlled merge -> post-merge closeout.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1240-1242.md
-- Review Entry: .loom/reviews/WI-1240-1242.json
-- Validation Entry: git diff --check; targeted global-cli smoke; py_compile; skills check; demo bootstrap check; PR gate; release judgment.
-- Closing Condition: PR #1327 is merge-ready with global-cli provider behavior consistent across installed-state, doctor/verify, fact-chain/status/story-carrier entrypoints, repo-local wrapper compatibility preserved, and release impact recorded for downstream consumption.
-- Current Checkpoint: closed
-- Current Stop: PR #1327 was merged into main at 2842f86f460b528b95b1f539f0bf6ee83189cfd6 after controlled-merge consumed PR gate, branch protection, required checks, and host mergeability for head 00f17f6d54ad9e5e0cd5b668a516367bf9f396c7. Issues #1240, #1241, and #1242 are CLOSED/COMPLETED; closeout check consumed PR, issue, required-check, and target-main evidence.
-- Next Step: Terminal; no WI-1240-1242 implementation or closeout-carrier work remains. Follow-up migration repair/fixtures stay with #1243/#1244, and docs/release closeout stays with #1245/#1246 or the parent release flow.
+- Recovery Entry: .loom/progress/WI-1269.md
+- Review Entry: .loom/reviews/WI-1269.json
+- Validation Entry: python3 tools/py_compile_clean.py tools/check_cli_contract.py; python3 tools/check_cli_contract.py --list-surfaces; python3 tools/check_cli_contract.py --surface missing; python3 tools/check_cli_contract.py --surface aggregate; PR metadata preflight; hosted checks; controlled merge gate.
+- Closing Condition: PR #1334 is merged through controlled merge, issue #1269 is closed, and post-merge closeout consumes PR, issue, branch, head, target-main, review, and validation evidence.
+- Current Checkpoint: merge
+- Current Stop: PR #1334 is open at head b62a77a1d11549f847bf50692ed664076e9462f4 after implementation, WI-1269 carrier sync, PR body readback, metadata preflight, build checkpoint, and authored implementation review were recorded. Local PR gate consumed review approval but required this merge checkpoint carrier update before host merge.
+- Next Step: Rerun local PR gate, wait for hosted checks, then execute controlled merge and post-merge closeout for #1269 only.
 - Blockers: None
-- Latest Validation Summary: Post-merge closeout evidence passed on 2026-06-05: PR #1327 readback state MERGED, merge commit 2842f86f460b528b95b1f539f0bf6ee83189cfd6, target main origin/main=2842f86f460b528b95b1f539f0bf6ee83189cfd6, issues #1240/#1241/#1242 CLOSED/COMPLETED; controlled-merge merge executed through Loom wrapper after required checks `demo-bootstrap`, `loom-check`, `loom-pr-merge-gate`, `py-compile`, and `repo-local-cli` passed; python3 .loom/bin/loom_flow.py closeout check --target . --pr 1327 --issue 1240 --branch work/1240-1242-global-cli-runtime-provider -> pass. Pre-merge retained validation remains: state-check pass, git diff --check pass, py_compile_clean OK, skills check pass, targeted global-cli smoke TARGETED_GLOBAL_CLI_CHECKS_PASS, fact-chain pass, flow build pass, adopt verify pass, shadow-parity pass, runtime-parity pass, runtime-evidence pass, local pr-gate pass, hosted checks pass, release-judgment pass. Full tools/check_cli_contract.py remains intentionally not rerun; prior full-contract failure remains classified as environment/carrier-state, not provider behavior.
-- Recovery Boundary: Terminal closeout carrier sync only after PR #1327 merge. Do not change #1240/#1241/#1242 implementation behavior, #1243/#1244 migration repair/fixtures, #1245/#1246 docs/release closeout, or #1287/#1288 review-head/parser semantics.
-- Current Lane: terminal-closeout
+- Latest Validation Summary: Pre-carrier implementation validation on 2026-06-06: `python3 tools/py_compile_clean.py tools/check_cli_contract.py` passed; `python3 tools/check_cli_contract.py --list-surfaces` listed `aggregate	check-cli-contract`; `python3 tools/check_cli_contract.py --surface missing` exited 2 with unknown surface selection failure; `python3 tools/check_cli_contract.py --surface aggregate` passed with `surface=aggregate fixture_group=check-cli-contract` in 193.12s. PR metadata preflight passed for PR #1334 body/readback at head b1d085b79587e46fefcbdfc3f1d39062e7fecadb.
+- Recovery Boundary: Do not handle #1270-#1274, #1276-#1280, or unrelated regression surface splits. Do not write `/Users/mc/dev/Loom` main.
+- Current Lane: implementation-merge-ready
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: post-merge PR/issue/main readback; controlled-merge merge; closeout check; retained targeted global-cli smoke; git diff --check; py_compile; skills check; hosted checks; release-judgment
-- Lane Entry: terminal-closeout
+- Verification Entry: local CLI contract validation; PR #1334 metadata preflight; authored review record; local PR gate pending rerun; hosted checks pending; controlled merge pending
+- Lane Entry: implementation-merge-ready
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1240-1242.md
-- Dynamic Truth: .loom/progress/WI-1240-1242.md
+- Static Truth: .loom/work-items/WI-1269.md
+- Dynamic Truth: .loom/progress/WI-1269.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
