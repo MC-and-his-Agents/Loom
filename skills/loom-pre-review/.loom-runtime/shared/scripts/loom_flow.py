@@ -85,6 +85,7 @@ TERMINAL_CHECKPOINTS = {
     "retired",
     "done",
     "closed",
+    "closed_out",
     "merged",
     "archived",
 }

@@ -42,6 +42,7 @@ from runtime_paths import repo_local_root
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 30.0
 ADOPT_VERIFY_TIMEOUT_SECONDS = 120.0
 BOOTSTRAP_TIMEOUT_SECONDS = 120.0
+REVIEW_RUN_TIMEOUT_SECONDS = 120.0
 SHADOW_PARITY_TIMEOUT_SECONDS = 120.0
 LOOM_CHECK_RUN_ID_ENV = "LOOM_CHECK_RUN_ID"
 
@@ -1149,6 +1150,8 @@ def command_timeout_seconds(args: list[str], requested_timeout_seconds: float | 
         return BOOTSTRAP_TIMEOUT_SECONDS
     if "adopt" in normalized and "verify" in normalized:
         return ADOPT_VERIFY_TIMEOUT_SECONDS
+    if "review" in normalized and "run" in normalized:
+        return REVIEW_RUN_TIMEOUT_SECONDS
     if "shadow-parity" in normalized:
         return SHADOW_PARITY_TIMEOUT_SECONDS
     return DEFAULT_COMMAND_TIMEOUT_SECONDS
@@ -1160,6 +1163,8 @@ def check_command_timeout_budget() -> list[Failure]:
         failures.append(Failure("command-timeout-budget", "bootstrap commands must use the extended loom_check timeout budget"))
     if command_timeout_seconds(["python3", "tools/loom_flow.py", "adopt", "verify"], None) != ADOPT_VERIFY_TIMEOUT_SECONDS:
         failures.append(Failure("command-timeout-budget", "adopt verify commands must keep the extended loom_check timeout budget"))
+    if command_timeout_seconds(["python3", "tools/loom_flow.py", "review", "run"], None) != REVIEW_RUN_TIMEOUT_SECONDS:
+        failures.append(Failure("command-timeout-budget", "review run commands must keep the extended loom_check timeout budget"))
     if command_timeout_seconds(["python3", "tools/loom_flow.py", "shadow-parity"], None) != SHADOW_PARITY_TIMEOUT_SECONDS:
         failures.append(Failure("command-timeout-budget", "shadow-parity commands must keep the extended loom_check timeout budget"))
     if command_timeout_seconds(["python3", "tools/loom_flow.py", "flow", "resume"], None) != DEFAULT_COMMAND_TIMEOUT_SECONDS:
@@ -4380,6 +4385,7 @@ def require_generated_skills_surface_parity_validation(
     category: str,
     context: str,
 ) -> None:
+    remove_python_cache_artifacts(root)
     payload, error = load_command_json(
         root,
         ["python3", "tools/loom.py", "skills", "check", "--target", str(root), "--json"],
@@ -5126,14 +5132,20 @@ def check_root_route_contracts(root: Path) -> list[Failure]:
             failures.append(Failure(category, "`skills/loom-init/contract.json` routing priority order drifted from the stable contract"))
 
     installation_commands = (
-        "npx @mc-and-his-agents/loom-installer add plugin",
-        "npx @mc-and-his-agents/loom-installer add skill <skill-id>",
+        "npm install -g @mc-and-his-agents/loom",
+        "loom host install --host codex --mode plugin --target . --apply --json",
+        "loom host verify --host codex --mode plugin --target . --json",
     )
     for command in installation_commands:
         if command not in skills_readme:
             failures.append(Failure(category, f"`skills/README.md` must document `{command}`"))
         if command not in skills_readme_zh:
             failures.append(Failure(category, f"`skills/README.zh-CN.md` must document `{command}`"))
+    plugin_embedded_payload = "plugins/loom/skills/"
+    if plugin_embedded_payload not in skills_readme:
+        failures.append(Failure(category, "`skills/README.md` must document downstream plugin embedded skills payload"))
+    if plugin_embedded_payload not in skills_readme_zh:
+        failures.append(Failure(category, "`skills/README.zh-CN.md` must document downstream plugin embedded skills payload"))
     if "git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom" not in readme:
         failures.append(Failure(category, "`README.md` must document native skills-library installation"))
     if "git clone https://github.com/MC-and-his-Agents/Loom.git ~/.codex/loom" not in readme_zh:
@@ -7194,6 +7206,13 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         if error:
             failures.append(Failure("daily-execution-cli", f"`{label}` command failed: {error}"))
             continue
+        if label == "host-binding-validate":
+            branch = payload.get("branch")
+            branch_present = isinstance(branch, dict) and branch.get("status") == "present"
+            if payload.get("result") == "block" and not branch_present and not host_read_unavailable(payload):
+                retry_payload, retry_error = load_command_json(root, args)
+                if retry_error is None and retry_payload is not None:
+                    payload = retry_payload
         result = payload.get("result")
         if result not in allowed_results:
             failures.append(
@@ -7590,16 +7609,39 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     "suite-evidence-validate",
                     "suite-carrier-validate",
                     "governance-lint",
+                    "pr-metadata-preflight",
+                    "pre-review-readiness-cost-guard",
                 ]:
                     failures.append(
                         Failure(
                             "daily-execution-cli",
-                            "`flow pre-review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-admission, workspace-locate, suite evidence/carrier validation, and governance-lint in order",
+                            "`flow pre-review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-admission, workspace-locate, suite evidence/carrier validation, governance-lint, pr-metadata-preflight, and readiness/cost guard in order",
                         )
                     )
                 governance_step = next((step for step in steps if isinstance(step, dict) and step.get("name") == "governance-lint"), None)
                 if not isinstance(governance_step, dict) or "governance_lint" not in governance_step:
                     failures.append(Failure("daily-execution-cli", "`flow pre-review` governance-lint step must embed governance_lint evidence"))
+                metadata_step = next((step for step in steps if isinstance(step, dict) and step.get("name") == "pr-metadata-preflight"), None)
+                if not isinstance(metadata_step, dict) or "pr_metadata_preflight" not in metadata_step:
+                    failures.append(Failure("daily-execution-cli", "`flow pre-review` pr-metadata-preflight step must embed parser preflight evidence"))
+                readiness_step = next((step for step in steps if isinstance(step, dict) and step.get("name") == "pre-review-readiness-cost-guard"), None)
+                readiness_guard = readiness_step.get("readiness_cost_guard") if isinstance(readiness_step, dict) else None
+                if not isinstance(readiness_guard, dict):
+                    failures.append(Failure("daily-execution-cli", "`flow pre-review` must embed pre-review readiness/cost guard evidence"))
+                else:
+                    if readiness_guard.get("schema_version") != "loom-pre-review-readiness-cost-guard/v1":
+                        failures.append(Failure("daily-execution-cli", "`flow pre-review` readiness/cost guard must expose its schema version"))
+                    if not isinstance(readiness_guard.get("failure_taxonomy"), list):
+                        failures.append(Failure("daily-execution-cli", "`flow pre-review` readiness/cost guard must expose failure_taxonomy"))
+                    if not isinstance(readiness_guard.get("deterministic_checks"), dict):
+                        failures.append(Failure("daily-execution-cli", "`flow pre-review` readiness/cost guard must expose deterministic check readiness"))
+                    if not isinstance(readiness_guard.get("post_review_carrier_policy"), dict):
+                        failures.append(Failure("daily-execution-cli", "`flow pre-review` readiness/cost guard must expose post-review carrier-only policy"))
+                    model_proof = readiness_guard.get("model_profile_proof")
+                    if not isinstance(model_proof, dict) or model_proof.get("source_issue") != "#969":
+                        failures.append(Failure("daily-execution-cli", "`flow pre-review` readiness/cost guard must consume #969 review profile proof"))
+                    if readiness_guard.get("pr_metadata_preflight") is None:
+                        failures.append(Failure("daily-execution-cli", "`flow pre-review` readiness/cost guard must consume PR metadata preflight evidence"))
             require_governance_lint_status_payload(
                 failures,
                 category="daily-execution-cli",
@@ -7843,14 +7885,18 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 "spec-review-gate",
                 "suite-evidence-validate",
                 "suite-carrier-validate",
+                "pr-metadata-preflight",
                 "review-entry",
             ]:
                 failures.append(
                     Failure(
                         "daily-execution-cli",
-                        "`flow review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-build, spec-review-gate, suite evidence/carrier validation, and review-entry in order",
+                        "`flow review` must run runtime-state, fact-chain, state-check, runtime-evidence, checkpoint-build, spec-review-gate, suite evidence/carrier validation, pr-metadata-preflight, and review-entry in order",
                     )
                 )
+            metadata_step = next((step for step in steps if isinstance(step, dict) and step.get("name") == "pr-metadata-preflight"), None)
+            if not isinstance(metadata_step, dict) or "pr_metadata_preflight" not in metadata_step:
+                failures.append(Failure("daily-execution-cli", "`flow review` pr-metadata-preflight step must embed parser preflight evidence"))
             review = payload.get("review")
             if isinstance(review, dict):
                 require_review_record_contract(
@@ -11230,6 +11276,17 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                             context="`installed review record allow` review.record",
                             payload=review.get("record"),
                         )
+                    review_path = positive_target / ".loom/reviews/INIT-0001.json"
+                    try:
+                        review_record = json.loads(review_path.read_text(encoding="utf-8"))
+                    except (OSError, json.JSONDecodeError):
+                        review_record = {}
+                    if isinstance(review_record, dict):
+                        review_record["semantic_review_disposition"] = {
+                            "status": "passed",
+                            "reason": "Installed daily-execution positive fixture authored a current implementation review.",
+                        }
+                        review_path.write_text(json.dumps(review_record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
                 payload, error = load_command_json(
                     root,
@@ -11293,14 +11350,16 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     return relative
 
                 def pr_gate_fixture(target: Path, *, number: int = 1, merge_state_status: str | None = None, host_review_state: str | None = None) -> str:
+                    head_ref_name = "feature/pr-gate"
+                    head_ref_oid = current_head(target)
                     payload = {
                         "number": number,
                         "state": "OPEN",
                         "isDraft": False,
-                        "headRefName": "feature/pr-gate",
+                        "headRefName": head_ref_name,
                         "baseRefName": "main",
-                        "headRefOid": current_head(target),
-                        "body": "## Related Work\n\n- Loom Work Item: INIT-0001\n",
+                        "headRefOid": head_ref_oid,
+                        "body": f"## Related Work\n\n- Loom Work Item: INIT-0001\n- Branch: {head_ref_name}\n- Head SHA: {head_ref_oid}\n",
                         "url": f"https://github.example/owner/repo/pull/{number}",
                     }
                     if merge_state_status:
@@ -12914,6 +12973,18 @@ def python_cache_artifacts(root: Path) -> set[str]:
             if path.suffix in {".pyc", ".pyo", ".pyd"}:
                 artifacts.add(path.relative_to(root).as_posix())
     return artifacts
+
+
+def remove_python_cache_artifacts(root: Path) -> None:
+    for relative in sorted(python_cache_artifacts(root), key=lambda value: value.count("/"), reverse=True):
+        path = root / relative
+        if path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
+            continue
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def check_py_compile_cache_hygiene(root: Path) -> list[Failure]:
@@ -21232,9 +21303,10 @@ def check_pr_metadata_machine_preflight_contract(root: Path) -> list[Failure]:
                                 "type": "pr_body_html_comment_json",
                                 "schema_version": "loom-repo-pr-metadata/v1",
                                 "marker": "loom:repo-pr-metadata",
+                                "source_range_or_hash": "sha256:declared-renderer-source",
                                 "required_fields": required_fields or ["contract_surface"],
                                 "preflight": {
-                                    "required_before": ["merge_ready"],
+                                    "required_before": ["pre_review", "review", "merge_ready"],
                                     "failure_mode": "blocking",
                                     "command_locator": command_locator,
                                 },
@@ -21268,23 +21340,29 @@ def check_pr_metadata_machine_preflight_contract(root: Path) -> list[Failure]:
             "body": body,
         }
 
-    def run_preflight(target: Path, payload: dict[str, object]) -> dict[str, object] | None:
-        write_json(target / ".loom/tmp/pr.json", payload)
-        result, error = load_command_json(
-            root,
-            [
-                "python3",
-                "src/skills/shared/scripts/loom_flow.py",
-                "pr-metadata",
-                "preflight",
-                "--target",
-                str(target),
-                "--surface",
-                "merge_ready",
-                "--pr-payload-file",
-                ".loom/tmp/pr.json",
-            ],
-        )
+    def run_preflight(
+        target: Path,
+        payload: dict[str, object] | None = None,
+        *,
+        surface: str = "merge_ready",
+        extra_args: list[str] | None = None,
+    ) -> dict[str, object] | None:
+        command = [
+            "python3",
+            "src/skills/shared/scripts/loom_flow.py",
+            "pr-metadata",
+            "preflight",
+            "--target",
+            str(target),
+            "--surface",
+            surface,
+        ]
+        if payload is not None:
+            write_json(target / ".loom/tmp/pr.json", payload)
+            command.extend(["--pr-payload-file", ".loom/tmp/pr.json"])
+        if extra_args:
+            command.extend(extra_args)
+        result, error = load_command_json(root, command)
         if error:
             failures.append(Failure(category, f"preflight command returned invalid output: {error}"))
         return result
@@ -21318,6 +21396,16 @@ Human-readable PR text.
         valid_payload = run_preflight(valid_target, pr_payload(valid_body))
         if not isinstance(valid_payload, dict) or valid_payload.get("result") != "pass":
             failures.append(Failure(category, "valid HTML comment JSON metadata block must pass preflight"))
+        review_payload = run_preflight(valid_target, pr_payload(valid_body.replace('"surface": "merge_ready"', '"surface": "review"')), surface="review")
+        if not isinstance(review_payload, dict) or review_payload.get("result") != "pass":
+            failures.append(Failure(category, "review surface must consume repo-specific PR metadata preflight"))
+        pre_review_payload = run_preflight(
+            valid_target,
+            pr_payload(valid_body.replace('"surface": "merge_ready"', '"surface": "pre_review"')),
+            surface="pre_review",
+        )
+        if not isinstance(pre_review_payload, dict) or pre_review_payload.get("result") != "pass":
+            failures.append(Failure(category, "pre-review surface must consume repo-specific PR metadata preflight before review admission"))
 
         malformed_target = base / "malformed"
         malformed_target.mkdir()
@@ -21329,6 +21417,8 @@ Human-readable PR text.
             failures.append(Failure(category, "malformed metadata JSON must block"))
         elif "parse_error" not in json.dumps(diagnostics, ensure_ascii=False):
             failures.append(Failure(category, "malformed metadata JSON must expose parser diagnostics"))
+        elif "raw_excerpt_sha256" not in json.dumps(diagnostics, ensure_ascii=False):
+            failures.append(Failure(category, "malformed metadata diagnostics must expose a raw excerpt hash"))
 
         missing_field_target = base / "missing-field"
         missing_field_target.mkdir()
@@ -21340,6 +21430,32 @@ Human-readable PR text.
             failures.append(Failure(category, "missing required repo-specific metadata field must block"))
         elif "fields.contract_surface" not in json.dumps(missing_diagnostics, ensure_ascii=False):
             failures.append(Failure(category, "missing field diagnostics must name the exact repo-specific field"))
+        elif "source_range_or_hash" not in json.dumps(missing_diagnostics, ensure_ascii=False):
+            failures.append(Failure(category, "missing field diagnostics must preserve the declared source range or hash"))
+
+        missing_schema_target = base / "missing-schema"
+        missing_schema_target.mkdir()
+        install_companion(missing_schema_target)
+        missing_schema_body = valid_body.replace('  "schema_version": "loom-repo-pr-metadata/v1",\n', "")
+        missing_schema_payload = run_preflight(missing_schema_target, pr_payload(missing_schema_body))
+        missing_schema_diagnostics = missing_schema_payload.get("diagnostics") if isinstance(missing_schema_payload, dict) else []
+        if not isinstance(missing_schema_payload, dict) or missing_schema_payload.get("result") != "block":
+            failures.append(Failure(category, "metadata block missing schema_version must block"))
+        elif "schema_version" not in json.dumps(missing_schema_diagnostics, ensure_ascii=False):
+            failures.append(Failure(category, "missing schema diagnostics must identify schema_version"))
+        elif "expected_format" not in json.dumps(missing_schema_diagnostics, ensure_ascii=False):
+            failures.append(Failure(category, "missing schema diagnostics must include the expected metadata format"))
+
+        unsupported_version_target = base / "unsupported-parser-version"
+        unsupported_version_target.mkdir()
+        install_companion(unsupported_version_target)
+        unsupported_version_body = valid_body.replace('"parser_version": "repo-parser/v1"', '"parser_version": "legacy-parser/v0"')
+        unsupported_version_payload = run_preflight(unsupported_version_target, pr_payload(unsupported_version_body))
+        unsupported_version_diagnostics = unsupported_version_payload.get("diagnostics") if isinstance(unsupported_version_payload, dict) else []
+        if not isinstance(unsupported_version_payload, dict) or unsupported_version_payload.get("result") != "block":
+            failures.append(Failure(category, "unsupported parser_version must block metadata preflight"))
+        elif "unsupported parser_version" not in json.dumps(unsupported_version_diagnostics, ensure_ascii=False):
+            failures.append(Failure(category, "unsupported parser_version diagnostics must identify the version failure"))
 
         advisory_legacy_target = base / "advisory-legacy"
         advisory_legacy_target.mkdir()
@@ -21348,12 +21464,81 @@ Human-readable PR text.
         if not isinstance(advisory_payload, dict) or advisory_payload.get("result") != "pass":
             failures.append(Failure(category, "advisory legacy migration mode must not break old PR bodies"))
 
+        dual_read_legacy_target = base / "dual-read-legacy"
+        dual_read_legacy_target.mkdir()
+        install_companion(dual_read_legacy_target, migration_mode="dual_read")
+        dual_read_payload = run_preflight(
+            dual_read_legacy_target,
+            pr_payload("## Summary\n\nLegacy Markdown-only PR body with `contract_surface: checked` in free text.\n"),
+        )
+        if not isinstance(dual_read_payload, dict) or dual_read_payload.get("result") != "pass":
+            failures.append(Failure(category, "dual_read migration mode must keep legacy Markdown-only PR bodies advisory"))
+        elif not any(contract.get("legacy_mode") for contract in dual_read_payload.get("metadata_contracts", []) if isinstance(contract, dict)):
+            failures.append(Failure(category, "dual_read legacy advisory output must expose legacy_mode for migration"))
+
         required_absent_target = base / "required-absent"
         required_absent_target.mkdir()
         install_companion(required_absent_target, migration_mode="required")
         required_absent_payload = run_preflight(required_absent_target, pr_payload("## Summary\n\nNo machine block.\n"))
         if not isinstance(required_absent_payload, dict) or required_absent_payload.get("result") != "block":
             failures.append(Failure(category, "required migration mode must block absent machine blocks"))
+
+        body_file_target = base / "body-file"
+        body_file_target.mkdir()
+        install_companion(body_file_target)
+        body_file = body_file_target / ".loom/tmp/rendered-pr.md"
+        readback_file = body_file_target / ".loom/tmp/readback-pr.md"
+        body_file.parent.mkdir(parents=True, exist_ok=True)
+        body_file.write_text(valid_body, encoding="utf-8")
+        readback_file.write_text(
+            valid_body.replace(
+                "Human-readable PR text.",
+                "\n".join(
+                    [
+                        "Renamed human heading text with `inline code`.",
+                        "",
+                        "- List item with changed indentation",
+                        "  - Nested-looking human-only detail",
+                        "",
+                        "Shell command substitution example: $(printf 'metadata stays in comment')",
+                        "",
+                        "Extra human-only paragraph with 中文括号（ok）.",
+                    ]
+                ),
+            ),
+            encoding="utf-8",
+        )
+        body_file_payload = run_preflight(
+            body_file_target,
+            extra_args=["--body-file", ".loom/tmp/rendered-pr.md"],
+        )
+        if not isinstance(body_file_payload, dict) or body_file_payload.get("result") != "pass":
+            failures.append(Failure(category, "rendered PR body file must pass metadata preflight before gh pr edit"))
+        elif body_file_payload.get("body_artifact", {}).get("body_sha256") is None:
+            failures.append(Failure(category, "body-file preflight must expose rendered body hash evidence"))
+        readback_payload = run_preflight(
+            body_file_target,
+            extra_args=["--body-file", ".loom/tmp/rendered-pr.md", "--compare-body-file", ".loom/tmp/readback-pr.md"],
+        )
+        if not isinstance(readback_payload, dict) or readback_payload.get("result") != "pass":
+            failures.append(Failure(category, "post-edit readback must pass when machine blocks match despite human Markdown drift"))
+        elif readback_payload.get("body_artifact", {}).get("preflight_body_source") != "compare_body_file":
+            failures.append(Failure(category, "post-edit readback preflight must validate the read-back body, not only the rendered artifact"))
+        drift_file = body_file_target / ".loom/tmp/readback-drift-pr.md"
+        drift_file.write_text(valid_body.replace('"contract_surface": "checked"', '"contract_surface": "edited"'), encoding="utf-8")
+        drift_payload = run_preflight(
+            body_file_target,
+            extra_args=["--body-file", ".loom/tmp/rendered-pr.md", "--compare-body-file", ".loom/tmp/readback-drift-pr.md"],
+        )
+        if not isinstance(drift_payload, dict) or drift_payload.get("result") != "block":
+            failures.append(Failure(category, "post-edit readback must block when the metadata machine block hash drifts"))
+        elif "machine block drift" not in json.dumps(drift_payload.get("body_artifact", {}), ensure_ascii=False):
+            failures.append(Failure(category, "post-edit machine block drift diagnostics must identify the hash comparison failure"))
+        drift_diagnostics = json.dumps(drift_payload.get("body_artifact", {}), ensure_ascii=False)
+        if "raw_excerpt_sha256" not in drift_diagnostics:
+            failures.append(Failure(category, "post-edit machine block drift diagnostics must expose raw excerpt hashes"))
+        if "gh_pr_edit_body_file_readback" not in drift_diagnostics:
+            failures.append(Failure(category, "post-edit machine block drift diagnostics must include the readback repair fallback"))
 
         forbidden_target = base / "forbidden-truth"
         forbidden_target.mkdir()
@@ -21382,6 +21567,11 @@ Human-readable PR text.
         "pr_metadata_preflight_payload(",
         "\"name\": \"pr-metadata-preflight\"",
         "PR_METADATA_PREFLIGHT_SCHEMA",
+        "surface=\"pre_review\"",
+        "surface=\"review\"",
+        "--body-file",
+        "compare_body_file",
+        "body_artifact",
     ):
         if anchor not in source_text:
             failures.append(Failure(category, f"`loom_flow.py` must retain `{anchor}`"))
@@ -21410,6 +21600,7 @@ def collect_source_failures(root: Path, source_surface: str = SOURCE_SURFACE_FUL
         (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "demo-repo-local-cli", lambda: check_demo_repo_local_cli(root)),
         (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "root-self-adoption", lambda: check_root_self_adoption_carrier(root)),
         (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "deep-existing-bootstrap", lambda: check_deep_existing_repo_bootstrap(root)),
+        (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "py-compile-cache-hygiene-pre", lambda: check_py_compile_cache_hygiene(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "daily-execution-cli", lambda: check_daily_execution_cli(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "py-compile-cache-hygiene", lambda: check_py_compile_cache_hygiene(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "repo-companion", lambda: check_repo_companion_interface_contracts(root)),
