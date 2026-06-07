@@ -12,10 +12,10 @@
 - Validation Entry: git diff --check; docs/static checks; suite path not_applicable rationale; fact-chain; review; PR metadata/readback; PR gate; hosted checks; release/no-release evidence; closeout sync for #1319.
 - Closing Condition: PR for #1319 is merged through the controlled merge wrapper, issue #1319 is closed with no-release evidence, and repo carriers show WI-1319 terminal closeout consumed without implying #1321/#1322/#1323/#1324 implementation is complete.
 - Current Checkpoint: closed_out
-- Current Stop: Post-merge closeout is consumed in GitHub control-plane readback: PR #1346 is merged at `54744596a098c0d2caf06d59296c802e38f718d2`, issue #1319 is CLOSED, stale native dependency edges to #1316 and #1317 have been removed, and versioned terminal closeout metadata has been written on closeout branch `closeout/1319-post-merge-consumed`.
-- Next Step: Commit and merge this closeout-only carrier sync back to `main` so repo truth records the consumed closeout.
+- Current Stop: Post-merge closeout is fully consumed on `main`: PR #1346 merged at `54744596a098c0d2caf06d59296c802e38f718d2`, closeout carrier PR #1348 merged at `63b44f1d0da9598f6f811dfcdde586d7aedfdf28`, issue #1319 is CLOSED, stale native dependency edges to #1316 and #1317 have been removed, and terminal closeout metadata is present on `origin/main`.
+- Next Step: None; WI-1319 is closed out. Downstream #1321/#1322/#1323/#1324 remain separate and are not completed by this item.
 - Blockers: None
-- Latest Validation Summary: 2026-06-07 post-merge closeout readback: PR #1346 merged through controlled merge wrapper at 2026-06-07T04:16:24Z with merge commit `54744596a098c0d2caf06d59296c802e38f718d2`, now in `origin/main`; issue #1319 is CLOSED at 2026-06-07T04:18:45Z with closeout evidence comment https://github.com/MC-and-his-Agents/Loom/issues/1319#issuecomment-4641395436; reconciliation audit passed after stale native dependency edges to #1316/#1317 were removed; closeout check passed with authenticated GitHub token; carrier closeout-sync wrote terminal metadata for WI-1319.
+- Latest Validation Summary: 2026-06-07 final closeout readback: PR #1346 merged through controlled merge wrapper at 2026-06-07T04:16:24Z with merge commit `54744596a098c0d2caf06d59296c802e38f718d2`; closeout carrier PR #1348 merged through controlled merge wrapper at 2026-06-07T04:47:45Z with merge commit `63b44f1d0da9598f6f811dfcdde586d7aedfdf28`; `origin/main` contains both commits and `.loom/progress/WI-1319.md` terminal metadata. GitHub readback shows issue #1319 CLOSED at 2026-06-07T04:18:45Z; stale native dependency edges to #1316/#1317 were removed; hosted checks for PR #1348 passed, including `loom-pr-merge-gate` and two `loom-check` aggregate runs.
 - Recovery Boundary: WI-1319 only: docs-governance checklist, governance methodology links, suite not_applicable locator, task carrier, and Loom review/status/closeout evidence. Do not implement gate parser, CLI metadata, runtime copy, fixtures, #1321 metadata carrier, #1322 gate behavior, #1323 fixture matrix, or #1324 parent closeout.
 - Current Lane: post-merge-closeout-consumed
 
@@ -24,7 +24,7 @@
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: PR #1346 merged by controlled wrapper; hosted checks passed at head 5582aba3423a5f6c813e30d9d54ceb5f4b7c1107; issue #1319 CLOSED; stale #1316/#1317 dependency edges removed; terminal carrier metadata written; pending closeout-only carrier PR merge to main.
+- Verification Entry: PR #1346 and closeout carrier PR #1348 both merged by controlled wrapper; hosted checks passed for PR #1348 at head 096d581889cedfca80a2a822b7919f30323eeeb2; issue #1319 CLOSED; stale #1316/#1317 dependency edges removed; terminal carrier metadata present on origin/main.
 - Lane Entry: post-merge-closeout-consumed
 
 ## Sources
