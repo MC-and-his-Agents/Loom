@@ -153,6 +153,9 @@ or verified through `loom host ...`.
 
 - Vision and boundary: [VISION.md](./VISION.md)
 - Repository constitution: [AGENTS.md](./AGENTS.md)
+- Change governance intensity: [docs/methodology/governance/change-governance-intensity.md](./docs/methodology/governance/change-governance-intensity.md)
+- Loom governance intensity mapping: [docs/methodology/governance/loom-governance-intensity-mapping.md](./docs/methodology/governance/loom-governance-intensity-mapping.md)
+- Governance intensity closeout evidence: [docs/evidence/governance-intensity-final-closeout.md](./docs/evidence/governance-intensity-final-closeout.md)
 - Skills surface: [skills/README.md](./skills/README.md)
 - Methodology docs: [docs/methodology/](./docs/methodology/)
 - Architecture docs: [docs/architecture/](./docs/architecture/)

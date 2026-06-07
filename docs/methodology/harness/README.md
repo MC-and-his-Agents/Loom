@@ -51,6 +51,7 @@
   - 定义 implementation review、`merge-ready`、`controlled merge`、`closeout` 的强前置消费链
 - [tiered-gate-consumption-contract.md](./tiered-gate-consumption-contract.md)
   - 定义治理强度字段、`suite_path: not_applicable` 与 fail-closed gate 消费合同
+  - Final closeout and release/no-release convergence for #1314 is indexed at [../../evidence/governance-intensity-final-closeout.md](../../evidence/governance-intensity-final-closeout.md)
 - `checkpoint-model.md`
   - 定义 `admission` / `build` checkpoint 的输入、输出、失败语义与回退去向
 - [workspace-model.md](./workspace-model.md)

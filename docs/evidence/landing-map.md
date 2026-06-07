@@ -37,6 +37,11 @@
   - 合同来源：`../methodology/governance/loom-governance-intensity-mapping.md`; `../methodology/harness/tiered-gate-consumption-contract.md`
   - 后续消费：`#1321` metadata carrier; `#1322` docs-governance light gate; `#1323` escalation and abuse fixtures
 
+- governance intensity final closeout
+  - 证据落点：`governance-intensity-final-closeout.md`
+  - 合同来源：`../methodology/governance/change-governance-intensity.md`; `../methodology/governance/loom-governance-intensity-mapping.md`; `../methodology/harness/tiered-gate-consumption-contract.md`
+  - closeout 消费：`#1324` parent #1314 docs / release-no-release / deferred follow-up convergence
+
 - `repo companion` 主合同
   - 稳定落点：`adoption/repo-companion-contract.md`
   - 入口消费：`skills/loom-init/SKILL.md`

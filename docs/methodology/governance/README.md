@@ -21,6 +21,10 @@
   - `#1316`
 - [docs-governance-lite-checklist.md](./docs-governance-lite-checklist.md)
   - `#1319`
+
+Final closeout evidence for the #1314 governance-intensity FR is recorded in
+[../../evidence/governance-intensity-final-closeout.md](../../evidence/governance-intensity-final-closeout.md).
+It links the completed child evidence, release/no-release judgment, and deferred follow-up boundary.
 - [review-model.md](./review-model.md)
   - `EXT-0004` `EXT-0014` `EXT-0018`
 - [github-delivery-funnel.md](./github-delivery-funnel.md)
