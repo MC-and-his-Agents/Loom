@@ -1,0 +1,7 @@
+# Evidence Map
+
+| evidence_id | evidence_type | source_locator | consumes | binding | freshness | consumer_boundary | remediation_direction |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| EV-001 | behavior_evidence | docs/evidence/governance-intensity-final-closeout.md | .loom/specs/WI-1324/spec.md suite decision rationale and parent #1314 closeout acceptance | WI-1324 / final closeout read surface / parent #1314 evidence convergence | present | review / merge-ready / PR gate / closeout / status | Refresh the closeout evidence if child issue or PR readback changes, if #1318 is no longer deferred, or if scope expands beyond closeout/index links. |
+| EV-002 | test_evidence | .loom/progress/WI-1324.md | validation strategy: docs/link readback, suite path validation, PR metadata/readback, pr-gate dry check, git diff, no-release evidence, hosted checks, controlled merge, closeout sync | WI-1324 / local and hosted validation summary | present | review / merge-ready / PR gate / closeout / status | Refresh the progress validation summary after PR creation, head changes, hosted checks, merge, or closeout. |
+| EV-003 | fresh_verification_input | .loom/progress/WI-1324.md | EV-001 EV-002 plus current HEAD, PR metadata, current-head review, hosted checks, controlled merge, and post-merge closeout evidence | WI-1324 / current closeout object / PR pending | present | merge-ready / closeout / status | Refresh after validation, review, PR body readback, hosted checks, merge, or any carrier-only drift. |
