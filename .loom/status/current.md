@@ -12,8 +12,8 @@
 - Validation Entry: git diff --check; py_compile_clean; pr metadata-preflight; tools/check_cli_contract.py --surface aggregate; fact-chain; suite validate not_applicable; pr-gate dry check; hosted checks; controlled merge; closeout sync.
 - Closing Condition: PR is merged through the controlled merge wrapper, issue #1321 is closed, repo carriers terminalize WI-1321 closeout, and follow-up #1322/#1323/#1324 remain separate.
 - Current Checkpoint: merge
-- Current Stop: Implementation build, demo fixture sync, fresh review carrier, PR body readback, governance intensity metadata preflight, fact-chain, suite not_applicable validation, and source contract-only loom_check have passed for PR #1351 head 24e4e82d4e27083dae82d0d81f6f473942e5d724.
-- Next Step: Rerun local pr-gate against PR #1351 head 24e4e82d4e27083dae82d0d81f6f473942e5d724, wait for hosted checks, run controlled merge, and complete post-merge closeout consumed for issue #1321.
+- Current Stop: Implementation build, demo fixture sync, fresh review carrier, PR body readback, governance intensity metadata preflight, fact-chain, suite not_applicable validation, source contract-only loom_check, checkpoint merge, and local pr-gate have passed for PR #1351.
+- Next Step: Push the refreshed merge-ready carriers, update PR #1351 body to the current head, wait for hosted checks, run controlled merge, and complete post-merge closeout consumed for issue #1321.
 - Blockers: None
 - Latest Validation Summary: 2026-06-07 local validation passed: git diff --check; python3 tools/py_compile_clean.py skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py tools/check_cli_contract.py; python3 tools/skills_surface.py check; python3 tools/loom.py skills check --target . --json; python3 tools/loom.py pr metadata-preflight --surface merge_ready --body-file .github/PULL_REQUEST_TEMPLATE.md --compare-body-file .github/PULL_REQUEST_TEMPLATE.md --json; python3 tools/check_cli_contract.py --surface aggregate passed in 184.79s; python3 tools/loom.py fact-chain --target . --item WI-1321 --json passed; python3 tools/loom.py suite validate --target . --item WI-1321 --json returned not_applicable with no missing inputs/blocking gaps; python3 tools/loom_check.py --profile source --source-surface contract-only . passed; make loom-demo-new-project-check passed after make loom-demo-new-project-sync refreshed examples/new-project fixture.
 - Recovery Boundary: WI-1321 owns only governance intensity metadata carrier/schema/parser/template/runtime-copy/targeted-fixture implementation, generated/demo fixture sync, and Loom carriers. Do not implement #1322 docs-governance light gate strategy, #1323 full escalation fixture matrix, #1324 parent closeout, or unrelated runtime provider/review/merge behavior.
@@ -24,7 +24,7 @@
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: WI-1321 merge-ready evidence is local and pre-hosted: git diff --check; py_compile_clean; skills surface; skills check; PR metadata preflight/readback for PR #1351 head 24e4e82d4e27083dae82d0d81f6f473942e5d724; tools/check_cli_contract.py --surface aggregate; fact-chain; suite validate not_applicable; loom_check source contract-only; demo bootstrap fixture check.
+- Verification Entry: WI-1321 merge-ready evidence is local and pre-hosted: git diff --check; py_compile_clean; skills surface; skills check; PR metadata preflight/readback for PR #1351; tools/check_cli_contract.py --surface aggregate; fact-chain; suite validate not_applicable; loom_check source contract-only; demo bootstrap fixture check; checkpoint merge; local pr-gate.
 - Lane Entry: merge-ready-gate-consumption
 
 ## Sources
