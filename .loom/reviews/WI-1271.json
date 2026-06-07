@@ -6,7 +6,7 @@
   "summary": "WI-1271 closeout carrier review approved: implementation PR #1362 is merged, issue #1271 is closed as COMPLETED, and this closeout-only diff terminalizes WI-1271 progress/status/shadow evidence without changing tools/check_cli_contract.py, suite-carrier scope, hosted workflows, metadata schema, release behavior, or #1257 parent scope. No findings.",
   "reviewer": "codex-scheduler",
   "authored_at": "2026-06-07T21:25:00Z",
-  "reviewed_head": "61f07fdc26d9a8f859820800e2cb7a517d4a4f21",
+  "reviewed_head": "28737bacb042019f7c4079e391651331b9478a76",
   "reviewed_validation_summary": "2026-06-07 post-merge closeout readback for WI-1271: PR #1362 merged through the controlled merge wrapper at 2026-06-07T21:15:43Z with merge commit `bddfe6dbb3be406bea2ae79f06bf7b3a6d95e641`; issue #1271 closed as COMPLETED at 2026-06-07T21:16:50Z with closeout evidence comment https://github.com/MC-and-his-Agents/Loom/issues/1271#issuecomment-4644125179; final hosted checks for head `7a8c062eae068d3d0e30766350be3eb863333a1e` passed (`py-compile`, `demo-bootstrap`, `repo-local-cli`, `root-self-governance`, `loom-check`, `loom-pr-merge-gate`, and `release-judgment`); `python3 tools/loom.py carrier closeout-sync --target . --item WI-1271 --terminal-state closed_out --issue 1271 --pr 1362 --merge-commit bddfe6dbb3be406bea2ae79f06bf7b3a6d95e641 --target-branch main --closed-at 2026-06-07T21:16:50Z --evidence-locator https://github.com/MC-and-his-Agents/Loom/issues/1271#issuecomment-4644125179 --apply --json` passed with `host_mutations=false`.",
   "fallback_to": null,
   "findings": [],
@@ -43,6 +43,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored scheduler review approved current-head WI-1271 terminal checkpoint/status/shadow carrier repair for merge checkpoint consumption."
+    "reason": "Authored scheduler review approved WI-1271 terminal closeout carrier at pushed closeout head 28737bacb042019f7c4079e391651331b9478a76; any later drift is expected to be limited to this review carrier binding."
   }
 }
