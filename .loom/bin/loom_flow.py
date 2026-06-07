@@ -161,7 +161,6 @@ GOVERNANCE_HIGH_RISK_CHANGE_CLASSES = {"runtime", "fixture", "release", "externa
 GOVERNANCE_LITE_ALLOWED_CHANGE_CLASS = "docs_governance"
 GOVERNANCE_LITE_ALLOWED_SUITE_PATH = "not_applicable"
 GOVERNANCE_LITE_REQUIRED_RELEASE_JUDGMENT = "no_release"
-GOVERNANCE_LITE_REQUIRED_REVIEW_REQUIREMENT = "current_head_review_required"
 
 PROJECT_DRIFT_KINDS = {
     "project_missing_item",
@@ -6901,14 +6900,6 @@ def governance_metadata_fields_from_preflight(pr_metadata_preflight: dict[str, A
     return fields if isinstance(fields, dict) else {}
 
 
-def docs_governance_lite_requested(fields: dict[str, Any]) -> bool:
-    return (
-        fields.get("governance_intensity") == "light"
-        and fields.get("change_class") == GOVERNANCE_LITE_ALLOWED_CHANGE_CLASS
-        and fields.get("suite_path") == GOVERNANCE_LITE_ALLOWED_SUITE_PATH
-    )
-
-
 def docs_governance_lite_gate_payload(context: dict[str, Any], pr_metadata_preflight: dict[str, Any] | None) -> dict[str, Any]:
     fields = governance_metadata_fields_from_preflight(pr_metadata_preflight)
     missing_inputs: list[str] = []
@@ -6940,22 +6931,30 @@ def docs_governance_lite_gate_payload(context: dict[str, Any], pr_metadata_prefl
                 ],
             },
         }
-    lite_requested = docs_governance_lite_requested(fields)
-    if lite_requested:
-        if fields.get("review_requirement") != GOVERNANCE_LITE_REQUIRED_REVIEW_REQUIREMENT:
+    if fields.get("governance_intensity") == "light":
+        if fields.get("change_class") != GOVERNANCE_LITE_ALLOWED_CHANGE_CLASS:
+            missing_inputs.append("docs-governance lite requires change_class docs_governance")
+        if fields.get("suite_path") != GOVERNANCE_LITE_ALLOWED_SUITE_PATH:
+            missing_inputs.append("docs-governance lite requires suite_path not_applicable")
+        if fields.get("review_requirement") != "current_head_review_required":
             missing_inputs.append("docs-governance lite requires current-head review")
         if fields.get("release_judgment") != GOVERNANCE_LITE_REQUIRED_RELEASE_JUDGMENT:
             missing_inputs.append("docs-governance lite requires no_release judgment")
         for required_bool in ("fact_chain_required", "pr_gate_required", "closeout_required"):
             if fields.get(required_bool) is not True:
                 missing_inputs.append(f"docs-governance lite requires {required_bool}")
+    if fields.get("suite_path") == "not_applicable":
         if not marker_present:
             missing_inputs.append("repo suite path decision is missing")
         elif suite_values != {"not_applicable"}:
             missing_inputs.append("repo suite path decision does not match metadata suite_path not_applicable")
-    elif fields.get("suite_path") == GOVERNANCE_LITE_ALLOWED_SUITE_PATH and fields.get("governance_intensity") == "light":
-        missing_inputs.append("docs-governance lite not_applicable requires change_class docs_governance")
-    if lite_requested and marker_present and suite_values == {"not_applicable"}:
+    if (
+        fields.get("governance_intensity") == "light"
+        and fields.get("change_class") == GOVERNANCE_LITE_ALLOWED_CHANGE_CLASS
+        and fields.get("suite_path") == GOVERNANCE_LITE_ALLOWED_SUITE_PATH
+        and marker_present
+        and suite_values == {"not_applicable"}
+    ):
         result = "pass" if not missing_inputs else "block"
         summary = (
             "docs-governance lite metadata and suite not_applicable decision are aligned; non-suite gates remain required."
@@ -14019,6 +14018,14 @@ def pr_metadata_effective_contract_surface(field: dict[str, Any], requested_surf
     return requested_surface
 
 
+def pr_metadata_candidate_contract_surfaces(field: dict[str, Any], requested_surface: str) -> list[str]:
+    effective_surface = pr_metadata_effective_contract_surface(field, requested_surface)
+    surfaces = [requested_surface]
+    if effective_surface not in surfaces:
+        surfaces.append(effective_surface)
+    return surfaces
+
+
 def pr_metadata_html_comment_blocks(body: str, marker: str) -> list[dict[str, Any]]:
     pattern = re.compile(rf"<!--\s*{re.escape(marker)}\s*(.*?)\s*-->", flags=re.DOTALL)
     blocks: list[dict[str, Any]] = []
@@ -14205,14 +14212,12 @@ def validate_governance_intensity_metadata_fields(fields: dict[str, Any]) -> lis
     if governance_intensity == "light" and change_class in GOVERNANCE_HIGH_RISK_CHANGE_CLASSES:
         missing_fields.append("fields.change_class")
         missing_fields.append("fields.governance_intensity")
-    if (
-        governance_intensity == "light"
-        and suite_path == GOVERNANCE_LITE_ALLOWED_SUITE_PATH
-        and change_class != GOVERNANCE_LITE_ALLOWED_CHANGE_CLASS
-    ):
-        missing_fields.append("fields.change_class")
-    if docs_governance_lite_requested(fields):
-        if review_requirement != GOVERNANCE_LITE_REQUIRED_REVIEW_REQUIREMENT:
+    if governance_intensity == "light":
+        if change_class != GOVERNANCE_LITE_ALLOWED_CHANGE_CLASS:
+            missing_fields.append("fields.change_class")
+        if suite_path != GOVERNANCE_LITE_ALLOWED_SUITE_PATH:
+            missing_fields.append("fields.suite_path")
+        if review_requirement != "current_head_review_required":
             missing_fields.append("fields.review_requirement")
         if release_judgment != GOVERNANCE_LITE_REQUIRED_RELEASE_JUDGMENT:
             missing_fields.append("fields.release_judgment")
@@ -14326,7 +14331,8 @@ def pr_metadata_contract_preflight(
     expected_branch: str | None = None,
 ) -> dict[str, Any]:
     contract_id = str(field.get("id") or "unknown")
-    effective_surface = pr_metadata_effective_contract_surface(field, surface)
+    candidate_surfaces = pr_metadata_candidate_contract_surfaces(field, surface)
+    effective_surface = candidate_surfaces[-1]
     machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
     marker = str(machine_carrier.get("marker") or "loom:repo-pr-metadata")
     migration_mode = str(machine_carrier.get("migration_mode") or "advisory_legacy")
@@ -14429,12 +14435,22 @@ def pr_metadata_contract_preflight(
                 )
             )
             continue
-        normalized, envelope_diagnostics = validate_pr_metadata_envelope(
-            envelope=envelope,
-            field=field,
-            surface=effective_surface,
-            block_locator=block["locator"],
-        )
+        normalized = None
+        envelope_diagnostics: list[dict[str, Any]] = []
+        matched_surface = effective_surface
+        for candidate_surface in candidate_surfaces:
+            candidate_normalized, candidate_diagnostics = validate_pr_metadata_envelope(
+                envelope=envelope,
+                field=field,
+                surface=candidate_surface,
+                block_locator=block["locator"],
+            )
+            if candidate_normalized is not None:
+                normalized = candidate_normalized
+                matched_surface = candidate_surface
+                envelope_diagnostics = candidate_diagnostics
+                break
+            envelope_diagnostics.extend(candidate_diagnostics)
         diagnostics.extend(envelope_diagnostics)
         if normalized is not None:
             binding_missing: list[str] = []
@@ -14476,6 +14492,7 @@ def pr_metadata_contract_preflight(
                     )
                     return {
                         **base,
+                        "effective_carrier_surface": matched_surface,
                         "result": "block",
                         "summary": "PR metadata machine block is present but its governance binding conflicts with PR body or PR head inputs.",
                         "missing_inputs": [f"PR metadata machine block invalid: {contract_id}"],
@@ -14486,6 +14503,7 @@ def pr_metadata_contract_preflight(
                     }
             return {
                 **base,
+                "effective_carrier_surface": matched_surface,
                 "result": "pass",
                 "summary": "PR metadata machine block is parseable and contains the required repo-specific fields.",
                 "missing_inputs": [],

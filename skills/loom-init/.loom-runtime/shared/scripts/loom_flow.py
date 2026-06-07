@@ -14018,6 +14018,14 @@ def pr_metadata_effective_contract_surface(field: dict[str, Any], requested_surf
     return requested_surface
 
 
+def pr_metadata_candidate_contract_surfaces(field: dict[str, Any], requested_surface: str) -> list[str]:
+    effective_surface = pr_metadata_effective_contract_surface(field, requested_surface)
+    surfaces = [requested_surface]
+    if effective_surface not in surfaces:
+        surfaces.append(effective_surface)
+    return surfaces
+
+
 def pr_metadata_html_comment_blocks(body: str, marker: str) -> list[dict[str, Any]]:
     pattern = re.compile(rf"<!--\s*{re.escape(marker)}\s*(.*?)\s*-->", flags=re.DOTALL)
     blocks: list[dict[str, Any]] = []
@@ -14323,7 +14331,8 @@ def pr_metadata_contract_preflight(
     expected_branch: str | None = None,
 ) -> dict[str, Any]:
     contract_id = str(field.get("id") or "unknown")
-    effective_surface = pr_metadata_effective_contract_surface(field, surface)
+    candidate_surfaces = pr_metadata_candidate_contract_surfaces(field, surface)
+    effective_surface = candidate_surfaces[-1]
     machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
     marker = str(machine_carrier.get("marker") or "loom:repo-pr-metadata")
     migration_mode = str(machine_carrier.get("migration_mode") or "advisory_legacy")
@@ -14426,12 +14435,22 @@ def pr_metadata_contract_preflight(
                 )
             )
             continue
-        normalized, envelope_diagnostics = validate_pr_metadata_envelope(
-            envelope=envelope,
-            field=field,
-            surface=effective_surface,
-            block_locator=block["locator"],
-        )
+        normalized = None
+        envelope_diagnostics: list[dict[str, Any]] = []
+        matched_surface = effective_surface
+        for candidate_surface in candidate_surfaces:
+            candidate_normalized, candidate_diagnostics = validate_pr_metadata_envelope(
+                envelope=envelope,
+                field=field,
+                surface=candidate_surface,
+                block_locator=block["locator"],
+            )
+            if candidate_normalized is not None:
+                normalized = candidate_normalized
+                matched_surface = candidate_surface
+                envelope_diagnostics = candidate_diagnostics
+                break
+            envelope_diagnostics.extend(candidate_diagnostics)
         diagnostics.extend(envelope_diagnostics)
         if normalized is not None:
             binding_missing: list[str] = []
@@ -14473,6 +14492,7 @@ def pr_metadata_contract_preflight(
                     )
                     return {
                         **base,
+                        "effective_carrier_surface": matched_surface,
                         "result": "block",
                         "summary": "PR metadata machine block is present but its governance binding conflicts with PR body or PR head inputs.",
                         "missing_inputs": [f"PR metadata machine block invalid: {contract_id}"],
@@ -14483,6 +14503,7 @@ def pr_metadata_contract_preflight(
                     }
             return {
                 **base,
+                "effective_carrier_surface": matched_surface,
                 "result": "pass",
                 "summary": "PR metadata machine block is parseable and contains the required repo-specific fields.",
                 "missing_inputs": [],
