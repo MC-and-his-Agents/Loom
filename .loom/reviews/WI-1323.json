@@ -1,0 +1,31 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1323",
+  "decision": "block",
+  "kind": "code_review",
+  "summary": "Formal implementation review is pending until the current WI-1323 head has completed suite validate, pr-gate dry checks, git diff --check, no-release evidence, and PR metadata/readback.",
+  "reviewer": "pending",
+  "authored_at": "2026-06-07T00:00:00Z",
+  "reviewed_head": "10112e3f9c702038dc156b10c1e135b3cd780f1f",
+  "reviewed_validation_summary": "Pending current-head validation for WI-1323.",
+  "fallback_to": "build",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "Replace this placeholder with current-head implementation review before merge-ready."
+    }
+  ],
+  "blocking_issues": [
+    "Current-head implementation review has not been recorded yet."
+  ],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1323.md",
+    "recovery_entry": ".loom/progress/WI-1323.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_evidence_map": ".loom/specs/WI-1323/evidence-map.md",
+    "suite_task_carriers": [
+      ".loom/specs/WI-1323/task-carrier.md"
+    ]
+  }
+}
