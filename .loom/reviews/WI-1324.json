@@ -1,0 +1,37 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1324",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Current-head review for WI-1324 at implementation head 56de1ef24b77e54cea6d3354fdab8be08658e278: the change adds final governance intensity closeout evidence, README/landing/methodology links, WI-1324 Work Item/progress/status/suite/evidence/task carriers, and init-result fact-chain binding for #1324. It does not change runtime behavior, gate/parser behavior, metadata schema, fixture matrices, generated skills, release workflows, version files, permissions, or external-visible actions. Completed child evidence is linked for #1315/#1316/#1317/#1319/#1320/#1321/#1322/#1323, while #1318 remains explicitly deferred and is not counted as completed.",
+  "reviewer": "codex-worker-R3-T10",
+  "authored_at": "2026-06-07T12:46:00Z",
+  "reviewed_head": "56de1ef24b77e54cea6d3354fdab8be08658e278",
+  "reviewed_validation_summary": "2026-06-07 local closeout validation passed before review artifact write: docs/link readback files exist; `python3 .loom/bin/loom_init.py fact-chain --target .` passed with WI-1324 and zero blockers; `python3 tools/loom.py suite validate --target . --item WI-1324 --json` returned `not_applicable` with no blocking gaps; `python3 tools/loom.py suite evidence validate --target . --item WI-1324 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1324 --json` passed; `python3 tools/check_release_surface.py` passed; `python3 tools/version_surface_check.py` passed; `git diff --check` passed. GitHub readback showed #1315/#1316/#1317/#1319/#1320/#1321/#1322/#1323 closed/completed and #1318 still open. No-release evidence is recorded in docs/evidence/governance-intensity-final-closeout.md and .loom/progress/WI-1324.md.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1318 remains deferred follow-up for the AGENTS root-rule principle and must not be represented as completed by #1324 or parent #1314 closeout."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1324.md",
+    "recovery_entry": ".loom/progress/WI-1324.md",
+    "status_surface": ".loom/status/current.md",
+    "closeout_evidence": "docs/evidence/governance-intensity-final-closeout.md",
+    "suite_validation": "not_applicable",
+    "suite_path_decision": ".loom/specs/WI-1324/spec.md",
+    "suite_evidence_map": ".loom/specs/WI-1324/evidence-map.md",
+    "suite_task_carriers": [
+      ".loom/specs/WI-1324/task-carrier.md"
+    ],
+    "fact_chain": "pass",
+    "release_surface_check": "pass",
+    "version_surface_check": "pass",
+    "git_diff_check": "pass"
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Current-head review approved the implementation head for PR metadata, PR gate, hosted checks, and controlled merge consumption. Review-file-only drift after this record is carrier-only and must be consumed as such by downstream gates."
+  }
+}
