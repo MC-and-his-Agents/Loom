@@ -8632,7 +8632,14 @@ def check_pr_template(target_root: Path) -> tuple[dict[str, Any], list[str]]:
 def render_adoption_pr_body(context: dict[str, Any]) -> str:
     item_id = context["item_id"]
     review_record = context["review_entry"]
-    spec_review_record = default_spec_review_path(item_id)
+    _, suite_path_values = suite_path_decision_presence(context)
+    suite_not_applicable = bool(suite_path_values) and suite_path_values <= {"not_applicable"}
+    spec_review_record = "not_applicable" if suite_not_applicable else default_spec_review_path(item_id)
+    spec_plan_locator = (
+        f".loom/specs/{item_id}/spec.md (suite path: not_applicable)"
+        if suite_not_applicable
+        else f".loom/specs/{item_id}/spec.md"
+    )
     return (
         "## Summary\n\n"
         f"- Problem: Adopt Loom governance carriers for `{item_id}`.\n"
@@ -8644,7 +8651,7 @@ def render_adoption_pr_body(context: dict[str, Any]) -> str:
         "- Follow-ups: Keep repo-specific gates repo-owned.\n\n"
         "## Related Work\n\n"
         f"- Issue: {item_id}\n"
-        f"- Spec / plan: .loom/specs/{item_id}/spec.md\n\n"
+        f"- Spec / plan: {spec_plan_locator}\n\n"
         "## Review Artifacts\n\n"
         f"- Active Work Item: {context['report']['fact_chain']['entry_points']['work_item']}\n"
         f"- Active Recovery Entry: {context['report']['fact_chain']['entry_points']['recovery_entry']}\n"
@@ -8700,6 +8707,12 @@ def validate_adoption_pr_body(body: str, *, target_root: Path) -> dict[str, Any]
 
     locator_status: dict[str, dict[str, Any]] = {}
     for label, locator in locators.items():
+        if label == "Spec Review Record" and locator == "not_applicable":
+            locator_status[label] = {
+                "locator": locator,
+                "status": "not_applicable",
+            }
+            continue
         path, errors = resolve_repo_relative_path(target_root, locator, label=f"Review Artifacts `{label}`")
         exists = bool(path and path.exists() and path.is_file())
         if errors:
@@ -12809,16 +12822,23 @@ def adoption_verify_payload(target_root: Path, output_relative: str, expected_it
     bypass_validation = validate_adoption_pr_body(bypass_body, target_root=target_root)
 
     review_record, review_path, review_errors = load_review_record(target_root, context["item_id"], context["review_entry"])
-    spec_review_record, spec_review_path, spec_review_errors = load_review_record(
-        target_root,
-        context["item_id"],
-        default_spec_review_path(context["item_id"]),
-    )
+    _, suite_path_values = suite_path_decision_presence(context)
+    suite_not_applicable = bool(suite_path_values) and suite_path_values <= {"not_applicable"}
+    if suite_not_applicable:
+        spec_review_record = None
+        spec_review_path = "not_applicable"
+        spec_review_errors: list[str] = []
+    else:
+        spec_review_record, spec_review_path, spec_review_errors = load_review_record(
+            target_root,
+            context["item_id"],
+            default_spec_review_path(context["item_id"]),
+        )
     review_missing = list(review_errors)
     if review_record is None and not review_errors:
         review_missing.append(f"missing review artifact: {review_path}")
     spec_review_missing = list(spec_review_errors)
-    if spec_review_record is None and not spec_review_errors:
+    if spec_review_record is None and not spec_review_errors and not suite_not_applicable:
         spec_review_missing.append(f"missing spec review artifact: {spec_review_path}")
 
     missing_inputs: list[str] = []
@@ -12878,7 +12898,7 @@ def adoption_verify_payload(target_root: Path, output_relative: str, expected_it
             },
             "spec": {
                 "path": spec_review_path,
-                "status": "present" if spec_review_record is not None and not spec_review_errors else "missing",
+                "status": "not_applicable" if suite_not_applicable else "present" if spec_review_record is not None and not spec_review_errors else "missing",
             },
         },
         "adoption_decisions": decisions,
