@@ -32,6 +32,11 @@
 
 以下关系用于表达 adoption 结论如何被入口层直接消费：
 
+- governance intensity read-surface inventory
+  - 证据落点：`governance-intensity-read-surface-inventory.md`
+  - 合同来源：`../methodology/governance/loom-governance-intensity-mapping.md`; `../methodology/harness/tiered-gate-consumption-contract.md`
+  - 后续消费：`#1321` metadata carrier; `#1322` docs-governance light gate; `#1323` escalation and abuse fixtures
+
 - `repo companion` 主合同
   - 稳定落点：`adoption/repo-companion-contract.md`
   - 入口消费：`skills/loom-init/SKILL.md`

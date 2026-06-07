@@ -1,0 +1,22 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1320",
+  "decision": "block",
+  "kind": "code_review",
+  "summary": "Formal review has not been recorded yet for WI-1320.",
+  "reviewer": "not yet assigned",
+  "reviewed_head": "d2191e73024d1d7e747fd8935c051c8c0df3be90",
+  "reviewed_validation_summary": "No final validation recorded yet.",
+  "fallback_to": "build",
+  "findings": [
+    {
+      "id": "pending-formal-review",
+      "severity": "block",
+      "summary": "Record a real review for the current PR head before merge-ready."
+    }
+  ],
+  "blocking_issues": [
+    "Record a real review for the current PR head before merge-ready."
+  ],
+  "follow_ups": []
+}
