@@ -2259,7 +2259,21 @@ def write_governance_metadata_contract_fixture(target: Path) -> None:
         encoding="utf-8",
     )
     (target / ".github").mkdir(parents=True, exist_ok=True)
-    (target / ".github" / "PULL_REQUEST_TEMPLATE.md").write_text("## PR Metadata Machine Carrier\n", encoding="utf-8")
+    (target / ".github" / "PULL_REQUEST_TEMPLATE.md").write_text(
+        "## Summary\n\n"
+        "- Problem:\n"
+        "- Scope:\n\n"
+        "## Validation\n\n"
+        "- [ ] Verified locally\n\n"
+        "## Risks And Follow-ups\n\n"
+        "- Risks:\n"
+        "- Follow-ups:\n\n"
+        "## Related Work\n\n"
+        "- Issue:\n"
+        "- Loom Work Item:\n\n"
+        "## PR Metadata Machine Carrier\n",
+        encoding="utf-8",
+    )
     (target / "docs" / "methodology" / "harness").mkdir(parents=True, exist_ok=True)
     (target / "docs" / "methodology" / "harness" / "tiered-gate-consumption-contract.md").write_text(
         "# Tiered Gate Consumption Contract\n",
@@ -2425,6 +2439,13 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
         "missing-intensity.md": {"governance_intensity": "__DELETE__"},
         "unknown-intensity.md": {"governance_intensity": "casual"},
         "light-runtime.md": {"governance_intensity": "light", "change_class": "runtime"},
+        "light-docs-only.md": {"governance_intensity": "light", "change_class": "docs_only", "suite_path": "not_applicable"},
+        "light-docs-governance-minimal.md": {
+            "governance_intensity": "light",
+            "change_class": "docs_governance",
+            "suite_path": "minimal",
+        },
+        "deferred-release.md": {"release_judgment": "deferred_release_judgment_blocking"},
         "missing-na-rationale.md": {
             "suite_path": "not_applicable",
             "suite_not_applicable": {
@@ -2443,6 +2464,42 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
             raise AssertionError(f"governance intensity metadata negative fixture did not block: {body_name}")
         if "PR metadata machine block invalid: loom-governance-intensity" not in payload.get("missing_inputs", []):
             raise AssertionError(f"governance intensity metadata fixture did not report invalid block: {body_name}")
+
+    docs_governance_lite = target / "docs-governance-lite.md"
+    docs_governance_lite.write_text(
+        governance_metadata_body(
+            fields_override={
+                "governance_intensity": "light",
+                "change_class": "docs_governance",
+                "suite_path": "not_applicable",
+                "suite_not_applicable": {
+                    "rationale": "docs-governance clarification does not need formal suite artifacts",
+                    "consumer_boundary": "suite validate and pr-gate consume only formal suite non-applicability",
+                    "recheck_condition": "scope expands beyond docs-governance methodology or current carrier evidence",
+                    "scope_proof": "diff is limited to governance docs and current Loom carriers",
+                    "review_requirement": "current_head_review_required",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    lite_payload = governance_metadata_preflight_payload(target, "docs-governance-lite.md")
+    if lite_payload.get("result") != "pass":
+        raise AssertionError(f"docs-governance lite metadata fixture did not pass: {lite_payload.get('missing_inputs')}")
+    _, review_surface_payload = run_flow_json(
+        [
+            "pr-metadata",
+            "preflight",
+            "--target",
+            str(target),
+            "--surface",
+            "review",
+            "--body-file",
+            "docs-governance-lite.md",
+        ]
+    )
+    if review_surface_payload.get("result") != "pass":
+        raise AssertionError("review surface did not consume the declared merge_ready governance metadata carrier")
 
 
 def append_pr_metadata_surface(target: Path, fixture: dict[str, str], *, surface: str) -> None:
@@ -2469,6 +2526,193 @@ def append_pr_metadata_surface(target: Path, fixture: dict[str, str], *, surface
         "-->\n"
     )
     pr_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def append_governance_intensity_metadata_body(
+    target: Path,
+    fixture: dict[str, str],
+    *,
+    fields_override: dict[str, Any] | None = None,
+) -> None:
+    pr_path = target / fixture["pr_file"]
+    payload = json.loads(pr_path.read_text(encoding="utf-8"))
+    payload["body"] = governance_metadata_body(
+        item=fixture["item"],
+        branch=fixture["branch"],
+        head_sha=payload["headRefOid"],
+        fields_override=fields_override,
+    )
+    pr_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def write_docs_governance_not_applicable_suite(target: Path, item: str) -> None:
+    suite_dir = target / ".loom" / "specs" / item
+    for extra_artifact in (
+        "suite-index.md",
+        "research.md",
+        "contracts.md",
+        "readiness-checklist.md",
+        "evidence-map.md",
+        "consistency-analysis.md",
+        "execution-breakdown.md",
+        "task-carrier.md",
+    ):
+        path = suite_dir / extra_artifact
+        if path.exists():
+            path.unlink()
+    not_applicable_text = (
+        "- Suite path: not_applicable\n\n"
+        "- Formal-suite not_applicable: rationale: docs-governance lite fixture only clarifies governance docs "
+        "and current carrier evidence; consumer boundary: suite validate, spec review, implementation review, "
+        "merge-ready, PR gate, hosted CI, and closeout consume this only as the formal suite decision while "
+        "fact-chain, current-head review, PR metadata, no-release judgment, controlled merge, and closeout remain required; "
+        "recheck condition: require a full or minimal suite if scope expands into runtime code, tools, fixtures, "
+        "metadata schema, generated payloads, release mechanics, AGENTS root rules, or external-visible behavior; "
+        "scope proof: fixture diff is limited to governance docs and current Loom carriers; "
+        "review requirement: current_head_review_required.\n"
+    )
+    (suite_dir / "spec.md").write_text("# Spec\n\n" + not_applicable_text, encoding="utf-8")
+    (suite_dir / "plan.md").write_text("# Plan\n\n" + not_applicable_text, encoding="utf-8")
+
+
+def assert_docs_governance_lite_pr_gate_fixture(tmp: Path) -> None:
+    target = tmp / "docs-governance-lite-pr-gate"
+    target.mkdir()
+    fixture = write_semantic_review_pr_gate_fixture(target)
+    write_governance_metadata_contract_fixture(target)
+    write_docs_governance_not_applicable_suite(target, fixture["item"])
+    subprocess.run(["git", "add", "-A"], cwd=target, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "fixture docs governance lite metadata and suite"],
+        cwd=target,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    _, review_record_payload = run_flow_json(
+        [
+            "review",
+            "record",
+            "--target",
+            str(target),
+            "--item",
+            fixture["item"],
+            "--review-file",
+            fixture["review_path"],
+            "--decision",
+            "allow",
+            "--kind",
+            "code_review",
+            "--summary",
+            "Fixture docs-governance lite review approves the current head.",
+            "--reviewer",
+            "contract-test",
+        ]
+    )
+    if review_record_payload.get("result") != "pass":
+        raise AssertionError(f"docs-governance lite review record fixture failed: {review_record_payload.get('missing_inputs')}")
+    update_fixture_pr_head(target, fixture)
+    append_governance_intensity_metadata_body(
+        target,
+        fixture,
+        fields_override={
+            "governance_intensity": "light",
+            "change_class": "docs_governance",
+            "suite_path": "not_applicable",
+            "suite_not_applicable": {
+                "rationale": "docs-governance lite fixture does not need formal suite artifacts",
+                "consumer_boundary": "suite validate and pr-gate consume only formal suite non-applicability",
+                "recheck_condition": "scope expands beyond governance docs and current carrier evidence",
+                "scope_proof": "diff is limited to governance docs and current Loom carriers",
+                "review_requirement": "current_head_review_required",
+            },
+        },
+    )
+    suite_payload = run_suite_validate_fixture(target, fixture["item"], expect=1)
+    if suite_payload.get("result") != "not_applicable":
+        raise AssertionError("docs-governance lite suite validate fixture did not return not_applicable")
+    pass_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if pass_payload.get("result") != "pass":
+        raise AssertionError(f"docs-governance lite pr-gate fixture blocked: {pass_payload.get('missing_inputs')}")
+    lite_gate = pass_payload.get("docs_governance_lite_gate", {})
+    if lite_gate.get("result") != "pass":
+        raise AssertionError("docs-governance lite pr-gate did not consume the positive gate payload")
+    if pass_payload.get("merge_checkpoint", {}).get("result") != "pass":
+        raise AssertionError("docs-governance lite pr-gate did not preserve merge checkpoint enforcement")
+
+    append_governance_intensity_metadata_body(
+        target,
+        fixture,
+        fields_override={
+            "governance_intensity": "light",
+            "change_class": "docs_governance",
+            "suite_path": "minimal",
+        },
+    )
+    blocked_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if blocked_payload.get("result") != "block":
+        raise AssertionError("docs-governance lite metadata/suite mismatch did not fail closed")
+
+    append_governance_intensity_metadata_body(
+        target,
+        fixture,
+        fields_override={
+            "governance_intensity": "light",
+            "change_class": "docs_governance",
+            "suite_path": "not_applicable",
+            "suite_not_applicable": {
+                "consumer_boundary": "suite validate and pr-gate consume only formal suite non-applicability",
+                "recheck_condition": "scope expands beyond governance docs and current carrier evidence",
+                "scope_proof": "diff is limited to governance docs and current Loom carriers",
+                "review_requirement": "current_head_review_required",
+            },
+        },
+    )
+    missing_rationale_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if missing_rationale_payload.get("result") != "block":
+        raise AssertionError("docs-governance lite missing rationale did not fail closed")
+
+    append_governance_intensity_metadata_body(
+        target,
+        fixture,
+        fields_override={
+            "governance_intensity": "light",
+            "change_class": "docs_governance",
+            "suite_path": "not_applicable",
+            "review_requirement": "specialized_review_required",
+            "suite_not_applicable": {
+                "rationale": "docs-governance lite fixture does not need formal suite artifacts",
+                "consumer_boundary": "suite validate and pr-gate consume only formal suite non-applicability",
+                "recheck_condition": "scope expands beyond governance docs and current carrier evidence",
+                "scope_proof": "diff is limited to governance docs and current Loom carriers",
+                "review_requirement": "specialized_review_required",
+            },
+        },
+    )
+    review_requirement_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if review_requirement_payload.get("result") != "block":
+        raise AssertionError("docs-governance lite non-current-head review requirement did not fail closed")
+
+    append_governance_intensity_metadata_body(
+        target,
+        fixture,
+        fields_override={
+            "governance_intensity": "light",
+            "change_class": "docs_governance",
+            "suite_path": "not_applicable",
+            "release_judgment": "deferred_release_judgment_blocking",
+            "suite_not_applicable": {
+                "rationale": "docs-governance lite fixture does not need formal suite artifacts",
+                "consumer_boundary": "suite validate and pr-gate consume only formal suite non-applicability",
+                "recheck_condition": "scope expands beyond governance docs and current carrier evidence",
+                "scope_proof": "diff is limited to governance docs and current Loom carriers",
+                "review_requirement": "current_head_review_required",
+            },
+        },
+    )
+    release_payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if release_payload.get("result") != "block":
+        raise AssertionError("docs-governance lite deferred release judgment did not fail closed")
 
 
 def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
@@ -2581,6 +2825,7 @@ def assert_semantic_review_disposition_pr_gate_fixture(tmp: Path) -> None:
     if pass_payload.get("pr", {}).get("work_item_from_body") != fixture["item"]:
         raise AssertionError("pr-gate did not preserve single Work Item id parsing")
     assert_terminal_closeout_pr_gate_fixture(tmp)
+    assert_docs_governance_lite_pr_gate_fixture(tmp)
 
     pr_path = target / fixture["pr_file"]
     merge_target = tmp / "semantic-review-controlled-merge"

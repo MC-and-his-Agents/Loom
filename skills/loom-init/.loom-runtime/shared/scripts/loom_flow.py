@@ -158,6 +158,9 @@ GOVERNANCE_NOT_APPLICABLE_REQUIRED_FIELDS = (
     "review_requirement",
 )
 GOVERNANCE_HIGH_RISK_CHANGE_CLASSES = {"runtime", "fixture", "release", "external_action", "mixed"}
+GOVERNANCE_LITE_ALLOWED_CHANGE_CLASS = "docs_governance"
+GOVERNANCE_LITE_ALLOWED_SUITE_PATH = "not_applicable"
+GOVERNANCE_LITE_REQUIRED_RELEASE_JUDGMENT = "no_release"
 
 PROJECT_DRIFT_KINDS = {
     "project_missing_item",
@@ -6882,6 +6885,114 @@ def suite_gate_payload_for_surface(context: dict[str, Any], *, surface: str) -> 
     if suite_gate_required_for_surface(context, surface=surface):
         return suite_gate_validation_payload(context, surface=surface)
     return suite_gate_not_applicable_payload(context, surface=surface)
+
+
+def governance_metadata_fields_from_preflight(pr_metadata_preflight: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(pr_metadata_preflight, dict):
+        return {}
+    carrier = pr_metadata_preflight.get("governance_intensity_carrier")
+    if not isinstance(carrier, dict):
+        return {}
+    envelope = carrier.get("envelope")
+    if not isinstance(envelope, dict):
+        return {}
+    fields = envelope.get("fields")
+    return fields if isinstance(fields, dict) else {}
+
+
+def docs_governance_lite_gate_payload(context: dict[str, Any], pr_metadata_preflight: dict[str, Any] | None) -> dict[str, Any]:
+    fields = governance_metadata_fields_from_preflight(pr_metadata_preflight)
+    missing_inputs: list[str] = []
+    marker_present, suite_values = suite_path_decision_presence(context)
+
+    if not fields:
+        return {
+            "schema_version": "loom-docs-governance-lite-gate/v1",
+            "result": "not_applicable",
+            "summary": "docs-governance lite gate is not applicable because no governance intensity metadata carrier was declared for this PR.",
+            "missing_inputs": [],
+            "fallback_to": None,
+            "metadata_fields": {},
+            "suite_path_decision": {
+                "marker_present": marker_present,
+                "values": sorted(suite_values),
+            },
+            "authority_boundary": {
+                "role": "formal_suite_bypass_only",
+                "does_not_replace": [
+                    "fact_chain",
+                    "current_head_review",
+                    "pr_metadata_readback",
+                    "hosted_checks",
+                    "pr_gate",
+                    "release_judgment",
+                    "controlled_merge",
+                    "post_merge_closeout",
+                ],
+            },
+        }
+    if fields.get("governance_intensity") == "light":
+        if fields.get("change_class") != GOVERNANCE_LITE_ALLOWED_CHANGE_CLASS:
+            missing_inputs.append("docs-governance lite requires change_class docs_governance")
+        if fields.get("suite_path") != GOVERNANCE_LITE_ALLOWED_SUITE_PATH:
+            missing_inputs.append("docs-governance lite requires suite_path not_applicable")
+        if fields.get("review_requirement") != "current_head_review_required":
+            missing_inputs.append("docs-governance lite requires current-head review")
+        if fields.get("release_judgment") != GOVERNANCE_LITE_REQUIRED_RELEASE_JUDGMENT:
+            missing_inputs.append("docs-governance lite requires no_release judgment")
+        for required_bool in ("fact_chain_required", "pr_gate_required", "closeout_required"):
+            if fields.get(required_bool) is not True:
+                missing_inputs.append(f"docs-governance lite requires {required_bool}")
+    if fields.get("suite_path") == "not_applicable":
+        if not marker_present:
+            missing_inputs.append("repo suite path decision is missing")
+        elif suite_values != {"not_applicable"}:
+            missing_inputs.append("repo suite path decision does not match metadata suite_path not_applicable")
+    if (
+        fields.get("governance_intensity") == "light"
+        and fields.get("change_class") == GOVERNANCE_LITE_ALLOWED_CHANGE_CLASS
+        and fields.get("suite_path") == GOVERNANCE_LITE_ALLOWED_SUITE_PATH
+        and marker_present
+        and suite_values == {"not_applicable"}
+    ):
+        result = "pass" if not missing_inputs else "block"
+        summary = (
+            "docs-governance lite metadata and suite not_applicable decision are aligned; non-suite gates remain required."
+            if result == "pass"
+            else "docs-governance lite metadata or suite decision is incomplete or mismatched."
+        )
+    else:
+        result = "not_applicable" if not missing_inputs else "block"
+        summary = (
+            "docs-governance lite gate is not applicable for this governance metadata."
+            if result == "not_applicable"
+            else "governance metadata and suite decision are incomplete or mismatched."
+        )
+    return {
+        "schema_version": "loom-docs-governance-lite-gate/v1",
+        "result": result,
+        "summary": summary,
+        "missing_inputs": dedupe_strings(missing_inputs),
+        "fallback_to": None if result in {"pass", "not_applicable"} else "update_pr_body",
+        "metadata_fields": fields,
+        "suite_path_decision": {
+            "marker_present": marker_present,
+            "values": sorted(suite_values),
+        },
+        "authority_boundary": {
+            "role": "formal_suite_bypass_only",
+            "does_not_replace": [
+                "fact_chain",
+                "current_head_review",
+                "pr_metadata_readback",
+                "hosted_checks",
+                "pr_gate",
+                "release_judgment",
+                "controlled_merge",
+                "post_merge_closeout",
+            ],
+        },
+    }
 
 
 def spec_review_gate_ready_for_implementation_review(spec_gate: dict[str, Any]) -> bool:
@@ -13873,6 +13984,12 @@ def metadata_contract_raw_fields(
     return [field for field in fields if isinstance(field, dict)], [], locator
 
 
+def pr_metadata_contract_surface(field: dict[str, Any]) -> str:
+    machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
+    carrier_surface = machine_carrier.get("surface")
+    return carrier_surface if isinstance(carrier_surface, str) and carrier_surface else "merge_ready"
+
+
 def applicable_pr_metadata_contracts(
     fields: list[dict[str, Any]],
     *,
@@ -13888,6 +14005,17 @@ def applicable_pr_metadata_contracts(
         if isinstance(required_before, list) and surface in required_before:
             contracts.append(field)
     return contracts
+
+
+def pr_metadata_effective_contract_surface(field: dict[str, Any], requested_surface: str) -> str:
+    carrier_surface = pr_metadata_contract_surface(field)
+    machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
+    preflight = machine_carrier.get("preflight") if isinstance(machine_carrier.get("preflight"), dict) else {}
+    required_before = preflight.get("required_before")
+    if requested_surface in {"review", "pre_review"} and carrier_surface == "merge_ready":
+        if isinstance(required_before, list) and requested_surface in required_before:
+            return "merge_ready"
+    return requested_surface
 
 
 def pr_metadata_html_comment_blocks(body: str, marker: str) -> list[dict[str, Any]]:
@@ -14076,6 +14204,15 @@ def validate_governance_intensity_metadata_fields(fields: dict[str, Any]) -> lis
     if governance_intensity == "light" and change_class in GOVERNANCE_HIGH_RISK_CHANGE_CLASSES:
         missing_fields.append("fields.change_class")
         missing_fields.append("fields.governance_intensity")
+    if governance_intensity == "light":
+        if change_class != GOVERNANCE_LITE_ALLOWED_CHANGE_CLASS:
+            missing_fields.append("fields.change_class")
+        if suite_path != GOVERNANCE_LITE_ALLOWED_SUITE_PATH:
+            missing_fields.append("fields.suite_path")
+        if review_requirement != "current_head_review_required":
+            missing_fields.append("fields.review_requirement")
+        if release_judgment != GOVERNANCE_LITE_REQUIRED_RELEASE_JUDGMENT:
+            missing_fields.append("fields.release_judgment")
     if release_judgment == "deferred_release_judgment_blocking":
         missing_fields.append("fields.release_judgment")
     return dedupe_strings(missing_fields)
@@ -14186,6 +14323,7 @@ def pr_metadata_contract_preflight(
     expected_branch: str | None = None,
 ) -> dict[str, Any]:
     contract_id = str(field.get("id") or "unknown")
+    effective_surface = pr_metadata_effective_contract_surface(field, surface)
     machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
     marker = str(machine_carrier.get("marker") or "loom:repo-pr-metadata")
     migration_mode = str(machine_carrier.get("migration_mode") or "advisory_legacy")
@@ -14208,6 +14346,7 @@ def pr_metadata_contract_preflight(
     base = {
         "metadata_contract_id": contract_id,
         "surface": surface,
+        "effective_carrier_surface": effective_surface,
         "marker": marker,
         "required_fields": required_fields,
         "migration_mode": migration_mode,
@@ -14290,7 +14429,7 @@ def pr_metadata_contract_preflight(
         normalized, envelope_diagnostics = validate_pr_metadata_envelope(
             envelope=envelope,
             field=field,
-            surface=surface,
+            surface=effective_surface,
             block_locator=block["locator"],
         )
         diagnostics.extend(envelope_diagnostics)
@@ -14366,7 +14505,7 @@ def pr_metadata_contract_preflight(
     diagnostic = pr_metadata_diagnostic(
         contract_id=contract_id,
         marker=marker,
-        reason="PR metadata machine blocks did not match the expected contract id and surface",
+        reason="PR metadata machine blocks did not match the expected contract id and effective carrier surface",
         source_locator=authority_locator,
         source_range_or_hash=source_range_or_hash,
         expected_schema=expected_schema,
@@ -15508,6 +15647,23 @@ def pr_gate_payload(
             "pr_metadata_preflight": pr_metadata_preflight,
         }
     )
+    docs_governance_lite_gate = docs_governance_lite_gate_payload(context, pr_metadata_preflight) if context else None
+    if isinstance(docs_governance_lite_gate, dict):
+        if docs_governance_lite_gate.get("result") == "block":
+            missing_inputs.extend(
+                f"docs-governance-lite: {message}"
+                for message in docs_governance_lite_gate.get("missing_inputs", [])
+            )
+        steps.append(
+            {
+                "name": "docs-governance-lite-gate",
+                "result": docs_governance_lite_gate["result"],
+                "summary": docs_governance_lite_gate["summary"],
+                "missing_inputs": docs_governance_lite_gate["missing_inputs"],
+                "fallback_to": docs_governance_lite_gate["fallback_to"],
+                "docs_governance_lite_gate": docs_governance_lite_gate,
+            }
+        )
     post_merge_review_diagnostic = post_merge_review_diagnostic_payload(
         pr_payload=pr_payload if isinstance(pr_payload, dict) else None,
         review_record=timing_review_record,
@@ -15653,6 +15809,7 @@ def pr_gate_payload(
         "review_approval": review_approval,
         "merge_checkpoint": merge_checkpoint,
         "pr_metadata_preflight": pr_metadata_preflight,
+        "docs_governance_lite_gate": docs_governance_lite_gate,
         "post_merge_review_diagnostic": post_merge_review_diagnostic,
         "terminal_closeout_consumption": terminal_closeout_consumption,
         "governance_lint": governance_lint,

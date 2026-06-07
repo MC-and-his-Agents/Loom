@@ -89,6 +89,12 @@ carrier 冲突，都必须 fail closed。
 Gate 可以因为 `light` 或 `not_applicable` 缩小 suite artifact 面，但不能把
 `not_applicable` 当成 review、CI、PR gate 或 closeout 的 substitute evidence。
 
+PR metadata 的 machine carrier 可以只声明 `surface: merge_ready`，同时通过
+`preflight.required_before` 被 `pre_review` / `review` 提前消费。提前消费只表示
+review 前已读取同一个将由 merge-ready 消费的 carrier；不得要求执行者另造一个
+`surface: review` 的第二 machine block，也不得因此跳过后续 merge-ready / PR gate
+readback。
+
 ## 5. Fail-closed 分类
 
 Gate 至少要区分以下阻断原因：
