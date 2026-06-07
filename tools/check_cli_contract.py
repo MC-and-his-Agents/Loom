@@ -2242,6 +2242,209 @@ def semantic_pr_gate_fixture_payload(target: Path, fixture: dict[str, str]) -> d
     return payload
 
 
+def write_governance_metadata_contract_fixture(target: Path) -> None:
+    companion = target / ".loom" / "companion"
+    companion.mkdir(parents=True, exist_ok=True)
+    (companion / "README.md").write_text("# Fixture Companion\n", encoding="utf-8")
+    (companion / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "loom-repo-companion-manifest/v1",
+                "companion_entry": ".loom/companion/README.md",
+                "repo_interface": ".loom/companion/repo-interface.json",
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (target / ".github").mkdir(parents=True, exist_ok=True)
+    (target / ".github" / "PULL_REQUEST_TEMPLATE.md").write_text("## PR Metadata Machine Carrier\n", encoding="utf-8")
+    (target / "docs" / "methodology" / "harness").mkdir(parents=True, exist_ok=True)
+    (target / "docs" / "methodology" / "harness" / "tiered-gate-consumption-contract.md").write_text(
+        "# Tiered Gate Consumption Contract\n",
+        encoding="utf-8",
+    )
+    (target / "tools").mkdir(parents=True, exist_ok=True)
+    (target / "tools" / "loom_flow.py").write_text("# fixture command locator\n", encoding="utf-8")
+    (companion / "repo-interface.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "loom-repo-interface/v2",
+                "companion_entry": ".loom/companion/README.md",
+                "repo_specific_requirements": {"review": [], "merge_ready": [], "closeout": []},
+                "specialized_gates": [],
+                "review_instruction_locators": {
+                    "spec_review": {"locator": "loom_default", "mode": "loom_default"},
+                    "implementation_review": {"locator": "loom_default", "mode": "loom_default"},
+                },
+                "metadata_contract": {
+                    "fields": [
+                        {
+                            "id": "loom-governance-intensity",
+                            "summary": "Governance intensity fixture carrier",
+                            "applicability_locator": "docs/methodology/harness/tiered-gate-consumption-contract.md",
+                            "authority_locator": ".github/PULL_REQUEST_TEMPLATE.md",
+                            "enforcement": "blocking",
+                            "machine_carrier": {
+                                "type": "pr_body_html_comment_json",
+                                "schema_version": "loom-repo-pr-metadata/v1",
+                                "carrier_id": "loom-governance-intensity-pr-body-block",
+                                "marker": "loom:repo-pr-metadata",
+                                "surface": "merge_ready",
+                                "repo_specific_field_set": [
+                                    "loom_work_item",
+                                    "branch",
+                                    "head_sha",
+                                    "governance_intensity",
+                                    "change_class",
+                                    "suite_path",
+                                    "suite_not_applicable",
+                                    "review_requirement",
+                                    "fact_chain_required",
+                                    "pr_gate_required",
+                                    "release_judgment",
+                                    "closeout_required",
+                                    "upgrade_triggers",
+                                ],
+                                "enforcement": "blocking",
+                                "required_fields": [
+                                    "loom_work_item",
+                                    "branch",
+                                    "head_sha",
+                                    "governance_intensity",
+                                    "change_class",
+                                    "suite_path",
+                                    "review_requirement",
+                                    "fact_chain_required",
+                                    "pr_gate_required",
+                                    "release_judgment",
+                                    "closeout_required",
+                                    "upgrade_triggers",
+                                ],
+                                "preflight": {
+                                    "required_before": ["review", "merge_ready"],
+                                    "failure_mode": "blocking",
+                                    "command_locator": "tools/loom_flow.py",
+                                },
+                                "diagnostics": {
+                                    "block_locator": True,
+                                    "parse_error": True,
+                                    "missing_fields": True,
+                                    "expected_format": True,
+                                    "suggested_fix": True,
+                                },
+                                "migration_mode": "required",
+                            },
+                        }
+                    ]
+                },
+                "context_schema": {"fields": []},
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def governance_metadata_body(
+    *,
+    item: str = "WI-1321",
+    branch: str = "work/1321-governance-intensity-metadata-carrier",
+    head_sha: str = "1111111111111111111111111111111111111111",
+    fields_override: dict[str, Any] | None = None,
+) -> str:
+    fields: dict[str, Any] = {
+        "loom_work_item": item,
+        "branch": branch,
+        "head_sha": head_sha,
+        "governance_intensity": "standard",
+        "change_class": "contract",
+        "suite_path": "minimal",
+        "suite_not_applicable": None,
+        "review_requirement": "current_head_review_required",
+        "fact_chain_required": True,
+        "pr_gate_required": True,
+        "release_judgment": "no_release",
+        "closeout_required": True,
+        "upgrade_triggers": [],
+    }
+    if fields_override:
+        for key, value in fields_override.items():
+            if value == "__DELETE__":
+                fields.pop(key, None)
+            else:
+                fields[key] = value
+    envelope = {
+        "schema_version": "loom-repo-pr-metadata/v1",
+        "metadata_contract_id": "loom-governance-intensity",
+        "surface": "merge_ready",
+        "fields": fields,
+        "source": {"rendered_hash": "sha256:fixture"},
+        "parser_version": "loom-pr-metadata-parser/v1",
+    }
+    return (
+        f"Loom Work Item: {item}\n"
+        f"Branch: {branch}\n"
+        f"Head SHA: {head_sha}\n\n"
+        "<!-- loom:repo-pr-metadata\n"
+        f"{json.dumps(envelope, indent=2)}\n"
+        "-->\n"
+    )
+
+
+def governance_metadata_preflight_payload(target: Path, body_name: str, *, expect: int = 0) -> dict[str, Any]:
+    _, payload = run_flow_json(
+        [
+            "pr-metadata",
+            "preflight",
+            "--target",
+            str(target),
+            "--surface",
+            "merge_ready",
+            "--body-file",
+            body_name,
+        ],
+        expect=expect,
+    )
+    return payload
+
+
+def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
+    target = tmp / "governance-intensity-metadata"
+    target.mkdir()
+    write_governance_metadata_contract_fixture(target)
+    positive = target / "positive.md"
+    positive.write_text(governance_metadata_body(), encoding="utf-8")
+    positive_payload = governance_metadata_preflight_payload(target, "positive.md")
+    if positive_payload.get("result") != "pass" or not positive_payload.get("governance_intensity_carrier"):
+        raise AssertionError("governance intensity metadata positive fixture did not pass")
+
+    negative_cases: dict[str, dict[str, Any]] = {
+        "missing-intensity.md": {"governance_intensity": "__DELETE__"},
+        "unknown-intensity.md": {"governance_intensity": "casual"},
+        "light-runtime.md": {"governance_intensity": "light", "change_class": "runtime"},
+        "missing-na-rationale.md": {
+            "suite_path": "not_applicable",
+            "suite_not_applicable": {
+                "consumer_boundary": "suite validate and pr-gate",
+                "recheck_condition": "scope changes",
+                "scope_proof": "docs-only diff",
+                "review_requirement": "current_head_review_required",
+            },
+        },
+        "head-conflict.md": {"head_sha": "2222222222222222222222222222222222222222"},
+    }
+    for body_name, overrides in negative_cases.items():
+        (target / body_name).write_text(governance_metadata_body(fields_override=overrides), encoding="utf-8")
+        payload = governance_metadata_preflight_payload(target, body_name, expect=1)
+        if payload.get("result") != "block":
+            raise AssertionError(f"governance intensity metadata negative fixture did not block: {body_name}")
+        if "PR metadata machine block invalid: loom-governance-intensity" not in payload.get("missing_inputs", []):
+            raise AssertionError(f"governance intensity metadata fixture did not report invalid block: {body_name}")
+
+
 def append_pr_metadata_surface(target: Path, fixture: dict[str, str], *, surface: str) -> None:
     pr_path = target / fixture["pr_file"]
     payload = json.loads(pr_path.read_text(encoding="utf-8"))
@@ -4660,6 +4863,7 @@ def run_aggregate_cli_contract() -> None:
         assert_closeout_blocks_missing_suite_evidence(active_item)
         assert_reconciliation_suite_taxonomy_contract()
         assert_docs_contract_suite_not_applicable_gate_contract(tmp)
+        assert_governance_intensity_metadata_preflight_fixture(tmp)
         assert_semantic_review_disposition_pr_gate_fixture(tmp)
         assert_governance_chain_closeout_fixture(tmp)
         assert_carrier_closeout_sync_contract(tmp)

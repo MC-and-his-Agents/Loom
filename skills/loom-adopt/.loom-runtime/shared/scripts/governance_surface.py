@@ -3483,10 +3483,7 @@ def maturity_status(
         key: value.get("status") == "present"
         for key, value in (spec_gate_inputs or {}).items()
     }
-    formal_spec_or_not_applicable_present = carrier_present.get("plan_path", False) or (
-        spec_gate_present_inputs.get("suite_path_decision", False)
-        and spec_gate_present_inputs.get("spec_review", False)
-    )
+    formal_spec_or_not_applicable_present = carrier_present.get("plan_path", False) or spec_gate_present_inputs.get("suite_path_decision", False)
     spec_gate_present = (
         carrier_present.get("review", False)
         and carrier_present.get("spec_path", False)

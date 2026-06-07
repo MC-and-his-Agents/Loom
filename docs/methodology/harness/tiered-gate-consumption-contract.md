@@ -27,6 +27,9 @@ carrier 冲突，都必须 fail closed。
 
 | 字段 | 允许值 | 必填条件 | 消费语义 |
 | --- | --- | --- | --- |
+| `loom_work_item` | 当前 Work Item id | 所有 Loom-governed PR | 绑定 PR metadata carrier 与 Work Item / issue 事实链 |
+| `branch` | 当前 PR head branch | 所有 Loom-governed PR | 绑定 PR metadata carrier 与正式执行分支 / worktree |
+| `head_sha` | 当前 PR head SHA | 所有 Loom-governed PR | 绑定 PR metadata carrier、review artifact 与 PR head |
 | `governance_intensity` | `light` / `standard` / `reinforced` | 所有 Loom-governed PR | 决定最低证据、升级触发和 gate profile 期望 |
 | `change_class` | `docs_only` / `docs_governance` / `contract` / `runtime` / `fixture` / `release` / `external_action` / `mixed` | 所有 Loom-governed PR | 解释为什么当前强度成立；高风险 class 不得降级 |
 | `suite_path` | `full` / `minimal` / `not_applicable` | 所有 Work Item | 决定 full suite artifacts 是否必须可读 |

@@ -135,6 +135,29 @@ PR_METADATA_PREFLIGHT_SCHEMA = "loom-pr-metadata-preflight/v1"
 PR_METADATA_MACHINE_SCHEMA = "loom-repo-pr-metadata/v1"
 PR_METADATA_PARSER_VERSION = "loom-pr-metadata-parser/v1"
 PR_METADATA_SUPPORTED_PARSER_VERSIONS = (PR_METADATA_PARSER_VERSION, "repo-parser/v1")
+GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID = "loom-governance-intensity"
+GOVERNANCE_INTENSITY_VALUES = {"light", "standard", "reinforced"}
+GOVERNANCE_CHANGE_CLASS_VALUES = {
+    "docs_only",
+    "docs_governance",
+    "contract",
+    "runtime",
+    "fixture",
+    "release",
+    "external_action",
+    "mixed",
+}
+GOVERNANCE_SUITE_PATH_VALUES = {"full", "minimal", "not_applicable"}
+GOVERNANCE_REVIEW_REQUIREMENT_VALUES = {"current_head_review_required", "specialized_review_required"}
+GOVERNANCE_RELEASE_JUDGMENT_VALUES = {"release_required", "no_release", "deferred_release_judgment_blocking"}
+GOVERNANCE_NOT_APPLICABLE_REQUIRED_FIELDS = (
+    "rationale",
+    "consumer_boundary",
+    "recheck_condition",
+    "scope_proof",
+    "review_requirement",
+)
+GOVERNANCE_HIGH_RISK_CHANGE_CLASSES = {"runtime", "fixture", "release", "external_action", "mixed"}
 
 PROJECT_DRIFT_KINDS = {
     "project_missing_item",
@@ -6689,6 +6712,19 @@ def allowed_post_review_carrier_paths(context: dict[str, Any], *review_paths: st
     return allowed
 
 
+def allowed_terminal_closeout_carrier_paths(context: dict[str, Any], *review_paths: str) -> set[str]:
+    allowed = allowed_post_review_carrier_paths(context, *review_paths)
+    item_id = context.get("item_id")
+    if isinstance(item_id, str) and item_id.strip():
+        allowed.update(
+            {
+                f".loom/specs/{item_id}/task-carrier.md",
+                f".loom/work-items/{item_id}.md",
+            }
+        )
+    return allowed
+
+
 def formal_spec_path(context: dict[str, Any]) -> str | None:
     preferred = f".loom/specs/{context['item_id']}/spec.md"
     if (context["target_root"] / preferred).exists():
@@ -8596,7 +8632,14 @@ def check_pr_template(target_root: Path) -> tuple[dict[str, Any], list[str]]:
 def render_adoption_pr_body(context: dict[str, Any]) -> str:
     item_id = context["item_id"]
     review_record = context["review_entry"]
-    spec_review_record = default_spec_review_path(item_id)
+    _, suite_path_values = suite_path_decision_presence(context)
+    suite_not_applicable = bool(suite_path_values) and suite_path_values <= {"not_applicable"}
+    spec_review_record = "not_applicable" if suite_not_applicable else default_spec_review_path(item_id)
+    spec_plan_locator = (
+        f".loom/specs/{item_id}/spec.md (suite path: not_applicable)"
+        if suite_not_applicable
+        else f".loom/specs/{item_id}/spec.md"
+    )
     return (
         "## Summary\n\n"
         f"- Problem: Adopt Loom governance carriers for `{item_id}`.\n"
@@ -8608,7 +8651,7 @@ def render_adoption_pr_body(context: dict[str, Any]) -> str:
         "- Follow-ups: Keep repo-specific gates repo-owned.\n\n"
         "## Related Work\n\n"
         f"- Issue: {item_id}\n"
-        f"- Spec / plan: .loom/specs/{item_id}/spec.md\n\n"
+        f"- Spec / plan: {spec_plan_locator}\n\n"
         "## Review Artifacts\n\n"
         f"- Active Work Item: {context['report']['fact_chain']['entry_points']['work_item']}\n"
         f"- Active Recovery Entry: {context['report']['fact_chain']['entry_points']['recovery_entry']}\n"
@@ -8664,6 +8707,12 @@ def validate_adoption_pr_body(body: str, *, target_root: Path) -> dict[str, Any]
 
     locator_status: dict[str, dict[str, Any]] = {}
     for label, locator in locators.items():
+        if label == "Spec Review Record" and locator == "not_applicable":
+            locator_status[label] = {
+                "locator": locator,
+                "status": "not_applicable",
+            }
+            continue
         path, errors = resolve_repo_relative_path(target_root, locator, label=f"Review Artifacts `{label}`")
         exists = bool(path and path.exists() and path.is_file())
         if errors:
@@ -12773,16 +12822,23 @@ def adoption_verify_payload(target_root: Path, output_relative: str, expected_it
     bypass_validation = validate_adoption_pr_body(bypass_body, target_root=target_root)
 
     review_record, review_path, review_errors = load_review_record(target_root, context["item_id"], context["review_entry"])
-    spec_review_record, spec_review_path, spec_review_errors = load_review_record(
-        target_root,
-        context["item_id"],
-        default_spec_review_path(context["item_id"]),
-    )
+    _, suite_path_values = suite_path_decision_presence(context)
+    suite_not_applicable = bool(suite_path_values) and suite_path_values <= {"not_applicable"}
+    if suite_not_applicable:
+        spec_review_record = None
+        spec_review_path = "not_applicable"
+        spec_review_errors: list[str] = []
+    else:
+        spec_review_record, spec_review_path, spec_review_errors = load_review_record(
+            target_root,
+            context["item_id"],
+            default_spec_review_path(context["item_id"]),
+        )
     review_missing = list(review_errors)
     if review_record is None and not review_errors:
         review_missing.append(f"missing review artifact: {review_path}")
     spec_review_missing = list(spec_review_errors)
-    if spec_review_record is None and not spec_review_errors:
+    if spec_review_record is None and not spec_review_errors and not suite_not_applicable:
         spec_review_missing.append(f"missing spec review artifact: {spec_review_path}")
 
     missing_inputs: list[str] = []
@@ -12842,7 +12898,7 @@ def adoption_verify_payload(target_root: Path, output_relative: str, expected_it
             },
             "spec": {
                 "path": spec_review_path,
-                "status": "present" if spec_review_record is not None and not spec_review_errors else "missing",
+                "status": "not_applicable" if suite_not_applicable else "present" if spec_review_record is not None and not spec_review_errors else "missing",
             },
         },
         "adoption_decisions": decisions,
@@ -13733,6 +13789,22 @@ def pr_body_mentions_item(body: Any, item_id: str) -> bool:
     return bool(re.search(rf"(?<![A-Z0-9-]){re.escape(item_id)}(?![A-Z0-9-])", body))
 
 
+def pr_body_machine_surface(body: Any) -> str | None:
+    if not isinstance(body, str):
+        return None
+    for block in pr_metadata_html_comment_blocks(body, "loom:repo-pr-metadata"):
+        try:
+            envelope = json.loads(block["raw"])
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(envelope, dict):
+            continue
+        surface = envelope.get("surface")
+        if isinstance(surface, str) and surface.strip():
+            return surface.strip()
+    return None
+
+
 def pr_metadata_block_locator(body: str, start: int, end: int, marker: str) -> dict[str, Any]:
     raw_excerpt = body[start:end]
     return {
@@ -13932,6 +14004,83 @@ def pr_metadata_diagnostic(
     }
 
 
+def governance_metadata_string_field(fields: dict[str, Any], name: str, missing_fields: list[str]) -> str | None:
+    value = fields.get(name)
+    if not isinstance(value, str) or not value.strip():
+        missing_fields.append(f"fields.{name}")
+        return None
+    return value.strip()
+
+
+def governance_metadata_bool_field(fields: dict[str, Any], name: str, missing_fields: list[str]) -> bool | None:
+    value = fields.get(name)
+    if value is not True:
+        missing_fields.append(f"fields.{name}")
+        return None
+    return True
+
+
+def validate_governance_intensity_metadata_fields(fields: dict[str, Any]) -> list[str]:
+    missing_fields: list[str] = []
+    work_item = governance_metadata_string_field(fields, "loom_work_item", missing_fields)
+    branch = governance_metadata_string_field(fields, "branch", missing_fields)
+    head_sha = governance_metadata_string_field(fields, "head_sha", missing_fields)
+    governance_intensity = governance_metadata_string_field(fields, "governance_intensity", missing_fields)
+    change_class = governance_metadata_string_field(fields, "change_class", missing_fields)
+    suite_path = governance_metadata_string_field(fields, "suite_path", missing_fields)
+    review_requirement = governance_metadata_string_field(fields, "review_requirement", missing_fields)
+    release_judgment = governance_metadata_string_field(fields, "release_judgment", missing_fields)
+    governance_metadata_bool_field(fields, "fact_chain_required", missing_fields)
+    governance_metadata_bool_field(fields, "pr_gate_required", missing_fields)
+    governance_metadata_bool_field(fields, "closeout_required", missing_fields)
+
+    if work_item and not re.fullmatch(r"(?:WI-|INIT-)[A-Z0-9-]+", work_item):
+        missing_fields.append("fields.loom_work_item")
+    if branch and not branch.startswith("work/"):
+        missing_fields.append("fields.branch")
+    if head_sha and not re.fullmatch(r"[0-9a-f]{40}", head_sha):
+        missing_fields.append("fields.head_sha")
+    if governance_intensity and governance_intensity not in GOVERNANCE_INTENSITY_VALUES:
+        missing_fields.append("fields.governance_intensity")
+    if change_class and change_class not in GOVERNANCE_CHANGE_CLASS_VALUES:
+        missing_fields.append("fields.change_class")
+    if suite_path and suite_path not in GOVERNANCE_SUITE_PATH_VALUES:
+        missing_fields.append("fields.suite_path")
+    if review_requirement and review_requirement not in GOVERNANCE_REVIEW_REQUIREMENT_VALUES:
+        missing_fields.append("fields.review_requirement")
+    if release_judgment and release_judgment not in GOVERNANCE_RELEASE_JUDGMENT_VALUES:
+        missing_fields.append("fields.release_judgment")
+
+    upgrade_triggers = fields.get("upgrade_triggers")
+    if not isinstance(upgrade_triggers, list) or any(not isinstance(entry, str) or not entry.strip() for entry in upgrade_triggers):
+        missing_fields.append("fields.upgrade_triggers")
+
+    suite_not_applicable = fields.get("suite_not_applicable")
+    if suite_path == "not_applicable":
+        if not isinstance(suite_not_applicable, dict):
+            missing_fields.append("fields.suite_not_applicable")
+        else:
+            for required_field in GOVERNANCE_NOT_APPLICABLE_REQUIRED_FIELDS:
+                value = suite_not_applicable.get(required_field)
+                if not isinstance(value, str) or not value.strip():
+                    missing_fields.append(f"fields.suite_not_applicable.{required_field}")
+            if (
+                isinstance(suite_not_applicable.get("review_requirement"), str)
+                and review_requirement
+                and suite_not_applicable.get("review_requirement") != review_requirement
+            ):
+                missing_fields.append("fields.suite_not_applicable.review_requirement")
+    elif "suite_not_applicable" in fields and suite_not_applicable not in (None, {}, ""):
+        missing_fields.append("fields.suite_not_applicable")
+
+    if governance_intensity == "light" and change_class in GOVERNANCE_HIGH_RISK_CHANGE_CLASSES:
+        missing_fields.append("fields.change_class")
+        missing_fields.append("fields.governance_intensity")
+    if release_judgment == "deferred_release_judgment_blocking":
+        missing_fields.append("fields.release_judgment")
+    return dedupe_strings(missing_fields)
+
+
 def validate_pr_metadata_envelope(
     *,
     envelope: Any,
@@ -13994,6 +14143,9 @@ def validate_pr_metadata_envelope(
             if isinstance(required_field, str) and required_field.strip():
                 if required_field not in fields or fields.get(required_field) in (None, ""):
                     missing_fields.append(f"fields.{required_field}")
+    if contract_id == GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID and isinstance(fields, dict):
+        missing_fields.extend(validate_governance_intensity_metadata_fields(fields))
+        missing_fields = dedupe_strings(missing_fields)
     if missing_fields:
         diagnostics.append(
             pr_metadata_diagnostic(
@@ -14002,7 +14154,7 @@ def validate_pr_metadata_envelope(
                 reason=(
                     f"unsupported parser_version: {parser_version}"
                     if unsupported_parser_version
-                    else "machine block is missing required envelope or repo-specific fields"
+                    else "machine block is missing or violates required envelope or repo-specific fields"
                 ),
                 source_locator=authority_locator,
                 source_range_or_hash=source_range_or_hash,
@@ -14029,6 +14181,9 @@ def pr_metadata_contract_preflight(
     field: dict[str, Any],
     body: str | None,
     surface: str,
+    expected_item: str | None = None,
+    expected_head_sha: str | None = None,
+    expected_branch: str | None = None,
 ) -> dict[str, Any]:
     contract_id = str(field.get("id") or "unknown")
     machine_carrier = field.get("machine_carrier") if isinstance(field.get("machine_carrier"), dict) else {}
@@ -14140,6 +14295,53 @@ def pr_metadata_contract_preflight(
         )
         diagnostics.extend(envelope_diagnostics)
         if normalized is not None:
+            binding_missing: list[str] = []
+            if contract_id == GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID:
+                normalized_fields = normalized.get("fields") if isinstance(normalized.get("fields"), dict) else {}
+                body_item = pr_work_item_from_body(body)
+                body_head = pr_body_field_value(body, "Head SHA")
+                body_branch = pr_body_field_value(body, "Branch")
+                expected_bindings = {
+                    "loom_work_item": expected_item or body_item,
+                    "head_sha": expected_head_sha or body_head,
+                    "branch": expected_branch or body_branch,
+                }
+                body_bindings = {
+                    "loom_work_item": body_item,
+                    "head_sha": body_head,
+                    "branch": body_branch,
+                }
+                for field_name, expected_value in expected_bindings.items():
+                    carrier_value = normalized_fields.get(field_name)
+                    if isinstance(expected_value, str) and expected_value and carrier_value != expected_value:
+                        binding_missing.append(f"fields.{field_name}")
+                for field_name, body_value in body_bindings.items():
+                    carrier_value = normalized_fields.get(field_name)
+                    if isinstance(body_value, str) and body_value and carrier_value != body_value:
+                        binding_missing.append(f"fields.{field_name}")
+                if binding_missing:
+                    diagnostics.append(
+                        pr_metadata_diagnostic(
+                            contract_id=contract_id,
+                            marker=marker,
+                            reason="governance metadata carrier binding does not match PR body or PR head inputs",
+                            source_locator=authority_locator,
+                            source_range_or_hash=source_range_or_hash,
+                            expected_schema=expected_schema,
+                            block_locator=block["locator"],
+                            missing_fields=dedupe_strings(binding_missing),
+                        )
+                    )
+                    return {
+                        **base,
+                        "result": "block",
+                        "summary": "PR metadata machine block is present but its governance binding conflicts with PR body or PR head inputs.",
+                        "missing_inputs": [f"PR metadata machine block invalid: {contract_id}"],
+                        "fallback_to": "update_pr_body",
+                        "diagnostics": diagnostics,
+                        "envelope": None,
+                        "legacy_mode": False,
+                    }
             return {
                 **base,
                 "result": "pass",
@@ -14247,8 +14449,20 @@ def pr_metadata_preflight_payload(
     )
     if isinstance(body_artifact_result, dict):
         missing_inputs.extend(str(message) for message in body_artifact_result.get("missing_inputs", []))
+    body_item = pr_work_item_from_body(body) if isinstance(body, str) else None
+    body_head = pr_body_field_value(body, "Head SHA") if isinstance(body, str) else None
+    body_branch = pr_body_field_value(body, "Branch") if isinstance(body, str) else None
+    pr_head = pr_payload.get("headRefOid") if isinstance(pr_payload, dict) else head_sha
+    pr_branch = pr_payload.get("headRefName") if isinstance(pr_payload, dict) else branch_name
     contract_results = [
-        pr_metadata_contract_preflight(field=field, body=body if isinstance(body, str) else None, surface=surface)
+        pr_metadata_contract_preflight(
+            field=field,
+            body=body if isinstance(body, str) else None,
+            surface=surface,
+            expected_item=body_item,
+            expected_head_sha=pr_head if isinstance(pr_head, str) and pr_head else body_head,
+            expected_branch=pr_branch if isinstance(pr_branch, str) and pr_branch else body_branch,
+        )
         for field in applicable_contracts
     ]
     for contract_result in contract_results:
@@ -14277,6 +14491,19 @@ def pr_metadata_preflight_payload(
         "fallback_to": "update_pr_body" if result == "block" and not contract_errors else "adoption" if result == "block" else None,
         "source_locator": source_locator,
         "metadata_contracts": contract_results,
+        "governance_intensity_carrier": next(
+            (
+                {
+                    "metadata_contract_id": contract_result.get("metadata_contract_id"),
+                    "surface": contract_result.get("surface"),
+                    "result": contract_result.get("result"),
+                    "envelope": contract_result.get("envelope"),
+                }
+                for contract_result in contract_results
+                if contract_result.get("metadata_contract_id") == GOVERNANCE_INTENSITY_METADATA_CONTRACT_ID
+            ),
+            None,
+        ),
         "diagnostics": [
             diagnostic
             for contract_result in contract_results
@@ -15054,6 +15281,7 @@ def pr_gate_payload(
         missing_inputs.extend(f"pr: {message}" for message in pr_errors)
 
     body_item = pr_work_item_from_body(pr_payload.get("body") if isinstance(pr_payload, dict) else None)
+    body_surface = pr_body_machine_surface(pr_payload.get("body") if isinstance(pr_payload, dict) else None)
     effective_item = expected_item or body_item
     if expected_item and body_item and expected_item != body_item:
         missing_inputs.append(f"PR body Work Item `{body_item}` does not match expected `{expected_item}`")
@@ -15118,6 +15346,12 @@ def pr_gate_payload(
         "head_binding": None,
         "semantic_review_disposition": None,
     }
+    terminal_closeout_consumption: dict[str, Any] = {
+        "result": "not_applicable",
+        "summary": "PR gate is not evaluating a terminal closeout carrier PR.",
+        "missing_inputs": [],
+        "fallback_to": None,
+    }
     timing_review_record: dict[str, Any] | None = None
     timing_review_path: str | None = None
     if context:
@@ -15152,13 +15386,62 @@ def pr_gate_payload(
                 head_binding=head_binding_payload,
                 current_validation_summary=context.get("latest_validation_summary"),
             )
+            terminal_closeout_binding, terminal_closeout_binding_errors = review_head_binding_for_head(
+                target_root,
+                reviewed_head=review_record.get("reviewed_head"),
+                target_head=pr_head,
+                allowed_paths=allowed_terminal_closeout_carrier_paths(context, review_path),
+            )
+            merge_checkpoint_missing = [
+                str(message)
+                for message in merge_checkpoint.get("missing_inputs", [])
+                if str(message).strip()
+            ]
+            terminal_closeout_missing: list[str] = []
+            if body_surface != "closeout":
+                terminal_closeout_missing.append("PR metadata surface is not closeout")
+            if merge_checkpoint.get("result") != "fallback" or merge_checkpoint.get("fallback_to") not in {"closed", "closed_out"}:
+                terminal_closeout_missing.append("merge checkpoint is not terminal closeout")
+            if normalize_checkpoint(str(context.get("current_checkpoint", ""))) not in {"closed", "closed_out", "done"}:
+                terminal_closeout_missing.append("current checkpoint is not terminal closed_out")
+            if terminal_closeout_binding.get("status") not in {"fresh", "carrier-only"} or terminal_closeout_binding.get("stale") is True:
+                terminal_closeout_missing.extend(terminal_closeout_binding_errors or ["terminal closeout carrier drift is not review-safe"])
+            non_review_checkpoint_missing = [
+                message
+                for message in merge_checkpoint_missing
+                if "review artifact is stale" not in message and "reviewed_head" not in message and "head binding" not in message
+            ]
+            terminal_closeout_missing.extend(non_review_checkpoint_missing)
+            terminal_closeout_consumption = {
+                "result": "pass" if not terminal_closeout_missing else "block",
+                "summary": (
+                    "terminal closeout carrier PR consumed retained implementation review and closeout-only carrier drift."
+                    if not terminal_closeout_missing
+                    else "terminal closeout carrier PR is not eligible to bypass current-head implementation review binding."
+                ),
+                "missing_inputs": terminal_closeout_missing,
+                "fallback_to": None if not terminal_closeout_missing else "review",
+                "surface": body_surface,
+                "checkpoint": context.get("current_checkpoint"),
+                "head_binding": terminal_closeout_binding,
+                "retained_review": {
+                    "path": review_path,
+                    "reviewed_head": review_record.get("reviewed_head"),
+                    "decision": review_record.get("decision"),
+                    "kind": review_kind,
+                },
+                "allowed_paths_policy": "terminal closeout carrier paths only; does not apply to merge-ready implementation PRs",
+            }
             approval_errors = [*review_errors, *head_binding_errors, *disposition_errors]
+            terminal_closeout_pass = terminal_closeout_consumption.get("result") == "pass"
             approval_status = (
                 "approved"
                 if review_record.get("decision") == "allow"
                 and not approval_errors
                 and review_kind in IMPLEMENTATION_REVIEW_KINDS
                 and disposition.get("consumable") is True
+                else "terminal_closeout_retained"
+                if terminal_closeout_pass
                 else "not_approved"
             )
             review_approval = {
@@ -15172,11 +15455,12 @@ def pr_gate_payload(
                 "semantic_review_disposition": disposition,
                 "missing_inputs": approval_errors,
             }
-            missing_inputs.extend(str(message) for message in approval_errors)
+            if not terminal_closeout_pass:
+                missing_inputs.extend(str(message) for message in approval_errors)
         terminal_closed_checkpoint = (
             merge_checkpoint.get("result") == "fallback"
-            and merge_checkpoint.get("fallback_to") == "closed"
-            and not merge_checkpoint.get("missing_inputs")
+            and merge_checkpoint.get("fallback_to") in {"closed", "closed_out"}
+            and terminal_closeout_consumption.get("result") == "pass"
         )
         if merge_checkpoint.get("result") in {"block", "fallback"} and not terminal_closed_checkpoint:
             missing_inputs.extend(str(message) for message in merge_checkpoint.get("missing_inputs", []))
@@ -15259,10 +15543,13 @@ def pr_gate_payload(
             for key in ("statusCheckRollup", "checks", "latestReviews", "reviewDecision", "mergeStateStatus")
         )
     if ci_or_host_review_signal_present and review_approval.get("status") != "approved":
-        missing_inputs.append("ci-only or host-review signal cannot satisfy semantic_review_disposition")
-        for category in ("ci_only_bypass", "ci_only_merge_bypass"):
-            if category not in failure_taxonomy:
-                failure_taxonomy.append(category)
+        if review_approval.get("status") == "terminal_closeout_retained":
+            pass
+        else:
+            missing_inputs.append("ci-only or host-review signal cannot satisfy semantic_review_disposition")
+            for category in ("ci_only_bypass", "ci_only_merge_bypass"):
+                if category not in failure_taxonomy:
+                    failure_taxonomy.append(category)
     if missing_inputs and result == "pass":
         result = "block"
         fallback_to = fallback_to or "build"
@@ -15289,12 +15576,55 @@ def pr_gate_payload(
             "provenance": [],
         }
     )
+    if context and terminal_closeout_consumption.get("result") == "pass":
+        governance_lint = {
+            "schema_version": GOVERNANCE_LINT_STATUS_SCHEMA,
+            "surface": "closeout",
+            "result": "pass",
+            "result_summary": "terminal closeout carrier PR retains implementation review evidence without promoting it to current-head merge-ready approval.",
+            "blocking_results": [],
+            "advisory_results": [],
+            "repo_specific_results": [],
+            "not_applicable_results": [
+                {
+                    "schema_version": GOVERNANCE_LINT_RESULT_SCHEMA,
+                    "id": "terminal_closeout_retained_review",
+                    "kind": "closeout_retained_review",
+                    "surface": "closeout",
+                    "subject": "work_item.review_entry",
+                    "strength": "not_applicable",
+                    "summary": "Closeout-only carrier drift is terminal and does not replace implementation PR review/head binding.",
+                    "mapped_failure": {
+                        "category": "not_applicable",
+                        "kind": "terminal_closeout",
+                    },
+                    "provenance": {
+                        "source_layer": "authored_truth",
+                        "source_owner": "loom",
+                        "source_locator": context.get("review_entry"),
+                        "source_binding": "work_item.review_entry",
+                        "freshness": "retained",
+                    },
+                    "bindings": {
+                        "item_id": context.get("item_id"),
+                        "head_sha": pr_head,
+                        "reviewed_head_sha": review_approval.get("reviewed_head"),
+                    },
+                    "fallback_to": None,
+                }
+            ],
+            "mapped_failures": [],
+            "provenance": [],
+        }
     return {
         "command": "pr-gate",
         "operation": "check",
         "schema_version": PR_MERGE_GATE_SCHEMA,
         "result": result,
         "summary": (
+            "PR merge gate consumed terminal closeout carrier drift with retained implementation review evidence."
+            if result == "pass" and terminal_closeout_consumption.get("result") == "pass"
+            else
             "PR merge gate found fresh authored semantic review approval for the current PR head."
             if result == "pass"
             else "PR merge gate is blocked or falling back before host merge."
@@ -15324,6 +15654,7 @@ def pr_gate_payload(
         "merge_checkpoint": merge_checkpoint,
         "pr_metadata_preflight": pr_metadata_preflight,
         "post_merge_review_diagnostic": post_merge_review_diagnostic,
+        "terminal_closeout_consumption": terminal_closeout_consumption,
         "governance_lint": governance_lint,
         "host_enforcement": {
             "stable_check_name": PR_MERGE_GATE_CHECK_NAME,

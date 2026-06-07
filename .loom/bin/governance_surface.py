@@ -910,6 +910,9 @@ def safe_read_json(path: Path) -> dict[str, Any] | None:
 
 
 def command_prefix(root: Path, tool_name: str) -> str:
+    installed_state = safe_read_json(root / ".loom" / "installed-state.json")
+    if isinstance(installed_state, dict) and installed_state.get("runtime_provider") == "global-cli":
+        return "loom"
     loom_tool = root / ".loom/bin" / tool_name
     if loom_tool.exists():
         return f"python3 .loom/bin/{tool_name}"
@@ -3480,10 +3483,7 @@ def maturity_status(
         key: value.get("status") == "present"
         for key, value in (spec_gate_inputs or {}).items()
     }
-    formal_spec_or_not_applicable_present = carrier_present.get("plan_path", False) or (
-        spec_gate_present_inputs.get("suite_path_decision", False)
-        and spec_gate_present_inputs.get("spec_review", False)
-    )
+    formal_spec_or_not_applicable_present = carrier_present.get("plan_path", False) or spec_gate_present_inputs.get("suite_path_decision", False)
     spec_gate_present = (
         carrier_present.get("review", False)
         and carrier_present.get("spec_path", False)

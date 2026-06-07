@@ -132,13 +132,13 @@
       "path": ".loom/bin/governance_surface.py",
       "kind": "loom-tool-support",
       "source": "skills/shared/scripts/governance_surface.py",
-      "sha256": "e9890c7b7779a8ad97c6a3500234ef1f19242ff887ed237d8b9a98785540dcec"
+      "sha256": "35ac2c9c2511782145d2f1fad08a0cc355b85d0613af49438be4e75292e84290"
     },
     {
       "path": ".loom/bin/loom_flow.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_flow.py",
-      "sha256": "31b4e79cd09546e79be70ea151b9e4f6fb5519384cd8c246da5f23a99b69f6fb"
+      "sha256": "e49a34dd72dfe2ce8688a4746e655840d48cef0b6c1ae5bb1ab040c211b5c30a"
     },
     {
       "path": ".loom/bin/loom_status.py",
