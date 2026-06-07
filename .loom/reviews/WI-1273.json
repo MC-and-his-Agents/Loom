@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1273",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1273 implementation review approved: PR #1368 adds the named governance-closeout CLI contract surface by moving closeout and reconciliation checks behind shared helpers while preserving aggregate check-cli-contract behavior. The diff is limited to tools/check_cli_contract.py plus minimal WI-1273 Loom carriers/shadow evidence, does not implement #1274 adoption-host-metadata or #1257 closeout, does not change task-carrier runtime validation semantics, hosted workflows, metadata schema, or release behavior, and local review validation passed for governance-closeout surface, PR metadata/head binding, fact-chain, suite not_applicable rationale, shadow parity, and diff hygiene. No findings.",
+  "reviewer": "codex-scheduler",
+  "authored_at": "2026-06-07T23:58:04Z",
+  "reviewed_head": "011440ac6b02dc0c9243a918a0af5444264910eb",
+  "reviewed_validation_summary": "2026-06-08 local implementation validation passed: `python3 tools/check_cli_contract.py --list-surfaces` lists `governance-closeout`; `python3 tools/check_cli_contract.py --surface governance-closeout` passed in 31.62s after WI-1273 carrier activation; `python3 tools/check_cli_contract.py` aggregate compatibility passed in 221.33s; `python3 tools/loom.py fact-chain --target . --json` passed; `python3 tools/loom.py suite validate --target . --item WI-1273 --json` returned formal-suite `result: not_applicable` with no blocking gaps; `git diff --check` passed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1273.md",
+    "recovery_entry": ".loom/progress/WI-1273.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
