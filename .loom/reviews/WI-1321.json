@@ -1,39 +1,48 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1321",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "5b06d02ff62009528d016f0724570385884b2d89",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1321 implementation review allows the governance intensity metadata carrier change at implementation head 430ffc2a. The change adds a blocking repo metadata contract, PR body machine carrier template, fail-closed parser semantics for missing/invalid governance fields and PR body/head binding drift, runtime copy synchronization, and targeted fixtures. It does not implement #1322 docs-governance light gate strategy, #1323 full escalation matrix, #1324 parent closeout, release mechanics, runtime provider changes, or review engine changes. Local validation consumed git diff --check, py_compile_clean, tools/skills_surface.py check, skills check, PR metadata preflight/readback, aggregate CLI contract fixtures, fact-chain, suite validate not_applicable, and loom_check source contract-only.",
+  "reviewer": "codex-worker-R3-T7",
+  "authored_at": "2026-06-07T06:20:11Z",
+  "reviewed_head": "430ffc2a9a13938406c5723e515b2c894bd3ee7d",
+  "reviewed_validation_summary": "2026-06-07 local validation passed: git diff --check; python3 tools/py_compile_clean.py skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py tools/check_cli_contract.py; python3 tools/skills_surface.py check; python3 tools/loom.py skills check --target . --json; python3 tools/loom.py pr metadata-preflight --surface merge_ready --body-file .github/PULL_REQUEST_TEMPLATE.md --compare-body-file .github/PULL_REQUEST_TEMPLATE.md --json; python3 tools/check_cli_contract.py --surface aggregate passed in 184.79s; python3 tools/loom.py fact-chain --target . --item WI-1321 --json passed; python3 tools/loom.py suite validate --target . --item WI-1321 --json returned not_applicable with no missing inputs/blocking gaps; python3 tools/loom_check.py --profile source --source-surface contract-only . passed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1321.md",
+    "recovery_entry": ".loom/progress/WI-1321.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
 }
