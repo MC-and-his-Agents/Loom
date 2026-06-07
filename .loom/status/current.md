@@ -6,7 +6,7 @@
 - Goal: Split suite inspect/scaffold/validate checks into a named CLI contract surface.
 - Scope: Add a stable `suite-contract` named surface in `tools/check_cli_contract.py` for suite inspect/scaffold/validate contract checks while preserving aggregate `check-cli-contract` coverage. Excludes suite evidence, suite carrier, governance closeout, adoption/host metadata, hosted workflow, release, metadata schema, and runtime suite semantic changes.
 - Execution Path: issue #1270 -> branch work/1270-check-cli-suite-contract-surface -> PR #1360 -> local surface/aggregate validation -> PR metadata/head binding -> hosted checks -> scheduler-owned review/controlled merge/closeout.
-- Workspace Entry: /Users/mc/.codex/worktrees/4fb8/Loom
+- Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1270.md
 - Review Entry: .loom/reviews/WI-1270.json
 - Validation Entry: python3 tools/check_cli_contract.py --list-surfaces; python3 tools/check_cli_contract.py --surface suite-contract; python3 tools/check_cli_contract.py; git diff --check; PR metadata preflight/readback; hosted checks.
