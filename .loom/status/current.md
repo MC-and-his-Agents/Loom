@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1324
-- Goal: Complete issue #1324 by converging parent #1314 closeout evidence for the change governance intensity model, Loom mapping, metadata carrier, docs-governance light gate, escalation fixtures, landing links, and release/no-release judgment.
-- Scope: Allowed: final closeout documentation, landing links, release/no-release evidence, parent/child issue closeout comments, WI-1324 Loom carriers, review/closeout evidence, and necessary shadow/carrier synchronization. Excluded: new gate behavior, metadata schema changes, fixture matrix changes, runtime/provider implementation, changes to terminalized #1319-#1323 implementation facts, raw merge, external release, and permission actions.
-- Execution Path: issue #1324 -> branch work/1324-final-closeout -> docs/link/readback checks -> fact-chain -> suite not_applicable validation -> pr-gate dry check -> git diff --check and no-release evidence -> current-head review -> hosted checks -> controlled merge -> closeout sync for #1324 and parent #1314.
-- Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1324.md
-- Review Entry: .loom/reviews/WI-1324.json
-- Validation Entry: docs/link/readback checks; fact-chain; suite validate not_applicable; pr-gate dry check; git diff --check; no-release evidence; hosted checks; controlled merge; closeout sync.
-- Closing Condition: PR for #1324 is merged through the controlled merge wrapper, issue #1324 is closed, repo carriers terminalize WI-1324 closeout, and parent #1314 has a closeout comment that distinguishes completed child work from deferred follow-up #1318.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1324 is closed out. PR #1357 merged into `main` at `7e2b6089212fec388f2a37ae3b3c0a84cc903d9f`; issue #1324 is closed; #1318 remains open as an explicitly deferred follow-up, not completed work.
-- Next Step: Close parent #1314 with a closeout comment that records completed child evidence and the deferred #1318 follow-up.
-- Blockers: None recorded.
-- Latest Validation Summary: 2026-06-07 final local validation passed after shadow parity repair: branch `work/1324-final-closeout` is based on `origin/main` `f89317220f2f5dfbe481e97dbaf499333231f7b7`; GitHub readback shows #1315/#1316/#1317/#1319/#1320/#1321/#1322/#1323 CLOSED/COMPLETED while #1318 remains OPEN and must be marked deferred rather than completed; PR readback shows #1322 PR #1353 merged at `167079bb7196db768d92e49e6501128d6b157e88` and closeout carrier PR #1354 merged at `10112e3f9c702038dc156b10c1e135b3cd780f1f`; #1323 PR #1355 merged at `6a7c2120a90e5197b6c89d10c27c38cc1a8fef30` and closeout carrier PR #1356 merged at `f89317220f2f5dfbe481e97dbaf499333231f7b7`; docs/link readback for governance-intensity model, Loom mapping, docs-governance checklist, tiered gate contract, metadata carrier, inventory, and final closeout evidence passed; `python3 .loom/bin/loom_init.py fact-chain --target .` passed with WI-1324 and zero blockers; `python3 tools/loom.py suite validate --target . --item WI-1324 --json` returned `not_applicable` with no blocking gaps; `python3 tools/loom.py suite evidence validate --target . --item WI-1324 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1324 --json` passed; `python3 tools/check_release_surface.py` passed; `python3 tools/version_surface_check.py` passed; `git diff --check` passed; root-self-governance local equivalent passed; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed. No-release evidence: WI-1324 only changes closeout evidence, landing/index links, WI-1324 carriers/review evidence, and shadow hash evidence; no runtime, generated skill, parser, metadata schema, fixture matrix, release workflow, version, permission, or external-visible action changed.
-- Recovery Boundary: WI-1324 owns only final closeout evidence, landing/readme/index links, release/no-release judgment, parent/child closeout comments, and WI-1324 Loom carriers. Do not implement AGENTS #1318, gate behavior, metadata schema, fixtures, runtime/provider changes, release publishing, or external permission actions here.
-- Current Lane: governance-intensity-final-closeout
+- Item ID: WI-1270
+- Goal: Split suite inspect/scaffold/validate checks into a named CLI contract surface.
+- Scope: Add a stable `suite-contract` named surface in `tools/check_cli_contract.py` for suite inspect/scaffold/validate contract checks while preserving aggregate `check-cli-contract` coverage. Excludes suite evidence, suite carrier, governance closeout, adoption/host metadata, hosted workflow, release, metadata schema, and runtime suite semantic changes.
+- Execution Path: issue #1270 -> branch work/1270-check-cli-suite-contract-surface -> PR #1360 -> local surface/aggregate validation -> PR metadata/head binding -> hosted checks -> scheduler-owned review/controlled merge/closeout.
+- Workspace Entry: /Users/mc/.codex/worktrees/4fb8/Loom
+- Recovery Entry: .loom/progress/WI-1270.md
+- Review Entry: .loom/reviews/WI-1270.json
+- Validation Entry: python3 tools/check_cli_contract.py --list-surfaces; python3 tools/check_cli_contract.py --surface suite-contract; python3 tools/check_cli_contract.py; git diff --check; PR metadata preflight/readback; hosted checks.
+- Closing Condition: PR #1360 is reviewed by the scheduler-owned gate, merged through controlled merge, issue #1270 is closed, and post-merge closeout sync consumes PR, issue, branch, head, target main, review, and validation evidence.
+- Current Checkpoint: implementation_pr_ready
+- Current Stop: PR #1360 is open at head 22f7c7973f27e2ef3e29be3aff1becf4954966b2 with local validation and PR metadata/head binding passed; hosted checks are being read back. Scheduler owns semantic review, controlled merge, and post-merge closeout.
+- Next Step: Wait for scheduler-owned semantic review/high-cost gate decision, controlled merge, and closeout sync.
+- Blockers: Scheduler-owned semantic review is not authored yet; hosted merge gate may remain blocked until the scheduler provides current-head review evidence.
+- Latest Validation Summary: 2026-06-08 local validation on branch `work/1270-check-cli-suite-contract-surface` head `22f7c7973f27e2ef3e29be3aff1becf4954966b2`: `python3 tools/check_cli_contract.py --list-surfaces` passed and listed `suite-contract	suite-contract` plus `aggregate	check-cli-contract`; `python3 tools/check_cli_contract.py --surface suite-contract` passed; `python3 tools/check_cli_contract.py` passed with suite-contract and aggregate surfaces; `git diff --check` passed. PR #1360 metadata readback matched rendered machine carrier for WI-1270, branch, head SHA, workspace, and `Surface: suite-contract`.
+- Recovery Boundary: Only #1270 suite-contract surface split and minimal WI-1270 PR-readiness carriers are in scope. Do not handle #1271, #1272, #1273, #1274, #1257 closeout, runtime suite semantics, hosted workflows, release surfaces, metadata schema, or external-visible actions.
+- Current Lane: check-cli-suite-contract-surface
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
-- Diagnostics Entry: not_applicable
-- Verification Entry: local validation, PR metadata/readback, PR gate, hosted checks, controlled merge, and #1324 closeout sync passed
-- Lane Entry: governance-intensity-final-closeout
+- Diagnostics Entry: hosted merge gate initially blocked on stale WI-1324 fact-chain and missing scheduler-owned semantic review; this carrier sync updates fact-chain to WI-1270 but does not author review evidence.
+- Verification Entry: local validation, PR metadata/readback, and hosted check readback for PR #1360
+- Lane Entry: check-cli-suite-contract-surface
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1324.md
-- Dynamic Truth: .loom/progress/WI-1324.md
+- Static Truth: .loom/work-items/WI-1270.md
+- Dynamic Truth: .loom/progress/WI-1270.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
