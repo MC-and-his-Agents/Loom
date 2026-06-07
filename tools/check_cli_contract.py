@@ -3530,7 +3530,7 @@ def assert_carrier_closeout_sync_contract(tmp: Path) -> None:
     ):
         raise AssertionError("carrier closeout-sync apply did not write structured terminal metadata")
 
-def assert_suite_evidence_surface_fixtures(tmp: Path) -> None:
+def assert_suite_evidence_surface_fixtures(tmp: Path, *, include_carrier: bool = True) -> None:
     evidence_target = tmp / "suite-evidence"
     evidence_suite = evidence_target / ".loom" / "specs" / "WI-evidence"
     evidence_suite.mkdir(parents=True)
@@ -3765,6 +3765,119 @@ def assert_suite_evidence_surface_fixtures(tmp: Path) -> None:
     ):
         raise AssertionError("suite evidence validate missing source locator payload drifted")
 
+    if include_carrier:
+        assert_suite_carrier_aggregate_fixtures(tmp)
+
+    evidence_scaffold_target = tmp / "suite-evidence-scaffold"
+    evidence_scaffold_target.mkdir()
+    suite_evidence_scaffold = run_suite_evidence_scaffold_fixture(evidence_scaffold_target, "WI-evidence-scaffold")
+    evidence_scaffold_payload = suite_evidence_scaffold.get("payload", {})
+    evidence_scaffold_writes = {entry["artifact"]: entry for entry in evidence_scaffold_payload.get("planned_writes", [])}
+    if (
+        suite_evidence_scaffold.get("result") != "pass"
+        or evidence_scaffold_payload.get("evidence_map_locator") != ".loom/specs/WI-evidence-scaffold/evidence-map.md"
+        or evidence_scaffold_payload.get("apply_required") is not True
+        or evidence_scaffold_payload.get("apply") is not False
+        or evidence_scaffold_payload.get("created_locators") != []
+        or evidence_scaffold_writes.get("evidence-map.md", {}).get("status") != "would_create"
+        or evidence_scaffold_writes.get("evidence-map.md", {}).get("source_template")
+        != "docs/methodology/templates/scaffold/evidence-map.md"
+        or evidence_scaffold_writes.get("evidence-map.md", {}).get("initial_freshness") != "missing"
+        or evidence_scaffold_payload.get("overwrite_policy", {}).get("mode") != "preserve_existing"
+        or evidence_scaffold_payload.get("overwrite_policy", {}).get("allows_overwrite") is not False
+        or evidence_scaffold_payload.get("initial_freshness_policy") != "scaffold never marks evidence present"
+    ):
+        raise AssertionError("suite evidence scaffold dry-run payload drifted")
+    if (evidence_scaffold_target / ".loom").exists():
+        raise AssertionError("suite evidence scaffold dry-run created a .loom directory")
+
+    evidence_apply_target = tmp / "suite-evidence-scaffold-apply"
+    evidence_apply_target.mkdir()
+    suite_evidence_scaffold_apply = run_suite_evidence_scaffold_apply_fixture(evidence_apply_target, "WI-evidence-apply")
+    evidence_apply_payload = suite_evidence_scaffold_apply.get("payload", {})
+    created_evidence_map = evidence_apply_target / ".loom" / "specs" / "WI-evidence-apply" / "evidence-map.md"
+    created_text = created_evidence_map.read_text(encoding="utf-8")
+    if (
+        suite_evidence_scaffold_apply.get("result") != "pass"
+        or suite_evidence_scaffold_apply.get("mutates") is not True
+        or evidence_apply_payload.get("apply") is not True
+        or evidence_apply_payload.get("apply_required") is not False
+        or evidence_apply_payload.get("created_locators") != [".loom/specs/WI-evidence-apply/evidence-map.md"]
+        or not created_evidence_map.is_file()
+        or "| EV-001 | behavior_evidence |  | .loom/specs/WI-evidence-apply/spec.md scenario / acceptance locator | WI-evidence-apply / scope / head / PR | missing |" not in created_text
+        or " | present | " in created_text
+    ):
+        raise AssertionError("suite evidence scaffold --apply create payload drifted")
+    suite_evidence_scaffold_validate = run_suite_evidence_validate_fixture(evidence_apply_target, "WI-evidence-apply", expect=1)
+    if (
+        suite_evidence_scaffold_validate.get("result") != "block"
+        or not any(gap.get("failure_kind") == "missing_evidence_map" for gap in suite_evidence_scaffold_validate.get("blocking_gaps", []))
+        or not any(gap.get("failure_kind") == "missing_fresh_verification_evidence" for gap in suite_evidence_scaffold_validate.get("blocking_gaps", []))
+    ):
+        raise AssertionError("suite evidence scaffold output must not validate as present evidence")
+    suite_evidence_scaffold_again = run_suite_evidence_scaffold_apply_fixture(evidence_apply_target, "WI-evidence-apply")
+    if (
+        suite_evidence_scaffold_again.get("mutates") is not False
+        or suite_evidence_scaffold_again.get("payload", {}).get("created_locators") != []
+        or suite_evidence_scaffold_again.get("payload", {}).get("overwrite_policy", {}).get("existing_files")
+        != [".loom/specs/WI-evidence-apply/evidence-map.md"]
+    ):
+        raise AssertionError("suite evidence scaffold repeat apply preservation drifted")
+
+    evidence_existing_target = tmp / "suite-evidence-scaffold-existing"
+    evidence_existing_suite = evidence_existing_target / ".loom" / "specs" / "WI-evidence-existing"
+    evidence_existing_suite.mkdir(parents=True)
+    (evidence_existing_suite / "evidence-map.md").write_text("# Existing evidence map\n", encoding="utf-8")
+    suite_evidence_existing = run_suite_evidence_scaffold_apply_fixture(evidence_existing_target, "WI-evidence-existing")
+    if (
+        suite_evidence_existing.get("mutates") is not False
+        or suite_evidence_existing.get("payload", {}).get("created_locators") != []
+        or (evidence_existing_suite / "evidence-map.md").read_text(encoding="utf-8") != "# Existing evidence map\n"
+    ):
+        raise AssertionError("suite evidence scaffold existing-file preservation drifted")
+
+    evidence_symlink_target = tmp / "suite-evidence-scaffold-symlink"
+    evidence_symlink_suite = evidence_symlink_target / ".loom" / "specs" / "WI-evidence-link"
+    evidence_symlink_suite.mkdir(parents=True)
+    (evidence_symlink_suite / "evidence-map.md").symlink_to("../../../outside-evidence.md")
+    suite_evidence_symlink = run_suite_evidence_scaffold_apply_fixture(
+        evidence_symlink_target,
+        "WI-evidence-link",
+        expect=1,
+    )
+    if (
+        suite_evidence_symlink.get("result") != "block"
+        or suite_evidence_symlink.get("fail_closed_reason") != "missing_scaffold_inputs"
+        or suite_evidence_symlink.get("mutates") is not False
+        or suite_evidence_symlink.get("payload", {}).get("created_locators") != []
+        or (evidence_symlink_target / "outside-evidence.md").exists()
+    ):
+        raise AssertionError("suite evidence scaffold symlink path did not fail closed")
+
+    _, suite_evidence_traversal = run_json(
+        [
+            "suite",
+            "evidence",
+            "scaffold",
+            "--target",
+            str(evidence_scaffold_target),
+            "--item",
+            "../escape",
+            "--json",
+            "--apply",
+        ],
+        expect=1,
+    )
+    if (
+        suite_evidence_traversal.get("result") != "block"
+        or suite_evidence_traversal.get("fail_closed_reason") != "invalid_suite_item"
+        or suite_evidence_traversal.get("mutates") is not False
+        or suite_evidence_traversal.get("payload", {}).get("created_locators") != []
+    ):
+        raise AssertionError("suite evidence scaffold traversal item did not fail closed")
+
+
+def assert_suite_carrier_aggregate_fixtures(tmp: Path) -> None:
     carrier_target = tmp / "suite-carrier"
     carrier_suite = carrier_target / ".loom" / "specs" / "WI-carrier"
     carrier_work_items = carrier_target / ".loom" / "work-items"
@@ -3990,114 +4103,6 @@ def assert_suite_evidence_surface_fixtures(tmp: Path) -> None:
         or not any(gap.get("failure_kind") == "deferred_as_completed" for gap in suite_carrier_deferred.get("blocking_gaps", []))
     ):
         raise AssertionError("suite carrier validate deferred-completed payload drifted")
-
-    evidence_scaffold_target = tmp / "suite-evidence-scaffold"
-    evidence_scaffold_target.mkdir()
-    suite_evidence_scaffold = run_suite_evidence_scaffold_fixture(evidence_scaffold_target, "WI-evidence-scaffold")
-    evidence_scaffold_payload = suite_evidence_scaffold.get("payload", {})
-    evidence_scaffold_writes = {entry["artifact"]: entry for entry in evidence_scaffold_payload.get("planned_writes", [])}
-    if (
-        suite_evidence_scaffold.get("result") != "pass"
-        or evidence_scaffold_payload.get("evidence_map_locator") != ".loom/specs/WI-evidence-scaffold/evidence-map.md"
-        or evidence_scaffold_payload.get("apply_required") is not True
-        or evidence_scaffold_payload.get("apply") is not False
-        or evidence_scaffold_payload.get("created_locators") != []
-        or evidence_scaffold_writes.get("evidence-map.md", {}).get("status") != "would_create"
-        or evidence_scaffold_writes.get("evidence-map.md", {}).get("source_template")
-        != "docs/methodology/templates/scaffold/evidence-map.md"
-        or evidence_scaffold_writes.get("evidence-map.md", {}).get("initial_freshness") != "missing"
-        or evidence_scaffold_payload.get("overwrite_policy", {}).get("mode") != "preserve_existing"
-        or evidence_scaffold_payload.get("overwrite_policy", {}).get("allows_overwrite") is not False
-        or evidence_scaffold_payload.get("initial_freshness_policy") != "scaffold never marks evidence present"
-    ):
-        raise AssertionError("suite evidence scaffold dry-run payload drifted")
-    if (evidence_scaffold_target / ".loom").exists():
-        raise AssertionError("suite evidence scaffold dry-run created a .loom directory")
-
-    evidence_apply_target = tmp / "suite-evidence-scaffold-apply"
-    evidence_apply_target.mkdir()
-    suite_evidence_scaffold_apply = run_suite_evidence_scaffold_apply_fixture(evidence_apply_target, "WI-evidence-apply")
-    evidence_apply_payload = suite_evidence_scaffold_apply.get("payload", {})
-    created_evidence_map = evidence_apply_target / ".loom" / "specs" / "WI-evidence-apply" / "evidence-map.md"
-    created_text = created_evidence_map.read_text(encoding="utf-8")
-    if (
-        suite_evidence_scaffold_apply.get("result") != "pass"
-        or suite_evidence_scaffold_apply.get("mutates") is not True
-        or evidence_apply_payload.get("apply") is not True
-        or evidence_apply_payload.get("apply_required") is not False
-        or evidence_apply_payload.get("created_locators") != [".loom/specs/WI-evidence-apply/evidence-map.md"]
-        or not created_evidence_map.is_file()
-        or "| EV-001 | behavior_evidence |  | .loom/specs/WI-evidence-apply/spec.md scenario / acceptance locator | WI-evidence-apply / scope / head / PR | missing |" not in created_text
-        or " | present | " in created_text
-    ):
-        raise AssertionError("suite evidence scaffold --apply create payload drifted")
-    suite_evidence_scaffold_validate = run_suite_evidence_validate_fixture(evidence_apply_target, "WI-evidence-apply", expect=1)
-    if (
-        suite_evidence_scaffold_validate.get("result") != "block"
-        or not any(gap.get("failure_kind") == "missing_evidence_map" for gap in suite_evidence_scaffold_validate.get("blocking_gaps", []))
-        or not any(gap.get("failure_kind") == "missing_fresh_verification_evidence" for gap in suite_evidence_scaffold_validate.get("blocking_gaps", []))
-    ):
-        raise AssertionError("suite evidence scaffold output must not validate as present evidence")
-    suite_evidence_scaffold_again = run_suite_evidence_scaffold_apply_fixture(evidence_apply_target, "WI-evidence-apply")
-    if (
-        suite_evidence_scaffold_again.get("mutates") is not False
-        or suite_evidence_scaffold_again.get("payload", {}).get("created_locators") != []
-        or suite_evidence_scaffold_again.get("payload", {}).get("overwrite_policy", {}).get("existing_files")
-        != [".loom/specs/WI-evidence-apply/evidence-map.md"]
-    ):
-        raise AssertionError("suite evidence scaffold repeat apply preservation drifted")
-
-    evidence_existing_target = tmp / "suite-evidence-scaffold-existing"
-    evidence_existing_suite = evidence_existing_target / ".loom" / "specs" / "WI-evidence-existing"
-    evidence_existing_suite.mkdir(parents=True)
-    (evidence_existing_suite / "evidence-map.md").write_text("# Existing evidence map\n", encoding="utf-8")
-    suite_evidence_existing = run_suite_evidence_scaffold_apply_fixture(evidence_existing_target, "WI-evidence-existing")
-    if (
-        suite_evidence_existing.get("mutates") is not False
-        or suite_evidence_existing.get("payload", {}).get("created_locators") != []
-        or (evidence_existing_suite / "evidence-map.md").read_text(encoding="utf-8") != "# Existing evidence map\n"
-    ):
-        raise AssertionError("suite evidence scaffold existing-file preservation drifted")
-
-    evidence_symlink_target = tmp / "suite-evidence-scaffold-symlink"
-    evidence_symlink_suite = evidence_symlink_target / ".loom" / "specs" / "WI-evidence-link"
-    evidence_symlink_suite.mkdir(parents=True)
-    (evidence_symlink_suite / "evidence-map.md").symlink_to("../../../outside-evidence.md")
-    suite_evidence_symlink = run_suite_evidence_scaffold_apply_fixture(
-        evidence_symlink_target,
-        "WI-evidence-link",
-        expect=1,
-    )
-    if (
-        suite_evidence_symlink.get("result") != "block"
-        or suite_evidence_symlink.get("fail_closed_reason") != "missing_scaffold_inputs"
-        or suite_evidence_symlink.get("mutates") is not False
-        or suite_evidence_symlink.get("payload", {}).get("created_locators") != []
-        or (evidence_symlink_target / "outside-evidence.md").exists()
-    ):
-        raise AssertionError("suite evidence scaffold symlink path did not fail closed")
-
-    _, suite_evidence_traversal = run_json(
-        [
-            "suite",
-            "evidence",
-            "scaffold",
-            "--target",
-            str(evidence_scaffold_target),
-            "--item",
-            "../escape",
-            "--json",
-            "--apply",
-        ],
-        expect=1,
-    )
-    if (
-        suite_evidence_traversal.get("result") != "block"
-        or suite_evidence_traversal.get("fail_closed_reason") != "invalid_suite_item"
-        or suite_evidence_traversal.get("mutates") is not False
-        or suite_evidence_traversal.get("payload", {}).get("created_locators") != []
-    ):
-        raise AssertionError("suite evidence scaffold traversal item did not fail closed")
 
 
 def run_aggregate_cli_contract() -> None:
@@ -5323,14 +5328,12 @@ def run_suite_evidence_surface() -> None:
         ("suite evidence inspect", "#1127"),
         ("suite evidence scaffold", "#1129"),
         ("suite evidence validate", "#1127"),
-        ("suite carrier inspect", "#1131"),
-        ("suite carrier validate", "#1131"),
     ):
         if matrix[command]["status"] != "implemented" or matrix[command]["domain"] != "suite":
             raise AssertionError(f"{command} must be declared in help matrix for {source_issue}")
 
     with tempfile.TemporaryDirectory(prefix="loom-suite-evidence-") as raw_tmp:
-        assert_suite_evidence_surface_fixtures(Path(raw_tmp))
+        assert_suite_evidence_surface_fixtures(Path(raw_tmp), include_carrier=False)
 
     print("suite evidence surface checks passed")
 
