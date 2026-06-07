@@ -11,21 +11,21 @@
 - Review Entry: .loom/reviews/WI-1321.json
 - Validation Entry: git diff --check; py_compile_clean; pr metadata-preflight; tools/check_cli_contract.py --surface aggregate; fact-chain; suite validate not_applicable; pr-gate dry check; hosted checks; controlled merge; closeout sync.
 - Closing Condition: PR is merged through the controlled merge wrapper, issue #1321 is closed, repo carriers terminalize WI-1321 closeout, and follow-up #1322/#1323/#1324 remain separate.
-- Current Checkpoint: merge
-- Current Stop: Governance intensity metadata carrier, suite not_applicable consumption, adoption verify not_applicable spec review handling, runtime manifest/shadow/demo fixture carrier refresh, metadata preflight, fact-chain, checkpoint merge, local pr-gate, bootstrap-regression, contract-only loom_check, skills checks, and aggregate CLI contract fixtures have passed locally for PR #1351.
-- Next Step: Push the refreshed implementation and carrier head, update PR #1351 body to the current head, wait for hosted checks, run controlled merge, and complete post-merge closeout consumed for issue #1321.
+- Current Checkpoint: closed_out
+- Current Stop: Post-merge closeout consumed: PR #1351 merged through the controlled merge wrapper at `d65fa2baa7fb059f114ff5e64dcfac06120870c7`, issue #1321 is CLOSED, reconciliation audit passed after stale dependency edge removal, closeout check passed, and terminal carrier metadata is recorded below.
+- Next Step: None for WI-1321; follow-up implementation remains in #1322/#1323 and parent closeout remains out of scope for #1324.
 - Blockers: None
-- Latest Validation Summary: 2026-06-07 local validation passed after governance intensity not_applicable/adoption carrier refresh: git diff --check; python3 tools/py_compile_clean.py skills/shared/scripts/loom_flow.py src/skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py skills/shared/scripts/governance_surface.py src/skills/shared/scripts/governance_surface.py .loom/bin/governance_surface.py; python3 tools/skills_surface.py check; python3 tools/loom.py skills check --target . --json; python3 .loom/bin/loom_init.py verify --target . passed; python3 .loom/bin/loom_flow.py governance-profile status --target . returned strong; python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1321 passed with spec review not_applicable; python3 tools/loom.py fact-chain --target . --item WI-1321 --json passed; python3 tools/loom.py suite validate --target . --item WI-1321 --json returned not_applicable with no missing inputs/blocking gaps; python3 tools/loom_check.py --profile source --source-surface bootstrap-regression . passed; python3 tools/loom_check.py --profile source --source-surface contract-only . passed; python3 tools/check_cli_contract.py --surface aggregate passed in 167.84s; make loom-demo-new-project-sync and make loom-demo-new-project-check passed after runtime fixture sync; local PR metadata preflight and pr-gate passed for PR #1351 before this carrier refresh.
+- Latest Validation Summary: 2026-06-07 post-merge closeout readback: PR #1351 merged through controlled merge wrapper at 2026-06-07T07:29:56Z with merge commit `d65fa2baa7fb059f114ff5e64dcfac06120870c7`, now in `origin/main`; issue #1321 is CLOSED at 2026-06-07T07:34:06Z with closeout evidence comment https://github.com/MC-and-his-Agents/Loom/issues/1321#issuecomment-4641803873; reconciliation audit passed after removing stale blocked-by edges from #1317/#1320; closeout check passed using PR status readback fixture due GitHub branch rules rate-limit, consuming retained merge-ready attempt `.loom/runtime/attempts/WI-1321/WI-1321-merge-ready-366ce01d70e6-e032de3e0b57.json`, PR merge backlink, host required checks, review record, and suite not_applicable evidence.
 - Recovery Boundary: WI-1321 owns only governance intensity metadata carrier/schema/parser/template/runtime-copy/targeted-fixture implementation, generated/demo fixture sync, and Loom carriers. Do not implement #1322 docs-governance light gate strategy, #1323 full escalation fixture matrix, #1324 parent closeout, or unrelated runtime provider/review/merge behavior.
-- Current Lane: merge-ready-gate-consumption
+- Current Lane: post-merge-closeout-consumed
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: WI-1321 merge-ready evidence is local and pre-hosted: git diff --check; py_compile_clean; skills surface; skills check; root verify; governance-profile status strong; adopt verify spec review not_applicable; PR metadata preflight/readback for PR #1351; tools/check_cli_contract.py --surface aggregate; fact-chain; suite validate not_applicable; loom_check bootstrap-regression; loom_check source contract-only; demo fixture sync/check; checkpoint merge; local pr-gate.
-- Lane Entry: merge-ready-gate-consumption
+- Verification Entry: Post-merge closeout consumed for PR #1351 and issue #1321: hosted checks passed, controlled merge wrapper merged PR #1351, issue #1321 closed with no-release evidence comment, reconciliation audit passed, closeout check passed, and terminal carrier metadata is present in `.loom/progress/WI-1321.md`.
+- Lane Entry: post-merge-closeout-consumed
 
 ## Sources
 
