@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1270",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1270 current-head review approved: the change only adds the suite-contract named check_cli_contract surface for suite inspect/scaffold/validate coverage, preserves aggregate check-cli-contract execution, and limits carrier changes to WI-1270 fact-chain/suite-not-applicable/shadow evidence needed for PR gate consumption. No findings.",
+  "reviewer": "codex-scheduler",
+  "authored_at": "2026-06-07T18:09:05Z",
+  "reviewed_head": "5eca51a3074edeafbb869aab4480d856f8bb5587",
+  "reviewed_validation_summary": "2026-06-08 final-head validation on branch `work/1270-check-cli-suite-contract-surface` head `5eca51a3074edeafbb869aab4480d856f8bb5587`: `python3 tools/check_cli_contract.py --list-surfaces` passed and listed `suite-contract\tsuite-contract` plus `aggregate\tcheck-cli-contract`; `python3 tools/check_cli_contract.py --surface suite-contract` passed; `python3 tools/check_cli_contract.py` passed with suite-contract and aggregate surfaces in 207.13s; `python3 tools/loom.py fact-chain --target . --json` passed with WI-1270 entry points; `python3 tools/loom.py suite validate --target . --item WI-1270 --json` returned expected `not_applicable` with no blocking gaps; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed before scheduler review carrier sync; `git diff --check` passed. PR #1360 metadata readback matched rendered machine carrier for WI-1270, branch, head SHA, workspace, suite not_applicable rationale, no_release judgment, and `Surface: suite-contract`. Hosted release-judgment passed. Scheduler-owned review record `.loom/reviews/WI-1270.json` was authored with decision allow, kind code_review, reviewed head 5eca51a3074edeafbb869aab4480d856f8bb5587, and no findings.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1270.md",
+    "recovery_entry": ".loom/progress/WI-1270.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
