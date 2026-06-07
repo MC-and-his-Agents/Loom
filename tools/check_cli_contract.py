@@ -3530,6 +3530,581 @@ def assert_carrier_closeout_sync_contract(tmp: Path) -> None:
     ):
         raise AssertionError("carrier closeout-sync apply did not write structured terminal metadata")
 
+def assert_suite_evidence_surface_fixtures(tmp: Path, *, include_carrier: bool = True) -> None:
+    evidence_target = tmp / "suite-evidence"
+    evidence_suite = evidence_target / ".loom" / "specs" / "WI-evidence"
+    evidence_suite.mkdir(parents=True)
+    (evidence_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
+    (evidence_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
+    (evidence_suite / "evidence-map.md").write_text(
+        "\n".join(
+            [
+                "# Evidence Map",
+                "",
+                "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- |",
+                "| EV-001 | behavior_evidence | .loom/specs/WI-evidence/spec.md | Scenario S1 | current HEAD | present | merge-ready evidence | refresh behavior evidence |",
+                "| EV-002 | test_evidence | .loom/specs/WI-evidence/plan.md | AC-1 | current HEAD | present | merge-ready evidence | rerun tests |",
+                "| EV-003 | fresh_verification_input | python3 tools/check_cli_contract.py | EV-001 EV-002 | current HEAD | present | merge-ready evidence | rerun validation |",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    suite_evidence_inspect = run_suite_evidence_inspect_fixture(evidence_target, "WI-evidence")
+    evidence_payload = suite_evidence_inspect.get("payload", {})
+    if (
+        evidence_payload.get("evidence_map", {}).get("status") != "present"
+        or evidence_payload.get("evidence_map", {}).get("row_count") != 3
+        or evidence_payload.get("evidence_map_locator") != ".loom/specs/WI-evidence/evidence-map.md"
+        or len(evidence_payload.get("rows", [])) != 3
+        or "docs/methodology/templates/evidence-map.md" not in evidence_payload.get("consumed_contracts", [])
+    ):
+        raise AssertionError("suite evidence inspect payload drifted")
+    suite_evidence_validate = run_suite_evidence_validate_fixture(evidence_target, "WI-evidence")
+    if (
+        suite_evidence_validate.get("result") != "pass"
+        or suite_evidence_validate.get("failed_layer") is not None
+        or suite_evidence_validate.get("fail_closed_reason") is not None
+        or suite_evidence_validate.get("blocking_gaps")
+        or suite_evidence_validate.get("payload", {}).get("required_evidence_types")
+        != ["behavior_evidence", "test_evidence", "fresh_verification_input"]
+        or suite_evidence_validate.get("payload", {}).get("freshness_context", {}).get("validation_summary_status") != "missing"
+    ):
+        raise AssertionError("suite evidence validate pass payload drifted")
+
+    evidence_missing_target = tmp / "suite-evidence-missing"
+    evidence_missing_target.mkdir()
+    suite_evidence_missing = run_suite_evidence_validate_fixture(evidence_missing_target, "WI-evidence-missing", expect=1)
+    if (
+        suite_evidence_missing.get("result") != "block"
+        or suite_evidence_missing.get("failed_layer") != "evidence_map"
+        or suite_evidence_missing.get("fail_closed_reason") != "missing_evidence_map"
+        or "evidence_map_locator" not in suite_evidence_missing.get("missing_inputs", [])
+        or not any(gap.get("failure_kind") == "missing_evidence_map" for gap in suite_evidence_missing.get("blocking_gaps", []))
+    ):
+        raise AssertionError("suite evidence validate missing map payload drifted")
+    assert_suite_failure_taxonomy(
+        suite_evidence_missing,
+        "missing_evidence_map",
+        result="block",
+        layer="evidence_map",
+    )
+
+    evidence_stale_target = tmp / "suite-evidence-stale"
+    evidence_stale_suite = evidence_stale_target / ".loom" / "specs" / "WI-evidence-stale"
+    evidence_stale_suite.mkdir(parents=True)
+    (evidence_stale_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
+    (evidence_stale_suite / "evidence-map.md").write_text(
+        "\n".join(
+            [
+                "# Evidence Map",
+                "",
+                "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- |",
+                "| EV-001 | behavior_evidence | .loom/specs/WI-evidence-stale/spec.md | Scenario S1 | previous HEAD | stale | merge-ready evidence | refresh behavior evidence |",
+                "| EV-002 | test_evidence | .loom/specs/WI-evidence-stale/plan.md | AC-1 | current HEAD | present | merge-ready evidence | rerun tests |",
+                "| EV-003 | fresh_verification_input | python3 tools/check_cli_contract.py | EV-001 EV-002 | current HEAD | present | merge-ready evidence | rerun validation |",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    suite_evidence_stale = run_suite_evidence_validate_fixture(evidence_stale_target, "WI-evidence-stale", expect=1)
+    if (
+        suite_evidence_stale.get("result") != "block"
+        or suite_evidence_stale.get("fail_closed_reason") != "stale_evidence"
+        or not any(gap.get("failure_kind") == "stale_evidence" for gap in suite_evidence_stale.get("blocking_gaps", []))
+        or not any(
+            gap.get("failure_kind") == "missing_fresh_verification_evidence"
+            for gap in suite_evidence_stale.get("blocking_gaps", [])
+        )
+    ):
+        raise AssertionError("suite evidence validate stale payload drifted")
+    assert_suite_failure_taxonomy(
+        suite_evidence_stale,
+        "stale_evidence",
+        result="block",
+        layer="evidence_map",
+    )
+    assert_suite_failure_taxonomy(
+        suite_evidence_stale,
+        "missing_fresh_verification_evidence",
+        result="block",
+        layer="evidence_map",
+    )
+
+    evidence_head_target = tmp / "suite-evidence-head-drift"
+    evidence_head_suite = evidence_head_target / ".loom" / "specs" / "WI-evidence-head"
+    evidence_head_suite.mkdir(parents=True)
+    current_head = init_git_fixture(evidence_head_target)
+    stale_head = "0" * 40 if current_head != "0" * 40 else "1" * 40
+    (evidence_head_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
+    (evidence_head_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
+    (evidence_head_suite / "evidence-map.md").write_text(
+        "\n".join(
+            [
+                "# Evidence Map",
+                "",
+                "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- |",
+                f"| EV-001 | behavior_evidence | .loom/specs/WI-evidence-head/spec.md | Scenario S1 | head_sha={stale_head} | present | merge-ready evidence | refresh behavior evidence |",
+                f"| EV-002 | test_evidence | .loom/specs/WI-evidence-head/plan.md | AC-1 | head_sha={current_head} | present | merge-ready evidence | rerun tests |",
+                f"| EV-003 | fresh_verification_input | python3 tools/check_cli_contract.py | EV-001 EV-002 | head_sha={current_head} | present | merge-ready evidence | rerun validation |",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    suite_evidence_head_drift = run_suite_evidence_validate_fixture(evidence_head_target, "WI-evidence-head", expect=1)
+    if (
+        suite_evidence_head_drift.get("result") != "block"
+        or suite_evidence_head_drift.get("fail_closed_reason") != "head_or_pr_drift"
+        or not any(gap.get("failure_kind") == "head_or_pr_drift" for gap in suite_evidence_head_drift.get("blocking_gaps", []))
+    ):
+        raise AssertionError("suite evidence validate head binding drift payload drifted")
+    assert_suite_failure_taxonomy(
+        suite_evidence_head_drift,
+        "head_or_pr_drift",
+        result="block",
+        layer="evidence_map",
+    )
+
+    evidence_pr_head_target = tmp / "suite-evidence-pr-head-drift"
+    evidence_pr_head_suite = evidence_pr_head_target / ".loom" / "specs" / "WI-evidence-pr-head"
+    evidence_pr_head_suite.mkdir(parents=True)
+    current_pr_head = init_git_fixture(evidence_pr_head_target)
+    stale_pr_head = "f" * 40 if current_pr_head != "f" * 40 else "e" * 40
+    (evidence_pr_head_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
+    (evidence_pr_head_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
+    (evidence_pr_head_suite / "evidence-map.md").write_text(
+        "\n".join(
+            [
+                "# Evidence Map",
+                "",
+                "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- |",
+                f"| EV-001 | behavior_evidence | .loom/specs/WI-evidence-pr-head/spec.md | Scenario S1 | pr_head={stale_pr_head} | present | merge-ready evidence | refresh behavior evidence |",
+                f"| EV-002 | test_evidence | .loom/specs/WI-evidence-pr-head/plan.md | AC-1 | pr_head={current_pr_head} | present | merge-ready evidence | rerun tests |",
+                f"| EV-003 | fresh_verification_input | python3 tools/check_cli_contract.py | EV-001 EV-002 | pr_head={current_pr_head} | present | merge-ready evidence | rerun validation |",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    suite_evidence_pr_head_drift = run_suite_evidence_validate_fixture(evidence_pr_head_target, "WI-evidence-pr-head", expect=1)
+    if (
+        suite_evidence_pr_head_drift.get("result") != "block"
+        or suite_evidence_pr_head_drift.get("fail_closed_reason") != "head_or_pr_drift"
+        or not any(gap.get("failure_kind") == "head_or_pr_drift" for gap in suite_evidence_pr_head_drift.get("blocking_gaps", []))
+    ):
+        raise AssertionError("suite evidence validate PR head binding drift payload drifted")
+
+    evidence_validation_target = tmp / "suite-evidence-validation-drift"
+    evidence_validation_suite = evidence_validation_target / ".loom" / "specs" / "WI-evidence-validation"
+    progress_dir = evidence_validation_target / ".loom" / "progress"
+    evidence_validation_suite.mkdir(parents=True)
+    progress_dir.mkdir(parents=True)
+    validation_summary = "Passed: fixture validation"
+    validation_digest = hashlib.sha256(validation_summary.encode("utf-8")).hexdigest()
+    stale_validation_digest = "a" * 64 if validation_digest != "a" * 64 else "b" * 64
+    (progress_dir / "WI-evidence-validation.md").write_text(
+        f"# WI-evidence-validation Progress\n\n- Latest Validation Summary: {validation_summary}\n",
+        encoding="utf-8",
+    )
+    (evidence_validation_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
+    (evidence_validation_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
+    (evidence_validation_suite / "evidence-map.md").write_text(
+        "\n".join(
+            [
+                "# Evidence Map",
+                "",
+                "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- |",
+                f"| EV-001 | behavior_evidence | .loom/specs/WI-evidence-validation/spec.md | Scenario S1 | validation_summary_sha256={stale_validation_digest} | present | merge-ready evidence | refresh behavior evidence |",
+                f"| EV-002 | test_evidence | .loom/specs/WI-evidence-validation/plan.md | AC-1 | validation_summary_sha256={validation_digest} | present | merge-ready evidence | rerun tests |",
+                f"| EV-003 | fresh_verification_input | python3 tools/check_cli_contract.py | EV-001 EV-002 | validation_summary_sha256={validation_digest} | present | merge-ready evidence | rerun validation |",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    suite_evidence_validation_drift = run_suite_evidence_validate_fixture(evidence_validation_target, "WI-evidence-validation", expect=1)
+    if (
+        suite_evidence_validation_drift.get("result") != "block"
+        or suite_evidence_validation_drift.get("fail_closed_reason") != "stale_evidence"
+        or suite_evidence_validation_drift.get("payload", {}).get("freshness_context", {}).get("validation_summary_sha256") != validation_digest
+        or not any(gap.get("failure_kind") == "stale_evidence" for gap in suite_evidence_validation_drift.get("blocking_gaps", []))
+    ):
+        raise AssertionError("suite evidence validate validation summary drift payload drifted")
+
+    evidence_missing_source_target = tmp / "suite-evidence-missing-source"
+    evidence_missing_source_suite = evidence_missing_source_target / ".loom" / "specs" / "WI-evidence-missing-source"
+    evidence_missing_source_suite.mkdir(parents=True)
+    (evidence_missing_source_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
+    (evidence_missing_source_suite / "evidence-map.md").write_text(
+        "\n".join(
+            [
+                "# Evidence Map",
+                "",
+                "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- |",
+                "| EV-001 | behavior_evidence | tools/missing-source.py | Scenario S1 | current HEAD | present | merge-ready evidence | refresh behavior evidence |",
+                "| EV-002 | test_evidence | .loom/specs/WI-evidence-missing-source/plan.md | AC-1 | current HEAD | present | merge-ready evidence | rerun tests |",
+                "| EV-003 | fresh_verification_input | python3 tools/check_cli_contract.py | EV-001 EV-002 | current HEAD | present | merge-ready evidence | rerun validation |",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    suite_evidence_missing_source = run_suite_evidence_validate_fixture(evidence_missing_source_target, "WI-evidence-missing-source", expect=1)
+    if (
+        suite_evidence_missing_source.get("result") != "block"
+        or suite_evidence_missing_source.get("fail_closed_reason") != "missing_source_locator"
+        or not any(gap.get("failure_kind") == "missing_source_locator" for gap in suite_evidence_missing_source.get("blocking_gaps", []))
+    ):
+        raise AssertionError("suite evidence validate missing source locator payload drifted")
+
+    if include_carrier:
+        assert_suite_carrier_aggregate_fixtures(tmp)
+
+    evidence_scaffold_target = tmp / "suite-evidence-scaffold"
+    evidence_scaffold_target.mkdir()
+    suite_evidence_scaffold = run_suite_evidence_scaffold_fixture(evidence_scaffold_target, "WI-evidence-scaffold")
+    evidence_scaffold_payload = suite_evidence_scaffold.get("payload", {})
+    evidence_scaffold_writes = {entry["artifact"]: entry for entry in evidence_scaffold_payload.get("planned_writes", [])}
+    if (
+        suite_evidence_scaffold.get("result") != "pass"
+        or evidence_scaffold_payload.get("evidence_map_locator") != ".loom/specs/WI-evidence-scaffold/evidence-map.md"
+        or evidence_scaffold_payload.get("apply_required") is not True
+        or evidence_scaffold_payload.get("apply") is not False
+        or evidence_scaffold_payload.get("created_locators") != []
+        or evidence_scaffold_writes.get("evidence-map.md", {}).get("status") != "would_create"
+        or evidence_scaffold_writes.get("evidence-map.md", {}).get("source_template")
+        != "docs/methodology/templates/scaffold/evidence-map.md"
+        or evidence_scaffold_writes.get("evidence-map.md", {}).get("initial_freshness") != "missing"
+        or evidence_scaffold_payload.get("overwrite_policy", {}).get("mode") != "preserve_existing"
+        or evidence_scaffold_payload.get("overwrite_policy", {}).get("allows_overwrite") is not False
+        or evidence_scaffold_payload.get("initial_freshness_policy") != "scaffold never marks evidence present"
+    ):
+        raise AssertionError("suite evidence scaffold dry-run payload drifted")
+    if (evidence_scaffold_target / ".loom").exists():
+        raise AssertionError("suite evidence scaffold dry-run created a .loom directory")
+
+    evidence_apply_target = tmp / "suite-evidence-scaffold-apply"
+    evidence_apply_target.mkdir()
+    suite_evidence_scaffold_apply = run_suite_evidence_scaffold_apply_fixture(evidence_apply_target, "WI-evidence-apply")
+    evidence_apply_payload = suite_evidence_scaffold_apply.get("payload", {})
+    created_evidence_map = evidence_apply_target / ".loom" / "specs" / "WI-evidence-apply" / "evidence-map.md"
+    created_text = created_evidence_map.read_text(encoding="utf-8")
+    if (
+        suite_evidence_scaffold_apply.get("result") != "pass"
+        or suite_evidence_scaffold_apply.get("mutates") is not True
+        or evidence_apply_payload.get("apply") is not True
+        or evidence_apply_payload.get("apply_required") is not False
+        or evidence_apply_payload.get("created_locators") != [".loom/specs/WI-evidence-apply/evidence-map.md"]
+        or not created_evidence_map.is_file()
+        or "| EV-001 | behavior_evidence |  | .loom/specs/WI-evidence-apply/spec.md scenario / acceptance locator | WI-evidence-apply / scope / head / PR | missing |" not in created_text
+        or " | present | " in created_text
+    ):
+        raise AssertionError("suite evidence scaffold --apply create payload drifted")
+    suite_evidence_scaffold_validate = run_suite_evidence_validate_fixture(evidence_apply_target, "WI-evidence-apply", expect=1)
+    if (
+        suite_evidence_scaffold_validate.get("result") != "block"
+        or not any(gap.get("failure_kind") == "missing_evidence_map" for gap in suite_evidence_scaffold_validate.get("blocking_gaps", []))
+        or not any(gap.get("failure_kind") == "missing_fresh_verification_evidence" for gap in suite_evidence_scaffold_validate.get("blocking_gaps", []))
+    ):
+        raise AssertionError("suite evidence scaffold output must not validate as present evidence")
+    suite_evidence_scaffold_again = run_suite_evidence_scaffold_apply_fixture(evidence_apply_target, "WI-evidence-apply")
+    if (
+        suite_evidence_scaffold_again.get("mutates") is not False
+        or suite_evidence_scaffold_again.get("payload", {}).get("created_locators") != []
+        or suite_evidence_scaffold_again.get("payload", {}).get("overwrite_policy", {}).get("existing_files")
+        != [".loom/specs/WI-evidence-apply/evidence-map.md"]
+    ):
+        raise AssertionError("suite evidence scaffold repeat apply preservation drifted")
+
+    evidence_existing_target = tmp / "suite-evidence-scaffold-existing"
+    evidence_existing_suite = evidence_existing_target / ".loom" / "specs" / "WI-evidence-existing"
+    evidence_existing_suite.mkdir(parents=True)
+    (evidence_existing_suite / "evidence-map.md").write_text("# Existing evidence map\n", encoding="utf-8")
+    suite_evidence_existing = run_suite_evidence_scaffold_apply_fixture(evidence_existing_target, "WI-evidence-existing")
+    if (
+        suite_evidence_existing.get("mutates") is not False
+        or suite_evidence_existing.get("payload", {}).get("created_locators") != []
+        or (evidence_existing_suite / "evidence-map.md").read_text(encoding="utf-8") != "# Existing evidence map\n"
+    ):
+        raise AssertionError("suite evidence scaffold existing-file preservation drifted")
+
+    evidence_symlink_target = tmp / "suite-evidence-scaffold-symlink"
+    evidence_symlink_suite = evidence_symlink_target / ".loom" / "specs" / "WI-evidence-link"
+    evidence_symlink_suite.mkdir(parents=True)
+    (evidence_symlink_suite / "evidence-map.md").symlink_to("../../../outside-evidence.md")
+    suite_evidence_symlink = run_suite_evidence_scaffold_apply_fixture(
+        evidence_symlink_target,
+        "WI-evidence-link",
+        expect=1,
+    )
+    if (
+        suite_evidence_symlink.get("result") != "block"
+        or suite_evidence_symlink.get("fail_closed_reason") != "missing_scaffold_inputs"
+        or suite_evidence_symlink.get("mutates") is not False
+        or suite_evidence_symlink.get("payload", {}).get("created_locators") != []
+        or (evidence_symlink_target / "outside-evidence.md").exists()
+    ):
+        raise AssertionError("suite evidence scaffold symlink path did not fail closed")
+
+    _, suite_evidence_traversal = run_json(
+        [
+            "suite",
+            "evidence",
+            "scaffold",
+            "--target",
+            str(evidence_scaffold_target),
+            "--item",
+            "../escape",
+            "--json",
+            "--apply",
+        ],
+        expect=1,
+    )
+    if (
+        suite_evidence_traversal.get("result") != "block"
+        or suite_evidence_traversal.get("fail_closed_reason") != "invalid_suite_item"
+        or suite_evidence_traversal.get("mutates") is not False
+        or suite_evidence_traversal.get("payload", {}).get("created_locators") != []
+    ):
+        raise AssertionError("suite evidence scaffold traversal item did not fail closed")
+
+
+def assert_suite_carrier_aggregate_fixtures(tmp: Path) -> None:
+    carrier_target = tmp / "suite-carrier"
+    carrier_suite = carrier_target / ".loom" / "specs" / "WI-carrier"
+    carrier_work_items = carrier_target / ".loom" / "work-items"
+    carrier_tasks = carrier_target / ".loom" / "tasks"
+    carrier_suite.mkdir(parents=True)
+    carrier_work_items.mkdir(parents=True)
+    carrier_tasks.mkdir(parents=True)
+    (carrier_work_items / "WI-carrier.md").write_text("# WI-carrier\n", encoding="utf-8")
+    (carrier_suite / "execution-breakdown.md").write_text("# Execution Breakdown\n", encoding="utf-8")
+    (carrier_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
+    (carrier_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
+    (carrier_tasks / "WI-carrier.md").write_text("- [ ] Unit C4\n", encoding="utf-8")
+    (carrier_suite / "task-carrier.md").write_text(
+        "\n".join(
+            [
+                "# Task Carrier",
+                "",
+                "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+                "| github_issue | https://github.com/owner/repo/issues/1131 | issue open | pending | primary | .loom/work-items/WI-carrier.md | .loom/specs/WI-carrier/execution-breakdown.md#unit-c1 | .loom/specs/WI-carrier/spec.md#scenario-s1 | .loom/specs/WI-carrier/plan.md#phase-1 | .loom/specs/WI-carrier/plan.md#validation | authored fixture | recheck before merge-ready |",
+                "| github_project_item | project://loom/item/1 | In Progress | in_progress | mirror | .loom/work-items/WI-carrier.md | .loom/specs/WI-carrier/execution-breakdown.md#unit-c2 | .loom/specs/WI-carrier/spec.md#scenario-s2 | .loom/specs/WI-carrier/plan.md#phase-2 | .loom/specs/WI-carrier/plan.md#validation | project readback fixture | mirror only |",
+                "| checklist_item | .loom/specs/WI-carrier/task-carrier.md | checked | done | evidence_locator | .loom/work-items/WI-carrier.md | .loom/specs/WI-carrier/execution-breakdown.md#unit-c3 | .loom/specs/WI-carrier/spec.md#scenario-s3 | .loom/specs/WI-carrier/plan.md#phase-3 | .loom/specs/WI-carrier/plan.md#validation | checklist fixture | carrier done is tracking only |",
+                "| repo_tasks_md | .loom/tasks/WI-carrier.md | task row open | blocked | primary | .loom/work-items/WI-carrier.md | .loom/specs/WI-carrier/execution-breakdown.md#unit-c4 | .loom/specs/WI-carrier/spec.md#scenario-s4 | .loom/specs/WI-carrier/plan.md#phase-4 | .loom/specs/WI-carrier/plan.md#validation | tasks.md fixture | blocker locator in Work Item recovery |",
+                "| external_tracker | https://tracker.example/T-1 | parked | deferred | primary | .loom/work-items/WI-carrier.md | .loom/specs/WI-carrier/execution-breakdown.md#unit-c5 | .loom/specs/WI-carrier/spec.md#scenario-s5 | .loom/specs/WI-carrier/plan.md#phase-5 | .loom/specs/WI-carrier/plan.md#validation | external fixture | activation condition: upstream ready |",
+                "| not_applicable | not_applicable:unit-c6 | no carrier needed | not_applicable | not_applicable | .loom/work-items/WI-carrier.md | .loom/specs/WI-carrier/execution-breakdown.md#unit-c6 | not_applicable | .loom/specs/WI-carrier/plan.md#phase-6 | not_applicable | authored rationale | minimal path rationale recheck |",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    suite_carrier_inspect = run_suite_carrier_inspect_fixture(carrier_target, "WI-carrier")
+    carrier_payload = suite_carrier_inspect.get("payload", {})
+    carrier_rows = carrier_payload.get("rows", [])
+    if (
+        carrier_payload.get("task_carrier", {}).get("status") != "present"
+        or carrier_payload.get("task_carrier", {}).get("row_count") != 6
+        or carrier_payload.get("task_carrier_locator") != ".loom/specs/WI-carrier/task-carrier.md"
+        or set(carrier_payload.get("recognized_carrier_types", [])) != {
+            "github_issue",
+            "github_project_item",
+            "checklist_item",
+            "repo_tasks_md",
+            "external_tracker",
+            "not_applicable",
+        }
+        or {row.get("normalized_status") for row in carrier_rows}
+        != {"pending", "in_progress", "done", "blocked", "deferred", "not_applicable"}
+        or carrier_payload.get("truth_boundary", {}).get("carrier_done_satisfies_work_item_done") is not False
+        or "docs/methodology/harness/task-carrier-contract.md" not in carrier_payload.get("consumed_contracts", [])
+    ):
+        raise AssertionError("suite carrier inspect payload drifted")
+    suite_carrier_validate = run_suite_carrier_validate_fixture(carrier_target, "WI-carrier")
+    if (
+        suite_carrier_validate.get("result") != "pass"
+        or suite_carrier_validate.get("failed_layer") is not None
+        or suite_carrier_validate.get("fail_closed_reason") is not None
+        or suite_carrier_validate.get("blocking_gaps")
+    ):
+        raise AssertionError("suite carrier validate pass payload drifted")
+
+    carrier_missing_target = tmp / "suite-carrier-missing"
+    carrier_missing_target.mkdir()
+    suite_carrier_missing = run_suite_carrier_validate_fixture(carrier_missing_target, "WI-carrier-missing", expect=1)
+    if (
+        suite_carrier_missing.get("result") != "block"
+        or suite_carrier_missing.get("failed_layer") != "task_carrier"
+        or suite_carrier_missing.get("fail_closed_reason") != "missing_task_carrier_locator"
+        or "task_carrier_locator" not in suite_carrier_missing.get("missing_inputs", [])
+        or not any(gap.get("failure_kind") == "missing_task_carrier_locator" for gap in suite_carrier_missing.get("blocking_gaps", []))
+    ):
+        raise AssertionError("suite carrier validate missing locator payload drifted")
+    assert_suite_failure_taxonomy(
+        suite_carrier_missing,
+        "missing_task_carrier_locator",
+        result="block",
+        layer="task_carrier",
+    )
+
+    carrier_invalid_target = tmp / "suite-carrier-invalid"
+    carrier_invalid_suite = carrier_invalid_target / ".loom" / "specs" / "WI-carrier-invalid"
+    carrier_invalid_suite.mkdir(parents=True)
+    (carrier_invalid_suite / "task-carrier.md").write_text(
+        "\n".join(
+            [
+                "# Task Carrier",
+                "",
+                "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+                "| unknown_host | host://carrier/1 | open | ready | owner | .loom/work-items/WI-carrier-invalid.md | .loom/specs/WI-carrier-invalid/execution-breakdown.md#unit | .loom/specs/WI-carrier-invalid/spec.md#scenario | .loom/specs/WI-carrier-invalid/plan.md#phase | .loom/specs/WI-carrier-invalid/plan.md#validation | invalid fixture | recheck before merge-ready |",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    suite_carrier_invalid = run_suite_carrier_validate_fixture(carrier_invalid_target, "WI-carrier-invalid", expect=1)
+    if (
+        suite_carrier_invalid.get("result") != "block"
+        or suite_carrier_invalid.get("fail_closed_reason") != "missing_task_carrier_locator"
+        or not any(gap.get("failure_kind") == "missing_task_carrier_locator" for gap in suite_carrier_invalid.get("blocking_gaps", []))
+    ):
+        raise AssertionError("suite carrier validate invalid type/status/relationship payload drifted")
+
+    carrier_primary_target = tmp / "suite-carrier-primary-conflict"
+    carrier_primary_suite = carrier_primary_target / ".loom" / "specs" / "WI-carrier-primary"
+    carrier_primary_suite.mkdir(parents=True)
+    (carrier_primary_suite / "task-carrier.md").write_text(
+        "\n".join(
+            [
+                "# Task Carrier",
+                "",
+                "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+                "| github_issue | https://github.com/owner/repo/issues/1 | open | in_progress | primary | .loom/work-items/WI-carrier-primary.md | .loom/specs/WI-carrier-primary/execution-breakdown.md#unit | .loom/specs/WI-carrier-primary/spec.md#scenario | .loom/specs/WI-carrier-primary/plan.md#phase | .loom/specs/WI-carrier-primary/plan.md#validation | primary fixture | recheck before merge-ready |",
+                "| external_tracker | https://tracker.example/T-3 | open | in_progress | primary | .loom/work-items/WI-carrier-primary.md | .loom/specs/WI-carrier-primary/execution-breakdown.md#unit | .loom/specs/WI-carrier-primary/spec.md#scenario | .loom/specs/WI-carrier-primary/plan.md#phase | .loom/specs/WI-carrier-primary/plan.md#validation | primary fixture | recheck before merge-ready |",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    suite_carrier_primary = run_suite_carrier_validate_fixture(carrier_primary_target, "WI-carrier-primary", expect=1)
+    if (
+        suite_carrier_primary.get("result") != "block"
+        or suite_carrier_primary.get("fail_closed_reason") != "carrier_truth_conflict"
+        or not any(gap.get("failure_kind") == "carrier_truth_conflict" for gap in suite_carrier_primary.get("blocking_gaps", []))
+    ):
+        raise AssertionError("suite carrier validate primary conflict payload drifted")
+
+    carrier_conflict_target = tmp / "suite-carrier-conflict"
+    carrier_conflict_suite = carrier_conflict_target / ".loom" / "specs" / "WI-carrier-conflict"
+    carrier_conflict_suite.mkdir(parents=True)
+    (carrier_conflict_suite / "task-carrier.md").write_text(
+        "\n".join(
+            [
+                "# Task Carrier",
+                "",
+                "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+                "| github_project_item | project://loom/item/2 | Project Done means completed | done | mirror | .loom/work-items/WI-carrier-conflict.md | .loom/specs/WI-carrier-conflict/execution-breakdown.md#unit | .loom/specs/WI-carrier-conflict/spec.md#scenario | .loom/specs/WI-carrier-conflict/plan.md#phase | .loom/specs/WI-carrier-conflict/plan.md#validation | project readback fixture | mirror only |",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    suite_carrier_conflict = run_suite_carrier_validate_fixture(carrier_conflict_target, "WI-carrier-conflict", expect=1)
+    if (
+        suite_carrier_conflict.get("result") != "block"
+        or suite_carrier_conflict.get("fail_closed_reason") != "carrier_truth_conflict"
+        or not any(gap.get("failure_kind") == "carrier_truth_conflict" for gap in suite_carrier_conflict.get("blocking_gaps", []))
+    ):
+        raise AssertionError("suite carrier validate truth conflict payload drifted")
+
+    carrier_host_conflict_target = tmp / "suite-carrier-host-conflict"
+    carrier_host_conflict_suite = carrier_host_conflict_target / ".loom" / "specs" / "WI-carrier-host-conflict"
+    carrier_host_conflict_suite.mkdir(parents=True)
+    (carrier_host_conflict_target / ".loom" / "progress").mkdir(parents=True)
+    (carrier_host_conflict_target / ".loom" / "progress" / "WI-carrier-host-conflict.md").write_text(
+        "\n".join(
+            [
+                "# WI-carrier-host-conflict Progress",
+                "",
+                "## Dynamic Facts",
+                "",
+                "- Item ID: WI-carrier-host-conflict",
+                "- Current Checkpoint: build",
+                "- Current Stop: fixture",
+                "- Next Step: fixture",
+                "- Blockers: None",
+                "- Latest Validation Summary: fixture",
+                "- Recovery Boundary: fixture",
+                "- Current Lane: fixture",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (carrier_host_conflict_suite / "task-carrier.md").write_text(
+        "\n".join(
+            [
+                "# Task Carrier",
+                "",
+                "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+                "| github_project_item | project://loom/item/9 | Project Done / issue open | done | mirror | .loom/work-items/WI-carrier-host-conflict.md | .loom/specs/WI-carrier-host-conflict/execution-breakdown.md#unit-project | .loom/specs/WI-carrier-host-conflict/spec.md#scenario-project | .loom/specs/WI-carrier-host-conflict/plan.md#phase-project | .loom/specs/WI-carrier-host-conflict/plan.md#validation | project fixture | mirror only |",
+                "| checklist_item | .loom/specs/WI-carrier-host-conflict/task-carrier.md | checklist checked / evidence missing | done | evidence_locator | .loom/work-items/WI-carrier-host-conflict.md | .loom/specs/WI-carrier-host-conflict/execution-breakdown.md#unit-checklist | .loom/specs/WI-carrier-host-conflict/spec.md#scenario-checklist | .loom/specs/WI-carrier-host-conflict/plan.md#phase-checklist | .loom/specs/WI-carrier-host-conflict/plan.md#validation | checklist fixture | checklist mirror only |",
+                "| github_issue | https://github.com/owner/repo/pull/99 | PR merged / issue open | done | mirror | .loom/work-items/WI-carrier-host-conflict.md | .loom/specs/WI-carrier-host-conflict/execution-breakdown.md#unit-pr | .loom/specs/WI-carrier-host-conflict/spec.md#scenario-pr | .loom/specs/WI-carrier-host-conflict/plan.md#phase-pr | .loom/specs/WI-carrier-host-conflict/plan.md#validation | pr fixture | PR merged is merge locator only |",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    suite_carrier_host_conflict = run_suite_carrier_validate_fixture(carrier_host_conflict_target, "WI-carrier-host-conflict", expect=1)
+    host_conflict_payload = suite_carrier_host_conflict.get("payload", {})
+    host_conflict_ids = {entry.get("id") for entry in host_conflict_payload.get("host_signal_conflicts", [])}
+    if (
+        suite_carrier_host_conflict.get("result") != "block"
+        or suite_carrier_host_conflict.get("fail_closed_reason") != "carrier_truth_conflict"
+        or not {"project-done-issue-open", "checklist-checked-evidence-missing", "pr-merged-issue-open"}.issubset(host_conflict_ids)
+        or "project_done" not in host_conflict_payload.get("recognized_truth_signals", [])
+        or not any(gap.get("failure_kind") == "carrier_truth_conflict" for gap in suite_carrier_host_conflict.get("blocking_gaps", []))
+    ):
+        raise AssertionError("suite carrier validate host signal conflict payload drifted")
+
+    carrier_deferred_target = tmp / "suite-carrier-deferred"
+    carrier_deferred_suite = carrier_deferred_target / ".loom" / "specs" / "WI-carrier-deferred"
+    carrier_deferred_suite.mkdir(parents=True)
+    (carrier_deferred_suite / "task-carrier.md").write_text(
+        "\n".join(
+            [
+                "# Task Carrier",
+                "",
+                "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+                "| external_tracker | https://tracker.example/T-2 | completed | deferred | primary | .loom/work-items/WI-carrier-deferred.md | .loom/specs/WI-carrier-deferred/execution-breakdown.md#unit | .loom/specs/WI-carrier-deferred/spec.md#scenario | .loom/specs/WI-carrier-deferred/plan.md#phase | .loom/specs/WI-carrier-deferred/plan.md#validation | external fixture | activation condition missing |",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    suite_carrier_deferred = run_suite_carrier_validate_fixture(carrier_deferred_target, "WI-carrier-deferred", expect=1)
+    if (
+        suite_carrier_deferred.get("result") != "block"
+        or suite_carrier_deferred.get("fail_closed_reason") != "deferred_as_completed"
+        or not any(gap.get("failure_kind") == "deferred_as_completed" for gap in suite_carrier_deferred.get("blocking_gaps", []))
+    ):
+        raise AssertionError("suite carrier validate deferred-completed payload drifted")
+
+
 def run_aggregate_cli_contract() -> None:
     _, help_payload = run_json(["help", "--json"], expect=0)
     matrix = {entry["command"]: entry for entry in help_payload["commands"]}
@@ -3769,573 +4344,7 @@ def run_aggregate_cli_contract() -> None:
         write_full_suite(full_target, "WI-full")
         assert_full_suite_happy_path_fixture(full_target, "WI-full")
 
-        evidence_target = tmp / "suite-evidence"
-        evidence_suite = evidence_target / ".loom" / "specs" / "WI-evidence"
-        evidence_suite.mkdir(parents=True)
-        (evidence_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
-        (evidence_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
-        (evidence_suite / "evidence-map.md").write_text(
-            "\n".join(
-                [
-                    "# Evidence Map",
-                    "",
-                    "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
-                    "| --- | --- | --- | --- | --- | --- | --- | --- |",
-                    "| EV-001 | behavior_evidence | .loom/specs/WI-evidence/spec.md | Scenario S1 | current HEAD | present | merge-ready evidence | refresh behavior evidence |",
-                    "| EV-002 | test_evidence | .loom/specs/WI-evidence/plan.md | AC-1 | current HEAD | present | merge-ready evidence | rerun tests |",
-                    "| EV-003 | fresh_verification_input | python3 tools/check_cli_contract.py | EV-001 EV-002 | current HEAD | present | merge-ready evidence | rerun validation |",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        suite_evidence_inspect = run_suite_evidence_inspect_fixture(evidence_target, "WI-evidence")
-        evidence_payload = suite_evidence_inspect.get("payload", {})
-        if (
-            evidence_payload.get("evidence_map", {}).get("status") != "present"
-            or evidence_payload.get("evidence_map", {}).get("row_count") != 3
-            or evidence_payload.get("evidence_map_locator") != ".loom/specs/WI-evidence/evidence-map.md"
-            or len(evidence_payload.get("rows", [])) != 3
-            or "docs/methodology/templates/evidence-map.md" not in evidence_payload.get("consumed_contracts", [])
-        ):
-            raise AssertionError("suite evidence inspect payload drifted")
-        suite_evidence_validate = run_suite_evidence_validate_fixture(evidence_target, "WI-evidence")
-        if (
-            suite_evidence_validate.get("result") != "pass"
-            or suite_evidence_validate.get("failed_layer") is not None
-            or suite_evidence_validate.get("fail_closed_reason") is not None
-            or suite_evidence_validate.get("blocking_gaps")
-            or suite_evidence_validate.get("payload", {}).get("required_evidence_types")
-            != ["behavior_evidence", "test_evidence", "fresh_verification_input"]
-            or suite_evidence_validate.get("payload", {}).get("freshness_context", {}).get("validation_summary_status") != "missing"
-        ):
-            raise AssertionError("suite evidence validate pass payload drifted")
-
-        evidence_missing_target = tmp / "suite-evidence-missing"
-        evidence_missing_target.mkdir()
-        suite_evidence_missing = run_suite_evidence_validate_fixture(evidence_missing_target, "WI-evidence-missing", expect=1)
-        if (
-            suite_evidence_missing.get("result") != "block"
-            or suite_evidence_missing.get("failed_layer") != "evidence_map"
-            or suite_evidence_missing.get("fail_closed_reason") != "missing_evidence_map"
-            or "evidence_map_locator" not in suite_evidence_missing.get("missing_inputs", [])
-            or not any(gap.get("failure_kind") == "missing_evidence_map" for gap in suite_evidence_missing.get("blocking_gaps", []))
-        ):
-            raise AssertionError("suite evidence validate missing map payload drifted")
-        assert_suite_failure_taxonomy(
-            suite_evidence_missing,
-            "missing_evidence_map",
-            result="block",
-            layer="evidence_map",
-        )
-
-        evidence_stale_target = tmp / "suite-evidence-stale"
-        evidence_stale_suite = evidence_stale_target / ".loom" / "specs" / "WI-evidence-stale"
-        evidence_stale_suite.mkdir(parents=True)
-        (evidence_stale_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
-        (evidence_stale_suite / "evidence-map.md").write_text(
-            "\n".join(
-                [
-                    "# Evidence Map",
-                    "",
-                    "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
-                    "| --- | --- | --- | --- | --- | --- | --- | --- |",
-                    "| EV-001 | behavior_evidence | .loom/specs/WI-evidence-stale/spec.md | Scenario S1 | previous HEAD | stale | merge-ready evidence | refresh behavior evidence |",
-                    "| EV-002 | test_evidence | .loom/specs/WI-evidence-stale/plan.md | AC-1 | current HEAD | present | merge-ready evidence | rerun tests |",
-                    "| EV-003 | fresh_verification_input | python3 tools/check_cli_contract.py | EV-001 EV-002 | current HEAD | present | merge-ready evidence | rerun validation |",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        suite_evidence_stale = run_suite_evidence_validate_fixture(evidence_stale_target, "WI-evidence-stale", expect=1)
-        if (
-            suite_evidence_stale.get("result") != "block"
-            or suite_evidence_stale.get("fail_closed_reason") != "stale_evidence"
-            or not any(gap.get("failure_kind") == "stale_evidence" for gap in suite_evidence_stale.get("blocking_gaps", []))
-            or not any(
-                gap.get("failure_kind") == "missing_fresh_verification_evidence"
-                for gap in suite_evidence_stale.get("blocking_gaps", [])
-            )
-        ):
-            raise AssertionError("suite evidence validate stale payload drifted")
-        assert_suite_failure_taxonomy(
-            suite_evidence_stale,
-            "stale_evidence",
-            result="block",
-            layer="evidence_map",
-        )
-        assert_suite_failure_taxonomy(
-            suite_evidence_stale,
-            "missing_fresh_verification_evidence",
-            result="block",
-            layer="evidence_map",
-        )
-
-        evidence_head_target = tmp / "suite-evidence-head-drift"
-        evidence_head_suite = evidence_head_target / ".loom" / "specs" / "WI-evidence-head"
-        evidence_head_suite.mkdir(parents=True)
-        current_head = init_git_fixture(evidence_head_target)
-        stale_head = "0" * 40 if current_head != "0" * 40 else "1" * 40
-        (evidence_head_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
-        (evidence_head_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
-        (evidence_head_suite / "evidence-map.md").write_text(
-            "\n".join(
-                [
-                    "# Evidence Map",
-                    "",
-                    "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
-                    "| --- | --- | --- | --- | --- | --- | --- | --- |",
-                    f"| EV-001 | behavior_evidence | .loom/specs/WI-evidence-head/spec.md | Scenario S1 | head_sha={stale_head} | present | merge-ready evidence | refresh behavior evidence |",
-                    f"| EV-002 | test_evidence | .loom/specs/WI-evidence-head/plan.md | AC-1 | head_sha={current_head} | present | merge-ready evidence | rerun tests |",
-                    f"| EV-003 | fresh_verification_input | python3 tools/check_cli_contract.py | EV-001 EV-002 | head_sha={current_head} | present | merge-ready evidence | rerun validation |",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        suite_evidence_head_drift = run_suite_evidence_validate_fixture(evidence_head_target, "WI-evidence-head", expect=1)
-        if (
-            suite_evidence_head_drift.get("result") != "block"
-            or suite_evidence_head_drift.get("fail_closed_reason") != "head_or_pr_drift"
-            or not any(gap.get("failure_kind") == "head_or_pr_drift" for gap in suite_evidence_head_drift.get("blocking_gaps", []))
-        ):
-            raise AssertionError("suite evidence validate head binding drift payload drifted")
-        assert_suite_failure_taxonomy(
-            suite_evidence_head_drift,
-            "head_or_pr_drift",
-            result="block",
-            layer="evidence_map",
-        )
-
-        evidence_pr_head_target = tmp / "suite-evidence-pr-head-drift"
-        evidence_pr_head_suite = evidence_pr_head_target / ".loom" / "specs" / "WI-evidence-pr-head"
-        evidence_pr_head_suite.mkdir(parents=True)
-        current_pr_head = init_git_fixture(evidence_pr_head_target)
-        stale_pr_head = "f" * 40 if current_pr_head != "f" * 40 else "e" * 40
-        (evidence_pr_head_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
-        (evidence_pr_head_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
-        (evidence_pr_head_suite / "evidence-map.md").write_text(
-            "\n".join(
-                [
-                    "# Evidence Map",
-                    "",
-                    "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
-                    "| --- | --- | --- | --- | --- | --- | --- | --- |",
-                    f"| EV-001 | behavior_evidence | .loom/specs/WI-evidence-pr-head/spec.md | Scenario S1 | pr_head={stale_pr_head} | present | merge-ready evidence | refresh behavior evidence |",
-                    f"| EV-002 | test_evidence | .loom/specs/WI-evidence-pr-head/plan.md | AC-1 | pr_head={current_pr_head} | present | merge-ready evidence | rerun tests |",
-                    f"| EV-003 | fresh_verification_input | python3 tools/check_cli_contract.py | EV-001 EV-002 | pr_head={current_pr_head} | present | merge-ready evidence | rerun validation |",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        suite_evidence_pr_head_drift = run_suite_evidence_validate_fixture(evidence_pr_head_target, "WI-evidence-pr-head", expect=1)
-        if (
-            suite_evidence_pr_head_drift.get("result") != "block"
-            or suite_evidence_pr_head_drift.get("fail_closed_reason") != "head_or_pr_drift"
-            or not any(gap.get("failure_kind") == "head_or_pr_drift" for gap in suite_evidence_pr_head_drift.get("blocking_gaps", []))
-        ):
-            raise AssertionError("suite evidence validate PR head binding drift payload drifted")
-
-        evidence_validation_target = tmp / "suite-evidence-validation-drift"
-        evidence_validation_suite = evidence_validation_target / ".loom" / "specs" / "WI-evidence-validation"
-        progress_dir = evidence_validation_target / ".loom" / "progress"
-        evidence_validation_suite.mkdir(parents=True)
-        progress_dir.mkdir(parents=True)
-        validation_summary = "Passed: fixture validation"
-        validation_digest = hashlib.sha256(validation_summary.encode("utf-8")).hexdigest()
-        stale_validation_digest = "a" * 64 if validation_digest != "a" * 64 else "b" * 64
-        (progress_dir / "WI-evidence-validation.md").write_text(
-            f"# WI-evidence-validation Progress\n\n- Latest Validation Summary: {validation_summary}\n",
-            encoding="utf-8",
-        )
-        (evidence_validation_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
-        (evidence_validation_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
-        (evidence_validation_suite / "evidence-map.md").write_text(
-            "\n".join(
-                [
-                    "# Evidence Map",
-                    "",
-                    "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
-                    "| --- | --- | --- | --- | --- | --- | --- | --- |",
-                    f"| EV-001 | behavior_evidence | .loom/specs/WI-evidence-validation/spec.md | Scenario S1 | validation_summary_sha256={stale_validation_digest} | present | merge-ready evidence | refresh behavior evidence |",
-                    f"| EV-002 | test_evidence | .loom/specs/WI-evidence-validation/plan.md | AC-1 | validation_summary_sha256={validation_digest} | present | merge-ready evidence | rerun tests |",
-                    f"| EV-003 | fresh_verification_input | python3 tools/check_cli_contract.py | EV-001 EV-002 | validation_summary_sha256={validation_digest} | present | merge-ready evidence | rerun validation |",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        suite_evidence_validation_drift = run_suite_evidence_validate_fixture(evidence_validation_target, "WI-evidence-validation", expect=1)
-        if (
-            suite_evidence_validation_drift.get("result") != "block"
-            or suite_evidence_validation_drift.get("fail_closed_reason") != "stale_evidence"
-            or suite_evidence_validation_drift.get("payload", {}).get("freshness_context", {}).get("validation_summary_sha256") != validation_digest
-            or not any(gap.get("failure_kind") == "stale_evidence" for gap in suite_evidence_validation_drift.get("blocking_gaps", []))
-        ):
-            raise AssertionError("suite evidence validate validation summary drift payload drifted")
-
-        evidence_missing_source_target = tmp / "suite-evidence-missing-source"
-        evidence_missing_source_suite = evidence_missing_source_target / ".loom" / "specs" / "WI-evidence-missing-source"
-        evidence_missing_source_suite.mkdir(parents=True)
-        (evidence_missing_source_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
-        (evidence_missing_source_suite / "evidence-map.md").write_text(
-            "\n".join(
-                [
-                    "# Evidence Map",
-                    "",
-                    "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
-                    "| --- | --- | --- | --- | --- | --- | --- | --- |",
-                    "| EV-001 | behavior_evidence | tools/missing-source.py | Scenario S1 | current HEAD | present | merge-ready evidence | refresh behavior evidence |",
-                    "| EV-002 | test_evidence | .loom/specs/WI-evidence-missing-source/plan.md | AC-1 | current HEAD | present | merge-ready evidence | rerun tests |",
-                    "| EV-003 | fresh_verification_input | python3 tools/check_cli_contract.py | EV-001 EV-002 | current HEAD | present | merge-ready evidence | rerun validation |",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        suite_evidence_missing_source = run_suite_evidence_validate_fixture(evidence_missing_source_target, "WI-evidence-missing-source", expect=1)
-        if (
-            suite_evidence_missing_source.get("result") != "block"
-            or suite_evidence_missing_source.get("fail_closed_reason") != "missing_source_locator"
-            or not any(gap.get("failure_kind") == "missing_source_locator" for gap in suite_evidence_missing_source.get("blocking_gaps", []))
-        ):
-            raise AssertionError("suite evidence validate missing source locator payload drifted")
-
-        carrier_target = tmp / "suite-carrier"
-        carrier_suite = carrier_target / ".loom" / "specs" / "WI-carrier"
-        carrier_work_items = carrier_target / ".loom" / "work-items"
-        carrier_tasks = carrier_target / ".loom" / "tasks"
-        carrier_suite.mkdir(parents=True)
-        carrier_work_items.mkdir(parents=True)
-        carrier_tasks.mkdir(parents=True)
-        (carrier_work_items / "WI-carrier.md").write_text("# WI-carrier\n", encoding="utf-8")
-        (carrier_suite / "execution-breakdown.md").write_text("# Execution Breakdown\n", encoding="utf-8")
-        (carrier_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
-        (carrier_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
-        (carrier_tasks / "WI-carrier.md").write_text("- [ ] Unit C4\n", encoding="utf-8")
-        (carrier_suite / "task-carrier.md").write_text(
-            "\n".join(
-                [
-                    "# Task Carrier",
-                    "",
-                    "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |",
-                    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-                    "| github_issue | https://github.com/owner/repo/issues/1131 | issue open | pending | primary | .loom/work-items/WI-carrier.md | .loom/specs/WI-carrier/execution-breakdown.md#unit-c1 | .loom/specs/WI-carrier/spec.md#scenario-s1 | .loom/specs/WI-carrier/plan.md#phase-1 | .loom/specs/WI-carrier/plan.md#validation | authored fixture | recheck before merge-ready |",
-                    "| github_project_item | project://loom/item/1 | In Progress | in_progress | mirror | .loom/work-items/WI-carrier.md | .loom/specs/WI-carrier/execution-breakdown.md#unit-c2 | .loom/specs/WI-carrier/spec.md#scenario-s2 | .loom/specs/WI-carrier/plan.md#phase-2 | .loom/specs/WI-carrier/plan.md#validation | project readback fixture | mirror only |",
-                    "| checklist_item | .loom/specs/WI-carrier/task-carrier.md | checked | done | evidence_locator | .loom/work-items/WI-carrier.md | .loom/specs/WI-carrier/execution-breakdown.md#unit-c3 | .loom/specs/WI-carrier/spec.md#scenario-s3 | .loom/specs/WI-carrier/plan.md#phase-3 | .loom/specs/WI-carrier/plan.md#validation | checklist fixture | carrier done is tracking only |",
-                    "| repo_tasks_md | .loom/tasks/WI-carrier.md | task row open | blocked | primary | .loom/work-items/WI-carrier.md | .loom/specs/WI-carrier/execution-breakdown.md#unit-c4 | .loom/specs/WI-carrier/spec.md#scenario-s4 | .loom/specs/WI-carrier/plan.md#phase-4 | .loom/specs/WI-carrier/plan.md#validation | tasks.md fixture | blocker locator in Work Item recovery |",
-                    "| external_tracker | https://tracker.example/T-1 | parked | deferred | primary | .loom/work-items/WI-carrier.md | .loom/specs/WI-carrier/execution-breakdown.md#unit-c5 | .loom/specs/WI-carrier/spec.md#scenario-s5 | .loom/specs/WI-carrier/plan.md#phase-5 | .loom/specs/WI-carrier/plan.md#validation | external fixture | activation condition: upstream ready |",
-                    "| not_applicable | not_applicable:unit-c6 | no carrier needed | not_applicable | not_applicable | .loom/work-items/WI-carrier.md | .loom/specs/WI-carrier/execution-breakdown.md#unit-c6 | not_applicable | .loom/specs/WI-carrier/plan.md#phase-6 | not_applicable | authored rationale | minimal path rationale recheck |",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        suite_carrier_inspect = run_suite_carrier_inspect_fixture(carrier_target, "WI-carrier")
-        carrier_payload = suite_carrier_inspect.get("payload", {})
-        carrier_rows = carrier_payload.get("rows", [])
-        if (
-            carrier_payload.get("task_carrier", {}).get("status") != "present"
-            or carrier_payload.get("task_carrier", {}).get("row_count") != 6
-            or carrier_payload.get("task_carrier_locator") != ".loom/specs/WI-carrier/task-carrier.md"
-            or set(carrier_payload.get("recognized_carrier_types", [])) != {
-                "github_issue",
-                "github_project_item",
-                "checklist_item",
-                "repo_tasks_md",
-                "external_tracker",
-                "not_applicable",
-            }
-            or {row.get("normalized_status") for row in carrier_rows}
-            != {"pending", "in_progress", "done", "blocked", "deferred", "not_applicable"}
-            or carrier_payload.get("truth_boundary", {}).get("carrier_done_satisfies_work_item_done") is not False
-            or "docs/methodology/harness/task-carrier-contract.md" not in carrier_payload.get("consumed_contracts", [])
-        ):
-            raise AssertionError("suite carrier inspect payload drifted")
-        suite_carrier_validate = run_suite_carrier_validate_fixture(carrier_target, "WI-carrier")
-        if (
-            suite_carrier_validate.get("result") != "pass"
-            or suite_carrier_validate.get("failed_layer") is not None
-            or suite_carrier_validate.get("fail_closed_reason") is not None
-            or suite_carrier_validate.get("blocking_gaps")
-        ):
-            raise AssertionError("suite carrier validate pass payload drifted")
-
-        carrier_missing_target = tmp / "suite-carrier-missing"
-        carrier_missing_target.mkdir()
-        suite_carrier_missing = run_suite_carrier_validate_fixture(carrier_missing_target, "WI-carrier-missing", expect=1)
-        if (
-            suite_carrier_missing.get("result") != "block"
-            or suite_carrier_missing.get("failed_layer") != "task_carrier"
-            or suite_carrier_missing.get("fail_closed_reason") != "missing_task_carrier_locator"
-            or "task_carrier_locator" not in suite_carrier_missing.get("missing_inputs", [])
-            or not any(gap.get("failure_kind") == "missing_task_carrier_locator" for gap in suite_carrier_missing.get("blocking_gaps", []))
-        ):
-            raise AssertionError("suite carrier validate missing locator payload drifted")
-        assert_suite_failure_taxonomy(
-            suite_carrier_missing,
-            "missing_task_carrier_locator",
-            result="block",
-            layer="task_carrier",
-        )
-
-        carrier_invalid_target = tmp / "suite-carrier-invalid"
-        carrier_invalid_suite = carrier_invalid_target / ".loom" / "specs" / "WI-carrier-invalid"
-        carrier_invalid_suite.mkdir(parents=True)
-        (carrier_invalid_suite / "task-carrier.md").write_text(
-            "\n".join(
-                [
-                    "# Task Carrier",
-                    "",
-                    "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |",
-                    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-                    "| unknown_host | host://carrier/1 | open | ready | owner | .loom/work-items/WI-carrier-invalid.md | .loom/specs/WI-carrier-invalid/execution-breakdown.md#unit | .loom/specs/WI-carrier-invalid/spec.md#scenario | .loom/specs/WI-carrier-invalid/plan.md#phase | .loom/specs/WI-carrier-invalid/plan.md#validation | invalid fixture | recheck before merge-ready |",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        suite_carrier_invalid = run_suite_carrier_validate_fixture(carrier_invalid_target, "WI-carrier-invalid", expect=1)
-        if (
-            suite_carrier_invalid.get("result") != "block"
-            or suite_carrier_invalid.get("fail_closed_reason") != "missing_task_carrier_locator"
-            or not any(gap.get("failure_kind") == "missing_task_carrier_locator" for gap in suite_carrier_invalid.get("blocking_gaps", []))
-        ):
-            raise AssertionError("suite carrier validate invalid type/status/relationship payload drifted")
-
-        carrier_primary_target = tmp / "suite-carrier-primary-conflict"
-        carrier_primary_suite = carrier_primary_target / ".loom" / "specs" / "WI-carrier-primary"
-        carrier_primary_suite.mkdir(parents=True)
-        (carrier_primary_suite / "task-carrier.md").write_text(
-            "\n".join(
-                [
-                    "# Task Carrier",
-                    "",
-                    "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |",
-                    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-                    "| github_issue | https://github.com/owner/repo/issues/1 | open | in_progress | primary | .loom/work-items/WI-carrier-primary.md | .loom/specs/WI-carrier-primary/execution-breakdown.md#unit | .loom/specs/WI-carrier-primary/spec.md#scenario | .loom/specs/WI-carrier-primary/plan.md#phase | .loom/specs/WI-carrier-primary/plan.md#validation | primary fixture | recheck before merge-ready |",
-                    "| external_tracker | https://tracker.example/T-3 | open | in_progress | primary | .loom/work-items/WI-carrier-primary.md | .loom/specs/WI-carrier-primary/execution-breakdown.md#unit | .loom/specs/WI-carrier-primary/spec.md#scenario | .loom/specs/WI-carrier-primary/plan.md#phase | .loom/specs/WI-carrier-primary/plan.md#validation | primary fixture | recheck before merge-ready |",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        suite_carrier_primary = run_suite_carrier_validate_fixture(carrier_primary_target, "WI-carrier-primary", expect=1)
-        if (
-            suite_carrier_primary.get("result") != "block"
-            or suite_carrier_primary.get("fail_closed_reason") != "carrier_truth_conflict"
-            or not any(gap.get("failure_kind") == "carrier_truth_conflict" for gap in suite_carrier_primary.get("blocking_gaps", []))
-        ):
-            raise AssertionError("suite carrier validate primary conflict payload drifted")
-
-        carrier_conflict_target = tmp / "suite-carrier-conflict"
-        carrier_conflict_suite = carrier_conflict_target / ".loom" / "specs" / "WI-carrier-conflict"
-        carrier_conflict_suite.mkdir(parents=True)
-        (carrier_conflict_suite / "task-carrier.md").write_text(
-            "\n".join(
-                [
-                    "# Task Carrier",
-                    "",
-                    "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |",
-                    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-                    "| github_project_item | project://loom/item/2 | Project Done means completed | done | mirror | .loom/work-items/WI-carrier-conflict.md | .loom/specs/WI-carrier-conflict/execution-breakdown.md#unit | .loom/specs/WI-carrier-conflict/spec.md#scenario | .loom/specs/WI-carrier-conflict/plan.md#phase | .loom/specs/WI-carrier-conflict/plan.md#validation | project readback fixture | mirror only |",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        suite_carrier_conflict = run_suite_carrier_validate_fixture(carrier_conflict_target, "WI-carrier-conflict", expect=1)
-        if (
-            suite_carrier_conflict.get("result") != "block"
-            or suite_carrier_conflict.get("fail_closed_reason") != "carrier_truth_conflict"
-            or not any(gap.get("failure_kind") == "carrier_truth_conflict" for gap in suite_carrier_conflict.get("blocking_gaps", []))
-        ):
-            raise AssertionError("suite carrier validate truth conflict payload drifted")
-
-        carrier_host_conflict_target = tmp / "suite-carrier-host-conflict"
-        carrier_host_conflict_suite = carrier_host_conflict_target / ".loom" / "specs" / "WI-carrier-host-conflict"
-        carrier_host_conflict_suite.mkdir(parents=True)
-        (carrier_host_conflict_target / ".loom" / "progress").mkdir(parents=True)
-        (carrier_host_conflict_target / ".loom" / "progress" / "WI-carrier-host-conflict.md").write_text(
-            "\n".join(
-                [
-                    "# WI-carrier-host-conflict Progress",
-                    "",
-                    "## Dynamic Facts",
-                    "",
-                    "- Item ID: WI-carrier-host-conflict",
-                    "- Current Checkpoint: build",
-                    "- Current Stop: fixture",
-                    "- Next Step: fixture",
-                    "- Blockers: None",
-                    "- Latest Validation Summary: fixture",
-                    "- Recovery Boundary: fixture",
-                    "- Current Lane: fixture",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        (carrier_host_conflict_suite / "task-carrier.md").write_text(
-            "\n".join(
-                [
-                    "# Task Carrier",
-                    "",
-                    "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |",
-                    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-                    "| github_project_item | project://loom/item/9 | Project Done / issue open | done | mirror | .loom/work-items/WI-carrier-host-conflict.md | .loom/specs/WI-carrier-host-conflict/execution-breakdown.md#unit-project | .loom/specs/WI-carrier-host-conflict/spec.md#scenario-project | .loom/specs/WI-carrier-host-conflict/plan.md#phase-project | .loom/specs/WI-carrier-host-conflict/plan.md#validation | project fixture | mirror only |",
-                    "| checklist_item | .loom/specs/WI-carrier-host-conflict/task-carrier.md | checklist checked / evidence missing | done | evidence_locator | .loom/work-items/WI-carrier-host-conflict.md | .loom/specs/WI-carrier-host-conflict/execution-breakdown.md#unit-checklist | .loom/specs/WI-carrier-host-conflict/spec.md#scenario-checklist | .loom/specs/WI-carrier-host-conflict/plan.md#phase-checklist | .loom/specs/WI-carrier-host-conflict/plan.md#validation | checklist fixture | checklist mirror only |",
-                    "| github_issue | https://github.com/owner/repo/pull/99 | PR merged / issue open | done | mirror | .loom/work-items/WI-carrier-host-conflict.md | .loom/specs/WI-carrier-host-conflict/execution-breakdown.md#unit-pr | .loom/specs/WI-carrier-host-conflict/spec.md#scenario-pr | .loom/specs/WI-carrier-host-conflict/plan.md#phase-pr | .loom/specs/WI-carrier-host-conflict/plan.md#validation | pr fixture | PR merged is merge locator only |",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        suite_carrier_host_conflict = run_suite_carrier_validate_fixture(carrier_host_conflict_target, "WI-carrier-host-conflict", expect=1)
-        host_conflict_payload = suite_carrier_host_conflict.get("payload", {})
-        host_conflict_ids = {entry.get("id") for entry in host_conflict_payload.get("host_signal_conflicts", [])}
-        if (
-            suite_carrier_host_conflict.get("result") != "block"
-            or suite_carrier_host_conflict.get("fail_closed_reason") != "carrier_truth_conflict"
-            or not {"project-done-issue-open", "checklist-checked-evidence-missing", "pr-merged-issue-open"}.issubset(host_conflict_ids)
-            or "project_done" not in host_conflict_payload.get("recognized_truth_signals", [])
-            or not any(gap.get("failure_kind") == "carrier_truth_conflict" for gap in suite_carrier_host_conflict.get("blocking_gaps", []))
-        ):
-            raise AssertionError("suite carrier validate host signal conflict payload drifted")
-
-        carrier_deferred_target = tmp / "suite-carrier-deferred"
-        carrier_deferred_suite = carrier_deferred_target / ".loom" / "specs" / "WI-carrier-deferred"
-        carrier_deferred_suite.mkdir(parents=True)
-        (carrier_deferred_suite / "task-carrier.md").write_text(
-            "\n".join(
-                [
-                    "# Task Carrier",
-                    "",
-                    "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |",
-                    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-                    "| external_tracker | https://tracker.example/T-2 | completed | deferred | primary | .loom/work-items/WI-carrier-deferred.md | .loom/specs/WI-carrier-deferred/execution-breakdown.md#unit | .loom/specs/WI-carrier-deferred/spec.md#scenario | .loom/specs/WI-carrier-deferred/plan.md#phase | .loom/specs/WI-carrier-deferred/plan.md#validation | external fixture | activation condition missing |",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
-        )
-        suite_carrier_deferred = run_suite_carrier_validate_fixture(carrier_deferred_target, "WI-carrier-deferred", expect=1)
-        if (
-            suite_carrier_deferred.get("result") != "block"
-            or suite_carrier_deferred.get("fail_closed_reason") != "deferred_as_completed"
-            or not any(gap.get("failure_kind") == "deferred_as_completed" for gap in suite_carrier_deferred.get("blocking_gaps", []))
-        ):
-            raise AssertionError("suite carrier validate deferred-completed payload drifted")
-
-        evidence_scaffold_target = tmp / "suite-evidence-scaffold"
-        evidence_scaffold_target.mkdir()
-        suite_evidence_scaffold = run_suite_evidence_scaffold_fixture(evidence_scaffold_target, "WI-evidence-scaffold")
-        evidence_scaffold_payload = suite_evidence_scaffold.get("payload", {})
-        evidence_scaffold_writes = {entry["artifact"]: entry for entry in evidence_scaffold_payload.get("planned_writes", [])}
-        if (
-            suite_evidence_scaffold.get("result") != "pass"
-            or evidence_scaffold_payload.get("evidence_map_locator") != ".loom/specs/WI-evidence-scaffold/evidence-map.md"
-            or evidence_scaffold_payload.get("apply_required") is not True
-            or evidence_scaffold_payload.get("apply") is not False
-            or evidence_scaffold_payload.get("created_locators") != []
-            or evidence_scaffold_writes.get("evidence-map.md", {}).get("status") != "would_create"
-            or evidence_scaffold_writes.get("evidence-map.md", {}).get("source_template")
-            != "docs/methodology/templates/scaffold/evidence-map.md"
-            or evidence_scaffold_writes.get("evidence-map.md", {}).get("initial_freshness") != "missing"
-            or evidence_scaffold_payload.get("overwrite_policy", {}).get("mode") != "preserve_existing"
-            or evidence_scaffold_payload.get("overwrite_policy", {}).get("allows_overwrite") is not False
-            or evidence_scaffold_payload.get("initial_freshness_policy") != "scaffold never marks evidence present"
-        ):
-            raise AssertionError("suite evidence scaffold dry-run payload drifted")
-        if (evidence_scaffold_target / ".loom").exists():
-            raise AssertionError("suite evidence scaffold dry-run created a .loom directory")
-
-        evidence_apply_target = tmp / "suite-evidence-scaffold-apply"
-        evidence_apply_target.mkdir()
-        suite_evidence_scaffold_apply = run_suite_evidence_scaffold_apply_fixture(evidence_apply_target, "WI-evidence-apply")
-        evidence_apply_payload = suite_evidence_scaffold_apply.get("payload", {})
-        created_evidence_map = evidence_apply_target / ".loom" / "specs" / "WI-evidence-apply" / "evidence-map.md"
-        created_text = created_evidence_map.read_text(encoding="utf-8")
-        if (
-            suite_evidence_scaffold_apply.get("result") != "pass"
-            or suite_evidence_scaffold_apply.get("mutates") is not True
-            or evidence_apply_payload.get("apply") is not True
-            or evidence_apply_payload.get("apply_required") is not False
-            or evidence_apply_payload.get("created_locators") != [".loom/specs/WI-evidence-apply/evidence-map.md"]
-            or not created_evidence_map.is_file()
-            or "| EV-001 | behavior_evidence |  | .loom/specs/WI-evidence-apply/spec.md scenario / acceptance locator | WI-evidence-apply / scope / head / PR | missing |" not in created_text
-            or " | present | " in created_text
-        ):
-            raise AssertionError("suite evidence scaffold --apply create payload drifted")
-        suite_evidence_scaffold_validate = run_suite_evidence_validate_fixture(evidence_apply_target, "WI-evidence-apply", expect=1)
-        if (
-            suite_evidence_scaffold_validate.get("result") != "block"
-            or not any(gap.get("failure_kind") == "missing_evidence_map" for gap in suite_evidence_scaffold_validate.get("blocking_gaps", []))
-            or not any(gap.get("failure_kind") == "missing_fresh_verification_evidence" for gap in suite_evidence_scaffold_validate.get("blocking_gaps", []))
-        ):
-            raise AssertionError("suite evidence scaffold output must not validate as present evidence")
-        suite_evidence_scaffold_again = run_suite_evidence_scaffold_apply_fixture(evidence_apply_target, "WI-evidence-apply")
-        if (
-            suite_evidence_scaffold_again.get("mutates") is not False
-            or suite_evidence_scaffold_again.get("payload", {}).get("created_locators") != []
-            or suite_evidence_scaffold_again.get("payload", {}).get("overwrite_policy", {}).get("existing_files")
-            != [".loom/specs/WI-evidence-apply/evidence-map.md"]
-        ):
-            raise AssertionError("suite evidence scaffold repeat apply preservation drifted")
-
-        evidence_existing_target = tmp / "suite-evidence-scaffold-existing"
-        evidence_existing_suite = evidence_existing_target / ".loom" / "specs" / "WI-evidence-existing"
-        evidence_existing_suite.mkdir(parents=True)
-        (evidence_existing_suite / "evidence-map.md").write_text("# Existing evidence map\n", encoding="utf-8")
-        suite_evidence_existing = run_suite_evidence_scaffold_apply_fixture(evidence_existing_target, "WI-evidence-existing")
-        if (
-            suite_evidence_existing.get("mutates") is not False
-            or suite_evidence_existing.get("payload", {}).get("created_locators") != []
-            or (evidence_existing_suite / "evidence-map.md").read_text(encoding="utf-8") != "# Existing evidence map\n"
-        ):
-            raise AssertionError("suite evidence scaffold existing-file preservation drifted")
-
-        evidence_symlink_target = tmp / "suite-evidence-scaffold-symlink"
-        evidence_symlink_suite = evidence_symlink_target / ".loom" / "specs" / "WI-evidence-link"
-        evidence_symlink_suite.mkdir(parents=True)
-        (evidence_symlink_suite / "evidence-map.md").symlink_to("../../../outside-evidence.md")
-        suite_evidence_symlink = run_suite_evidence_scaffold_apply_fixture(
-            evidence_symlink_target,
-            "WI-evidence-link",
-            expect=1,
-        )
-        if (
-            suite_evidence_symlink.get("result") != "block"
-            or suite_evidence_symlink.get("fail_closed_reason") != "missing_scaffold_inputs"
-            or suite_evidence_symlink.get("mutates") is not False
-            or suite_evidence_symlink.get("payload", {}).get("created_locators") != []
-            or (evidence_symlink_target / "outside-evidence.md").exists()
-        ):
-            raise AssertionError("suite evidence scaffold symlink path did not fail closed")
-
-        _, suite_evidence_traversal = run_json(
-            [
-                "suite",
-                "evidence",
-                "scaffold",
-                "--target",
-                str(evidence_scaffold_target),
-                "--item",
-                "../escape",
-                "--json",
-                "--apply",
-            ],
-            expect=1,
-        )
-        if (
-            suite_evidence_traversal.get("result") != "block"
-            or suite_evidence_traversal.get("fail_closed_reason") != "invalid_suite_item"
-            or suite_evidence_traversal.get("mutates") is not False
-            or suite_evidence_traversal.get("payload", {}).get("created_locators") != []
-        ):
-            raise AssertionError("suite evidence scaffold traversal item did not fail closed")
+        assert_suite_evidence_surface_fixtures(tmp)
 
         full_missing_scenario_target = tmp / "suite-full-missing-scenario-mapping"
         full_missing_scenario_suite = full_missing_scenario_target / ".loom" / "specs" / "WI-full-missing-scenario"
@@ -5312,6 +5321,23 @@ def run_aggregate_cli_contract() -> None:
     print("cli contract checks passed")
 
 
+def run_suite_evidence_surface() -> None:
+    _, help_payload = run_json(["help", "--json"], expect=0)
+    matrix = {entry["command"]: entry for entry in help_payload["commands"]}
+    for command, source_issue in (
+        ("suite evidence inspect", "#1127"),
+        ("suite evidence scaffold", "#1129"),
+        ("suite evidence validate", "#1127"),
+    ):
+        if matrix[command]["status"] != "implemented" or matrix[command]["domain"] != "suite":
+            raise AssertionError(f"{command} must be declared in help matrix for {source_issue}")
+
+    with tempfile.TemporaryDirectory(prefix="loom-suite-evidence-") as raw_tmp:
+        assert_suite_evidence_surface_fixtures(Path(raw_tmp), include_carrier=False)
+
+    print("suite evidence surface checks passed")
+
+
 def run_suite_contract_surface() -> None:
     _, help_payload = run_json(["help", "--json"], expect=0)
     matrix = {entry["command"]: entry for entry in help_payload["commands"]}
@@ -5834,6 +5860,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="suite-contract",
             fixture_group="suite-contract",
             run=run_suite_contract_surface,
+        ),
+        SurfaceCheck(
+            name="suite-evidence",
+            fixture_group="suite-evidence",
+            run=run_suite_evidence_surface,
         ),
         SurfaceCheck(
             name="aggregate",
