@@ -72,8 +72,9 @@ Docs-only 变更可以使用轻量 formal-suite 决策，但只能在以下条�
 - PR body 记录 release / no-release 判断
 - current-head review、fact-chain、CI / hosted checks、PR gate、controlled merge 和 closeout 仍按当前路径执行
 
-Docs-governance 轻量路径不是本文档完成项。它由 #1319 定义 checklist，由 #1322
-实现 gate 行为。本文档只冻结它必须消费的边界。
+Docs-governance 轻量路径的执行 checklist 见
+[docs-governance-lite-checklist.md](./docs-governance-lite-checklist.md)。
+Gate 行为仍由 #1322 实现；本文档只冻结它必须消费的边界。
 
 ## 5. 升级触发
 
