@@ -1,31 +1,57 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1323",
-  "decision": "block",
+  "decision": "allow",
   "kind": "code_review",
-  "summary": "Formal implementation review is pending until the current WI-1323 head has completed suite validate, pr-gate dry checks, git diff --check, no-release evidence, and PR metadata/readback.",
-  "reviewer": "pending",
-  "authored_at": "2026-06-07T00:00:00Z",
-  "reviewed_head": "10112e3f9c702038dc156b10c1e135b3cd780f1f",
-  "reviewed_validation_summary": "Pending current-head validation for WI-1323.",
-  "fallback_to": "build",
-  "findings": [
-    {
-      "severity": "block",
-      "summary": "Replace this placeholder with current-head implementation review before merge-ready."
-    }
-  ],
-  "blocking_issues": [
-    "Current-head implementation review has not been recorded yet."
-  ],
+  "summary": "Current-head review for WI-1323 passed: targeted governance intensity abuse fixtures cover docs-governance light positive behavior and fail-closed runtime/code, fixture, release-impacting docs, missing rationale, PR body readback drift, carrier/head mismatch, PR branch mismatch, stale review/head binding, and suite/metadata mismatch cases without lowering gate strictness or changing schema.",
+  "reviewer": "Codex R3-T9",
+  "authored_at": "2026-06-07T11:13:36Z",
+  "reviewed_head": "7a8fbbd45976598efefaa4187ce10aa3b81a14e2",
+  "reviewed_validation_summary": "2026-06-07 local validation passed before current-head review: `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py` completed in 193.56s and covered governance intensity metadata preflight, docs-governance light/not_applicable pr-gate positive path, runtime/code high-risk light abuse, fixture high-risk light abuse, release-impacting docs light abuse, stale review/head binding, missing rationale, PR body readback drift, carrier/head mismatch, PR body branch mismatch, and suite/metadata mismatch fail-closed cases; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .` passed with WI-1323 fresh status; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1323 --json` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1323 --json` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1323 --json` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py tools/check_cli_contract.py` passed; `git diff --check` passed; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_release_surface.py` and `PYTHONDONTWRITEBYTECODE=1 python3 tools/version_surface_check.py` passed as no-release surface evidence.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
   "follow_ups": [],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-1323.md",
     "recovery_entry": ".loom/progress/WI-1323.md",
     "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/5f12/Loom/tools/loom.py suite evidence validate --target /Users/mc/.codex/worktrees/5f12/Loom --item WI-1323 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/5f12/Loom/tools/loom.py suite carrier validate --target /Users/mc/.codex/worktrees/5f12/Loom --item WI-1323 --json",
     "suite_evidence_map": ".loom/specs/WI-1323/evidence-map.md",
+    "suite_consistency_analysis": null,
     "suite_task_carriers": [
       ".loom/specs/WI-1323/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
     ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
   }
 }
