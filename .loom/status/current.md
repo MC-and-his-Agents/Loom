@@ -11,7 +11,7 @@
 - Review Entry: .loom/reviews/WI-1324.json
 - Validation Entry: docs/link/readback checks; fact-chain; suite validate not_applicable; pr-gate dry check; git diff --check; no-release evidence; hosted checks; controlled merge; closeout sync.
 - Closing Condition: PR for #1324 is merged through the controlled merge wrapper, issue #1324 is closed, repo carriers terminalize WI-1324 closeout, and parent #1314 has a closeout comment that distinguishes completed child work from deferred follow-up #1318.
-- Current Checkpoint: implementation
+- Current Checkpoint: merge
 - Current Stop: WI-1324 is preparing final closeout evidence for parent #1314 from terminalized child carriers and GitHub readback. Required child work #1315/#1316/#1317/#1319/#1320/#1321/#1322/#1323 is closed or closed_out; #1318 remains open and is explicitly treated as a deferred follow-up, not completed work.
 - Next Step: Complete local validation, current-head review, PR metadata/readback, hosted checks, controlled merge, and post-merge closeout sync for #1324 and parent #1314.
 - Blockers: None for #1324 closeout if #1318 remains explicitly deferred in parent closeout evidence. Do not close #1318 as completed unless its AGENTS root-rule implementation is separately done and reviewed.
