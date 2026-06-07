@@ -1,0 +1,27 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1320",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "Spec review for WI-1320 allows the formal suite path decision `not_applicable`: this Work Item is a docs-only inventory and boundary confirmation for governance intensity read surfaces, with no metadata schema implementation, gate behavior implementation, fixtures, AGENTS body, gate contract body, tools behavior, or .loom/bin distribution changes. The not_applicable rationale in `.loom/specs/WI-1320/spec.md` states rationale, consumer boundary, recheck condition, scope proof, and review requirement.",
+  "reviewer": "codex-worker-R3-T6",
+  "reviewed_head": "8b92178ad475af17b9acc71c3b15c6a89d02bf4b",
+  "reviewed_validation_summary": "2026-06-07 local and PR validation for WI-1320 inventory: `git diff --check`, fact-chain and status passed at head `ac831d92f525cf7977160e7e0ceebe4d95f8313d`; PR #1347 body readback matched Work Item `WI-1320`, branch `work/1320-tier-support-inventory` and head `ac831d92f525cf7977160e7e0ceebe4d95f8313d`; live PR metadata preflight inside `python3 tools/loom.py pr gate 1347 --work-item WI-1320 --head-sha ac831d92f525cf7977160e7e0ceebe4d95f8313d --surface merge_ready --json` passed. Earlier validation retained: suite validate returned JSON result `not_applicable` with no missing inputs or blocking gaps and valid rationale at `.loom/specs/WI-1320/spec.md` (CLI exit code 1 is current not_applicable exit semantics); checkpoint build, skills_surface and loom_check contract-only passed. Initial standalone body-file metadata preflight used absolute `/tmp` paths and correctly blocked because the CLI requires repo-relative body files; this was an invocation issue, not a PR metadata gap.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1321 implements the metadata carrier; #1322 implements docs-governance light gate behavior; #1323 owns escalation and abuse fixtures."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1320.md",
+    "recovery_entry": ".loom/progress/WI-1320.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_validation": "not_applicable",
+    "suite_path_decision": ".loom/specs/WI-1320/spec.md",
+    "suite_spec": ".loom/specs/WI-1320/spec.md",
+    "suite_plan": null,
+    "suite_implementation_contract": null,
+    "inventory_evidence": "docs/evidence/governance-intensity-read-surface-inventory.md"
+  }
+}
