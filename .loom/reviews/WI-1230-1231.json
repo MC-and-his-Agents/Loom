@@ -3,54 +3,21 @@
   "item_id": "WI-1230-1231",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Implementation review for WI-1230-1231: diff adds optional structured terminal closeout metadata parsing, implements `loom carrier closeout-sync` as an explicit versioned carrier writer with dry-run default and `host_mutations: false`, updates CLI contract coverage, synchronizes generated runtime copies, and documents the separation between workspace retire, host closeout sync, and carrier closeout sync. No host mutation, worktree deletion, repair/apply, release, or unrelated closeout behavior is introduced.",
+  "summary": "Closeout-only carrier review for WI-1230-1231 terminal readback: this diff terminalizes repo truth after PR #1338 and closeout carrier PR #1339 are merged, and after #1230/#1231 are CLOSED/COMPLETED. It updates only Loom carrier/status/review/shadow closeout evidence and does not change runtime, CLI, fixtures, implementation behavior, or other Work Item implementation scope.",
   "reviewer": "codex-R2-T3b",
-  "reviewed_head": "0ea55b9335c689bfee7bfc21d7f0d3cb7a222905",
-  "reviewed_validation_summary": "Validation passed for WI-1230-1231 on 2026-06-06 after demo fixture sync and implementation-contract refresh: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile tools/loom.py tools/check_cli_contract.py src/skills/shared/scripts/fact_chain_support.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/fact_chain_support.py skills/shared/scripts/loom_flow.py .loom/bin/fact_chain_support.py .loom/bin/loom_flow.py`; runtime parity cmp across src/skills/shared, skills/shared, .loom/bin, and all skills/loom-* runtime copies; `python3 tools/loom.py skills check --target /Users/mc/.codex/worktrees/df54/Loom --json`; `python3 tools/loom.py suite validate --target /Users/mc/.codex/worktrees/df54/Loom --item WI-1230-1231 --json`; `python3 tools/loom.py suite carrier validate --target /Users/mc/.codex/worktrees/df54/Loom --item WI-1230-1231 --json`; `python3 tools/loom.py suite evidence validate --target /Users/mc/.codex/worktrees/df54/Loom --item WI-1230-1231 --json`; `python3 tools/loom.py carrier closeout-sync --target /Users/mc/.codex/worktrees/df54/Loom --item WI-1230-1231 --terminal-state not_applicable --issue 1230 --pr not_applicable --merge-commit not_applicable --target-branch main --closed-at not_applicable --evidence-locator not_applicable --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py` -> `cli contract checks passed`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/check_cli_contract.py --surface aggregate` passed in 186.19s after merging origin/main; `make loom-demo-new-project-check` -> `demo bootstrap fixture: OK (examples/new-project)`; `python3 tools/loom.py closeout --target /Users/mc/.codex/worktrees/df54/Loom --json` -> `result=pass` before PR creation. Hosted checks for PR #1338 initially failed because demo bootstrap fixture drift was present before this sync; rerun is required for head 2cc5405625b74ea74cda2a3a82c895a67191dafa.",
+  "authored_at": "2026-06-07T00:00:00Z",
+  "reviewed_head": "c26b33909a50258f2a326304ccb92a9722c2ad39",
+  "reviewed_validation_summary": "Post-merge readback on 2026-06-07: PR #1338 is MERGED at 2026-06-06T14:22:14Z with merge commit 6fb66bc9099c0bfd278ebcfbb073f479af440d30; PR #1339 is MERGED at 2026-06-06T14:38:54Z with merge commit cd7a73d66978c2a9fceeb0f53081c811d8f1961d; `git merge-base --is-ancestor` confirms both merge commits are contained in origin/main 671b284594df8937653f99d555d3bec30af3ce7b; #1230 CLOSED/COMPLETED at 2026-06-06T14:40:02Z; #1231 CLOSED/COMPLETED at 2026-06-06T14:40:05Z. Closeout-only local validation passed: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py fact-chain --target /Users/mc/.codex/worktrees/df54/Loom --json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py carrier refresh --target /Users/mc/.codex/worktrees/df54/Loom --dry-run`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target /Users/mc/.codex/worktrees/df54/Loom --surface all --blocking`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py closeout --target /Users/mc/.codex/worktrees/df54/Loom --json`.",
   "fallback_to": null,
+  "semantic_review_disposition": {
+    "status": "passed"
+  },
   "findings": [],
   "blocking_issues": [],
   "follow_ups": [],
   "consumed_inputs": {
-    "work_item": ".loom/work-items/WI-1230-1231.md",
-    "recovery_entry": ".loom/progress/WI-1230-1231.md",
-    "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pass",
-    "budget_risk": {
-      "schema_version": "loom-execution-budget-risk/v1",
-      "status": "unavailable",
-      "enforcement": "advisory",
-      "highest_risk": "none",
-      "risk_dimensions": [],
-      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
-      "budget_summary": "local validation and contract checks completed before PR creation; hosted checks remain pending until PR is pushed.",
-      "adapter_evidence_locator": "",
-      "provenance": {
-        "source": "local_validation"
-      }
-    },
-    "engine_adapter": null,
-    "engine_evidence": null,
-    "normalized_findings": null,
-    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/df54/Loom/tools/loom.py suite evidence validate --target /Users/mc/.codex/worktrees/df54/Loom --item WI-1230-1231 --json",
-    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/df54/Loom/tools/loom.py suite carrier validate --target /Users/mc/.codex/worktrees/df54/Loom --item WI-1230-1231 --json",
-    "suite_evidence_map": ".loom/specs/WI-1230-1231/evidence-map.md",
-    "suite_consistency_analysis": null,
-    "suite_task_carriers": [
-      ".loom/specs/WI-1230-1231/task-carrier.md"
-    ],
-    "suite_evidence_consumed_contracts": [
-      "docs/methodology/harness/full-spec-suite-cli-surface.md",
-      "docs/methodology/templates/evidence-map.md"
-    ],
-    "suite_carrier_consumed_contracts": [
-      "docs/methodology/harness/task-carrier-contract.md",
-      "docs/methodology/templates/execution-breakdown.md",
-      "docs/methodology/harness/full-spec-suite-cli-surface.md"
-    ]
-  },
-  "semantic_review_disposition": {
-    "status": "passed",
-    "reason": "Manual semantic review found no blockers after local contract validation, implementation-contract refresh, and demo fixture sync passed; final PR gate and hosted checks must consume the committed head."
+    "engine_adapter": "codex-app/R2-T3b",
+    "engine_evidence": "PR #1338/#1339 merge readback; #1230/#1231 CLOSED/COMPLETED readback; closeout-only carrier/status diff; local validation passed before PR creation",
+    "normalized_findings": null
   }
 }
