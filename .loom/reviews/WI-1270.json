@@ -3,11 +3,11 @@
   "item_id": "WI-1270",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1270 current-head review approved: the change only adds the suite-contract named check_cli_contract surface for suite inspect/scaffold/validate coverage, preserves aggregate check-cli-contract execution, and limits carrier changes to WI-1270 fact-chain/suite-not-applicable/shadow evidence needed for PR gate consumption. No findings.",
+  "summary": "WI-1270 terminal checkpoint repair current-head review approved: PR #1364 only updates WI-1270 terminal checkpoint/status/shadow carrier metadata and associated-artifact declarations so repo truth consistently reports closed_out after PR #1360/#1361/#1363. No implementation, suite-evidence, suite-carrier, governance-closeout, adoption metadata, hosted workflow, metadata schema, release, or #1257 parent scope changes. No findings.",
   "reviewer": "codex-scheduler",
-  "authored_at": "2026-06-07T18:09:05Z",
-  "reviewed_head": "5eca51a3074edeafbb869aab4480d856f8bb5587",
-  "reviewed_validation_summary": "2026-06-08 final-head validation on branch `work/1270-check-cli-suite-contract-surface` head `5eca51a3074edeafbb869aab4480d856f8bb5587`: `python3 tools/check_cli_contract.py --list-surfaces` passed and listed `suite-contract\tsuite-contract` plus `aggregate\tcheck-cli-contract`; `python3 tools/check_cli_contract.py --surface suite-contract` passed; `python3 tools/check_cli_contract.py` passed with suite-contract and aggregate surfaces in 207.13s; `python3 tools/loom.py fact-chain --target . --json` passed with WI-1270 entry points; `python3 tools/loom.py suite validate --target . --item WI-1270 --json` returned expected `not_applicable` with no blocking gaps; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed before scheduler review carrier sync; `git diff --check` passed. PR #1360 metadata readback matched rendered machine carrier for WI-1270, branch, head SHA, workspace, suite not_applicable rationale, no_release judgment, and `Surface: suite-contract`. Hosted release-judgment passed. Scheduler-owned review record `.loom/reviews/WI-1270.json` was authored with decision allow, kind code_review, reviewed head 5eca51a3074edeafbb869aab4480d856f8bb5587, and no findings.",
+  "authored_at": "2026-06-07T20:35:41Z",
+  "reviewed_head": "35a73960be7654cb478be594a3c2354f25c47ff0",
+  "reviewed_validation_summary": "2026-06-07 terminal checkpoint repair validation on branch `work/1270-terminal-checkpoint-repair` head `35a73960be7654cb478be594a3c2354f25c47ff0`: `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed; `python3 .loom/bin/loom_flow.py purity-check --target . --item WI-1270` passed; `python3 tools/loom.py suite validate --target . --item WI-1270 --json` returned expected `not_applicable` with no blocking gaps and exit status 1; PR #1364 body/readback metadata preflight passed for WI-1270, branch, head SHA, workspace, suite not_applicable rationale, and no_release judgment.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -16,7 +16,7 @@
     "work_item": ".loom/work-items/WI-1270.md",
     "recovery_entry": ".loom/progress/WI-1270.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pass",
+    "build_checkpoint": "not_applicable_closed_out_terminal_checkpoint_repair",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
       "status": "not_applicable",
@@ -43,6 +43,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored scheduler review approved current-head terminal checkpoint/status/shadow carrier repair for merge checkpoint consumption."
   }
 }
