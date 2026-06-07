@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1270
-- Goal: Split suite inspect/scaffold/validate checks into a named CLI contract surface.
-- Scope: Add a stable `suite-contract` named surface in `tools/check_cli_contract.py` for suite inspect/scaffold/validate contract checks while preserving aggregate `check-cli-contract` coverage. Excludes suite evidence, suite carrier, governance closeout, adoption/host metadata, hosted workflow, release, metadata schema, and runtime suite semantic changes.
-- Execution Path: issue #1270 -> branch work/1270-check-cli-suite-contract-surface -> PR #1360 -> local surface/aggregate validation -> PR metadata/head binding -> hosted checks -> scheduler-owned review/controlled merge/closeout.
+- Item ID: WI-1271
+- Goal: Split `tools/check_cli_contract.py` suite evidence and suite carrier checks into a named CLI contract surface.
+- Scope: Add a stable `suite-evidence` named surface in `tools/check_cli_contract.py` for suite evidence inspect/scaffold/validate and suite carrier inspect/validate contract checks while preserving aggregate `check-cli-contract` behavior. Excludes #1272 suite-carrier follow-up scope, #1273 governance closeout, #1274 adoption/host metadata, #1257 parent closeout, hosted workflow changes, metadata schema changes, release work, and runtime suite semantic changes outside `tools/check_cli_contract.py`.
+- Execution Path: issue #1271 -> branch `work/1271-check-cli-suite-evidence-surface` -> implementation validation -> PR metadata/head binding -> hosted checks -> scheduler-owned semantic review, controlled merge, and closeout.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1270.md
-- Review Entry: .loom/reviews/WI-1270.json
-- Validation Entry: python3 tools/check_cli_contract.py --list-surfaces; python3 tools/check_cli_contract.py --surface suite-contract; python3 tools/check_cli_contract.py; git diff --check; PR metadata preflight/readback; hosted checks.
-- Closing Condition: PR #1360 is reviewed by the scheduler-owned gate, merged through controlled merge, issue #1270 is closed, and post-merge closeout sync consumes PR, issue, branch, head, target main, review, and validation evidence.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1270 is closed out: implementation PR #1360 was merged by the controlled merge wrapper into `main` at merge commit `2dd2eda818ef80790351a5033697862187efe844`; issue #1270 is closed; closeout PR #1361 and terminal carrier repair PR #1363 consumed the repo truth drift.
-- Next Step: No further WI-1270 implementation or closeout work; continue Round 4 with #1271.
-- Blockers: None recorded.
-- Latest Validation Summary: 2026-06-07 terminal checkpoint repair validation on branch `work/1270-terminal-checkpoint-repair` head `35a73960be7654cb478be594a3c2354f25c47ff0`: `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed; `python3 .loom/bin/loom_flow.py purity-check --target . --item WI-1270` passed; `python3 tools/loom.py suite validate --target . --item WI-1270 --json` returned expected `not_applicable` with no blocking gaps and exit status 1; PR #1364 body/readback metadata preflight passed for WI-1270, branch, head SHA, workspace, suite not_applicable rationale, and no_release judgment.
-- Recovery Boundary: Only #1270 suite-contract surface split and minimal WI-1270 PR-readiness carriers are in scope. Do not handle #1271, #1272, #1273, #1274, #1257 closeout, runtime suite semantics, hosted workflows, release surfaces, metadata schema, or external-visible actions.
-- Current Lane: check-cli-suite-contract-surface
+- Recovery Entry: .loom/progress/WI-1271.md
+- Review Entry: .loom/reviews/WI-1271.json
+- Validation Entry: python3 tools/check_cli_contract.py --list-surfaces; python3 tools/check_cli_contract.py --surface suite-evidence; python3 tools/check_cli_contract.py; python3 tools/loom.py fact-chain --target . --json; python3 tools/loom.py suite validate --target . --item WI-1271 --json; git diff --check; PR metadata preflight/readback; hosted checks.
+- Closing Condition: PR for #1271 is reviewed by the scheduler-owned gate, merged through controlled merge, issue #1271 is closed, and post-merge closeout sync consumes PR, issue, branch, target main, review, and validation evidence.
+- Current Checkpoint: build
+- Current Stop: Implementation local validation passed for the new `suite-evidence` named surface while aggregate `check-cli-contract` behavior remains intact; PR creation, metadata readback, hosted checks, scheduler-owned review, controlled merge, and closeout remain pending.
+- Next Step: Commit and push the branch, create/update the PR for #1271, verify PR body machine carrier/head binding, then read back hosted checks before stopping at `waiting-scheduler-gate`.
+- Blockers: None
+- Latest Validation Summary: 2026-06-08 local validation on branch `work/1271-check-cli-suite-evidence-surface`: `python3 tools/check_cli_contract.py --list-surfaces` passed and listed `suite-contract`, `suite-evidence`, and `aggregate`; `python3 tools/check_cli_contract.py --surface suite-evidence` passed in 2.39s; `python3 tools/check_cli_contract.py` passed with `suite-contract`, `suite-evidence`, and aggregate `check-cli-contract` surfaces in 194.60s; `git diff --check` passed before carrier authoring.
+- Recovery Boundary: Only #1271 suite-evidence surface split and minimal WI-1271 PR-readiness carriers are in scope. Do not implement #1272, #1273, #1274, #1257 parent closeout, Round 5+, release work, hosted workflow changes, metadata schema changes, runtime suite semantic changes outside `tools/check_cli_contract.py`, or unrelated cleanup.
+- Current Lane: check-cli-suite-evidence-surface
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
-- Diagnostics Entry: hosted merge gate initially blocked on stale WI-1324 fact-chain and missing scheduler-owned semantic review; carrier sync updated fact-chain to WI-1270, suite not_applicable, shadow parity, and final-head PR metadata. Scheduler-owned semantic review is now authored in `.loom/reviews/WI-1270.json`.
-- Verification Entry: local validation, PR metadata/readback, and hosted check readback for PR #1360
-- Lane Entry: check-cli-suite-contract-surface
+- Diagnostics Entry: none
+- Verification Entry: local validation, PR metadata/readback, and hosted check readback for the #1271 PR
+- Lane Entry: check-cli-suite-evidence-surface
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1270.md
-- Dynamic Truth: .loom/progress/WI-1270.md
+- Static Truth: .loom/work-items/WI-1271.md
+- Dynamic Truth: .loom/progress/WI-1271.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
