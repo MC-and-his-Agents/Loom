@@ -1,22 +1,33 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1320",
-  "decision": "block",
+  "decision": "allow",
   "kind": "code_review",
-  "summary": "Formal review has not been recorded yet for WI-1320.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "d2191e73024d1d7e747fd8935c051c8c0df3be90",
-  "reviewed_validation_summary": "No final validation recorded yet.",
-  "fallback_to": "build",
-  "findings": [
-    {
-      "id": "pending-formal-review",
-      "severity": "block",
-      "summary": "Record a real review for the current PR head before merge-ready."
-    }
+  "summary": "WI-1320 inventory review approves implementation head 7aca7061: the change is limited to read-surface inventory evidence, a necessary evidence landing link, and WI-1320 Loom carriers. It classifies CLI/gate/carrier/PR body/review/suite/merge-ready/closeout surfaces as must-change, maybe-change, not_applicable, deferred, or unknown, and gives #1321/#1322/#1323 minimal touchpoints and validation suggestions. It does not modify `tools/`, `.loom/bin`, fixtures, AGENTS body, gate contract body, metadata schema implementation, or gate behavior.",
+  "reviewer": "codex-worker-R3-T6",
+  "reviewed_head": "7aca70615add20fed379109696f8eddac646a156",
+  "reviewed_validation_summary": "2026-06-07 local validation for WI-1320 inventory head `7aca70615add20fed379109696f8eddac646a156`: `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --item WI-1320 --json` passed; `python3 tools/loom.py suite validate --target . --item WI-1320 --json` returned JSON result `not_applicable` with no missing inputs or blocking gaps and valid rationale at `.loom/specs/WI-1320/spec.md` (CLI exit code 1 is current not_applicable exit semantics); `python3 .loom/bin/loom_flow.py checkpoint build --target . --item WI-1320` passed; `python3 tools/skills_surface.py check` passed; `python3 tools/loom_check.py --profile source --source-surface contract-only .` passed. `python3 tools/loom.py status --target . --item WI-1320 --json` before review blocked only on placeholder review not yet allow/current validation, and `flow pre-review` before commit blocked on dirty worktree. Scope proof: committed diff is inventory docs, landing link, and WI-1320 carriers only.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "#1321 implements the metadata carrier; #1322 implements docs-governance light gate behavior; #1323 owns escalation and abuse fixtures."
   ],
-  "blocking_issues": [
-    "Record a real review for the current PR head before merge-ready."
-  ],
-  "follow_ups": []
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1320.md",
+    "recovery_entry": ".loom/progress/WI-1320.md",
+    "status_surface": ".loom/status/current.md",
+    "inventory_evidence": "docs/evidence/governance-intensity-read-surface-inventory.md",
+    "suite_validation": "not_applicable",
+    "suite_path_decision": ".loom/specs/WI-1320/spec.md",
+    "fact_chain": "pass",
+    "build_checkpoint": "pass",
+    "skills_surface": "pass",
+    "loom_check_contract_only": "pass"
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "consumable": true,
+    "reason": "Authored inventory review approved the current implementation head for merge checkpoint consumption."
+  }
 }
