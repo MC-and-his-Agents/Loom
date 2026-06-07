@@ -18,7 +18,70 @@
     }
   },
   "metadata_contract": {
-    "fields": []
+    "fields": [
+      {
+        "id": "loom-governance-intensity",
+        "summary": "Loom governance intensity PR metadata carrier binding Work Item, branch/head, suite path, review, release judgment, PR gate, and closeout requiredness.",
+        "applicability_locator": "docs/methodology/harness/tiered-gate-consumption-contract.md",
+        "authority_locator": ".github/PULL_REQUEST_TEMPLATE.md",
+        "enforcement": "blocking",
+        "machine_carrier": {
+          "type": "pr_body_html_comment_json",
+          "schema_version": "loom-repo-pr-metadata/v1",
+          "carrier_id": "loom-governance-intensity-pr-body-block",
+          "marker": "loom:repo-pr-metadata",
+          "surface": "merge_ready",
+          "repo_specific_field_set": [
+            "loom_work_item",
+            "branch",
+            "head_sha",
+            "governance_intensity",
+            "change_class",
+            "suite_path",
+            "suite_not_applicable",
+            "review_requirement",
+            "fact_chain_required",
+            "pr_gate_required",
+            "release_judgment",
+            "closeout_required",
+            "upgrade_triggers"
+          ],
+          "authority_locator": ".github/PULL_REQUEST_TEMPLATE.md",
+          "applicability_locator": "docs/methodology/harness/tiered-gate-consumption-contract.md",
+          "enforcement": "blocking",
+          "required_fields": [
+            "loom_work_item",
+            "branch",
+            "head_sha",
+            "governance_intensity",
+            "change_class",
+            "suite_path",
+            "review_requirement",
+            "fact_chain_required",
+            "pr_gate_required",
+            "release_judgment",
+            "closeout_required",
+            "upgrade_triggers"
+          ],
+          "preflight": {
+            "required_before": [
+              "review",
+              "merge_ready"
+            ],
+            "failure_mode": "blocking",
+            "command_locator": "tools/loom_flow.py"
+          },
+          "diagnostics": {
+            "block_locator": true,
+            "parse_error": true,
+            "missing_fields": true,
+            "expected_format": true,
+            "suggested_fix": true
+          },
+          "migration_mode": "required"
+        }
+      }
+    ]
   },
   "context_schema": {
     "fields": []
