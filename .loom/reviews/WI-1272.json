@@ -1,0 +1,29 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1272",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1272 implementation review approved: the diff adds the named suite-carrier check_cli_contract surface by reusing the existing suite carrier inspect/validate fixture helper, preserves aggregate check-cli-contract coverage, and limits carrier/status/shadow edits to WI-1272 PR readiness. No findings.",
+  "reviewer": "codex-scheduler",
+  "authored_at": "2026-06-07T22:39:06Z",
+  "reviewed_head": "3f1da1168ff7194adf01af8d98edb57410e7d82e",
+  "reviewed_validation_summary": "2026-06-07 local validation for WI-1272 passed: `python3 tools/check_cli_contract.py --list-surfaces` listed `suite-contract`, `suite-evidence`, `suite-carrier`, and `aggregate\tcheck-cli-contract`; `python3 tools/check_cli_contract.py --surface suite-carrier` passed; `python3 tools/check_cli_contract.py` passed with `suite-contract`, `suite-evidence`, `suite-carrier`, and aggregate `check-cli-contract` coverage; `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed; `python3 tools/loom.py suite validate --target . --item WI-1272 --json` returned expected `result: not_applicable` with valid rationale and no missing inputs or blocking gaps.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1272.md",
+    "recovery_entry": ".loom/progress/WI-1272.md",
+    "status_surface": ".loom/status/current.md",
+    "implementation_file": "tools/check_cli_contract.py",
+    "pr": "https://github.com/MC-and-his-Agents/Loom/pull/1366",
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_surface": "suite-carrier",
+    "release_judgment": "no_release"
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored scheduler review approved current-head WI-1272 suite-carrier surface split; implementation is limited to check_cli_contract surface registration and minimal WI-1272 carriers, with no task-carrier runtime semantic change."
+  }
+}
