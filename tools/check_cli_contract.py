@@ -2242,6 +2242,26 @@ def semantic_pr_gate_fixture_payload(target: Path, fixture: dict[str, str]) -> d
     return payload
 
 
+def assert_pr_gate_blocks(
+    target: Path,
+    fixture: dict[str, str],
+    label: str,
+    *,
+    expected_missing: str | None = None,
+    expect_lite_gate_block: bool = False,
+) -> dict[str, Any]:
+    payload = semantic_pr_gate_fixture_payload(target, fixture)
+    if payload.get("result") != "block":
+        raise AssertionError(f"{label} did not fail closed")
+    if expected_missing and not any(expected_missing in str(message) for message in payload.get("missing_inputs", [])):
+        raise AssertionError(f"{label} did not expose expected missing input: {expected_missing}")
+    if expect_lite_gate_block:
+        lite_gate = payload.get("docs_governance_lite_gate")
+        if not isinstance(lite_gate, dict) or lite_gate.get("result") != "block":
+            raise AssertionError(f"{label} did not expose blocking docs-governance lite gate evidence")
+    return payload
+
+
 def write_governance_metadata_contract_fixture(target: Path) -> None:
     companion = target / ".loom" / "companion"
     companion.mkdir(parents=True, exist_ok=True)
@@ -2439,6 +2459,8 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
         "missing-intensity.md": {"governance_intensity": "__DELETE__"},
         "unknown-intensity.md": {"governance_intensity": "casual"},
         "light-runtime.md": {"governance_intensity": "light", "change_class": "runtime"},
+        "light-fixture.md": {"governance_intensity": "light", "change_class": "fixture"},
+        "light-release-impacting-docs.md": {"governance_intensity": "light", "change_class": "release"},
         "light-docs-only.md": {"governance_intensity": "light", "change_class": "docs_only", "suite_path": "not_applicable"},
         "light-docs-governance-minimal.md": {
             "governance_intensity": "light",
@@ -2500,6 +2522,35 @@ def assert_governance_intensity_metadata_preflight_fixture(tmp: Path) -> None:
     )
     if review_surface_payload.get("result") != "pass":
         raise AssertionError("review surface did not consume the declared merge_ready governance metadata carrier")
+
+    readback_drift = target / "docs-governance-lite-readback-drift.md"
+    readback_drift.write_text(
+        docs_governance_lite.read_text(encoding="utf-8").replace(
+            '"release_judgment": "no_release"',
+            '"release_judgment": "release_required"',
+        ),
+        encoding="utf-8",
+    )
+    _, readback_drift_payload = run_flow_json(
+        [
+            "pr-metadata",
+            "preflight",
+            "--target",
+            str(target),
+            "--surface",
+            "merge_ready",
+            "--body-file",
+            "docs-governance-lite.md",
+            "--compare-body-file",
+            "docs-governance-lite-readback-drift.md",
+        ],
+        expect=1,
+    )
+    if readback_drift_payload.get("result") != "block":
+        raise AssertionError("PR body readback drift did not fail closed")
+    body_artifact = readback_drift_payload.get("body_artifact")
+    if not isinstance(body_artifact, dict) or body_artifact.get("result") != "block":
+        raise AssertionError("PR body readback drift did not expose body_artifact block evidence")
 
 
 def append_pr_metadata_surface(target: Path, fixture: dict[str, str], *, surface: str) -> None:
@@ -2649,9 +2700,12 @@ def assert_docs_governance_lite_pr_gate_fixture(tmp: Path) -> None:
             "suite_path": "minimal",
         },
     )
-    blocked_payload = semantic_pr_gate_fixture_payload(target, fixture)
-    if blocked_payload.get("result") != "block":
-        raise AssertionError("docs-governance lite metadata/suite mismatch did not fail closed")
+    assert_pr_gate_blocks(
+        target,
+        fixture,
+        "docs-governance lite metadata/suite mismatch",
+        expected_missing="PR metadata machine block invalid: loom-governance-intensity",
+    )
 
     append_governance_intensity_metadata_body(
         target,
@@ -2668,9 +2722,12 @@ def assert_docs_governance_lite_pr_gate_fixture(tmp: Path) -> None:
             },
         },
     )
-    missing_rationale_payload = semantic_pr_gate_fixture_payload(target, fixture)
-    if missing_rationale_payload.get("result") != "block":
-        raise AssertionError("docs-governance lite missing rationale did not fail closed")
+    assert_pr_gate_blocks(
+        target,
+        fixture,
+        "docs-governance lite missing rationale",
+        expected_missing="PR metadata machine block invalid: loom-governance-intensity",
+    )
 
     append_governance_intensity_metadata_body(
         target,
@@ -2689,9 +2746,12 @@ def assert_docs_governance_lite_pr_gate_fixture(tmp: Path) -> None:
             },
         },
     )
-    review_requirement_payload = semantic_pr_gate_fixture_payload(target, fixture)
-    if review_requirement_payload.get("result") != "block":
-        raise AssertionError("docs-governance lite non-current-head review requirement did not fail closed")
+    assert_pr_gate_blocks(
+        target,
+        fixture,
+        "docs-governance lite non-current-head review requirement",
+        expected_missing="PR metadata machine block invalid: loom-governance-intensity",
+    )
 
     append_governance_intensity_metadata_body(
         target,
@@ -2710,9 +2770,108 @@ def assert_docs_governance_lite_pr_gate_fixture(tmp: Path) -> None:
             },
         },
     )
-    release_payload = semantic_pr_gate_fixture_payload(target, fixture)
-    if release_payload.get("result") != "block":
-        raise AssertionError("docs-governance lite deferred release judgment did not fail closed")
+    assert_pr_gate_blocks(
+        target,
+        fixture,
+        "docs-governance lite deferred release judgment",
+        expected_missing="PR metadata machine block invalid: loom-governance-intensity",
+    )
+
+    abuse_cases: dict[str, dict[str, Any]] = {
+        "runtime/code change declared as light": {
+            "governance_intensity": "light",
+            "change_class": "runtime",
+            "suite_path": "not_applicable",
+            "suite_not_applicable": {
+                "rationale": "runtime behavior cannot use docs-governance light bypass",
+                "consumer_boundary": "suite validate and pr-gate",
+                "recheck_condition": "runtime code changes require stronger governance",
+                "scope_proof": "fixture intentionally models runtime/code change abuse",
+                "review_requirement": "current_head_review_required",
+            },
+        },
+        "fixture change declared as light": {
+            "governance_intensity": "light",
+            "change_class": "fixture",
+            "suite_path": "not_applicable",
+            "suite_not_applicable": {
+                "rationale": "fixture changes cannot use docs-governance light bypass",
+                "consumer_boundary": "suite validate and pr-gate",
+                "recheck_condition": "fixture changes require stronger governance",
+                "scope_proof": "fixture intentionally models regression fixture abuse",
+                "review_requirement": "current_head_review_required",
+            },
+        },
+        "release-impacting docs declared as light": {
+            "governance_intensity": "light",
+            "change_class": "release",
+            "suite_path": "not_applicable",
+            "release_judgment": "release_required",
+            "suite_not_applicable": {
+                "rationale": "release-impacting docs cannot use docs-governance light bypass",
+                "consumer_boundary": "suite validate and pr-gate",
+                "recheck_condition": "release-impacting scope requires release evidence",
+                "scope_proof": "fixture intentionally models release-impacting docs abuse",
+                "review_requirement": "current_head_review_required",
+            },
+        },
+    }
+    for label, overrides in abuse_cases.items():
+        append_governance_intensity_metadata_body(target, fixture, fields_override=overrides)
+        assert_pr_gate_blocks(
+            target,
+            fixture,
+            label,
+            expected_missing="PR metadata machine block invalid: loom-governance-intensity",
+        )
+
+    append_governance_intensity_metadata_body(
+        target,
+        fixture,
+        fields_override={
+            "governance_intensity": "light",
+            "change_class": "docs_governance",
+            "suite_path": "not_applicable",
+            "head_sha": "0" * 40,
+            "suite_not_applicable": {
+                "rationale": "docs-governance lite fixture does not need formal suite artifacts",
+                "consumer_boundary": "suite validate and pr-gate consume only formal suite non-applicability",
+                "recheck_condition": "scope expands beyond governance docs and current carrier evidence",
+                "scope_proof": "diff is limited to governance docs and current Loom carriers",
+                "review_requirement": "current_head_review_required",
+            },
+        },
+    )
+    assert_pr_gate_blocks(
+        target,
+        fixture,
+        "governance metadata carrier/head mismatch",
+        expected_missing="PR metadata machine block invalid: loom-governance-intensity",
+    )
+
+    update_fixture_pr_head(target, fixture, extra={"headRefName": "work/1323-mismatched-pr-branch"})
+    append_governance_intensity_metadata_body(
+        target,
+        fixture,
+        fields_override={
+            "governance_intensity": "light",
+            "change_class": "docs_governance",
+            "suite_path": "not_applicable",
+            "suite_not_applicable": {
+                "rationale": "docs-governance lite fixture does not need formal suite artifacts",
+                "consumer_boundary": "suite validate and pr-gate consume only formal suite non-applicability",
+                "recheck_condition": "scope expands beyond governance docs and current carrier evidence",
+                "scope_proof": "diff is limited to governance docs and current Loom carriers",
+                "review_requirement": "current_head_review_required",
+            },
+        },
+    )
+    assert_pr_gate_blocks(
+        target,
+        fixture,
+        "PR body branch mismatch",
+        expected_missing="PR body Branch does not match PR payload headRefName",
+    )
 
 
 def assert_terminal_closeout_pr_gate_fixture(tmp: Path) -> None:
