@@ -5338,6 +5338,22 @@ def run_suite_evidence_surface() -> None:
     print("suite evidence surface checks passed")
 
 
+def run_suite_carrier_surface() -> None:
+    _, help_payload = run_json(["help", "--json"], expect=0)
+    matrix = {entry["command"]: entry for entry in help_payload["commands"]}
+    for command, source_issue in (
+        ("suite carrier inspect", "#1131"),
+        ("suite carrier validate", "#1131"),
+    ):
+        if matrix[command]["status"] != "implemented" or matrix[command]["domain"] != "suite":
+            raise AssertionError(f"{command} must be declared in help matrix for {source_issue}")
+
+    with tempfile.TemporaryDirectory(prefix="loom-suite-carrier-") as raw_tmp:
+        assert_suite_carrier_aggregate_fixtures(Path(raw_tmp))
+
+    print("suite carrier surface checks passed")
+
+
 def run_suite_contract_surface() -> None:
     _, help_payload = run_json(["help", "--json"], expect=0)
     matrix = {entry["command"]: entry for entry in help_payload["commands"]}
@@ -5865,6 +5881,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="suite-evidence",
             fixture_group="suite-evidence",
             run=run_suite_evidence_surface,
+        ),
+        SurfaceCheck(
+            name="suite-carrier",
+            fixture_group="suite-carrier",
+            run=run_suite_carrier_surface,
         ),
         SurfaceCheck(
             name="aggregate",
