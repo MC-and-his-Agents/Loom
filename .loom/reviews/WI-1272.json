@@ -3,11 +3,11 @@
   "item_id": "WI-1272",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1272 implementation review approved: the diff adds the named suite-carrier check_cli_contract surface by reusing the existing suite carrier inspect/validate fixture helper, preserves aggregate check-cli-contract coverage, and limits carrier/status/shadow edits to WI-1272 PR readiness. No findings.",
+  "summary": "WI-1272 closeout carrier review approved: implementation PR #1366 is merged, issue #1272 is closed as COMPLETED, and this closeout-only diff terminalizes WI-1272 progress/status/shadow evidence without changing tools/check_cli_contract.py, task-carrier runtime semantics, hosted workflows, metadata schema, release behavior, or #1273/#1274/#1257 scope. No findings.",
   "reviewer": "codex-scheduler",
-  "authored_at": "2026-06-07T22:39:06Z",
-  "reviewed_head": "3f1da1168ff7194adf01af8d98edb57410e7d82e",
-  "reviewed_validation_summary": "2026-06-07 local validation for WI-1272 passed: `python3 tools/check_cli_contract.py --list-surfaces` listed `suite-contract`, `suite-evidence`, `suite-carrier`, and `aggregate\tcheck-cli-contract`; `python3 tools/check_cli_contract.py --surface suite-carrier` passed; `python3 tools/check_cli_contract.py` passed with `suite-contract`, `suite-evidence`, `suite-carrier`, and aggregate `check-cli-contract` coverage; `git diff --check` passed; `python3 tools/loom.py fact-chain --target . --json` passed; `python3 tools/loom.py suite validate --target . --item WI-1272 --json` returned expected `result: not_applicable` with valid rationale and no missing inputs or blocking gaps.",
+  "authored_at": "2026-06-07T23:12:40Z",
+  "reviewed_head": "583945be50f63d1ed0d89220b99fa5b76463e2f6",
+  "reviewed_validation_summary": "2026-06-07 post-merge closeout readback for WI-1272: PR #1366 merged through the controlled merge wrapper at 2026-06-07T22:53:36Z with merge commit `d8ee862e125730b26e13b6f13d61c89177712e89`; issue #1272 closed as COMPLETED at 2026-06-07T22:54:08Z with closeout evidence comment https://github.com/MC-and-his-Agents/Loom/issues/1272#issuecomment-4644344121; final hosted checks for head `c8c79ec158c9536b0e9492aae7762c336a928c55` passed (`py-compile`, `demo-bootstrap`, `repo-local-cli`, `root-self-governance`, `loom-check`, `loom-pr-merge-gate`, and `release-judgment`); `python3 tools/loom.py carrier closeout-sync --target . --item WI-1272 --terminal-state closed_out --issue 1272 --pr 1366 --merge-commit d8ee862e125730b26e13b6f13d61c89177712e89 --target-branch main --closed-at 2026-06-07T22:54:08Z --evidence-locator https://github.com/MC-and-his-Agents/Loom/issues/1272#issuecomment-4644344121 --apply --json` passed with `host_mutations=false`.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -16,14 +16,17 @@
     "work_item": ".loom/work-items/WI-1272.md",
     "recovery_entry": ".loom/progress/WI-1272.md",
     "status_surface": ".loom/status/current.md",
-    "implementation_file": "tools/check_cli_contract.py",
-    "pr": "https://github.com/MC-and-his-Agents/Loom/pull/1366",
+    "build_checkpoint": "not_applicable_closed_out_terminal_checkpoint_repair",
     "suite_evidence_validation": "not_applicable",
-    "suite_carrier_surface": "suite-carrier",
-    "release_judgment": "no_release"
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored scheduler review approved current-head WI-1272 suite-carrier surface split; implementation is limited to check_cli_contract surface registration and minimal WI-1272 carriers, with no task-carrier runtime semantic change."
+    "reason": "Authored scheduler review approved WI-1272 terminal closeout carrier at closeout head 583945be50f63d1ed0d89220b99fa5b76463e2f6; any later drift is expected to be limited to this review carrier binding."
   }
 }
