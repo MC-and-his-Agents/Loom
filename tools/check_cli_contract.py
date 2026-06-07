@@ -5312,8 +5312,529 @@ def run_aggregate_cli_contract() -> None:
     print("cli contract checks passed")
 
 
+def run_suite_contract_surface() -> None:
+    _, help_payload = run_json(["help", "--json"], expect=0)
+    matrix = {entry["command"]: entry for entry in help_payload["commands"]}
+    for command, source_issue in (
+        ("suite inspect", "#1111"),
+        ("suite scaffold", "#1114"),
+        ("suite validate", "#1120"),
+    ):
+        if matrix[command]["status"] != "implemented" or matrix[command]["domain"] != "suite":
+            raise AssertionError(f"{command} must be declared in help matrix for {source_issue}")
+
+    with tempfile.TemporaryDirectory(prefix="loom-suite-contract-") as raw_tmp:
+        tmp = Path(raw_tmp)
+        suite_unknown_target = tmp / "suite-unknown"
+        suite_unknown_target.mkdir()
+        suite_unknown = run_suite_inspect_fixture(suite_unknown_target, "WI-1109")
+        if (
+            suite_unknown.get("payload", {}).get("suite_path") != "unknown"
+            or suite_unknown.get("payload", {}).get("artifact_inventory") != []
+            or "suite_path_decision" not in suite_unknown.get("payload", {}).get("missing_inputs", [])
+        ):
+            raise AssertionError("suite inspect unknown-state payload drifted")
+        suite_unknown_validate = run_suite_validate_fixture(suite_unknown_target, "WI-1109", expect=1)
+        if (
+            suite_unknown_validate.get("result") != "block"
+            or suite_unknown_validate.get("failed_layer") != "suite"
+            or suite_unknown_validate.get("fail_closed_reason") != "missing_suite_path_decision"
+            or "suite_path_decision" not in suite_unknown_validate.get("missing_inputs", [])
+            or not suite_unknown_validate.get("blocking_gaps")
+            or suite_unknown_validate.get("advisory_gaps")
+        ):
+            raise AssertionError("suite validate unknown-state block payload drifted")
+        assert_suite_failure_taxonomy(
+            suite_unknown_validate,
+            "missing_suite_path_decision",
+            result="block",
+            layer="suite",
+        )
+
+        suite_conflict_target = tmp / "suite-conflict"
+        suite_conflict = suite_conflict_target / ".loom" / "specs" / "WI-conflict"
+        suite_conflict.mkdir(parents=True)
+        (suite_conflict / "suite-index.md").write_text("# Suite\n\n- Suite path: full\n", encoding="utf-8")
+        (suite_conflict / "spec.md").write_text("# Spec\n\n- Suite path: minimal\n", encoding="utf-8")
+        (suite_conflict / "plan.md").write_text("# Plan\n", encoding="utf-8")
+        suite_conflict_validate = run_suite_validate_fixture(suite_conflict_target, "WI-conflict", expect=1)
+        conflict_missing = suite_conflict_validate.get("payload", {}).get("missing_inputs", [])
+        if (
+            suite_conflict_validate.get("result") != "block"
+            or suite_conflict_validate.get("fail_closed_reason") != "missing_suite_path_decision"
+            or "suite_path_decision" not in conflict_missing
+            or not any(str(entry).startswith("conflicting_suite_path_decision:") for entry in conflict_missing)
+            or not any(
+                gap.get("failure_kind") == "missing_suite_path_decision"
+                and gap.get("source_locator") == ".loom/specs/WI-conflict/spec.md"
+                for gap in suite_conflict_validate.get("blocking_gaps", [])
+            )
+        ):
+            raise AssertionError("suite validate conflicting path decision payload drifted")
+
+        minimal_target = tmp / "suite-minimal"
+        write_minimal_suite(minimal_target, "WI-minimal")
+        assert_minimal_suite_happy_path_fixture(minimal_target, "WI-minimal")
+
+        minimal_invalid_target = tmp / "suite-minimal-invalid-rationale"
+        minimal_invalid_suite = minimal_invalid_target / ".loom" / "specs" / "WI-minimal-invalid"
+        minimal_invalid_suite.mkdir(parents=True)
+        (minimal_invalid_suite / "spec.md").write_text(
+            "# Spec\n\n- Suite path: minimal\n\n- Full suite artifacts not_applicable.\n",
+            encoding="utf-8",
+        )
+        (minimal_invalid_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
+        suite_minimal_invalid = run_suite_validate_fixture(minimal_invalid_target, "WI-minimal-invalid", expect=1)
+        assert_suite_negative_fail_closed(
+            suite_minimal_invalid,
+            "invalid_not_applicable_rationale",
+            expected_missing_inputs=(
+                "not_applicable_rationale:.loom/specs/WI-minimal-invalid/spec.md:block-3:rationale",
+                "not_applicable_rationale:.loom/specs/WI-minimal-invalid/spec.md:block-3:consumer_boundary",
+                "not_applicable_rationale:.loom/specs/WI-minimal-invalid/spec.md:block-3:recheck_condition",
+            ),
+            expected_missing_fields=("rationale", "consumer_boundary", "recheck_condition"),
+        )
+
+        minimal_deferred_target = tmp / "suite-minimal-deferred"
+        minimal_deferred_suite = minimal_deferred_target / ".loom" / "specs" / "WI-minimal-deferred"
+        minimal_deferred_suite.mkdir(parents=True)
+        (minimal_deferred_suite / "spec.md").write_text(
+            "# Spec\n\n"
+            "- Suite path: minimal\n\n"
+            "- Full suite artifacts deferred: activation condition: later evidence Work Item; "
+            "non-blocking consumers: none for readiness.\n",
+            encoding="utf-8",
+        )
+        (minimal_deferred_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
+        suite_minimal_deferred = run_suite_validate_fixture(minimal_deferred_target, "WI-minimal-deferred", expect=1)
+        if (
+            suite_minimal_deferred.get("result") != "block"
+            or not suite_minimal_deferred.get("payload", {}).get("deferred_items")
+            or not any(
+                gap.get("failure_kind") == "deferred_as_completed"
+                for gap in suite_minimal_deferred.get("blocking_gaps", [])
+            )
+        ):
+            raise AssertionError("suite validate deferred-as-not-applicable payload drifted")
+        assert_suite_failure_taxonomy(
+            suite_minimal_deferred,
+            "deferred_as_completed",
+            result="block",
+            layer="suite",
+        )
+
+        not_applicable_target = tmp / "suite-not-applicable"
+        not_applicable_suite = not_applicable_target / ".loom" / "specs" / "WI-not-applicable"
+        not_applicable_suite.mkdir(parents=True)
+        (not_applicable_suite / "spec.md").write_text(
+            "# Spec\n\n"
+            "- Suite path: not applicable\n\n"
+            "- Suite-level not_applicable: rationale: no formal suite is needed for this fixture; "
+            "consumer boundary: suite validation only records the bypass; "
+            "recheck condition: a Work Item requires formal spec consumption.\n",
+            encoding="utf-8",
+        )
+        suite_not_applicable = run_suite_inspect_fixture(not_applicable_target, "WI-not-applicable")
+        not_applicable_payload = suite_not_applicable.get("payload", {})
+        if (
+            not_applicable_payload.get("suite_path") != "not_applicable"
+            or not_applicable_payload.get("path_decision_locator") != ".loom/specs/WI-not-applicable/spec.md"
+            or not_applicable_payload.get("missing_inputs")
+        ):
+            raise AssertionError("suite inspect not_applicable payload drifted")
+        suite_not_applicable_validate = run_suite_validate_fixture(not_applicable_target, "WI-not-applicable", expect=1)
+        if (
+            suite_not_applicable_validate.get("result") != "not_applicable"
+            or suite_not_applicable_validate.get("payload", {}).get("suite_path") != "not_applicable"
+            or suite_not_applicable_validate.get("blocking_gaps")
+            or not suite_not_applicable_validate.get("payload", {}).get("not_applicable_rationale")
+        ):
+            raise AssertionError("suite validate not_applicable payload drifted")
+
+        full_target = tmp / "suite-full"
+        write_full_suite(full_target, "WI-full")
+        assert_full_suite_happy_path_fixture(full_target, "WI-full")
+
+        full_missing_scenario_target = tmp / "suite-full-missing-scenario-mapping"
+        full_missing_scenario_suite = full_missing_scenario_target / ".loom" / "specs" / "WI-full-missing-scenario"
+        full_missing_scenario_suite.mkdir(parents=True)
+        (full_missing_scenario_suite / "suite-index.md").write_text(
+            "# Full Suite Index\n\n- Schema marker: loom-full-suite-index/v1\n- Suite path: full\n",
+            encoding="utf-8",
+        )
+        (full_missing_scenario_suite / "spec.md").write_text(
+            "# Spec\n\n"
+            "## Key Scenarios\n\n"
+            "### Scenario S1\n\nGiven a missing mapping fixture\nWhen validation runs\nThen it blocks\n\n"
+            "## Acceptance Criteria\n\n"
+            "- [ ] A1: Acceptance still maps\n",
+            encoding="utf-8",
+        )
+        (full_missing_scenario_suite / "plan.md").write_text(
+            "# Plan\n\n"
+            "## Test Strategy\n\n"
+            "- Acceptance test mapping:\n"
+            "  - A1 -> manual evidence: issue closeout comment\n",
+            encoding="utf-8",
+        )
+        suite_full_missing_scenario = run_suite_validate_fixture(
+            full_missing_scenario_target,
+            "WI-full-missing-scenario",
+            expect=1,
+        )
+        if (
+            suite_full_missing_scenario.get("result") != "block"
+            or suite_full_missing_scenario.get("failed_layer") != "spec/plan"
+            or suite_full_missing_scenario.get("fail_closed_reason") != "missing_spec_plan_mapping"
+            or "S1"
+            not in suite_full_missing_scenario.get("payload", {}).get("spec_plan_mapping", {}).get("missing_scenarios", [])
+            or not any(
+                gap.get("failure_kind") == "missing_spec_plan_mapping"
+                and gap.get("surface") == "spec/plan"
+                for gap in suite_full_missing_scenario.get("blocking_gaps", [])
+            )
+        ):
+            raise AssertionError("suite validate missing scenario mapping payload drifted")
+        assert_suite_failure_taxonomy(
+            suite_full_missing_scenario,
+            "missing_spec_plan_mapping",
+            result="block",
+            layer="spec/plan",
+        )
+
+        full_missing_acceptance_target = tmp / "suite-full-missing-acceptance-mapping"
+        full_missing_acceptance_suite = full_missing_acceptance_target / ".loom" / "specs" / "WI-full-missing-acceptance"
+        full_missing_acceptance_suite.mkdir(parents=True)
+        (full_missing_acceptance_suite / "suite-index.md").write_text(
+            "# Full Suite Index\n\n- Schema marker: loom-full-suite-index/v1\n- Suite path: full\n",
+            encoding="utf-8",
+        )
+        (full_missing_acceptance_suite / "spec.md").write_text(
+            "# Spec\n\n"
+            "## Key Scenarios\n\n"
+            "### Scenario S1\n\nGiven an acceptance mapping fixture\nWhen validation runs\nThen it blocks\n\n"
+            "## Acceptance Criteria\n\n"
+            "- [ ] A1: Acceptance must map to a test strategy\n",
+            encoding="utf-8",
+        )
+        (full_missing_acceptance_suite / "plan.md").write_text(
+            "# Plan\n\n"
+            "## Validation\n\n"
+            "- Scenario validation mapping:\n"
+            "  - S1 -> automated: python3 tools/check_cli_contract.py\n",
+            encoding="utf-8",
+        )
+        suite_full_missing_acceptance = run_suite_validate_fixture(
+            full_missing_acceptance_target,
+            "WI-full-missing-acceptance",
+            expect=1,
+        )
+        if (
+            suite_full_missing_acceptance.get("result") != "block"
+            or suite_full_missing_acceptance.get("failed_layer") != "spec/plan"
+            or suite_full_missing_acceptance.get("fail_closed_reason") != "missing_spec_plan_mapping"
+            or "A1"
+            not in suite_full_missing_acceptance.get("payload", {}).get("spec_plan_mapping", {}).get("missing_acceptance", [])
+        ):
+            raise AssertionError("suite validate missing acceptance mapping payload drifted")
+
+        full_advisory_target = tmp / "suite-full-advisory"
+        full_advisory_suite = full_advisory_target / ".loom" / "specs" / "WI-full-advisory"
+        full_advisory_suite.mkdir(parents=True)
+        (full_advisory_suite / "suite-index.md").write_text(
+            "# Full Suite Index\n\n- Schema marker: loom-full-suite-index/v1\n- Suite path: full\n",
+            encoding="utf-8",
+        )
+        (full_advisory_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
+        (full_advisory_suite / "plan.md").write_text("# Plan\n", encoding="utf-8")
+        suite_full_advisory_validate = run_suite_validate_fixture(full_advisory_target, "WI-full-advisory", expect=1)
+        if (
+            suite_full_advisory_validate.get("result") != "advisory"
+            or suite_full_advisory_validate.get("blocking_gaps")
+            or not suite_full_advisory_validate.get("advisory_gaps")
+            or suite_full_advisory_validate.get("payload", {}).get("suite_path") != "full"
+        ):
+            raise AssertionError("suite validate advisory payload drifted")
+        assert_suite_failure_taxonomy(
+            suite_full_advisory_validate,
+            "missing_optional_suite_artifact",
+            result="advisory",
+            layer="suite",
+        )
+
+        full_missing_target = tmp / "suite-full-missing"
+        full_missing_suite = full_missing_target / ".loom" / "specs" / "WI-full-missing"
+        full_missing_suite.mkdir(parents=True)
+        (full_missing_suite / "suite-index.md").write_text(
+            "# Full Suite Index\n\n- Schema marker: loom-full-suite-index/v1\n- Suite path: full\n",
+            encoding="utf-8",
+        )
+        (full_missing_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
+        suite_full_missing = run_suite_inspect_fixture(full_missing_target, "WI-full-missing")
+        full_missing_payload = suite_full_missing.get("payload", {})
+        missing_inventory = {entry["artifact"]: entry for entry in full_missing_payload.get("artifact_inventory", [])}
+        if (
+            full_missing_payload.get("suite_path") != "full"
+            or "required_artifact:.loom/specs/WI-full-missing/plan.md"
+            not in full_missing_payload.get("missing_inputs", [])
+            or missing_inventory.get("plan.md", {}).get("status") != "missing"
+        ):
+            raise AssertionError("suite inspect missing required artifact payload drifted")
+        suite_full_missing_validate = run_suite_validate_fixture(full_missing_target, "WI-full-missing", expect=1)
+        if suite_full_missing_validate.get("failed_layer") != "suite":
+            raise AssertionError("suite validate missing required artifact layer drifted")
+        assert_suite_negative_fail_closed(
+            suite_full_missing_validate,
+            "missing_required_artifact",
+            expected_missing_inputs=("required_artifact:.loom/specs/WI-full-missing/plan.md",),
+        )
+
+        full_invalid_target = tmp / "suite-full-invalid"
+        full_invalid_suite = full_invalid_target / ".loom" / "specs" / "WI-full-invalid"
+        full_invalid_suite.mkdir(parents=True)
+        (full_invalid_suite / "suite-index.md").write_text(
+            "# Full Suite Index\n\n- Schema marker: loom-full-suite-index/v1\n- Suite path: full\n",
+            encoding="utf-8",
+        )
+        (full_invalid_suite / "spec.md").write_text("# Spec\n", encoding="utf-8")
+        (full_invalid_suite / "plan.md").mkdir()
+        suite_full_invalid_validate = run_suite_validate_fixture(full_invalid_target, "WI-full-invalid", expect=1)
+        invalid_inventory = {
+            entry["artifact"]: entry
+            for entry in suite_full_invalid_validate.get("payload", {}).get("artifact_inventory", [])
+        }
+        if (
+            suite_full_invalid_validate.get("result") != "block"
+            or suite_full_invalid_validate.get("fail_closed_reason") != "missing_required_artifact"
+            or invalid_inventory.get("plan.md", {}).get("status") != "invalid"
+            or "required_artifact:.loom/specs/WI-full-invalid/plan.md"
+            not in suite_full_invalid_validate.get("payload", {}).get("missing_inputs", [])
+        ):
+            raise AssertionError("suite validate invalid required artifact payload drifted")
+
+        scaffold_target = tmp / "suite-scaffold"
+        scaffold_target.mkdir()
+        suite_scaffold = run_suite_scaffold_fixture(scaffold_target, "WI-scaffold")
+        scaffold_payload = suite_scaffold.get("payload", {})
+        planned_writes = {entry["artifact"]: entry for entry in scaffold_payload.get("planned_writes", [])}
+        source_templates = {entry["artifact"]: entry["locator"] for entry in scaffold_payload.get("source_templates", [])}
+        if (
+            suite_scaffold.get("result") != "pass"
+            or scaffold_payload.get("suite_path") != "minimal"
+            or scaffold_payload.get("artifact_root") != ".loom/specs/WI-scaffold"
+            or scaffold_payload.get("apply_required") is not True
+            or scaffold_payload.get("apply") is not False
+            or scaffold_payload.get("created_locators") != []
+            or "Dry-run only; no files were created." not in scaffold_payload.get("rollback_note", "")
+            or sorted(planned_writes) != ["plan.md", "spec.md"]
+            or planned_writes["spec.md"].get("locator") != ".loom/specs/WI-scaffold/spec.md"
+            or planned_writes["plan.md"].get("locator") != ".loom/specs/WI-scaffold/plan.md"
+            or planned_writes["spec.md"].get("status") != "would_create"
+            or planned_writes["plan.md"].get("status") != "would_create"
+            or planned_writes["spec.md"].get("overwrite_policy") != "preserve_existing"
+            or planned_writes["plan.md"].get("overwrite_policy") != "preserve_existing"
+            or source_templates.get("spec.md") != "docs/methodology/templates/scaffold/spec.md"
+            or source_templates.get("plan.md") != "docs/methodology/templates/scaffold/plan.md"
+            or scaffold_payload.get("overwrite_policy", {}).get("mode") != "preserve_existing"
+            or scaffold_payload.get("overwrite_policy", {}).get("allows_overwrite") is not False
+            or scaffold_payload.get("overwrite_policy", {}).get("ambiguous_overwrite") != "fail_closed"
+            or scaffold_payload.get("overwrite_policy", {}).get("existing_files") != []
+        ):
+            raise AssertionError("suite scaffold dry-run payload drifted")
+        if (scaffold_target / ".loom").exists():
+            raise AssertionError("suite scaffold dry-run created a .loom directory")
+
+        existing_scaffold_target = tmp / "suite-scaffold-existing"
+        existing_suite = existing_scaffold_target / ".loom" / "specs" / "WI-existing"
+        existing_suite.mkdir(parents=True)
+        (existing_suite / "spec.md").write_text("# Existing spec\n", encoding="utf-8")
+        suite_scaffold_existing = run_suite_scaffold_fixture(existing_scaffold_target, "WI-existing")
+        existing_payload = suite_scaffold_existing.get("payload", {})
+        existing_writes = {entry["artifact"]: entry for entry in existing_payload.get("planned_writes", [])}
+        if (
+            existing_writes.get("spec.md", {}).get("planned_action") != "preserve_existing"
+            or existing_writes.get("spec.md", {}).get("would_write") is not False
+            or existing_writes.get("plan.md", {}).get("planned_action") != "create"
+            or existing_payload.get("overwrite_policy", {}).get("existing_files") != [".loom/specs/WI-existing/spec.md"]
+            or existing_payload.get("created_locators") != []
+        ):
+            raise AssertionError("suite scaffold existing-file overwrite policy drifted")
+
+        apply_target = tmp / "suite-scaffold-apply"
+        apply_target.mkdir()
+        suite_scaffold_apply = run_suite_scaffold_apply_fixture(apply_target, "WI-apply")
+        apply_payload = suite_scaffold_apply.get("payload", {})
+        apply_writes = {entry["artifact"]: entry for entry in apply_payload.get("planned_writes", [])}
+        if (
+            suite_scaffold_apply.get("mutates") is not True
+            or apply_payload.get("apply") is not True
+            or apply_payload.get("apply_required") is not False
+            or apply_payload.get("created_locators")
+            != [".loom/specs/WI-apply/spec.md", ".loom/specs/WI-apply/plan.md"]
+            or "Rollback is deleting the created repo-relative locators" not in apply_payload.get("rollback_note", "")
+            or apply_writes.get("spec.md", {}).get("status") != "created"
+            or apply_writes.get("plan.md", {}).get("status") != "created"
+            or not (apply_target / ".loom/specs/WI-apply/spec.md").is_file()
+            or not (apply_target / ".loom/specs/WI-apply/plan.md").is_file()
+        ):
+            raise AssertionError("suite scaffold --apply create payload drifted")
+
+        existing_apply_target = tmp / "suite-scaffold-apply-existing"
+        existing_apply_suite = existing_apply_target / ".loom" / "specs" / "WI-apply-existing"
+        existing_apply_suite.mkdir(parents=True)
+        (existing_apply_suite / "spec.md").write_text("# Existing spec\n", encoding="utf-8")
+        suite_scaffold_apply_existing = run_suite_scaffold_apply_fixture(existing_apply_target, "WI-apply-existing")
+        apply_existing_payload = suite_scaffold_apply_existing.get("payload", {})
+        apply_existing_writes = {entry["artifact"]: entry for entry in apply_existing_payload.get("planned_writes", [])}
+        if (
+            suite_scaffold_apply_existing.get("mutates") is not True
+            or apply_existing_payload.get("created_locators") != [".loom/specs/WI-apply-existing/plan.md"]
+            or apply_existing_writes.get("spec.md", {}).get("planned_action") != "preserve_existing"
+            or apply_existing_writes.get("spec.md", {}).get("wrote") is not False
+            or apply_existing_writes.get("plan.md", {}).get("status") != "created"
+            or (existing_apply_suite / "spec.md").read_text(encoding="utf-8") != "# Existing spec\n"
+        ):
+            raise AssertionError("suite scaffold --apply existing-file preservation drifted")
+
+        suite_scaffold_apply_again = run_suite_scaffold_apply_fixture(apply_target, "WI-apply")
+        apply_again_payload = suite_scaffold_apply_again.get("payload", {})
+        if (
+            suite_scaffold_apply_again.get("mutates") is not False
+            or apply_again_payload.get("created_locators") != []
+            or apply_again_payload.get("overwrite_policy", {}).get("existing_files")
+            != [".loom/specs/WI-apply/spec.md", ".loom/specs/WI-apply/plan.md"]
+        ):
+            raise AssertionError("suite scaffold --apply repeat preservation drifted")
+
+        traversal_target = tmp / "suite-scaffold-traversal"
+        traversal_target.mkdir()
+        _, suite_scaffold_traversal = run_json(
+            ["suite", "scaffold", "--target", str(traversal_target), "--item", "../escape", "--json", "--apply"],
+            expect=1,
+        )
+        if (
+            suite_scaffold_traversal.get("result") != "block"
+            or suite_scaffold_traversal.get("fail_closed_reason") != "invalid_suite_item"
+            or suite_scaffold_traversal.get("mutates") is not False
+            or suite_scaffold_traversal.get("payload", {}).get("created_locators") != []
+            or (traversal_target / ".loom").exists()
+        ):
+            raise AssertionError("suite scaffold --apply traversal item did not fail closed")
+
+        _, suite_scaffold_absolute = run_json(
+            ["suite", "scaffold", "--target", str(traversal_target), "--item", str(tmp / "abs-write"), "--json", "--apply"],
+            expect=1,
+        )
+        if (
+            suite_scaffold_absolute.get("result") != "block"
+            or suite_scaffold_absolute.get("fail_closed_reason") != "invalid_suite_item"
+            or suite_scaffold_absolute.get("payload", {}).get("created_locators") != []
+        ):
+            raise AssertionError("suite scaffold --apply absolute item did not fail closed")
+
+        symlink_target = tmp / "suite-scaffold-symlink"
+        symlink_suite = symlink_target / ".loom" / "specs" / "WI-link"
+        symlink_suite.mkdir(parents=True)
+        (symlink_suite / "spec.md").symlink_to("../../../outside-spec.md")
+        _, suite_scaffold_symlink = run_json(
+            ["suite", "scaffold", "--target", str(symlink_target), "--item", "WI-link", "--json", "--apply"],
+            expect=1,
+        )
+        if (
+            suite_scaffold_symlink.get("result") != "block"
+            or suite_scaffold_symlink.get("fail_closed_reason") != "missing_scaffold_inputs"
+            or suite_scaffold_symlink.get("payload", {}).get("created_locators") != []
+            or (symlink_target / "outside-spec.md").exists()
+            or (symlink_suite / "plan.md").exists()
+        ):
+            raise AssertionError("suite scaffold --apply symlink path did not fail closed")
+
+        directory_artifact_target = tmp / "suite-scaffold-directory-artifact"
+        directory_artifact_suite = directory_artifact_target / ".loom" / "specs" / "WI-dir"
+        (directory_artifact_suite / "spec.md").mkdir(parents=True)
+        _, suite_scaffold_directory_artifact = run_json(
+            ["suite", "scaffold", "--target", str(directory_artifact_target), "--item", "WI-dir", "--json", "--apply"],
+            expect=1,
+        )
+        if (
+            suite_scaffold_directory_artifact.get("result") != "block"
+            or suite_scaffold_directory_artifact.get("fail_closed_reason") != "missing_scaffold_inputs"
+            or suite_scaffold_directory_artifact.get("payload", {}).get("created_locators") != []
+            or suite_scaffold_directory_artifact.get("payload", {}).get("overwrite_policy", {}).get("ambiguous_overwrite") != "fail_closed"
+            or "scaffold artifact is not a regular file" not in "\n".join(suite_scaffold_directory_artifact.get("payload", {}).get("missing_inputs", []))
+            or (directory_artifact_suite / "plan.md").exists()
+        ):
+            raise AssertionError("suite scaffold --apply directory artifact did not fail closed")
+
+        full_artifacts = [
+            "suite-index.md",
+            "spec.md",
+            "plan.md",
+            "research.md",
+            "contracts.md",
+            "readiness-checklist.md",
+        ]
+        full_scaffold_target = tmp / "suite-scaffold-full"
+        full_scaffold_target.mkdir()
+        suite_scaffold_full = run_suite_scaffold_fixture(full_scaffold_target, "WI-full", ["--suite", "full"])
+        full_payload = suite_scaffold_full.get("payload", {})
+        full_planned_writes = {entry["artifact"]: entry for entry in full_payload.get("planned_writes", [])}
+        if (
+            suite_scaffold_full.get("result") != "pass"
+            or full_payload.get("suite_path") != "full"
+            or full_payload.get("artifact_root") != ".loom/specs/WI-full"
+            or full_payload.get("apply_required") is not True
+            or full_payload.get("apply") is not False
+            or full_payload.get("created_locators") != []
+            or sorted(full_planned_writes) != sorted(full_artifacts)
+            or full_payload.get("required_artifacts") != ["suite-index.md", "spec.md", "plan.md"]
+            or full_payload.get("conditional_artifacts") != ["research.md", "contracts.md", "readiness-checklist.md"]
+            or full_planned_writes["suite-index.md"].get("locator") != ".loom/specs/WI-full/suite-index.md"
+            or full_planned_writes["research.md"].get("requirement") != "conditional"
+            or full_planned_writes["spec.md"].get("requirement") != "required"
+            or any(full_planned_writes[artifact].get("overwrite_policy") != "preserve_existing" for artifact in full_artifacts)
+            or full_payload.get("overwrite_policy", {}).get("ambiguous_overwrite") != "fail_closed"
+        ):
+            raise AssertionError("suite scaffold full-suite dry-run payload drifted")
+        if (full_scaffold_target / ".loom").exists():
+            raise AssertionError("suite scaffold full-suite dry-run created a .loom directory")
+
+        truth_dry_run_target = tmp / "suite-scaffold-truth-dry-run"
+        truth_dry_run_target.mkdir()
+        truth_dry_run_before = write_forbidden_truth_fixture(truth_dry_run_target)
+        truth_dry_run_tree_before = snapshot_tree(truth_dry_run_target)
+        suite_scaffold_truth_dry_run = run_suite_scaffold_fixture(
+            truth_dry_run_target,
+            "WI-truth",
+            ["--suite", "full"],
+        )
+        truth_dry_run_payload = suite_scaffold_truth_dry_run.get("payload", {})
+        assert_forbidden_truth_unchanged(truth_dry_run_target, truth_dry_run_before)
+        assert_scaffold_write_boundary(truth_dry_run_payload, item="WI-truth", allowed_artifacts=full_artifacts)
+        if snapshot_tree(truth_dry_run_target) != truth_dry_run_tree_before:
+            raise AssertionError("suite scaffold dry-run changed host/review/closeout/generated-skill fixture tree")
+
+        truth_minimal_target = tmp / "suite-scaffold-truth-minimal"
+        truth_minimal_target.mkdir()
+        truth_minimal_before = write_forbidden_truth_fixture(truth_minimal_target)
+        suite_scaffold_truth_minimal = run_suite_scaffold_apply_fixture(truth_minimal_target, "WI-truth")
+        truth_minimal_payload = suite_scaffold_truth_minimal.get("payload", {})
+        assert_forbidden_truth_unchanged(truth_minimal_target, truth_minimal_before)
+        assert_scaffold_write_boundary(truth_minimal_payload, item="WI-truth", allowed_artifacts=["spec.md", "plan.md"])
+        if truth_minimal_payload.get("created_locators") != [".loom/specs/WI-truth/spec.md", ".loom/specs/WI-truth/plan.md"]:
+            raise AssertionError("suite scaffold minimal truth-boundary fixture created unexpected locators")
+
+    print("suite contract surface checks passed")
+
+
 def available_surface_checks() -> tuple[SurfaceCheck, ...]:
     return (
+        SurfaceCheck(
+            name="suite-contract",
+            fixture_group="suite-contract",
+            run=run_suite_contract_surface,
+        ),
         SurfaceCheck(
             name="aggregate",
             fixture_group="check-cli-contract",
