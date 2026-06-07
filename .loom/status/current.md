@@ -4,7 +4,7 @@
 
 - Item ID: WI-1270
 - Goal: Split suite inspect/scaffold/validate checks into a named CLI contract surface.
-- Scope: Add a stable `suite-contract` named surface in `tools/check_cli_contract.py` for suite inspect/scaffold/validate contract checks while preserving aggregate `check-cli-contract` coverage, with only the minimal WI-1270 carrier paths `.loom/work-items/WI-1270.md`, `.loom/progress/WI-1270.md`, `.loom/status/current.md`, `.loom/specs/WI-1270/spec.md`, `.loom/reviews/WI-1270.json`, `.loom/shadow/merge-ready-loom.json`, and `.loom/shadow/closeout-loom.json` needed for fact-chain, suite not_applicable, review, and shadow consumption. Excludes suite evidence, suite carrier, governance closeout, adoption/host metadata, hosted workflow, release, metadata schema, and runtime suite semantic changes.
+- Scope: Add a stable `suite-contract` named surface in `tools/check_cli_contract.py` for suite inspect/scaffold/validate contract checks while preserving aggregate `check-cli-contract` coverage. Excludes suite evidence, suite carrier, governance closeout, adoption/host metadata, hosted workflow, release, metadata schema, and runtime suite semantic changes.
 - Execution Path: issue #1270 -> branch work/1270-check-cli-suite-contract-surface -> PR #1360 -> local surface/aggregate validation -> PR metadata/head binding -> hosted checks -> scheduler-owned review/controlled merge/closeout.
 - Workspace Entry: .
 - Recovery Entry: .loom/progress/WI-1270.md
