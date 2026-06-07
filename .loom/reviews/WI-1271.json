@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1271",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1271 current-head review approved: the corrected change adds an evidence-only suite-evidence named check_cli_contract surface for suite evidence inspect/scaffold/validate and evidence-map fixtures, preserves aggregate check-cli-contract execution, leaves suite carrier assertions aggregate-only for #1272, and limits carrier changes to WI-1271 fact-chain/suite-not-applicable/shadow evidence needed for PR gate consumption. No findings.",
+  "reviewer": "codex-scheduler",
+  "authored_at": "2026-06-07T19:53:49Z",
+  "reviewed_head": "d8ee5c591e4ff025237d483b04a27eeabae9511f",
+  "reviewed_validation_summary": "2026-06-08 correction validation on branch `work/1271-check-cli-suite-evidence-surface`: `python3 tools/check_cli_contract.py --list-surfaces` passed and listed `suite-contract`, `suite-evidence`, and `aggregate` only; `python3 tools/check_cli_contract.py --surface suite-evidence` passed in 1.66s with evidence-only checks; `python3 tools/check_cli_contract.py` passed in 181.38s and preserved carrier assertions through aggregate; `python3 tools/loom.py fact-chain --target . --json` passed; `python3 tools/loom.py suite validate --target . --item WI-1271 --json` returned `not_applicable` with no blocking gaps under the existing exit-1 contract; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed after shadow refresh; `git diff --check` passed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1271.md",
+    "recovery_entry": ".loom/progress/WI-1271.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
