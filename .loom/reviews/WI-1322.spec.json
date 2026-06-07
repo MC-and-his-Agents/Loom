@@ -1,0 +1,51 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1322",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1322 minimal suite reviewed at current head: spec, plan, implementation contract, evidence map, and task carrier cover docs-governance lite gate behavior, required fail-closed cases, review/pre-review metadata carrier consumption, and non-suite gate preservation.",
+  "reviewer": "Codex R3-T8",
+  "authored_at": "2026-06-07T08:53:22Z",
+  "reviewed_head": "fbf700ba457f29e74e07989127e9336ef748235d",
+  "reviewed_validation_summary": "2026-06-07T08:49:59Z local validation passed before review: `python3 tools/check_cli_contract.py --surface aggregate` passed in 240.75s; `git diff --check` passed; `python3 tools/py_compile_clean.py tools/check_cli_contract.py src/skills/shared/scripts/loom_flow.py skills/shared/scripts/loom_flow.py .loom/bin/loom_flow.py` passed; `python3 tools/skills_surface.py check` passed; `python3 .loom/bin/loom_init.py fact-chain --target .` returned ok with WI-1322 entry points; `python3 tools/loom.py suite validate --target . --item WI-1322 --json`, `suite evidence validate`, and `suite carrier validate` passed. Pending: current-head review, PR body metadata preflight/readback, PR gate dry check against PR head, hosted checks, controlled merge, and closeout sync.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1322.md",
+    "recovery_entry": ".loom/progress/WI-1322.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/.codex/worktrees/bb31/Loom/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1322/spec.md",
+    "suite_plan": ".loom/specs/WI-1322/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1322/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1322/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}
