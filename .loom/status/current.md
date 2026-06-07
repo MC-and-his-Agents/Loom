@@ -11,9 +11,9 @@
 - Review Entry: .loom/reviews/WI-1322.json
 - Validation Entry: git diff --check; py_compile_clean; skills_surface.py check; tools/check_cli_contract.py --surface aggregate; fact-chain; suite validate; pr-gate dry check; hosted checks; controlled merge; closeout sync.
 - Closing Condition: PR for #1322 is merged through the controlled merge wrapper, issue #1322 is closed, repo carriers terminalize WI-1322 closeout, and follow-up #1323/#1324 remain separate.
-- Current Checkpoint: merge
-- Current Stop: Hosted-check failure fixes are locally validated on branch `work/1322-docs-governance-lite-gate`: PR metadata carrier compatibility, demo bootstrap fixture drift, runtime provenance, and shadow parity now pass locally; current local head is still `24f8b4eea956f1f2c853f5288467d09026c054c0` until the fixes are committed.
-- Next Step: Commit the refreshed runtime/manifest/shadow fixes, record current-head implementation review against the new head, update PR #1353 metadata/readback, run PR gate dry check, then enter hosted checks.
+- Current Checkpoint: closed_out
+- Current Stop: WI-1322 is closed out: PR #1353 was merged by the controlled merge wrapper into `main` at merge commit `167079bb7196db768d92e49e6501128d6b157e88`; issue #1322 is closed; stale native blocked-by edges to #1317/#1319/#1321 were removed after reconciliation sync reported them as unsupported automatic actions.
+- Next Step: No further WI-1322 implementation work; keep #1323 and #1324 as separate follow-up scope.
 - Blockers: None recorded.
 - Latest Validation Summary: 2026-06-07T18:02:30+08:00 local validation passed after hosted-check failure fixes: targeted PR metadata preflight compatibility accepted both review-surface and merge_ready carriers for review consumption; `/usr/bin/python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run` passed with no refresh needed; `make loom-demo-new-project-check` passed; `/usr/bin/python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed; `make loom-check` passed for source/full profile, 40 source/distribution surfaces, including `pr-metadata-machine`, `root-self-adoption`, `demo-bootstrap`, and `daily-execution-cli`. Pending: commit refreshed fixes, refreshed current-head review, PR body metadata preflight/readback, PR gate dry check against PR head, hosted checks, controlled merge, and closeout sync.
 - Recovery Boundary: WI-1322 owns docs-governance lite gate behavior, targeted parser/suite/pr-gate fixtures, minimal contract clarification, runtime copy/generated surface sync, and Loom carriers only. Do not implement #1323 full misuse fixture matrix, #1324 parent/final closeout, unrelated runtime provider/review engine/merge/release strategy, or broad docs-only light-path defaulting.
@@ -24,7 +24,7 @@
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: not_applicable
-- Verification Entry: 2026-06-07T18:02:30+08:00 local validation passed after hosted-check failure fixes: targeted PR metadata preflight compatibility, carrier refresh dry-run, demo bootstrap fixture, shadow parity, and `make loom-check` source/full profile across 40 surfaces; PR metadata/readback, PR gate dry, refreshed current-head review, hosted checks, controlled merge, and closeout remain pending.
+- Verification Entry: 2026-06-07T18:22:57+08:00 closeout evidence consumed: PR #1353 merged by controlled merge wrapper, merge commit `167079bb7196db768d92e49e6501128d6b157e88` is on `origin/main`, issue #1322 is closed, stale blocked-by edges are removed, and `closeout check --target . --issue 1322 --pr 1353 --branch work/1322-docs-governance-lite-gate` passed.
 - Lane Entry: docs-governance-lite-gate
 
 ## Sources
