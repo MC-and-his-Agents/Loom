@@ -11,11 +11,11 @@
 - Review Entry: .loom/reviews/WI-1271.json
 - Validation Entry: python3 tools/check_cli_contract.py --list-surfaces; python3 tools/check_cli_contract.py --surface suite-evidence; python3 tools/check_cli_contract.py; python3 tools/loom.py fact-chain --target . --json; python3 tools/loom.py suite validate --target . --item WI-1271 --json; git diff --check; PR metadata preflight/readback; hosted checks.
 - Closing Condition: PR for #1271 is reviewed by the scheduler-owned gate, merged through controlled merge, issue #1271 is closed, and post-merge closeout sync consumes PR, issue, branch, target main, review, and validation evidence.
-- Current Checkpoint: merge
-- Current Stop: PR #1362 is ready to update to rebased scheduler review carrier head after #1270 terminal carrier repair reached `origin/main`. Corrected evidence-only implementation validation, PR metadata/head binding, hosted check readback, and scheduler-owned current-head semantic review passed. Review record `.loom/reviews/WI-1271.json` is authored against rebased implementation head 3cad7547ff7ee1478b64d2f15ac2161f8e1f27dc with no findings.
-- Next Step: Update PR #1362 to the scheduler review carrier head, rerun PR gate/hosted checks, then perform controlled merge and post-merge closeout sync if gates pass.
-- Blockers: None
-- Latest Validation Summary: 2026-06-07 rebased-head validation on branch `work/1271-check-cli-suite-evidence-surface` head `3cad7547ff7ee1478b64d2f15ac2161f8e1f27dc`: `python3 tools/check_cli_contract.py --list-surfaces` passed and listed `suite-contract`, `suite-evidence`, and `aggregate` only; `python3 tools/check_cli_contract.py --surface suite-evidence` passed in 1.73s with evidence-only checks; `python3 tools/check_cli_contract.py` passed with `suite-contract`, `suite-evidence`, and aggregate `check-cli-contract` surfaces in 199.56s, preserving carrier assertions through aggregate; `python3 tools/loom.py fact-chain --target . --json` passed; `python3 tools/loom.py suite validate --target . --item WI-1271 --json` returned `not_applicable` with no blocking gaps under the existing exit-1 contract; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed after rebase; `python3 .loom/bin/loom_flow.py purity-check --target . --item WI-1271` passed; `git diff --check` passed.
+- Current Checkpoint: closed_out
+- Current Stop: WI-1271 is closed out: implementation PR #1362 was merged by the controlled merge wrapper into `main` at merge commit `bddfe6dbb3be406bea2ae79f06bf7b3a6d95e641`; issue #1271 is closed as COMPLETED; this closeout-only carrier sync consumed the PR, issue, target branch, no-release judgment, hosted checks, and terminal metadata.
+- Next Step: No further WI-1271 implementation or closeout work; continue Round 4 with #1272.
+- Blockers: None recorded.
+- Latest Validation Summary: 2026-06-07 post-merge closeout readback for WI-1271: PR #1362 merged through the controlled merge wrapper at 2026-06-07T21:15:43Z with merge commit `bddfe6dbb3be406bea2ae79f06bf7b3a6d95e641`; issue #1271 closed as COMPLETED at 2026-06-07T21:16:50Z with closeout evidence comment https://github.com/MC-and-his-Agents/Loom/issues/1271#issuecomment-4644125179; final hosted checks for head `7a8c062eae068d3d0e30766350be3eb863333a1e` passed (`py-compile`, `demo-bootstrap`, `repo-local-cli`, `root-self-governance`, `loom-check`, `loom-pr-merge-gate`, and `release-judgment`); `python3 tools/loom.py carrier closeout-sync --target . --item WI-1271 --terminal-state closed_out --issue 1271 --pr 1362 --merge-commit bddfe6dbb3be406bea2ae79f06bf7b3a6d95e641 --target-branch main --closed-at 2026-06-07T21:16:50Z --evidence-locator https://github.com/MC-and-his-Agents/Loom/issues/1271#issuecomment-4644125179 --apply --json` passed with `host_mutations=false`.
 - Recovery Boundary: Only #1271 suite-evidence surface split and minimal WI-1271 PR-readiness carriers are in scope. Do not implement #1272, #1273, #1274, #1257 parent closeout, Round 5+, release work, hosted workflow changes, metadata schema changes, runtime suite semantic changes outside `tools/check_cli_contract.py`, or unrelated cleanup.
 - Current Lane: check-cli-suite-evidence-surface
 
@@ -23,8 +23,8 @@
 
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
-- Diagnostics Entry: hosted merge gate and root-self-adoption initially blocked on missing scheduler-owned semantic review; scheduler-owned semantic review is now authored in `.loom/reviews/WI-1271.json`.
-- Verification Entry: local validation, PR metadata/readback, and hosted check readback for the #1271 PR
+- Diagnostics Entry: no blocking diagnostics remain; #1271 closeout consumed implementation PR #1362, controlled merge readback, issue closure, no-release judgment, and terminal carrier metadata.
+- Verification Entry: post-merge closeout readback, carrier closeout-sync apply output, final hosted check readback, and shadow parity for the #1271 closeout carrier PR
 - Lane Entry: check-cli-suite-evidence-surface
 
 ## Sources
