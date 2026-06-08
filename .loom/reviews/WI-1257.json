@@ -3,7 +3,7 @@
   "item_id": "WI-1257",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1257 parent closeout carrier review approved for scheduler gate consumption at carrier-fix head `bdea5afa161b7dc2593302ac6f285a82b330f80e`: the active PR #1372 diff is limited to WI-1257 work-item/progress/spec/review carriers, status activation, bootstrap fact-chain metadata, and merge-ready/closeout shadow synchronization. The earlier runtime PR-body artifact has been removed from the versioned diff. No `tools/check_cli_contract.py` implementation behavior, child WI terminal facts, hosted workflow behavior, metadata schema, release mechanics, or Round 5 scope are changed.",
+  "summary": "WI-1257 parent closeout carrier review remains approved for scheduler gate consumption after the review-carrier validation-summary sync head `d69c3b0afd5d50a9ff300c043cd80967c5c1a48b`: the active PR #1372 diff remains limited to WI-1257 work-item/progress/spec/review carriers, status activation, bootstrap fact-chain metadata, and merge-ready/closeout shadow synchronization. No `tools/check_cli_contract.py` implementation behavior, child WI terminal facts, hosted workflow behavior, metadata schema, release mechanics, or Round 5 scope are changed.",
   "reviewer": "codex-scheduler",
   "authored_at": "2026-06-08T03:12:00Z",
   "reviewed_head": "bdea5afa161b7dc2593302ac6f285a82b330f80e",
@@ -11,9 +11,7 @@
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
-  "follow_ups": [
-    "Scheduler-owned semantic review must re-read the current PR head after PR creation, metadata readback, hosted checks classification, and any carrier-only drift."
-  ],
+  "follow_ups": [],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-1257.md",
     "recovery_entry": ".loom/progress/WI-1257.md",
@@ -30,17 +28,17 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Scheduler-owned semantic review approved WI-1257 parent closeout carrier sync at carrier-fix head bdea5afa161b7dc2593302ac6f285a82b330f80e; any later drift is expected to be limited to this review carrier binding and live PR body metadata readback."
+    "reason": "Authored WI-1257 closeout review remains valid after carrier-only drift to head d69c3b0afd5d50a9ff300c043cd80967c5c1a48b because the only additional change is review-carrier and PR metadata rebinding for the same parent closeout scope."
   },
   "head_binding": {
     "reviewed_head": "bdea5afa161b7dc2593302ac6f285a82b330f80e",
-    "current_head": "20471e354bf1b38d04ef516114308cf5cf7ca114",
+    "current_head": "d69c3b0afd5d50a9ff300c043cd80967c5c1a48b",
     "status": "carrier-only",
     "stale": false,
     "changed_paths": [
+      ".loom/reviews/WI-1257.json",
       ".loom/bootstrap/init-result.json",
       ".loom/progress/WI-1257.md",
-      ".loom/reviews/WI-1257.json",
       ".loom/shadow/closeout-loom.json",
       ".loom/shadow/merge-ready-loom.json",
       ".loom/specs/WI-1257/evidence-map.md",
