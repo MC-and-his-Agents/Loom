@@ -3,11 +3,11 @@
   "item_id": "WI-1274",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1274 implementation review approved: PR #1370 adds a narrow adoption-host-metadata named check_cli_contract surface that reuses the existing metadata-only adoption/host metadata fixture, preserves aggregate check-cli-contract behavior, and changes only tools/check_cli_contract.py plus minimal WI-1274 carriers/shadow evidence. Local focused validation, fact-chain, PR metadata/head binding, and hosted non-review checks passed; remaining hosted failures were the expected missing review artifact gate. No findings.",
+  "summary": "WI-1274 closeout-only review approved: PR #1371 only consumes the already-merged PR #1370 and issue #1274 COMPLETED facts into WI-1274 progress/status/shadow carriers. The diff is limited to .loom/progress/WI-1274.md, .loom/status/current.md, .loom/shadow/closeout-loom.json, and .loom/shadow/merge-ready-loom.json; no check_cli_contract implementation behavior, runtime validation semantics, release path, or parent #1257 closeout is changed. Local fact-chain, shadow parity, diff check, PR metadata preflight/readback, and hosted non-gate checks are acceptable for closeout. No findings.",
   "reviewer": "codex-scheduler",
-  "authored_at": "2026-06-08T01:13:28Z",
-  "reviewed_head": "428033436f9599d3419ce1a610b42e69aa2e703f",
-  "reviewed_validation_summary": "2026-06-08T00:52:56Z worker validation: `python3 tools/check_cli_contract.py --list-surfaces` passed and listed `adoption-host-metadata` plus `aggregate`; `python3 tools/check_cli_contract.py --surface adoption-host-metadata` passed in 0.74s; `python3 tools/check_cli_contract.py` passed all six surfaces in 217.36s including aggregate `check-cli-contract`; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1274; `python3 tools/loom.py suite validate --target . --item WI-1274 --json` returned expected `not_applicable` with no blocking gaps and exit status 1; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed; `git diff --check` passed. PR metadata/head binding and hosted checks remain pending.",
+  "authored_at": "2026-06-08T01:42:04Z",
+  "reviewed_head": "94cb950eae33de4cadde6dc5de3d76d1a80f989e",
+  "reviewed_validation_summary": "2026-06-08 post-merge closeout readback for WI-1274: PR #1370 merged through the controlled merge wrapper at 2026-06-08T01:30:24Z with merge commit `197556f6d727f3dcf6e6f0d6113c96bfdae867f7`; issue #1274 closed as COMPLETED at 2026-06-08T01:31:09Z with closeout evidence comment https://github.com/MC-and-his-Agents/Loom/issues/1274#issuecomment-4644775708; final hosted checks for head `d347067f121d2253860dd8cfd10b268129e30877` passed (`py-compile`, `demo-bootstrap`, `repo-local-cli`, `root-self-governance`, `loom-check`, `loom-pr-merge-gate`, and `release-judgment`); `python3 tools/loom.py carrier closeout-sync --target . --item WI-1274 --terminal-state closed_out --issue 1274 --pr 1370 --merge-commit 197556f6d727f3dcf6e6f0d6113c96bfdae867f7 --target-branch main --closed-at 2026-06-08T01:31:09Z --evidence-locator https://github.com/MC-and-his-Agents/Loom/issues/1274#issuecomment-4644775708 --apply --json` passed with `host_mutations=false`.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -16,7 +16,7 @@
     "work_item": ".loom/work-items/WI-1274.md",
     "recovery_entry": ".loom/progress/WI-1274.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pass",
+    "build_checkpoint": "closed_out_closeout_only",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
       "status": "not_applicable",
@@ -43,6 +43,20 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored scheduler closeout-only review approved the current PR head for terminal carrier sync consumption."
+  },
+  "head_binding": {
+    "reviewed_head": "94cb950eae33de4cadde6dc5de3d76d1a80f989e",
+    "current_head": "94cb950eae33de4cadde6dc5de3d76d1a80f989e",
+    "status": "current",
+    "stale": false,
+    "changed_paths": [
+      ".loom/progress/WI-1274.md",
+      ".loom/reviews/WI-1274.json",
+      ".loom/shadow/closeout-loom.json",
+      ".loom/shadow/merge-ready-loom.json",
+      ".loom/status/current.md"
+    ],
+    "disallowed_paths": []
   }
 }
