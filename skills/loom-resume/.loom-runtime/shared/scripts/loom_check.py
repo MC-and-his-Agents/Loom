@@ -53,16 +53,22 @@ PROFILE_CHOICES = (AUTO_PROFILE, SOURCE_PROFILE, CONSUMER_PROFILE)
 SOURCE_SURFACE_FULL = "full"
 SOURCE_SURFACE_CONTRACT_ONLY = "contract-only"
 SOURCE_SURFACE_SOURCE_SELF_FIXTURE = "source-self-fixture"
+SOURCE_SURFACE_REVIEW_RUN = "review-run"
 SOURCE_SURFACE_BOOTSTRAP_REGRESSION = "bootstrap-regression"
 SOURCE_SURFACE_DISTRIBUTION_REGRESSION = "distribution-regression"
 SOURCE_SURFACE_CHOICES = (
     SOURCE_SURFACE_FULL,
     SOURCE_SURFACE_CONTRACT_ONLY,
     SOURCE_SURFACE_SOURCE_SELF_FIXTURE,
+    SOURCE_SURFACE_REVIEW_RUN,
     SOURCE_SURFACE_BOOTSTRAP_REGRESSION,
     SOURCE_SURFACE_DISTRIBUTION_REGRESSION,
 )
-SOURCE_SURFACE_COUNT = 40
+SOURCE_SURFACE_COUNT = 41
+SOURCE_SURFACE_GROUPS = {
+    SOURCE_SURFACE_SOURCE_SELF_FIXTURE: {SOURCE_SURFACE_SOURCE_SELF_FIXTURE, SOURCE_SURFACE_REVIEW_RUN},
+}
+REVIEW_RUN_FIXTURE_CATEGORY = "review-run-fixture"
 SOURCE_SNAPSHOT_EXCLUDED_ROOTS = {
     ".loom/cache",
     ".loom/runtime",
@@ -6954,6 +6960,1393 @@ def check_deep_existing_repo_bootstrap(root: Path) -> list[Failure]:
     return failures
 
 
+def check_review_run_fixture(root: Path, example_target: Path | None = None) -> list[Failure]:
+    failures: list[Failure] = []
+    if example_target is None:
+        example_target = root / "examples/new-project"
+    if not example_target.exists():
+        return failures
+    with loom_check_temporary_directory(prefix="loom-check-review-run-") as tmp:
+        source_snapshot = Path(tmp) / "source-snapshot"
+        review_target = Path(tmp) / "new-project"
+        fake_bin = Path(tmp) / "bin"
+        fake_bin.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(root, source_snapshot, ignore=source_snapshot_ignore(root))
+
+        def ensure_source_snapshot() -> bool:
+            if source_snapshot.exists():
+                return True
+            try:
+                shutil.copytree(root, source_snapshot, ignore=source_snapshot_ignore(root))
+            except OSError as exc:
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` source snapshot setup failed: {exc}"))
+                return False
+            return True
+
+        def author_review_run_suite_fixture(target: Path) -> None:
+            suite_root = target / ".loom/specs/INIT-0001"
+            suite_root.mkdir(parents=True, exist_ok=True)
+            (suite_root / "spec.md").write_text(
+                "\n".join(
+                    [
+                        "# Spec",
+                        "",
+                        "- Suite path: minimal",
+                        "",
+                        "## Scenarios",
+                        "",
+                        "- Scenario S1: Review-run fixtures consume a validated formal suite.",
+                        "",
+                        "## Acceptance Criteria",
+                        "",
+                        "- AC-1: Review run can treat the authored spec-review record as current input.",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (suite_root / "execution-breakdown.md").write_text(
+                "\n".join(
+                    [
+                        "# Execution Breakdown",
+                        "",
+                        "## unit-init-1",
+                        "",
+                        "- Scope: review-run fixture gate consumption.",
+                        "- Validation: review run and review record consume suite evidence/carrier validation.",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (suite_root / "evidence-map.md").write_text(
+                "\n".join(
+                    [
+                        "# Evidence Map",
+                        "",
+                        "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
+                        "| --- | --- | --- | --- | --- | --- | --- | --- |",
+                        "| EV-001 | behavior_evidence | README.md | `.loom/specs/INIT-0001/spec.md` S1 | INIT-0001 / review-run fixture behavior | present | review evidence only | Re-run review-run fixture commands after behavior changes. |",
+                        "| EV-002 | test_evidence | .loom/progress/INIT-0001.md | `.loom/specs/INIT-0001/plan.md` validation | INIT-0001 / review-run fixture tests | present | review evidence only | Re-run daily-execution-cli fixture validation. |",
+                        "| EV-003 | fresh_verification_input | .loom/progress/INIT-0001.md | EV-001 EV-002 | INIT-0001 / latest validation summary | present | review evidence only | Refresh the progress summary after rerunning validation. |",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (suite_root / "task-carrier.md").write_text(
+                "\n".join(
+                    [
+                        "# Task Carrier",
+                        "",
+                        "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |",
+                        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+                        "| repo_tasks_md | .loom/work-items/INIT-0001.md | fixture in progress | in_progress | primary | .loom/work-items/INIT-0001.md | .loom/specs/INIT-0001/execution-breakdown.md#unit-init-1 | .loom/specs/INIT-0001/spec.md#scenario-s1 | .loom/specs/INIT-0001/plan.md#validation | .loom/specs/INIT-0001/plan.md#validation | daily-execution-cli review-run fixture | Recheck before review record and PR gate fixture consumption. |",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            work_item_path = target / ".loom/work-items/INIT-0001.md"
+            if work_item_path.exists():
+                work_item_text = work_item_path.read_text(encoding="utf-8")
+                additions = [
+                    "- `.loom/specs/INIT-0001/evidence-map.md`",
+                    "- `.loom/specs/INIT-0001/execution-breakdown.md`",
+                    "- `.loom/specs/INIT-0001/task-carrier.md`",
+                ]
+                missing = [line for line in additions if line not in work_item_text]
+                if missing:
+                    work_item_path.write_text(work_item_text.rstrip() + "\n" + "\n".join(missing) + "\n", encoding="utf-8")
+            (suite_root / "plan.md").write_text(
+                "\n".join(
+                    [
+                        "# Plan",
+                        "",
+                        "- Suite path: minimal",
+                        "",
+                        "## Validation",
+                        "",
+                        "- S1 -> automated validation evidence: review-run positive and adapter fixtures.",
+                        "- AC-1 -> test evidence: review run consumes spec review without replacing implementation review truth.",
+                        "",
+                        "## Minimal Path Applicability Records",
+                        "",
+                        "- full-path-artifacts not_applicable rationale: review-run fixtures only need the minimal formal suite; consumer boundary: suite validation, spec review, review run, and review record input must not require suite-index.md, research.md, contracts.md, or readiness-checklist.md for this fixture; recheck condition: switch to full suite when these consumers require full-path artifacts.",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+        def prepare_review_target(target: Path, label: str) -> bool:
+            if not ensure_source_snapshot():
+                return False
+            shutil.copytree(source_snapshot, target)
+            for args in (
+                ["git", "init"],
+                ["git", "config", "user.email", "loom-check@example.com"],
+                ["git", "config", "user.name", "loom-check"],
+            ):
+                result = run_command(root, args, cwd=target)
+                if result.returncode != 0:
+                    detail = result.stderr.strip() or result.stdout.strip() or "git setup failed"
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`{label}` setup failed: {detail}"))
+                    return False
+            payload, error = load_command_json(
+                root,
+                [
+                    "python3",
+                    "tools/loom_init.py",
+                    "bootstrap",
+                    "--target",
+                    ".",
+                    "--intent",
+                    "execution-control",
+                    "--write",
+                    "--force",
+                    "--verify",
+                    "--install-pr-template",
+                ],
+                cwd=target,
+                timeout_seconds=ADOPT_VERIFY_TIMEOUT_SECONDS,
+            )
+            if error:
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`{label}` bootstrap failed: {error}"))
+                return False
+            verification = payload.get("verification")
+            if not isinstance(verification, dict) or verification.get("ok") is not True:
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`{label}` bootstrap must verify successfully"))
+                return False
+            prune_fixture_work_items(target)
+            author_review_run_suite_fixture(target)
+            require_minimal_suite_happy_path_validation(
+                failures,
+                root=root,
+                target=target,
+                item="INIT-0001",
+                category=REVIEW_RUN_FIXTURE_CATEGORY,
+                context=f"`{label}` source minimal suite happy path",
+            )
+            author_full_suite_happy_path_fixture(target, "WI-full-happy")
+            require_full_suite_happy_path_validation(
+                failures,
+                root=root,
+                target=target,
+                item="WI-full-happy",
+                category=REVIEW_RUN_FIXTURE_CATEGORY,
+                context=f"`{label}` source full suite happy path",
+            )
+            require_generated_skills_surface_parity_validation(
+                failures,
+                root=root,
+                category=REVIEW_RUN_FIXTURE_CATEGORY,
+                context=f"`{label}` source generated skills surface parity",
+            )
+            require_suite_negative_fail_closed_validation(
+                failures,
+                root=root,
+                target=target,
+                category=REVIEW_RUN_FIXTURE_CATEGORY,
+                context=f"`{label}` source suite negative fail-closed",
+            )
+            author_stale_evidence_block_fixture(target, "WI-stale-evidence")
+            require_stale_evidence_block_validation(
+                failures,
+                root=root,
+                target=target,
+                item="WI-stale-evidence",
+                category=REVIEW_RUN_FIXTURE_CATEGORY,
+                context=f"`{label}` source stale evidence fixture",
+            )
+            author_host_conflict_block_fixture(target, "WI-host-conflict")
+            require_host_conflict_block_validation(
+                failures,
+                root=root,
+                target=target,
+                item="WI-host-conflict",
+                category=REVIEW_RUN_FIXTURE_CATEGORY,
+                context=f"`{label}` source host conflict fixture",
+            )
+            require_scaffold_mutation_boundary_validation(
+                failures,
+                root=root,
+                target=target / "WI-1151-scaffold-fixtures",
+                category=REVIEW_RUN_FIXTURE_CATEGORY,
+                context=f"`{label}` source scaffold mutation boundary",
+            )
+            for args in (
+                ["git", "add", "."],
+                ["git", "add", "-f", ".loom"],
+                ["git", "commit", "-m", "review-run baseline"],
+            ):
+                result = run_command(root, args, cwd=target)
+                if result.returncode != 0:
+                    detail = result.stderr.strip() or result.stdout.strip() or "git baseline commit failed"
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`{label}` setup failed: {detail}"))
+                    return False
+            head = run_command(root, ["git", "rev-parse", "HEAD"], cwd=target)
+            if head.returncode != 0:
+                detail = head.stderr.strip() or head.stdout.strip() or "git rev-parse failed"
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`{label}` setup failed: {detail}"))
+                return False
+            reviewed_head = head.stdout.strip() or "unknown-head"
+            spec_review_path = target / ".loom/reviews/INIT-0001.spec.json"
+            spec_review_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "loom-review/v1",
+                        "item_id": "INIT-0001",
+                        "decision": "allow",
+                        "kind": "spec_review",
+                        "summary": "Formal spec is approved for downstream review-run tests.",
+                        "reviewer": "loom-check",
+                        "reviewed_head": reviewed_head,
+                        "reviewed_validation_summary": "Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist.",
+                        "fallback_to": None,
+                        "findings": [],
+                        "blocking_issues": [],
+                        "follow_ups": [],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            for args in (
+                ["git", "add", "-f", ".loom/reviews/INIT-0001.spec.json"],
+                ["git", "commit", "-m", "record spec review baseline"],
+            ):
+                result = run_command(root, args, cwd=target)
+                if result.returncode != 0:
+                    detail = result.stderr.strip() or result.stdout.strip() or "git spec review baseline failed"
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`{label}` setup failed: {detail}"))
+                    return False
+            return True
+
+        prepare_review_target(review_target, "review run positive chain")
+        write_fake_codex(fake_bin / "codex", mode="success")
+        success_env = prepend_path_env(fake_bin, {"CI": "", "CODEX_CI": ""})
+
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(review_target),
+                "--item",
+                "INIT-0001",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` positive chain failed: {error}"))
+        else:
+            require_review_run_payload(
+                failures,
+                category=REVIEW_RUN_FIXTURE_CATEGORY,
+                context="`review run` positive chain",
+                payload=payload,
+                expected_result={"pass"},
+            )
+            if isinstance(payload, dict):
+                engine = payload.get("engine") if isinstance(payload.get("engine"), dict) else {}
+                if engine.get("engine") != "codex" or engine.get("adapter") != "loom/default-codex-exec":
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` positive chain must keep the default codex exec adapter"))
+                profile = engine.get("profile") if isinstance(engine.get("profile"), dict) else {}
+                if profile.get("model") != "gpt-5.5" or profile.get("reasoning_effort") != "medium":
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` positive chain must resolve the gpt-5.5 default profile"))
+                source = profile.get("profile_source") if isinstance(profile.get("profile_source"), dict) else {}
+                expected_source = "repo-owned-policy" if (review_target / ".loom/review-profiles.json").exists() else "loom-built-in"
+                if source.get("kind") != expected_source:
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` positive chain must record the resolved profile source"))
+                review_record_input = payload.get("review_record_input") if isinstance(payload.get("review_record_input"), dict) else {}
+                if review_record_input.get("engine_adapter") != "loom/default-codex-exec" or review_record_input.get("reviewer") != "loom/default-codex-exec":
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` positive chain must keep default review_record_input adapter"))
+                evidence = payload.get("engine", {}).get("evidence") if isinstance(payload.get("engine"), dict) else None
+                context_pack_path = evidence.get("context_pack") if isinstance(evidence, dict) else None
+                prompt_path = evidence.get("prompt") if isinstance(evidence, dict) else None
+                if not isinstance(context_pack_path, str) or not (review_target / context_pack_path).exists():
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` positive chain must write context pack evidence"))
+                else:
+                    context_pack = json.loads((review_target / context_pack_path).read_text(encoding="utf-8"))
+                    if context_pack.get("schema_version") != "loom-review-context-pack/v1":
+                        failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` context pack must use the stable schema"))
+                    if not isinstance(context_pack.get("repeated_blocker_signal"), dict):
+                        failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` context pack must include repeated blocker signal"))
+                prompt_file = (review_target / prompt_path) if isinstance(prompt_path, str) else None
+                prompt_text = prompt_file.read_text(encoding="utf-8") if prompt_file is not None and prompt_file.exists() else ""
+                if not prompt_text or "Recent Review Context Pack" not in prompt_text:
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` prompt must include recent review context pack guidance"))
+                if "Change Evidence Snapshot" not in prompt_text or "Focused Diff Excerpt" not in prompt_text:
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` prompt must include focused change evidence for host-limited reviewers"))
+                if "不要重跑 full `tools/loom_check.py .`" not in prompt_text:
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` prompt must keep full validation commands outside reviewer scope"))
+                if "不能仅因既有 record stale 而 block" not in prompt_text:
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` prompt must treat stale prior review records as historical input during replacement review runs"))
+                profile_probe = json.loads(json.dumps(payload))
+                if isinstance(profile_probe.get("engine"), dict):
+                    profile_probe["engine"].pop("profile", None)
+                profile_probe_failures: list[Failure] = []
+                require_review_run_payload(
+                    profile_probe_failures,
+                    category=REVIEW_RUN_FIXTURE_CATEGORY,
+                    context="`review run` missing profile probe",
+                    payload=profile_probe,
+                    expected_result={"pass"},
+                )
+                if not any("engine profile" in failure.detail for failure in profile_probe_failures):
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` contract check must fail when resolved profile metadata is missing"))
+
+        shadow_target = Path(tmp) / "review-run-shadow"
+        prepare_review_target(shadow_target, "review run shadow adapter")
+        shadow_raw = shadow_target / ".loom/runtime/tmp/codex-app-review-raw.json"
+        shadow_raw.parent.mkdir(parents=True, exist_ok=True)
+        shadow_raw.write_text(
+            json.dumps(
+                {
+                    "decision": "fallback",
+                    "summary": "Codex App reviewer produced shadow-only findings.",
+                    "findings": [
+                        {
+                            "id": "shadow-warn-1",
+                            "summary": "Codex App shadow review noted a comparison-only issue.",
+                            "severity": "warn",
+                            "rebuttal": None,
+                            "disposition": {
+                                "status": "deferred",
+                                "summary": "Shadow evidence must not author the formal review record.",
+                            },
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        write_fake_codex(fake_bin / "codex", mode="success")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(shadow_target),
+                "--item",
+                "INIT-0001",
+                "--shadow-engine-adapter",
+                "loom/codex-app-review",
+                "--shadow-review-raw-file",
+                ".loom/runtime/tmp/codex-app-review-raw.json",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` shadow adapter failed: {error}"))
+        else:
+            require_review_run_payload(
+                failures,
+                category=REVIEW_RUN_FIXTURE_CATEGORY,
+                context="`review run` shadow adapter",
+                payload=payload,
+                expected_result={"pass"},
+            )
+            if isinstance(payload, dict):
+                review_record_input = payload.get("review_record_input") if isinstance(payload.get("review_record_input"), dict) else {}
+                if review_record_input.get("engine_adapter") != "loom/default-codex-exec":
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` shadow adapter must not replace default review_record_input engine adapter"))
+                shadow_engine = payload.get("shadow_engine") if isinstance(payload.get("shadow_engine"), dict) else {}
+                if shadow_engine.get("result") != "pass":
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` shadow adapter must pass when raw review evidence is provided"))
+                evidence = shadow_engine.get("evidence") if isinstance(shadow_engine.get("evidence"), dict) else {}
+                for key in ("raw_review", "normalized_findings", "metadata", "parity_diff"):
+                    value = evidence.get(key)
+                    if not isinstance(value, str) or not (shadow_target / value).exists():
+                        failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` shadow adapter must write {key} evidence"))
+                if shadow_engine.get("authoritative") is not False or shadow_engine.get("blocking") is not False:
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` shadow adapter must stay non-authoritative and non-blocking"))
+
+        shadow_unavailable_target = Path(tmp) / "review-run-shadow-unavailable"
+        prepare_review_target(shadow_unavailable_target, "review run shadow unavailable")
+        write_fake_codex(fake_bin / "codex", mode="success")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(shadow_unavailable_target),
+                "--item",
+                "INIT-0001",
+                "--shadow-engine-adapter",
+                "loom/codex-app-review",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` shadow unavailable failed: {error}"))
+        else:
+            require_review_run_payload(
+                failures,
+                category=REVIEW_RUN_FIXTURE_CATEGORY,
+                context="`review run` shadow unavailable",
+                payload=payload,
+                expected_result={"pass"},
+            )
+            shadow_engine = payload.get("shadow_engine") if isinstance(payload, dict) and isinstance(payload.get("shadow_engine"), dict) else {}
+            if shadow_engine.get("result") != "unavailable":
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` shadow unavailable must not block the default review path"))
+            review_record_input = payload.get("review_record_input") if isinstance(payload, dict) and isinstance(payload.get("review_record_input"), dict) else {}
+            if review_record_input.get("engine_adapter") != "loom/default-codex-exec":
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` shadow unavailable must preserve the default review record input"))
+
+        app_embedded_result = {
+            "decision": "allow",
+            "summary": "Codex App turn/start embedded a structured review result in an app-server text field.",
+            "findings": [
+                {
+                    "id": "codex-app-embedded-json-warn-1",
+                    "summary": "Codex App embedded JSON was recovered from a notification string.",
+                    "severity": "warn",
+                    "rebuttal": None,
+                    "disposition": {
+                        "status": "accepted",
+                        "summary": "Only schema-valid structured review output is accepted from string fields.",
+                    },
+                    "details": "Fixture mirrors app-server agent_message.message / output_text.text wrapping.",
+                    "code_location": None,
+                }
+            ],
+        }
+        app_embedded_notification = {
+            "method": "agent_message",
+            "params": {"message": json.dumps(app_embedded_result, ensure_ascii=False)},
+        }
+        app_embedded_normalized = loom_flow_module.find_normalized_review_payload(app_embedded_notification)
+        if not isinstance(app_embedded_normalized, dict) or app_embedded_normalized.get("decision") != "allow":
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` must recover schema-valid Codex App results embedded in app-server text fields"))
+
+        app_default_target = Path(tmp) / "review-run-codex-app-default"
+        prepare_review_target(app_default_target, "review run Codex App host default")
+        app_default_raw = app_default_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
+        app_default_raw.parent.mkdir(parents=True, exist_ok=True)
+        app_default_raw.write_text(
+            json.dumps(
+                {
+                    "decision": "allow",
+                    "summary": "Codex App default reviewer found the item ready.",
+                    "findings": [
+                        {
+                            "id": "codex-app-default-warn-1",
+                            "summary": "Codex App default review noted a tracked follow-up.",
+                            "severity": "warn",
+                            "rebuttal": None,
+                            "disposition": {
+                                "status": "accepted",
+                                "summary": "The finding is recorded through the single review record boundary.",
+                            },
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        write_fake_codex(fake_bin / "codex", mode="fail_if_called")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(app_default_target),
+                "--item",
+                "INIT-0001",
+                "--codex-app-review-app-server",
+                "stdio://stage3-default-proof",
+                "--codex-app-review-thread-id",
+                "thread-stage3-default-proof",
+                "--codex-app-review-cwd",
+                str(app_default_target),
+                "--codex-app-review-raw-file",
+                ".loom/runtime/tmp/codex-app-review-normalized.json",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` Codex App host default failed: {error}"))
+        else:
+            require_review_run_payload(
+                failures,
+                category=REVIEW_RUN_FIXTURE_CATEGORY,
+                context="`review run` Codex App host default",
+                payload=payload,
+                expected_result={"pass"},
+            )
+            if isinstance(payload, dict):
+                engine = payload.get("engine") if isinstance(payload.get("engine"), dict) else {}
+                if engine.get("adapter") != "loom/codex-app-review" or engine.get("engine") != "codex-app-review":
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App host default must select the app adapter"))
+                review_record_input = payload.get("review_record_input") if isinstance(payload.get("review_record_input"), dict) else {}
+                if review_record_input.get("engine_adapter") != "loom/codex-app-review" or review_record_input.get("reviewer") != "loom/codex-app-review":
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App host default must author app adapter review_record_input"))
+                metadata = payload.get("engine_metadata") if isinstance(payload.get("engine_metadata"), dict) else {}
+                if metadata.get("selection_source") != "codex-app-host-default" or metadata.get("thread_id") != "thread-stage3-default-proof":
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App host default must expose selected adapter and thread proof metadata"))
+                merge_payload, merge_error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        "tools/loom_flow.py",
+                        "flow",
+                        "merge-ready",
+                        "--target",
+                        str(app_default_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if merge_error:
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`merge-ready before authored default app review record` failed: {merge_error}"))
+                elif merge_payload.get("result") == "pass":
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`merge-ready` must not consume default Codex App raw evidence before review record is authored"))
+
+        app_ci_default_target = Path(tmp) / "review-run-codex-app-ci-default"
+        prepare_review_target(app_ci_default_target, "review run Codex App CI host default")
+        app_ci_raw = app_ci_default_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
+        app_ci_raw.parent.mkdir(parents=True, exist_ok=True)
+        app_ci_raw.write_text(app_default_raw.read_text(encoding="utf-8"), encoding="utf-8")
+        write_fake_codex(fake_bin / "codex", mode="fail_if_called")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(app_ci_default_target),
+                "--item",
+                "INIT-0001",
+                "--codex-app-review-app-server",
+                "stdio://stage3-ci-proof",
+                "--codex-app-review-thread-id",
+                "thread-stage3-ci-proof",
+                "--codex-app-review-cwd",
+                str(app_ci_default_target),
+                "--codex-app-review-raw-file",
+                ".loom/runtime/tmp/codex-app-review-normalized.json",
+            ],
+            env=prepend_path_env(fake_bin, {"CODEX_CI": "1"}),
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` Codex App CI host default failed: {error}"))
+        else:
+            require_review_run_payload(
+                failures,
+                category=REVIEW_RUN_FIXTURE_CATEGORY,
+                context="`review run` Codex App CI host default",
+                payload=payload,
+                expected_result={"pass"},
+            )
+            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
+            metadata = payload.get("engine_metadata") if isinstance(payload, dict) and isinstance(payload.get("engine_metadata"), dict) else {}
+            if engine.get("adapter") != "loom/codex-app-review" or metadata.get("selection_source") != "codex-app-host-default":
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App CI host default must prefer valid app proof over CODEX_CI"))
+            if metadata.get("ci_env_present") is not True:
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App CI host default must record that CI env was present"))
+
+        app_ci_fallback_target = Path(tmp) / "review-run-codex-app-ci-missing-proof-fallback"
+        prepare_review_target(app_ci_fallback_target, "review run Codex App CI missing proof fallback")
+        write_fake_codex(fake_bin / "codex", mode="success")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(app_ci_fallback_target),
+                "--item",
+                "INIT-0001",
+            ],
+            env=prepend_path_env(fake_bin, {"CODEX_CI": "1"}),
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` Codex App CI missing proof fallback failed: {error}"))
+        else:
+            require_review_run_payload(
+                failures,
+                category=REVIEW_RUN_FIXTURE_CATEGORY,
+                context="`review run` Codex App CI missing proof fallback",
+                payload=payload,
+                expected_result={"pass"},
+            )
+            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
+            metadata = payload.get("engine_metadata") if isinstance(payload, dict) and isinstance(payload.get("engine_metadata"), dict) else {}
+            missing_host_proof = metadata.get("missing_host_proof") if isinstance(metadata.get("missing_host_proof"), list) else []
+            if engine.get("adapter") != "loom/default-codex-exec" or metadata.get("fallback_reason") != "ci-or-codex-ci":
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App CI missing proof fallback must keep the default codex exec adapter"))
+            if not missing_host_proof:
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App CI missing proof fallback must expose missing host proof diagnostics"))
+
+        app_unavailable_fallback_target = Path(tmp) / "review-run-codex-app-unavailable-fallback"
+        prepare_review_target(app_unavailable_fallback_target, "review run Codex App unavailable fallback")
+        write_fake_codex(fake_bin / "codex", mode="success")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(app_unavailable_fallback_target),
+                "--item",
+                "INIT-0001",
+                "--codex-app-review-app-server",
+                f"unix://{tmp}/missing-codex-app.sock",
+                "--codex-app-review-thread-id",
+                "thread-stage3-missing-endpoint",
+                "--codex-app-review-cwd",
+                str(app_unavailable_fallback_target),
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` Codex App unavailable fallback failed: {error}"))
+        else:
+            require_review_run_payload(
+                failures,
+                category=REVIEW_RUN_FIXTURE_CATEGORY,
+                context="`review run` Codex App unavailable fallback",
+                payload=payload,
+                expected_result={"pass"},
+            )
+            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
+            metadata = payload.get("engine_metadata") if isinstance(payload, dict) and isinstance(payload.get("engine_metadata"), dict) else {}
+            if engine.get("adapter") != "loom/default-codex-exec" or metadata.get("fallback_reason") != "app-server-unavailable":
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App unavailable fallback must record default adapter fallback"))
+
+        app_conflict_target = Path(tmp) / "review-run-codex-app-proof-conflict"
+        prepare_review_target(app_conflict_target, "review run Codex App proof conflict")
+        app_conflict_raw = app_conflict_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
+        app_conflict_raw.parent.mkdir(parents=True, exist_ok=True)
+        app_conflict_raw.write_text(app_default_raw.read_text(encoding="utf-8"), encoding="utf-8")
+        write_fake_codex(fake_bin / "codex", mode="fail_if_called")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(app_conflict_target),
+                "--item",
+                "INIT-0001",
+                "--codex-app-review-app-server",
+                "stdio://stage3-conflict-proof",
+                "--codex-app-review-thread-id",
+                "thread-stage3-conflict-proof",
+                "--codex-app-review-cwd",
+                str(Path(tmp) / "different-cwd"),
+                "--codex-app-review-raw-file",
+                ".loom/runtime/tmp/codex-app-review-normalized.json",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` Codex App proof conflict failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App proof conflict must fail closed"))
+        else:
+            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
+            if engine.get("adapter") != "loom/codex-app-review" or engine.get("failure_reason") != "runtime_conflict":
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App proof conflict must not fallback to default codex"))
+            if "does not match target root" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App proof conflict must expose cwd mismatch"))
+            if isinstance(payload, dict) and isinstance(payload.get("review_record_input"), dict):
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App proof conflict must not emit review_record_input"))
+
+        app_authoritative_target = Path(tmp) / "review-run-codex-app-authoritative"
+        prepare_review_target(app_authoritative_target, "review run Codex App authoritative")
+        app_raw = app_authoritative_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
+        app_raw.parent.mkdir(parents=True, exist_ok=True)
+        app_raw.write_text(
+            json.dumps(
+                {
+                    "decision": "allow",
+                    "summary": "Codex App authoritative reviewer found the item ready.",
+                    "findings": [
+                        {
+                            "id": "codex-app-warn-1",
+                            "summary": "Codex App authoritative review noted a tracked follow-up.",
+                            "severity": "warn",
+                            "rebuttal": None,
+                            "disposition": {
+                                "status": "accepted",
+                                "summary": "The finding is recorded through the single review record boundary.",
+                            },
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        write_fake_codex(fake_bin / "codex", mode="fail_if_called")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(app_authoritative_target),
+                "--item",
+                "INIT-0001",
+                "--engine-adapter",
+                "loom/codex-app-review",
+                "--codex-app-review-app-server",
+                "stdio://stage2-live-proof",
+                "--codex-app-review-thread-id",
+                "thread-stage2-live-proof",
+                "--codex-app-review-cwd",
+                str(app_authoritative_target),
+                "--codex-app-review-raw-file",
+                ".loom/runtime/tmp/codex-app-review-normalized.json",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` Codex App authoritative failed: {error}"))
+        else:
+            require_review_run_payload(
+                failures,
+                category=REVIEW_RUN_FIXTURE_CATEGORY,
+                context="`review run` Codex App authoritative",
+                payload=payload,
+                expected_result={"pass"},
+            )
+            if isinstance(payload, dict):
+                review_record_input = payload.get("review_record_input") if isinstance(payload.get("review_record_input"), dict) else {}
+                if review_record_input.get("engine_adapter") != "loom/codex-app-review":
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App authoritative must author app adapter review_record_input"))
+                engine = payload.get("engine") if isinstance(payload.get("engine"), dict) else {}
+                if engine.get("engine") != "codex-app-review":
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App authoritative must not call codex exec"))
+                metadata = payload.get("engine_metadata") if isinstance(payload.get("engine_metadata"), dict) else {}
+                if metadata.get("thread_id") != "thread-stage2-live-proof":
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App authoritative must expose live thread proof metadata"))
+                model_proof = metadata.get("model_proof") if isinstance(metadata.get("model_proof"), dict) else {}
+                if model_proof.get("requested_model") != "gpt-5.5" or model_proof.get("requested_reasoning") != "medium":
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App authoritative must record requested gpt-5.5 model proof"))
+                if model_proof.get("result") != "unverified" or model_proof.get("proof_source") != "raw-file-unverified":
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App raw-file proof must be structured as unverified"))
+                merge_payload, merge_error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        "tools/loom_flow.py",
+                        "flow",
+                        "merge-ready",
+                        "--target",
+                        str(app_authoritative_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if merge_error:
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`merge-ready before authored app review record` failed: {merge_error}"))
+                elif merge_payload.get("result") == "pass":
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`merge-ready` must not consume raw Codex App authoritative evidence before review record is authored"))
+
+        app_unverified_high_risk_target = Path(tmp) / "review-run-codex-app-unverified-high-risk"
+        prepare_review_target(app_unverified_high_risk_target, "review run Codex App high-risk unverified model proof")
+        app_unverified_raw = app_unverified_high_risk_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
+        app_unverified_raw.parent.mkdir(parents=True, exist_ok=True)
+        app_unverified_raw.write_text(
+            json.dumps(
+                {
+                    "decision": "allow",
+                    "summary": "Raw-file review result is structurally valid but lacks actual model proof.",
+                    "findings": [],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(app_unverified_high_risk_target),
+                "--item",
+                "INIT-0001",
+                "--engine-adapter",
+                "loom/codex-app-review",
+                "--engine-profile",
+                "high-risk",
+                "--engine-override-reason",
+                "fixture requires high-risk profile to fail closed without actual model proof",
+                "--codex-app-review-app-server",
+                "stdio://stage2-live-proof",
+                "--codex-app-review-thread-id",
+                "thread-stage2-live-proof",
+                "--codex-app-review-cwd",
+                str(app_unverified_high_risk_target),
+                "--codex-app-review-raw-file",
+                ".loom/runtime/tmp/codex-app-review-normalized.json",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` Codex App high-risk unverified proof failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App high-risk profile must fail closed without actual model proof"))
+        elif "actual model/reasoning proof is unverified" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App high-risk unverified proof must expose the proof failure reason"))
+
+        app_missing_target = Path(tmp) / "review-run-codex-app-missing-proof"
+        prepare_review_target(app_missing_target, "review run Codex App missing proof")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(app_missing_target),
+                "--item",
+                "INIT-0001",
+                "--engine-adapter",
+                "loom/codex-app-review",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` Codex App missing proof failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App missing proof must fail closed"))
+
+        app_invalid_target = Path(tmp) / "review-run-codex-app-invalid-raw"
+        prepare_review_target(app_invalid_target, "review run Codex App invalid raw")
+        invalid_raw = app_invalid_target / ".loom/runtime/tmp/codex-app-review-invalid.txt"
+        invalid_raw.parent.mkdir(parents=True, exist_ok=True)
+        invalid_raw.write_text("plain review text is not authoritative schema\n", encoding="utf-8")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(app_invalid_target),
+                "--item",
+                "INIT-0001",
+                "--engine-adapter",
+                "loom/codex-app-review",
+                "--codex-app-review-app-server",
+                "stdio://stage2-live-proof",
+                "--codex-app-review-thread-id",
+                "thread-stage2-live-proof",
+                "--codex-app-review-cwd",
+                str(app_invalid_target),
+                "--codex-app-review-raw-file",
+                ".loom/runtime/tmp/codex-app-review-invalid.txt",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` Codex App invalid raw failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` Codex App invalid raw must fail closed on schema drift"))
+
+        repeated_target = Path(tmp) / "repeated-blocker-context"
+        prepare_review_target(repeated_target, "review run repeated blocker context")
+        history_root = repeated_target / ".loom/runtime/review/INIT-0001"
+        for attempt in ("attempt-a", "attempt-b"):
+            attempt_root = history_root / attempt
+            attempt_root.mkdir(parents=True, exist_ok=True)
+            (attempt_root / "normalized-findings.json").write_text(
+                json.dumps(
+                    {
+                        "findings": [
+                            {
+                                "id": "block-context-drift",
+                                "summary": "Context drift keeps reappearing after local patch attempts.",
+                                "severity": "block",
+                                "rebuttal": None,
+                                "disposition": {
+                                    "status": "accepted",
+                                    "summary": "Fixture marks this as a real repeated blocker candidate.",
+                                },
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (attempt_root / "engine-metadata.json").write_text(
+                json.dumps({"reviewed_head": attempt, "validation_summary": f"{attempt} validation"}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        write_fake_codex(fake_bin / "codex", mode="success")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(repeated_target),
+                "--item",
+                "INIT-0001",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` repeated blocker context failed: {error}"))
+        else:
+            require_review_run_payload(
+                failures,
+                category=REVIEW_RUN_FIXTURE_CATEGORY,
+                context="`review run` repeated blocker context",
+                payload=payload,
+                expected_result={"pass"},
+            )
+            evidence = payload.get("engine", {}).get("evidence") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else None
+            context_pack_path = evidence.get("context_pack") if isinstance(evidence, dict) else None
+            if not isinstance(context_pack_path, str):
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` repeated blocker context must expose context pack evidence"))
+            else:
+                context_pack = json.loads((repeated_target / context_pack_path).read_text(encoding="utf-8"))
+                signal = context_pack.get("repeated_blocker_signal")
+                if not isinstance(signal, dict) or signal.get("result") != "present":
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` repeated blocker context must identify repeated blocker candidates"))
+                candidates = signal.get("candidates") if isinstance(signal, dict) else None
+                if not isinstance(candidates, list) or not candidates:
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` repeated blocker context must include candidate details"))
+
+        override_target = Path(tmp) / "profile-override"
+        prepare_review_target(override_target, "review run profile override")
+        write_fake_codex(fake_bin / "codex", mode="success")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(override_target),
+                "--item",
+                "INIT-0001",
+                "--engine-model",
+                "gpt-5.2",
+                "--engine-reasoning",
+                "high",
+                "--engine-override-reason",
+                "fixture requires explicit high-reasoning review profile evidence",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` profile override failed: {error}"))
+        else:
+            require_review_run_payload(
+                failures,
+                category=REVIEW_RUN_FIXTURE_CATEGORY,
+                context="`review run` profile override",
+                payload=payload,
+                expected_result={"pass"},
+            )
+            engine = payload.get("engine") if isinstance(payload, dict) else None
+            profile = engine.get("profile") if isinstance(engine, dict) else None
+            if not isinstance(profile, dict) or not isinstance(profile.get("override"), dict):
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` profile override must record previous and selected profile evidence"))
+            else:
+                override = profile["override"]
+                if not isinstance(override.get("previous_profile"), dict) or not isinstance(override.get("selected_profile"), dict):
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` profile override must record previous and selected profile"))
+                if override.get("reason") != "fixture requires explicit high-reasoning review profile evidence":
+                    failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` profile override must preserve the override reason"))
+
+        missing_reason_target = Path(tmp) / "profile-override-missing-reason"
+        prepare_review_target(missing_reason_target, "review run profile override missing reason")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(missing_reason_target),
+                "--item",
+                "INIT-0001",
+                "--engine-reasoning",
+                "high",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` profile override missing reason failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` profile override must block without an override reason"))
+        elif "override requires" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` profile override missing reason must expose the missing reason"))
+
+        repo_policy_target = Path(tmp) / "repo-owned-profile"
+        prepare_review_target(repo_policy_target, "review run repo-owned profile")
+        repo_policy_path = repo_policy_target / ".loom/review-profiles.json"
+        repo_policy_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": "loom-review-profiles/v1",
+                    "profiles": {
+                        "default": {
+                            "model": "gpt-5.5-repo-fixture",
+                            "reasoning_effort": "high",
+                            "selection_reason": "repo-owned fixture policy raises normal review reasoning",
+                        }
+                    },
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(repo_policy_target),
+                "--item",
+                "INIT-0001",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` repo-owned profile failed: {error}"))
+        else:
+            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
+            profile = engine.get("profile") if isinstance(engine.get("profile"), dict) else {}
+            source = profile.get("profile_source") if isinstance(profile.get("profile_source"), dict) else {}
+            if profile.get("model") != "gpt-5.5-repo-fixture" or profile.get("reasoning_effort") != "high":
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` repo-owned profile must override the built-in profile"))
+            if source.get("kind") != "repo-owned-policy" or source.get("locator") != ".loom/review-profiles.json":
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` repo-owned profile must record repo policy as the profile source"))
+
+        invalid_repo_policy_target = Path(tmp) / "repo-owned-profile-invalid"
+        prepare_review_target(invalid_repo_policy_target, "review run invalid repo-owned profile")
+        invalid_repo_policy_path = invalid_repo_policy_target / ".loom/review-profiles.json"
+        invalid_repo_policy_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": "loom-review-profiles/v1",
+                    "profiles": {
+                        "default": {
+                            "model": "",
+                            "reasoning_effort": "medium",
+                            "selection_reason": "invalid fixture",
+                        }
+                    },
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(invalid_repo_policy_target),
+                "--item",
+                "INIT-0001",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` invalid repo-owned profile failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` invalid repo-owned profile must fail closed"))
+        elif "model must be non-empty" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` invalid repo-owned profile must expose stable validation failure"))
+
+        local_default_target = Path(tmp) / "local-config-default-ignored"
+        prepare_review_target(local_default_target, "review run local config default ignored")
+        (local_default_target / ".loom/review-profiles.json").unlink(missing_ok=True)
+        local_codex_home = Path(tmp) / "codex-home"
+        local_codex_home.mkdir(parents=True, exist_ok=True)
+        (local_codex_home / "config.toml").write_text(
+            'model = "gpt-local-fixture"\nmodel_reasoning_effort = "xhigh"\n',
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(local_default_target),
+                "--item",
+                "INIT-0001",
+            ],
+            env=prepend_path_env(fake_bin, {"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` local config default ignored failed: {error}"))
+        else:
+            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
+            profile = engine.get("profile") if isinstance(engine.get("profile"), dict) else {}
+            if profile.get("model") != "gpt-5.5" or profile.get("reasoning_effort") != "medium":
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` must not read local Codex config without explicit opt-in"))
+
+        local_opt_in_target = Path(tmp) / "local-config-opt-in"
+        prepare_review_target(local_opt_in_target, "review run local config opt-in")
+        (local_opt_in_target / ".loom/review-profiles.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "loom-review-profiles/v1",
+                    "allow_local_codex_config_in_ci": True,
+                    "profiles": {},
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(local_opt_in_target),
+                "--item",
+                "INIT-0001",
+                "--engine-use-local-codex-defaults",
+                "--engine-override-reason",
+                "fixture explicitly opts into local Codex defaults",
+            ],
+            env=prepend_path_env(fake_bin, {"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` local config opt-in failed: {error}"))
+        else:
+            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
+            profile = engine.get("profile") if isinstance(engine.get("profile"), dict) else {}
+            source = profile.get("profile_source") if isinstance(profile.get("profile_source"), dict) else {}
+            if profile.get("model") != "gpt-local-fixture" or profile.get("reasoning_effort") != "xhigh":
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` local config opt-in must consume local model and reasoning"))
+            if source.get("kind") != "local-codex-config-opt-in" or not isinstance(profile.get("override"), dict):
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` local config opt-in must record override evidence and source"))
+
+        local_headless_target = Path(tmp) / "local-config-headless-rejected"
+        prepare_review_target(local_headless_target, "review run local config headless rejected")
+        (local_headless_target / ".loom/review-profiles.json").unlink(missing_ok=True)
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(local_headless_target),
+                "--item",
+                "INIT-0001",
+                "--engine-use-local-codex-defaults",
+                "--engine-override-reason",
+                "fixture proves headless rejects local Codex defaults by default",
+            ],
+            env=prepend_path_env(fake_bin, {"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` local config headless rejected failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` local config opt-in must be rejected in headless fallback by default"))
+        elif "local Codex config opt-in is disabled" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` local config headless rejection must expose stable failure reason"))
+
+        local_ci_target = Path(tmp) / "local-config-ci-rejected"
+        prepare_review_target(local_ci_target, "review run local config CI rejected")
+        (local_ci_target / ".loom/review-profiles.json").unlink(missing_ok=True)
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(local_ci_target),
+                "--item",
+                "INIT-0001",
+                "--engine-use-local-codex-defaults",
+                "--engine-override-reason",
+                "fixture proves CI rejects local Codex defaults by default",
+            ],
+            env=prepend_path_env(fake_bin, {"CI": "true", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` local config CI rejected failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` local config opt-in must be rejected in CI by default"))
+        elif "local Codex config opt-in is disabled" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` local config CI rejection must expose stable failure reason"))
+
+        engine_missing_target = Path(tmp) / "engine-missing"
+        prepare_review_target(engine_missing_target, "review run engine unavailable")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(engine_missing_target),
+                "--item",
+                "INIT-0001",
+            ],
+            env={"PATH": "/usr/bin:/bin"},
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` engine unavailable failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` must block when the default engine is unavailable"))
+        else:
+            require_review_run_payload(
+                failures,
+                category=REVIEW_RUN_FIXTURE_CATEGORY,
+                context="`review run` engine unavailable",
+                payload=payload,
+                expected_result={"block"},
+            )
+            engine = payload.get("engine")
+            if isinstance(engine, dict) and engine.get("failure_reason") != "engine_unavailable":
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` must report `engine_unavailable` when Codex is missing"))
+            if payload.get("fallback_to") is not None:
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` must not convert engine failure into checkpoint fallback"))
+
+        schema_target = Path(tmp) / "schema-drift"
+        prepare_review_target(schema_target, "review run schema drift")
+        write_fake_codex(fake_bin / "codex", mode="schema_drift")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(schema_target),
+                "--item",
+                "INIT-0001",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` schema drift failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` must block on schema drift"))
+        else:
+            require_review_run_payload(
+                failures,
+                category=REVIEW_RUN_FIXTURE_CATEGORY,
+                context="`review run` schema drift",
+                payload=payload,
+                expected_result={"block"},
+            )
+            engine = payload.get("engine")
+            if isinstance(engine, dict) and engine.get("failure_reason") != "schema_drift":
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` must report `schema_drift` for invalid engine output"))
+
+        dirty_target = Path(tmp) / "tracked-edit"
+        prepare_review_target(dirty_target, "review run tracked edit")
+        write_fake_codex(fake_bin / "codex", mode="tracked_edit", tracked_edit_target=".loom/status/current.md")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "review",
+                "run",
+                "--target",
+                str(dirty_target),
+                "--item",
+                "INIT-0001",
+            ],
+            env=success_env,
+        )
+        if error:
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, f"`review run` tracked edit failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` must block when engine modifies tracked repo content"))
+        else:
+            require_review_run_payload(
+                failures,
+                category=REVIEW_RUN_FIXTURE_CATEGORY,
+                context="`review run` tracked edit",
+                payload=payload,
+                expected_result={"block"},
+            )
+            engine = payload.get("engine")
+            if isinstance(engine, dict) and engine.get("failure_reason") != "repo_diff_detected":
+                failures.append(Failure(REVIEW_RUN_FIXTURE_CATEGORY, "`review run` must report `repo_diff_detected` when tracked files change"))
+
+    return failures
+
+
 def check_daily_execution_cli(root: Path) -> list[Failure]:
     failures: list[Failure] = []
     flow_temp_roots: list[Path] = []
@@ -8334,1384 +9727,6 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             failure_blob = json.dumps(report.get("blocking_failures") if isinstance(report, dict) else [], ensure_ascii=False)
             if "parallel_truth_drift" not in failure_blob:
                 failures.append(Failure("daily-execution-cli", "`host mirror overwrite` must expose parallel_truth_drift"))
-
-    with loom_check_temporary_directory(prefix="loom-check-review-run-") as tmp:
-        source_snapshot = Path(tmp) / "source-snapshot"
-        review_target = Path(tmp) / "new-project"
-        fake_bin = Path(tmp) / "bin"
-        fake_bin.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(root, source_snapshot, ignore=source_snapshot_ignore(root))
-
-        def ensure_source_snapshot() -> bool:
-            if source_snapshot.exists():
-                return True
-            try:
-                shutil.copytree(root, source_snapshot, ignore=source_snapshot_ignore(root))
-            except OSError as exc:
-                failures.append(Failure("daily-execution-cli", f"`review run` source snapshot setup failed: {exc}"))
-                return False
-            return True
-
-        def author_review_run_suite_fixture(target: Path) -> None:
-            suite_root = target / ".loom/specs/INIT-0001"
-            suite_root.mkdir(parents=True, exist_ok=True)
-            (suite_root / "spec.md").write_text(
-                "\n".join(
-                    [
-                        "# Spec",
-                        "",
-                        "- Suite path: minimal",
-                        "",
-                        "## Scenarios",
-                        "",
-                        "- Scenario S1: Review-run fixtures consume a validated formal suite.",
-                        "",
-                        "## Acceptance Criteria",
-                        "",
-                        "- AC-1: Review run can treat the authored spec-review record as current input.",
-                        "",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-            (suite_root / "execution-breakdown.md").write_text(
-                "\n".join(
-                    [
-                        "# Execution Breakdown",
-                        "",
-                        "## unit-init-1",
-                        "",
-                        "- Scope: review-run fixture gate consumption.",
-                        "- Validation: review run and review record consume suite evidence/carrier validation.",
-                        "",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-            (suite_root / "evidence-map.md").write_text(
-                "\n".join(
-                    [
-                        "# Evidence Map",
-                        "",
-                        "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
-                        "| --- | --- | --- | --- | --- | --- | --- | --- |",
-                        "| EV-001 | behavior_evidence | README.md | `.loom/specs/INIT-0001/spec.md` S1 | INIT-0001 / review-run fixture behavior | present | review evidence only | Re-run review-run fixture commands after behavior changes. |",
-                        "| EV-002 | test_evidence | .loom/progress/INIT-0001.md | `.loom/specs/INIT-0001/plan.md` validation | INIT-0001 / review-run fixture tests | present | review evidence only | Re-run daily-execution-cli fixture validation. |",
-                        "| EV-003 | fresh_verification_input | .loom/progress/INIT-0001.md | EV-001 EV-002 | INIT-0001 / latest validation summary | present | review evidence only | Refresh the progress summary after rerunning validation. |",
-                        "",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-            (suite_root / "task-carrier.md").write_text(
-                "\n".join(
-                    [
-                        "# Task Carrier",
-                        "",
-                        "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |",
-                        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-                        "| repo_tasks_md | .loom/work-items/INIT-0001.md | fixture in progress | in_progress | primary | .loom/work-items/INIT-0001.md | .loom/specs/INIT-0001/execution-breakdown.md#unit-init-1 | .loom/specs/INIT-0001/spec.md#scenario-s1 | .loom/specs/INIT-0001/plan.md#validation | .loom/specs/INIT-0001/plan.md#validation | daily-execution-cli review-run fixture | Recheck before review record and PR gate fixture consumption. |",
-                        "",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-            work_item_path = target / ".loom/work-items/INIT-0001.md"
-            if work_item_path.exists():
-                work_item_text = work_item_path.read_text(encoding="utf-8")
-                additions = [
-                    "- `.loom/specs/INIT-0001/evidence-map.md`",
-                    "- `.loom/specs/INIT-0001/execution-breakdown.md`",
-                    "- `.loom/specs/INIT-0001/task-carrier.md`",
-                ]
-                missing = [line for line in additions if line not in work_item_text]
-                if missing:
-                    work_item_path.write_text(work_item_text.rstrip() + "\n" + "\n".join(missing) + "\n", encoding="utf-8")
-            (suite_root / "plan.md").write_text(
-                "\n".join(
-                    [
-                        "# Plan",
-                        "",
-                        "- Suite path: minimal",
-                        "",
-                        "## Validation",
-                        "",
-                        "- S1 -> automated validation evidence: review-run positive and adapter fixtures.",
-                        "- AC-1 -> test evidence: review run consumes spec review without replacing implementation review truth.",
-                        "",
-                        "## Minimal Path Applicability Records",
-                        "",
-                        "- full-path-artifacts not_applicable rationale: review-run fixtures only need the minimal formal suite; consumer boundary: suite validation, spec review, review run, and review record input must not require suite-index.md, research.md, contracts.md, or readiness-checklist.md for this fixture; recheck condition: switch to full suite when these consumers require full-path artifacts.",
-                        "",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-        def prepare_review_target(target: Path, label: str) -> bool:
-            if not ensure_source_snapshot():
-                return False
-            shutil.copytree(source_snapshot, target)
-            for args in (
-                ["git", "init"],
-                ["git", "config", "user.email", "loom-check@example.com"],
-                ["git", "config", "user.name", "loom-check"],
-            ):
-                result = run_command(root, args, cwd=target)
-                if result.returncode != 0:
-                    detail = result.stderr.strip() or result.stdout.strip() or "git setup failed"
-                    failures.append(Failure("daily-execution-cli", f"`{label}` setup failed: {detail}"))
-                    return False
-            payload, error = load_command_json(
-                root,
-                [
-                    "python3",
-                    "tools/loom_init.py",
-                    "bootstrap",
-                    "--target",
-                    ".",
-                    "--intent",
-                    "execution-control",
-                    "--write",
-                    "--force",
-                    "--verify",
-                    "--install-pr-template",
-                ],
-                cwd=target,
-                timeout_seconds=ADOPT_VERIFY_TIMEOUT_SECONDS,
-            )
-            if error:
-                failures.append(Failure("daily-execution-cli", f"`{label}` bootstrap failed: {error}"))
-                return False
-            verification = payload.get("verification")
-            if not isinstance(verification, dict) or verification.get("ok") is not True:
-                failures.append(Failure("daily-execution-cli", f"`{label}` bootstrap must verify successfully"))
-                return False
-            prune_fixture_work_items(target)
-            author_review_run_suite_fixture(target)
-            require_minimal_suite_happy_path_validation(
-                failures,
-                root=root,
-                target=target,
-                item="INIT-0001",
-                category="daily-execution-cli",
-                context=f"`{label}` source minimal suite happy path",
-            )
-            author_full_suite_happy_path_fixture(target, "WI-full-happy")
-            require_full_suite_happy_path_validation(
-                failures,
-                root=root,
-                target=target,
-                item="WI-full-happy",
-                category="daily-execution-cli",
-                context=f"`{label}` source full suite happy path",
-            )
-            require_generated_skills_surface_parity_validation(
-                failures,
-                root=root,
-                category="daily-execution-cli",
-                context=f"`{label}` source generated skills surface parity",
-            )
-            require_suite_negative_fail_closed_validation(
-                failures,
-                root=root,
-                target=target,
-                category="daily-execution-cli",
-                context=f"`{label}` source suite negative fail-closed",
-            )
-            author_stale_evidence_block_fixture(target, "WI-stale-evidence")
-            require_stale_evidence_block_validation(
-                failures,
-                root=root,
-                target=target,
-                item="WI-stale-evidence",
-                category="daily-execution-cli",
-                context=f"`{label}` source stale evidence fixture",
-            )
-            author_host_conflict_block_fixture(target, "WI-host-conflict")
-            require_host_conflict_block_validation(
-                failures,
-                root=root,
-                target=target,
-                item="WI-host-conflict",
-                category="daily-execution-cli",
-                context=f"`{label}` source host conflict fixture",
-            )
-            require_scaffold_mutation_boundary_validation(
-                failures,
-                root=root,
-                target=target / "WI-1151-scaffold-fixtures",
-                category="daily-execution-cli",
-                context=f"`{label}` source scaffold mutation boundary",
-            )
-            for args in (
-                ["git", "add", "."],
-                ["git", "add", "-f", ".loom"],
-                ["git", "commit", "-m", "review-run baseline"],
-            ):
-                result = run_command(root, args, cwd=target)
-                if result.returncode != 0:
-                    detail = result.stderr.strip() or result.stdout.strip() or "git baseline commit failed"
-                    failures.append(Failure("daily-execution-cli", f"`{label}` setup failed: {detail}"))
-                    return False
-            head = run_command(root, ["git", "rev-parse", "HEAD"], cwd=target)
-            if head.returncode != 0:
-                detail = head.stderr.strip() or head.stdout.strip() or "git rev-parse failed"
-                failures.append(Failure("daily-execution-cli", f"`{label}` setup failed: {detail}"))
-                return False
-            reviewed_head = head.stdout.strip() or "unknown-head"
-            spec_review_path = target / ".loom/reviews/INIT-0001.spec.json"
-            spec_review_path.write_text(
-                json.dumps(
-                    {
-                        "schema_version": "loom-review/v1",
-                        "item_id": "INIT-0001",
-                        "decision": "allow",
-                        "kind": "spec_review",
-                        "summary": "Formal spec is approved for downstream review-run tests.",
-                        "reviewer": "loom-check",
-                        "reviewed_head": reviewed_head,
-                        "reviewed_validation_summary": "Bootstrap manifest exists; init-result JSON can be read mechanically; the first work item, status surface, and spec/plan artifacts exist.",
-                        "fallback_to": None,
-                        "findings": [],
-                        "blocking_issues": [],
-                        "follow_ups": [],
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                )
-                + "\n",
-                encoding="utf-8",
-            )
-            for args in (
-                ["git", "add", "-f", ".loom/reviews/INIT-0001.spec.json"],
-                ["git", "commit", "-m", "record spec review baseline"],
-            ):
-                result = run_command(root, args, cwd=target)
-                if result.returncode != 0:
-                    detail = result.stderr.strip() or result.stdout.strip() or "git spec review baseline failed"
-                    failures.append(Failure("daily-execution-cli", f"`{label}` setup failed: {detail}"))
-                    return False
-            return True
-
-        prepare_review_target(review_target, "review run positive chain")
-        write_fake_codex(fake_bin / "codex", mode="success")
-        success_env = prepend_path_env(fake_bin, {"CI": "", "CODEX_CI": ""})
-
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(review_target),
-                "--item",
-                "INIT-0001",
-            ],
-            env=success_env,
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` positive chain failed: {error}"))
-        else:
-            require_review_run_payload(
-                failures,
-                category="daily-execution-cli",
-                context="`review run` positive chain",
-                payload=payload,
-                expected_result={"pass"},
-            )
-            if isinstance(payload, dict):
-                engine = payload.get("engine") if isinstance(payload.get("engine"), dict) else {}
-                if engine.get("engine") != "codex" or engine.get("adapter") != "loom/default-codex-exec":
-                    failures.append(Failure("daily-execution-cli", "`review run` positive chain must keep the default codex exec adapter"))
-                profile = engine.get("profile") if isinstance(engine.get("profile"), dict) else {}
-                if profile.get("model") != "gpt-5.5" or profile.get("reasoning_effort") != "medium":
-                    failures.append(Failure("daily-execution-cli", "`review run` positive chain must resolve the gpt-5.5 default profile"))
-                source = profile.get("profile_source") if isinstance(profile.get("profile_source"), dict) else {}
-                expected_source = "repo-owned-policy" if (review_target / ".loom/review-profiles.json").exists() else "loom-built-in"
-                if source.get("kind") != expected_source:
-                    failures.append(Failure("daily-execution-cli", "`review run` positive chain must record the resolved profile source"))
-                review_record_input = payload.get("review_record_input") if isinstance(payload.get("review_record_input"), dict) else {}
-                if review_record_input.get("engine_adapter") != "loom/default-codex-exec" or review_record_input.get("reviewer") != "loom/default-codex-exec":
-                    failures.append(Failure("daily-execution-cli", "`review run` positive chain must keep default review_record_input adapter"))
-                evidence = payload.get("engine", {}).get("evidence") if isinstance(payload.get("engine"), dict) else None
-                context_pack_path = evidence.get("context_pack") if isinstance(evidence, dict) else None
-                prompt_path = evidence.get("prompt") if isinstance(evidence, dict) else None
-                if not isinstance(context_pack_path, str) or not (review_target / context_pack_path).exists():
-                    failures.append(Failure("daily-execution-cli", "`review run` positive chain must write context pack evidence"))
-                else:
-                    context_pack = json.loads((review_target / context_pack_path).read_text(encoding="utf-8"))
-                    if context_pack.get("schema_version") != "loom-review-context-pack/v1":
-                        failures.append(Failure("daily-execution-cli", "`review run` context pack must use the stable schema"))
-                    if not isinstance(context_pack.get("repeated_blocker_signal"), dict):
-                        failures.append(Failure("daily-execution-cli", "`review run` context pack must include repeated blocker signal"))
-                prompt_file = (review_target / prompt_path) if isinstance(prompt_path, str) else None
-                prompt_text = prompt_file.read_text(encoding="utf-8") if prompt_file is not None and prompt_file.exists() else ""
-                if not prompt_text or "Recent Review Context Pack" not in prompt_text:
-                    failures.append(Failure("daily-execution-cli", "`review run` prompt must include recent review context pack guidance"))
-                if "Change Evidence Snapshot" not in prompt_text or "Focused Diff Excerpt" not in prompt_text:
-                    failures.append(Failure("daily-execution-cli", "`review run` prompt must include focused change evidence for host-limited reviewers"))
-                if "不要重跑 full `tools/loom_check.py .`" not in prompt_text:
-                    failures.append(Failure("daily-execution-cli", "`review run` prompt must keep full validation commands outside reviewer scope"))
-                if "不能仅因既有 record stale 而 block" not in prompt_text:
-                    failures.append(Failure("daily-execution-cli", "`review run` prompt must treat stale prior review records as historical input during replacement review runs"))
-                profile_probe = json.loads(json.dumps(payload))
-                if isinstance(profile_probe.get("engine"), dict):
-                    profile_probe["engine"].pop("profile", None)
-                profile_probe_failures: list[Failure] = []
-                require_review_run_payload(
-                    profile_probe_failures,
-                    category="daily-execution-cli",
-                    context="`review run` missing profile probe",
-                    payload=profile_probe,
-                    expected_result={"pass"},
-                )
-                if not any("engine profile" in failure.detail for failure in profile_probe_failures):
-                    failures.append(Failure("daily-execution-cli", "`review run` contract check must fail when resolved profile metadata is missing"))
-
-        shadow_target = Path(tmp) / "review-run-shadow"
-        prepare_review_target(shadow_target, "review run shadow adapter")
-        shadow_raw = shadow_target / ".loom/runtime/tmp/codex-app-review-raw.json"
-        shadow_raw.parent.mkdir(parents=True, exist_ok=True)
-        shadow_raw.write_text(
-            json.dumps(
-                {
-                    "decision": "fallback",
-                    "summary": "Codex App reviewer produced shadow-only findings.",
-                    "findings": [
-                        {
-                            "id": "shadow-warn-1",
-                            "summary": "Codex App shadow review noted a comparison-only issue.",
-                            "severity": "warn",
-                            "rebuttal": None,
-                            "disposition": {
-                                "status": "deferred",
-                                "summary": "Shadow evidence must not author the formal review record.",
-                            },
-                        }
-                    ],
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-        write_fake_codex(fake_bin / "codex", mode="success")
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(shadow_target),
-                "--item",
-                "INIT-0001",
-                "--shadow-engine-adapter",
-                "loom/codex-app-review",
-                "--shadow-review-raw-file",
-                ".loom/runtime/tmp/codex-app-review-raw.json",
-            ],
-            env=success_env,
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` shadow adapter failed: {error}"))
-        else:
-            require_review_run_payload(
-                failures,
-                category="daily-execution-cli",
-                context="`review run` shadow adapter",
-                payload=payload,
-                expected_result={"pass"},
-            )
-            if isinstance(payload, dict):
-                review_record_input = payload.get("review_record_input") if isinstance(payload.get("review_record_input"), dict) else {}
-                if review_record_input.get("engine_adapter") != "loom/default-codex-exec":
-                    failures.append(Failure("daily-execution-cli", "`review run` shadow adapter must not replace default review_record_input engine adapter"))
-                shadow_engine = payload.get("shadow_engine") if isinstance(payload.get("shadow_engine"), dict) else {}
-                if shadow_engine.get("result") != "pass":
-                    failures.append(Failure("daily-execution-cli", "`review run` shadow adapter must pass when raw review evidence is provided"))
-                evidence = shadow_engine.get("evidence") if isinstance(shadow_engine.get("evidence"), dict) else {}
-                for key in ("raw_review", "normalized_findings", "metadata", "parity_diff"):
-                    value = evidence.get(key)
-                    if not isinstance(value, str) or not (shadow_target / value).exists():
-                        failures.append(Failure("daily-execution-cli", f"`review run` shadow adapter must write {key} evidence"))
-                if shadow_engine.get("authoritative") is not False or shadow_engine.get("blocking") is not False:
-                    failures.append(Failure("daily-execution-cli", "`review run` shadow adapter must stay non-authoritative and non-blocking"))
-
-        shadow_unavailable_target = Path(tmp) / "review-run-shadow-unavailable"
-        prepare_review_target(shadow_unavailable_target, "review run shadow unavailable")
-        write_fake_codex(fake_bin / "codex", mode="success")
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(shadow_unavailable_target),
-                "--item",
-                "INIT-0001",
-                "--shadow-engine-adapter",
-                "loom/codex-app-review",
-            ],
-            env=success_env,
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` shadow unavailable failed: {error}"))
-        else:
-            require_review_run_payload(
-                failures,
-                category="daily-execution-cli",
-                context="`review run` shadow unavailable",
-                payload=payload,
-                expected_result={"pass"},
-            )
-            shadow_engine = payload.get("shadow_engine") if isinstance(payload, dict) and isinstance(payload.get("shadow_engine"), dict) else {}
-            if shadow_engine.get("result") != "unavailable":
-                failures.append(Failure("daily-execution-cli", "`review run` shadow unavailable must not block the default review path"))
-            review_record_input = payload.get("review_record_input") if isinstance(payload, dict) and isinstance(payload.get("review_record_input"), dict) else {}
-            if review_record_input.get("engine_adapter") != "loom/default-codex-exec":
-                failures.append(Failure("daily-execution-cli", "`review run` shadow unavailable must preserve the default review record input"))
-
-        app_embedded_result = {
-            "decision": "allow",
-            "summary": "Codex App turn/start embedded a structured review result in an app-server text field.",
-            "findings": [
-                {
-                    "id": "codex-app-embedded-json-warn-1",
-                    "summary": "Codex App embedded JSON was recovered from a notification string.",
-                    "severity": "warn",
-                    "rebuttal": None,
-                    "disposition": {
-                        "status": "accepted",
-                        "summary": "Only schema-valid structured review output is accepted from string fields.",
-                    },
-                    "details": "Fixture mirrors app-server agent_message.message / output_text.text wrapping.",
-                    "code_location": None,
-                }
-            ],
-        }
-        app_embedded_notification = {
-            "method": "agent_message",
-            "params": {"message": json.dumps(app_embedded_result, ensure_ascii=False)},
-        }
-        app_embedded_normalized = loom_flow_module.find_normalized_review_payload(app_embedded_notification)
-        if not isinstance(app_embedded_normalized, dict) or app_embedded_normalized.get("decision") != "allow":
-            failures.append(Failure("daily-execution-cli", "`review run` must recover schema-valid Codex App results embedded in app-server text fields"))
-
-        app_default_target = Path(tmp) / "review-run-codex-app-default"
-        prepare_review_target(app_default_target, "review run Codex App host default")
-        app_default_raw = app_default_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
-        app_default_raw.parent.mkdir(parents=True, exist_ok=True)
-        app_default_raw.write_text(
-            json.dumps(
-                {
-                    "decision": "allow",
-                    "summary": "Codex App default reviewer found the item ready.",
-                    "findings": [
-                        {
-                            "id": "codex-app-default-warn-1",
-                            "summary": "Codex App default review noted a tracked follow-up.",
-                            "severity": "warn",
-                            "rebuttal": None,
-                            "disposition": {
-                                "status": "accepted",
-                                "summary": "The finding is recorded through the single review record boundary.",
-                            },
-                        }
-                    ],
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-        write_fake_codex(fake_bin / "codex", mode="fail_if_called")
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(app_default_target),
-                "--item",
-                "INIT-0001",
-                "--codex-app-review-app-server",
-                "stdio://stage3-default-proof",
-                "--codex-app-review-thread-id",
-                "thread-stage3-default-proof",
-                "--codex-app-review-cwd",
-                str(app_default_target),
-                "--codex-app-review-raw-file",
-                ".loom/runtime/tmp/codex-app-review-normalized.json",
-            ],
-            env=success_env,
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` Codex App host default failed: {error}"))
-        else:
-            require_review_run_payload(
-                failures,
-                category="daily-execution-cli",
-                context="`review run` Codex App host default",
-                payload=payload,
-                expected_result={"pass"},
-            )
-            if isinstance(payload, dict):
-                engine = payload.get("engine") if isinstance(payload.get("engine"), dict) else {}
-                if engine.get("adapter") != "loom/codex-app-review" or engine.get("engine") != "codex-app-review":
-                    failures.append(Failure("daily-execution-cli", "`review run` Codex App host default must select the app adapter"))
-                review_record_input = payload.get("review_record_input") if isinstance(payload.get("review_record_input"), dict) else {}
-                if review_record_input.get("engine_adapter") != "loom/codex-app-review" or review_record_input.get("reviewer") != "loom/codex-app-review":
-                    failures.append(Failure("daily-execution-cli", "`review run` Codex App host default must author app adapter review_record_input"))
-                metadata = payload.get("engine_metadata") if isinstance(payload.get("engine_metadata"), dict) else {}
-                if metadata.get("selection_source") != "codex-app-host-default" or metadata.get("thread_id") != "thread-stage3-default-proof":
-                    failures.append(Failure("daily-execution-cli", "`review run` Codex App host default must expose selected adapter and thread proof metadata"))
-                merge_payload, merge_error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        "tools/loom_flow.py",
-                        "flow",
-                        "merge-ready",
-                        "--target",
-                        str(app_default_target),
-                        "--item",
-                        "INIT-0001",
-                    ],
-                )
-                if merge_error:
-                    failures.append(Failure("daily-execution-cli", f"`merge-ready before authored default app review record` failed: {merge_error}"))
-                elif merge_payload.get("result") == "pass":
-                    failures.append(Failure("daily-execution-cli", "`merge-ready` must not consume default Codex App raw evidence before review record is authored"))
-
-        app_ci_default_target = Path(tmp) / "review-run-codex-app-ci-default"
-        prepare_review_target(app_ci_default_target, "review run Codex App CI host default")
-        app_ci_raw = app_ci_default_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
-        app_ci_raw.parent.mkdir(parents=True, exist_ok=True)
-        app_ci_raw.write_text(app_default_raw.read_text(encoding="utf-8"), encoding="utf-8")
-        write_fake_codex(fake_bin / "codex", mode="fail_if_called")
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(app_ci_default_target),
-                "--item",
-                "INIT-0001",
-                "--codex-app-review-app-server",
-                "stdio://stage3-ci-proof",
-                "--codex-app-review-thread-id",
-                "thread-stage3-ci-proof",
-                "--codex-app-review-cwd",
-                str(app_ci_default_target),
-                "--codex-app-review-raw-file",
-                ".loom/runtime/tmp/codex-app-review-normalized.json",
-            ],
-            env=prepend_path_env(fake_bin, {"CODEX_CI": "1"}),
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` Codex App CI host default failed: {error}"))
-        else:
-            require_review_run_payload(
-                failures,
-                category="daily-execution-cli",
-                context="`review run` Codex App CI host default",
-                payload=payload,
-                expected_result={"pass"},
-            )
-            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
-            metadata = payload.get("engine_metadata") if isinstance(payload, dict) and isinstance(payload.get("engine_metadata"), dict) else {}
-            if engine.get("adapter") != "loom/codex-app-review" or metadata.get("selection_source") != "codex-app-host-default":
-                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI host default must prefer valid app proof over CODEX_CI"))
-            if metadata.get("ci_env_present") is not True:
-                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI host default must record that CI env was present"))
-
-        app_ci_fallback_target = Path(tmp) / "review-run-codex-app-ci-missing-proof-fallback"
-        prepare_review_target(app_ci_fallback_target, "review run Codex App CI missing proof fallback")
-        write_fake_codex(fake_bin / "codex", mode="success")
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(app_ci_fallback_target),
-                "--item",
-                "INIT-0001",
-            ],
-            env=prepend_path_env(fake_bin, {"CODEX_CI": "1"}),
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` Codex App CI missing proof fallback failed: {error}"))
-        else:
-            require_review_run_payload(
-                failures,
-                category="daily-execution-cli",
-                context="`review run` Codex App CI missing proof fallback",
-                payload=payload,
-                expected_result={"pass"},
-            )
-            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
-            metadata = payload.get("engine_metadata") if isinstance(payload, dict) and isinstance(payload.get("engine_metadata"), dict) else {}
-            missing_host_proof = metadata.get("missing_host_proof") if isinstance(metadata.get("missing_host_proof"), list) else []
-            if engine.get("adapter") != "loom/default-codex-exec" or metadata.get("fallback_reason") != "ci-or-codex-ci":
-                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI missing proof fallback must keep the default codex exec adapter"))
-            if not missing_host_proof:
-                failures.append(Failure("daily-execution-cli", "`review run` Codex App CI missing proof fallback must expose missing host proof diagnostics"))
-
-        app_unavailable_fallback_target = Path(tmp) / "review-run-codex-app-unavailable-fallback"
-        prepare_review_target(app_unavailable_fallback_target, "review run Codex App unavailable fallback")
-        write_fake_codex(fake_bin / "codex", mode="success")
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(app_unavailable_fallback_target),
-                "--item",
-                "INIT-0001",
-                "--codex-app-review-app-server",
-                f"unix://{tmp}/missing-codex-app.sock",
-                "--codex-app-review-thread-id",
-                "thread-stage3-missing-endpoint",
-                "--codex-app-review-cwd",
-                str(app_unavailable_fallback_target),
-            ],
-            env=success_env,
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` Codex App unavailable fallback failed: {error}"))
-        else:
-            require_review_run_payload(
-                failures,
-                category="daily-execution-cli",
-                context="`review run` Codex App unavailable fallback",
-                payload=payload,
-                expected_result={"pass"},
-            )
-            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
-            metadata = payload.get("engine_metadata") if isinstance(payload, dict) and isinstance(payload.get("engine_metadata"), dict) else {}
-            if engine.get("adapter") != "loom/default-codex-exec" or metadata.get("fallback_reason") != "app-server-unavailable":
-                failures.append(Failure("daily-execution-cli", "`review run` Codex App unavailable fallback must record default adapter fallback"))
-
-        app_conflict_target = Path(tmp) / "review-run-codex-app-proof-conflict"
-        prepare_review_target(app_conflict_target, "review run Codex App proof conflict")
-        app_conflict_raw = app_conflict_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
-        app_conflict_raw.parent.mkdir(parents=True, exist_ok=True)
-        app_conflict_raw.write_text(app_default_raw.read_text(encoding="utf-8"), encoding="utf-8")
-        write_fake_codex(fake_bin / "codex", mode="fail_if_called")
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(app_conflict_target),
-                "--item",
-                "INIT-0001",
-                "--codex-app-review-app-server",
-                "stdio://stage3-conflict-proof",
-                "--codex-app-review-thread-id",
-                "thread-stage3-conflict-proof",
-                "--codex-app-review-cwd",
-                str(Path(tmp) / "different-cwd"),
-                "--codex-app-review-raw-file",
-                ".loom/runtime/tmp/codex-app-review-normalized.json",
-            ],
-            env=success_env,
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` Codex App proof conflict failed: {error}"))
-        elif payload.get("result") != "block":
-            failures.append(Failure("daily-execution-cli", "`review run` Codex App proof conflict must fail closed"))
-        else:
-            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
-            if engine.get("adapter") != "loom/codex-app-review" or engine.get("failure_reason") != "runtime_conflict":
-                failures.append(Failure("daily-execution-cli", "`review run` Codex App proof conflict must not fallback to default codex"))
-            if "does not match target root" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
-                failures.append(Failure("daily-execution-cli", "`review run` Codex App proof conflict must expose cwd mismatch"))
-            if isinstance(payload, dict) and isinstance(payload.get("review_record_input"), dict):
-                failures.append(Failure("daily-execution-cli", "`review run` Codex App proof conflict must not emit review_record_input"))
-
-        app_authoritative_target = Path(tmp) / "review-run-codex-app-authoritative"
-        prepare_review_target(app_authoritative_target, "review run Codex App authoritative")
-        app_raw = app_authoritative_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
-        app_raw.parent.mkdir(parents=True, exist_ok=True)
-        app_raw.write_text(
-            json.dumps(
-                {
-                    "decision": "allow",
-                    "summary": "Codex App authoritative reviewer found the item ready.",
-                    "findings": [
-                        {
-                            "id": "codex-app-warn-1",
-                            "summary": "Codex App authoritative review noted a tracked follow-up.",
-                            "severity": "warn",
-                            "rebuttal": None,
-                            "disposition": {
-                                "status": "accepted",
-                                "summary": "The finding is recorded through the single review record boundary.",
-                            },
-                        }
-                    ],
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-        write_fake_codex(fake_bin / "codex", mode="fail_if_called")
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(app_authoritative_target),
-                "--item",
-                "INIT-0001",
-                "--engine-adapter",
-                "loom/codex-app-review",
-                "--codex-app-review-app-server",
-                "stdio://stage2-live-proof",
-                "--codex-app-review-thread-id",
-                "thread-stage2-live-proof",
-                "--codex-app-review-cwd",
-                str(app_authoritative_target),
-                "--codex-app-review-raw-file",
-                ".loom/runtime/tmp/codex-app-review-normalized.json",
-            ],
-            env=success_env,
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` Codex App authoritative failed: {error}"))
-        else:
-            require_review_run_payload(
-                failures,
-                category="daily-execution-cli",
-                context="`review run` Codex App authoritative",
-                payload=payload,
-                expected_result={"pass"},
-            )
-            if isinstance(payload, dict):
-                review_record_input = payload.get("review_record_input") if isinstance(payload.get("review_record_input"), dict) else {}
-                if review_record_input.get("engine_adapter") != "loom/codex-app-review":
-                    failures.append(Failure("daily-execution-cli", "`review run` Codex App authoritative must author app adapter review_record_input"))
-                engine = payload.get("engine") if isinstance(payload.get("engine"), dict) else {}
-                if engine.get("engine") != "codex-app-review":
-                    failures.append(Failure("daily-execution-cli", "`review run` Codex App authoritative must not call codex exec"))
-                metadata = payload.get("engine_metadata") if isinstance(payload.get("engine_metadata"), dict) else {}
-                if metadata.get("thread_id") != "thread-stage2-live-proof":
-                    failures.append(Failure("daily-execution-cli", "`review run` Codex App authoritative must expose live thread proof metadata"))
-                model_proof = metadata.get("model_proof") if isinstance(metadata.get("model_proof"), dict) else {}
-                if model_proof.get("requested_model") != "gpt-5.5" or model_proof.get("requested_reasoning") != "medium":
-                    failures.append(Failure("daily-execution-cli", "`review run` Codex App authoritative must record requested gpt-5.5 model proof"))
-                if model_proof.get("result") != "unverified" or model_proof.get("proof_source") != "raw-file-unverified":
-                    failures.append(Failure("daily-execution-cli", "`review run` Codex App raw-file proof must be structured as unverified"))
-                merge_payload, merge_error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        "tools/loom_flow.py",
-                        "flow",
-                        "merge-ready",
-                        "--target",
-                        str(app_authoritative_target),
-                        "--item",
-                        "INIT-0001",
-                    ],
-                )
-                if merge_error:
-                    failures.append(Failure("daily-execution-cli", f"`merge-ready before authored app review record` failed: {merge_error}"))
-                elif merge_payload.get("result") == "pass":
-                    failures.append(Failure("daily-execution-cli", "`merge-ready` must not consume raw Codex App authoritative evidence before review record is authored"))
-
-        app_unverified_high_risk_target = Path(tmp) / "review-run-codex-app-unverified-high-risk"
-        prepare_review_target(app_unverified_high_risk_target, "review run Codex App high-risk unverified model proof")
-        app_unverified_raw = app_unverified_high_risk_target / ".loom/runtime/tmp/codex-app-review-normalized.json"
-        app_unverified_raw.parent.mkdir(parents=True, exist_ok=True)
-        app_unverified_raw.write_text(
-            json.dumps(
-                {
-                    "decision": "allow",
-                    "summary": "Raw-file review result is structurally valid but lacks actual model proof.",
-                    "findings": [],
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(app_unverified_high_risk_target),
-                "--item",
-                "INIT-0001",
-                "--engine-adapter",
-                "loom/codex-app-review",
-                "--engine-profile",
-                "high-risk",
-                "--engine-override-reason",
-                "fixture requires high-risk profile to fail closed without actual model proof",
-                "--codex-app-review-app-server",
-                "stdio://stage2-live-proof",
-                "--codex-app-review-thread-id",
-                "thread-stage2-live-proof",
-                "--codex-app-review-cwd",
-                str(app_unverified_high_risk_target),
-                "--codex-app-review-raw-file",
-                ".loom/runtime/tmp/codex-app-review-normalized.json",
-            ],
-            env=success_env,
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` Codex App high-risk unverified proof failed: {error}"))
-        elif payload.get("result") != "block":
-            failures.append(Failure("daily-execution-cli", "`review run` Codex App high-risk profile must fail closed without actual model proof"))
-        elif "actual model/reasoning proof is unverified" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
-            failures.append(Failure("daily-execution-cli", "`review run` Codex App high-risk unverified proof must expose the proof failure reason"))
-
-        app_missing_target = Path(tmp) / "review-run-codex-app-missing-proof"
-        prepare_review_target(app_missing_target, "review run Codex App missing proof")
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(app_missing_target),
-                "--item",
-                "INIT-0001",
-                "--engine-adapter",
-                "loom/codex-app-review",
-            ],
-            env=success_env,
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` Codex App missing proof failed: {error}"))
-        elif payload.get("result") != "block":
-            failures.append(Failure("daily-execution-cli", "`review run` Codex App missing proof must fail closed"))
-
-        app_invalid_target = Path(tmp) / "review-run-codex-app-invalid-raw"
-        prepare_review_target(app_invalid_target, "review run Codex App invalid raw")
-        invalid_raw = app_invalid_target / ".loom/runtime/tmp/codex-app-review-invalid.txt"
-        invalid_raw.parent.mkdir(parents=True, exist_ok=True)
-        invalid_raw.write_text("plain review text is not authoritative schema\n", encoding="utf-8")
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(app_invalid_target),
-                "--item",
-                "INIT-0001",
-                "--engine-adapter",
-                "loom/codex-app-review",
-                "--codex-app-review-app-server",
-                "stdio://stage2-live-proof",
-                "--codex-app-review-thread-id",
-                "thread-stage2-live-proof",
-                "--codex-app-review-cwd",
-                str(app_invalid_target),
-                "--codex-app-review-raw-file",
-                ".loom/runtime/tmp/codex-app-review-invalid.txt",
-            ],
-            env=success_env,
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` Codex App invalid raw failed: {error}"))
-        elif payload.get("result") != "block":
-            failures.append(Failure("daily-execution-cli", "`review run` Codex App invalid raw must fail closed on schema drift"))
-
-        repeated_target = Path(tmp) / "repeated-blocker-context"
-        prepare_review_target(repeated_target, "review run repeated blocker context")
-        history_root = repeated_target / ".loom/runtime/review/INIT-0001"
-        for attempt in ("attempt-a", "attempt-b"):
-            attempt_root = history_root / attempt
-            attempt_root.mkdir(parents=True, exist_ok=True)
-            (attempt_root / "normalized-findings.json").write_text(
-                json.dumps(
-                    {
-                        "findings": [
-                            {
-                                "id": "block-context-drift",
-                                "summary": "Context drift keeps reappearing after local patch attempts.",
-                                "severity": "block",
-                                "rebuttal": None,
-                                "disposition": {
-                                    "status": "accepted",
-                                    "summary": "Fixture marks this as a real repeated blocker candidate.",
-                                },
-                            }
-                        ]
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                )
-                + "\n",
-                encoding="utf-8",
-            )
-            (attempt_root / "engine-metadata.json").write_text(
-                json.dumps({"reviewed_head": attempt, "validation_summary": f"{attempt} validation"}, indent=2) + "\n",
-                encoding="utf-8",
-            )
-        write_fake_codex(fake_bin / "codex", mode="success")
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(repeated_target),
-                "--item",
-                "INIT-0001",
-            ],
-            env=success_env,
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` repeated blocker context failed: {error}"))
-        else:
-            require_review_run_payload(
-                failures,
-                category="daily-execution-cli",
-                context="`review run` repeated blocker context",
-                payload=payload,
-                expected_result={"pass"},
-            )
-            evidence = payload.get("engine", {}).get("evidence") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else None
-            context_pack_path = evidence.get("context_pack") if isinstance(evidence, dict) else None
-            if not isinstance(context_pack_path, str):
-                failures.append(Failure("daily-execution-cli", "`review run` repeated blocker context must expose context pack evidence"))
-            else:
-                context_pack = json.loads((repeated_target / context_pack_path).read_text(encoding="utf-8"))
-                signal = context_pack.get("repeated_blocker_signal")
-                if not isinstance(signal, dict) or signal.get("result") != "present":
-                    failures.append(Failure("daily-execution-cli", "`review run` repeated blocker context must identify repeated blocker candidates"))
-                candidates = signal.get("candidates") if isinstance(signal, dict) else None
-                if not isinstance(candidates, list) or not candidates:
-                    failures.append(Failure("daily-execution-cli", "`review run` repeated blocker context must include candidate details"))
-
-        override_target = Path(tmp) / "profile-override"
-        prepare_review_target(override_target, "review run profile override")
-        write_fake_codex(fake_bin / "codex", mode="success")
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(override_target),
-                "--item",
-                "INIT-0001",
-                "--engine-model",
-                "gpt-5.2",
-                "--engine-reasoning",
-                "high",
-                "--engine-override-reason",
-                "fixture requires explicit high-reasoning review profile evidence",
-            ],
-            env=success_env,
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` profile override failed: {error}"))
-        else:
-            require_review_run_payload(
-                failures,
-                category="daily-execution-cli",
-                context="`review run` profile override",
-                payload=payload,
-                expected_result={"pass"},
-            )
-            engine = payload.get("engine") if isinstance(payload, dict) else None
-            profile = engine.get("profile") if isinstance(engine, dict) else None
-            if not isinstance(profile, dict) or not isinstance(profile.get("override"), dict):
-                failures.append(Failure("daily-execution-cli", "`review run` profile override must record previous and selected profile evidence"))
-            else:
-                override = profile["override"]
-                if not isinstance(override.get("previous_profile"), dict) or not isinstance(override.get("selected_profile"), dict):
-                    failures.append(Failure("daily-execution-cli", "`review run` profile override must record previous and selected profile"))
-                if override.get("reason") != "fixture requires explicit high-reasoning review profile evidence":
-                    failures.append(Failure("daily-execution-cli", "`review run` profile override must preserve the override reason"))
-
-        missing_reason_target = Path(tmp) / "profile-override-missing-reason"
-        prepare_review_target(missing_reason_target, "review run profile override missing reason")
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(missing_reason_target),
-                "--item",
-                "INIT-0001",
-                "--engine-reasoning",
-                "high",
-            ],
-            env=success_env,
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` profile override missing reason failed: {error}"))
-        elif payload.get("result") != "block":
-            failures.append(Failure("daily-execution-cli", "`review run` profile override must block without an override reason"))
-        elif "override requires" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
-            failures.append(Failure("daily-execution-cli", "`review run` profile override missing reason must expose the missing reason"))
-
-        repo_policy_target = Path(tmp) / "repo-owned-profile"
-        prepare_review_target(repo_policy_target, "review run repo-owned profile")
-        repo_policy_path = repo_policy_target / ".loom/review-profiles.json"
-        repo_policy_path.write_text(
-            json.dumps(
-                {
-                    "schema_version": "loom-review-profiles/v1",
-                    "profiles": {
-                        "default": {
-                            "model": "gpt-5.5-repo-fixture",
-                            "reasoning_effort": "high",
-                            "selection_reason": "repo-owned fixture policy raises normal review reasoning",
-                        }
-                    },
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(repo_policy_target),
-                "--item",
-                "INIT-0001",
-            ],
-            env=success_env,
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` repo-owned profile failed: {error}"))
-        else:
-            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
-            profile = engine.get("profile") if isinstance(engine.get("profile"), dict) else {}
-            source = profile.get("profile_source") if isinstance(profile.get("profile_source"), dict) else {}
-            if profile.get("model") != "gpt-5.5-repo-fixture" or profile.get("reasoning_effort") != "high":
-                failures.append(Failure("daily-execution-cli", "`review run` repo-owned profile must override the built-in profile"))
-            if source.get("kind") != "repo-owned-policy" or source.get("locator") != ".loom/review-profiles.json":
-                failures.append(Failure("daily-execution-cli", "`review run` repo-owned profile must record repo policy as the profile source"))
-
-        invalid_repo_policy_target = Path(tmp) / "repo-owned-profile-invalid"
-        prepare_review_target(invalid_repo_policy_target, "review run invalid repo-owned profile")
-        invalid_repo_policy_path = invalid_repo_policy_target / ".loom/review-profiles.json"
-        invalid_repo_policy_path.write_text(
-            json.dumps(
-                {
-                    "schema_version": "loom-review-profiles/v1",
-                    "profiles": {
-                        "default": {
-                            "model": "",
-                            "reasoning_effort": "medium",
-                            "selection_reason": "invalid fixture",
-                        }
-                    },
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(invalid_repo_policy_target),
-                "--item",
-                "INIT-0001",
-            ],
-            env=success_env,
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` invalid repo-owned profile failed: {error}"))
-        elif payload.get("result") != "block":
-            failures.append(Failure("daily-execution-cli", "`review run` invalid repo-owned profile must fail closed"))
-        elif "model must be non-empty" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
-            failures.append(Failure("daily-execution-cli", "`review run` invalid repo-owned profile must expose stable validation failure"))
-
-        local_default_target = Path(tmp) / "local-config-default-ignored"
-        prepare_review_target(local_default_target, "review run local config default ignored")
-        (local_default_target / ".loom/review-profiles.json").unlink(missing_ok=True)
-        local_codex_home = Path(tmp) / "codex-home"
-        local_codex_home.mkdir(parents=True, exist_ok=True)
-        (local_codex_home / "config.toml").write_text(
-            'model = "gpt-local-fixture"\nmodel_reasoning_effort = "xhigh"\n',
-            encoding="utf-8",
-        )
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(local_default_target),
-                "--item",
-                "INIT-0001",
-            ],
-            env=prepend_path_env(fake_bin, {"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` local config default ignored failed: {error}"))
-        else:
-            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
-            profile = engine.get("profile") if isinstance(engine.get("profile"), dict) else {}
-            if profile.get("model") != "gpt-5.5" or profile.get("reasoning_effort") != "medium":
-                failures.append(Failure("daily-execution-cli", "`review run` must not read local Codex config without explicit opt-in"))
-
-        local_opt_in_target = Path(tmp) / "local-config-opt-in"
-        prepare_review_target(local_opt_in_target, "review run local config opt-in")
-        (local_opt_in_target / ".loom/review-profiles.json").write_text(
-            json.dumps(
-                {
-                    "schema_version": "loom-review-profiles/v1",
-                    "allow_local_codex_config_in_ci": True,
-                    "profiles": {},
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(local_opt_in_target),
-                "--item",
-                "INIT-0001",
-                "--engine-use-local-codex-defaults",
-                "--engine-override-reason",
-                "fixture explicitly opts into local Codex defaults",
-            ],
-            env=prepend_path_env(fake_bin, {"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` local config opt-in failed: {error}"))
-        else:
-            engine = payload.get("engine") if isinstance(payload, dict) and isinstance(payload.get("engine"), dict) else {}
-            profile = engine.get("profile") if isinstance(engine.get("profile"), dict) else {}
-            source = profile.get("profile_source") if isinstance(profile.get("profile_source"), dict) else {}
-            if profile.get("model") != "gpt-local-fixture" or profile.get("reasoning_effort") != "xhigh":
-                failures.append(Failure("daily-execution-cli", "`review run` local config opt-in must consume local model and reasoning"))
-            if source.get("kind") != "local-codex-config-opt-in" or not isinstance(profile.get("override"), dict):
-                failures.append(Failure("daily-execution-cli", "`review run` local config opt-in must record override evidence and source"))
-
-        local_headless_target = Path(tmp) / "local-config-headless-rejected"
-        prepare_review_target(local_headless_target, "review run local config headless rejected")
-        (local_headless_target / ".loom/review-profiles.json").unlink(missing_ok=True)
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(local_headless_target),
-                "--item",
-                "INIT-0001",
-                "--engine-use-local-codex-defaults",
-                "--engine-override-reason",
-                "fixture proves headless rejects local Codex defaults by default",
-            ],
-            env=prepend_path_env(fake_bin, {"CI": "", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` local config headless rejected failed: {error}"))
-        elif payload.get("result") != "block":
-            failures.append(Failure("daily-execution-cli", "`review run` local config opt-in must be rejected in headless fallback by default"))
-        elif "local Codex config opt-in is disabled" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
-            failures.append(Failure("daily-execution-cli", "`review run` local config headless rejection must expose stable failure reason"))
-
-        local_ci_target = Path(tmp) / "local-config-ci-rejected"
-        prepare_review_target(local_ci_target, "review run local config CI rejected")
-        (local_ci_target / ".loom/review-profiles.json").unlink(missing_ok=True)
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(local_ci_target),
-                "--item",
-                "INIT-0001",
-                "--engine-use-local-codex-defaults",
-                "--engine-override-reason",
-                "fixture proves CI rejects local Codex defaults by default",
-            ],
-            env=prepend_path_env(fake_bin, {"CI": "true", "CODEX_CI": "", "CODEX_HOME": str(local_codex_home)}),
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` local config CI rejected failed: {error}"))
-        elif payload.get("result") != "block":
-            failures.append(Failure("daily-execution-cli", "`review run` local config opt-in must be rejected in CI by default"))
-        elif "local Codex config opt-in is disabled" not in json.dumps(payload.get("missing_inputs"), ensure_ascii=False):
-            failures.append(Failure("daily-execution-cli", "`review run` local config CI rejection must expose stable failure reason"))
-
-        engine_missing_target = Path(tmp) / "engine-missing"
-        prepare_review_target(engine_missing_target, "review run engine unavailable")
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(engine_missing_target),
-                "--item",
-                "INIT-0001",
-            ],
-            env={"PATH": "/usr/bin:/bin"},
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` engine unavailable failed: {error}"))
-        elif payload.get("result") != "block":
-            failures.append(Failure("daily-execution-cli", "`review run` must block when the default engine is unavailable"))
-        else:
-            require_review_run_payload(
-                failures,
-                category="daily-execution-cli",
-                context="`review run` engine unavailable",
-                payload=payload,
-                expected_result={"block"},
-            )
-            engine = payload.get("engine")
-            if isinstance(engine, dict) and engine.get("failure_reason") != "engine_unavailable":
-                failures.append(Failure("daily-execution-cli", "`review run` must report `engine_unavailable` when Codex is missing"))
-            if payload.get("fallback_to") is not None:
-                failures.append(Failure("daily-execution-cli", "`review run` must not convert engine failure into checkpoint fallback"))
-
-        schema_target = Path(tmp) / "schema-drift"
-        prepare_review_target(schema_target, "review run schema drift")
-        write_fake_codex(fake_bin / "codex", mode="schema_drift")
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(schema_target),
-                "--item",
-                "INIT-0001",
-            ],
-            env=success_env,
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` schema drift failed: {error}"))
-        elif payload.get("result") != "block":
-            failures.append(Failure("daily-execution-cli", "`review run` must block on schema drift"))
-        else:
-            require_review_run_payload(
-                failures,
-                category="daily-execution-cli",
-                context="`review run` schema drift",
-                payload=payload,
-                expected_result={"block"},
-            )
-            engine = payload.get("engine")
-            if isinstance(engine, dict) and engine.get("failure_reason") != "schema_drift":
-                failures.append(Failure("daily-execution-cli", "`review run` must report `schema_drift` for invalid engine output"))
-
-        dirty_target = Path(tmp) / "tracked-edit"
-        prepare_review_target(dirty_target, "review run tracked edit")
-        write_fake_codex(fake_bin / "codex", mode="tracked_edit", tracked_edit_target=".loom/status/current.md")
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "review",
-                "run",
-                "--target",
-                str(dirty_target),
-                "--item",
-                "INIT-0001",
-            ],
-            env=success_env,
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`review run` tracked edit failed: {error}"))
-        elif payload.get("result") != "block":
-            failures.append(Failure("daily-execution-cli", "`review run` must block when engine modifies tracked repo content"))
-        else:
-            require_review_run_payload(
-                failures,
-                category="daily-execution-cli",
-                context="`review run` tracked edit",
-                payload=payload,
-                expected_result={"block"},
-            )
-            engine = payload.get("engine")
-            if isinstance(engine, dict) and engine.get("failure_reason") != "repo_diff_detected":
-                failures.append(Failure("daily-execution-cli", "`review run` must report `repo_diff_detected` when tracked files change"))
 
     flow_tmp_path: Path | None = None
     with loom_check_temporary_directory(prefix="loom-check-flow-") as tmp:
@@ -21578,6 +21593,12 @@ Human-readable PR text.
     return failures
 
 
+def source_surface_includes(requested_surface: str, step_surface: str) -> bool:
+    if requested_surface == SOURCE_SURFACE_FULL or requested_surface == step_surface:
+        return True
+    return step_surface in SOURCE_SURFACE_GROUPS.get(requested_surface, set())
+
+
 def collect_source_failures(root: Path, source_surface: str = SOURCE_SURFACE_FULL) -> list[Failure]:
     failures: list[Failure] = []
     steps: list[tuple[str, str, object]] = [
@@ -21601,6 +21622,7 @@ def collect_source_failures(root: Path, source_surface: str = SOURCE_SURFACE_FUL
         (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "root-self-adoption", lambda: check_root_self_adoption_carrier(root)),
         (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "deep-existing-bootstrap", lambda: check_deep_existing_repo_bootstrap(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "py-compile-cache-hygiene-pre", lambda: check_py_compile_cache_hygiene(root)),
+        (SOURCE_SURFACE_REVIEW_RUN, "review-run", lambda: check_review_run_fixture(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "daily-execution-cli", lambda: check_daily_execution_cli(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "py-compile-cache-hygiene", lambda: check_py_compile_cache_hygiene(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "repo-companion", lambda: check_repo_companion_interface_contracts(root)),
@@ -21641,7 +21663,7 @@ def collect_source_failures(root: Path, source_surface: str = SOURCE_SURFACE_FUL
         (SOURCE_SURFACE_CONTRACT_ONLY, "markdown-links", lambda: check_markdown_links(root)),
     ]
     for surface, name, callback in steps:
-        if source_surface not in {SOURCE_SURFACE_FULL, surface}:
+        if not source_surface_includes(source_surface, surface):
             continue
         started = time.monotonic()
         print(f"loom_check: start source surface={surface} step={name}", file=sys.stderr)
@@ -21720,7 +21742,7 @@ def check_loom_check_profile_contract(root: Path) -> list[Failure]:
     source_text = (root / "src/skills/shared/scripts/loom_check.py").read_text(encoding="utf-8")
     if "source/distribution" not in source_text or "--profile" not in source_text:
         failures.append(Failure(category, "`loom_check.py` must document source/distribution scope and expose `--profile`"))
-    for anchor in ("--source-surface", "contract-only", "bootstrap-regression", "distribution-regression", "loom_check: start source surface="):
+    for anchor in ("--source-surface", "contract-only", "source-self-fixture", "review-run", "bootstrap-regression", "distribution-regression", "loom_check: start source surface="):
         if anchor not in source_text:
             failures.append(Failure(category, f"`loom_check.py` must expose source surface contract anchor `{anchor}`"))
     init_text = (root / "src/skills/shared/scripts/loom_init.py").read_text(encoding="utf-8")
