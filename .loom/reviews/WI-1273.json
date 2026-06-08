@@ -3,11 +3,11 @@
   "item_id": "WI-1273",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1273 implementation review approved: PR #1368 adds the named governance-closeout CLI contract surface by moving closeout and reconciliation checks behind shared helpers while preserving aggregate check-cli-contract behavior. The diff is limited to tools/check_cli_contract.py plus minimal WI-1273 Loom carriers/shadow evidence, does not implement #1274 adoption-host-metadata or #1257 closeout, does not change task-carrier runtime validation semantics, hosted workflows, metadata schema, or release behavior, and local review validation passed for governance-closeout surface, PR metadata/head binding, fact-chain, suite not_applicable rationale, shadow parity, and diff hygiene. No findings.",
+  "summary": "WI-1273 closeout carrier review approved: implementation PR #1368 is merged, issue #1273 is closed as COMPLETED, and this closeout-only diff terminalizes WI-1273 progress/status/shadow evidence without changing tools/check_cli_contract.py, governance closeout behavior, hosted workflows, metadata schema, release behavior, or #1274/#1257 scope. No findings.",
   "reviewer": "codex-scheduler",
-  "authored_at": "2026-06-07T23:58:04Z",
-  "reviewed_head": "011440ac6b02dc0c9243a918a0af5444264910eb",
-  "reviewed_validation_summary": "2026-06-08 local implementation validation passed: `python3 tools/check_cli_contract.py --list-surfaces` lists `governance-closeout`; `python3 tools/check_cli_contract.py --surface governance-closeout` passed in 31.62s after WI-1273 carrier activation; `python3 tools/check_cli_contract.py` aggregate compatibility passed in 221.33s; `python3 tools/loom.py fact-chain --target . --json` passed; `python3 tools/loom.py suite validate --target . --item WI-1273 --json` returned formal-suite `result: not_applicable` with no blocking gaps; `git diff --check` passed.",
+  "authored_at": "2026-06-08T00:26:20Z",
+  "reviewed_head": "2c90e47cca36000686d40ce73c51bf3c134c5adb",
+  "reviewed_validation_summary": "2026-06-08 post-merge closeout readback for WI-1273: PR #1368 merged through the controlled merge wrapper at 2026-06-08T00:18:08Z with merge commit `5b8477874be1521d077689adc6234258b57c24bb`; issue #1273 closed as COMPLETED at 2026-06-08T00:19:39Z with closeout evidence comment https://github.com/MC-and-his-Agents/Loom/issues/1273#issuecomment-4644551818; final hosted checks for head `7e521409b2dba2f648bf91fd024901655a66cfb7` passed (`py-compile`, `demo-bootstrap`, `repo-local-cli`, `root-self-governance`, `loom-check`, `loom-pr-merge-gate`, and `release-judgment`); `python3 tools/loom.py carrier closeout-sync --target . --item WI-1273 --terminal-state closed_out --issue 1273 --pr 1368 --merge-commit 5b8477874be1521d077689adc6234258b57c24bb --target-branch main --closed-at 2026-06-08T00:19:39Z --evidence-locator https://github.com/MC-and-his-Agents/Loom/issues/1273#issuecomment-4644551818 --apply --json` passed with `host_mutations=false`.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -16,23 +16,7 @@
     "work_item": ".loom/work-items/WI-1273.md",
     "recovery_entry": ".loom/progress/WI-1273.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pass",
-    "budget_risk": {
-      "schema_version": "loom-execution-budget-risk/v1",
-      "status": "not_applicable",
-      "enforcement": "advisory",
-      "highest_risk": "none",
-      "risk_dimensions": [],
-      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
-      "budget_summary": "execution budget is not collected for this invocation.",
-      "adapter_evidence_locator": "",
-      "provenance": {
-        "source": "github_host"
-      }
-    },
-    "engine_adapter": null,
-    "engine_evidence": null,
-    "normalized_findings": null,
+    "build_checkpoint": "not_applicable_closed_out_terminal_checkpoint_repair",
     "suite_evidence_validation": "not_applicable",
     "suite_carrier_validation": "not_applicable",
     "suite_evidence_map": null,
@@ -43,6 +27,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored scheduler review approved WI-1273 terminal closeout carrier at closeout head 2c90e47cca36000686d40ce73c51bf3c134c5adb; any later drift is expected to be limited to this review carrier binding."
   }
 }
