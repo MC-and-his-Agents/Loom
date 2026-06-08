@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1274",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1274 implementation review approved: PR #1370 adds a narrow adoption-host-metadata named check_cli_contract surface that reuses the existing metadata-only adoption/host metadata fixture, preserves aggregate check-cli-contract behavior, and changes only tools/check_cli_contract.py plus minimal WI-1274 carriers/shadow evidence. Local focused validation, fact-chain, PR metadata/head binding, and hosted non-review checks passed; remaining hosted failures were the expected missing review artifact gate. No findings.",
+  "reviewer": "codex-scheduler",
+  "authored_at": "2026-06-08T01:13:28Z",
+  "reviewed_head": "428033436f9599d3419ce1a610b42e69aa2e703f",
+  "reviewed_validation_summary": "2026-06-08T00:52:56Z worker validation: `python3 tools/check_cli_contract.py --list-surfaces` passed and listed `adoption-host-metadata` plus `aggregate`; `python3 tools/check_cli_contract.py --surface adoption-host-metadata` passed in 0.74s; `python3 tools/check_cli_contract.py` passed all six surfaces in 217.36s including aggregate `check-cli-contract`; `python3 tools/loom.py fact-chain --target . --json` passed for WI-1274; `python3 tools/loom.py suite validate --target . --item WI-1274 --json` returned expected `not_applicable` with no blocking gaps and exit status 1; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed; `git diff --check` passed. PR metadata/head binding and hosted checks remain pending.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1274.md",
+    "recovery_entry": ".loom/progress/WI-1274.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
