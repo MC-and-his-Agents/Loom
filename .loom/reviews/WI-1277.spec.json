@@ -1,0 +1,51 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1277",
+  "decision": "allow",
+  "kind": "spec_review",
+  "summary": "WI-1277 minimal spec/plan covers merge-gate source surface split, aggregate source-self-fixture compatibility, generated runtime parity, no downstream or release scope expansion; suite validate/evidence/carrier passed on head 02d54f9f409e9017a4d03734d0b3902b611c9415.",
+  "reviewer": "scheduler-thread-019ea5b2-4f32-7232-885c-720fbb3f8855",
+  "authored_at": "2026-06-08T14:42:05Z",
+  "reviewed_head": "02d54f9f409e9017a4d03734d0b3902b611c9415",
+  "reviewed_validation_summary": "2026-06-08 worker validation on the current PR head: `git diff --check origin/main..HEAD`; focused Python compile for canonical/generated/runtime `loom_check.py` files plus `examples/new-project/.loom/bin/loom_check.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills check --target . --json`; `make loom-demo-new-project-check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface merge-gate .` passed with `merge-gate` elapsed 247.06s and failures=0; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface source-self-fixture .` passed with `review-run` elapsed 440.28s, `merge-gate` elapsed 210.42s, and aggregate OK; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1277 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1277 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1277 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .` read back current item WI-1277; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed. PR metadata preflight passed after body readback for the current head. Hosted checks: `py-compile`, `demo-bootstrap`, `repo-local-cli`, and `release-judgment` passed; `loom-check`, node installer `gate`, `root-self-governance`, and `loom-pr-merge-gate` are blocked by scheduler-owned missing review/spec review artifacts, with the earliest PR gate run also carrying stale pre-body-update metadata diagnostics that local readback has since cleared.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1277.md",
+    "recovery_entry": ".loom/progress/WI-1277.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/.codex/worktrees/39fe/Loom/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1277/spec.md",
+    "suite_plan": ".loom/specs/WI-1277/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1277/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1277/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
+}

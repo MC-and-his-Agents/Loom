@@ -2,34 +2,34 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1276
-- Goal: Complete issue #1276 by splitting source-self review-run fixtures into a stable named source surface while preserving review contract assertions, aggregate `source-self-fixture` behavior, and full source profile compatibility.
-- Scope: Allowed: `loom_check.py` source surface naming/runner contract for review-run fixtures; generated skills runtime `loom_check.py` parity sync; #1276 progress/status/PR metadata. Excluded: #1277/#1278/#1279/#1280 implementation, #1258 parent closeout, Round 4/Round 6+/Deferred roadmap work, release/package/workflow behavior, and scheduler-owned review/merge/closeout gates.
-- Execution Path: issue #1276 -> branch `work/1276-source-self-review-run-fixtures` -> named `review-run` source surface -> generated skills runtime parity -> focused review-run validation -> aggregate source-self-fixture validation -> PR metadata/head binding -> scheduler-owned gate.
+- Item ID: WI-1277
+- Goal: Complete issue #1277 by splitting source-self merge, PR, merge-ready, checkpoint merge, stale review, CI bypass, required gate, and ruleset fixtures into a stable named `merge-gate` source surface while preserving fail-closed behavior, aggregate `source-self-fixture` behavior, and full source profile compatibility.
+- Scope: Allowed: `loom_check.py` source surface naming/runner contract for merge-gate fixtures; generated skills runtime `loom_check.py` parity sync; WI-1277 progress/status/spec/evidence carriers; PR metadata for the #1277 PR. Excluded: #1278 closeout-reconciliation, #1279 retire-workspace, #1280 installed-runtime, #1258 parent closeout, Round 4/Round 6+/Deferred roadmap work, release/package/workflow behavior, and scheduler-owned review/merge/closeout gates.
+- Execution Path: issue #1277 -> branch `work/1277-source-self-merge-gate-fixtures` -> named `merge-gate` source surface -> generated skills runtime parity -> focused merge-gate validation -> aggregate source-self-fixture validation -> PR metadata/head binding -> scheduler-owned gate.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1276.md
-- Review Entry: .loom/reviews/WI-1276.json
-- Validation Entry: `git diff --check`; `python3 tools/py_compile_clean.py ...`; `python3 tools/loom.py suite validate --target . --item WI-1276 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1276 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1276 --json`; `python3 tools/loom.py skills check --target . --json`; `python3 tools/loom_check.py --profile source --source-surface review-run .`; `python3 tools/loom_check.py --profile source --source-surface source-self-fixture .`; root/demo runtime-state drift checks.
-- Closing Condition: PR for #1276 is current-head reviewed and merged through scheduler-owned gate; issue #1276 is closed/completed; downstream #1277 may start only after #1276 merge/readback. Parent #1258 remains open until all children close.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1276 is closed out: PR #1374 was merged into `main` by scheduler-owned controlled merge at 2026-06-08T11:04:46Z with merge commit `17a3eea8cea59014628fa60f38bc06baf1fc8d3d`; issue #1276 is CLOSED/COMPLETED at 2026-06-08T11:04:47Z; repo closeout check/sync consumed PR, issue, required checks, review, suite evidence, and target branch readback. Downstream #1277/#1278/#1279/#1280 are now dependency-unblocked but not started in this closeout.
-- Next Step: Reassess Round 5 downstream write ownership and start only dependency-ready #1277-#1280 workers with the shared source-surface contract from #1276.
+- Recovery Entry: .loom/progress/WI-1277.md
+- Review Entry: .loom/reviews/WI-1277.json
+- Validation Entry: `git diff --check`; focused Python compile for changed runtime/check files; `python3 tools/loom.py skills check --target . --json`; `python3 tools/loom_check.py --profile source --source-surface merge-gate .`; `python3 tools/loom_check.py --profile source --source-surface source-self-fixture .`; suite/fact-chain/carrier/shadow/PR metadata preflight/readback checks; hosted PR checks.
+- Closing Condition: PR for #1277 is current-head reviewed and merged through scheduler-owned gate; issue #1277 is closed/completed; downstream #1278 may start only after #1277 merge/readback. Parent #1258 remains open until all children close.
+- Current Checkpoint: merge
+- Current Stop: Scheduler-owned current-head spec/implementation review artifacts are recorded and locally consumed for PR #1376 at head c185ededf1342e65f137180fc4410204debf9218; worker scope remains unchanged, PR metadata readback is head-bound, and remaining action is merge gate consumption.
+- Next Step: Run scheduler-owned merge checkpoint, pr-gate check, hosted gate readback, then controlled merge/readback/closeout for #1277 if gates pass.
 - Blockers: None
-- Latest Validation Summary: 2026-06-08 post-merge closeout readback for WI-1276: PR #1374 is MERGED at 2026-06-08T11:04:46Z with head `42a68e2e86eaa28cd8d1fa48fd31167d63dc0e3f` and merge commit `17a3eea8cea59014628fa60f38bc06baf1fc8d3d`; issue #1276 is CLOSED/COMPLETED at 2026-06-08T11:04:47Z; `origin/main` readback is `17a3eea8cea59014628fa60f38bc06baf1fc8d3d`; hosted required checks for the retained PR head passed (`py-compile`, `demo-bootstrap`, `repo-local-cli`, `loom-check`, `loom-pr-merge-gate`); scheduler-owned controlled merge wrapper returned `result=pass`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_flow.py closeout sync --target . --issue 1276 --pr 1374 --branch work/1276-source-self-review-run-fixtures --skip-gate` returned `result=pass`.
-- Recovery Boundary: #1276 is terminal. Do not modify #1277/#1278/#1279/#1280 implementations in this closeout branch, do not terminalize #1258, do not change release/package/workflow behavior, and treat this evidence as post-merge closeout consumption.
-- Current Lane: source-self-review-run-fixtures
+- Latest Validation Summary: 2026-06-08 worker validation on the current PR head: `git diff --check origin/main..HEAD`; focused Python compile for canonical/generated/runtime `loom_check.py` files plus `examples/new-project/.loom/bin/loom_check.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills check --target . --json`; `make loom-demo-new-project-check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface merge-gate .` passed with `merge-gate` elapsed 247.06s and failures=0; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface source-self-fixture .` passed with `review-run` elapsed 440.28s, `merge-gate` elapsed 210.42s, and aggregate OK; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1277 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1277 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1277 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .` read back current item WI-1277; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed. PR metadata preflight passed after body readback for the current head. Hosted checks: `py-compile`, `demo-bootstrap`, `repo-local-cli`, and `release-judgment` passed; `loom-check`, node installer `gate`, `root-self-governance`, and `loom-pr-merge-gate` are blocked by scheduler-owned missing review/spec review artifacts, with the earliest PR gate run also carrying stale pre-body-update metadata diagnostics that local readback has since cleared.
+- Recovery Boundary: Complete #1277 only. Do not implement #1278 closeout-reconciliation, #1279 retire-workspace, #1280 installed-runtime, #1258 parent closeout, release/package/workflow behavior, or scheduler-owned review/merge/closeout gates.
+- Current Lane: source-self-merge-gate-fixtures
 
 ## Runtime Evidence
 
 - Run Entry: not_applicable
-- Logs Entry: local command outputs in worker thread 019ea5b8-57e8-7123-b5ba-50c03a32385e
-- Diagnostics Entry: resolved generated skills parity drift and resolved bootstrapped runtime manifest drift by reverting unmanifested `.loom/bin/loom_check.py` edits.
-- Verification Entry: post-merge closeout readback consumed PR #1374 MERGED, merge commit `17a3eea8cea59014628fa60f38bc06baf1fc8d3d`, issue #1276 CLOSED/COMPLETED, required hosted checks passed, and `closeout sync` result pass.
-- Lane Entry: source-self-review-run-fixtures
+- Logs Entry: local command outputs in worker thread 019ea73d-a24c-70f3-8a15-5e4ec80e5e91
+- Diagnostics Entry: `merge-gate` source surface added through canonical runtime and generated skills sync; no release/package/workflow behavior changes expected.
+- Verification Entry: Local validation passed for focused `merge-gate`, aggregate `source-self-fixture`, generated skills parity, suite validate/evidence/carrier validate, fact-chain readback, PR metadata readback, and worker-owned hosted checks; scheduler-owned review artifacts and final gate remain pending.
+- Lane Entry: source-self-merge-gate-fixtures
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1276.md
-- Dynamic Truth: .loom/progress/WI-1276.md
+- Static Truth: .loom/work-items/WI-1277.md
+- Dynamic Truth: .loom/progress/WI-1277.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

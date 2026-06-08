@@ -1,0 +1,58 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1277",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Current-head implementation review approves the merge-gate fixture split: canonical/generated loom_check.py expose merge-gate, source-self-fixture aggregate includes review-run and merge-gate, daily execution gate fixture remains fail-closed, demo/runtime parity is refreshed, and diff stays within WI-1277 runtime/carrier scope.",
+  "reviewer": "scheduler-thread-019ea5b2-4f32-7232-885c-720fbb3f8855",
+  "authored_at": "2026-06-08T14:44:22Z",
+  "reviewed_head": "d8a0b332f724150a68395f139a0e456fc92baa6b",
+  "reviewed_validation_summary": "2026-06-08 worker validation on the current PR head: `git diff --check origin/main..HEAD`; focused Python compile for canonical/generated/runtime `loom_check.py` files plus `examples/new-project/.loom/bin/loom_check.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills check --target . --json`; `make loom-demo-new-project-check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface merge-gate .` passed with `merge-gate` elapsed 247.06s and failures=0; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface source-self-fixture .` passed with `review-run` elapsed 440.28s, `merge-gate` elapsed 210.42s, and aggregate OK; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1277 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1277 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1277 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py fact-chain --target .` read back current item WI-1277; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed. PR metadata preflight passed after body readback for the current head. Hosted checks: `py-compile`, `demo-bootstrap`, `repo-local-cli`, and `release-judgment` passed; `loom-check`, node installer `gate`, `root-self-governance`, and `loom-pr-merge-gate` are blocked by scheduler-owned missing review/spec review artifacts, with the earliest PR gate run also carrying stale pre-body-update metadata diagnostics that local readback has since cleared.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1277.md",
+    "recovery_entry": ".loom/progress/WI-1277.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "unavailable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/branches/main\": EOF",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_control_plane",
+        "error_count": 1
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/39fe/Loom/tools/loom.py suite evidence validate --target /Users/mc/.codex/worktrees/39fe/Loom --item WI-1277 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/39fe/Loom/tools/loom.py suite carrier validate --target /Users/mc/.codex/worktrees/39fe/Loom --item WI-1277 --json",
+    "suite_evidence_map": ".loom/specs/WI-1277/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1277/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
