@@ -3,10 +3,10 @@
   "item_id": "WI-1257",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Scheduler semantic review allows PR #1373 at head `92b55faea2af813b08906aedb314195855b5b2ca`: the reviewed closeout-only diff is limited to WI-1257 post-merge closeout carriers, shadows, spec evidence, review carrier, and status. It consumes PR #1372 merged facts. No `tools/check_cli_contract.py` implementation behavior, hosted workflow behavior, metadata schema, release mechanics, child WI terminal facts, Round 5, Deferred roadmap, issue closure, or unrelated scope changed.",
+  "summary": "Scheduler semantic review allows PR #1373 at head `4049436a1d67d50119e8e9bd89f846cba72bc0b8`: the reviewed closeout-only diff is limited to WI-1257 post-merge closeout carriers, shadows, spec evidence, review carrier, and status. It consumes PR #1372 merged facts. No `tools/check_cli_contract.py` implementation behavior, hosted workflow behavior, metadata schema, release mechanics, child WI terminal facts, Round 5, Deferred roadmap, issue closure, or unrelated scope changed.",
   "reviewer": "codex-scheduler",
   "authored_at": "2026-06-08T04:25:00Z",
-  "reviewed_head": "92b55faea2af813b08906aedb314195855b5b2ca",
+  "reviewed_head": "4049436a1d67d50119e8e9bd89f846cba72bc0b8",
   "reviewed_validation_summary": "2026-06-08 post-merge closeout-only readback for WI-1257: worker T7 formal worksite `/Users/mc/.codex/worktrees/068b/Loom` is on branch `work/1257-check-cli-surfaces-postmerge-closeout`, tracks `origin/work/1257-check-cli-surfaces-postmerge-closeout`, and starts from `origin/main` merge commit `2774ca17cdeb4c81302f2153307ea00ac2e66c62`. GitHub readback confirms PR #1372 MERGED at 2026-06-08T03:53:57Z with head `e11ad27890a9966d8dbec43a514eeec619533c12` and merge commit `2774ca17cdeb4c81302f2153307ea00ac2e66c62`; issue #1257 remains OPEN and must be closed only by the scheduler after the closeout-only PR gate. Prior child closeout readback remains terminal for #1270 CLOSED/COMPLETED at 2026-06-07T18:33:48Z, #1271 CLOSED/COMPLETED at 2026-06-07T21:16:50Z, #1272 CLOSED/COMPLETED at 2026-06-07T22:54:08Z, #1273 CLOSED/COMPLETED at 2026-06-08T00:19:39Z, and #1274 CLOSED/COMPLETED at 2026-06-08T01:31:09Z. Closeout-only local validation passed before PR creation: `python3 .loom/bin/loom_init.py fact-chain --target .`; `python3 tools/loom.py fact-chain --target . --json`; `python3 tools/loom.py suite validate --target . --item WI-1257 --json` => `not_applicable` with no blocking gaps; `python3 tools/loom.py suite evidence validate --target . --item WI-1257 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1257 --json`; `python3 .loom/bin/loom_flow.py adopt verify --target . --item WI-1257`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `python3 .loom/bin/loom_flow.py carrier refresh --target . --dry-run`; and `git diff --check`. Post-merge evidence is explicitly post-merge and does not replace scheduler-owned review, controlled merge, issue closure, or final Round 4 closeout readback.",
   "fallback_to": null,
   "findings": [],
@@ -28,11 +28,11 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Scheduler reviewed PR #1373 closeout-only diff at head 92b55faea2af813b08906aedb314195855b5b2ca and found it limited to WI-1257 post-merge closeout carriers, shadows, spec evidence, review carrier, and status; it consumes PR #1372 merged facts without implementation semantics, workflows, metadata schema, release, child WI terminal facts, Round 5, Deferred roadmap, issue closure, or unrelated scope."
+    "reason": "Scheduler reviewed PR #1373 closeout-only diff at head 4049436a1d67d50119e8e9bd89f846cba72bc0b8 and found it limited to WI-1257 post-merge closeout carriers, shadows, spec evidence, review carrier, and status; it consumes PR #1372 merged facts without implementation semantics, workflows, metadata schema, release, child WI terminal facts, Round 5, Deferred roadmap, issue closure, or unrelated scope."
   },
   "head_binding": {
-    "reviewed_head": "92b55faea2af813b08906aedb314195855b5b2ca",
-    "current_head": "92b55faea2af813b08906aedb314195855b5b2ca",
+    "reviewed_head": "4049436a1d67d50119e8e9bd89f846cba72bc0b8",
+    "current_head": "4049436a1d67d50119e8e9bd89f846cba72bc0b8",
     "status": "carrier-only",
     "stale": false,
     "changed_paths": [
