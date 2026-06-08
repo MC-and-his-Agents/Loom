@@ -4105,6 +4105,41 @@ def assert_suite_carrier_aggregate_fixtures(tmp: Path) -> None:
         raise AssertionError("suite carrier validate deferred-completed payload drifted")
 
 
+def assert_governance_closeout_help_contract() -> None:
+    _, help_payload = run_json(["help", "--json"], expect=0)
+    matrix = {entry["command"]: entry for entry in help_payload["commands"]}
+    for command in ("reconcile", "gate closeout", "closeout"):
+        if matrix[command]["status"] != "implemented":
+            raise AssertionError(f"{command} must be implemented for governance closeout")
+    if matrix["carrier closeout-sync"]["status"] != "implemented" or matrix["carrier closeout-sync"]["domain"] != "harness":
+        raise AssertionError("carrier closeout-sync must be declared as a harness command for #1231")
+
+
+def assert_active_closeout_contract(active_item: str) -> None:
+    status, closeout_payload = run_json(["closeout", "--target", str(REPO_ROOT), "--json"])
+    if closeout_payload["command"] != "closeout" or closeout_payload.get("schema_version") != "loom-scenario-control/v1":
+        raise AssertionError("closeout did not wrap the closeout check runtime")
+    if closeout_payload.get("result") not in {"pass", "block", "fallback"}:
+        raise AssertionError("closeout did not emit a structured pass/block/fallback result")
+    assert_suite_gate_consumption(closeout_payload, expected_surface="closeout")
+    if status == 0:
+        assert_closeout_blocks_missing_suite_evidence(active_item)
+
+
+def run_governance_closeout_contract() -> None:
+    assert_governance_closeout_help_contract()
+    active_item = active_work_item_id()
+    assert_active_closeout_contract(active_item)
+    assert_reconciliation_suite_taxonomy_contract()
+    with tempfile.TemporaryDirectory(prefix="loom-governance-closeout-") as raw_tmp:
+        tmp = Path(raw_tmp)
+        assert_docs_contract_suite_not_applicable_gate_contract(tmp)
+        assert_governance_chain_closeout_fixture(tmp)
+        assert_carrier_closeout_sync_contract(tmp)
+
+    print("governance closeout surface checks passed")
+
+
 def run_aggregate_cli_contract() -> None:
     _, help_payload = run_json(["help", "--json"], expect=0)
     matrix = {entry["command"]: entry for entry in help_payload["commands"]}
@@ -4189,8 +4224,7 @@ def run_aggregate_cli_contract() -> None:
         raise AssertionError("suite carrier inspect must be declared in help matrix for #1131")
     if matrix["suite carrier validate"]["status"] != "implemented" or matrix["suite carrier validate"]["domain"] != "suite":
         raise AssertionError("suite carrier validate must be declared in help matrix for #1131")
-    if matrix["carrier closeout-sync"]["status"] != "implemented" or matrix["carrier closeout-sync"]["domain"] != "harness":
-        raise AssertionError("carrier closeout-sync must be declared as a harness command for #1231")
+    assert_governance_closeout_help_contract()
 
     _, version_payload = run_json(["version", "--json"], expect=0)
     if version_payload["result"] != "pass" or not version_payload["versions"]["repo_version"]:
@@ -5269,11 +5303,7 @@ def run_aggregate_cli_contract() -> None:
         status, retire_payload = run_json(["retire", "--target", str(REPO_ROOT), "--item", "WI-924", "--json"])
         if retire_payload["command"] != "retire" or not retire_payload.get("retire_contract"):
             raise AssertionError("retire did not expose structured non-mutating contract")
-        _, closeout_payload = run_json(["closeout", "--target", str(REPO_ROOT), "--json"], expect=0)
-        if closeout_payload["command"] != "closeout" or closeout_payload.get("schema_version") != "loom-scenario-control/v1":
-            raise AssertionError("closeout did not wrap the closeout check runtime")
-        assert_suite_gate_consumption(closeout_payload, expected_surface="closeout")
-        assert_closeout_blocks_missing_suite_evidence(active_item)
+        assert_active_closeout_contract(active_item)
         assert_reconciliation_suite_taxonomy_contract()
         assert_docs_contract_suite_not_applicable_gate_contract(tmp)
         assert_governance_intensity_metadata_preflight_fixture(tmp)
@@ -5886,6 +5916,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="suite-carrier",
             fixture_group="suite-carrier",
             run=run_suite_carrier_surface,
+        ),
+        SurfaceCheck(
+            name="governance-closeout",
+            fixture_group="governance-closeout",
+            run=run_governance_closeout_contract,
         ),
         SurfaceCheck(
             name="aggregate",
