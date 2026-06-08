@@ -4140,6 +4140,13 @@ def run_governance_closeout_contract() -> None:
     print("governance closeout surface checks passed")
 
 
+def run_adoption_host_metadata_surface() -> None:
+    with tempfile.TemporaryDirectory(prefix="loom-adoption-host-metadata-") as raw_tmp:
+        assert_metadata_only_adoption_contract(Path(raw_tmp))
+
+    print("adoption host metadata surface checks passed")
+
+
 def run_aggregate_cli_contract() -> None:
     _, help_payload = run_json(["help", "--json"], expect=0)
     matrix = {entry["command"]: entry for entry in help_payload["commands"]}
@@ -5921,6 +5928,11 @@ def available_surface_checks() -> tuple[SurfaceCheck, ...]:
             name="governance-closeout",
             fixture_group="governance-closeout",
             run=run_governance_closeout_contract,
+        ),
+        SurfaceCheck(
+            name="adoption-host-metadata",
+            fixture_group="adoption-host-metadata",
+            run=run_adoption_host_metadata_surface,
         ),
         SurfaceCheck(
             name="aggregate",
