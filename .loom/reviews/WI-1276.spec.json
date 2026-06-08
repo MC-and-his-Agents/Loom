@@ -1,17 +1,51 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1276",
-  "decision": "fallback",
+  "decision": "allow",
   "kind": "spec_review",
-  "summary": "Formal spec review has not been completed yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "4305dd5015c61432cb49e4fd0d553f8bdc91fab2",
-  "reviewed_validation_summary": "Spec, plan, evidence map, and task carrier are present for WI-1276; current-head spec review remains scheduler-owned.",
-  "fallback_to": "admission",
-  "blocking_issues": [
-    "Spec gate remains open until the scheduler-owned formal spec review is recorded for the current PR head."
-  ],
-  "follow_ups": [
-    "Record a spec_review decision before implementation review or merge-ready consumes the formal spec path."
-  ]
+  "summary": "Scheduler-owned current-head spec review for WI-1276 passes: minimal suite path is valid, scope remains bounded to review-run source surface split, deferred #1277-#1280/#1258 items are not marked complete, and no release/package/workflow expansion is present.",
+  "reviewer": "scheduler-thread-019ea5b2-4f32-7232-885c-720fbb3f8855",
+  "authored_at": "2026-06-08T10:13:38Z",
+  "reviewed_head": "e92bd196d9f794f8266dad68d956c6e731d767b0",
+  "reviewed_validation_summary": "2026-06-08 local validation passed: `git diff --check`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py skills/shared/scripts/loom_check.py src/skills/shared/scripts/loom_check.py skills/loom-adopt/.loom-runtime/shared/scripts/loom_check.py skills/loom-build/.loom-runtime/shared/scripts/loom_check.py skills/loom-handoff/.loom-runtime/shared/scripts/loom_check.py skills/loom-init/.loom-runtime/shared/scripts/loom_check.py skills/loom-merge-ready/.loom-runtime/shared/scripts/loom_check.py skills/loom-pre-review/.loom-runtime/shared/scripts/loom_check.py skills/loom-resume/.loom-runtime/shared/scripts/loom_check.py skills/loom-retire/.loom-runtime/shared/scripts/loom_check.py skills/loom-review/.loom-runtime/shared/scripts/loom_check.py skills/loom-spec-review/.loom-runtime/shared/scripts/loom_check.py skills/loom-story/.loom-runtime/shared/scripts/loom_check.py tools/loom_check.py tools/check_loom_check_runtime_regressions.py`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite validate --target . --item WI-1276 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite evidence validate --target . --item WI-1276 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py suite carrier validate --target . --item WI-1276 --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom.py skills check --target . --json`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface review-run .`; `PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface source-self-fixture .`; `PYTHONDONTWRITEBYTECODE=1 python3 .loom/bin/loom_init.py runtime-state --target .`; `PYTHONDONTWRITEBYTECODE=1 python3 examples/new-project/.loom/bin/loom_init.py runtime-state --target examples/new-project`.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1276.md",
+    "recovery_entry": ".loom/progress/WI-1276.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_validation": "suite validate",
+    "suite_validator": "/Users/mc/.codex/worktrees/1d92/Loom/tools/loom.py",
+    "suite_validator_mode": "repo-local-cli",
+    "suite_spec": ".loom/specs/WI-1276/spec.md",
+    "suite_plan": ".loom/specs/WI-1276/plan.md",
+    "suite_evidence_map": ".loom/specs/WI-1276/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1276/task-carrier.md"
+    ],
+    "suite_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/spec-suite.md"
+    ]
+  }
 }
