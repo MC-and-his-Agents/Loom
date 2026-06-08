@@ -1,0 +1,17 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1276",
+  "decision": "fallback",
+  "kind": "spec_review",
+  "summary": "Formal spec review has not been completed yet.",
+  "reviewer": "not yet assigned",
+  "reviewed_head": "4305dd5015c61432cb49e4fd0d553f8bdc91fab2",
+  "reviewed_validation_summary": "Spec, plan, evidence map, and task carrier are present for WI-1276; current-head spec review remains scheduler-owned.",
+  "fallback_to": "admission",
+  "blocking_issues": [
+    "Spec gate remains open until the scheduler-owned formal spec review is recorded for the current PR head."
+  ],
+  "follow_ups": [
+    "Record a spec_review decision before implementation review or merge-ready consumes the formal spec path."
+  ]
+}
