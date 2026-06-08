@@ -3,11 +3,11 @@
   "item_id": "WI-1257",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1257 parent closeout carrier review remains approved for scheduler gate consumption after the review-carrier validation-summary sync head `d69c3b0afd5d50a9ff300c043cd80967c5c1a48b`: the active PR #1372 diff remains limited to WI-1257 work-item/progress/spec/review carriers, status activation, bootstrap fact-chain metadata, and merge-ready/closeout shadow synchronization. No `tools/check_cli_contract.py` implementation behavior, child WI terminal facts, hosted workflow behavior, metadata schema, release mechanics, or Round 5 scope are changed.",
+  "summary": "WI-1257 post-merge closeout-only carrier review remains approved for scheduler gate consumption after PR #1372 merged into `main` at `2774ca17cdeb4c81302f2153307ea00ac2e66c62`: the current closeout-only diff is limited to WI-1257 progress/status/spec evidence carriers, review-carrier rebinding, and merge-ready/closeout shadow synchronization. No `tools/check_cli_contract.py` implementation behavior, child WI terminal facts, hosted workflow behavior, metadata schema, release mechanics, issue closure, or Round 5 scope are changed.",
   "reviewer": "codex-scheduler",
   "authored_at": "2026-06-08T03:12:00Z",
   "reviewed_head": "bdea5afa161b7dc2593302ac6f285a82b330f80e",
-  "reviewed_validation_summary": "2026-06-08 parent closeout readiness readback for WI-1257: formal worktree `/Users/mc/.codex/worktrees/c571/Loom` is on branch `work/1257-check-cli-surfaces-closeout`, tracks `origin/work/1257-check-cli-surfaces-closeout`, and merge base with `origin/main` remains `572abe634fbdab48c792ce580f861753cf925c03`. GitHub readback confirms #1270 CLOSED/COMPLETED at 2026-06-07T18:33:48Z, #1271 CLOSED/COMPLETED at 2026-06-07T21:16:50Z, #1272 CLOSED/COMPLETED at 2026-06-07T22:54:08Z, #1273 CLOSED/COMPLETED at 2026-06-08T00:19:39Z, and #1274 CLOSED/COMPLETED at 2026-06-08T01:31:09Z. Local validation passed before hosted readback: `python3 .loom/bin/loom_init.py fact-chain --target .`; `python3 tools/loom.py suite validate --target . --item WI-1257 --json` => `not_applicable`; `python3 tools/loom.py suite evidence validate --target . --item WI-1257 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1257 --json`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface merge_ready --surface closeout --blocking`; and `git diff --check`. PR #1372 is open; PR body was repaired to the live PR head. Hosted readback on the prior run shows `py-compile`, `demo-bootstrap`, and `repo-local-cli` passing; `loom-pr-merge-gate` failed before the PR body repair; `root-self-governance` and `loom-check` failed because `.loom/status/current.md` was stale against `.loom/progress/WI-1257.md`.",
+  "reviewed_validation_summary": "2026-06-08 post-merge closeout-only readback for WI-1257: worker T7 formal worksite `/Users/mc/.codex/worktrees/068b/Loom` is on branch `work/1257-check-cli-surfaces-postmerge-closeout`, tracks `origin/work/1257-check-cli-surfaces-postmerge-closeout`, and starts from `origin/main` merge commit `2774ca17cdeb4c81302f2153307ea00ac2e66c62`. GitHub readback confirms PR #1372 MERGED at 2026-06-08T03:53:57Z with head `e11ad27890a9966d8dbec43a514eeec619533c12` and merge commit `2774ca17cdeb4c81302f2153307ea00ac2e66c62`; issue #1257 remains OPEN and must be closed only by the scheduler after the closeout-only PR gate. Prior child closeout readback remains terminal for #1270 CLOSED/COMPLETED at 2026-06-07T18:33:48Z, #1271 CLOSED/COMPLETED at 2026-06-07T21:16:50Z, #1272 CLOSED/COMPLETED at 2026-06-07T22:54:08Z, #1273 CLOSED/COMPLETED at 2026-06-08T00:19:39Z, and #1274 CLOSED/COMPLETED at 2026-06-08T01:31:09Z. Post-merge evidence is explicitly post-merge and does not replace scheduler-owned review, controlled merge, issue closure, or final Round 4 closeout readback.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -28,24 +28,21 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored WI-1257 closeout review remains valid after carrier-only drift to head d69c3b0afd5d50a9ff300c043cd80967c5c1a48b because the only additional change is review-carrier and PR metadata rebinding for the same parent closeout scope."
+    "reason": "Authored WI-1257 closeout review remains valid after post-merge carrier-only drift to head 2774ca17cdeb4c81302f2153307ea00ac2e66c62 because the additional change only consumes PR #1372 merged evidence and rebinds WI-1257 carriers for the same parent closeout scope."
   },
   "head_binding": {
     "reviewed_head": "bdea5afa161b7dc2593302ac6f285a82b330f80e",
-    "current_head": "d69c3b0afd5d50a9ff300c043cd80967c5c1a48b",
+    "current_head": "2774ca17cdeb4c81302f2153307ea00ac2e66c62",
     "status": "carrier-only",
     "stale": false,
     "changed_paths": [
       ".loom/reviews/WI-1257.json",
-      ".loom/bootstrap/init-result.json",
       ".loom/progress/WI-1257.md",
       ".loom/shadow/closeout-loom.json",
       ".loom/shadow/merge-ready-loom.json",
       ".loom/specs/WI-1257/evidence-map.md",
-      ".loom/specs/WI-1257/spec.md",
       ".loom/specs/WI-1257/task-carrier.md",
-      ".loom/status/current.md",
-      ".loom/work-items/WI-1257.md"
+      ".loom/status/current.md"
     ],
     "disallowed_paths": []
   }
