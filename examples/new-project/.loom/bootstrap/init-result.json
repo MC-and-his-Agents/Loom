@@ -456,7 +456,7 @@
       "path": ".loom/bin/loom_check.py",
       "kind": "loom-tool",
       "source": "skills/shared/scripts/loom_check.py",
-      "sha256": "11546e589eeb4e693c29e9900428bd446b79793179f1afdaca17aebcc2934c20"
+      "sha256": "5d0cbd8fa56f7eca7af8dd015d7144b405dd0b74b8d4f8bd9c6bb6915bc2c69a"
     },
     {
       "path": ".loom/bin/loom_story_carriers.py",
@@ -700,14 +700,20 @@
     },
     "github_control_plane": {
       "repository": "MC-and-his-Agents/Loom",
-      "default_branch": "unknown",
-      "branch_protection": "unknown",
-      "required_checks": "unknown",
-      "pr_reviews": "unknown",
+      "default_branch": "main",
+      "branch_protection": "enabled",
+      "required_checks": [
+        "py-compile",
+        "demo-bootstrap",
+        "repo-local-cli",
+        "loom-check",
+        "loom-pr-merge-gate"
+      ],
+      "pr_reviews": "not_required",
       "rulesets": {
-        "status": "unknown",
-        "enforced": "unknown",
-        "count": "unknown"
+        "status": "verified",
+        "enforced": false,
+        "count": 0
       },
       "ci_check_presence": {
         "schema_version": "loom-ci-check-presence/v1",
@@ -719,14 +725,16 @@
           "repo-local-cli",
           "loom-check"
         ],
-        "check_ran": "unknown",
-        "required_checks_configured": "unknown",
-        "host_enforcement_status": "unverified",
+        "check_ran": true,
+        "required_checks_configured": true,
+        "host_enforcement_status": "verified",
         "recommended_action": "install the workflow and configure its stable check names as host-required checks"
       },
       "host_enforcement": {
-        "branch_protection_or_ruleset": "unknown",
-        "required_checks": "unknown",
+        "branch_protection_or_ruleset": true,
+        "required_checks": true,
+        "workflow_exists": false,
+        "check_ran": true,
         "verification_status": "unverified"
       },
       "api_snapshot": {
@@ -740,16 +748,36 @@
             "method": "GET",
             "path": "repos/MC-and-his-Agents/Loom",
             "purpose": "repository default branch"
+          },
+          {
+            "method": "GET",
+            "path": "repos/MC-and-his-Agents/Loom/branches/main",
+            "purpose": "branch protection"
+          },
+          {
+            "method": "GET",
+            "path": "repos/MC-and-his-Agents/Loom/actions/workflows",
+            "purpose": "workflow presence"
+          },
+          {
+            "method": "GET",
+            "path": "repos/MC-and-his-Agents/Loom/commits/main/check-runs",
+            "purpose": "recent check runs"
+          },
+          {
+            "method": "GET",
+            "path": "repos/MC-and-his-Agents/Loom/rulesets",
+            "purpose": "branch ruleset enforcement"
           }
         ],
         "errors": [
-          "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom\": EOF"
+          "github workflow read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/actions/workflows\": EOF"
         ],
         "budget": {
           "schema_version": "loom-execution-budget/v1",
           "status": "unavailable",
           "enforcement": "advisory",
-          "summary": "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom\": EOF",
+          "summary": "github workflow read: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom/actions/workflows\": EOF",
           "dimensions": [],
           "provenance": {
             "source": "github_control_plane",
@@ -1219,12 +1247,10 @@
             "authority": "loom + host"
           }
         },
-        "default_branch": "unknown",
-        "missing_inputs": [
-          "github default branch"
-        ],
-        "result": "block",
-        "summary": "host binding surface is readable, but required binding facts are missing or host-managed."
+        "default_branch": "main",
+        "missing_inputs": [],
+        "result": "pass",
+        "summary": "host binding surface can relate the active Work Item to branch, worktree, PR, merge commit, and closeout."
       },
       "taxonomy": {
         "spec_stale": "Approved spec no longer covers the implementation surface.",
@@ -1742,9 +1768,7 @@
       }
     },
     "summary": "repository is treated as new; Loom can plan the first governance carriers and bootstrap entrypoints without adding a second truth source.",
-    "missing_inputs": [
-      "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom\": EOF"
-    ]
+    "missing_inputs": []
   },
   "lifecycle_expectations": {
     "schema_version": "loom-workspace-lifecycle/v1",
