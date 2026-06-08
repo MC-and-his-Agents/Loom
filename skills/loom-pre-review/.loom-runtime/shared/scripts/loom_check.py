@@ -54,6 +54,7 @@ SOURCE_SURFACE_FULL = "full"
 SOURCE_SURFACE_CONTRACT_ONLY = "contract-only"
 SOURCE_SURFACE_SOURCE_SELF_FIXTURE = "source-self-fixture"
 SOURCE_SURFACE_REVIEW_RUN = "review-run"
+SOURCE_SURFACE_MERGE_GATE = "merge-gate"
 SOURCE_SURFACE_BOOTSTRAP_REGRESSION = "bootstrap-regression"
 SOURCE_SURFACE_DISTRIBUTION_REGRESSION = "distribution-regression"
 SOURCE_SURFACE_CHOICES = (
@@ -61,12 +62,17 @@ SOURCE_SURFACE_CHOICES = (
     SOURCE_SURFACE_CONTRACT_ONLY,
     SOURCE_SURFACE_SOURCE_SELF_FIXTURE,
     SOURCE_SURFACE_REVIEW_RUN,
+    SOURCE_SURFACE_MERGE_GATE,
     SOURCE_SURFACE_BOOTSTRAP_REGRESSION,
     SOURCE_SURFACE_DISTRIBUTION_REGRESSION,
 )
-SOURCE_SURFACE_COUNT = 41
+SOURCE_SURFACE_COUNT = 42
 SOURCE_SURFACE_GROUPS = {
-    SOURCE_SURFACE_SOURCE_SELF_FIXTURE: {SOURCE_SURFACE_SOURCE_SELF_FIXTURE, SOURCE_SURFACE_REVIEW_RUN},
+    SOURCE_SURFACE_SOURCE_SELF_FIXTURE: {
+        SOURCE_SURFACE_SOURCE_SELF_FIXTURE,
+        SOURCE_SURFACE_REVIEW_RUN,
+        SOURCE_SURFACE_MERGE_GATE,
+    },
 }
 REVIEW_RUN_FIXTURE_CATEGORY = "review-run-fixture"
 SOURCE_SNAPSHOT_EXCLUDED_ROOTS = {
@@ -21623,7 +21629,7 @@ def collect_source_failures(root: Path, source_surface: str = SOURCE_SURFACE_FUL
         (SOURCE_SURFACE_BOOTSTRAP_REGRESSION, "deep-existing-bootstrap", lambda: check_deep_existing_repo_bootstrap(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "py-compile-cache-hygiene-pre", lambda: check_py_compile_cache_hygiene(root)),
         (SOURCE_SURFACE_REVIEW_RUN, "review-run", lambda: check_review_run_fixture(root)),
-        (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "daily-execution-cli", lambda: check_daily_execution_cli(root)),
+        (SOURCE_SURFACE_MERGE_GATE, "merge-gate", lambda: check_daily_execution_cli(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "py-compile-cache-hygiene", lambda: check_py_compile_cache_hygiene(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "repo-companion", lambda: check_repo_companion_interface_contracts(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "repo-interop", lambda: check_repo_interop_contracts(root)),
@@ -21742,7 +21748,7 @@ def check_loom_check_profile_contract(root: Path) -> list[Failure]:
     source_text = (root / "src/skills/shared/scripts/loom_check.py").read_text(encoding="utf-8")
     if "source/distribution" not in source_text or "--profile" not in source_text:
         failures.append(Failure(category, "`loom_check.py` must document source/distribution scope and expose `--profile`"))
-    for anchor in ("--source-surface", "contract-only", "source-self-fixture", "review-run", "bootstrap-regression", "distribution-regression", "loom_check: start source surface="):
+    for anchor in ("--source-surface", "contract-only", "source-self-fixture", "review-run", "merge-gate", "bootstrap-regression", "distribution-regression", "loom_check: start source surface="):
         if anchor not in source_text:
             failures.append(Failure(category, f"`loom_check.py` must expose source surface contract anchor `{anchor}`"))
     init_text = (root / "src/skills/shared/scripts/loom_init.py").read_text(encoding="utf-8")
