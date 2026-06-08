@@ -3,11 +3,11 @@
   "item_id": "WI-1257",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "WI-1257 parent closeout carrier review is provisionally ready for scheduler gate consumption at current head `572abe634fbdab48c792ce580f861753cf925c03`: the active diff is limited to WI-1257 work-item/progress/spec/review/runtime PR-body carriers plus fact-chain/status activation for the parent closeout branch. No `tools/check_cli_contract.py` implementation behavior, child WI terminal facts, hosted workflow behavior, metadata schema, or release mechanics are changed. Scheduler-owned semantic review, PR metadata readback, hosted checks classification, and final gate consumption remain pending.",
+  "summary": "WI-1257 parent closeout carrier review is provisionally ready for scheduler gate consumption at current head `64b648c4454c64bd419a5d940229fa7877098fa8`: the active diff is limited to WI-1257 work-item/progress/spec/review/runtime PR-body carriers plus fact-chain/status activation for the parent closeout branch. No `tools/check_cli_contract.py` implementation behavior, child WI terminal facts, hosted workflow behavior, metadata schema, or release mechanics are changed. PR #1372 exists and still requires metadata readback and hosted-check classification before scheduler-owned semantic review and controlled merge.",
   "reviewer": "codex-worker-T6",
-  "authored_at": "2026-06-08T02:27:00Z",
-  "reviewed_head": "572abe634fbdab48c792ce580f861753cf925c03",
-  "reviewed_validation_summary": "2026-06-08 local validation in progress for WI-1257 parent closeout: `python3 .loom/bin/loom_flow.py work-item update --target . --item WI-1257 --activate` passed and rebased the active fact chain onto WI-1257; `python3 .loom/bin/loom_init.py fact-chain --target .` passed for WI-1257; `python3 tools/loom.py suite validate --target . --item WI-1257 --json` returned `not_applicable`; `python3 tools/loom.py suite evidence validate --target . --item WI-1257 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1257 --json` passed; `git diff --check` passed. Remaining pre-merge work: refresh Loom shadow parity for the updated status surface, create/read back the closeout PR metadata, classify hosted checks, and stop at waiting-scheduler-gate.",
+  "authored_at": "2026-06-08T02:34:00Z",
+  "reviewed_head": "64b648c4454c64bd419a5d940229fa7877098fa8",
+  "reviewed_validation_summary": "2026-06-08 parent closeout readiness readback for WI-1257: `python3 .loom/bin/loom_init.py fact-chain --target .` passed for active WI-1257; `python3 tools/loom.py suite validate --target . --item WI-1257 --json` returned `not_applicable`; `python3 tools/loom.py suite evidence validate --target . --item WI-1257 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1257 --json` passed; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface merge_ready --surface closeout --blocking` passed; `git diff --check` passed. PR #1372 is open at head `64b648c4454c64bd419a5d940229fa7877098fa8`; current readback shows `py-compile`, `demo-bootstrap`, and `repo-local-cli` passing, `loom-pr-merge-gate` failing while the PR body carried the pre-commit head SHA, and `loom-check` / latest `root-self-governance` still in progress. Remaining pre-merge work: update/read back PR metadata to the current head, re-read hosted checks, and stop at waiting-scheduler-gate.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -33,8 +33,8 @@
     "reason": "Worker-level current-head review found only bounded parent-closeout carrier changes; scheduler-owned semantic review must still consume the PR head before merge-ready or controlled merge."
   },
   "head_binding": {
-    "reviewed_head": "572abe634fbdab48c792ce580f861753cf925c03",
-    "current_head": "572abe634fbdab48c792ce580f861753cf925c03",
+    "reviewed_head": "64b648c4454c64bd419a5d940229fa7877098fa8",
+    "current_head": "64b648c4454c64bd419a5d940229fa7877098fa8",
     "status": "current",
     "stale": false,
     "changed_paths": [

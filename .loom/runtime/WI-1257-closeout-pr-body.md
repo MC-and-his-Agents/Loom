@@ -28,7 +28,7 @@ Validation details:
 - Loom Work Item: WI-1257
 - Spec / plan: `.loom/specs/WI-1257/spec.md`; formal suite is not applicable for this parent closeout-only carrier sync.
 - Branch: `work/1257-check-cli-surfaces-closeout`
-- Head SHA: `572abe634fbdab48c792ce580f861753cf925c03`
+- Head SHA: `64b648c4454c64bd419a5d940229fa7877098fa8`
 - Child issues: #1270, #1271, #1272, #1273, #1274
 
 ## PR Metadata Machine Carrier
@@ -41,7 +41,7 @@ Validation details:
   "fields": {
     "loom_work_item": "WI-1257",
     "branch": "work/1257-check-cli-surfaces-closeout",
-    "head_sha": "572abe634fbdab48c792ce580f861753cf925c03",
+    "head_sha": "64b648c4454c64bd419a5d940229fa7877098fa8",
     "governance_intensity": "standard",
     "change_class": "contract",
     "suite_path": "not_applicable",
@@ -59,7 +59,7 @@ Validation details:
     "closeout_required": true,
     "upgrade_triggers": []
   },
-  "source": {"rendered_hash": "renderer:codex-worker-T6-closeout:572abe63"},
+  "source": {"rendered_hash": "renderer:codex-worker-T6-closeout:64b648c4"},
   "parser_version": "loom-pr-metadata-parser/v1"
 }
 -->
@@ -72,7 +72,7 @@ Validation details:
   "fields": {
     "loom_work_item": "WI-1257",
     "branch": "work/1257-check-cli-surfaces-closeout",
-    "head_sha": "572abe634fbdab48c792ce580f861753cf925c03",
+    "head_sha": "64b648c4454c64bd419a5d940229fa7877098fa8",
     "governance_intensity": "standard",
     "change_class": "contract",
     "suite_path": "not_applicable",
@@ -90,7 +90,7 @@ Validation details:
     "closeout_required": true,
     "upgrade_triggers": []
   },
-  "source": {"rendered_hash": "renderer:codex-worker-T6-merge_ready:572abe63"},
+  "source": {"rendered_hash": "renderer:codex-worker-T6-merge_ready:64b648c4"},
   "parser_version": "loom-pr-metadata-parser/v1"
 }
 -->
