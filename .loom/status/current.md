@@ -12,10 +12,10 @@
 - Validation Entry: GitHub child/PR readback; `python3 .loom/bin/loom_init.py fact-chain --target .`; `python3 tools/loom.py suite validate --target . --item WI-1257 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1257 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1257 --json`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking`; `git diff --check`; PR metadata preflight/readback; hosted checks readback.
 - Closing Condition: A closeout-only PR for WI-1257 is current-head reviewed and merged through the scheduler-owned controlled merge path, issue #1257 is closed as COMPLETED, and repo carriers terminalize the parent closeout with readback to `main`.
 - Current Checkpoint: in_progress
-- Current Stop: Parent closeout setup in progress. All Round 4 child issues #1270/#1271/#1272/#1273/#1274 are read back CLOSED/COMPLETED, and the WI-1257 closeout branch is now preparing repo carriers, PR metadata, and validation evidence for scheduler-owned review and merge.
-- Next Step: Finalize WI-1257 closeout carriers, open the closeout PR, bind PR metadata/head SHA, classify hosted checks, and stop at waiting-scheduler-gate.
+- Current Stop: Parent closeout PR #1372 is open on `work/1257-check-cli-surfaces-closeout`. Child issues #1270/#1271/#1272/#1273/#1274 remain read back CLOSED/COMPLETED. Local parent-closeout carriers are in place; PR metadata now binds the live PR head, and hosted failures have been classified as stale PR-body metadata plus stale derived status drift.
+- Next Step: Refresh derived status/shadow carriers, re-read PR #1372 metadata and hosted checks, then stop at scheduler-owned semantic review and controlled merge gate.
 - Blockers: None recorded.
-- Latest Validation Summary: 2026-06-08 startup readback confirms formal worktree `/Users/mc/.codex/worktrees/c571/Loom` is on branch `work/1257-check-cli-surfaces-closeout`, tracks `origin/work/1257-check-cli-surfaces-closeout`, and is based on `origin/main` merge base `572abe634fbdab48c792ce580f861753cf925c03`. GitHub readback shows #1270 CLOSED/COMPLETED at 2026-06-07T18:33:48Z, #1271 CLOSED/COMPLETED at 2026-06-07T21:16:50Z, #1272 CLOSED/COMPLETED at 2026-06-07T22:54:08Z, #1273 CLOSED/COMPLETED at 2026-06-08T00:19:39Z, and #1274 CLOSED/COMPLETED at 2026-06-08T01:31:09Z. No WI-1257 closeout PR exists yet on this branch.
+- Latest Validation Summary: 2026-06-08 parent closeout readiness readback for WI-1257: formal worktree `/Users/mc/.codex/worktrees/c571/Loom` is on branch `work/1257-check-cli-surfaces-closeout`, tracks `origin/work/1257-check-cli-surfaces-closeout`, and merge base with `origin/main` remains `572abe634fbdab48c792ce580f861753cf925c03`. GitHub readback confirms #1270 CLOSED/COMPLETED at 2026-06-07T18:33:48Z, #1271 CLOSED/COMPLETED at 2026-06-07T21:16:50Z, #1272 CLOSED/COMPLETED at 2026-06-07T22:54:08Z, #1273 CLOSED/COMPLETED at 2026-06-08T00:19:39Z, and #1274 CLOSED/COMPLETED at 2026-06-08T01:31:09Z. Local validation passed before hosted readback: `python3 .loom/bin/loom_init.py fact-chain --target .`; `python3 tools/loom.py suite validate --target . --item WI-1257 --json` => `not_applicable`; `python3 tools/loom.py suite evidence validate --target . --item WI-1257 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1257 --json`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface merge_ready --surface closeout --blocking`; and `git diff --check`. PR #1372 is open; PR body was repaired to the live PR head. Hosted readback on the prior run shows `py-compile`, `demo-bootstrap`, and `repo-local-cli` passing; `loom-pr-merge-gate` failed before the PR body repair; `root-self-governance` and `loom-check` failed because `.loom/status/current.md` was stale against `.loom/progress/WI-1257.md`.
 - Recovery Boundary: WI-1257 owns only the parent closeout truth/progress/status/shadow/review/PR metadata for Round 4 `check_cli_contract.py` surfaces. Do not modify implementation semantics, child WI terminal facts, hosted workflows, metadata schema, release behavior, or unrelated repository state.
 - Current Lane: check-cli-surfaces-parent-closeout
 
@@ -24,8 +24,8 @@
 - Run Entry: not_applicable
 - Logs Entry: not_applicable
 - Diagnostics Entry: no blocking diagnostics currently recorded during implementation.
-- Verification Entry: post-merge closeout readback passed; PR #1370 merged, issue #1274 closed completed, hosted checks passed, and no release was required
-- Lane Entry: check-cli-adoption-host-metadata-surface
+- Verification Entry: parent closeout PR #1372 is open; child issues #1270-#1274 are terminalized; local carrier validation passed before derived status refresh; no release is expected
+- Lane Entry: check-cli-surfaces-parent-closeout
 
 ## Sources
 
