@@ -1,0 +1,53 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1257",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "WI-1257 parent closeout carrier review is provisionally ready for scheduler gate consumption at current head `572abe634fbdab48c792ce580f861753cf925c03`: the active diff is limited to WI-1257 work-item/progress/spec/review/runtime PR-body carriers plus fact-chain/status activation for the parent closeout branch. No `tools/check_cli_contract.py` implementation behavior, child WI terminal facts, hosted workflow behavior, metadata schema, or release mechanics are changed. Scheduler-owned semantic review, PR metadata readback, hosted checks classification, and final gate consumption remain pending.",
+  "reviewer": "codex-worker-T6",
+  "authored_at": "2026-06-08T02:27:00Z",
+  "reviewed_head": "572abe634fbdab48c792ce580f861753cf925c03",
+  "reviewed_validation_summary": "2026-06-08 local validation in progress for WI-1257 parent closeout: `python3 .loom/bin/loom_flow.py work-item update --target . --item WI-1257 --activate` passed and rebased the active fact chain onto WI-1257; `python3 .loom/bin/loom_init.py fact-chain --target .` passed for WI-1257; `python3 tools/loom.py suite validate --target . --item WI-1257 --json` returned `not_applicable`; `python3 tools/loom.py suite evidence validate --target . --item WI-1257 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1257 --json` passed; `git diff --check` passed. Remaining pre-merge work: refresh Loom shadow parity for the updated status surface, create/read back the closeout PR metadata, classify hosted checks, and stop at waiting-scheduler-gate.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [
+    "Scheduler-owned semantic review must re-read the current PR head after PR creation, metadata readback, hosted checks classification, and any carrier-only drift."
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1257.md",
+    "recovery_entry": ".loom/progress/WI-1257.md",
+    "status_surface": ".loom/status/current.md",
+    "suite_path_decision": ".loom/specs/WI-1257/spec.md",
+    "suite_evidence_map": ".loom/specs/WI-1257/evidence-map.md",
+    "suite_task_carriers": [
+      ".loom/specs/WI-1257/task-carrier.md"
+    ],
+    "suite_validation": "not_applicable",
+    "suite_evidence_validation": "pass",
+    "suite_carrier_validation": "pass",
+    "git_diff_check": "pass"
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Worker-level current-head review found only bounded parent-closeout carrier changes; scheduler-owned semantic review must still consume the PR head before merge-ready or controlled merge."
+  },
+  "head_binding": {
+    "reviewed_head": "572abe634fbdab48c792ce580f861753cf925c03",
+    "current_head": "572abe634fbdab48c792ce580f861753cf925c03",
+    "status": "current",
+    "stale": false,
+    "changed_paths": [
+      ".loom/bootstrap/init-result.json",
+      ".loom/progress/WI-1257.md",
+      ".loom/reviews/WI-1257.json",
+      ".loom/runtime/WI-1257-closeout-pr-body.md",
+      ".loom/specs/WI-1257/evidence-map.md",
+      ".loom/specs/WI-1257/spec.md",
+      ".loom/specs/WI-1257/task-carrier.md",
+      ".loom/status/current.md",
+      ".loom/work-items/WI-1257.md"
+    ],
+    "disallowed_paths": []
+  }
+}
