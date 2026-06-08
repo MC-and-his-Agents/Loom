@@ -55,6 +55,7 @@ SOURCE_SURFACE_CONTRACT_ONLY = "contract-only"
 SOURCE_SURFACE_SOURCE_SELF_FIXTURE = "source-self-fixture"
 SOURCE_SURFACE_REVIEW_RUN = "review-run"
 SOURCE_SURFACE_MERGE_GATE = "merge-gate"
+SOURCE_SURFACE_CLOSEOUT_RECONCILIATION = "closeout-reconciliation"
 SOURCE_SURFACE_BOOTSTRAP_REGRESSION = "bootstrap-regression"
 SOURCE_SURFACE_DISTRIBUTION_REGRESSION = "distribution-regression"
 SOURCE_SURFACE_CHOICES = (
@@ -63,18 +64,21 @@ SOURCE_SURFACE_CHOICES = (
     SOURCE_SURFACE_SOURCE_SELF_FIXTURE,
     SOURCE_SURFACE_REVIEW_RUN,
     SOURCE_SURFACE_MERGE_GATE,
+    SOURCE_SURFACE_CLOSEOUT_RECONCILIATION,
     SOURCE_SURFACE_BOOTSTRAP_REGRESSION,
     SOURCE_SURFACE_DISTRIBUTION_REGRESSION,
 )
-SOURCE_SURFACE_COUNT = 42
+SOURCE_SURFACE_COUNT = 43
 SOURCE_SURFACE_GROUPS = {
     SOURCE_SURFACE_SOURCE_SELF_FIXTURE: {
         SOURCE_SURFACE_SOURCE_SELF_FIXTURE,
         SOURCE_SURFACE_REVIEW_RUN,
         SOURCE_SURFACE_MERGE_GATE,
+        SOURCE_SURFACE_CLOSEOUT_RECONCILIATION,
     },
 }
 REVIEW_RUN_FIXTURE_CATEGORY = "review-run-fixture"
+CLOSEOUT_RECONCILIATION_FIXTURE_CATEGORY = "closeout-reconciliation-fixture"
 SOURCE_SNAPSHOT_EXCLUDED_ROOTS = {
     ".loom/cache",
     ".loom/runtime",
@@ -8353,6 +8357,459 @@ def check_review_run_fixture(root: Path, example_target: Path | None = None) -> 
     return failures
 
 
+def require_closeout_command_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    label: str,
+    payload: dict[str, object],
+    expected_scene: str,
+    expected_carrier: str,
+) -> None:
+    if payload.get("command") != "closeout":
+        failures.append(Failure(category, f"`{label}` must report `command: closeout`"))
+    expected_operation = "check" if label.endswith("check") else "sync"
+    if payload.get("operation") != expected_operation:
+        failures.append(Failure(category, f"`{label}` must report `operation: {expected_operation}`"))
+    repo = payload.get("repo")
+    if not isinstance(repo, dict):
+        failures.append(Failure(category, f"`{label}` must include `repo`"))
+    else:
+        if not isinstance(repo.get("owner"), str) or not repo.get("owner"):
+            failures.append(Failure(category, f"`{label}` must include `repo.owner`"))
+        if not isinstance(repo.get("name"), str) or not repo.get("name"):
+            failures.append(Failure(category, f"`{label}` must include `repo.name`"))
+    require_runtime_state_payload(
+        failures,
+        category=category,
+        context=f"`{label}`",
+        payload=payload.get("runtime_state"),
+        expected_scene=expected_scene,
+        expected_carrier=expected_carrier,
+        allowed_results={"pass"},
+    )
+    require_closeout_reconciliation_contract(
+        failures,
+        category=category,
+        context=f"`{label}`",
+        payload=payload,
+    )
+
+
+def require_reconciliation_audit_command_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    label: str,
+    payload: dict[str, object],
+    expected_scene: str,
+    expected_carrier: str,
+) -> None:
+    if payload.get("command") != "reconciliation":
+        failures.append(Failure(category, f"`{label}` must report `command: reconciliation`"))
+    if payload.get("operation") != "audit":
+        failures.append(Failure(category, f"`{label}` must report `operation: audit`"))
+    require_runtime_state_payload(
+        failures,
+        category=category,
+        context=f"`{label}`",
+        payload=payload.get("runtime_state"),
+        expected_scene=expected_scene,
+        expected_carrier=expected_carrier,
+        allowed_results={"pass"},
+    )
+    require_reconciliation_payload(
+        failures,
+        category=category,
+        context=f"`{label}`",
+        payload=payload,
+    )
+
+
+def require_status_closeout_payload(
+    failures: list[Failure],
+    *,
+    category: str,
+    context: str,
+    payload: dict[str, object],
+) -> None:
+    closeout = payload.get("closeout")
+    if not isinstance(closeout, dict):
+        failures.append(Failure(category, f"{context} must include `closeout`"))
+        return
+    if closeout.get("result") not in {"pass", "block", "not_applicable"}:
+        failures.append(Failure(category, f"{context} closeout result must stay within the stable set"))
+    reconciliation = closeout.get("reconciliation")
+    if not isinstance(reconciliation, dict):
+        failures.append(Failure(category, f"{context} closeout must include reconciliation"))
+    elif reconciliation.get("result") not in {"pass", "warn", "fix-needed", "block", "not_applicable"}:
+        failures.append(Failure(category, f"{context} closeout reconciliation result must stay within the stable set"))
+
+
+def check_closeout_reconciliation_fixture(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    category = CLOSEOUT_RECONCILIATION_FIXTURE_CATEGORY
+    example_target = root / "examples/new-project"
+    tool_path = root / "tools/loom_flow.py"
+    if not tool_path.exists() or not example_target.exists():
+        return failures
+
+    demo_commands = [
+        (
+            "closeout-check",
+            ["python3", "tools/loom_flow.py", "closeout", "check", "--target", ".", "--skip-gate"],
+            {"pass", "block"},
+        ),
+        (
+            "closeout-sync",
+            ["python3", "tools/loom_flow.py", "closeout", "sync", "--target", ".", "--skip-gate"],
+            {"pass", "block"},
+        ),
+        (
+            "reconciliation-audit",
+            ["python3", "tools/loom_flow.py", "reconciliation", "audit", "--target", "."],
+            {"block"},
+        ),
+        (
+            "status-control-closeout",
+            ["python3", "tools/loom_status.py", "--target", "examples/new-project", "--item", "INIT-0001"],
+            {"pass", "block"},
+        ),
+    ]
+    for label, args, allowed_results in demo_commands:
+        payload, error = load_command_json(root, args)
+        if error:
+            failures.append(Failure(category, f"`{label}` command failed: {error}"))
+            continue
+        result = payload.get("result")
+        if result not in allowed_results:
+            failures.append(Failure(category, f"`{label}` returned unexpected result `{result}`"))
+        if label in {"closeout-check", "closeout-sync"}:
+            require_closeout_command_payload(
+                failures,
+                category=category,
+                label=label,
+                payload=payload,
+                expected_scene="repo-local-demo",
+                expected_carrier="repo-local-wrapper",
+            )
+            require_repo_specific_requirements_payload(
+                failures,
+                category=category,
+                context=f"`{label}` repo_specific_requirements",
+                payload=payload.get("repo_specific_requirements"),
+                expected_surface="closeout",
+            )
+        elif label == "reconciliation-audit":
+            require_reconciliation_audit_command_payload(
+                failures,
+                category=category,
+                label=label,
+                payload=payload,
+                expected_scene="repo-local-demo",
+                expected_carrier="repo-local-wrapper",
+            )
+        elif label == "status-control-closeout":
+            if payload.get("command") != "status":
+                failures.append(Failure(category, "`loom_status` must report `command: status`"))
+            require_status_closeout_payload(
+                failures,
+                category=category,
+                context="`loom_status`",
+                payload=payload,
+            )
+
+    live_github_opt_in = os.environ.get("LOOM_CHECK_LIVE_GITHUB") == "1"
+    gh_auth_probe = None
+    if live_github_opt_in and shutil.which("gh") is not None:
+        try:
+            gh_auth_probe = run_command(root, ["gh", "auth", "status"], timeout_seconds=5)
+        except subprocess.TimeoutExpired:
+            gh_auth_probe = None
+    gh_auth_ready = gh_auth_probe is not None and gh_auth_probe.returncode == 0
+    if gh_auth_ready and os.environ.get("GITHUB_ACTIONS") != "true":
+        with loom_check_temporary_directory(prefix="loom-check-closeout-reconciliation-") as tmp:
+            install_root = Path(tmp) / "installed" / "skills"
+            shutil.copytree(root / "skills", install_root)
+            for label, args in (
+                (
+                    "installed reconciliation audit",
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "reconciliation",
+                        "audit",
+                        "--target",
+                        str(root),
+                        "--issue",
+                        "131",
+                        "--pr",
+                        "138",
+                        "--project",
+                        "5",
+                    ],
+                ),
+                (
+                    "installed reconciliation sync dry-run",
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "reconciliation",
+                        "sync",
+                        "--target",
+                        str(root),
+                        "--issue",
+                        "131",
+                        "--pr",
+                        "138",
+                        "--project",
+                        "5",
+                        "--dry-run",
+                    ],
+                ),
+                (
+                    "installed closeout check",
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "closeout",
+                        "check",
+                        "--target",
+                        str(root),
+                        "--issue",
+                        "131",
+                        "--pr",
+                        "138",
+                        "--project",
+                        "5",
+                        "--skip-gate",
+                    ],
+                ),
+                (
+                    "installed closeout sync",
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "closeout",
+                        "sync",
+                        "--target",
+                        str(root),
+                        "--issue",
+                        "131",
+                        "--pr",
+                        "138",
+                        "--project",
+                        "5",
+                        "--skip-gate",
+                    ],
+                ),
+            ):
+                payload, error = load_command_json_with_retry(
+                    root,
+                    args,
+                    timeout_seconds=60,
+                    retries=3,
+                )
+                if error:
+                    if label in {"installed closeout check", "installed closeout sync"} and "command timed out" in error:
+                        continue
+                    failures.append(Failure(category, f"`{label}` failed: {error}"))
+                    continue
+                rate_limited = payload_has_github_rate_limit(payload)
+                if label == "installed reconciliation audit":
+                    if payload.get("result") != "pass" and not rate_limited:
+                        failures.append(Failure(category, "`installed reconciliation audit` must pass on the historical closeout sample"))
+                    require_reconciliation_audit_command_payload(
+                        failures,
+                        category=category,
+                        label=label,
+                        payload=payload,
+                        expected_scene="installed-runtime",
+                        expected_carrier="installed-skills-root",
+                    )
+                elif label == "installed reconciliation sync dry-run":
+                    if payload.get("result") != "pass" and not rate_limited:
+                        failures.append(Failure(category, "`installed reconciliation sync --dry-run` must pass on an already aligned sample"))
+                    require_runtime_state_payload(
+                        failures,
+                        category=category,
+                        context="`installed reconciliation sync --dry-run`",
+                        payload=payload.get("runtime_state"),
+                        expected_scene="installed-runtime",
+                        expected_carrier="installed-skills-root",
+                        allowed_results={"pass"},
+                    )
+                    require_safe_sync_plan_payload(
+                        failures,
+                        category=category,
+                        context="`installed reconciliation sync --dry-run`",
+                        payload=payload.get("sync_plan"),
+                    )
+                    if payload.get("applied_actions") != []:
+                        failures.append(Failure(category, "`reconciliation sync --dry-run` must not report applied actions"))
+                else:
+                    if payload.get("result") != "pass" and not rate_limited:
+                        failures.append(Failure(category, f"`{label}` must pass on the historical closeout sample"))
+                    require_closeout_command_payload(
+                        failures,
+                        category=category,
+                        label=label,
+                        payload=payload,
+                        expected_scene="installed-runtime",
+                        expected_carrier="installed-skills-root",
+                    )
+
+    fail_closed_payloads = [
+        (
+            "closeout-fix-needed-fail-open",
+            {
+                "result": "pass",
+                "fallback_to": None,
+                "reconciliation": {
+                    "command": "reconciliation",
+                    "operation": "audit",
+                    "result": "fix-needed",
+                    "summary": "fix-needed",
+                    "missing_inputs": [],
+                    "fallback_to": "manual-reconciliation",
+                    "findings": [
+                        {
+                            "kind": "absorbed_but_open",
+                            "severity": "fix-needed",
+                            "subject": "issue #177",
+                            "evidence": {},
+                            "recommended_action": "run reconciliation sync",
+                        }
+                    ],
+                },
+            },
+        ),
+        (
+            "closeout-block-fallback-drift",
+            {
+                "result": "block",
+                "fallback_to": "merge",
+                "reconciliation": {
+                    "command": "reconciliation",
+                    "operation": "audit",
+                    "result": "block",
+                    "summary": "block",
+                    "missing_inputs": ["issue/pr/project"],
+                    "fallback_to": "manual-reconciliation",
+                    "findings": [
+                        {
+                            "kind": "parent_drift",
+                            "severity": "block",
+                            "subject": "parent issue #148",
+                            "evidence": {},
+                            "recommended_action": "manual reconciliation",
+                        }
+                    ],
+                },
+            },
+        ),
+        (
+            "closeout-malformed-reconciliation",
+            {
+                "result": "pass",
+                "fallback_to": None,
+                "reconciliation": {
+                    "command": "reconciliation",
+                    "operation": "audit",
+                    "summary": "broken",
+                    "missing_inputs": "bad",
+                    "findings": "bad",
+                },
+            },
+        ),
+    ]
+    for label, payload in fail_closed_payloads:
+        sample_failures: list[Failure] = []
+        require_closeout_reconciliation_contract(
+            sample_failures,
+            category=category,
+            context=f"`{label}`",
+            payload=payload,
+        )
+        if not sample_failures:
+            failures.append(Failure(category, f"`{label}` synthetic payload must fail closeout reconciliation validation"))
+
+    warn_payload_failures: list[Failure] = []
+    require_closeout_reconciliation_contract(
+        warn_payload_failures,
+        category=category,
+        context="`closeout-warn-does-not-block`",
+        payload={
+            "result": "pass",
+            "fallback_to": None,
+            "reconciliation": {
+                "command": "reconciliation",
+                "operation": "audit",
+                "result": "warn",
+                "summary": "warn",
+                "missing_inputs": [],
+                "fallback_to": "manual-reconciliation",
+                "findings": [
+                    {
+                        "category": "drift",
+                        "kind": "project_drift",
+                        "severity": "warn",
+                        "subject": "project 5",
+                        "evidence": {},
+                        "recommended_action": "review warning",
+                        "fallback_to": "reconciliation-sync",
+                    }
+                ],
+            },
+        },
+    )
+    if warn_payload_failures:
+        failures.append(Failure(category, "`closeout-warn-does-not-block` synthetic payload must allow non-blocking reconciliation warnings"))
+
+    valid_reconciliation_samples = [
+        ("merged_but_open", "fix-needed", "reconciliation-sync"),
+        ("absorbed_but_open", "fix-needed", "reconciliation-sync"),
+        ("parent_drift", "block", "manual-reconciliation"),
+        ("binding_failure", "block", "manual-reconciliation"),
+        ("merge_signal_drift", "block", "manual-reconciliation"),
+        ("host_signal_drift", "block", "manual-reconciliation"),
+    ]
+    for kind, reconciliation_result_value, fallback_to in valid_reconciliation_samples:
+        sample_failures = []
+        require_closeout_reconciliation_contract(
+            sample_failures,
+            category=category,
+            context=f"`closeout-{kind}`",
+            payload={
+                "result": "block",
+                "fallback_to": fallback_to,
+                "reconciliation": {
+                    "command": "reconciliation",
+                    "operation": "audit",
+                    "result": reconciliation_result_value,
+                    "summary": kind,
+                    "missing_inputs": [] if kind != "host_signal_drift" else ["github control plane"],
+                    "fallback_to": "manual-reconciliation",
+                    "findings": [
+                        {
+                            "category": "drift",
+                            "kind": kind,
+                            "severity": reconciliation_result_value,
+                            "subject": "closeout sample",
+                            "evidence": {},
+                            "recommended_action": "reconcile closeout sample",
+                            "fallback_to": fallback_to,
+                        }
+                    ],
+                },
+            },
+        )
+        if sample_failures:
+            failures.append(Failure(category, f"`closeout-{kind}` synthetic payload must satisfy closeout reconciliation validation"))
+
+    return failures
+
+
 def check_daily_execution_cli(root: Path) -> list[Failure]:
     failures: list[Failure] = []
     flow_temp_roots: list[Path] = []
@@ -8580,21 +9037,6 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             {"pass"},
         ),
         (
-            "closeout-check",
-            ["python3", "tools/loom_flow.py", "closeout", "check", "--target", ".", "--skip-gate"],
-            {"pass"},
-        ),
-        (
-            "closeout-sync",
-            ["python3", "tools/loom_flow.py", "closeout", "sync", "--target", ".", "--skip-gate"],
-            {"pass"},
-        ),
-        (
-            "reconciliation-audit",
-            ["python3", "tools/loom_flow.py", "reconciliation", "audit", "--target", "."],
-            {"block"},
-        ),
-        (
             "purity",
             ["python3", "tools/loom_flow.py", "purity-check", "--target", "examples/new-project", "--item", "INIT-0001"],
             {"pass"},
@@ -8805,17 +9247,6 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     or (isinstance(external_provenance, list) and external_provenance)
                 ):
                     failures.append(Failure("daily-execution-cli", "`loom_status` external_orchestrator must carry provenance"))
-            closeout = payload.get("closeout")
-            if not isinstance(closeout, dict):
-                failures.append(Failure("daily-execution-cli", "`loom_status` must include `closeout`"))
-            else:
-                if closeout.get("result") not in {"pass", "block", "not_applicable"}:
-                    failures.append(Failure("daily-execution-cli", "`loom_status` closeout result must stay within the stable set"))
-                reconciliation = closeout.get("reconciliation")
-                if not isinstance(reconciliation, dict):
-                    failures.append(Failure("daily-execution-cli", "`loom_status` closeout must include reconciliation"))
-                elif reconciliation.get("result") not in {"pass", "warn", "fix-needed", "block", "not_applicable"}:
-                    failures.append(Failure("daily-execution-cli", "`loom_status` closeout reconciliation result must stay within the stable set"))
             require_target_release_status_payload(
                 failures,
                 category="daily-execution-cli",
@@ -9355,64 +9786,6 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 category="daily-execution-cli",
                 context="`workspace attach`",
                 payload=payload.get("lifecycle_expectations"),
-            )
-        if label in {"closeout-check", "closeout-sync"}:
-            if payload.get("command") != "closeout":
-                failures.append(Failure("daily-execution-cli", f"`{label}` must report `command: closeout`"))
-            expected_operation = "check" if label == "closeout-check" else "sync"
-            if payload.get("operation") != expected_operation:
-                failures.append(
-                    Failure("daily-execution-cli", f"`{label}` must report `operation: {expected_operation}`")
-                )
-            repo = payload.get("repo")
-            if not isinstance(repo, dict):
-                failures.append(Failure("daily-execution-cli", f"`{label}` must include `repo`"))
-            else:
-                if not isinstance(repo.get("owner"), str) or not repo.get("owner"):
-                    failures.append(Failure("daily-execution-cli", f"`{label}` must include `repo.owner`"))
-                if not isinstance(repo.get("name"), str) or not repo.get("name"):
-                    failures.append(Failure("daily-execution-cli", f"`{label}` must include `repo.name`"))
-            require_runtime_state_payload(
-                failures,
-                category="daily-execution-cli",
-                context=f"`{label}`",
-                payload=payload.get("runtime_state"),
-                expected_scene="repo-local-demo",
-                expected_carrier="repo-local-wrapper",
-                allowed_results={"pass"},
-            )
-            require_closeout_reconciliation_contract(
-                failures,
-                category="daily-execution-cli",
-                context=f"`{label}`",
-                payload=payload,
-            )
-            require_repo_specific_requirements_payload(
-                failures,
-                category="daily-execution-cli",
-                context=f"`{label}` repo_specific_requirements",
-                payload=payload.get("repo_specific_requirements"),
-                expected_surface="closeout",
-            )
-        if label == "reconciliation-audit":
-            if payload.get("command") != "reconciliation":
-                failures.append(Failure("daily-execution-cli", "`reconciliation audit` must report `command: reconciliation`"))
-            if payload.get("operation") != "audit":
-                failures.append(Failure("daily-execution-cli", "`reconciliation audit` must report `operation: audit`"))
-            require_runtime_state_payload(
-                failures,
-                category="daily-execution-cli",
-                context="`reconciliation audit`",
-                payload=payload.get("runtime_state"),
-                expected_scene="repo-local-demo",
-                expected_carrier="repo-local-wrapper",
-                allowed_results={"pass"},
-            )
-            require_reconciliation_payload(
-                failures,
-                category="daily-execution-cli",
-                context="`reconciliation audit`",
-                payload=payload,
             )
         if label == "flow-merge-ready":
             if payload.get("command") != "flow":
@@ -12427,148 +12800,6 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             broken_install = tmp_root / "broken-install" / "skills"
             shutil.copytree(root / "skills", install_root)
 
-            for label, args in (
-                (
-                    "installed reconciliation audit",
-                    [
-                        "python3",
-                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                        "reconciliation",
-                        "audit",
-                        "--target",
-                        str(root),
-                        "--issue",
-                        "131",
-                        "--pr",
-                        "138",
-                        "--project",
-                        "5",
-                    ],
-                ),
-                (
-                    "installed reconciliation sync dry-run",
-                    [
-                        "python3",
-                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                        "reconciliation",
-                        "sync",
-                        "--target",
-                        str(root),
-                        "--issue",
-                        "131",
-                        "--pr",
-                        "138",
-                        "--project",
-                        "5",
-                        "--dry-run",
-                    ],
-                ),
-                (
-                    "installed closeout check",
-                    [
-                        "python3",
-                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                        "closeout",
-                        "check",
-                        "--target",
-                        str(root),
-                        "--issue",
-                        "131",
-                        "--pr",
-                        "138",
-                        "--project",
-                        "5",
-                        "--skip-gate",
-                    ],
-                ),
-                (
-                    "installed closeout sync",
-                    [
-                        "python3",
-                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                        "closeout",
-                        "sync",
-                        "--target",
-                        str(root),
-                        "--issue",
-                        "131",
-                        "--pr",
-                        "138",
-                        "--project",
-                        "5",
-                        "--skip-gate",
-                    ],
-                ),
-            ):
-                payload, error = load_command_json_with_retry(
-                    root,
-                    args,
-                    timeout_seconds=60,
-                    retries=3,
-                )
-                if error:
-                    if label in {"installed closeout check", "installed closeout sync"} and "command timed out" in error:
-                        continue
-                    failures.append(Failure("daily-execution-cli", f"`{label}` failed: {error}"))
-                    continue
-                rate_limited = payload_has_github_rate_limit(payload)
-                if label == "installed reconciliation audit":
-                    if payload.get("result") != "pass" and not rate_limited:
-                        failures.append(Failure("daily-execution-cli", "`installed reconciliation audit` must pass on the historical closeout sample"))
-                    require_runtime_state_payload(
-                        failures,
-                        category="daily-execution-cli",
-                        context="`installed reconciliation audit`",
-                        payload=payload.get("runtime_state"),
-                        expected_scene="installed-runtime",
-                        expected_carrier="installed-skills-root",
-                        allowed_results={"pass"},
-                    )
-                    require_reconciliation_payload(
-                        failures,
-                        category="daily-execution-cli",
-                        context="`installed reconciliation audit`",
-                        payload=payload,
-                    )
-                elif label == "installed reconciliation sync dry-run":
-                    if payload.get("result") != "pass" and not rate_limited:
-                        failures.append(Failure("daily-execution-cli", "`installed reconciliation sync --dry-run` must pass on an already aligned sample"))
-                    require_runtime_state_payload(
-                        failures,
-                        category="daily-execution-cli",
-                        context="`installed reconciliation sync --dry-run`",
-                        payload=payload.get("runtime_state"),
-                        expected_scene="installed-runtime",
-                        expected_carrier="installed-skills-root",
-                        allowed_results={"pass"},
-                    )
-                    require_safe_sync_plan_payload(
-                        failures,
-                        category="daily-execution-cli",
-                        context="`installed reconciliation sync --dry-run`",
-                        payload=payload.get("sync_plan"),
-                    )
-                    if payload.get("applied_actions") != []:
-                        failures.append(Failure("daily-execution-cli", "`reconciliation sync --dry-run` must not report applied actions"))
-                else:
-                    if payload.get("result") != "pass" and not rate_limited:
-                        failures.append(Failure("daily-execution-cli", f"`{label}` must pass on the historical closeout sample"))
-                    require_runtime_state_payload(
-                        failures,
-                        category="daily-execution-cli",
-                        context=f"`{label}`",
-                        payload=payload.get("runtime_state"),
-                        expected_scene="installed-runtime",
-                        expected_carrier="installed-skills-root",
-                        allowed_results={"pass"},
-                    )
-                    require_closeout_reconciliation_contract(
-                        failures,
-                        category="daily-execution-cli",
-                        context=f"`{label}`",
-                        payload=payload,
-                    )
-
             for target in (retire_target, dirty_target):
                 shutil.copytree(example_target, target)
                 for args in (
@@ -12798,169 +13029,6 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     expected_carrier="installed-skills-root",
                     allowed_results={"block"},
                 )
-
-    fail_closed_payloads = [
-        (
-            "closeout-fix-needed-fail-open",
-            {
-                "result": "pass",
-                "fallback_to": None,
-                "reconciliation": {
-                    "command": "reconciliation",
-                    "operation": "audit",
-                    "result": "fix-needed",
-                    "summary": "fix-needed",
-                    "missing_inputs": [],
-                    "fallback_to": "manual-reconciliation",
-                    "findings": [
-                        {
-                            "kind": "absorbed_but_open",
-                            "severity": "fix-needed",
-                            "subject": "issue #177",
-                            "evidence": {},
-                            "recommended_action": "run reconciliation sync",
-                        }
-                    ],
-                },
-            },
-        ),
-        (
-            "closeout-block-fallback-drift",
-            {
-                "result": "block",
-                "fallback_to": "merge",
-                "reconciliation": {
-                    "command": "reconciliation",
-                    "operation": "audit",
-                    "result": "block",
-                    "summary": "block",
-                    "missing_inputs": ["issue/pr/project"],
-                    "fallback_to": "manual-reconciliation",
-                    "findings": [
-                        {
-                            "kind": "parent_drift",
-                            "severity": "block",
-                            "subject": "parent issue #148",
-                            "evidence": {},
-                            "recommended_action": "manual reconciliation",
-                        }
-                    ],
-                },
-            },
-        ),
-        (
-            "closeout-malformed-reconciliation",
-            {
-                "result": "pass",
-                "fallback_to": None,
-                "reconciliation": {
-                    "command": "reconciliation",
-                    "operation": "audit",
-                    "summary": "broken",
-                    "missing_inputs": "bad",
-                    "findings": "bad",
-                },
-            },
-        ),
-    ]
-    for label, payload in fail_closed_payloads:
-        sample_failures: list[Failure] = []
-        require_closeout_reconciliation_contract(
-            sample_failures,
-            category="daily-execution-cli",
-            context=f"`{label}`",
-            payload=payload,
-        )
-        if not sample_failures:
-            failures.append(
-                Failure(
-                    "daily-execution-cli",
-                    f"`{label}` synthetic payload must fail closeout reconciliation validation",
-                )
-            )
-
-    warn_payload_failures: list[Failure] = []
-    require_closeout_reconciliation_contract(
-        warn_payload_failures,
-        category="daily-execution-cli",
-        context="`closeout-warn-does-not-block`",
-        payload={
-            "result": "pass",
-            "fallback_to": None,
-            "reconciliation": {
-                "command": "reconciliation",
-                "operation": "audit",
-                "result": "warn",
-                "summary": "warn",
-                "missing_inputs": [],
-                "fallback_to": "manual-reconciliation",
-                    "findings": [
-                        {
-                            "category": "drift",
-                            "kind": "project_drift",
-                            "severity": "warn",
-                            "subject": "project 5",
-                            "evidence": {},
-                            "recommended_action": "review warning",
-                            "fallback_to": "reconciliation-sync",
-                        }
-                    ],
-                },
-            },
-        )
-    if warn_payload_failures:
-        failures.append(
-            Failure(
-                "daily-execution-cli",
-                "`closeout-warn-does-not-block` synthetic payload must allow non-blocking reconciliation warnings",
-            )
-        )
-
-    valid_reconciliation_samples = [
-        ("merged_but_open", "fix-needed", "reconciliation-sync"),
-        ("absorbed_but_open", "fix-needed", "reconciliation-sync"),
-        ("parent_drift", "block", "manual-reconciliation"),
-        ("binding_failure", "block", "manual-reconciliation"),
-        ("merge_signal_drift", "block", "manual-reconciliation"),
-        ("host_signal_drift", "block", "manual-reconciliation"),
-    ]
-    for kind, reconciliation_result_value, fallback_to in valid_reconciliation_samples:
-        sample_failures = []
-        require_closeout_reconciliation_contract(
-            sample_failures,
-            category="daily-execution-cli",
-            context=f"`closeout-{kind}`",
-            payload={
-                "result": "block",
-                "fallback_to": fallback_to,
-                "reconciliation": {
-                    "command": "reconciliation",
-                    "operation": "audit",
-                    "result": reconciliation_result_value,
-                    "summary": kind,
-                    "missing_inputs": [] if kind != "host_signal_drift" else ["github control plane"],
-                    "fallback_to": "manual-reconciliation",
-                    "findings": [
-                        {
-                            "category": "drift",
-                            "kind": kind,
-                            "severity": reconciliation_result_value,
-                            "subject": "closeout sample",
-                            "evidence": {},
-                            "recommended_action": "reconcile closeout sample",
-                            "fallback_to": fallback_to,
-                        }
-                    ],
-                },
-            },
-        )
-        if sample_failures:
-            failures.append(
-                Failure(
-                    "daily-execution-cli",
-                    f"`closeout-{kind}` synthetic payload must satisfy closeout reconciliation validation",
-                )
-            )
 
     for flow_temp_root in flow_temp_roots:
         if flow_temp_root.exists() and not remove_temp_tree(flow_temp_root, attempts=20, delay_seconds=0.25):
@@ -15160,6 +15228,7 @@ def check_external_runtime_devendor_contract(root: Path) -> list[Failure]:
 
 def check_status_closeout_binding_contract(root: Path) -> list[Failure]:
     failures: list[Failure] = []
+    category = CLOSEOUT_RECONCILIATION_FIXTURE_CATEGORY
     seen: dict[str, object] = {}
     original_closeout_payload = loom_status_module.closeout_payload
 
@@ -15198,7 +15267,7 @@ def check_status_closeout_binding_contract(root: Path) -> list[Failure]:
         loom_status_module.closeout_payload = original_closeout_payload
 
     if payload.get("result") != "pass":
-        failures.append(Failure("daily-execution-cli", "`loom_status` synthetic closeout payload must pass"))
+        failures.append(Failure(category, "`loom_status` synthetic closeout payload must pass"))
     expected = {
         "phase_number": 439,
         "fr_number": 474,
@@ -15212,7 +15281,7 @@ def check_status_closeout_binding_contract(root: Path) -> list[Failure]:
     }
     for field, value in expected.items():
         if seen.get(field) != value:
-            failures.append(Failure("daily-execution-cli", f"`loom_status` closeout must forward `{field}` to closeout_payload"))
+            failures.append(Failure(category, f"`loom_status` closeout must forward `{field}` to closeout_payload"))
     return failures
 
 
@@ -21630,13 +21699,14 @@ def collect_source_failures(root: Path, source_surface: str = SOURCE_SURFACE_FUL
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "py-compile-cache-hygiene-pre", lambda: check_py_compile_cache_hygiene(root)),
         (SOURCE_SURFACE_REVIEW_RUN, "review-run", lambda: check_review_run_fixture(root)),
         (SOURCE_SURFACE_MERGE_GATE, "merge-gate", lambda: check_daily_execution_cli(root)),
+        (SOURCE_SURFACE_CLOSEOUT_RECONCILIATION, "closeout-reconciliation", lambda: check_closeout_reconciliation_fixture(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "py-compile-cache-hygiene", lambda: check_py_compile_cache_hygiene(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "repo-companion", lambda: check_repo_companion_interface_contracts(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "repo-interop", lambda: check_repo_interop_contracts(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "external-orchestrator-interop", lambda: check_external_orchestrator_interop_fixture_contract(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "external-orchestrator-conformance", lambda: check_external_orchestrator_conformance_contract(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "external-runtime-devendor", lambda: check_external_runtime_devendor_contract(root)),
-        (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "status-closeout-binding", lambda: check_status_closeout_binding_contract(root)),
+        (SOURCE_SURFACE_CLOSEOUT_RECONCILIATION, "status-closeout-binding", lambda: check_status_closeout_binding_contract(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "behavior-first-locators", lambda: check_behavior_first_locator_contracts(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "adversarial-adoption", lambda: check_adversarial_adoption_fixture(root)),
         (SOURCE_SURFACE_DISTRIBUTION_REGRESSION, "node-installer", lambda: check_node_installer(root)),
@@ -21748,7 +21818,7 @@ def check_loom_check_profile_contract(root: Path) -> list[Failure]:
     source_text = (root / "src/skills/shared/scripts/loom_check.py").read_text(encoding="utf-8")
     if "source/distribution" not in source_text or "--profile" not in source_text:
         failures.append(Failure(category, "`loom_check.py` must document source/distribution scope and expose `--profile`"))
-    for anchor in ("--source-surface", "contract-only", "source-self-fixture", "review-run", "merge-gate", "bootstrap-regression", "distribution-regression", "loom_check: start source surface="):
+    for anchor in ("--source-surface", "contract-only", "source-self-fixture", "review-run", "merge-gate", "closeout-reconciliation", "bootstrap-regression", "distribution-regression", "loom_check: start source surface="):
         if anchor not in source_text:
             failures.append(Failure(category, f"`loom_check.py` must expose source surface contract anchor `{anchor}`"))
     init_text = (root / "src/skills/shared/scripts/loom_init.py").read_text(encoding="utf-8")

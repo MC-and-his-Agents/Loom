@@ -206,12 +206,16 @@ full validation remains required even when fast surfaces all pass.
 | `contract-only` | fast validation / closeout-friendly contract proof |
 | `bootstrap-regression` | targeted heavier validation，面向 demo/bootstrap regression |
 | `distribution-regression` | targeted heavier validation，面向 installer / distribution / release-adjacent regression |
+| `review-run` | targeted source-self fixture validation，面向 review-run fixture diagnostics |
+| `merge-gate` | targeted source-self fixture validation，面向 PR gate / merge-ready / controlled merge fixture diagnostics |
+| `closeout-reconciliation` | targeted source-self fixture validation，面向 closeout / reconciliation fixture diagnostics |
 | `source-self-fixture` | heavy fixture surface，面向 Loom source repo 深层行为样本 |
 | `full` | authoritative full validation |
 
 其中：
 
 - `contract-only` 默认不是 release proof
+- `review-run`、`merge-gate`、`closeout-reconciliation` 是 `source-self-fixture` 的可聚合 child surfaces
 - `source-self-fixture`、`bootstrap-regression`、`distribution-regression` 是可选 targeted heavy surfaces，不自动等于 full
 - `full` 仍是 source profile 默认 authoritative aggregate validation
 
