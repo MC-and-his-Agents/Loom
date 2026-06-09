@@ -65,9 +65,6 @@ Current always-read command inventory from `demo_commands`:
 | `attach` | `python3 tools/loom_flow.py workspace attach --target examples/new-project --item INIT-0001` | `pass` |
 | `review-read` | `python3 tools/loom_flow.py review read --target examples/new-project --item INIT-0001` | `pass` |
 | `host-lifecycle` | `python3 tools/loom_flow.py host-lifecycle --target examples/new-project --item INIT-0001` | `pass` |
-| `closeout-check` | `python3 tools/loom_flow.py closeout check --target . --skip-gate` | `pass` |
-| `closeout-sync` | `python3 tools/loom_flow.py closeout sync --target . --skip-gate` | `pass` |
-| `reconciliation-audit` | `python3 tools/loom_flow.py reconciliation audit --target .` | `block` |
 | `purity` | `python3 tools/loom_flow.py purity-check --target examples/new-project --item INIT-0001` | `pass` |
 
 Current fixture groups inside the same bucket:
@@ -79,7 +76,7 @@ Current fixture groups inside the same bucket:
 | `host-binding` | Host binding validate/inspect against `main`, allowing host read unavailability only where code already allows it. | Host read availability is not proof of product behavior. |
 | `goal-and-governance-profile` | Goal derive/validate and governance-profile status/upgrade/binding. | Strong upgrade missing host enforcement remains expected evidence. |
 | `flow-lifecycle` | Flow pre-review/review/resume/handoff/merge-ready plus checkpoint admission/build/merge and workspace locate/attach. | Flow step order is asserted and cannot be silently relaxed. |
-| `review-and-closeout` | Review read, closeout check/sync, reconciliation audit, closeout reconciliation payload samples. | Closeout convenience checks are not release readiness. |
+| `review-read` | Review read and review record contract checks. | Review evidence is separate from merge-ready and closeout consumption. |
 | `installed-runtime-positive-chain` | Installed skill route and flow checks for pre-review, spec-review, review, merge-ready, checkpoint merge, controlled merge, and retained result consumption. | This is slow/full candidate until a later PR proves smaller authoritative grouping. |
 | `installed-negative-boundaries` | Missing suite, missing review, PR-body/raw-evidence bypass, stale review, CI bypass, missing install-layout, dirty retire samples. | Negative tests must not be moved into fast-only proof without full aggregation. |
 | `retire-and-workspace` | Installed purity-check, workspace cleanup, workspace retire, Loom-owned residue, non-Loom residue. | Mutating fixture setup is internal to temporary targets and must not become repo truth. |
@@ -142,13 +139,13 @@ Current source-self fixture steps outside the daily bucket:
 | `external-orchestrator-interop` | `check_external_orchestrator_interop_fixture_contract(root)` | External orchestrator interop fixture. |
 | `external-orchestrator-conformance` | `check_external_orchestrator_conformance_contract(root)` | External orchestrator conformance fixture. |
 | `external-runtime-devendor` | `check_external_runtime_devendor_contract(root)` | Runtime devendor boundary. |
-| `status-closeout-binding` | `check_status_closeout_binding_contract(root)` | Status/closeout binding. |
 | `behavior-first-locators` | `check_behavior_first_locator_contracts(root)` | Locator behavior contract. |
 | `adversarial-adoption` | `check_adversarial_adoption_fixture(root)` | Heavy adversarial fixture group. |
 
 Overlap boundary:
 
 - `daily-execution-cli` is itself a `source-self-fixture` step, but #1248 owns its internal command and fixture inventory.
+- `closeout-reconciliation` is itself a `source-self-fixture` child surface, but #1278 owns its command and payload inventory.
 - #1275 owns the non-daily step labels above and the boundary that they remain outside #1248 unless a later PR explicitly moves them with full aggregation proof.
 - The #1275 issue body mentions overlap with #1247; this inventory treats that as an unresolved locator mismatch because the active requested target is #1248.
 
@@ -159,6 +156,43 @@ Unknowns:
 - No new source-self selector is confirmed by this inventory.
 
 Later PR slice recommendation: PR-N should add source-self fixture group evidence for the non-daily labels without moving `daily-execution-cli` internals. Any ownership correction for #1247 versus #1248 should be made in issue comments before implementation.
+
+## #1278 Closeout/Reconciliation Source Surface
+
+Current bucket: `closeout-reconciliation`.
+
+Primary locator: `skills/shared/scripts/loom_check.py`, function `check_closeout_reconciliation_fixture()`.
+
+Current source-surface entry: `collect_source_failures(... SOURCE_SURFACE_CLOSEOUT_RECONCILIATION ...)` exposes `closeout-reconciliation` as a focused source surface. The aggregate `source-self-fixture` includes `review-run`, `merge-gate`, `closeout-reconciliation`, and the remaining source-self fixture steps.
+
+Current always-read command inventory:
+
+| Label | Command | Allowed result |
+| --- | --- | --- |
+| `closeout-check` | `python3 tools/loom_flow.py closeout check --target . --skip-gate` | `pass`, `block` |
+| `closeout-sync` | `python3 tools/loom_flow.py closeout sync --target . --skip-gate` | `pass`, `block` |
+| `reconciliation-audit` | `python3 tools/loom_flow.py reconciliation audit --target .` | `block` |
+| `status-control-closeout` | `python3 tools/loom_status.py --target examples/new-project --item INIT-0001` | `pass`, `block` |
+
+Current fixture groups inside the same bucket:
+
+| Stable group name | Current locator | Coverage boundary |
+| --- | --- | --- |
+| `closeout-check-sync` | `check_closeout_reconciliation_fixture()` repo-local closeout commands | Closeout check/sync must keep runtime-state, repo, repo-specific closeout requirements, and reconciliation payload validation fail-closed. |
+| `reconciliation-audit` | `check_closeout_reconciliation_fixture()` repo-local reconciliation command | Reconciliation audit remains allowed to return `block` for current source repo state, but payload schema and taxonomy must stay stable. |
+| `historical-closeout-samples` | `check_closeout_reconciliation_fixture()` installed runtime live opt-in samples | Live historical issue/PR/project samples run only with explicit `LOOM_CHECK_LIVE_GITHUB=1` and non-GitHub Actions auth. |
+| `safe-sync-dry-run` | `installed reconciliation sync dry-run` | Dry-run must expose `loom-safe-sync-plan/v1` and must not report applied actions. |
+| `synthetic-fail-closed-payloads` | `require_closeout_reconciliation_contract()` samples | `fix-needed` and `block` reconciliation results must force closeout `block` with the correct fallback; `warn` must not block. |
+| `status-closeout-binding` | `check_status_closeout_binding_contract(root)` | `loom_status` closeout status must forward issue, PR, Project, branch, owner/repo, and skip-gate inputs to closeout payload generation. |
+
+Boundary decision: keep closeout/reconciliation as a focused source surface without treating it as release readiness. `closeout-reconciliation` is a fixture surface; authoritative closeout remains owned by scheduler-controlled gate and post-merge consumption.
+
+Unknowns:
+
+- Live historical closeout samples depend on explicit local GitHub auth and remain skipped in CI by design.
+- Target-branch closeout semantics embedded in the broader adversarial adoption fixture remain aggregate `source-self-fixture` coverage unless a later split extracts that sub-scenario directly.
+
+Later PR slice recommendation: #1279 retire/workspace and #1280 installed-runtime should remain separate named surfaces; do not fold them into `closeout-reconciliation`.
 
 ## #1281 Repo Local CLI CI Command Contract
 
