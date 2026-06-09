@@ -1,47 +1,22 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1283",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "authored_at": "2026-06-09T14:58:35Z",
-  "reviewed_head": "f36922b04dbaa0f65dd0a9ba750476dd55aeb0cf",
-  "reviewed_validation_summary": "2026-06-09 T2 local validation: git diff --check passed; repo-local-cli group-order readback passed across Makefile variable, workflow steps, docs table, and repo-local-cli-full target order; make -n repo-local-cli-full showed the frozen order; make repo-local-cli-fast GROUP=workspace-locate passed; make repo-local-cli-full passed, including runtime-state-scene-conflict-negative fail-closed behavior where the underlying command returned result block and the Make target treated that as expected. WI-1283 carrier validation passed via loom_init fact-chain/verify, loom_flow purity-check, shadow-parity, adopt verify, suite evidence validate, and suite carrier validate; suite validate returned not_applicable by design with no blocking gaps. Scheduler-requested .loom/bin/__pycache__/ residue was removed and is absent from status.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "compat-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Projected from compatibility `blocking_issues`."
-      }
-    },
-    {
-      "id": "compat-follow-up-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "Projected from compatibility `follow_ups`."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ],
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Scheduler current-head review for PR #1389 head b7da6b567f8bf37f1dc9fde13444e19555a7b981: scope is limited to repo-local-cli local aliases/docs plus WI-1283 carriers; Makefile, workflow, docs, and full replay preserve the frozen group order; runtime-state scene conflict negative check remains fail-closed; hosted required gate names and workflow semantics are unchanged; no release/package/#1284/#1259 scope expansion found.",
+  "reviewer": "scheduler:019eabaf-92dc-7a52-a238-838f4c0bf4ac",
+  "authored_at": "2026-06-09T16:04:34Z",
+  "reviewed_head": "b7da6b567f8bf37f1dc9fde13444e19555a7b981",
+  "reviewed_validation_summary": "2026-06-09 T2 gate-input readiness correction: official recovery writeback moved WI-1283 to merge checkpoint with Blockers: None and synchronized .loom/status/current.md; official carrier refresh updated .loom/shadow/merge-ready-loom.json and .loom/shadow/closeout-loom.json after status sha drift. Validation passed: git diff --check; loom_init fact-chain; loom_init verify; loom_flow purity-check; checkpoint build; shadow-parity --blocking; adopt verify. Final PR metadata, flow review, and pr-gate checks are expected to be clean except for scheduler-owned semantic_review_disposition, which T2 is forbidden to record.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
   "consumed_inputs": {
     "work_item": ".loom/work-items/WI-1283.md",
     "recovery_entry": ".loom/progress/WI-1283.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "block",
+    "build_checkpoint": "pass",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
       "status": "not_applicable",
@@ -57,6 +32,17 @@
     },
     "engine_adapter": null,
     "engine_evidence": null,
-    "normalized_findings": null
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
   }
 }
