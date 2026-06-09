@@ -1,4 +1,7 @@
 .PHONY: loom-check check py-compile skills-check host-adapter-check version-surface-check release-surface-check cli-contract-check npm-package-check loom-check-runtime-regression loom-demo-new-project loom-demo-new-project-check loom-demo-new-project-sync loom-self-plugin-check
+.PHONY: repo-local-cli-fast repo-local-cli-full repo-local-cli-setup-demo-bootstrap repo-local-cli-init-runtime repo-local-cli-fact-chain repo-local-cli-flow-gates repo-local-cli-workspace-locate repo-local-cli-purity-check repo-local-cli-runtime-state-scene-conflict-negative
+
+REPO_LOCAL_CLI_GROUPS := setup-demo-bootstrap init-runtime fact-chain flow-gates workspace-locate purity-check runtime-state-scene-conflict-negative
 
 loom-check: loom-self-plugin-check loom-demo-new-project-check loom-check-runtime-regression
 	python3 tools/loom_check.py
@@ -46,3 +49,47 @@ loom-self-plugin-check:
 	test -f skills/loom-init/SKILL.md
 	test -f skills/loom-init/loom-package.json
 	test ! -f .agents/plugins/marketplace.json
+
+repo-local-cli-fast:
+	@test -n "$(GROUP)" || { echo "usage: make repo-local-cli-fast GROUP=<group>"; echo "groups: $(REPO_LOCAL_CLI_GROUPS)"; exit 2; }
+	@case " $(REPO_LOCAL_CLI_GROUPS) " in *" $(GROUP) "*) ;; *) echo "unknown repo-local-cli group: $(GROUP)"; echo "groups: $(REPO_LOCAL_CLI_GROUPS)"; exit 2;; esac
+	$(MAKE) --no-print-directory repo-local-cli-$(GROUP)
+
+repo-local-cli-full:
+	$(MAKE) --no-print-directory repo-local-cli-setup-demo-bootstrap
+	$(MAKE) --no-print-directory repo-local-cli-init-runtime
+	$(MAKE) --no-print-directory repo-local-cli-fact-chain
+	$(MAKE) --no-print-directory repo-local-cli-flow-gates
+	$(MAKE) --no-print-directory repo-local-cli-workspace-locate
+	$(MAKE) --no-print-directory repo-local-cli-purity-check
+	$(MAKE) --no-print-directory repo-local-cli-runtime-state-scene-conflict-negative
+
+repo-local-cli-setup-demo-bootstrap:
+	$(MAKE) --no-print-directory loom-demo-new-project-check
+
+repo-local-cli-init-runtime:
+	cd examples/new-project && python3 .loom/bin/loom_init.py runtime-state --target .
+	cd examples/new-project && python3 .loom/bin/loom_init.py verify --target .
+
+repo-local-cli-fact-chain:
+	cd examples/new-project && python3 .loom/bin/loom_init.py fact-chain --target .
+	cd examples/new-project && python3 .loom/bin/loom_flow.py runtime-state --target . --item INIT-0001
+	cd examples/new-project && python3 .loom/bin/loom_flow.py fact-chain --target . --item INIT-0001
+	cd examples/new-project && python3 .loom/bin/loom_flow.py runtime-evidence --target . --item INIT-0001
+	cd examples/new-project && python3 .loom/bin/loom_flow.py state-check --target . --item INIT-0001
+
+repo-local-cli-flow-gates:
+	cd examples/new-project && python3 .loom/bin/loom_flow.py flow pre-review --target . --item INIT-0001
+	cd examples/new-project && python3 .loom/bin/loom_flow.py checkpoint admission --target . --item INIT-0001
+
+repo-local-cli-workspace-locate:
+	cd examples/new-project && python3 .loom/bin/loom_flow.py workspace locate --target . --item INIT-0001
+
+repo-local-cli-purity-check:
+	cd examples/new-project && python3 .loom/bin/loom_flow.py purity-check --target . --item INIT-0001
+
+repo-local-cli-runtime-state-scene-conflict-negative:
+	@if LOOM_SOURCE_REPO_ROOT="$$PWD" LOOM_INSTALLED_SKILLS_ROOT="$$PWD/skills" LOOM_RUNTIME_SCENE=upgrade-rehearsal python3 skills/shared/scripts/loom_flow.py runtime-state --target examples/new-project --item INIT-0001; then \
+		echo "expected runtime-state conflict to fail closed"; \
+		exit 1; \
+	fi

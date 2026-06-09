@@ -2,21 +2,21 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1282
-- Goal: Split the `repo-local-cli` CI workflow command surface into stable, diagnosable workflow steps while preserving every existing repo-local CLI command, setup dependency, order-sensitive sequence, and the runtime-state scene conflict negative check.
-- Scope: Own issue #1282 only: freeze the repo-local-cli command group names/order, split `.github/workflows/loom-check.yml` repo-local-cli step identity, maintain WI-1282 progress/spec/evidence carriers, and refresh PR #1385 metadata for the current head. Excluded: #1283/#1284/#1259 implementation or closeout, Round 5, Round 7+, Deferred roadmap, release/package workflow behavior, `tools/check_cli_contract.py`, `tools/loom_check.py`, `skills/shared/scripts/loom_check.py`, generated runtime copies, semantic review, guardian, controlled merge, and issue closeout.
-- Execution Path: issue #1282 -> branch `work/1282-repo-local-cli-workflow-steps` -> freeze command group contract -> split repo-local-cli workflow steps -> preserve command membership/order/setup/negative check -> local validation -> PR #1385 metadata/head binding -> hosted check readback -> scheduler-owned gate.
+- Item ID: WI-1283
+- Goal: Add repo-local-cli local validation aliases and documentation so maintainers can reproduce the frozen CI command groups locally.
+- Scope: Issue #1283 only: Makefile repo-local-cli local validation aliases and narrow docs that distinguish fast versus full validation, preserve #1282 group names/order, keep runtime-state scene conflict negative check fail-closed, and do not weaken merge-ready or loom-check required gates. Excluded: workflow edits, #1284 evidence/closeout, #1259 closeout, generated runtime, release/package behavior, and unrelated tools.
+- Execution Path: issue #1283 -> branch work/1283-repo-local-cli-local-validation -> #1282 command contract readback -> Makefile aliases/docs -> local fast/full replay validation -> WI-1283 carrier/PR metadata -> scheduler-owned gate
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1282.md
-- Review Entry: .loom/reviews/WI-1282.json
-- Validation Entry: `git diff --check`; workflow YAML parse and command preservation readback; `make loom-demo-new-project-check`; local split group execution; runtime-state scene conflict negative check; `python3 .loom/bin/loom_init.py fact-chain --target .`; `python3 .loom/bin/loom_init.py verify --target .`; WI-1282 suite/evidence/carrier validation; PR metadata/head readback; hosted check readback.
-- Closing Condition: PR #1385 is current-head reviewed and consumed by scheduler-owned gate, then merged; issue #1282 is closed/completed only by scheduler closeout; #1283/#1284/#1259 remain out of this worker scope.
-- Current Checkpoint: closed_out
-- Current Stop: PR #1385 merged at 2026-06-09T13:57:11Z as merge commit 0dbcaab1b03c3c1bc9725d37604110e170eafe18; WI-1282 implementation and scheduler-owned gate are complete.
-- Next Step: Merge this closeout-only carrier sync, then run reconciliation sync to close issue #1282 and unblock #1283/#1284.
-- Blockers: None
-- Latest Validation Summary: 2026-06-09 review-shadow correction at PR #1385 head 6fec676e80c8ed631ed4a71a1d9af608679dfbb5: official recovery writeback moved WI-1282 to merge checkpoint; current-head allow review was recorded in .loom/reviews/WI-1282.json after reviewing the frozen repo-local-cli workflow split and WI-1282 carriers; carrier refresh dry-run and write were limited to authorized .loom/shadow/closeout-loom.json and .loom/shadow/merge-ready-loom.json; git diff --check passed; workflow readback confirmed the stable repo-local-cli group order and the 13 preserved commands including setup-demo-bootstrap and runtime-state scene conflict negative check; fact-chain and loom_init verify passed with current item WI-1282; shadow-parity --surface all --blocking passed; adopt verify passed. Pre-commit flow review is expected to purity-block on uncommitted authorized shadow carriers; clean-worktree purity/flow review/pr-gate/PR metadata preflight remain pending after commit.
-- Recovery Boundary: Closeout-only sync for WI-1282. Consume completed facts from PR #1385 merge commit 0dbcaab1b03c3c1bc9725d37604110e170eafe18; do not change repo-local-cli workflow semantics, #1283/#1284/#1259 work, Round 5, Round 7+, Deferred roadmap, release/package behavior, generated runtime, guardian, or controlled merge.
+- Recovery Entry: .loom/progress/WI-1283.md
+- Review Entry: .loom/reviews/WI-1283.json
+- Validation Entry: git diff --check; repo-local-cli group-order readback; make repo-local-cli-fast GROUP=workspace-locate; make repo-local-cli-full; fact-chain/verify/purity/shadow/adopt checks; PR metadata/head readback; hosted checks
+- Closing Condition: Worker stops at waiting-scheduler-gate after clean local validation, PR metadata/head readback, and hosted checks; scheduler owns review/merge-ready/merge/closeout and issue #1283 closure.
+- Current Checkpoint: build checkpoint
+- Current Stop: Repo-local-cli local validation aliases/docs and WI-1283 carriers are locally validated; branch is ready for commit, push, PR metadata readback, and hosted checks.
+- Next Step: Commit and push the WI-1283 branch, create/update PR metadata, read back hosted checks, then stop at waiting-scheduler-gate.
+- Blockers: None.
+- Latest Validation Summary: 2026-06-09 T2 local validation: git diff --check passed; repo-local-cli group-order readback passed across Makefile variable, workflow steps, docs table, and repo-local-cli-full target order; make -n repo-local-cli-full showed the frozen order; make repo-local-cli-fast GROUP=workspace-locate passed; make repo-local-cli-full passed, including runtime-state-scene-conflict-negative fail-closed behavior where the underlying command returned result block and the Make target treated that as expected. WI-1283 carrier validation passed via loom_init fact-chain/verify, loom_flow purity-check, shadow-parity, adopt verify, suite evidence validate, and suite carrier validate; suite validate returned not_applicable by design with no blocking gaps. Scheduler-requested .loom/bin/__pycache__/ residue was removed and is absent from status.
+- Recovery Boundary: WI-1283 only: Makefile repo-local-cli local validation aliases, narrow repo-local validation docs, WI-1283 carriers, and PR metadata. Do not edit workflow semantics, #1284 evidence/closeout, #1259 closeout, generated runtime, release/package behavior, Round 5, Round 7+, Deferred roadmap, or unrelated tools.
 - Current Lane: repo-local-cli-surfaces
 
 ## Runtime Evidence
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1282.md
-- Dynamic Truth: .loom/progress/WI-1282.md
+- Static Truth: .loom/work-items/WI-1283.md
+- Dynamic Truth: .loom/progress/WI-1283.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
