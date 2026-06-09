@@ -57,6 +57,7 @@ SOURCE_SURFACE_REVIEW_RUN = "review-run"
 SOURCE_SURFACE_MERGE_GATE = "merge-gate"
 SOURCE_SURFACE_CLOSEOUT_RECONCILIATION = "closeout-reconciliation"
 SOURCE_SURFACE_RETIRE_WORKSPACE = "retire-workspace"
+SOURCE_SURFACE_INSTALLED_RUNTIME = "installed-runtime"
 SOURCE_SURFACE_BOOTSTRAP_REGRESSION = "bootstrap-regression"
 SOURCE_SURFACE_DISTRIBUTION_REGRESSION = "distribution-regression"
 SOURCE_SURFACE_CHOICES = (
@@ -67,10 +68,11 @@ SOURCE_SURFACE_CHOICES = (
     SOURCE_SURFACE_MERGE_GATE,
     SOURCE_SURFACE_CLOSEOUT_RECONCILIATION,
     SOURCE_SURFACE_RETIRE_WORKSPACE,
+    SOURCE_SURFACE_INSTALLED_RUNTIME,
     SOURCE_SURFACE_BOOTSTRAP_REGRESSION,
     SOURCE_SURFACE_DISTRIBUTION_REGRESSION,
 )
-SOURCE_SURFACE_COUNT = 44
+SOURCE_SURFACE_COUNT = 45
 SOURCE_SURFACE_GROUPS = {
     SOURCE_SURFACE_SOURCE_SELF_FIXTURE: {
         SOURCE_SURFACE_SOURCE_SELF_FIXTURE,
@@ -78,11 +80,13 @@ SOURCE_SURFACE_GROUPS = {
         SOURCE_SURFACE_MERGE_GATE,
         SOURCE_SURFACE_CLOSEOUT_RECONCILIATION,
         SOURCE_SURFACE_RETIRE_WORKSPACE,
+        SOURCE_SURFACE_INSTALLED_RUNTIME,
     },
 }
 REVIEW_RUN_FIXTURE_CATEGORY = "review-run-fixture"
 CLOSEOUT_RECONCILIATION_FIXTURE_CATEGORY = "closeout-reconciliation-fixture"
 RETIRE_WORKSPACE_FIXTURE_CATEGORY = "retire-workspace-fixture"
+INSTALLED_RUNTIME_FIXTURE_CATEGORY = "installed-runtime-fixture"
 SOURCE_SNAPSHOT_EXCLUDED_ROOTS = {
     ".loom/cache",
     ".loom/runtime",
@@ -9183,6 +9187,2327 @@ def check_retire_workspace_fixture(root: Path) -> list[Failure]:
     return failures
 
 
+
+def check_installed_runtime_fixture(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    example_target = root / "examples/new-project"
+    tool_path = root / "tools/loom_flow.py"
+    if not tool_path.exists() or not example_target.exists():
+        return failures
+
+    with loom_check_temporary_directory(prefix="loom-check-runtime-state-") as tmp:
+        tmp_root = Path(tmp)
+        install_root = tmp_root / "installed" / "skills"
+        target_root = tmp_root / "target"
+        bootstrap_target = tmp_root / "bootstrapped-target"
+        shutil.copytree(root / "skills", install_root)
+        target_root.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(example_target, bootstrap_target)
+
+        payload, error = load_command_json(
+            root,
+            ["python3", str(install_root / "loom-init" / "scripts" / "loom-init.py"), "runtime-state", "--target", str(target_root)],
+        )
+        if error:
+            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed loom-init runtime-state` failed: {error}"))
+        else:
+            require_runtime_state_payload(
+                failures,
+                category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                context="`installed loom-init runtime-state`",
+                payload=payload.get("runtime_state"),
+                expected_scene="installed-runtime",
+                expected_carrier="installed-skills-root",
+                allowed_results={"pass"},
+            )
+
+        payload, error = load_command_json(
+            root,
+            ["python3", str(install_root / "shared" / "scripts" / "loom_flow.py"), "runtime-state", "--target", str(target_root)],
+            env={"LOOM_RUNTIME_SCENE": "upgrade-rehearsal"},
+        )
+        if error:
+            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed loom-flow runtime-state -- rehearsal` failed: {error}"))
+        else:
+            require_runtime_state_payload(
+                failures,
+                category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                context="`installed loom-flow runtime-state -- rehearsal`",
+                payload=payload.get("runtime_state"),
+                expected_scene="upgrade-rehearsal",
+                expected_carrier="installed-skills-root",
+                allowed_results={"pass"},
+            )
+
+        broken_install = tmp_root / "broken-install" / "skills"
+        shutil.copytree(root / "skills", broken_install)
+        (broken_install / "loom-init" / ".loom-runtime" / "shared" / "scripts" / "loom_flow.py").unlink()
+        payload, error = load_command_json(
+            root,
+            ["python3", str(broken_install / "loom-init" / "scripts" / "loom-init.py"), "runtime-state", "--target", str(target_root)],
+        )
+        if error:
+            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed runtime-state` missing shared runtime failed unexpectedly: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed runtime-state` must block when shared runtime is missing"))
+
+        drift_install = tmp_root / "drift-install" / "skills"
+        shutil.copytree(root / "skills", drift_install)
+        (drift_install / "loom-init" / ".loom-runtime" / "install-layout.json").unlink()
+        payload, error = load_command_json(
+            root,
+            ["python3", str(drift_install / "loom-init" / "scripts" / "loom-init.py"), "runtime-state", "--target", str(target_root)],
+        )
+        if error:
+            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed runtime-state` missing install-layout failed unexpectedly: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed runtime-state` must block when install-layout is missing"))
+
+        payload, error = load_command_json(
+            root,
+            ["python3", str(install_root / "shared" / "scripts" / "loom_flow.py"), "runtime-state", "--target", str(target_root)],
+            env={"LOOM_RUNTIME_SCENE": "repo-local-demo"},
+        )
+        if error:
+            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed runtime-state` scene conflict failed unexpectedly: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed runtime-state` must block on scene/carrier conflict"))
+
+        source_repo = tmp_root / "source"
+        sibling_prefix_install = tmp_root / "source-evil" / "skills"
+        source_repo.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(root / "skills", sibling_prefix_install)
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                str(sibling_prefix_install / "shared" / "scripts" / "loom_flow.py"),
+                "runtime-state",
+                "--target",
+                str(target_root),
+            ],
+            env={"LOOM_SOURCE_REPO_ROOT": str(source_repo)},
+        )
+        if error:
+            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`repo-local runtime-state` sibling-prefix escape failed unexpectedly: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`repo-local runtime-state` must block sibling-prefix install roots outside the source repo"))
+        else:
+            runtime_state = payload.get("runtime_state")
+            missing_inputs = runtime_state.get("missing_inputs") if isinstance(runtime_state, dict) else []
+            if not any("install root must stay inside the source repository" in str(item) for item in missing_inputs):
+                failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`repo-local runtime-state` sibling-prefix escape must expose the source-repo containment error"))
+
+        payload, error = load_command_json(
+            root,
+            ["python3", ".loom/bin/loom_init.py", "runtime-state", "--target", "."],
+            cwd=bootstrap_target,
+            env={"LOOM_SOURCE_REPO_ROOT": "/tmp/not-loom"},
+        )
+        if error:
+            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`bootstrapped loom-init runtime-state with unrelated source env` failed: {error}"))
+        else:
+            require_runtime_state_payload(
+                failures,
+                category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                context="`bootstrapped loom-init runtime-state with unrelated source env`",
+                payload=payload.get("runtime_state"),
+                expected_scene="installed-runtime",
+                expected_carrier="bootstrapped-target-runtime",
+                allowed_results={"pass"},
+            )
+
+        payload, error = load_command_json(
+            root,
+            ["python3", ".loom/bin/loom_init.py", "route", "--target", ".", "--task", "inspect adoption carrier"],
+            cwd=bootstrap_target,
+        )
+        if error:
+            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`bootstrapped loom-init route` failed: {error}"))
+        else:
+            require_route_payload(
+                failures,
+                category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                context="`bootstrapped loom-init route`",
+                payload=payload,
+                expected_skill="loom-adopt",
+                expected_mode="implicit",
+                allowed_results={"pass"},
+            )
+            runtime_state = payload.get("runtime_state")
+            if not isinstance(runtime_state, dict) or runtime_state.get("carrier") != "bootstrapped-target-runtime":
+                failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`bootstrapped loom-init route` must use the bootstrapped target runtime carrier"))
+            registry_check = (
+                runtime_state.get("checks", {}).get("registry_contract")
+                if isinstance(runtime_state, dict) and isinstance(runtime_state.get("checks"), dict)
+                else None
+            )
+            if not isinstance(registry_check, dict) or registry_check.get("status") != "not_applicable":
+                failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`bootstrapped loom-init route` must not require skills/registry.json"))
+
+        broken_bootstrap = tmp_root / "broken-bootstrapped-target"
+        shutil.copytree(example_target, broken_bootstrap)
+        manifest_path = broken_bootstrap / ".loom" / "bootstrap" / "manifest.json"
+        manifest = load_json_file(manifest_path)
+        if isinstance(manifest, dict):
+            artifacts = manifest.get("artifacts")
+            if isinstance(artifacts, list):
+                for artifact in artifacts:
+                    if isinstance(artifact, dict) and artifact.get("path") == ".loom/bin/runtime_state.py":
+                        artifact["source"] = "broken/source.py"
+            manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        payload, error = load_command_json(
+            root,
+            ["python3", ".loom/bin/loom_init.py", "runtime-state", "--target", "."],
+            cwd=broken_bootstrap,
+        )
+        if error:
+            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`bootstrapped runtime-state` manifest drift failed unexpectedly: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`bootstrapped runtime-state` must block when the bootstrap manifest drifts"))
+
+        hash_drift_bootstrap = tmp_root / "hash-drift-bootstrapped-target"
+        shutil.copytree(example_target, hash_drift_bootstrap)
+        manifest_path = hash_drift_bootstrap / ".loom" / "bootstrap" / "manifest.json"
+        manifest = load_json_file(manifest_path)
+        if isinstance(manifest, dict):
+            artifacts = manifest.get("artifacts")
+            if isinstance(artifacts, list):
+                for artifact in artifacts:
+                    if isinstance(artifact, dict) and artifact.get("path") == ".loom/bin/runtime_state.py":
+                        artifact["sha256"] = "0" * 64
+            manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        payload, error = load_command_json(
+            root,
+            ["python3", ".loom/bin/loom_init.py", "runtime-state", "--target", "."],
+            cwd=hash_drift_bootstrap,
+        )
+        if error:
+            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`bootstrapped runtime-state` provenance hash drift failed unexpectedly: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`bootstrapped runtime-state` must block when runtime provenance hashes drift"))
+
+    if shutil.which("git") is not None:
+        with loom_check_temporary_directory(prefix="loom-check-installed-pre-merge-") as tmp:
+            tmp_root = Path(tmp)
+            install_root = tmp_root / "installed" / "skills"
+            source_snapshot = tmp_root / "source-snapshot"
+            positive_target = tmp_root / "positive-target"
+            review_fallback_target = tmp_root / "review-fallback-target"
+            fake_bin = tmp_root / "bin"
+            fake_bin.mkdir(parents=True, exist_ok=True)
+            write_fake_codex(fake_bin / "codex", mode="success")
+            installed_review_env = prepend_path_env(fake_bin)
+            shutil.copytree(root / "skills", install_root)
+            shutil.copytree(root, source_snapshot, ignore=source_snapshot_ignore(root))
+
+            def author_positive_suite_fixture(target: Path) -> None:
+                suite_root = target / ".loom/specs/INIT-0001"
+                suite_root.mkdir(parents=True, exist_ok=True)
+                (suite_root / "spec.md").write_text(
+                    "\n".join(
+                        [
+                            "# Spec",
+                            "",
+                            "- Suite path: minimal",
+                            "",
+                            "## Scenarios",
+                            "",
+                            "- Scenario S1: Installed pre-merge execution reaches review and merge-ready gates.",
+                            "",
+                            "## Acceptance Criteria",
+                            "",
+                            "- AC-1: Installed positive chain can consume suite validation before spec review approval.",
+                            "",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+                (suite_root / "execution-breakdown.md").write_text(
+                    "\n".join(
+                        [
+                            "# Execution Breakdown",
+                            "",
+                            "## unit-init-1",
+                            "",
+                            "- Scope: installed positive pre-merge fixture gate consumption.",
+                            "- Validation: pre-review, review, PR gate, merge-ready, and controlled merge consume current carriers.",
+                            "",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+                (suite_root / "evidence-map.md").write_text(
+                    "\n".join(
+                        [
+                            "# Evidence Map",
+                            "",
+                            "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
+                            "| --- | --- | --- | --- | --- | --- | --- | --- |",
+                            "| EV-001 | behavior_evidence | README.md | `.loom/specs/INIT-0001/spec.md` S1 | INIT-0001 / installed fixture behavior | present | review and merge-ready evidence only | Re-run installed positive chain after behavior changes. |",
+                            "| EV-002 | test_evidence | .loom/progress/INIT-0001.md | `.loom/specs/INIT-0001/plan.md` validation | INIT-0001 / installed fixture tests | present | review and merge-ready evidence only | Re-run daily-execution-cli installed fixture validation. |",
+                            "| EV-003 | fresh_verification_input | .loom/progress/INIT-0001.md | EV-001 EV-002 | INIT-0001 / latest validation summary | present | review and merge-ready evidence only | Refresh progress summary after rerunning validation. |",
+                            "",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+                (suite_root / "task-carrier.md").write_text(
+                    "\n".join(
+                        [
+                            "# Task Carrier",
+                            "",
+                            "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |",
+                            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+                            "| repo_tasks_md | .loom/work-items/INIT-0001.md | fixture in progress | in_progress | primary | .loom/work-items/INIT-0001.md | .loom/specs/INIT-0001/execution-breakdown.md#unit-init-1 | .loom/specs/INIT-0001/spec.md#scenario-s1 | .loom/specs/INIT-0001/plan.md#validation | .loom/specs/INIT-0001/plan.md#validation | daily-execution-cli installed positive fixture | Recheck before review, PR gate, merge-ready, and controlled merge fixture consumption. |",
+                            "",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+                work_item_path = target / ".loom/work-items/INIT-0001.md"
+                if work_item_path.exists():
+                    work_item_text = work_item_path.read_text(encoding="utf-8")
+                    additions = [
+                        "- `.loom/specs/INIT-0001/evidence-map.md`",
+                        "- `.loom/specs/INIT-0001/execution-breakdown.md`",
+                        "- `.loom/specs/INIT-0001/task-carrier.md`",
+                    ]
+                    missing = [line for line in additions if line not in work_item_text]
+                    if missing:
+                        work_item_path.write_text(work_item_text.rstrip() + "\n" + "\n".join(missing) + "\n", encoding="utf-8")
+                (suite_root / "plan.md").write_text(
+                    "\n".join(
+                        [
+                            "# Plan",
+                            "",
+                            "- Suite path: minimal",
+                            "",
+                            "## Validation",
+                            "",
+                            "- S1 -> automated validation evidence: daily-execution-cli installed positive chain.",
+                            "- AC-1 -> test evidence: installed spec-review run and record allow consume suite validation.",
+                            "",
+                            "## Minimal Path Applicability Records",
+                            "",
+                            "- full-path-artifacts not_applicable rationale: installed pre-merge fixture only exercises the minimal formal suite; consumer boundary: suite validation, spec review, review, merge-ready, and controlled merge must not require suite-index.md, research.md, contracts.md, or readiness-checklist.md for this fixture; recheck condition: switch to full suite when these consumers require full-path artifacts.",
+                            "",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+
+            def prepare_target(target: Path) -> tuple[str | None, list[str]]:
+                errors: list[str] = []
+                shutil.copytree(source_snapshot, target)
+                for args in (
+                    ["git", "init"],
+                    ["git", "config", "user.email", "loom-check@example.com"],
+                    ["git", "config", "user.name", "loom-check"],
+                ):
+                    result = run_command(root, args, cwd=target)
+                    if result.returncode != 0:
+                        detail = result.stderr.strip() or result.stdout.strip() or "git setup failed"
+                        errors.append(detail)
+                        return None, errors
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-init" / "scripts" / "loom-init.py"),
+                        "bootstrap",
+                        "--target",
+                        str(target),
+                        "--intent",
+                        "execution-control",
+                        "--write",
+                        "--force",
+                        "--verify",
+                        "--install-pr-template",
+                    ],
+                    timeout_seconds=ADOPT_VERIFY_TIMEOUT_SECONDS,
+                )
+                if error:
+                    errors.append(error)
+                    return None, errors
+                verification = payload.get("verification")
+                if not isinstance(verification, dict) or verification.get("ok") is not True:
+                    errors.append("installed bootstrap must verify successfully before the pre-merge chain starts")
+                    return None, errors
+                prune_fixture_work_items(target)
+                author_positive_suite_fixture(target)
+                require_minimal_suite_happy_path_validation(
+                    failures,
+                    root=root,
+                    target=target,
+                    item="INIT-0001",
+                    category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                    context="`installed pre-merge chain` minimal suite happy path",
+                )
+                author_full_suite_happy_path_fixture(target, "WI-full-happy")
+                require_full_suite_happy_path_validation(
+                    failures,
+                    root=root,
+                    target=target,
+                    item="WI-full-happy",
+                    category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                    context="`installed pre-merge chain` full suite happy path",
+                )
+                require_generated_skills_surface_parity_validation(
+                    failures,
+                    root=root,
+                    category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                    context="`installed pre-merge chain` generated skills surface parity",
+                )
+                require_suite_negative_fail_closed_validation(
+                    failures,
+                    root=root,
+                    target=target,
+                    category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                    context="`installed pre-merge chain` suite negative fail-closed",
+                )
+                author_stale_evidence_block_fixture(target, "WI-stale-evidence")
+                require_stale_evidence_block_validation(
+                    failures,
+                    root=root,
+                    target=target,
+                    item="WI-stale-evidence",
+                    category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                    context="`installed pre-merge chain` stale evidence fixture",
+                )
+                author_host_conflict_block_fixture(target, "WI-host-conflict")
+                require_host_conflict_block_validation(
+                    failures,
+                    root=root,
+                    target=target,
+                    item="WI-host-conflict",
+                    category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                    context="`installed pre-merge chain` host conflict fixture",
+                )
+                require_scaffold_mutation_boundary_validation(
+                    failures,
+                    root=root,
+                    target=target / "WI-1151-scaffold-fixtures",
+                    category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                    context="`installed pre-merge chain` scaffold mutation boundary",
+                )
+
+                git_add = run_command(root, ["git", "add", "."], cwd=target)
+                if git_add.returncode != 0:
+                    detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
+                    errors.append(detail)
+                    return None, errors
+                git_commit = run_command(root, ["git", "commit", "-m", "bootstrap baseline for #209"], cwd=target)
+                if git_commit.returncode != 0:
+                    detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
+                    errors.append(detail)
+                    return None, errors
+
+                resume_payload, resume_error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-resume" / "scripts" / "loom-resume.py"),
+                        "flow",
+                        "resume",
+                        "--target",
+                        str(target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if resume_error:
+                    errors.append(resume_error)
+                    return None, errors
+                recovery = resume_payload.get("recovery")
+                if not isinstance(recovery, dict):
+                    errors.append("resume payload must include `recovery`")
+                    return None, errors
+                summary = recovery.get("latest_validation_summary")
+                if not isinstance(summary, str) or not summary:
+                    errors.append("resume payload must expose a non-empty `latest_validation_summary`")
+                    return None, errors
+                return summary, errors
+
+            positive_summary, positive_setup_errors = prepare_target(positive_target)
+            if positive_setup_errors:
+                failures.append(
+                    Failure(
+                        INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                        f"`installed pre-merge chain` setup failed: {'; '.join(positive_setup_errors)}",
+                    )
+                )
+            else:
+                task_signals = {
+                    "resume": "请接手当前事项并恢复上下文后继续推进",
+                    "pre-review": "请在进入 review 前做统一检查",
+                    "spec-review": "请先对 formal spec 做 spec review",
+                    "review": "请对当前事项做正式 review 并给出审查结论",
+                    "merge-ready": "请做 merge-ready 最终放行前预检并确认是否可以合并",
+                }
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-init" / "scripts" / "loom-init.py"),
+                        "route",
+                        "--target",
+                        str(positive_target),
+                        "--task",
+                        task_signals["resume"],
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed route resume` failed: {error}"))
+                else:
+                    require_route_payload(
+                        failures,
+                        category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                        context="`installed route resume`",
+                        payload=payload,
+                        expected_skill="loom-resume",
+                        expected_mode="implicit",
+                        expected_runtime_scene="installed-runtime",
+                        expected_runtime_carrier="installed-skills-root",
+                    )
+
+                resume_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-resume" / "scripts" / "loom-resume.py"),
+                        "flow",
+                        "resume",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed flow resume` failed: {error}"))
+                elif resume_payload.get("result") != "pass":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed flow resume` must pass for the positive chain"))
+                else:
+                    require_runtime_state_payload(
+                        failures,
+                        category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                        context="`installed flow resume`",
+                        payload=resume_payload.get("runtime_state"),
+                        expected_scene="installed-runtime",
+                        expected_carrier="installed-skills-root",
+                        allowed_results={"pass"},
+                    )
+                    require_execution_attempt_summary(
+                        failures,
+                        category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                        context="`installed flow resume`",
+                        payload=resume_payload.get("execution_attempt"),
+                        expected_operation="resume",
+                    )
+                    latest_attempt_status, latest_attempt_errors = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "shared" / "scripts" / "loom_status.py"),
+                            "--target",
+                            str(positive_target),
+                            "--item",
+                            "INIT-0001",
+                        ],
+                    )
+                    if latest_attempt_errors:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed status latest attempt` failed: {latest_attempt_errors}"))
+                    else:
+                        latest_attempt = latest_attempt_status.get("latest_execution_attempt")
+                        if not isinstance(latest_attempt, dict):
+                            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`loom_status` must include latest_execution_attempt"))
+                        elif latest_attempt.get("freshness") != "fresh":
+                            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`loom_status` must expose the latest fresh execution_attempt after flow resume"))
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-init" / "scripts" / "loom-init.py"),
+                        "route",
+                        "--target",
+                        str(positive_target),
+                        "--task",
+                        task_signals["pre-review"],
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed route pre-review` failed: {error}"))
+                else:
+                    require_route_payload(
+                        failures,
+                        category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                        context="`installed route pre-review`",
+                        payload=payload,
+                        expected_skill="loom-pre-review",
+                        expected_mode="implicit",
+                        expected_runtime_scene="installed-runtime",
+                        expected_runtime_carrier="installed-skills-root",
+                    )
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-pre-review" / "scripts" / "loom-pre-review.py"),
+                        "flow",
+                        "pre-review",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed flow pre-review` failed: {error}"))
+                elif payload.get("result") != "pass":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed flow pre-review` must pass for the positive chain"))
+                else:
+                    require_governance_lint_status_payload(
+                        failures,
+                        category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                        context="`installed flow pre-review`.governance_lint",
+                        payload=payload.get("governance_lint"),
+                        expected_surface="pre_review",
+                    )
+                    if payload.get("governance_lint", {}).get("result") != "pass":
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed flow pre-review` governance_lint must pass for the positive chain"))
+                    require_execution_attempt_summary(
+                        failures,
+                        category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                        context="`installed flow pre-review`",
+                        payload=payload.get("execution_attempt"),
+                        expected_operation="pre-review",
+                    )
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-init" / "scripts" / "loom-init.py"),
+                        "route",
+                        "--target",
+                        str(positive_target),
+                        "--task",
+                        task_signals["spec-review"],
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed route spec-review` failed: {error}"))
+                else:
+                    require_route_payload(
+                        failures,
+                        category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                        context="`installed route spec-review`",
+                        payload=payload,
+                        expected_skill="loom-spec-review",
+                        expected_mode="implicit",
+                        expected_runtime_scene="installed-runtime",
+                        expected_runtime_carrier="installed-skills-root",
+                    )
+
+                spec_review_flow_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-spec-review" / "scripts" / "loom-spec-review.py"),
+                        "flow",
+                        "spec-review",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed flow spec-review` failed: {error}"))
+                elif spec_review_flow_payload.get("result") != "pass":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed flow spec-review` must pass for the positive chain"))
+                else:
+                    require_execution_attempt_summary(
+                        failures,
+                        category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                        context="`installed flow spec-review`",
+                        payload=spec_review_flow_payload.get("execution_attempt"),
+                        expected_operation="spec-review",
+                    )
+
+                spec_review_run_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "review",
+                        "run",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                        "--review-file",
+                        ".loom/reviews/INIT-0001.spec.json",
+                    ],
+                    env=installed_review_env,
+                    timeout_seconds=150,
+                )
+                spec_review_record_input: dict[str, object] | None = None
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed spec review run` failed: {error}"))
+                elif spec_review_run_payload.get("result") != "pass":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed spec review run` must pass for the positive chain"))
+                else:
+                    require_review_run_payload(
+                        failures,
+                        category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                        context="`installed spec review run`",
+                        payload=spec_review_run_payload,
+                        expected_result={"pass"},
+                    )
+                    spec_review_record_input = (
+                        spec_review_run_payload.get("review_record_input")
+                        if isinstance(spec_review_run_payload, dict)
+                        else None
+                    )
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-spec-review" / "scripts" / "loom-spec-review.py"),
+                        "review",
+                        "record",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                        "--review-file",
+                        ".loom/reviews/INIT-0001.spec.json",
+                        "--decision",
+                        str(spec_review_record_input.get("decision", "allow")) if isinstance(spec_review_record_input, dict) else "allow",
+                        "--kind",
+                        "spec_review",
+                        "--summary",
+                        str(spec_review_record_input.get("summary", "Installed formal spec is approved for downstream review."))
+                        if isinstance(spec_review_record_input, dict)
+                        else "Installed formal spec is approved for downstream review.",
+                        "--reviewer",
+                        str(spec_review_record_input.get("reviewer", "loom-check")) if isinstance(spec_review_record_input, dict) else "loom-check",
+                        "--findings-file",
+                        str(spec_review_record_input.get("findings_file", ".loom/review-findings.json"))
+                        if isinstance(spec_review_record_input, dict)
+                        else ".loom/review-findings.json",
+                        "--engine-adapter",
+                        str(spec_review_record_input.get("engine_adapter", "loom/default-codex-exec"))
+                        if isinstance(spec_review_record_input, dict)
+                        else "loom/default-codex-exec",
+                        "--engine-evidence",
+                        str(spec_review_record_input.get("engine_evidence", ".loom/runtime/review/INIT-0001/unknown-head/engine-result.json"))
+                        if isinstance(spec_review_record_input, dict)
+                        else ".loom/runtime/review/INIT-0001/unknown-head/engine-result.json",
+                        "--normalized-findings",
+                        str(spec_review_record_input.get("normalized_findings", ".loom/review-findings.json"))
+                        if isinstance(spec_review_record_input, dict)
+                        else ".loom/review-findings.json",
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed spec review record allow` failed: {error}"))
+                elif payload.get("result") != "pass":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed spec review record allow` must pass"))
+                else:
+                    git_add = run_command(
+                        root,
+                        ["git", "add", ".loom/reviews/INIT-0001.spec.json"],
+                        cwd=positive_target,
+                    )
+                    if git_add.returncode != 0:
+                        detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed spec review carrier commit` add failed: {detail}"))
+                    else:
+                        git_commit = run_command(
+                            root,
+                            ["git", "commit", "-m", "author installed spec review carrier for #209"],
+                            cwd=positive_target,
+                        )
+                        if git_commit.returncode != 0:
+                            detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
+                            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed spec review carrier commit` failed: {detail}"))
+
+                incomplete_spec_target = tmp_root / "incomplete-spec-review-target"
+                shutil.copytree(positive_target, incomplete_spec_target)
+                spec_plan_path = incomplete_spec_target / ".loom/specs/INIT-0001/plan.md"
+                spec_plan_path.unlink()
+                incomplete_spec_setup_ok = False
+                git_add = run_command(root, ["git", "add", ".loom/specs/INIT-0001/plan.md"], cwd=incomplete_spec_target)
+                if git_add.returncode != 0:
+                    detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed incomplete spec review setup` add failed: {detail}"))
+                else:
+                    git_commit = run_command(
+                        root,
+                        ["git", "commit", "-m", "remove plan for incomplete spec fixture"],
+                        cwd=incomplete_spec_target,
+                    )
+                    if git_commit.returncode != 0:
+                        detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed incomplete spec review setup` commit failed: {detail}"))
+                    else:
+                        incomplete_spec_setup_ok = True
+                if incomplete_spec_setup_ok:
+                    payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                            "flow",
+                            "spec-review",
+                            "--target",
+                            str(incomplete_spec_target),
+                            "--item",
+                            "INIT-0001",
+                        ],
+                    )
+                    if error:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed incomplete flow spec-review` failed: {error}"))
+                    elif payload.get("result") != "block":
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed incomplete flow spec-review` must block"))
+                    elif not any(step.get("name") == "suite-validate" for step in payload.get("steps", []) if isinstance(step, dict)):
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed incomplete flow spec-review` must consume suite validation"))
+                    elif not any("plan.md" in str(item) for item in payload.get("missing_inputs", [])):
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed incomplete flow spec-review` must name the missing plan.md"))
+                    elif payload.get("suite_validation", {}).get("command") != "suite validate":
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed incomplete flow spec-review` must expose suite validate output"))
+
+                    payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "loom-spec-review" / "scripts" / "loom-spec-review.py"),
+                            "review",
+                            "record",
+                            "--target",
+                            str(incomplete_spec_target),
+                            "--item",
+                            "INIT-0001",
+                            "--review-file",
+                            ".loom/reviews/INIT-0001.spec.json",
+                            "--decision",
+                            "allow",
+                            "--kind",
+                            "spec_review",
+                            "--summary",
+                            "Incomplete formal spec suite should not be approved.",
+                            "--reviewer",
+                            "loom-check",
+                        ],
+                    )
+                    if error:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed incomplete spec review record` failed: {error}"))
+                    elif payload.get("result") != "block":
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed incomplete spec review record` must block"))
+                    elif not any("plan.md" in str(item) for item in payload.get("missing_inputs", [])):
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed incomplete spec review record` must name the missing plan.md"))
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-init" / "scripts" / "loom-init.py"),
+                        "route",
+                        "--target",
+                        str(positive_target),
+                        "--task",
+                        task_signals["review"],
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed route review` failed: {error}"))
+                else:
+                    require_route_payload(
+                        failures,
+                        category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                        context="`installed route review`",
+                        payload=payload,
+                        expected_skill="loom-review",
+                        expected_mode="implicit",
+                        expected_runtime_scene="installed-runtime",
+                        expected_runtime_carrier="installed-skills-root",
+                    )
+
+                review_flow_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-review" / "scripts" / "loom-review.py"),
+                        "flow",
+                        "review",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed flow review` failed: {error}"))
+                elif review_flow_payload.get("result") != "pass":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed flow review` must pass for the positive chain"))
+                else:
+                    review = review_flow_payload.get("review")
+                    if isinstance(review, dict):
+                        require_review_record_contract(
+                            failures,
+                            category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                            context="`installed flow review` review.record",
+                            payload=review.get("record"),
+                        )
+
+                review_run_payload: dict[str, object] | None = None
+                review_record_input: dict[str, object] | None = None
+                review_run_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "review",
+                        "run",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                    env=installed_review_env,
+                    timeout_seconds=150,
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed review run` failed: {error}"))
+                elif review_run_payload.get("result") != "pass":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed review run` must pass for the positive chain"))
+                else:
+                    require_review_run_payload(
+                        failures,
+                        category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                        context="`installed review run`",
+                        payload=review_run_payload,
+                        expected_result={"pass"},
+                    )
+                    review_record_input = review_run_payload.get("review_record_input") if isinstance(review_run_payload, dict) else None
+                review_record_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-review" / "scripts" / "loom-review.py"),
+                        "review",
+                        "record",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                        "--decision",
+                        str(review_record_input.get("decision", "allow")) if isinstance(review_record_input, dict) else "allow",
+                        "--kind",
+                        str(review_record_input.get("kind", "code_review")) if isinstance(review_record_input, dict) else "code_review",
+                        "--summary",
+                        str(review_record_input.get("summary", "Installed pre-merge chain is ready for merge checkpoint consumption."))
+                        if isinstance(review_record_input, dict)
+                        else "Installed pre-merge chain is ready for merge checkpoint consumption.",
+                        "--reviewer",
+                        str(review_record_input.get("reviewer", "loom-check")) if isinstance(review_record_input, dict) else "loom-check",
+                        "--findings-file",
+                        str(review_record_input.get("findings_file", ".loom/review-findings.json")) if isinstance(review_record_input, dict) else ".loom/review-findings.json",
+                        "--engine-adapter",
+                        str(review_record_input.get("engine_adapter", "loom/default-codex-exec")) if isinstance(review_record_input, dict) else "loom/default-codex-exec",
+                        "--engine-evidence",
+                        str(review_record_input.get("engine_evidence", ".loom/runtime/review/INIT-0001/unknown-head/engine-result.json"))
+                        if isinstance(review_record_input, dict)
+                        else ".loom/runtime/review/INIT-0001/unknown-head/engine-result.json",
+                        "--normalized-findings",
+                        str(review_record_input.get("normalized_findings", ".loom/review-findings.json"))
+                        if isinstance(review_record_input, dict)
+                        else ".loom/review-findings.json",
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed review record allow` failed: {error}"))
+                elif review_record_payload.get("result") != "pass":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed review record allow` must pass"))
+                else:
+                    review = review_record_payload.get("review")
+                    if isinstance(review, dict):
+                        require_review_record_contract(
+                            failures,
+                            category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                            context="`installed review record allow` review.record",
+                            payload=review.get("record"),
+                        )
+                    review_path = positive_target / ".loom/reviews/INIT-0001.json"
+                    try:
+                        review_record = json.loads(review_path.read_text(encoding="utf-8"))
+                    except (OSError, json.JSONDecodeError):
+                        review_record = {}
+                    if isinstance(review_record, dict):
+                        review_record["semantic_review_disposition"] = {
+                            "status": "passed",
+                            "reason": "Installed daily-execution positive fixture authored a current implementation review.",
+                        }
+                        review_path.write_text(json.dumps(review_record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "recovery",
+                        "writeback",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                        "--current-checkpoint",
+                        "merge checkpoint",
+                        "--current-stop",
+                        "Installed review completed and merge-ready validation is next.",
+                        "--next-step",
+                        "Run merge-ready and checkpoint merge from installed skills.",
+                        "--latest-validation-summary",
+                        positive_summary,
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed recovery writeback for merge` failed: {error}"))
+                elif payload.get("result") != "pass":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed recovery writeback for merge` must pass"))
+
+                git_add = run_command(
+                    root,
+                    [
+                        "git",
+                        "add",
+                        "-f",
+                        ".loom/progress/INIT-0001.md",
+                        ".loom/status/current.md",
+                        ".loom/reviews/INIT-0001.json",
+                    ],
+                    cwd=positive_target,
+                )
+                if git_add.returncode != 0:
+                    detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed pre-merge carrier commit` add failed: {detail}"))
+                else:
+                    git_commit = run_command(
+                        root,
+                        ["git", "commit", "-m", "author installed pre-merge carriers for #209"],
+                        cwd=positive_target,
+                    )
+                    if git_commit.returncode != 0:
+                        detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed pre-merge carrier commit` failed: {detail}"))
+
+                def current_head(target: Path) -> str:
+                    result = run_command(root, ["git", "rev-parse", "HEAD"], cwd=target)
+                    return result.stdout.strip()
+
+                def write_json_fixture(target: Path, relative: str, payload: object) -> str:
+                    path = target / relative
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                    return relative
+
+                def pr_gate_fixture(target: Path, *, number: int = 1, merge_state_status: str | None = None, host_review_state: str | None = None) -> str:
+                    head_ref_name = "feature/pr-gate"
+                    head_ref_oid = current_head(target)
+                    payload = {
+                        "number": number,
+                        "state": "OPEN",
+                        "isDraft": False,
+                        "headRefName": head_ref_name,
+                        "baseRefName": "main",
+                        "headRefOid": head_ref_oid,
+                        "body": f"## Related Work\n\n- Loom Work Item: INIT-0001\n- Branch: {head_ref_name}\n- Head SHA: {head_ref_oid}\n",
+                        "url": f"https://github.example/owner/repo/pull/{number}",
+                    }
+                    if merge_state_status:
+                        payload["mergeStateStatus"] = merge_state_status
+                    if host_review_state:
+                        payload["reviewDecision"] = host_review_state
+                        payload["latestReviews"] = [
+                            {
+                                "state": host_review_state,
+                                "authorAssociation": "OWNER",
+                                "author": {"login": "single-author-maintainer"},
+                            }
+                        ]
+                    return write_json_fixture(
+                        target,
+                        f".loom/tmp/pr-gate/pr-{number}.json",
+                        payload,
+                    )
+
+                pr_fixture = pr_gate_fixture(positive_target)
+                retained_pr_gate_fixture: str | None = None
+                pr_gate_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "pr-gate",
+                        "check",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                        "--pr",
+                        "1",
+                        "--pr-payload-file",
+                        pr_fixture,
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed pr-gate` positive failed: {error}"))
+                elif pr_gate_payload.get("result") != "pass":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` must pass for fresh authored review approval"))
+                else:
+                    if pr_gate_payload.get("schema_version") != "loom-pr-merge-gate/v1":
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` must expose the stable schema"))
+                    approval_boundary = pr_gate_payload.get("approval_boundary")
+                    if not isinstance(approval_boundary, dict) or approval_boundary.get("raw_review_evidence_satisfies_approval") is not False:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` must reject raw review evidence as approval truth"))
+                    elif any(
+                        approval_boundary.get(field) is not False
+                        for field in (
+                            "shadow_evidence_satisfies_approval",
+                            "runtime_review_evidence_satisfies_approval",
+                            "pr_body_summary_satisfies_approval",
+                            "ci_success_satisfies_approval",
+                            "github_review_comments_satisfy_approval",
+                        )
+                    ):
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` must reject shadow/runtime/PR body/CI/GitHub review evidence as approval truth"))
+                    review_approval = pr_gate_payload.get("review_approval")
+                    if not isinstance(review_approval, dict) or review_approval.get("decision") != "allow":
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` must read the authored allow review record"))
+                    governance_lint = pr_gate_payload.get("governance_lint")
+                    if not isinstance(governance_lint, dict) or governance_lint.get("result") != "pass":
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` must expose passing approval-boundary governance lint for fresh authored review approval"))
+                    retained_pr_gate_fixture = write_json_fixture(
+                        positive_target,
+                        ".loom/tmp/pr-gate/retained-pr-gate.json",
+                        pr_gate_payload,
+                    )
+
+                protection_fixture = write_json_fixture(
+                    positive_target,
+                    ".loom/tmp/pr-gate/branch-protection.json",
+                    {
+                        "required_status_checks": {
+                            "contexts": ["py-compile", "loom-check", "loom-pr-merge-gate"],
+                        },
+                    },
+                )
+                status_fixture = write_json_fixture(
+                    positive_target,
+                    ".loom/tmp/pr-gate/status-checks.json",
+                    {
+                        "statusCheckRollup": [
+                            {"name": "py-compile", "status": "COMPLETED", "conclusion": "SUCCESS"},
+                            {"name": "loom-check", "status": "COMPLETED", "conclusion": "SUCCESS"},
+                            {"name": "loom-pr-merge-gate", "status": "COMPLETED", "conclusion": "SUCCESS"},
+                        ],
+                    },
+                )
+                controlled_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "controlled-merge",
+                        "check",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                        "--pr",
+                        "1",
+                        "--pr-payload-file",
+                        pr_fixture,
+                        "--branch-protection-file",
+                        protection_fixture,
+                        "--status-checks-file",
+                        status_fixture,
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed controlled-merge` positive failed: {error}"))
+                elif controlled_payload.get("result") != "pass":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed controlled-merge` check must pass when pr-gate and required checks pass"))
+                else:
+                    host_enforcement = controlled_payload.get("host_enforcement")
+                    merge = controlled_payload.get("merge")
+                    if not isinstance(host_enforcement, dict) or host_enforcement.get("required") is not True:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed controlled-merge` must prove loom-pr-merge-gate is required"))
+                    if not isinstance(merge, dict) or merge.get("attempted") is not False or merge.get("dry_run") is not True:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed controlled-merge check` must not call gh pr merge"))
+
+                blocked_policy_pr_fixture = pr_gate_fixture(
+                    positive_target,
+                    number=21,
+                    merge_state_status="BLOCKED",
+                    host_review_state="COMMENTED",
+                )
+                controlled_blocked_policy_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "controlled-merge",
+                        "check",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                        "--pr",
+                        "21",
+                        "--pr-payload-file",
+                        blocked_policy_pr_fixture,
+                        "--branch-protection-file",
+                        protection_fixture,
+                        "--status-checks-file",
+                        status_fixture,
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed controlled-merge` BLOCKED policy fixture failed: {error}"))
+                elif controlled_blocked_policy_payload.get("result") != "pass":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed controlled-merge` must allow GitHub BLOCKED when authored Loom approval and required checks pass"))
+                else:
+                    drift_readback = controlled_blocked_policy_payload.get("drift_readback")
+                    mergeability = (
+                        drift_readback.get("subchecks", {}).get("mergeability")
+                        if isinstance(drift_readback, dict)
+                        else None
+                    )
+                    pr_gate = controlled_blocked_policy_payload.get("pr_gate")
+                    approval_boundary = pr_gate.get("approval_boundary") if isinstance(pr_gate, dict) else None
+                    if not isinstance(mergeability, dict) or mergeability.get("result") != "pass" or mergeability.get("interpretation") != "delegated_host_policy":
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed controlled-merge` must report GitHub BLOCKED as delegated host policy evidence"))
+                    if not isinstance(approval_boundary, dict) or approval_boundary.get("github_review_comments_satisfy_approval") is not False:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed controlled-merge` must keep author COMMENTED host review evidence outside approval truth"))
+
+                for hard_status in ("DIRTY", "DRAFT"):
+                    hard_status_fixture = pr_gate_fixture(positive_target, number=30 if hard_status == "DIRTY" else 31, merge_state_status=hard_status)
+                    hard_status_payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                            "controlled-merge",
+                            "check",
+                            "--target",
+                            str(positive_target),
+                            "--item",
+                            "INIT-0001",
+                            "--pr",
+                            "30" if hard_status == "DIRTY" else "31",
+                            "--pr-payload-file",
+                            hard_status_fixture,
+                            "--branch-protection-file",
+                            protection_fixture,
+                            "--status-checks-file",
+                            status_fixture,
+                        ],
+                    )
+                    if error:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed controlled-merge` {hard_status} fixture failed: {error}"))
+                    elif hard_status_payload.get("result") != "block":
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed controlled-merge` must block GitHub {hard_status} mergeability"))
+                    else:
+                        drift_readback = hard_status_payload.get("drift_readback")
+                        mergeability = (
+                            drift_readback.get("subchecks", {}).get("mergeability")
+                            if isinstance(drift_readback, dict)
+                            else None
+                        )
+                        if not isinstance(mergeability, dict) or mergeability.get("result") != "block" or mergeability.get("interpretation") != "hard_block":
+                            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed controlled-merge` must report GitHub {hard_status} as hard-block mergeability"))
+
+                missing_gate_protection = write_json_fixture(
+                    positive_target,
+                    ".loom/tmp/pr-gate/branch-protection-missing-pr-gate.json",
+                    {
+                        "required_status_checks": {
+                            "contexts": ["py-compile", "loom-check"],
+                        },
+                    },
+                )
+                controlled_missing_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "controlled-merge",
+                        "check",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                        "--pr",
+                        "1",
+                        "--pr-payload-file",
+                        pr_fixture,
+                        "--branch-protection-file",
+                        missing_gate_protection,
+                        "--status-checks-file",
+                        status_fixture,
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed controlled-merge` missing required gate failed: {error}"))
+                elif controlled_missing_payload.get("result") != "block":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed controlled-merge` must block when loom-pr-merge-gate is not required"))
+
+                ci_bypass_target = tmp_root / "pr-gate-ci-success-bypass"
+                shutil.copytree(positive_target, ci_bypass_target)
+                ci_review_path = ci_bypass_target / ".loom/reviews/INIT-0001.json"
+                if ci_review_path.exists():
+                    ci_review_path.unlink()
+                git_add = run_command(root, ["git", "add", "-u", ".loom/reviews/INIT-0001.json"], cwd=ci_bypass_target)
+                git_commit = run_command(root, ["git", "commit", "-m", "remove authored review for ci bypass fixture"], cwd=ci_bypass_target)
+                if git_add.returncode != 0 or git_commit.returncode != 0:
+                    detail = git_add.stderr.strip() or git_add.stdout.strip() or git_commit.stderr.strip() or git_commit.stdout.strip() or "git fixture setup failed"
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed controlled-merge` CI bypass fixture setup failed: {detail}"))
+                else:
+                    ci_pr_fixture = pr_gate_fixture(ci_bypass_target, number=20)
+                    ci_controlled_payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                            "controlled-merge",
+                            "check",
+                            "--target",
+                            str(ci_bypass_target),
+                            "--item",
+                            "INIT-0001",
+                            "--pr",
+                            "20",
+                            "--pr-payload-file",
+                            ci_pr_fixture,
+                            "--branch-protection-file",
+                            protection_fixture,
+                            "--status-checks-file",
+                            status_fixture,
+                        ],
+                    )
+                    if error:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed controlled-merge` CI bypass failed: {error}"))
+                    elif ci_controlled_payload.get("result") != "block":
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed controlled-merge` must block CI-success-only approval bypass"))
+                    else:
+                        pr_gate = ci_controlled_payload.get("pr_gate")
+                        governance_lint = pr_gate.get("governance_lint") if isinstance(pr_gate, dict) else None
+                        approval_boundary = pr_gate.get("approval_boundary") if isinstance(pr_gate, dict) else None
+                        if not isinstance(governance_lint, dict) or governance_lint.get("result") != "block":
+                            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed controlled-merge` CI bypass must expose blocking governance lint"))
+                        if not isinstance(approval_boundary, dict) or approval_boundary.get("ci_success_satisfies_approval") is not False:
+                            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed controlled-merge` must not treat CI success as semantic approval"))
+
+                ruleset_fixture = write_json_fixture(
+                    positive_target,
+                    ".loom/tmp/pr-gate/branch-ruleset.json",
+                    [
+                        {
+                            "type": "required_status_checks",
+                            "parameters": {
+                                "required_status_checks": [
+                                    {"context": "loom-pr-merge-gate"},
+                                ],
+                            },
+                        },
+                    ],
+                )
+                controlled_ruleset_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "controlled-merge",
+                        "check",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                        "--pr",
+                        "1",
+                        "--pr-payload-file",
+                        pr_fixture,
+                        "--branch-protection-file",
+                        missing_gate_protection,
+                        "--ruleset-file",
+                        ruleset_fixture,
+                        "--status-checks-file",
+                        status_fixture,
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed controlled-merge` ruleset required gate failed: {error}"))
+                elif controlled_ruleset_payload.get("result") != "pass":
+                    failures.append(
+                        Failure(
+                            INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                            "`installed controlled-merge` must pass when an active ruleset requires "
+                            f"loom-pr-merge-gate; got result={controlled_ruleset_payload.get('result')} "
+                            f"missing={controlled_ruleset_payload.get('missing_inputs')} "
+                            f"host_enforcement={controlled_ruleset_payload.get('host_enforcement')}",
+                        )
+                    )
+                else:
+                    host_enforcement = controlled_ruleset_payload.get("host_enforcement")
+                    if not isinstance(host_enforcement, dict) or "loom-pr-merge-gate" not in host_enforcement.get("ruleset_required_contexts", []):
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed controlled-merge` must expose ruleset required contexts"))
+
+                def copy_pr_gate_fixture(target: Path) -> None:
+                    clone = run_command(root, ["git", "clone", "--quiet", str(positive_target), str(target)])
+                    if clone.returncode != 0:
+                        shutil.copytree(positive_target, target)
+                    run_command(root, ["git", "config", "user.email", "loom-check@example.com"], cwd=target)
+                    run_command(root, ["git", "config", "user.name", "loom-check"], cwd=target)
+
+                missing_review_target = tmp_root / "pr-gate-missing-review"
+                copy_pr_gate_fixture(missing_review_target)
+                review_path = missing_review_target / ".loom/reviews/INIT-0001.json"
+                if review_path.exists():
+                    review_path.unlink()
+                git_add = run_command(root, ["git", "add", "-u", ".loom/reviews/INIT-0001.json"], cwd=missing_review_target)
+                git_commit = run_command(root, ["git", "commit", "-m", "remove authored review for pr gate fixture"], cwd=missing_review_target)
+                if git_add.returncode != 0 or git_commit.returncode != 0:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` missing review fixture setup failed"))
+                else:
+                    missing_pr_fixture = pr_gate_fixture(missing_review_target, number=2)
+                    missing_review_payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                            "pr-gate",
+                            "check",
+                            "--target",
+                            str(missing_review_target),
+                            "--item",
+                            "INIT-0001",
+                            "--pr",
+                            "2",
+                            "--pr-payload-file",
+                            missing_pr_fixture,
+                        ],
+                    )
+                    taxonomy = missing_review_payload.get("failure_taxonomy") if isinstance(missing_review_payload, dict) else []
+                    if error:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed pr-gate` missing review failed: {error}"))
+                    elif missing_review_payload.get("result") != "block" or "review_missing" not in taxonomy:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` must block when authored review is missing"))
+
+                pr_body_bypass_target = tmp_root / "pr-gate-pr-body-bypass"
+                copy_pr_gate_fixture(pr_body_bypass_target)
+                pr_body_review_path = pr_body_bypass_target / ".loom/reviews/INIT-0001.json"
+                if pr_body_review_path.exists():
+                    pr_body_review_path.unlink()
+                git_add = run_command(root, ["git", "add", "-u", ".loom/reviews/INIT-0001.json"], cwd=pr_body_bypass_target)
+                git_commit = run_command(root, ["git", "commit", "-m", "remove authored review for pr body bypass fixture"], cwd=pr_body_bypass_target)
+                if git_add.returncode != 0 or git_commit.returncode != 0:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` PR body bypass fixture setup failed"))
+                else:
+                    pr_body_fixture = write_json_fixture(
+                        pr_body_bypass_target,
+                        ".loom/tmp/pr-gate/pr-body-approval.json",
+                        {
+                            "number": 21,
+                            "state": "OPEN",
+                            "isDraft": False,
+                            "headRefName": "feature/pr-body-bypass",
+                            "baseRefName": "main",
+                            "headRefOid": current_head(pr_body_bypass_target),
+                            "body": "## Related Work\n\n- Loom Work Item: INIT-0001\n\n## Review\n\nApproved by PR body summary.\n",
+                            "url": "https://github.example/owner/repo/pull/21",
+                        },
+                    )
+                    pr_body_payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                            "pr-gate",
+                            "check",
+                            "--target",
+                            str(pr_body_bypass_target),
+                            "--item",
+                            "INIT-0001",
+                            "--pr",
+                            "21",
+                            "--pr-payload-file",
+                            pr_body_fixture,
+                        ],
+                    )
+                    if error:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed pr-gate` PR body bypass failed: {error}"))
+                    elif pr_body_payload.get("result") != "block":
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` must block PR-body-only approval bypass"))
+                    else:
+                        approval_boundary = pr_body_payload.get("approval_boundary")
+                        governance_lint = pr_body_payload.get("governance_lint")
+                        if not isinstance(approval_boundary, dict) or approval_boundary.get("pr_body_summary_satisfies_approval") is not False:
+                            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` must not treat PR body approval text as semantic approval"))
+                        if not isinstance(governance_lint, dict) or governance_lint.get("result") != "block":
+                            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` PR body bypass must expose blocking governance lint"))
+
+                raw_only_target = tmp_root / "pr-gate-raw-only"
+                copy_pr_gate_fixture(raw_only_target)
+                raw_review_path = raw_only_target / ".loom/reviews/INIT-0001.json"
+                if raw_review_path.exists():
+                    raw_review_path.unlink()
+                write_json_fixture(
+                    raw_only_target,
+                    ".loom/runtime/review/INIT-0001/raw-only-head/engine-result.json",
+                    {"decision": "allow", "summary": "Raw evidence must not satisfy the PR gate.", "findings": []},
+                )
+                git_add = run_command(root, ["git", "add", "-f", "-A", ".loom/reviews/INIT-0001.json", ".loom/runtime/review"], cwd=raw_only_target)
+                git_commit = run_command(root, ["git", "commit", "-m", "leave only raw review evidence for pr gate fixture"], cwd=raw_only_target)
+                if git_add.returncode != 0 or git_commit.returncode != 0:
+                    detail = git_add.stderr.strip() or git_add.stdout.strip() or git_commit.stderr.strip() or git_commit.stdout.strip() or "git fixture setup failed"
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed pr-gate` raw evidence fixture setup failed: {detail}"))
+                else:
+                    raw_pr_fixture = pr_gate_fixture(raw_only_target, number=3)
+                    raw_only_payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                            "pr-gate",
+                            "check",
+                            "--target",
+                            str(raw_only_target),
+                            "--item",
+                            "INIT-0001",
+                            "--pr",
+                            "3",
+                            "--pr-payload-file",
+                            raw_pr_fixture,
+                        ],
+                    )
+                    taxonomy = raw_only_payload.get("failure_taxonomy") if isinstance(raw_only_payload, dict) else []
+                    if error:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed pr-gate` raw evidence bypass failed: {error}"))
+                    elif raw_only_payload.get("result") != "block" or "raw_evidence_bypass" not in taxonomy:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` must block raw-evidence-only approval bypass"))
+                    else:
+                        governance_lint = raw_only_payload.get("governance_lint")
+                        if not isinstance(governance_lint, dict) or governance_lint.get("result") != "block":
+                            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` raw-only case must expose blocking approval-boundary governance lint"))
+
+                block_decision_target = tmp_root / "pr-gate-block-decision"
+                copy_pr_gate_fixture(block_decision_target)
+                block_review_path = block_decision_target / ".loom/reviews/INIT-0001.json"
+                try:
+                    block_review = json.loads(block_review_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    block_review = {}
+                if isinstance(block_review, dict):
+                    block_review["decision"] = "block"
+                    block_review["summary"] = "Fixture review blocks merge."
+                    block_review_path.write_text(json.dumps(block_review, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                git_add = run_command(root, ["git", "add", "-f", ".loom/reviews/INIT-0001.json"], cwd=block_decision_target)
+                git_commit = run_command(root, ["git", "commit", "-m", "author blocking review fixture"], cwd=block_decision_target)
+                if git_add.returncode != 0 or git_commit.returncode != 0:
+                    detail = git_add.stderr.strip() or git_add.stdout.strip() or git_commit.stderr.strip() or git_commit.stdout.strip() or "git fixture setup failed"
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed pr-gate` block decision fixture setup failed: {detail}"))
+                else:
+                    block_pr_fixture = pr_gate_fixture(block_decision_target, number=4)
+                    block_decision_payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                            "pr-gate",
+                            "check",
+                            "--target",
+                            str(block_decision_target),
+                            "--item",
+                            "INIT-0001",
+                            "--pr",
+                            "4",
+                            "--pr-payload-file",
+                            block_pr_fixture,
+                        ],
+                    )
+                    taxonomy = block_decision_payload.get("failure_taxonomy") if isinstance(block_decision_payload, dict) else []
+                    if error:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed pr-gate` block decision failed: {error}"))
+                    elif block_decision_payload.get("result") != "block" or "review_not_approved" not in taxonomy:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` must block non-allow authored review decisions"))
+
+                spec_review_target = tmp_root / "pr-gate-spec-review-kind"
+                shutil.copytree(positive_target, spec_review_target)
+                spec_review_path = spec_review_target / ".loom/reviews/INIT-0001.json"
+                try:
+                    spec_review_record = json.loads(spec_review_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    spec_review_record = {}
+                if isinstance(spec_review_record, dict):
+                    spec_review_record["kind"] = "spec_review"
+                    spec_review_record["summary"] = "A spec review cannot satisfy implementation approval."
+                    spec_review_path.write_text(json.dumps(spec_review_record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                git_add = run_command(root, ["git", "add", "-f", ".loom/reviews/INIT-0001.json"], cwd=spec_review_target)
+                git_commit = run_command(root, ["git", "commit", "-m", "author spec review kind fixture"], cwd=spec_review_target)
+                if git_add.returncode != 0 or git_commit.returncode != 0:
+                    detail = git_add.stderr.strip() or git_add.stdout.strip() or git_commit.stderr.strip() or git_commit.stdout.strip() or "git fixture setup failed"
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed pr-gate` spec review kind fixture setup failed: {detail}"))
+                else:
+                    spec_review_pr_fixture = pr_gate_fixture(spec_review_target, number=6)
+                    spec_review_payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                            "pr-gate",
+                            "check",
+                            "--target",
+                            str(spec_review_target),
+                            "--item",
+                            "INIT-0001",
+                            "--pr",
+                            "6",
+                            "--pr-payload-file",
+                            spec_review_pr_fixture,
+                        ],
+                    )
+                    taxonomy = spec_review_payload.get("failure_taxonomy") if isinstance(spec_review_payload, dict) else []
+                    review_approval = spec_review_payload.get("review_approval") if isinstance(spec_review_payload, dict) else {}
+                    governance_lint = spec_review_payload.get("governance_lint") if isinstance(spec_review_payload, dict) else {}
+                    if error:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed pr-gate` spec review kind failed: {error}"))
+                    elif spec_review_payload.get("result") != "block" or "review_not_approved" not in taxonomy:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` must block spec_review records from satisfying implementation approval"))
+                    elif not isinstance(review_approval, dict) or review_approval.get("status") == "approved":
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` must not mark spec_review records as implementation approval"))
+                    elif not isinstance(governance_lint, dict) or governance_lint.get("result") != "block":
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` spec_review case must expose blocking approval-boundary governance lint"))
+
+                stale_review_target = tmp_root / "pr-gate-stale-review"
+                shutil.copytree(positive_target, stale_review_target)
+                readme_path = stale_review_target / "README.md"
+                readme_path.write_text(readme_path.read_text(encoding="utf-8") + "\nStale review fixture change.\n", encoding="utf-8")
+                git_add = run_command(root, ["git", "add", "README.md"], cwd=stale_review_target)
+                git_commit = run_command(root, ["git", "commit", "-m", "change implementation after review fixture"], cwd=stale_review_target)
+                if git_add.returncode != 0 or git_commit.returncode != 0:
+                    detail = git_add.stderr.strip() or git_add.stdout.strip() or git_commit.stderr.strip() or git_commit.stdout.strip() or "git fixture setup failed"
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed pr-gate` stale review fixture setup failed: {detail}"))
+                else:
+                    stale_pr_fixture = pr_gate_fixture(stale_review_target, number=22)
+                    stale_payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                            "pr-gate",
+                            "check",
+                            "--target",
+                            str(stale_review_target),
+                            "--item",
+                            "INIT-0001",
+                            "--pr",
+                            "22",
+                            "--pr-payload-file",
+                            stale_pr_fixture,
+                        ],
+                    )
+                    taxonomy = stale_payload.get("failure_taxonomy") if isinstance(stale_payload, dict) else []
+                    governance_lint = stale_payload.get("governance_lint") if isinstance(stale_payload, dict) else {}
+                    if error:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed pr-gate` stale review failed: {error}"))
+                    elif stale_payload.get("result") != "block" or not ({"review_stale", "head_binding_drift"} & set(taxonomy)):
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` must block stale review/head drift evidence"))
+                    elif not isinstance(governance_lint, dict) or governance_lint.get("result") != "block":
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` stale review case must expose blocking governance lint"))
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-init" / "scripts" / "loom-init.py"),
+                        "route",
+                        "--target",
+                        str(positive_target),
+                        "--task",
+                        task_signals["merge-ready"],
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed route merge-ready` failed: {error}"))
+                else:
+                    require_route_payload(
+                        failures,
+                        category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                        context="`installed route merge-ready`",
+                        payload=payload,
+                        expected_skill="loom-merge-ready",
+                        expected_mode="implicit",
+                        expected_runtime_scene="installed-runtime",
+                        expected_runtime_carrier="installed-skills-root",
+                    )
+
+                merge_ready_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "loom-merge-ready" / "scripts" / "loom-merge-ready.py"),
+                        "flow",
+                        "merge-ready",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed flow merge-ready` failed: {error}"))
+                elif merge_ready_payload.get("result") != "pass":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed flow merge-ready` must pass for the positive chain"))
+                else:
+                    retained_merge_gate_fixture = write_json_fixture(
+                        positive_target,
+                        ".loom/tmp/pr-gate/retained-merge-gate.json",
+                        merge_ready_payload,
+                    )
+                    merge_checkpoint = merge_ready_payload.get("merge_checkpoint")
+                    if not isinstance(merge_checkpoint, dict) or merge_checkpoint.get("result") != "pass":
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed flow merge-ready` must expose `merge_checkpoint.result = pass`"))
+                    require_governance_lint_status_payload(
+                        failures,
+                        category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                        context="`installed flow merge-ready`.governance_lint",
+                        payload=merge_ready_payload.get("governance_lint"),
+                        expected_surface="merge_ready",
+                    )
+                    if merge_ready_payload.get("governance_lint", {}).get("result") != "pass":
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed flow merge-ready` governance_lint must pass for the positive chain"))
+                    if retained_pr_gate_fixture is not None:
+                        retained_controlled_payload, error = load_command_json(
+                            root,
+                            [
+                                "python3",
+                                str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                                "controlled-merge",
+                                "check",
+                                "--target",
+                                str(positive_target),
+                                "--item",
+                                "INIT-0001",
+                                "--pr",
+                                "1",
+                                "--pr-payload-file",
+                                pr_fixture,
+                                "--branch-protection-file",
+                                protection_fixture,
+                                "--status-checks-file",
+                                status_fixture,
+                                "--pr-gate-result-file",
+                                retained_pr_gate_fixture,
+                                "--merge-gate-result-file",
+                                retained_merge_gate_fixture,
+                            ],
+                        )
+                        if error:
+                            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed controlled-merge` retained result consumption failed: {error}"))
+                        elif retained_controlled_payload.get("result") != "pass":
+                            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed controlled-merge` must pass with fresh retained pr-gate and merge-gate results"))
+                        else:
+                            retained_results = retained_controlled_payload.get("retained_results")
+                            drift_readback = retained_controlled_payload.get("drift_readback")
+                            if not isinstance(retained_results, dict) or retained_results.get("pr_gate", {}).get("source") != "retained":
+                                failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed controlled-merge` must report retained pr-gate consumption"))
+                            if not isinstance(drift_readback, dict) or drift_readback.get("mode") != "drift-only":
+                                failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed controlled-merge` must expose drift-only readback when consuming retained results"))
+
+                        stale_pr_gate_payload = json.loads(json.dumps(pr_gate_payload))
+                        stale_pr_gate_payload["pr"]["head_sha"] = "0" * 40
+                        stale_pr_gate_fixture = write_json_fixture(
+                            positive_target,
+                            ".loom/tmp/pr-gate/retained-pr-gate-stale-head.json",
+                            stale_pr_gate_payload,
+                        )
+                        stale_retained_payload, error = load_command_json(
+                            root,
+                            [
+                                "python3",
+                                str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                                "controlled-merge",
+                                "check",
+                                "--target",
+                                str(positive_target),
+                                "--item",
+                                "INIT-0001",
+                                "--pr",
+                                "1",
+                                "--pr-payload-file",
+                                pr_fixture,
+                                "--branch-protection-file",
+                                protection_fixture,
+                                "--status-checks-file",
+                                status_fixture,
+                                "--pr-gate-result-file",
+                                stale_pr_gate_fixture,
+                                "--merge-gate-result-file",
+                                retained_merge_gate_fixture,
+                            ],
+                        )
+                        if error:
+                            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed controlled-merge` stale retained pr-gate failed: {error}"))
+                        elif stale_retained_payload.get("result") != "block":
+                            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed controlled-merge` must block stale retained pr-gate head drift"))
+
+                checkpoint_merge_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "checkpoint",
+                        "merge",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed checkpoint merge` failed: {error}"))
+                elif checkpoint_merge_payload.get("result") != "pass":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed checkpoint merge` must pass for the positive chain"))
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "recovery",
+                        "writeback",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                        "--current-checkpoint",
+                        "merge checkpoint",
+                        "--current-stop",
+                        "Only Loom carrier status changed after review.",
+                        "--next-step",
+                        "Confirm carrier-only review head binding remains consumable.",
+                        "--latest-validation-summary",
+                        positive_summary,
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed recovery writeback carrier-only` failed: {error}"))
+                elif payload.get("result") != "pass":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed recovery writeback carrier-only` must pass"))
+                git_add = run_command(root, ["git", "add", "-f", ".loom/progress/INIT-0001.md", ".loom/status/current.md"], cwd=positive_target)
+                if git_add.returncode != 0:
+                    detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed carrier-only commit` add failed: {detail}"))
+                else:
+                    git_commit = run_command(
+                        root,
+                        ["git", "commit", "-m", "refresh carriers after review for #354"],
+                        cwd=positive_target,
+                    )
+                    if git_commit.returncode != 0:
+                        detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed carrier-only commit` failed: {detail}"))
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "checkpoint",
+                        "merge",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed checkpoint merge` carrier-only failed: {error}"))
+                elif payload.get("result") != "pass":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed checkpoint merge` must pass for carrier-only review head drift"))
+                elif "carrier-only" not in json.dumps(payload, ensure_ascii=False):
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed checkpoint merge` must expose carrier-only review head binding"))
+
+                broken_install = tmp_root / "broken-install" / "skills"
+                shutil.copytree(root / "skills", broken_install)
+                (broken_install / "loom-init" / ".loom-runtime" / "install-layout.json").unlink()
+                (broken_install / "loom-pre-review" / ".loom-runtime" / "install-layout.json").unlink()
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(broken_install / "loom-init" / "scripts" / "loom-init.py"),
+                        "route",
+                        "--target",
+                        str(positive_target),
+                        "--task",
+                        task_signals["resume"],
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed route` missing install-layout failed unexpectedly: {error}"))
+                else:
+                    require_route_payload(
+                        failures,
+                        category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                        context="`installed route` missing install-layout",
+                        payload=payload,
+                        expected_skill="loom-init",
+                        expected_mode="fallback",
+                        expected_runtime_scene="installed-runtime",
+                        expected_runtime_carrier="installed-skills-root",
+                        allowed_results={"block"},
+                    )
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(broken_install / "loom-pre-review" / "scripts" / "loom-pre-review.py"),
+                        "flow",
+                        "pre-review",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed flow pre-review` missing install-layout failed unexpectedly: {error}"))
+                elif payload.get("result") != "block":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed flow pre-review` must block when install-layout is missing"))
+                else:
+                    require_runtime_state_payload(
+                        failures,
+                        category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                        context="`installed flow pre-review` missing install-layout",
+                        payload=payload.get("runtime_state"),
+                        expected_scene="installed-runtime",
+                        expected_carrier="installed-skills-root",
+                        allowed_results={"block"},
+                    )
+
+                review_fallback_summary, review_fallback_errors = prepare_target(review_fallback_target)
+                if review_fallback_errors:
+                    failures.append(
+                        Failure(
+                            INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                            f"`installed review baseline fallback` setup failed: {'; '.join(review_fallback_errors)}",
+                        )
+                    )
+                else:
+                    payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                            "recovery",
+                            "writeback",
+                            "--target",
+                            str(review_fallback_target),
+                            "--item",
+                            "INIT-0001",
+                            "--current-checkpoint",
+                            "admission checkpoint",
+                            "--current-stop",
+                            "Installed review baseline is still at admission.",
+                            "--next-step",
+                            "Promote the target repo to build checkpoint before review.",
+                            "--latest-validation-summary",
+                            review_fallback_summary,
+                        ],
+                    )
+                    if error:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed recovery writeback for admission fallback` failed: {error}"))
+                    elif payload.get("result") != "pass":
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed recovery writeback for admission fallback` must pass"))
+
+                    git_add = run_command(
+                        root,
+                        ["git", "add", "-f", ".loom/progress/INIT-0001.md", ".loom/status/current.md"],
+                        cwd=review_fallback_target,
+                    )
+                    if git_add.returncode != 0:
+                        detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed review baseline fallback` add failed: {detail}"))
+                    else:
+                        git_commit = run_command(
+                            root,
+                            ["git", "commit", "-m", "lower checkpoint to admission for #209 fallback"],
+                            cwd=review_fallback_target,
+                        )
+                        if git_commit.returncode != 0:
+                            detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
+                            failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed review baseline fallback` commit failed: {detail}"))
+
+                    payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "loom-review" / "scripts" / "loom-review.py"),
+                            "flow",
+                            "review",
+                            "--target",
+                            str(review_fallback_target),
+                            "--item",
+                            "INIT-0001",
+                        ],
+                    )
+                    if error:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed flow review` admission fallback failed: {error}"))
+                    elif payload.get("result") != "fallback" or payload.get("fallback_to") != "admission":
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed flow review` must fall back to `admission` when build checkpoint is missing"))
+
+                    payload, error = load_command_json(
+                        root,
+                        [
+                            "python3",
+                            str(install_root / "loom-merge-ready" / "scripts" / "loom-merge-ready.py"),
+                            "flow",
+                            "merge-ready",
+                            "--target",
+                            str(review_fallback_target),
+                            "--item",
+                            "INIT-0001",
+                        ],
+                    )
+                    if error:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed flow merge-ready` review-baseline fallback failed: {error}"))
+                    elif payload.get("result") not in {"fallback", "block"}:
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed flow merge-ready` must fail closed when review baseline is missing"))
+
+                readme_path = positive_target / "README.md"
+                readme_path.write_text(readme_path.read_text(encoding="utf-8") + "\n# review-head-drift\n", encoding="utf-8")
+                git_add = run_command(root, ["git", "add", "README.md"], cwd=positive_target)
+                if git_add.returncode != 0:
+                    detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed merge-ready drift` add failed: {detail}"))
+                else:
+                    git_commit = run_command(
+                        root,
+                        ["git", "commit", "-m", "introduce non-carrier drift after review for #209"],
+                        cwd=positive_target,
+                    )
+                    if git_commit.returncode != 0:
+                        detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed merge-ready drift` commit failed: {detail}"))
+
+                stale_pr_fixture = pr_gate_fixture(positive_target, number=5)
+                stale_pr_payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "pr-gate",
+                        "check",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                        "--pr",
+                        "5",
+                        "--pr-payload-file",
+                        stale_pr_fixture,
+                    ],
+                )
+                taxonomy = stale_pr_payload.get("failure_taxonomy") if isinstance(stale_pr_payload, dict) else []
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed pr-gate` stale review failed: {error}"))
+                elif stale_pr_payload.get("result") != "block" or "review_stale" not in taxonomy:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed pr-gate` must block stale authored review approval"))
+
+                payload, error = load_command_json(
+                    root,
+                    [
+                        "python3",
+                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
+                        "checkpoint",
+                        "merge",
+                        "--target",
+                        str(positive_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                )
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed checkpoint merge` drift negative failed: {error}"))
+                elif payload.get("result") != "block":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed checkpoint merge` must block when HEAD drifts beyond Loom carriers"))
+                elif "implementation-drift-only" not in json.dumps(payload, ensure_ascii=False):
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed checkpoint merge` drift negative must expose implementation-drift-only review head binding"))
+
+    live_github_opt_in = os.environ.get("LOOM_CHECK_LIVE_GITHUB") == "1"
+    gh_auth_probe = None
+    if live_github_opt_in and shutil.which("gh") is not None:
+        try:
+            gh_auth_probe = run_command(root, ["gh", "auth", "status"], timeout_seconds=5)
+        except subprocess.TimeoutExpired:
+            gh_auth_probe = None
+    gh_auth_ready = gh_auth_probe is not None and gh_auth_probe.returncode == 0
+    # GitHub Actions' ephemeral token is enough for self-governance host binding
+    # reads, but it is not a stable authority for historical live issue/PR/project
+    # samples. Keep those samples as local authenticated coverage instead of
+    # making CI depend on mutable host permissions.
+    if gh_auth_ready and os.environ.get("GITHUB_ACTIONS") != "true":
+        with loom_check_temporary_directory(prefix="loom-check-installed-post-merge-") as tmp:
+            tmp_root = Path(tmp)
+            install_root = tmp_root / "installed" / "skills"
+            retire_target = tmp_root / "retire-target"
+            dirty_target = tmp_root / "dirty-target"
+            broken_install = tmp_root / "broken-install" / "skills"
+            shutil.copytree(root / "skills", install_root)
+
+            for target in (retire_target, dirty_target):
+                shutil.copytree(example_target, target)
+                for args in (
+                    ["git", "init"],
+                    ["git", "config", "user.email", "loom-check@example.com"],
+                    ["git", "config", "user.name", "loom-check"],
+                    ["git", "add", "."],
+                    ["git", "commit", "-m", "baseline"],
+                ):
+                    result = run_command(root, args, cwd=target)
+                    if result.returncode != 0:
+                        detail = result.stderr.strip() or result.stdout.strip() or "git setup failed"
+                        failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed retire` setup failed: {detail}"))
+                        break
+
+            purity_payload, error = load_command_json(
+                root,
+                [
+                    "python3",
+                    str(install_root / "loom-retire" / "scripts" / "loom-retire.py"),
+                    "purity-check",
+                    "--target",
+                    str(retire_target),
+                    "--item",
+                    "INIT-0001",
+                ],
+            )
+            if error:
+                failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed purity-check` failed: {error}"))
+            elif purity_payload.get("result") != "pass":
+                failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed purity-check` must pass on a clean retire target"))
+            else:
+                require_runtime_state_payload(
+                    failures,
+                    category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                    context="`installed purity-check`",
+                    payload=purity_payload.get("runtime_state"),
+                    expected_scene="installed-runtime",
+                    expected_carrier="installed-skills-root",
+                    allowed_results={"pass"},
+                )
+
+            temp_root = retire_target / ".loom" / ".tmp"
+            installed_residue = temp_root / "loom-owned-residue"
+            installed_residue.mkdir(parents=True, exist_ok=True)
+            (installed_residue / ".loom-owned").write_text("owned\n", encoding="utf-8")
+            (installed_residue / "sentinel.txt").write_text("temp\n", encoding="utf-8")
+
+            cleanup_payload, error = load_command_json(
+                root,
+                [
+                    "python3",
+                    str(install_root / "loom-retire" / "scripts" / "loom-retire.py"),
+                    "workspace",
+                    "cleanup",
+                    "--target",
+                    str(retire_target),
+                    "--item",
+                    "INIT-0001",
+                ],
+            )
+            if error:
+                failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed workspace cleanup` failed: {error}"))
+            elif cleanup_payload.get("result") != "pass":
+                failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed workspace cleanup` must pass for Loom-owned residue"))
+            else:
+                require_runtime_state_payload(
+                    failures,
+                    category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                    context="`installed workspace cleanup`",
+                    payload=cleanup_payload.get("runtime_state"),
+                    expected_scene="installed-runtime",
+                    expected_carrier="installed-skills-root",
+                    allowed_results={"pass"},
+                )
+                require_lifecycle_expectations_payload(
+                    failures,
+                    category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                    context="`installed workspace cleanup`",
+                    payload=cleanup_payload.get("lifecycle_expectations"),
+                )
+
+            retire_payload, error = load_command_json(
+                root,
+                [
+                    "python3",
+                    str(install_root / "loom-retire" / "scripts" / "loom-retire.py"),
+                    "workspace",
+                    "retire",
+                    "--target",
+                    str(retire_target),
+                    "--item",
+                    "INIT-0001",
+                ],
+            )
+            if error:
+                failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed workspace retire` failed: {error}"))
+            elif retire_payload.get("result") != "pass":
+                failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed workspace retire` must pass after cleanup"))
+            else:
+                require_runtime_state_payload(
+                    failures,
+                    category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                    context="`installed workspace retire`",
+                    payload=retire_payload.get("runtime_state"),
+                    expected_scene="installed-runtime",
+                    expected_carrier="installed-skills-root",
+                    allowed_results={"pass"},
+                )
+                require_lifecycle_expectations_payload(
+                    failures,
+                    category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                    context="`installed workspace retire`",
+                    payload=retire_payload.get("lifecycle_expectations"),
+                )
+                checkpoint = retire_payload.get("checkpoint")
+                if not isinstance(checkpoint, dict) or checkpoint.get("normalized") != "retired":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, "`installed workspace retire` must leave the target in `retired` state"))
+
+            (dirty_target / "foreign-residue.txt").write_text("pending\n", encoding="utf-8")
+            dirty_add = run_command(root, ["git", "add", "foreign-residue.txt"], cwd=dirty_target)
+            if dirty_add.returncode != 0:
+                detail = dirty_add.stderr.strip() or dirty_add.stdout.strip() or "git add failed"
+                failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`installed retire` dirty sample setup failed: {detail}"))
+
+            for label, args in (
+                (
+                    "installed purity-check dirty sample",
+                    [
+                        "python3",
+                        str(install_root / "loom-retire" / "scripts" / "loom-retire.py"),
+                        "purity-check",
+                        "--target",
+                        str(dirty_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                ),
+                (
+                    "installed workspace cleanup dirty sample",
+                    [
+                        "python3",
+                        str(install_root / "loom-retire" / "scripts" / "loom-retire.py"),
+                        "workspace",
+                        "cleanup",
+                        "--target",
+                        str(dirty_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                ),
+                (
+                    "installed workspace retire dirty sample",
+                    [
+                        "python3",
+                        str(install_root / "loom-retire" / "scripts" / "loom-retire.py"),
+                        "workspace",
+                        "retire",
+                        "--target",
+                        str(dirty_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                ),
+            ):
+                payload, error = load_command_json(root, args)
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`{label}` failed: {error}"))
+                    continue
+                if payload.get("result") != "block":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`{label}` must block when non-Loom residue is present"))
+                require_runtime_state_payload(
+                    failures,
+                    category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                    context=f"`{label}`",
+                    payload=payload.get("runtime_state"),
+                    expected_scene="installed-runtime",
+                    expected_carrier="installed-skills-root",
+                    allowed_results={"pass"},
+                )
+
+            shutil.copytree(root / "skills", broken_install)
+            (broken_install / "install-layout.json").unlink()
+            (broken_install / "loom-retire" / ".loom-runtime" / "install-layout.json").unlink()
+            for label, args in (
+                (
+                    "installed closeout check missing install-layout",
+                    [
+                        "python3",
+                        str(broken_install / "shared" / "scripts" / "loom_flow.py"),
+                        "closeout",
+                        "check",
+                        "--target",
+                        str(root),
+                        "--issue",
+                        "131",
+                        "--pr",
+                        "138",
+                        "--skip-gate",
+                    ],
+                ),
+                (
+                    "installed purity-check missing install-layout",
+                    [
+                        "python3",
+                        str(broken_install / "loom-retire" / "scripts" / "loom-retire.py"),
+                        "purity-check",
+                        "--target",
+                        str(retire_target),
+                        "--item",
+                        "INIT-0001",
+                    ],
+                ),
+            ):
+                payload, error = load_command_json(root, args)
+                if error:
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`{label}` failed unexpectedly: {error}"))
+                    continue
+                if payload.get("result") != "block":
+                    failures.append(Failure(INSTALLED_RUNTIME_FIXTURE_CATEGORY, f"`{label}` must block when install-layout is missing"))
+                require_runtime_state_payload(
+                    failures,
+                    category=INSTALLED_RUNTIME_FIXTURE_CATEGORY,
+                    context=f"`{label}`",
+                    payload=payload.get("runtime_state"),
+                    expected_scene="installed-runtime",
+                    expected_carrier="installed-skills-root",
+                    allowed_results={"block"},
+                )
+
+    return failures
+
 def check_daily_execution_cli(root: Path) -> list[Failure]:
     failures: list[Failure] = []
     example_target = root / "examples/new-project"
@@ -10788,198 +13113,6 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     )
                 )
 
-    with loom_check_temporary_directory(prefix="loom-check-runtime-state-") as tmp:
-        tmp_root = Path(tmp)
-        install_root = tmp_root / "installed" / "skills"
-        target_root = tmp_root / "target"
-        bootstrap_target = tmp_root / "bootstrapped-target"
-        shutil.copytree(root / "skills", install_root)
-        target_root.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(example_target, bootstrap_target)
-
-        payload, error = load_command_json(
-            root,
-            ["python3", str(install_root / "loom-init" / "scripts" / "loom-init.py"), "runtime-state", "--target", str(target_root)],
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`installed loom-init runtime-state` failed: {error}"))
-        else:
-            require_runtime_state_payload(
-                failures,
-                category="daily-execution-cli",
-                context="`installed loom-init runtime-state`",
-                payload=payload.get("runtime_state"),
-                expected_scene="installed-runtime",
-                expected_carrier="installed-skills-root",
-                allowed_results={"pass"},
-            )
-
-        payload, error = load_command_json(
-            root,
-            ["python3", str(install_root / "shared" / "scripts" / "loom_flow.py"), "runtime-state", "--target", str(target_root)],
-            env={"LOOM_RUNTIME_SCENE": "upgrade-rehearsal"},
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`installed loom-flow runtime-state -- rehearsal` failed: {error}"))
-        else:
-            require_runtime_state_payload(
-                failures,
-                category="daily-execution-cli",
-                context="`installed loom-flow runtime-state -- rehearsal`",
-                payload=payload.get("runtime_state"),
-                expected_scene="upgrade-rehearsal",
-                expected_carrier="installed-skills-root",
-                allowed_results={"pass"},
-            )
-
-        broken_install = tmp_root / "broken-install" / "skills"
-        shutil.copytree(root / "skills", broken_install)
-        (broken_install / "loom-init" / ".loom-runtime" / "shared" / "scripts" / "loom_flow.py").unlink()
-        payload, error = load_command_json(
-            root,
-            ["python3", str(broken_install / "loom-init" / "scripts" / "loom-init.py"), "runtime-state", "--target", str(target_root)],
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`installed runtime-state` missing shared runtime failed unexpectedly: {error}"))
-        elif payload.get("result") != "block":
-            failures.append(Failure("daily-execution-cli", "`installed runtime-state` must block when shared runtime is missing"))
-
-        drift_install = tmp_root / "drift-install" / "skills"
-        shutil.copytree(root / "skills", drift_install)
-        (drift_install / "loom-init" / ".loom-runtime" / "install-layout.json").unlink()
-        payload, error = load_command_json(
-            root,
-            ["python3", str(drift_install / "loom-init" / "scripts" / "loom-init.py"), "runtime-state", "--target", str(target_root)],
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`installed runtime-state` missing install-layout failed unexpectedly: {error}"))
-        elif payload.get("result") != "block":
-            failures.append(Failure("daily-execution-cli", "`installed runtime-state` must block when install-layout is missing"))
-
-        payload, error = load_command_json(
-            root,
-            ["python3", str(install_root / "shared" / "scripts" / "loom_flow.py"), "runtime-state", "--target", str(target_root)],
-            env={"LOOM_RUNTIME_SCENE": "repo-local-demo"},
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`installed runtime-state` scene conflict failed unexpectedly: {error}"))
-        elif payload.get("result") != "block":
-            failures.append(Failure("daily-execution-cli", "`installed runtime-state` must block on scene/carrier conflict"))
-
-        source_repo = tmp_root / "source"
-        sibling_prefix_install = tmp_root / "source-evil" / "skills"
-        source_repo.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(root / "skills", sibling_prefix_install)
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                str(sibling_prefix_install / "shared" / "scripts" / "loom_flow.py"),
-                "runtime-state",
-                "--target",
-                str(target_root),
-            ],
-            env={"LOOM_SOURCE_REPO_ROOT": str(source_repo)},
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`repo-local runtime-state` sibling-prefix escape failed unexpectedly: {error}"))
-        elif payload.get("result") != "block":
-            failures.append(Failure("daily-execution-cli", "`repo-local runtime-state` must block sibling-prefix install roots outside the source repo"))
-        else:
-            runtime_state = payload.get("runtime_state")
-            missing_inputs = runtime_state.get("missing_inputs") if isinstance(runtime_state, dict) else []
-            if not any("install root must stay inside the source repository" in str(item) for item in missing_inputs):
-                failures.append(Failure("daily-execution-cli", "`repo-local runtime-state` sibling-prefix escape must expose the source-repo containment error"))
-
-        payload, error = load_command_json(
-            root,
-            ["python3", ".loom/bin/loom_init.py", "runtime-state", "--target", "."],
-            cwd=bootstrap_target,
-            env={"LOOM_SOURCE_REPO_ROOT": "/tmp/not-loom"},
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`bootstrapped loom-init runtime-state with unrelated source env` failed: {error}"))
-        else:
-            require_runtime_state_payload(
-                failures,
-                category="daily-execution-cli",
-                context="`bootstrapped loom-init runtime-state with unrelated source env`",
-                payload=payload.get("runtime_state"),
-                expected_scene="installed-runtime",
-                expected_carrier="bootstrapped-target-runtime",
-                allowed_results={"pass"},
-            )
-
-        payload, error = load_command_json(
-            root,
-            ["python3", ".loom/bin/loom_init.py", "route", "--target", ".", "--task", "inspect adoption carrier"],
-            cwd=bootstrap_target,
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`bootstrapped loom-init route` failed: {error}"))
-        else:
-            require_route_payload(
-                failures,
-                category="daily-execution-cli",
-                context="`bootstrapped loom-init route`",
-                payload=payload,
-                expected_skill="loom-adopt",
-                expected_mode="implicit",
-                allowed_results={"pass"},
-            )
-            runtime_state = payload.get("runtime_state")
-            if not isinstance(runtime_state, dict) or runtime_state.get("carrier") != "bootstrapped-target-runtime":
-                failures.append(Failure("daily-execution-cli", "`bootstrapped loom-init route` must use the bootstrapped target runtime carrier"))
-            registry_check = (
-                runtime_state.get("checks", {}).get("registry_contract")
-                if isinstance(runtime_state, dict) and isinstance(runtime_state.get("checks"), dict)
-                else None
-            )
-            if not isinstance(registry_check, dict) or registry_check.get("status") != "not_applicable":
-                failures.append(Failure("daily-execution-cli", "`bootstrapped loom-init route` must not require skills/registry.json"))
-
-        broken_bootstrap = tmp_root / "broken-bootstrapped-target"
-        shutil.copytree(example_target, broken_bootstrap)
-        manifest_path = broken_bootstrap / ".loom" / "bootstrap" / "manifest.json"
-        manifest = load_json_file(manifest_path)
-        if isinstance(manifest, dict):
-            artifacts = manifest.get("artifacts")
-            if isinstance(artifacts, list):
-                for artifact in artifacts:
-                    if isinstance(artifact, dict) and artifact.get("path") == ".loom/bin/runtime_state.py":
-                        artifact["source"] = "broken/source.py"
-            manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        payload, error = load_command_json(
-            root,
-            ["python3", ".loom/bin/loom_init.py", "runtime-state", "--target", "."],
-            cwd=broken_bootstrap,
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`bootstrapped runtime-state` manifest drift failed unexpectedly: {error}"))
-        elif payload.get("result") != "block":
-            failures.append(Failure("daily-execution-cli", "`bootstrapped runtime-state` must block when the bootstrap manifest drifts"))
-
-        hash_drift_bootstrap = tmp_root / "hash-drift-bootstrapped-target"
-        shutil.copytree(example_target, hash_drift_bootstrap)
-        manifest_path = hash_drift_bootstrap / ".loom" / "bootstrap" / "manifest.json"
-        manifest = load_json_file(manifest_path)
-        if isinstance(manifest, dict):
-            artifacts = manifest.get("artifacts")
-            if isinstance(artifacts, list):
-                for artifact in artifacts:
-                    if isinstance(artifact, dict) and artifact.get("path") == ".loom/bin/runtime_state.py":
-                        artifact["sha256"] = "0" * 64
-            manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        payload, error = load_command_json(
-            root,
-            ["python3", ".loom/bin/loom_init.py", "runtime-state", "--target", "."],
-            cwd=hash_drift_bootstrap,
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`bootstrapped runtime-state` provenance hash drift failed unexpectedly: {error}"))
-        elif payload.get("result") != "block":
-            failures.append(Failure("daily-execution-cli", "`bootstrapped runtime-state` must block when runtime provenance hashes drift"))
-
     with loom_check_temporary_directory(prefix="loom-check-governance-surface-boundary-") as tmp:
         tmp_root = Path(tmp)
         outside = tmp_root / "outside.md"
@@ -11008,2125 +13141,6 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                 entry = carrier_summary.get(carrier)
                 if isinstance(entry, dict) and entry.get("status") == "present":
                     failures.append(Failure("daily-execution-cli", f"`governance surface` must not report unsafe {label} `{carrier}` fact-chain locators as present"))
-
-    if shutil.which("git") is not None:
-        with loom_check_temporary_directory(prefix="loom-check-installed-pre-merge-") as tmp:
-            tmp_root = Path(tmp)
-            install_root = tmp_root / "installed" / "skills"
-            source_snapshot = tmp_root / "source-snapshot"
-            positive_target = tmp_root / "positive-target"
-            review_fallback_target = tmp_root / "review-fallback-target"
-            fake_bin = tmp_root / "bin"
-            fake_bin.mkdir(parents=True, exist_ok=True)
-            write_fake_codex(fake_bin / "codex", mode="success")
-            installed_review_env = prepend_path_env(fake_bin)
-            shutil.copytree(root / "skills", install_root)
-            shutil.copytree(root, source_snapshot, ignore=source_snapshot_ignore(root))
-
-            def author_positive_suite_fixture(target: Path) -> None:
-                suite_root = target / ".loom/specs/INIT-0001"
-                suite_root.mkdir(parents=True, exist_ok=True)
-                (suite_root / "spec.md").write_text(
-                    "\n".join(
-                        [
-                            "# Spec",
-                            "",
-                            "- Suite path: minimal",
-                            "",
-                            "## Scenarios",
-                            "",
-                            "- Scenario S1: Installed pre-merge execution reaches review and merge-ready gates.",
-                            "",
-                            "## Acceptance Criteria",
-                            "",
-                            "- AC-1: Installed positive chain can consume suite validation before spec review approval.",
-                            "",
-                        ]
-                    ),
-                    encoding="utf-8",
-                )
-                (suite_root / "execution-breakdown.md").write_text(
-                    "\n".join(
-                        [
-                            "# Execution Breakdown",
-                            "",
-                            "## unit-init-1",
-                            "",
-                            "- Scope: installed positive pre-merge fixture gate consumption.",
-                            "- Validation: pre-review, review, PR gate, merge-ready, and controlled merge consume current carriers.",
-                            "",
-                        ]
-                    ),
-                    encoding="utf-8",
-                )
-                (suite_root / "evidence-map.md").write_text(
-                    "\n".join(
-                        [
-                            "# Evidence Map",
-                            "",
-                            "| Evidence id | Type | Source locator | Consumes | Binding | Freshness | Consumer boundary | Remediation direction |",
-                            "| --- | --- | --- | --- | --- | --- | --- | --- |",
-                            "| EV-001 | behavior_evidence | README.md | `.loom/specs/INIT-0001/spec.md` S1 | INIT-0001 / installed fixture behavior | present | review and merge-ready evidence only | Re-run installed positive chain after behavior changes. |",
-                            "| EV-002 | test_evidence | .loom/progress/INIT-0001.md | `.loom/specs/INIT-0001/plan.md` validation | INIT-0001 / installed fixture tests | present | review and merge-ready evidence only | Re-run daily-execution-cli installed fixture validation. |",
-                            "| EV-003 | fresh_verification_input | .loom/progress/INIT-0001.md | EV-001 EV-002 | INIT-0001 / latest validation summary | present | review and merge-ready evidence only | Refresh progress summary after rerunning validation. |",
-                            "",
-                        ]
-                    ),
-                    encoding="utf-8",
-                )
-                (suite_root / "task-carrier.md").write_text(
-                    "\n".join(
-                        [
-                            "# Task Carrier",
-                            "",
-                            "| carrier_type | carrier_locator | source_value | normalized_status | relationship | work_item_locator | breakdown_unit_locator | spec_scenario_locator | plan_phase_locator | validation_strategy_locator | provenance | freshness_rule |",
-                            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-                            "| repo_tasks_md | .loom/work-items/INIT-0001.md | fixture in progress | in_progress | primary | .loom/work-items/INIT-0001.md | .loom/specs/INIT-0001/execution-breakdown.md#unit-init-1 | .loom/specs/INIT-0001/spec.md#scenario-s1 | .loom/specs/INIT-0001/plan.md#validation | .loom/specs/INIT-0001/plan.md#validation | daily-execution-cli installed positive fixture | Recheck before review, PR gate, merge-ready, and controlled merge fixture consumption. |",
-                            "",
-                        ]
-                    ),
-                    encoding="utf-8",
-                )
-                work_item_path = target / ".loom/work-items/INIT-0001.md"
-                if work_item_path.exists():
-                    work_item_text = work_item_path.read_text(encoding="utf-8")
-                    additions = [
-                        "- `.loom/specs/INIT-0001/evidence-map.md`",
-                        "- `.loom/specs/INIT-0001/execution-breakdown.md`",
-                        "- `.loom/specs/INIT-0001/task-carrier.md`",
-                    ]
-                    missing = [line for line in additions if line not in work_item_text]
-                    if missing:
-                        work_item_path.write_text(work_item_text.rstrip() + "\n" + "\n".join(missing) + "\n", encoding="utf-8")
-                (suite_root / "plan.md").write_text(
-                    "\n".join(
-                        [
-                            "# Plan",
-                            "",
-                            "- Suite path: minimal",
-                            "",
-                            "## Validation",
-                            "",
-                            "- S1 -> automated validation evidence: daily-execution-cli installed positive chain.",
-                            "- AC-1 -> test evidence: installed spec-review run and record allow consume suite validation.",
-                            "",
-                            "## Minimal Path Applicability Records",
-                            "",
-                            "- full-path-artifacts not_applicable rationale: installed pre-merge fixture only exercises the minimal formal suite; consumer boundary: suite validation, spec review, review, merge-ready, and controlled merge must not require suite-index.md, research.md, contracts.md, or readiness-checklist.md for this fixture; recheck condition: switch to full suite when these consumers require full-path artifacts.",
-                            "",
-                        ]
-                    ),
-                    encoding="utf-8",
-                )
-
-            def prepare_target(target: Path) -> tuple[str | None, list[str]]:
-                errors: list[str] = []
-                shutil.copytree(source_snapshot, target)
-                for args in (
-                    ["git", "init"],
-                    ["git", "config", "user.email", "loom-check@example.com"],
-                    ["git", "config", "user.name", "loom-check"],
-                ):
-                    result = run_command(root, args, cwd=target)
-                    if result.returncode != 0:
-                        detail = result.stderr.strip() or result.stdout.strip() or "git setup failed"
-                        errors.append(detail)
-                        return None, errors
-
-                payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "loom-init" / "scripts" / "loom-init.py"),
-                        "bootstrap",
-                        "--target",
-                        str(target),
-                        "--intent",
-                        "execution-control",
-                        "--write",
-                        "--force",
-                        "--verify",
-                        "--install-pr-template",
-                    ],
-                    timeout_seconds=ADOPT_VERIFY_TIMEOUT_SECONDS,
-                )
-                if error:
-                    errors.append(error)
-                    return None, errors
-                verification = payload.get("verification")
-                if not isinstance(verification, dict) or verification.get("ok") is not True:
-                    errors.append("installed bootstrap must verify successfully before the pre-merge chain starts")
-                    return None, errors
-                prune_fixture_work_items(target)
-                author_positive_suite_fixture(target)
-                require_minimal_suite_happy_path_validation(
-                    failures,
-                    root=root,
-                    target=target,
-                    item="INIT-0001",
-                    category="daily-execution-cli",
-                    context="`installed pre-merge chain` minimal suite happy path",
-                )
-                author_full_suite_happy_path_fixture(target, "WI-full-happy")
-                require_full_suite_happy_path_validation(
-                    failures,
-                    root=root,
-                    target=target,
-                    item="WI-full-happy",
-                    category="daily-execution-cli",
-                    context="`installed pre-merge chain` full suite happy path",
-                )
-                require_generated_skills_surface_parity_validation(
-                    failures,
-                    root=root,
-                    category="daily-execution-cli",
-                    context="`installed pre-merge chain` generated skills surface parity",
-                )
-                require_suite_negative_fail_closed_validation(
-                    failures,
-                    root=root,
-                    target=target,
-                    category="daily-execution-cli",
-                    context="`installed pre-merge chain` suite negative fail-closed",
-                )
-                author_stale_evidence_block_fixture(target, "WI-stale-evidence")
-                require_stale_evidence_block_validation(
-                    failures,
-                    root=root,
-                    target=target,
-                    item="WI-stale-evidence",
-                    category="daily-execution-cli",
-                    context="`installed pre-merge chain` stale evidence fixture",
-                )
-                author_host_conflict_block_fixture(target, "WI-host-conflict")
-                require_host_conflict_block_validation(
-                    failures,
-                    root=root,
-                    target=target,
-                    item="WI-host-conflict",
-                    category="daily-execution-cli",
-                    context="`installed pre-merge chain` host conflict fixture",
-                )
-                require_scaffold_mutation_boundary_validation(
-                    failures,
-                    root=root,
-                    target=target / "WI-1151-scaffold-fixtures",
-                    category="daily-execution-cli",
-                    context="`installed pre-merge chain` scaffold mutation boundary",
-                )
-
-                git_add = run_command(root, ["git", "add", "."], cwd=target)
-                if git_add.returncode != 0:
-                    detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
-                    errors.append(detail)
-                    return None, errors
-                git_commit = run_command(root, ["git", "commit", "-m", "bootstrap baseline for #209"], cwd=target)
-                if git_commit.returncode != 0:
-                    detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
-                    errors.append(detail)
-                    return None, errors
-
-                resume_payload, resume_error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "loom-resume" / "scripts" / "loom-resume.py"),
-                        "flow",
-                        "resume",
-                        "--target",
-                        str(target),
-                        "--item",
-                        "INIT-0001",
-                    ],
-                )
-                if resume_error:
-                    errors.append(resume_error)
-                    return None, errors
-                recovery = resume_payload.get("recovery")
-                if not isinstance(recovery, dict):
-                    errors.append("resume payload must include `recovery`")
-                    return None, errors
-                summary = recovery.get("latest_validation_summary")
-                if not isinstance(summary, str) or not summary:
-                    errors.append("resume payload must expose a non-empty `latest_validation_summary`")
-                    return None, errors
-                return summary, errors
-
-            positive_summary, positive_setup_errors = prepare_target(positive_target)
-            if positive_setup_errors:
-                failures.append(
-                    Failure(
-                        "daily-execution-cli",
-                        f"`installed pre-merge chain` setup failed: {'; '.join(positive_setup_errors)}",
-                    )
-                )
-            else:
-                task_signals = {
-                    "resume": "请接手当前事项并恢复上下文后继续推进",
-                    "pre-review": "请在进入 review 前做统一检查",
-                    "spec-review": "请先对 formal spec 做 spec review",
-                    "review": "请对当前事项做正式 review 并给出审查结论",
-                    "merge-ready": "请做 merge-ready 最终放行前预检并确认是否可以合并",
-                }
-
-                payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "loom-init" / "scripts" / "loom-init.py"),
-                        "route",
-                        "--target",
-                        str(positive_target),
-                        "--task",
-                        task_signals["resume"],
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed route resume` failed: {error}"))
-                else:
-                    require_route_payload(
-                        failures,
-                        category="daily-execution-cli",
-                        context="`installed route resume`",
-                        payload=payload,
-                        expected_skill="loom-resume",
-                        expected_mode="implicit",
-                        expected_runtime_scene="installed-runtime",
-                        expected_runtime_carrier="installed-skills-root",
-                    )
-
-                resume_payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "loom-resume" / "scripts" / "loom-resume.py"),
-                        "flow",
-                        "resume",
-                        "--target",
-                        str(positive_target),
-                        "--item",
-                        "INIT-0001",
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed flow resume` failed: {error}"))
-                elif resume_payload.get("result") != "pass":
-                    failures.append(Failure("daily-execution-cli", "`installed flow resume` must pass for the positive chain"))
-                else:
-                    require_runtime_state_payload(
-                        failures,
-                        category="daily-execution-cli",
-                        context="`installed flow resume`",
-                        payload=resume_payload.get("runtime_state"),
-                        expected_scene="installed-runtime",
-                        expected_carrier="installed-skills-root",
-                        allowed_results={"pass"},
-                    )
-                    require_execution_attempt_summary(
-                        failures,
-                        category="daily-execution-cli",
-                        context="`installed flow resume`",
-                        payload=resume_payload.get("execution_attempt"),
-                        expected_operation="resume",
-                    )
-                    latest_attempt_status, latest_attempt_errors = load_command_json(
-                        root,
-                        [
-                            "python3",
-                            str(install_root / "shared" / "scripts" / "loom_status.py"),
-                            "--target",
-                            str(positive_target),
-                            "--item",
-                            "INIT-0001",
-                        ],
-                    )
-                    if latest_attempt_errors:
-                        failures.append(Failure("daily-execution-cli", f"`installed status latest attempt` failed: {latest_attempt_errors}"))
-                    else:
-                        latest_attempt = latest_attempt_status.get("latest_execution_attempt")
-                        if not isinstance(latest_attempt, dict):
-                            failures.append(Failure("daily-execution-cli", "`loom_status` must include latest_execution_attempt"))
-                        elif latest_attempt.get("freshness") != "fresh":
-                            failures.append(Failure("daily-execution-cli", "`loom_status` must expose the latest fresh execution_attempt after flow resume"))
-
-                payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "loom-init" / "scripts" / "loom-init.py"),
-                        "route",
-                        "--target",
-                        str(positive_target),
-                        "--task",
-                        task_signals["pre-review"],
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed route pre-review` failed: {error}"))
-                else:
-                    require_route_payload(
-                        failures,
-                        category="daily-execution-cli",
-                        context="`installed route pre-review`",
-                        payload=payload,
-                        expected_skill="loom-pre-review",
-                        expected_mode="implicit",
-                        expected_runtime_scene="installed-runtime",
-                        expected_runtime_carrier="installed-skills-root",
-                    )
-
-                payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "loom-pre-review" / "scripts" / "loom-pre-review.py"),
-                        "flow",
-                        "pre-review",
-                        "--target",
-                        str(positive_target),
-                        "--item",
-                        "INIT-0001",
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed flow pre-review` failed: {error}"))
-                elif payload.get("result") != "pass":
-                    failures.append(Failure("daily-execution-cli", "`installed flow pre-review` must pass for the positive chain"))
-                else:
-                    require_governance_lint_status_payload(
-                        failures,
-                        category="daily-execution-cli",
-                        context="`installed flow pre-review`.governance_lint",
-                        payload=payload.get("governance_lint"),
-                        expected_surface="pre_review",
-                    )
-                    if payload.get("governance_lint", {}).get("result") != "pass":
-                        failures.append(Failure("daily-execution-cli", "`installed flow pre-review` governance_lint must pass for the positive chain"))
-                    require_execution_attempt_summary(
-                        failures,
-                        category="daily-execution-cli",
-                        context="`installed flow pre-review`",
-                        payload=payload.get("execution_attempt"),
-                        expected_operation="pre-review",
-                    )
-
-                payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "loom-init" / "scripts" / "loom-init.py"),
-                        "route",
-                        "--target",
-                        str(positive_target),
-                        "--task",
-                        task_signals["spec-review"],
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed route spec-review` failed: {error}"))
-                else:
-                    require_route_payload(
-                        failures,
-                        category="daily-execution-cli",
-                        context="`installed route spec-review`",
-                        payload=payload,
-                        expected_skill="loom-spec-review",
-                        expected_mode="implicit",
-                        expected_runtime_scene="installed-runtime",
-                        expected_runtime_carrier="installed-skills-root",
-                    )
-
-                spec_review_flow_payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "loom-spec-review" / "scripts" / "loom-spec-review.py"),
-                        "flow",
-                        "spec-review",
-                        "--target",
-                        str(positive_target),
-                        "--item",
-                        "INIT-0001",
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed flow spec-review` failed: {error}"))
-                elif spec_review_flow_payload.get("result") != "pass":
-                    failures.append(Failure("daily-execution-cli", "`installed flow spec-review` must pass for the positive chain"))
-                else:
-                    require_execution_attempt_summary(
-                        failures,
-                        category="daily-execution-cli",
-                        context="`installed flow spec-review`",
-                        payload=spec_review_flow_payload.get("execution_attempt"),
-                        expected_operation="spec-review",
-                    )
-
-                spec_review_run_payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                        "review",
-                        "run",
-                        "--target",
-                        str(positive_target),
-                        "--item",
-                        "INIT-0001",
-                        "--review-file",
-                        ".loom/reviews/INIT-0001.spec.json",
-                    ],
-                    env=installed_review_env,
-                    timeout_seconds=150,
-                )
-                spec_review_record_input: dict[str, object] | None = None
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed spec review run` failed: {error}"))
-                elif spec_review_run_payload.get("result") != "pass":
-                    failures.append(Failure("daily-execution-cli", "`installed spec review run` must pass for the positive chain"))
-                else:
-                    require_review_run_payload(
-                        failures,
-                        category="daily-execution-cli",
-                        context="`installed spec review run`",
-                        payload=spec_review_run_payload,
-                        expected_result={"pass"},
-                    )
-                    spec_review_record_input = (
-                        spec_review_run_payload.get("review_record_input")
-                        if isinstance(spec_review_run_payload, dict)
-                        else None
-                    )
-
-                payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "loom-spec-review" / "scripts" / "loom-spec-review.py"),
-                        "review",
-                        "record",
-                        "--target",
-                        str(positive_target),
-                        "--item",
-                        "INIT-0001",
-                        "--review-file",
-                        ".loom/reviews/INIT-0001.spec.json",
-                        "--decision",
-                        str(spec_review_record_input.get("decision", "allow")) if isinstance(spec_review_record_input, dict) else "allow",
-                        "--kind",
-                        "spec_review",
-                        "--summary",
-                        str(spec_review_record_input.get("summary", "Installed formal spec is approved for downstream review."))
-                        if isinstance(spec_review_record_input, dict)
-                        else "Installed formal spec is approved for downstream review.",
-                        "--reviewer",
-                        str(spec_review_record_input.get("reviewer", "loom-check")) if isinstance(spec_review_record_input, dict) else "loom-check",
-                        "--findings-file",
-                        str(spec_review_record_input.get("findings_file", ".loom/review-findings.json"))
-                        if isinstance(spec_review_record_input, dict)
-                        else ".loom/review-findings.json",
-                        "--engine-adapter",
-                        str(spec_review_record_input.get("engine_adapter", "loom/default-codex-exec"))
-                        if isinstance(spec_review_record_input, dict)
-                        else "loom/default-codex-exec",
-                        "--engine-evidence",
-                        str(spec_review_record_input.get("engine_evidence", ".loom/runtime/review/INIT-0001/unknown-head/engine-result.json"))
-                        if isinstance(spec_review_record_input, dict)
-                        else ".loom/runtime/review/INIT-0001/unknown-head/engine-result.json",
-                        "--normalized-findings",
-                        str(spec_review_record_input.get("normalized_findings", ".loom/review-findings.json"))
-                        if isinstance(spec_review_record_input, dict)
-                        else ".loom/review-findings.json",
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed spec review record allow` failed: {error}"))
-                elif payload.get("result") != "pass":
-                    failures.append(Failure("daily-execution-cli", "`installed spec review record allow` must pass"))
-                else:
-                    git_add = run_command(
-                        root,
-                        ["git", "add", ".loom/reviews/INIT-0001.spec.json"],
-                        cwd=positive_target,
-                    )
-                    if git_add.returncode != 0:
-                        detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
-                        failures.append(Failure("daily-execution-cli", f"`installed spec review carrier commit` add failed: {detail}"))
-                    else:
-                        git_commit = run_command(
-                            root,
-                            ["git", "commit", "-m", "author installed spec review carrier for #209"],
-                            cwd=positive_target,
-                        )
-                        if git_commit.returncode != 0:
-                            detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
-                            failures.append(Failure("daily-execution-cli", f"`installed spec review carrier commit` failed: {detail}"))
-
-                incomplete_spec_target = tmp_root / "incomplete-spec-review-target"
-                shutil.copytree(positive_target, incomplete_spec_target)
-                spec_plan_path = incomplete_spec_target / ".loom/specs/INIT-0001/plan.md"
-                spec_plan_path.unlink()
-                incomplete_spec_setup_ok = False
-                git_add = run_command(root, ["git", "add", ".loom/specs/INIT-0001/plan.md"], cwd=incomplete_spec_target)
-                if git_add.returncode != 0:
-                    detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
-                    failures.append(Failure("daily-execution-cli", f"`installed incomplete spec review setup` add failed: {detail}"))
-                else:
-                    git_commit = run_command(
-                        root,
-                        ["git", "commit", "-m", "remove plan for incomplete spec fixture"],
-                        cwd=incomplete_spec_target,
-                    )
-                    if git_commit.returncode != 0:
-                        detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
-                        failures.append(Failure("daily-execution-cli", f"`installed incomplete spec review setup` commit failed: {detail}"))
-                    else:
-                        incomplete_spec_setup_ok = True
-                if incomplete_spec_setup_ok:
-                    payload, error = load_command_json(
-                        root,
-                        [
-                            "python3",
-                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                            "flow",
-                            "spec-review",
-                            "--target",
-                            str(incomplete_spec_target),
-                            "--item",
-                            "INIT-0001",
-                        ],
-                    )
-                    if error:
-                        failures.append(Failure("daily-execution-cli", f"`installed incomplete flow spec-review` failed: {error}"))
-                    elif payload.get("result") != "block":
-                        failures.append(Failure("daily-execution-cli", "`installed incomplete flow spec-review` must block"))
-                    elif not any(step.get("name") == "suite-validate" for step in payload.get("steps", []) if isinstance(step, dict)):
-                        failures.append(Failure("daily-execution-cli", "`installed incomplete flow spec-review` must consume suite validation"))
-                    elif not any("plan.md" in str(item) for item in payload.get("missing_inputs", [])):
-                        failures.append(Failure("daily-execution-cli", "`installed incomplete flow spec-review` must name the missing plan.md"))
-                    elif payload.get("suite_validation", {}).get("command") != "suite validate":
-                        failures.append(Failure("daily-execution-cli", "`installed incomplete flow spec-review` must expose suite validate output"))
-
-                    payload, error = load_command_json(
-                        root,
-                        [
-                            "python3",
-                            str(install_root / "loom-spec-review" / "scripts" / "loom-spec-review.py"),
-                            "review",
-                            "record",
-                            "--target",
-                            str(incomplete_spec_target),
-                            "--item",
-                            "INIT-0001",
-                            "--review-file",
-                            ".loom/reviews/INIT-0001.spec.json",
-                            "--decision",
-                            "allow",
-                            "--kind",
-                            "spec_review",
-                            "--summary",
-                            "Incomplete formal spec suite should not be approved.",
-                            "--reviewer",
-                            "loom-check",
-                        ],
-                    )
-                    if error:
-                        failures.append(Failure("daily-execution-cli", f"`installed incomplete spec review record` failed: {error}"))
-                    elif payload.get("result") != "block":
-                        failures.append(Failure("daily-execution-cli", "`installed incomplete spec review record` must block"))
-                    elif not any("plan.md" in str(item) for item in payload.get("missing_inputs", [])):
-                        failures.append(Failure("daily-execution-cli", "`installed incomplete spec review record` must name the missing plan.md"))
-
-                payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "loom-init" / "scripts" / "loom-init.py"),
-                        "route",
-                        "--target",
-                        str(positive_target),
-                        "--task",
-                        task_signals["review"],
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed route review` failed: {error}"))
-                else:
-                    require_route_payload(
-                        failures,
-                        category="daily-execution-cli",
-                        context="`installed route review`",
-                        payload=payload,
-                        expected_skill="loom-review",
-                        expected_mode="implicit",
-                        expected_runtime_scene="installed-runtime",
-                        expected_runtime_carrier="installed-skills-root",
-                    )
-
-                review_flow_payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "loom-review" / "scripts" / "loom-review.py"),
-                        "flow",
-                        "review",
-                        "--target",
-                        str(positive_target),
-                        "--item",
-                        "INIT-0001",
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed flow review` failed: {error}"))
-                elif review_flow_payload.get("result") != "pass":
-                    failures.append(Failure("daily-execution-cli", "`installed flow review` must pass for the positive chain"))
-                else:
-                    review = review_flow_payload.get("review")
-                    if isinstance(review, dict):
-                        require_review_record_contract(
-                            failures,
-                            category="daily-execution-cli",
-                            context="`installed flow review` review.record",
-                            payload=review.get("record"),
-                        )
-
-                review_run_payload: dict[str, object] | None = None
-                review_record_input: dict[str, object] | None = None
-                review_run_payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                        "review",
-                        "run",
-                        "--target",
-                        str(positive_target),
-                        "--item",
-                        "INIT-0001",
-                    ],
-                    env=installed_review_env,
-                    timeout_seconds=150,
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed review run` failed: {error}"))
-                elif review_run_payload.get("result") != "pass":
-                    failures.append(Failure("daily-execution-cli", "`installed review run` must pass for the positive chain"))
-                else:
-                    require_review_run_payload(
-                        failures,
-                        category="daily-execution-cli",
-                        context="`installed review run`",
-                        payload=review_run_payload,
-                        expected_result={"pass"},
-                    )
-                    review_record_input = review_run_payload.get("review_record_input") if isinstance(review_run_payload, dict) else None
-                review_record_payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "loom-review" / "scripts" / "loom-review.py"),
-                        "review",
-                        "record",
-                        "--target",
-                        str(positive_target),
-                        "--item",
-                        "INIT-0001",
-                        "--decision",
-                        str(review_record_input.get("decision", "allow")) if isinstance(review_record_input, dict) else "allow",
-                        "--kind",
-                        str(review_record_input.get("kind", "code_review")) if isinstance(review_record_input, dict) else "code_review",
-                        "--summary",
-                        str(review_record_input.get("summary", "Installed pre-merge chain is ready for merge checkpoint consumption."))
-                        if isinstance(review_record_input, dict)
-                        else "Installed pre-merge chain is ready for merge checkpoint consumption.",
-                        "--reviewer",
-                        str(review_record_input.get("reviewer", "loom-check")) if isinstance(review_record_input, dict) else "loom-check",
-                        "--findings-file",
-                        str(review_record_input.get("findings_file", ".loom/review-findings.json")) if isinstance(review_record_input, dict) else ".loom/review-findings.json",
-                        "--engine-adapter",
-                        str(review_record_input.get("engine_adapter", "loom/default-codex-exec")) if isinstance(review_record_input, dict) else "loom/default-codex-exec",
-                        "--engine-evidence",
-                        str(review_record_input.get("engine_evidence", ".loom/runtime/review/INIT-0001/unknown-head/engine-result.json"))
-                        if isinstance(review_record_input, dict)
-                        else ".loom/runtime/review/INIT-0001/unknown-head/engine-result.json",
-                        "--normalized-findings",
-                        str(review_record_input.get("normalized_findings", ".loom/review-findings.json"))
-                        if isinstance(review_record_input, dict)
-                        else ".loom/review-findings.json",
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed review record allow` failed: {error}"))
-                elif review_record_payload.get("result") != "pass":
-                    failures.append(Failure("daily-execution-cli", "`installed review record allow` must pass"))
-                else:
-                    review = review_record_payload.get("review")
-                    if isinstance(review, dict):
-                        require_review_record_contract(
-                            failures,
-                            category="daily-execution-cli",
-                            context="`installed review record allow` review.record",
-                            payload=review.get("record"),
-                        )
-                    review_path = positive_target / ".loom/reviews/INIT-0001.json"
-                    try:
-                        review_record = json.loads(review_path.read_text(encoding="utf-8"))
-                    except (OSError, json.JSONDecodeError):
-                        review_record = {}
-                    if isinstance(review_record, dict):
-                        review_record["semantic_review_disposition"] = {
-                            "status": "passed",
-                            "reason": "Installed daily-execution positive fixture authored a current implementation review.",
-                        }
-                        review_path.write_text(json.dumps(review_record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-                payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                        "recovery",
-                        "writeback",
-                        "--target",
-                        str(positive_target),
-                        "--item",
-                        "INIT-0001",
-                        "--current-checkpoint",
-                        "merge checkpoint",
-                        "--current-stop",
-                        "Installed review completed and merge-ready validation is next.",
-                        "--next-step",
-                        "Run merge-ready and checkpoint merge from installed skills.",
-                        "--latest-validation-summary",
-                        positive_summary,
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed recovery writeback for merge` failed: {error}"))
-                elif payload.get("result") != "pass":
-                    failures.append(Failure("daily-execution-cli", "`installed recovery writeback for merge` must pass"))
-
-                git_add = run_command(
-                    root,
-                    [
-                        "git",
-                        "add",
-                        "-f",
-                        ".loom/progress/INIT-0001.md",
-                        ".loom/status/current.md",
-                        ".loom/reviews/INIT-0001.json",
-                    ],
-                    cwd=positive_target,
-                )
-                if git_add.returncode != 0:
-                    detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
-                    failures.append(Failure("daily-execution-cli", f"`installed pre-merge carrier commit` add failed: {detail}"))
-                else:
-                    git_commit = run_command(
-                        root,
-                        ["git", "commit", "-m", "author installed pre-merge carriers for #209"],
-                        cwd=positive_target,
-                    )
-                    if git_commit.returncode != 0:
-                        detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
-                        failures.append(Failure("daily-execution-cli", f"`installed pre-merge carrier commit` failed: {detail}"))
-
-                def current_head(target: Path) -> str:
-                    result = run_command(root, ["git", "rev-parse", "HEAD"], cwd=target)
-                    return result.stdout.strip()
-
-                def write_json_fixture(target: Path, relative: str, payload: object) -> str:
-                    path = target / relative
-                    path.parent.mkdir(parents=True, exist_ok=True)
-                    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-                    return relative
-
-                def pr_gate_fixture(target: Path, *, number: int = 1, merge_state_status: str | None = None, host_review_state: str | None = None) -> str:
-                    head_ref_name = "feature/pr-gate"
-                    head_ref_oid = current_head(target)
-                    payload = {
-                        "number": number,
-                        "state": "OPEN",
-                        "isDraft": False,
-                        "headRefName": head_ref_name,
-                        "baseRefName": "main",
-                        "headRefOid": head_ref_oid,
-                        "body": f"## Related Work\n\n- Loom Work Item: INIT-0001\n- Branch: {head_ref_name}\n- Head SHA: {head_ref_oid}\n",
-                        "url": f"https://github.example/owner/repo/pull/{number}",
-                    }
-                    if merge_state_status:
-                        payload["mergeStateStatus"] = merge_state_status
-                    if host_review_state:
-                        payload["reviewDecision"] = host_review_state
-                        payload["latestReviews"] = [
-                            {
-                                "state": host_review_state,
-                                "authorAssociation": "OWNER",
-                                "author": {"login": "single-author-maintainer"},
-                            }
-                        ]
-                    return write_json_fixture(
-                        target,
-                        f".loom/tmp/pr-gate/pr-{number}.json",
-                        payload,
-                    )
-
-                pr_fixture = pr_gate_fixture(positive_target)
-                retained_pr_gate_fixture: str | None = None
-                pr_gate_payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                        "pr-gate",
-                        "check",
-                        "--target",
-                        str(positive_target),
-                        "--item",
-                        "INIT-0001",
-                        "--pr",
-                        "1",
-                        "--pr-payload-file",
-                        pr_fixture,
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed pr-gate` positive failed: {error}"))
-                elif pr_gate_payload.get("result") != "pass":
-                    failures.append(Failure("daily-execution-cli", "`installed pr-gate` must pass for fresh authored review approval"))
-                else:
-                    if pr_gate_payload.get("schema_version") != "loom-pr-merge-gate/v1":
-                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` must expose the stable schema"))
-                    approval_boundary = pr_gate_payload.get("approval_boundary")
-                    if not isinstance(approval_boundary, dict) or approval_boundary.get("raw_review_evidence_satisfies_approval") is not False:
-                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` must reject raw review evidence as approval truth"))
-                    elif any(
-                        approval_boundary.get(field) is not False
-                        for field in (
-                            "shadow_evidence_satisfies_approval",
-                            "runtime_review_evidence_satisfies_approval",
-                            "pr_body_summary_satisfies_approval",
-                            "ci_success_satisfies_approval",
-                            "github_review_comments_satisfy_approval",
-                        )
-                    ):
-                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` must reject shadow/runtime/PR body/CI/GitHub review evidence as approval truth"))
-                    review_approval = pr_gate_payload.get("review_approval")
-                    if not isinstance(review_approval, dict) or review_approval.get("decision") != "allow":
-                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` must read the authored allow review record"))
-                    governance_lint = pr_gate_payload.get("governance_lint")
-                    if not isinstance(governance_lint, dict) or governance_lint.get("result") != "pass":
-                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` must expose passing approval-boundary governance lint for fresh authored review approval"))
-                    retained_pr_gate_fixture = write_json_fixture(
-                        positive_target,
-                        ".loom/tmp/pr-gate/retained-pr-gate.json",
-                        pr_gate_payload,
-                    )
-
-                protection_fixture = write_json_fixture(
-                    positive_target,
-                    ".loom/tmp/pr-gate/branch-protection.json",
-                    {
-                        "required_status_checks": {
-                            "contexts": ["py-compile", "loom-check", "loom-pr-merge-gate"],
-                        },
-                    },
-                )
-                status_fixture = write_json_fixture(
-                    positive_target,
-                    ".loom/tmp/pr-gate/status-checks.json",
-                    {
-                        "statusCheckRollup": [
-                            {"name": "py-compile", "status": "COMPLETED", "conclusion": "SUCCESS"},
-                            {"name": "loom-check", "status": "COMPLETED", "conclusion": "SUCCESS"},
-                            {"name": "loom-pr-merge-gate", "status": "COMPLETED", "conclusion": "SUCCESS"},
-                        ],
-                    },
-                )
-                controlled_payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                        "controlled-merge",
-                        "check",
-                        "--target",
-                        str(positive_target),
-                        "--item",
-                        "INIT-0001",
-                        "--pr",
-                        "1",
-                        "--pr-payload-file",
-                        pr_fixture,
-                        "--branch-protection-file",
-                        protection_fixture,
-                        "--status-checks-file",
-                        status_fixture,
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed controlled-merge` positive failed: {error}"))
-                elif controlled_payload.get("result") != "pass":
-                    failures.append(Failure("daily-execution-cli", "`installed controlled-merge` check must pass when pr-gate and required checks pass"))
-                else:
-                    host_enforcement = controlled_payload.get("host_enforcement")
-                    merge = controlled_payload.get("merge")
-                    if not isinstance(host_enforcement, dict) or host_enforcement.get("required") is not True:
-                        failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must prove loom-pr-merge-gate is required"))
-                    if not isinstance(merge, dict) or merge.get("attempted") is not False or merge.get("dry_run") is not True:
-                        failures.append(Failure("daily-execution-cli", "`installed controlled-merge check` must not call gh pr merge"))
-
-                blocked_policy_pr_fixture = pr_gate_fixture(
-                    positive_target,
-                    number=21,
-                    merge_state_status="BLOCKED",
-                    host_review_state="COMMENTED",
-                )
-                controlled_blocked_policy_payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                        "controlled-merge",
-                        "check",
-                        "--target",
-                        str(positive_target),
-                        "--item",
-                        "INIT-0001",
-                        "--pr",
-                        "21",
-                        "--pr-payload-file",
-                        blocked_policy_pr_fixture,
-                        "--branch-protection-file",
-                        protection_fixture,
-                        "--status-checks-file",
-                        status_fixture,
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed controlled-merge` BLOCKED policy fixture failed: {error}"))
-                elif controlled_blocked_policy_payload.get("result") != "pass":
-                    failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must allow GitHub BLOCKED when authored Loom approval and required checks pass"))
-                else:
-                    drift_readback = controlled_blocked_policy_payload.get("drift_readback")
-                    mergeability = (
-                        drift_readback.get("subchecks", {}).get("mergeability")
-                        if isinstance(drift_readback, dict)
-                        else None
-                    )
-                    pr_gate = controlled_blocked_policy_payload.get("pr_gate")
-                    approval_boundary = pr_gate.get("approval_boundary") if isinstance(pr_gate, dict) else None
-                    if not isinstance(mergeability, dict) or mergeability.get("result") != "pass" or mergeability.get("interpretation") != "delegated_host_policy":
-                        failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must report GitHub BLOCKED as delegated host policy evidence"))
-                    if not isinstance(approval_boundary, dict) or approval_boundary.get("github_review_comments_satisfy_approval") is not False:
-                        failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must keep author COMMENTED host review evidence outside approval truth"))
-
-                for hard_status in ("DIRTY", "DRAFT"):
-                    hard_status_fixture = pr_gate_fixture(positive_target, number=30 if hard_status == "DIRTY" else 31, merge_state_status=hard_status)
-                    hard_status_payload, error = load_command_json(
-                        root,
-                        [
-                            "python3",
-                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                            "controlled-merge",
-                            "check",
-                            "--target",
-                            str(positive_target),
-                            "--item",
-                            "INIT-0001",
-                            "--pr",
-                            "30" if hard_status == "DIRTY" else "31",
-                            "--pr-payload-file",
-                            hard_status_fixture,
-                            "--branch-protection-file",
-                            protection_fixture,
-                            "--status-checks-file",
-                            status_fixture,
-                        ],
-                    )
-                    if error:
-                        failures.append(Failure("daily-execution-cli", f"`installed controlled-merge` {hard_status} fixture failed: {error}"))
-                    elif hard_status_payload.get("result") != "block":
-                        failures.append(Failure("daily-execution-cli", f"`installed controlled-merge` must block GitHub {hard_status} mergeability"))
-                    else:
-                        drift_readback = hard_status_payload.get("drift_readback")
-                        mergeability = (
-                            drift_readback.get("subchecks", {}).get("mergeability")
-                            if isinstance(drift_readback, dict)
-                            else None
-                        )
-                        if not isinstance(mergeability, dict) or mergeability.get("result") != "block" or mergeability.get("interpretation") != "hard_block":
-                            failures.append(Failure("daily-execution-cli", f"`installed controlled-merge` must report GitHub {hard_status} as hard-block mergeability"))
-
-                missing_gate_protection = write_json_fixture(
-                    positive_target,
-                    ".loom/tmp/pr-gate/branch-protection-missing-pr-gate.json",
-                    {
-                        "required_status_checks": {
-                            "contexts": ["py-compile", "loom-check"],
-                        },
-                    },
-                )
-                controlled_missing_payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                        "controlled-merge",
-                        "check",
-                        "--target",
-                        str(positive_target),
-                        "--item",
-                        "INIT-0001",
-                        "--pr",
-                        "1",
-                        "--pr-payload-file",
-                        pr_fixture,
-                        "--branch-protection-file",
-                        missing_gate_protection,
-                        "--status-checks-file",
-                        status_fixture,
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed controlled-merge` missing required gate failed: {error}"))
-                elif controlled_missing_payload.get("result") != "block":
-                    failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must block when loom-pr-merge-gate is not required"))
-
-                ci_bypass_target = tmp_root / "pr-gate-ci-success-bypass"
-                shutil.copytree(positive_target, ci_bypass_target)
-                ci_review_path = ci_bypass_target / ".loom/reviews/INIT-0001.json"
-                if ci_review_path.exists():
-                    ci_review_path.unlink()
-                git_add = run_command(root, ["git", "add", "-u", ".loom/reviews/INIT-0001.json"], cwd=ci_bypass_target)
-                git_commit = run_command(root, ["git", "commit", "-m", "remove authored review for ci bypass fixture"], cwd=ci_bypass_target)
-                if git_add.returncode != 0 or git_commit.returncode != 0:
-                    detail = git_add.stderr.strip() or git_add.stdout.strip() or git_commit.stderr.strip() or git_commit.stdout.strip() or "git fixture setup failed"
-                    failures.append(Failure("daily-execution-cli", f"`installed controlled-merge` CI bypass fixture setup failed: {detail}"))
-                else:
-                    ci_pr_fixture = pr_gate_fixture(ci_bypass_target, number=20)
-                    ci_controlled_payload, error = load_command_json(
-                        root,
-                        [
-                            "python3",
-                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                            "controlled-merge",
-                            "check",
-                            "--target",
-                            str(ci_bypass_target),
-                            "--item",
-                            "INIT-0001",
-                            "--pr",
-                            "20",
-                            "--pr-payload-file",
-                            ci_pr_fixture,
-                            "--branch-protection-file",
-                            protection_fixture,
-                            "--status-checks-file",
-                            status_fixture,
-                        ],
-                    )
-                    if error:
-                        failures.append(Failure("daily-execution-cli", f"`installed controlled-merge` CI bypass failed: {error}"))
-                    elif ci_controlled_payload.get("result") != "block":
-                        failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must block CI-success-only approval bypass"))
-                    else:
-                        pr_gate = ci_controlled_payload.get("pr_gate")
-                        governance_lint = pr_gate.get("governance_lint") if isinstance(pr_gate, dict) else None
-                        approval_boundary = pr_gate.get("approval_boundary") if isinstance(pr_gate, dict) else None
-                        if not isinstance(governance_lint, dict) or governance_lint.get("result") != "block":
-                            failures.append(Failure("daily-execution-cli", "`installed controlled-merge` CI bypass must expose blocking governance lint"))
-                        if not isinstance(approval_boundary, dict) or approval_boundary.get("ci_success_satisfies_approval") is not False:
-                            failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must not treat CI success as semantic approval"))
-
-                ruleset_fixture = write_json_fixture(
-                    positive_target,
-                    ".loom/tmp/pr-gate/branch-ruleset.json",
-                    [
-                        {
-                            "type": "required_status_checks",
-                            "parameters": {
-                                "required_status_checks": [
-                                    {"context": "loom-pr-merge-gate"},
-                                ],
-                            },
-                        },
-                    ],
-                )
-                controlled_ruleset_payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                        "controlled-merge",
-                        "check",
-                        "--target",
-                        str(positive_target),
-                        "--item",
-                        "INIT-0001",
-                        "--pr",
-                        "1",
-                        "--pr-payload-file",
-                        pr_fixture,
-                        "--branch-protection-file",
-                        missing_gate_protection,
-                        "--ruleset-file",
-                        ruleset_fixture,
-                        "--status-checks-file",
-                        status_fixture,
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed controlled-merge` ruleset required gate failed: {error}"))
-                elif controlled_ruleset_payload.get("result") != "pass":
-                    failures.append(
-                        Failure(
-                            "daily-execution-cli",
-                            "`installed controlled-merge` must pass when an active ruleset requires "
-                            f"loom-pr-merge-gate; got result={controlled_ruleset_payload.get('result')} "
-                            f"missing={controlled_ruleset_payload.get('missing_inputs')} "
-                            f"host_enforcement={controlled_ruleset_payload.get('host_enforcement')}",
-                        )
-                    )
-                else:
-                    host_enforcement = controlled_ruleset_payload.get("host_enforcement")
-                    if not isinstance(host_enforcement, dict) or "loom-pr-merge-gate" not in host_enforcement.get("ruleset_required_contexts", []):
-                        failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must expose ruleset required contexts"))
-
-                def copy_pr_gate_fixture(target: Path) -> None:
-                    clone = run_command(root, ["git", "clone", "--quiet", str(positive_target), str(target)])
-                    if clone.returncode != 0:
-                        shutil.copytree(positive_target, target)
-                    run_command(root, ["git", "config", "user.email", "loom-check@example.com"], cwd=target)
-                    run_command(root, ["git", "config", "user.name", "loom-check"], cwd=target)
-
-                missing_review_target = tmp_root / "pr-gate-missing-review"
-                copy_pr_gate_fixture(missing_review_target)
-                review_path = missing_review_target / ".loom/reviews/INIT-0001.json"
-                if review_path.exists():
-                    review_path.unlink()
-                git_add = run_command(root, ["git", "add", "-u", ".loom/reviews/INIT-0001.json"], cwd=missing_review_target)
-                git_commit = run_command(root, ["git", "commit", "-m", "remove authored review for pr gate fixture"], cwd=missing_review_target)
-                if git_add.returncode != 0 or git_commit.returncode != 0:
-                    failures.append(Failure("daily-execution-cli", "`installed pr-gate` missing review fixture setup failed"))
-                else:
-                    missing_pr_fixture = pr_gate_fixture(missing_review_target, number=2)
-                    missing_review_payload, error = load_command_json(
-                        root,
-                        [
-                            "python3",
-                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                            "pr-gate",
-                            "check",
-                            "--target",
-                            str(missing_review_target),
-                            "--item",
-                            "INIT-0001",
-                            "--pr",
-                            "2",
-                            "--pr-payload-file",
-                            missing_pr_fixture,
-                        ],
-                    )
-                    taxonomy = missing_review_payload.get("failure_taxonomy") if isinstance(missing_review_payload, dict) else []
-                    if error:
-                        failures.append(Failure("daily-execution-cli", f"`installed pr-gate` missing review failed: {error}"))
-                    elif missing_review_payload.get("result") != "block" or "review_missing" not in taxonomy:
-                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` must block when authored review is missing"))
-
-                pr_body_bypass_target = tmp_root / "pr-gate-pr-body-bypass"
-                copy_pr_gate_fixture(pr_body_bypass_target)
-                pr_body_review_path = pr_body_bypass_target / ".loom/reviews/INIT-0001.json"
-                if pr_body_review_path.exists():
-                    pr_body_review_path.unlink()
-                git_add = run_command(root, ["git", "add", "-u", ".loom/reviews/INIT-0001.json"], cwd=pr_body_bypass_target)
-                git_commit = run_command(root, ["git", "commit", "-m", "remove authored review for pr body bypass fixture"], cwd=pr_body_bypass_target)
-                if git_add.returncode != 0 or git_commit.returncode != 0:
-                    failures.append(Failure("daily-execution-cli", "`installed pr-gate` PR body bypass fixture setup failed"))
-                else:
-                    pr_body_fixture = write_json_fixture(
-                        pr_body_bypass_target,
-                        ".loom/tmp/pr-gate/pr-body-approval.json",
-                        {
-                            "number": 21,
-                            "state": "OPEN",
-                            "isDraft": False,
-                            "headRefName": "feature/pr-body-bypass",
-                            "baseRefName": "main",
-                            "headRefOid": current_head(pr_body_bypass_target),
-                            "body": "## Related Work\n\n- Loom Work Item: INIT-0001\n\n## Review\n\nApproved by PR body summary.\n",
-                            "url": "https://github.example/owner/repo/pull/21",
-                        },
-                    )
-                    pr_body_payload, error = load_command_json(
-                        root,
-                        [
-                            "python3",
-                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                            "pr-gate",
-                            "check",
-                            "--target",
-                            str(pr_body_bypass_target),
-                            "--item",
-                            "INIT-0001",
-                            "--pr",
-                            "21",
-                            "--pr-payload-file",
-                            pr_body_fixture,
-                        ],
-                    )
-                    if error:
-                        failures.append(Failure("daily-execution-cli", f"`installed pr-gate` PR body bypass failed: {error}"))
-                    elif pr_body_payload.get("result") != "block":
-                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` must block PR-body-only approval bypass"))
-                    else:
-                        approval_boundary = pr_body_payload.get("approval_boundary")
-                        governance_lint = pr_body_payload.get("governance_lint")
-                        if not isinstance(approval_boundary, dict) or approval_boundary.get("pr_body_summary_satisfies_approval") is not False:
-                            failures.append(Failure("daily-execution-cli", "`installed pr-gate` must not treat PR body approval text as semantic approval"))
-                        if not isinstance(governance_lint, dict) or governance_lint.get("result") != "block":
-                            failures.append(Failure("daily-execution-cli", "`installed pr-gate` PR body bypass must expose blocking governance lint"))
-
-                raw_only_target = tmp_root / "pr-gate-raw-only"
-                copy_pr_gate_fixture(raw_only_target)
-                raw_review_path = raw_only_target / ".loom/reviews/INIT-0001.json"
-                if raw_review_path.exists():
-                    raw_review_path.unlink()
-                write_json_fixture(
-                    raw_only_target,
-                    ".loom/runtime/review/INIT-0001/raw-only-head/engine-result.json",
-                    {"decision": "allow", "summary": "Raw evidence must not satisfy the PR gate.", "findings": []},
-                )
-                git_add = run_command(root, ["git", "add", "-f", "-A", ".loom/reviews/INIT-0001.json", ".loom/runtime/review"], cwd=raw_only_target)
-                git_commit = run_command(root, ["git", "commit", "-m", "leave only raw review evidence for pr gate fixture"], cwd=raw_only_target)
-                if git_add.returncode != 0 or git_commit.returncode != 0:
-                    detail = git_add.stderr.strip() or git_add.stdout.strip() or git_commit.stderr.strip() or git_commit.stdout.strip() or "git fixture setup failed"
-                    failures.append(Failure("daily-execution-cli", f"`installed pr-gate` raw evidence fixture setup failed: {detail}"))
-                else:
-                    raw_pr_fixture = pr_gate_fixture(raw_only_target, number=3)
-                    raw_only_payload, error = load_command_json(
-                        root,
-                        [
-                            "python3",
-                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                            "pr-gate",
-                            "check",
-                            "--target",
-                            str(raw_only_target),
-                            "--item",
-                            "INIT-0001",
-                            "--pr",
-                            "3",
-                            "--pr-payload-file",
-                            raw_pr_fixture,
-                        ],
-                    )
-                    taxonomy = raw_only_payload.get("failure_taxonomy") if isinstance(raw_only_payload, dict) else []
-                    if error:
-                        failures.append(Failure("daily-execution-cli", f"`installed pr-gate` raw evidence bypass failed: {error}"))
-                    elif raw_only_payload.get("result") != "block" or "raw_evidence_bypass" not in taxonomy:
-                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` must block raw-evidence-only approval bypass"))
-                    else:
-                        governance_lint = raw_only_payload.get("governance_lint")
-                        if not isinstance(governance_lint, dict) or governance_lint.get("result") != "block":
-                            failures.append(Failure("daily-execution-cli", "`installed pr-gate` raw-only case must expose blocking approval-boundary governance lint"))
-
-                block_decision_target = tmp_root / "pr-gate-block-decision"
-                copy_pr_gate_fixture(block_decision_target)
-                block_review_path = block_decision_target / ".loom/reviews/INIT-0001.json"
-                try:
-                    block_review = json.loads(block_review_path.read_text(encoding="utf-8"))
-                except (OSError, json.JSONDecodeError):
-                    block_review = {}
-                if isinstance(block_review, dict):
-                    block_review["decision"] = "block"
-                    block_review["summary"] = "Fixture review blocks merge."
-                    block_review_path.write_text(json.dumps(block_review, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-                git_add = run_command(root, ["git", "add", "-f", ".loom/reviews/INIT-0001.json"], cwd=block_decision_target)
-                git_commit = run_command(root, ["git", "commit", "-m", "author blocking review fixture"], cwd=block_decision_target)
-                if git_add.returncode != 0 or git_commit.returncode != 0:
-                    detail = git_add.stderr.strip() or git_add.stdout.strip() or git_commit.stderr.strip() or git_commit.stdout.strip() or "git fixture setup failed"
-                    failures.append(Failure("daily-execution-cli", f"`installed pr-gate` block decision fixture setup failed: {detail}"))
-                else:
-                    block_pr_fixture = pr_gate_fixture(block_decision_target, number=4)
-                    block_decision_payload, error = load_command_json(
-                        root,
-                        [
-                            "python3",
-                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                            "pr-gate",
-                            "check",
-                            "--target",
-                            str(block_decision_target),
-                            "--item",
-                            "INIT-0001",
-                            "--pr",
-                            "4",
-                            "--pr-payload-file",
-                            block_pr_fixture,
-                        ],
-                    )
-                    taxonomy = block_decision_payload.get("failure_taxonomy") if isinstance(block_decision_payload, dict) else []
-                    if error:
-                        failures.append(Failure("daily-execution-cli", f"`installed pr-gate` block decision failed: {error}"))
-                    elif block_decision_payload.get("result") != "block" or "review_not_approved" not in taxonomy:
-                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` must block non-allow authored review decisions"))
-
-                spec_review_target = tmp_root / "pr-gate-spec-review-kind"
-                shutil.copytree(positive_target, spec_review_target)
-                spec_review_path = spec_review_target / ".loom/reviews/INIT-0001.json"
-                try:
-                    spec_review_record = json.loads(spec_review_path.read_text(encoding="utf-8"))
-                except (OSError, json.JSONDecodeError):
-                    spec_review_record = {}
-                if isinstance(spec_review_record, dict):
-                    spec_review_record["kind"] = "spec_review"
-                    spec_review_record["summary"] = "A spec review cannot satisfy implementation approval."
-                    spec_review_path.write_text(json.dumps(spec_review_record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-                git_add = run_command(root, ["git", "add", "-f", ".loom/reviews/INIT-0001.json"], cwd=spec_review_target)
-                git_commit = run_command(root, ["git", "commit", "-m", "author spec review kind fixture"], cwd=spec_review_target)
-                if git_add.returncode != 0 or git_commit.returncode != 0:
-                    detail = git_add.stderr.strip() or git_add.stdout.strip() or git_commit.stderr.strip() or git_commit.stdout.strip() or "git fixture setup failed"
-                    failures.append(Failure("daily-execution-cli", f"`installed pr-gate` spec review kind fixture setup failed: {detail}"))
-                else:
-                    spec_review_pr_fixture = pr_gate_fixture(spec_review_target, number=6)
-                    spec_review_payload, error = load_command_json(
-                        root,
-                        [
-                            "python3",
-                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                            "pr-gate",
-                            "check",
-                            "--target",
-                            str(spec_review_target),
-                            "--item",
-                            "INIT-0001",
-                            "--pr",
-                            "6",
-                            "--pr-payload-file",
-                            spec_review_pr_fixture,
-                        ],
-                    )
-                    taxonomy = spec_review_payload.get("failure_taxonomy") if isinstance(spec_review_payload, dict) else []
-                    review_approval = spec_review_payload.get("review_approval") if isinstance(spec_review_payload, dict) else {}
-                    governance_lint = spec_review_payload.get("governance_lint") if isinstance(spec_review_payload, dict) else {}
-                    if error:
-                        failures.append(Failure("daily-execution-cli", f"`installed pr-gate` spec review kind failed: {error}"))
-                    elif spec_review_payload.get("result") != "block" or "review_not_approved" not in taxonomy:
-                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` must block spec_review records from satisfying implementation approval"))
-                    elif not isinstance(review_approval, dict) or review_approval.get("status") == "approved":
-                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` must not mark spec_review records as implementation approval"))
-                    elif not isinstance(governance_lint, dict) or governance_lint.get("result") != "block":
-                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` spec_review case must expose blocking approval-boundary governance lint"))
-
-                stale_review_target = tmp_root / "pr-gate-stale-review"
-                shutil.copytree(positive_target, stale_review_target)
-                readme_path = stale_review_target / "README.md"
-                readme_path.write_text(readme_path.read_text(encoding="utf-8") + "\nStale review fixture change.\n", encoding="utf-8")
-                git_add = run_command(root, ["git", "add", "README.md"], cwd=stale_review_target)
-                git_commit = run_command(root, ["git", "commit", "-m", "change implementation after review fixture"], cwd=stale_review_target)
-                if git_add.returncode != 0 or git_commit.returncode != 0:
-                    detail = git_add.stderr.strip() or git_add.stdout.strip() or git_commit.stderr.strip() or git_commit.stdout.strip() or "git fixture setup failed"
-                    failures.append(Failure("daily-execution-cli", f"`installed pr-gate` stale review fixture setup failed: {detail}"))
-                else:
-                    stale_pr_fixture = pr_gate_fixture(stale_review_target, number=22)
-                    stale_payload, error = load_command_json(
-                        root,
-                        [
-                            "python3",
-                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                            "pr-gate",
-                            "check",
-                            "--target",
-                            str(stale_review_target),
-                            "--item",
-                            "INIT-0001",
-                            "--pr",
-                            "22",
-                            "--pr-payload-file",
-                            stale_pr_fixture,
-                        ],
-                    )
-                    taxonomy = stale_payload.get("failure_taxonomy") if isinstance(stale_payload, dict) else []
-                    governance_lint = stale_payload.get("governance_lint") if isinstance(stale_payload, dict) else {}
-                    if error:
-                        failures.append(Failure("daily-execution-cli", f"`installed pr-gate` stale review failed: {error}"))
-                    elif stale_payload.get("result") != "block" or not ({"review_stale", "head_binding_drift"} & set(taxonomy)):
-                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` must block stale review/head drift evidence"))
-                    elif not isinstance(governance_lint, dict) or governance_lint.get("result") != "block":
-                        failures.append(Failure("daily-execution-cli", "`installed pr-gate` stale review case must expose blocking governance lint"))
-
-                payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "loom-init" / "scripts" / "loom-init.py"),
-                        "route",
-                        "--target",
-                        str(positive_target),
-                        "--task",
-                        task_signals["merge-ready"],
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed route merge-ready` failed: {error}"))
-                else:
-                    require_route_payload(
-                        failures,
-                        category="daily-execution-cli",
-                        context="`installed route merge-ready`",
-                        payload=payload,
-                        expected_skill="loom-merge-ready",
-                        expected_mode="implicit",
-                        expected_runtime_scene="installed-runtime",
-                        expected_runtime_carrier="installed-skills-root",
-                    )
-
-                merge_ready_payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "loom-merge-ready" / "scripts" / "loom-merge-ready.py"),
-                        "flow",
-                        "merge-ready",
-                        "--target",
-                        str(positive_target),
-                        "--item",
-                        "INIT-0001",
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed flow merge-ready` failed: {error}"))
-                elif merge_ready_payload.get("result") != "pass":
-                    failures.append(Failure("daily-execution-cli", "`installed flow merge-ready` must pass for the positive chain"))
-                else:
-                    retained_merge_gate_fixture = write_json_fixture(
-                        positive_target,
-                        ".loom/tmp/pr-gate/retained-merge-gate.json",
-                        merge_ready_payload,
-                    )
-                    merge_checkpoint = merge_ready_payload.get("merge_checkpoint")
-                    if not isinstance(merge_checkpoint, dict) or merge_checkpoint.get("result") != "pass":
-                        failures.append(Failure("daily-execution-cli", "`installed flow merge-ready` must expose `merge_checkpoint.result = pass`"))
-                    require_governance_lint_status_payload(
-                        failures,
-                        category="daily-execution-cli",
-                        context="`installed flow merge-ready`.governance_lint",
-                        payload=merge_ready_payload.get("governance_lint"),
-                        expected_surface="merge_ready",
-                    )
-                    if merge_ready_payload.get("governance_lint", {}).get("result") != "pass":
-                        failures.append(Failure("daily-execution-cli", "`installed flow merge-ready` governance_lint must pass for the positive chain"))
-                    if retained_pr_gate_fixture is not None:
-                        retained_controlled_payload, error = load_command_json(
-                            root,
-                            [
-                                "python3",
-                                str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                                "controlled-merge",
-                                "check",
-                                "--target",
-                                str(positive_target),
-                                "--item",
-                                "INIT-0001",
-                                "--pr",
-                                "1",
-                                "--pr-payload-file",
-                                pr_fixture,
-                                "--branch-protection-file",
-                                protection_fixture,
-                                "--status-checks-file",
-                                status_fixture,
-                                "--pr-gate-result-file",
-                                retained_pr_gate_fixture,
-                                "--merge-gate-result-file",
-                                retained_merge_gate_fixture,
-                            ],
-                        )
-                        if error:
-                            failures.append(Failure("daily-execution-cli", f"`installed controlled-merge` retained result consumption failed: {error}"))
-                        elif retained_controlled_payload.get("result") != "pass":
-                            failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must pass with fresh retained pr-gate and merge-gate results"))
-                        else:
-                            retained_results = retained_controlled_payload.get("retained_results")
-                            drift_readback = retained_controlled_payload.get("drift_readback")
-                            if not isinstance(retained_results, dict) or retained_results.get("pr_gate", {}).get("source") != "retained":
-                                failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must report retained pr-gate consumption"))
-                            if not isinstance(drift_readback, dict) or drift_readback.get("mode") != "drift-only":
-                                failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must expose drift-only readback when consuming retained results"))
-
-                        stale_pr_gate_payload = json.loads(json.dumps(pr_gate_payload))
-                        stale_pr_gate_payload["pr"]["head_sha"] = "0" * 40
-                        stale_pr_gate_fixture = write_json_fixture(
-                            positive_target,
-                            ".loom/tmp/pr-gate/retained-pr-gate-stale-head.json",
-                            stale_pr_gate_payload,
-                        )
-                        stale_retained_payload, error = load_command_json(
-                            root,
-                            [
-                                "python3",
-                                str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                                "controlled-merge",
-                                "check",
-                                "--target",
-                                str(positive_target),
-                                "--item",
-                                "INIT-0001",
-                                "--pr",
-                                "1",
-                                "--pr-payload-file",
-                                pr_fixture,
-                                "--branch-protection-file",
-                                protection_fixture,
-                                "--status-checks-file",
-                                status_fixture,
-                                "--pr-gate-result-file",
-                                stale_pr_gate_fixture,
-                                "--merge-gate-result-file",
-                                retained_merge_gate_fixture,
-                            ],
-                        )
-                        if error:
-                            failures.append(Failure("daily-execution-cli", f"`installed controlled-merge` stale retained pr-gate failed: {error}"))
-                        elif stale_retained_payload.get("result") != "block":
-                            failures.append(Failure("daily-execution-cli", "`installed controlled-merge` must block stale retained pr-gate head drift"))
-
-                checkpoint_merge_payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                        "checkpoint",
-                        "merge",
-                        "--target",
-                        str(positive_target),
-                        "--item",
-                        "INIT-0001",
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed checkpoint merge` failed: {error}"))
-                elif checkpoint_merge_payload.get("result") != "pass":
-                    failures.append(Failure("daily-execution-cli", "`installed checkpoint merge` must pass for the positive chain"))
-
-                payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                        "recovery",
-                        "writeback",
-                        "--target",
-                        str(positive_target),
-                        "--item",
-                        "INIT-0001",
-                        "--current-checkpoint",
-                        "merge checkpoint",
-                        "--current-stop",
-                        "Only Loom carrier status changed after review.",
-                        "--next-step",
-                        "Confirm carrier-only review head binding remains consumable.",
-                        "--latest-validation-summary",
-                        positive_summary,
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed recovery writeback carrier-only` failed: {error}"))
-                elif payload.get("result") != "pass":
-                    failures.append(Failure("daily-execution-cli", "`installed recovery writeback carrier-only` must pass"))
-                git_add = run_command(root, ["git", "add", "-f", ".loom/progress/INIT-0001.md", ".loom/status/current.md"], cwd=positive_target)
-                if git_add.returncode != 0:
-                    detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
-                    failures.append(Failure("daily-execution-cli", f"`installed carrier-only commit` add failed: {detail}"))
-                else:
-                    git_commit = run_command(
-                        root,
-                        ["git", "commit", "-m", "refresh carriers after review for #354"],
-                        cwd=positive_target,
-                    )
-                    if git_commit.returncode != 0:
-                        detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
-                        failures.append(Failure("daily-execution-cli", f"`installed carrier-only commit` failed: {detail}"))
-
-                payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                        "checkpoint",
-                        "merge",
-                        "--target",
-                        str(positive_target),
-                        "--item",
-                        "INIT-0001",
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed checkpoint merge` carrier-only failed: {error}"))
-                elif payload.get("result") != "pass":
-                    failures.append(Failure("daily-execution-cli", "`installed checkpoint merge` must pass for carrier-only review head drift"))
-                elif "carrier-only" not in json.dumps(payload, ensure_ascii=False):
-                    failures.append(Failure("daily-execution-cli", "`installed checkpoint merge` must expose carrier-only review head binding"))
-
-                broken_install = tmp_root / "broken-install" / "skills"
-                shutil.copytree(root / "skills", broken_install)
-                (broken_install / "loom-init" / ".loom-runtime" / "install-layout.json").unlink()
-                (broken_install / "loom-pre-review" / ".loom-runtime" / "install-layout.json").unlink()
-                payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(broken_install / "loom-init" / "scripts" / "loom-init.py"),
-                        "route",
-                        "--target",
-                        str(positive_target),
-                        "--task",
-                        task_signals["resume"],
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed route` missing install-layout failed unexpectedly: {error}"))
-                else:
-                    require_route_payload(
-                        failures,
-                        category="daily-execution-cli",
-                        context="`installed route` missing install-layout",
-                        payload=payload,
-                        expected_skill="loom-init",
-                        expected_mode="fallback",
-                        expected_runtime_scene="installed-runtime",
-                        expected_runtime_carrier="installed-skills-root",
-                        allowed_results={"block"},
-                    )
-
-                payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(broken_install / "loom-pre-review" / "scripts" / "loom-pre-review.py"),
-                        "flow",
-                        "pre-review",
-                        "--target",
-                        str(positive_target),
-                        "--item",
-                        "INIT-0001",
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed flow pre-review` missing install-layout failed unexpectedly: {error}"))
-                elif payload.get("result") != "block":
-                    failures.append(Failure("daily-execution-cli", "`installed flow pre-review` must block when install-layout is missing"))
-                else:
-                    require_runtime_state_payload(
-                        failures,
-                        category="daily-execution-cli",
-                        context="`installed flow pre-review` missing install-layout",
-                        payload=payload.get("runtime_state"),
-                        expected_scene="installed-runtime",
-                        expected_carrier="installed-skills-root",
-                        allowed_results={"block"},
-                    )
-
-                review_fallback_summary, review_fallback_errors = prepare_target(review_fallback_target)
-                if review_fallback_errors:
-                    failures.append(
-                        Failure(
-                            "daily-execution-cli",
-                            f"`installed review baseline fallback` setup failed: {'; '.join(review_fallback_errors)}",
-                        )
-                    )
-                else:
-                    payload, error = load_command_json(
-                        root,
-                        [
-                            "python3",
-                            str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                            "recovery",
-                            "writeback",
-                            "--target",
-                            str(review_fallback_target),
-                            "--item",
-                            "INIT-0001",
-                            "--current-checkpoint",
-                            "admission checkpoint",
-                            "--current-stop",
-                            "Installed review baseline is still at admission.",
-                            "--next-step",
-                            "Promote the target repo to build checkpoint before review.",
-                            "--latest-validation-summary",
-                            review_fallback_summary,
-                        ],
-                    )
-                    if error:
-                        failures.append(Failure("daily-execution-cli", f"`installed recovery writeback for admission fallback` failed: {error}"))
-                    elif payload.get("result") != "pass":
-                        failures.append(Failure("daily-execution-cli", "`installed recovery writeback for admission fallback` must pass"))
-
-                    git_add = run_command(
-                        root,
-                        ["git", "add", "-f", ".loom/progress/INIT-0001.md", ".loom/status/current.md"],
-                        cwd=review_fallback_target,
-                    )
-                    if git_add.returncode != 0:
-                        detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
-                        failures.append(Failure("daily-execution-cli", f"`installed review baseline fallback` add failed: {detail}"))
-                    else:
-                        git_commit = run_command(
-                            root,
-                            ["git", "commit", "-m", "lower checkpoint to admission for #209 fallback"],
-                            cwd=review_fallback_target,
-                        )
-                        if git_commit.returncode != 0:
-                            detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
-                            failures.append(Failure("daily-execution-cli", f"`installed review baseline fallback` commit failed: {detail}"))
-
-                    payload, error = load_command_json(
-                        root,
-                        [
-                            "python3",
-                            str(install_root / "loom-review" / "scripts" / "loom-review.py"),
-                            "flow",
-                            "review",
-                            "--target",
-                            str(review_fallback_target),
-                            "--item",
-                            "INIT-0001",
-                        ],
-                    )
-                    if error:
-                        failures.append(Failure("daily-execution-cli", f"`installed flow review` admission fallback failed: {error}"))
-                    elif payload.get("result") != "fallback" or payload.get("fallback_to") != "admission":
-                        failures.append(Failure("daily-execution-cli", "`installed flow review` must fall back to `admission` when build checkpoint is missing"))
-
-                    payload, error = load_command_json(
-                        root,
-                        [
-                            "python3",
-                            str(install_root / "loom-merge-ready" / "scripts" / "loom-merge-ready.py"),
-                            "flow",
-                            "merge-ready",
-                            "--target",
-                            str(review_fallback_target),
-                            "--item",
-                            "INIT-0001",
-                        ],
-                    )
-                    if error:
-                        failures.append(Failure("daily-execution-cli", f"`installed flow merge-ready` review-baseline fallback failed: {error}"))
-                    elif payload.get("result") not in {"fallback", "block"}:
-                        failures.append(Failure("daily-execution-cli", "`installed flow merge-ready` must fail closed when review baseline is missing"))
-
-                readme_path = positive_target / "README.md"
-                readme_path.write_text(readme_path.read_text(encoding="utf-8") + "\n# review-head-drift\n", encoding="utf-8")
-                git_add = run_command(root, ["git", "add", "README.md"], cwd=positive_target)
-                if git_add.returncode != 0:
-                    detail = git_add.stderr.strip() or git_add.stdout.strip() or "git add failed"
-                    failures.append(Failure("daily-execution-cli", f"`installed merge-ready drift` add failed: {detail}"))
-                else:
-                    git_commit = run_command(
-                        root,
-                        ["git", "commit", "-m", "introduce non-carrier drift after review for #209"],
-                        cwd=positive_target,
-                    )
-                    if git_commit.returncode != 0:
-                        detail = git_commit.stderr.strip() or git_commit.stdout.strip() or "git commit failed"
-                        failures.append(Failure("daily-execution-cli", f"`installed merge-ready drift` commit failed: {detail}"))
-
-                stale_pr_fixture = pr_gate_fixture(positive_target, number=5)
-                stale_pr_payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                        "pr-gate",
-                        "check",
-                        "--target",
-                        str(positive_target),
-                        "--item",
-                        "INIT-0001",
-                        "--pr",
-                        "5",
-                        "--pr-payload-file",
-                        stale_pr_fixture,
-                    ],
-                )
-                taxonomy = stale_pr_payload.get("failure_taxonomy") if isinstance(stale_pr_payload, dict) else []
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed pr-gate` stale review failed: {error}"))
-                elif stale_pr_payload.get("result") != "block" or "review_stale" not in taxonomy:
-                    failures.append(Failure("daily-execution-cli", "`installed pr-gate` must block stale authored review approval"))
-
-                payload, error = load_command_json(
-                    root,
-                    [
-                        "python3",
-                        str(install_root / "shared" / "scripts" / "loom_flow.py"),
-                        "checkpoint",
-                        "merge",
-                        "--target",
-                        str(positive_target),
-                        "--item",
-                        "INIT-0001",
-                    ],
-                )
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`installed checkpoint merge` drift negative failed: {error}"))
-                elif payload.get("result") != "block":
-                    failures.append(Failure("daily-execution-cli", "`installed checkpoint merge` must block when HEAD drifts beyond Loom carriers"))
-                elif "implementation-drift-only" not in json.dumps(payload, ensure_ascii=False):
-                    failures.append(Failure("daily-execution-cli", "`installed checkpoint merge` drift negative must expose implementation-drift-only review head binding"))
-
-    live_github_opt_in = os.environ.get("LOOM_CHECK_LIVE_GITHUB") == "1"
-    gh_auth_probe = None
-    if live_github_opt_in and shutil.which("gh") is not None:
-        try:
-            gh_auth_probe = run_command(root, ["gh", "auth", "status"], timeout_seconds=5)
-        except subprocess.TimeoutExpired:
-            gh_auth_probe = None
-    gh_auth_ready = gh_auth_probe is not None and gh_auth_probe.returncode == 0
-    # GitHub Actions' ephemeral token is enough for self-governance host binding
-    # reads, but it is not a stable authority for historical live issue/PR/project
-    # samples. Keep those samples as local authenticated coverage instead of
-    # making CI depend on mutable host permissions.
-    if gh_auth_ready and os.environ.get("GITHUB_ACTIONS") != "true":
-        with loom_check_temporary_directory(prefix="loom-check-installed-post-merge-") as tmp:
-            tmp_root = Path(tmp)
-            install_root = tmp_root / "installed" / "skills"
-            retire_target = tmp_root / "retire-target"
-            dirty_target = tmp_root / "dirty-target"
-            broken_install = tmp_root / "broken-install" / "skills"
-            shutil.copytree(root / "skills", install_root)
-
-            for target in (retire_target, dirty_target):
-                shutil.copytree(example_target, target)
-                for args in (
-                    ["git", "init"],
-                    ["git", "config", "user.email", "loom-check@example.com"],
-                    ["git", "config", "user.name", "loom-check"],
-                    ["git", "add", "."],
-                    ["git", "commit", "-m", "baseline"],
-                ):
-                    result = run_command(root, args, cwd=target)
-                    if result.returncode != 0:
-                        detail = result.stderr.strip() or result.stdout.strip() or "git setup failed"
-                        failures.append(Failure("daily-execution-cli", f"`installed retire` setup failed: {detail}"))
-                        break
-
-            purity_payload, error = load_command_json(
-                root,
-                [
-                    "python3",
-                    str(install_root / "loom-retire" / "scripts" / "loom-retire.py"),
-                    "purity-check",
-                    "--target",
-                    str(retire_target),
-                    "--item",
-                    "INIT-0001",
-                ],
-            )
-            if error:
-                failures.append(Failure("daily-execution-cli", f"`installed purity-check` failed: {error}"))
-            elif purity_payload.get("result") != "pass":
-                failures.append(Failure("daily-execution-cli", "`installed purity-check` must pass on a clean retire target"))
-            else:
-                require_runtime_state_payload(
-                    failures,
-                    category="daily-execution-cli",
-                    context="`installed purity-check`",
-                    payload=purity_payload.get("runtime_state"),
-                    expected_scene="installed-runtime",
-                    expected_carrier="installed-skills-root",
-                    allowed_results={"pass"},
-                )
-
-            temp_root = retire_target / ".loom" / ".tmp"
-            installed_residue = temp_root / "loom-owned-residue"
-            installed_residue.mkdir(parents=True, exist_ok=True)
-            (installed_residue / ".loom-owned").write_text("owned\n", encoding="utf-8")
-            (installed_residue / "sentinel.txt").write_text("temp\n", encoding="utf-8")
-
-            cleanup_payload, error = load_command_json(
-                root,
-                [
-                    "python3",
-                    str(install_root / "loom-retire" / "scripts" / "loom-retire.py"),
-                    "workspace",
-                    "cleanup",
-                    "--target",
-                    str(retire_target),
-                    "--item",
-                    "INIT-0001",
-                ],
-            )
-            if error:
-                failures.append(Failure("daily-execution-cli", f"`installed workspace cleanup` failed: {error}"))
-            elif cleanup_payload.get("result") != "pass":
-                failures.append(Failure("daily-execution-cli", "`installed workspace cleanup` must pass for Loom-owned residue"))
-            else:
-                require_runtime_state_payload(
-                    failures,
-                    category="daily-execution-cli",
-                    context="`installed workspace cleanup`",
-                    payload=cleanup_payload.get("runtime_state"),
-                    expected_scene="installed-runtime",
-                    expected_carrier="installed-skills-root",
-                    allowed_results={"pass"},
-                )
-                require_lifecycle_expectations_payload(
-                    failures,
-                    category="daily-execution-cli",
-                    context="`installed workspace cleanup`",
-                    payload=cleanup_payload.get("lifecycle_expectations"),
-                )
-
-            retire_payload, error = load_command_json(
-                root,
-                [
-                    "python3",
-                    str(install_root / "loom-retire" / "scripts" / "loom-retire.py"),
-                    "workspace",
-                    "retire",
-                    "--target",
-                    str(retire_target),
-                    "--item",
-                    "INIT-0001",
-                ],
-            )
-            if error:
-                failures.append(Failure("daily-execution-cli", f"`installed workspace retire` failed: {error}"))
-            elif retire_payload.get("result") != "pass":
-                failures.append(Failure("daily-execution-cli", "`installed workspace retire` must pass after cleanup"))
-            else:
-                require_runtime_state_payload(
-                    failures,
-                    category="daily-execution-cli",
-                    context="`installed workspace retire`",
-                    payload=retire_payload.get("runtime_state"),
-                    expected_scene="installed-runtime",
-                    expected_carrier="installed-skills-root",
-                    allowed_results={"pass"},
-                )
-                require_lifecycle_expectations_payload(
-                    failures,
-                    category="daily-execution-cli",
-                    context="`installed workspace retire`",
-                    payload=retire_payload.get("lifecycle_expectations"),
-                )
-                checkpoint = retire_payload.get("checkpoint")
-                if not isinstance(checkpoint, dict) or checkpoint.get("normalized") != "retired":
-                    failures.append(Failure("daily-execution-cli", "`installed workspace retire` must leave the target in `retired` state"))
-
-            (dirty_target / "foreign-residue.txt").write_text("pending\n", encoding="utf-8")
-            dirty_add = run_command(root, ["git", "add", "foreign-residue.txt"], cwd=dirty_target)
-            if dirty_add.returncode != 0:
-                detail = dirty_add.stderr.strip() or dirty_add.stdout.strip() or "git add failed"
-                failures.append(Failure("daily-execution-cli", f"`installed retire` dirty sample setup failed: {detail}"))
-
-            for label, args in (
-                (
-                    "installed purity-check dirty sample",
-                    [
-                        "python3",
-                        str(install_root / "loom-retire" / "scripts" / "loom-retire.py"),
-                        "purity-check",
-                        "--target",
-                        str(dirty_target),
-                        "--item",
-                        "INIT-0001",
-                    ],
-                ),
-                (
-                    "installed workspace cleanup dirty sample",
-                    [
-                        "python3",
-                        str(install_root / "loom-retire" / "scripts" / "loom-retire.py"),
-                        "workspace",
-                        "cleanup",
-                        "--target",
-                        str(dirty_target),
-                        "--item",
-                        "INIT-0001",
-                    ],
-                ),
-                (
-                    "installed workspace retire dirty sample",
-                    [
-                        "python3",
-                        str(install_root / "loom-retire" / "scripts" / "loom-retire.py"),
-                        "workspace",
-                        "retire",
-                        "--target",
-                        str(dirty_target),
-                        "--item",
-                        "INIT-0001",
-                    ],
-                ),
-            ):
-                payload, error = load_command_json(root, args)
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`{label}` failed: {error}"))
-                    continue
-                if payload.get("result") != "block":
-                    failures.append(Failure("daily-execution-cli", f"`{label}` must block when non-Loom residue is present"))
-                require_runtime_state_payload(
-                    failures,
-                    category="daily-execution-cli",
-                    context=f"`{label}`",
-                    payload=payload.get("runtime_state"),
-                    expected_scene="installed-runtime",
-                    expected_carrier="installed-skills-root",
-                    allowed_results={"pass"},
-                )
-
-            shutil.copytree(root / "skills", broken_install)
-            (broken_install / "install-layout.json").unlink()
-            (broken_install / "loom-retire" / ".loom-runtime" / "install-layout.json").unlink()
-            for label, args in (
-                (
-                    "installed closeout check missing install-layout",
-                    [
-                        "python3",
-                        str(broken_install / "shared" / "scripts" / "loom_flow.py"),
-                        "closeout",
-                        "check",
-                        "--target",
-                        str(root),
-                        "--issue",
-                        "131",
-                        "--pr",
-                        "138",
-                        "--skip-gate",
-                    ],
-                ),
-                (
-                    "installed purity-check missing install-layout",
-                    [
-                        "python3",
-                        str(broken_install / "loom-retire" / "scripts" / "loom-retire.py"),
-                        "purity-check",
-                        "--target",
-                        str(retire_target),
-                        "--item",
-                        "INIT-0001",
-                    ],
-                ),
-            ):
-                payload, error = load_command_json(root, args)
-                if error:
-                    failures.append(Failure("daily-execution-cli", f"`{label}` failed unexpectedly: {error}"))
-                    continue
-                if payload.get("result") != "block":
-                    failures.append(Failure("daily-execution-cli", f"`{label}` must block when install-layout is missing"))
-                require_runtime_state_payload(
-                    failures,
-                    category="daily-execution-cli",
-                    context=f"`{label}`",
-                    payload=payload.get("runtime_state"),
-                    expected_scene="installed-runtime",
-                    expected_carrier="installed-skills-root",
-                    allowed_results={"block"},
-                )
 
     return failures
 
@@ -21796,6 +21810,7 @@ def collect_source_failures(root: Path, source_surface: str = SOURCE_SURFACE_FUL
         (SOURCE_SURFACE_MERGE_GATE, "merge-gate", lambda: check_daily_execution_cli(root)),
         (SOURCE_SURFACE_CLOSEOUT_RECONCILIATION, "closeout-reconciliation", lambda: check_closeout_reconciliation_fixture(root)),
         (SOURCE_SURFACE_RETIRE_WORKSPACE, "retire-workspace", lambda: check_retire_workspace_fixture(root)),
+        (SOURCE_SURFACE_INSTALLED_RUNTIME, "installed-runtime", lambda: check_installed_runtime_fixture(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "py-compile-cache-hygiene", lambda: check_py_compile_cache_hygiene(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "repo-companion", lambda: check_repo_companion_interface_contracts(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "repo-interop", lambda: check_repo_interop_contracts(root)),
@@ -21914,7 +21929,7 @@ def check_loom_check_profile_contract(root: Path) -> list[Failure]:
     source_text = (root / "src/skills/shared/scripts/loom_check.py").read_text(encoding="utf-8")
     if "source/distribution" not in source_text or "--profile" not in source_text:
         failures.append(Failure(category, "`loom_check.py` must document source/distribution scope and expose `--profile`"))
-    for anchor in ("--source-surface", "contract-only", "source-self-fixture", "review-run", "merge-gate", "closeout-reconciliation", "retire-workspace", "bootstrap-regression", "distribution-regression", "loom_check: start source surface="):
+    for anchor in ("--source-surface", "contract-only", "source-self-fixture", "review-run", "merge-gate", "closeout-reconciliation", "retire-workspace", "installed-runtime", "bootstrap-regression", "distribution-regression", "loom_check: start source surface="):
         if anchor not in source_text:
             failures.append(Failure(category, f"`loom_check.py` must expose source surface contract anchor `{anchor}`"))
     init_text = (root / "src/skills/shared/scripts/loom_init.py").read_text(encoding="utf-8")
