@@ -1,0 +1,48 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1284",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Scheduler current-head review for PR #1388 after merging origin/main 1d6527f8906cc9b96553078dcf325871958380a8: PR diff against current main remains limited to WI-1284 evidence/closeout carriers, review/status/shadow/bootstrap metadata, and not_applicable suite carriers; #1283 implementation and terminal closeout truth are consumed from main rather than re-authored by #1284; repo-local-cli frozen group order evidence remains explicit for PR #1385/#1387 and current PR #1388; no workflow semantics, #1283 alias/docs ownership expansion, #1259 parent closeout, release/package, generated runtime, permission, or external-visible behavior change found.",
+  "reviewer": "scheduler:019eabaf-92dc-7a52-a238-838f4c0bf4ac",
+  "authored_at": "2026-06-09T17:05:19Z",
+  "reviewed_head": "ac81b475e84babd7007609db50dadaf041f2ef3f",
+  "reviewed_validation_summary": "2026-06-09 scheduler merge-main repair for WI-1284: merged origin/main 1d6527f8906cc9b96553078dcf325871958380a8 into work/1284-repo-local-cli-evidence-closeout after #1283 implementation and closeout landed; resolved bootstrap/status/shadow conflicts by preserving WI-1284 as current item and retaining #1283 terminal files from main. Validation passed: git diff --check; loom_init fact-chain with current_item WI-1284, checkpoint merge, Blockers None, no status stale/drift; loom_init verify; checkpoint build; shadow-parity --blocking; carrier refresh dry-run refresh_needed []. Scheduler current-head semantic review records no findings and confirms the PR diff remains limited to WI-1284 evidence/closeout carriers with no workflow semantics, #1283 alias/docs, #1259 closeout, release/package, generated runtime, permission, or external-visible behavior change.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1284.md",
+    "recovery_entry": ".loom/progress/WI-1284.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
