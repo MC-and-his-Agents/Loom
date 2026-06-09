@@ -1,0 +1,62 @@
+{
+  "schema_version": "loom-review/v1",
+  "item_id": "WI-1279",
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Current-head implementation review approves the retire-workspace fixture split: canonical, shared, generated skill runtime, and demo runtime loom_check.py surfaces expose retire-workspace; source-self-fixture aggregate includes review-run, merge-gate, closeout-reconciliation, and retire-workspace; retire/workspace/purity diagnostics remain fail-closed under retire-workspace-fixture; generated and demo runtime parity is refreshed; and the diff stays within WI-1279 runtime/carrier/review scope.",
+  "reviewer": "scheduler-thread-019ea5b2-4f32-7232-885c-720fbb3f8855",
+  "authored_at": "2026-06-09T05:13:00Z",
+  "reviewed_head": "4ccb02f28aeeaca501d3f8bd0322351180c97b20",
+  "reviewed_validation_summary": "2026-06-09 worker validation on branch `work/1279-source-self-retire-workspace-fixtures`: `make loom-demo-new-project-check` passed after syncing the demo generated runtime copy and bootstrap manifests; `python3 tools/py_compile_clean.py tools/loom_check.py src/skills/shared/scripts/loom_check.py skills/shared/scripts/loom_check.py examples/new-project/.loom/bin/loom_check.py skills/loom-retire/.loom-runtime/shared/scripts/loom_check.py` passed; `python3 src/skills/shared/scripts/loom_check.py examples/new-project` passed; `python3 src/skills/shared/scripts/loom_check.py --profile consumer examples/new-project` passed; `python3 tools/loom.py skills check --target . --json` passed; `python3 tools/loom_check.py --profile source --source-surface contract-only .` passed; `python3 tools/loom_check.py --profile source --source-surface retire-workspace .` passed with failures=0, including after stale aggregate lock cleanup; `python3 .loom/bin/loom_init.py fact-chain --target .` passed; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed after carrier refresh; previous aggregate `python3 tools/loom_check.py --profile source --source-surface source-self-fixture .` consumed `merge-gate`, `closeout-reconciliation`, `retire-workspace`, and `adversarial-adoption` successfully, with final failure limited to 3 non-WI-1279 `review-run-fixture` findings; current-tree aggregate retry was stopped as a review-run fixture execution hang, and the stale lock was removed; `git diff --check` passed.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1279.md",
+    "recovery_entry": ".loom/progress/WI-1279.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_validation": "python3 tools/loom.py suite validate --target . --item WI-1279 --json",
+    "suite_evidence_validation": "not_applicable: current CLI exposes suite validate for WI-1279 minimal path; evidence-map is consumed by review and suite validation",
+    "suite_carrier_validation": "not_applicable: current CLI exposes suite validate plus fact-chain/shadow-parity for WI-1279 carrier consumption",
+    "suite_evidence_map": ".loom/specs/WI-1279/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1279/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ],
+    "same_class_review": {
+      "result": "pass",
+      "summary": "Checked source surface registry/group membership, collect_source_failures step order, profile contract anchors, generated skill runtime copies, demo runtime manifest parity, WI-1279 carriers, PR metadata head binding, and exclusion boundaries for #1280 installed-runtime and #1258 parent closeout."
+    }
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
+}
