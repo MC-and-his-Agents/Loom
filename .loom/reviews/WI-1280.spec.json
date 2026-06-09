@@ -3,11 +3,11 @@
   "item_id": "WI-1280",
   "decision": "allow",
   "kind": "spec_review",
-  "summary": "WI-1280 minimal spec/plan covers the installed-runtime source surface split, aggregate source-self-fixture compatibility, installed route/flow/runtime parity, bootstrapped embedded runtime behavior, install-layout dependent fail-closed diagnostics, generated runtime parity, no #1258 parent closeout, and no release/package/workflow behavior change.",
-  "reviewer": "scheduler-thread-019ea5b2-4f32-7232-885c-720fbb3f8855",
-  "authored_at": "2026-06-09T07:49:34Z",
-  "reviewed_head": "3156322650b4e80352adea60d0e1348f74f035b9",
-  "reviewed_validation_summary": "2026-06-09 worker validation on branch `work/1280-source-self-installed-runtime-fixtures-r2`: `git diff --check` passed; `python3 tools/py_compile_clean.py tools/loom_check.py src/skills/shared/scripts/loom_check.py skills/shared/scripts/loom_check.py skills/loom-adopt/.loom-runtime/shared/scripts/loom_check.py skills/loom-build/.loom-runtime/shared/scripts/loom_check.py skills/loom-handoff/.loom-runtime/shared/scripts/loom_check.py skills/loom-init/.loom-runtime/shared/scripts/loom_check.py skills/loom-merge-ready/.loom-runtime/shared/scripts/loom_check.py skills/loom-pre-review/.loom-runtime/shared/scripts/loom_check.py skills/loom-resume/.loom-runtime/shared/scripts/loom_check.py skills/loom-retire/.loom-runtime/shared/scripts/loom_check.py skills/loom-review/.loom-runtime/shared/scripts/loom_check.py skills/loom-spec-review/.loom-runtime/shared/scripts/loom_check.py skills/loom-story/.loom-runtime/shared/scripts/loom_check.py` passed; `python3 tools/loom.py skills sync --target . --apply --json` passed; `python3 tools/loom.py skills check --target . --json` passed; `python3 tools/loom_check.py --profile source --help` exposes `installed-runtime`; `python3 tools/loom_check.py --profile source --source-surface contract-only .` passed; `python3 tools/loom_check.py --profile source --source-surface installed-runtime .` passed with elapsed 113.55s and failures=0; aggregate `python3 tools/loom_check.py --profile source --source-surface source-self-fixture .` consumed and passed `merge-gate`, `closeout-reconciliation`, `retire-workspace`, new `installed-runtime` with elapsed 81.29s, and subsequent source-self fixture steps, but finished with 4 unrelated `review-run-fixture` failures listed in Blockers; `python3 .loom/bin/loom_flow.py work-item update --target . --item WI-1280 --activate` passed; `python3 .loom/bin/loom_init.py fact-chain --target .` passed; `python3 tools/loom.py suite validate --target . --item WI-1280 --json` passed; `python3 tools/loom.py suite evidence validate --target . --item WI-1280 --json` passed; `python3 tools/loom.py suite carrier validate --target . --item WI-1280 --json` passed; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1280 --write` passed; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed.",
+  "summary": "Current-head carrier repair spec review rebinds WI-1280 formal spec approval to PR #1386's reachable repair-branch head: the WI-1280 spec/plan/implementation-contract suite is unchanged by this PR, the original #1382 spec review remains retained evidence, and this PR only repairs closeout carriers for terminal closed_out consumption.",
+  "reviewer": "codex-main-thread-carrier-repair",
+  "authored_at": "2026-06-09T12:28:31Z",
+  "reviewed_head": "46e4f9ac3528987d0f3b60eb06fec1730deedf29",
+  "reviewed_validation_summary": "2026-06-09 carrier repair spec review on branch `work/1280-carrier-closeout-repair`: PR #1386 changes only WI-1280 carrier/status/shadow/review facts and does not change `.loom/specs/WI-1280/spec.md`, `.loom/specs/WI-1280/plan.md`, or `.loom/specs/WI-1280/implementation-contract.md`; `python3 .loom/bin/loom_init.py fact-chain --target .` passed with derived status fresh; `python3 .loom/bin/loom_flow.py purity-check --target . --item WI-1280` passed with checkpoint `closed_out`; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed; `python3 .loom/bin/loom_flow.py pr-gate check --target . --pr 1386 --head-sha 46e4f9ac3528987d0f3b60eb06fec1730deedf29 --branch work/1280-carrier-closeout-repair` reproduced that only the retained #1382 spec review head was unreachable in hosted checkout; scope remains carrier-only with no implementation, workflow, release, Round 6, or #1258 parent closeout changes.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -49,7 +49,14 @@
     ],
     "metadata_same_class_audit": {
       "result": "pass",
-      "summary": "PR body, minimal spec/plan, task carrier, status/progress, implementation contract, and evidence map consistently bind WI-1280, branch work/1280-source-self-installed-runtime-fixtures-r2, head 3156322650b4e80352adea60d0e1348f74f035b9, suite_path minimal, release_judgment no_release, closeout_required true, and no #1258/Round 4/Round 6+/Deferred roadmap completion claims."
+      "summary": "PR body, minimal spec/plan, task carrier, status/progress, implementation contract, and evidence map consistently bind WI-1280; PR #1386 repair head 46e4f9ac3528987d0f3b60eb06fec1730deedf29 only rebinds closeout carrier evidence and makes no #1258/Round 4/Round 6+/Deferred roadmap completion claims."
+    },
+    "retained_spec_review": {
+      "result": "retained",
+      "reviewed_head": "3156322650b4e80352adea60d0e1348f74f035b9",
+      "implementation_pr": "#1382",
+      "implementation_merge_commit": "46cfa2011a80cf3b529c2c279eb5c3055bff161e",
+      "summary": "The original WI-1280 spec review remains historical evidence for the already-merged installed-runtime implementation; this repair PR records a reachable carrier review head so hosted gates can compare the unchanged spec suite without relying on local dangling objects."
     }
   }
 }
