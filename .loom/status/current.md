@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1280
-- Goal: Complete issue #1280 by splitting source-self installed route, flow, runtime parity, and install-layout dependent fixtures into a stable named `installed-runtime` source surface while preserving embedded runtime and repo-local compatibility, aggregate `source-self-fixture` behavior, and the #1276/#1277/#1278/#1279 `--source-surface` runner contract.
-- Scope: Allowed: `loom_check.py` source-surface registry/runner contract and generated skills runtime parity for installed-runtime fixtures; WI-1280 progress/status/spec/evidence carriers; PR metadata for the #1280 PR. Excluded: #1258 parent closeout, Round 4/Round 6+/Deferred roadmap work, #1276/#1277/#1278/#1279 implementation or closeout changes except read-only contract reference, release/package/workflow behavior, and scheduler-owned review/guardian/loom_check gate consumption, controlled merge, post-merge readback, and closeout.
-- Execution Path: issue #1280 -> branch `work/1280-source-self-installed-runtime-fixtures-r2` -> named `installed-runtime` source surface -> generated skills runtime parity -> focused installed-runtime validation -> aggregate source-self-fixture validation -> PR metadata/head binding -> scheduler-owned gate.
+- Item ID: WI-1282
+- Goal: Split the `repo-local-cli` CI workflow command surface into stable, diagnosable workflow steps while preserving every existing repo-local CLI command, setup dependency, order-sensitive sequence, and the runtime-state scene conflict negative check.
+- Scope: Own issue #1282 only: freeze the repo-local-cli command group names/order, split `.github/workflows/loom-check.yml` repo-local-cli step identity, maintain WI-1282 progress/spec/evidence carriers, and refresh PR #1385 metadata for the current head. Excluded: #1283/#1284/#1259 implementation or closeout, Round 5, Round 7+, Deferred roadmap, release/package workflow behavior, `tools/check_cli_contract.py`, `tools/loom_check.py`, `skills/shared/scripts/loom_check.py`, generated runtime copies, semantic review, guardian, controlled merge, and issue closeout.
+- Execution Path: issue #1282 -> branch `work/1282-repo-local-cli-workflow-steps` -> freeze command group contract -> split repo-local-cli workflow steps -> preserve command membership/order/setup/negative check -> local validation -> PR #1385 metadata/head binding -> hosted check readback -> scheduler-owned gate.
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1280.md
-- Review Entry: .loom/reviews/WI-1280.json
-- Validation Entry: `git diff --check`; `python3 tools/py_compile_clean.py tools/loom_check.py src/skills/shared/scripts/loom_check.py skills/shared/scripts/loom_check.py skills/loom-*/.loom-runtime/shared/scripts/loom_check.py`; `python3 tools/loom.py skills check --target . --json`; `python3 tools/loom_check.py --profile source --source-surface contract-only .`; `python3 tools/loom_check.py --profile source --source-surface installed-runtime .`; `python3 tools/loom_check.py --profile source --source-surface source-self-fixture .`; suite/fact-chain/carrier/shadow/PR metadata preflight/readback checks; hosted PR checks.
-- Closing Condition: PR for #1280 is current-head reviewed and merged through scheduler-owned gate; issue #1280 is closed/completed; parent #1258 remains open until all children close and closeout is consumed.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1280 is closed out: PR #1382 merged into `main` at 2026-06-09T08:28:35Z with merge commit `46cfa2011a80cf3b529c2c279eb5c3055bff161e`; issue #1280 closed at 2026-06-09T08:28:37Z; closeout PR #1384 merged into `main` at 2026-06-09T09:04:15Z with merge commit `8346be4ac1fbaa829e6c6f7d3f73280066ed3b78`; repo carrier closeout is synchronized to terminal checkpoint.
-- Next Step: Round 6 scheduler can refresh `origin/main` after this carrier repair merges and reassess PR #1385 purity/gate inputs; keep #1258 parent closeout dependent on all Round 5 terminal carriers and parent closeout evidence.
+- Recovery Entry: .loom/progress/WI-1282.md
+- Review Entry: .loom/reviews/WI-1282.json
+- Validation Entry: `git diff --check`; workflow YAML parse and command preservation readback; `make loom-demo-new-project-check`; local split group execution; runtime-state scene conflict negative check; `python3 .loom/bin/loom_init.py fact-chain --target .`; `python3 .loom/bin/loom_init.py verify --target .`; WI-1282 suite/evidence/carrier validation; PR metadata/head readback; hosted check readback.
+- Closing Condition: PR #1385 is current-head reviewed and consumed by scheduler-owned gate, then merged; issue #1282 is closed/completed only by scheduler closeout; #1283/#1284/#1259 remain out of this worker scope.
+- Current Checkpoint: merge
+- Current Stop: WI-1282 current-head review is recorded for PR #1385; authorized shadow carriers were refreshed and local gate-input validation is being finalized before commit/push.
+- Next Step: Commit the authorized review/shadow carrier correction, run clean-worktree purity/review/pr-gate/metadata validation on the new head, update PR #1385 metadata, read hosted checks, and stop at scheduler-owned gate.
 - Blockers: None
-- Latest Validation Summary: 2026-06-09 carrier repair validation on branch `work/1280-carrier-closeout-repair`: `python3 .loom/bin/loom_flow.py recovery writeback --target . --item WI-1280 --current-checkpoint closed_out ...` passed and resynchronized `.loom/status/current.md`; `python3 .loom/bin/loom_flow.py carrier closeout-sync --target . --item WI-1280 --apply ...` passed and refreshed terminal metadata; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1280 --write` refreshed `.loom/shadow/merge-ready-loom.json` and `.loom/shadow/closeout-loom.json` for the updated status surface; `python3 .loom/bin/loom_init.py fact-chain --target .` passed with derived status fresh; `python3 .loom/bin/loom_flow.py purity-check --target . --item WI-1280` passed with checkpoint `closed_out` and no active workspace conflict; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed after shadow refresh; `git diff --check` passed. Scope is limited to WI-1280 carrier/status/shadow closeout repair; no implementation, workflow, release, Round 6, or #1258 parent closeout changes.
-- Recovery Boundary: Do not implement #1258 parent closeout, Round 4/Round 6+/Deferred roadmap, #1276/#1277/#1278/#1279 implementation or closeout changes, release/package/workflow behavior, scheduler-owned semantic/spec review artifacts, guardian/loom_check high-cost gate consumption, controlled merge, post-merge readback, or closeout in this worker branch.
-- Current Lane: source-self-installed-runtime-fixtures
+- Latest Validation Summary: 2026-06-09 review-shadow correction at PR #1385 head 6fec676e80c8ed631ed4a71a1d9af608679dfbb5: official recovery writeback moved WI-1282 to merge checkpoint; current-head allow review was recorded in .loom/reviews/WI-1282.json after reviewing the frozen repo-local-cli workflow split and WI-1282 carriers; carrier refresh dry-run and write were limited to authorized .loom/shadow/closeout-loom.json and .loom/shadow/merge-ready-loom.json; git diff --check passed; workflow readback confirmed the stable repo-local-cli group order and the 13 preserved commands including setup-demo-bootstrap and runtime-state scene conflict negative check; fact-chain and loom_init verify passed with current item WI-1282; shadow-parity --surface all --blocking passed; adopt verify passed. Pre-commit flow review is expected to purity-block on uncommitted authorized shadow carriers; clean-worktree purity/flow review/pr-gate/PR metadata preflight remain pending after commit.
+- Recovery Boundary: Own only issue #1282. Allowed writes are `.github/workflows/loom-check.yml` for repo-local-cli command group identity/split, `.loom/bootstrap/init-result.json` for WI-1282 fact-chain activation, `.loom/work-items/WI-1282.md` for WI-1282 static truth, `.loom/progress/WI-1282.md`, `.loom/status/current.md`, narrow `.loom/specs/WI-1282/**` evidence carriers, and #1282 PR metadata. Do not edit #1283/#1284/#1259 closeout work, Round 5, Round 7+, release/package workflows, `tools/check_cli_contract.py`, `tools/loom_check.py`, `skills/shared/scripts/loom_check.py`, generated runtime copies, semantic review, guardian, controlled merge, issue closeout, or project/root `/Users/mc/dev/Loom`.
+- Current Lane: repo-local-cli-surfaces
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1280.md
-- Dynamic Truth: .loom/progress/WI-1280.md
+- Static Truth: .loom/work-items/WI-1282.md
+- Dynamic Truth: .loom/progress/WI-1282.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .

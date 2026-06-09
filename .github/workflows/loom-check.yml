@@ -33,23 +33,35 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Check demo bootstrap fixture
+      - name: "repo-local-cli: setup-demo-bootstrap"
         run: make loom-demo-new-project-check
-      - name: Run repo-local demo CLI
+      - name: "repo-local-cli: init-runtime"
+        working-directory: examples/new-project
         run: |
-          cd examples/new-project
           python3 .loom/bin/loom_init.py runtime-state --target .
           python3 .loom/bin/loom_init.py verify --target .
+      - name: "repo-local-cli: fact-chain"
+        working-directory: examples/new-project
+        run: |
           python3 .loom/bin/loom_init.py fact-chain --target .
           python3 .loom/bin/loom_flow.py runtime-state --target . --item INIT-0001
           python3 .loom/bin/loom_flow.py fact-chain --target . --item INIT-0001
           python3 .loom/bin/loom_flow.py runtime-evidence --target . --item INIT-0001
           python3 .loom/bin/loom_flow.py state-check --target . --item INIT-0001
+      - name: "repo-local-cli: flow-gates"
+        working-directory: examples/new-project
+        run: |
           python3 .loom/bin/loom_flow.py flow pre-review --target . --item INIT-0001
           python3 .loom/bin/loom_flow.py checkpoint admission --target . --item INIT-0001
+      - name: "repo-local-cli: workspace-locate"
+        working-directory: examples/new-project
+        run: |
           python3 .loom/bin/loom_flow.py workspace locate --target . --item INIT-0001
+      - name: "repo-local-cli: purity-check"
+        working-directory: examples/new-project
+        run: |
           python3 .loom/bin/loom_flow.py purity-check --target . --item INIT-0001
-      - name: Runtime-state scene conflict must fail closed
+      - name: "repo-local-cli: runtime-state-scene-conflict-negative"
         run: |
           if LOOM_SOURCE_REPO_ROOT="$PWD" LOOM_INSTALLED_SKILLS_ROOT="$PWD/skills" LOOM_RUNTIME_SCENE=upgrade-rehearsal python3 skills/shared/scripts/loom_flow.py runtime-state --target examples/new-project --item INIT-0001; then
             echo "expected runtime-state conflict to fail closed"
