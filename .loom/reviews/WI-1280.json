@@ -3,10 +3,10 @@
   "item_id": "WI-1280",
   "decision": "allow",
   "kind": "code_review",
-  "summary": "Current-head implementation review approves the installed-runtime fixture split: canonical, shared, generated skill runtime, and demo runtime loom_check.py surfaces expose installed-runtime; source-self-fixture aggregate includes review-run, merge-gate, closeout-reconciliation, retire-workspace, and installed-runtime; installed route, installed flow, runtime-state parity, bootstrapped embedded runtime, installed pre-merge, install-layout, retire, and workspace diagnostics run under installed-runtime-fixture; generated runtime parity is refreshed; and the diff stays within WI-1280 runtime/carrier/demo-sync scope.",
-  "reviewer": "scheduler-thread-019ea5b2-4f32-7232-885c-720fbb3f8855",
-  "authored_at": "2026-06-09T07:49:34Z",
-  "reviewed_head": "3156322650b4e80352adea60d0e1348f74f035b9",
+  "summary": "Current-head carrier repair review approves PR #1386 as a minimal WI-1280 closeout carrier sync: it only changes WI-1280 progress/status/shadow/review carrier facts to terminal closed_out, preserves the already-merged #1382 implementation scope as historical evidence, and makes no implementation, workflow, release, Round 6, or #1258 parent closeout changes.",
+  "reviewer": "codex-main-thread-carrier-repair",
+  "authored_at": "2026-06-09T12:08:40Z",
+  "reviewed_head": "0649bbf15fc0e1b1717fc1c7ba06926dfb0a1a84",
   "reviewed_validation_summary": "2026-06-09 carrier repair validation on branch `work/1280-carrier-closeout-repair`: `python3 .loom/bin/loom_flow.py recovery writeback --target . --item WI-1280 --current-checkpoint closed_out ...` passed and resynchronized `.loom/status/current.md`; `python3 .loom/bin/loom_flow.py carrier closeout-sync --target . --item WI-1280 --apply ...` passed and refreshed terminal metadata; `python3 .loom/bin/loom_flow.py carrier refresh --target . --item WI-1280 --write` refreshed `.loom/shadow/merge-ready-loom.json` and `.loom/shadow/closeout-loom.json` for the updated status surface; `python3 .loom/bin/loom_init.py fact-chain --target .` passed with derived status fresh; `python3 .loom/bin/loom_flow.py purity-check --target . --item WI-1280` passed with checkpoint `closed_out` and no active workspace conflict; `python3 .loom/bin/loom_flow.py shadow-parity --target . --surface all --blocking` passed after shadow refresh; `git diff --check` passed. Scope is limited to WI-1280 carrier/status/shadow closeout repair; no implementation, workflow, release, Round 6, or #1258 parent closeout changes.",
   "fallback_to": null,
   "findings": [],
@@ -53,10 +53,19 @@
     "same_class_review": {
       "result": "pass",
       "summary": "Checked source surface registry/group membership, collect_source_failures step order, profile contract anchors, installed-runtime fixture category use, generated skill runtime copies, demo runtime manifest parity, WI-1280 carriers, PR metadata head binding, and exclusion boundaries for #1258 parent closeout, #1276/#1277/#1278/#1279 terminal work, release/package/workflow changes, Round 4, Round 6+, and Deferred roadmap."
+    },
+    "retained_implementation_review": {
+      "result": "retained",
+      "reviewed_head": "3156322650b4e80352adea60d0e1348f74f035b9",
+      "implementation_pr": "#1382",
+      "implementation_merge_commit": "46cfa2011a80cf3b529c2c279eb5c3055bff161e",
+      "closeout_pr": "#1384",
+      "closeout_merge_commit": "8346be4ac1fbaa829e6c6f7d3f73280066ed3b78",
+      "summary": "The original WI-1280 implementation review remains historical evidence for the already-merged installed-runtime implementation; this PR's current-head review covers only the carrier closeout repair."
     }
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Authored current-head review approved this carrier-only closeout repair for merge checkpoint consumption."
   }
 }
