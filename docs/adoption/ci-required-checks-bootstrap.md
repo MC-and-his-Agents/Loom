@@ -15,6 +15,8 @@ Loom 不把 workflow 文件存在解释为宿主强制门禁。强制能力仍�
 
 这些名称必须稳定，因为 GitHub required checks 绑定的是 check name。
 
+`repo-local-cli` check 内部的可诊断 command groups 可以在本地用 [repo-local gate starter aliases](../methodology/harness/repo-local-gate-starter.md#repo-local-cli-local-validation) 重放。那些 local aliases 必须保留 CI group names/order，但它们不是新的 required check names，也不能被描述为比 hosted `repo-local-cli` 或 `loom-check` 更弱的 merge-ready gate。
+
 ## Read Surface
 
 `github_control_plane.ci_check_presence` 区分：
