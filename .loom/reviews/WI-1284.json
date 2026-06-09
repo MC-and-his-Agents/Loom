@@ -1,39 +1,48 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1284",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "029d0ee057eee2495affd667ef4e8dcb5b0dbe1e",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Scheduler current-head review for PR #1388 head 2514c70c8f9d22fe4900c1eaf8f8d05b880473f3: scope is limited to WI-1284 repo-local-cli CI evidence and closeout expectation carriers; consumed #1282 frozen command group contract and PR #1385/#1387 post-merge/readback hosted evidence; current PR #1388 hosted repo-local-cli jobs preserve the frozen group order; no workflow semantics, #1283 alias/docs, #1259 closeout, release/package, generated runtime, permission, or external-visible behavior change found.",
+  "reviewer": "scheduler:019eabaf-92dc-7a52-a238-838f4c0bf4ac",
+  "authored_at": "2026-06-09T16:21:17Z",
+  "reviewed_head": "2514c70c8f9d22fe4900c1eaf8f8d05b880473f3",
+  "reviewed_validation_summary": "2026-06-09 clear-recovery-blocker correction for WI-1284: scheduler consumed T3 report T3-report-202606092349-waiting-scheduler-gate and found flow review still blocked before semantic review because checkpoint-build treated the progress Blockers field as a hard blocker. Official recovery writeback keeps Current Checkpoint at accepted value merge, sets Blockers to None, and moves scheduler-owned review/draft/gate pending state into Current Stop and Next Step only. Prior WI-1284 local validation passed and hosted post-merge/readback evidence remains explicit for PR #1385 run 27210093374 job 80336435486 and PR #1387 run 27212248994 job 80344176543; current PR #1388 hosted repo-local-cli evidence is classified separately from scheduler-owned review/draft/gate inputs. PR body visible and machine head metadata must be updated to the final correction head before scheduler gate consumption.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1284.md",
+    "recovery_entry": ".loom/progress/WI-1284.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
 }
