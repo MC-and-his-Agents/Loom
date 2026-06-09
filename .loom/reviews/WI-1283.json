@@ -5,28 +5,29 @@
   "kind": "general_review",
   "summary": "Formal review has not been recorded yet.",
   "reviewer": "not yet assigned",
-  "reviewed_head": "029d0ee057eee2495affd667ef4e8dcb5b0dbe1e",
-  "reviewed_validation_summary": "No validation recorded yet.",
+  "authored_at": "2026-06-09T14:58:35Z",
+  "reviewed_head": "f36922b04dbaa0f65dd0a9ba750476dd55aeb0cf",
+  "reviewed_validation_summary": "2026-06-09 T2 local validation: git diff --check passed; repo-local-cli group-order readback passed across Makefile variable, workflow steps, docs table, and repo-local-cli-full target order; make -n repo-local-cli-full showed the frozen order; make repo-local-cli-fast GROUP=workspace-locate passed; make repo-local-cli-full passed, including runtime-state-scene-conflict-negative fail-closed behavior where the underlying command returned result block and the Make target treated that as expected. WI-1283 carrier validation passed via loom_init fact-chain/verify, loom_flow purity-check, shadow-parity, adopt verify, suite evidence validate, and suite carrier validate; suite validate returned not_applicable by design with no blocking gaps. Scheduler-requested .loom/bin/__pycache__/ residue was removed and is absent from status.",
   "fallback_to": "admission",
   "findings": [
     {
-      "id": "scaffolded-block-1",
+      "id": "compat-block-1",
       "summary": "Review artifact scaffolded but not yet concluded.",
       "severity": "block",
       "rebuttal": null,
       "disposition": {
         "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+        "summary": "Projected from compatibility `blocking_issues`."
       }
     },
     {
-      "id": "scaffolded-warn-1",
+      "id": "compat-follow-up-1",
       "summary": "Record a real review before asking merge checkpoint to consume it.",
       "severity": "warn",
       "rebuttal": null,
       "disposition": {
         "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
+        "summary": "Projected from compatibility `follow_ups`."
       }
     }
   ],
@@ -35,5 +36,27 @@
   ],
   "follow_ups": [
     "Record a real review before asking merge checkpoint to consume it."
-  ]
+  ],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1283.md",
+    "recovery_entry": ".loom/progress/WI-1283.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "block",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
+      }
+    },
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null
+  }
 }
