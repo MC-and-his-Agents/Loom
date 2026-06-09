@@ -11,13 +11,13 @@
 - Review Entry: .loom/reviews/WI-1283.json
 - Validation Entry: git diff --check; repo-local-cli group-order readback; make repo-local-cli-fast GROUP=workspace-locate; make repo-local-cli-full; fact-chain/verify/purity/shadow/adopt checks; PR metadata/head readback; hosted checks
 - Closing Condition: Worker stops at waiting-scheduler-gate after clean local validation, PR metadata/head readback, and hosted checks; scheduler owns review/merge-ready/merge/closeout and issue #1283 closure.
-- Current Checkpoint: merge checkpoint
-- Current Stop: WI-1283 local aliases/docs, PR metadata, hosted repo-local checks, and carrier readiness are prepared for scheduler-owned semantic review.
-- Next Step: Scheduler records current-head semantic review disposition for WI-1283, then reruns pr-gate / merge-ready and proceeds to controlled merge only if gates pass.
+- Current Checkpoint: closed_out
+- Current Stop: WI-1283 is closed out: PR #1389 merged through the controlled merge wrapper at 2026-06-09T16:28:40Z with merge commit 9ce69f2b2b71ce227517775fb58a9b19298883fb; issue #1283 closed at 2026-06-09T16:32:04Z; stale blocked-by edge to closed #1282 was removed; closeout check passed and terminal carrier metadata is recorded.
+- Next Step: None for WI-1283. Wait for WI-1284 terminal closeout before starting #1259 parent closeout.
 - Blockers: None
 - Latest Validation Summary: 2026-06-09 T2 gate-input readiness correction: official recovery writeback moved WI-1283 to merge checkpoint with Blockers: None and synchronized .loom/status/current.md; official carrier refresh updated .loom/shadow/merge-ready-loom.json and .loom/shadow/closeout-loom.json after status sha drift. Validation passed: git diff --check; loom_init fact-chain; loom_init verify; loom_flow purity-check; checkpoint build; shadow-parity --blocking; adopt verify. Final PR metadata, flow review, and pr-gate checks are expected to be clean except for scheduler-owned semantic_review_disposition, which T2 is forbidden to record.
-- Recovery Boundary: WI-1283 only: Makefile repo-local-cli local validation aliases, narrow repo-local validation docs, WI-1283 carriers, and PR metadata. Do not edit workflow semantics, #1284 evidence/closeout, #1259 closeout, generated runtime, release/package behavior, Round 5, Round 7+, Deferred roadmap, or unrelated tools.
-- Current Lane: repo-local-cli-surfaces
+- Recovery Boundary: Terminal closeout carrier only for WI-1283. Do not modify #1284 evidence/closeout, #1259 parent closeout, workflow semantics, generated runtime, release/package behavior, Round 5, Round 7+, Deferred roadmap, or unrelated surfaces.
+- Current Lane: post-merge-closeout-consumed
 
 ## Runtime Evidence
 
