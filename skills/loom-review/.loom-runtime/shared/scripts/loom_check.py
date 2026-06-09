@@ -56,6 +56,7 @@ SOURCE_SURFACE_SOURCE_SELF_FIXTURE = "source-self-fixture"
 SOURCE_SURFACE_REVIEW_RUN = "review-run"
 SOURCE_SURFACE_MERGE_GATE = "merge-gate"
 SOURCE_SURFACE_CLOSEOUT_RECONCILIATION = "closeout-reconciliation"
+SOURCE_SURFACE_RETIRE_WORKSPACE = "retire-workspace"
 SOURCE_SURFACE_BOOTSTRAP_REGRESSION = "bootstrap-regression"
 SOURCE_SURFACE_DISTRIBUTION_REGRESSION = "distribution-regression"
 SOURCE_SURFACE_CHOICES = (
@@ -65,20 +66,23 @@ SOURCE_SURFACE_CHOICES = (
     SOURCE_SURFACE_REVIEW_RUN,
     SOURCE_SURFACE_MERGE_GATE,
     SOURCE_SURFACE_CLOSEOUT_RECONCILIATION,
+    SOURCE_SURFACE_RETIRE_WORKSPACE,
     SOURCE_SURFACE_BOOTSTRAP_REGRESSION,
     SOURCE_SURFACE_DISTRIBUTION_REGRESSION,
 )
-SOURCE_SURFACE_COUNT = 43
+SOURCE_SURFACE_COUNT = 44
 SOURCE_SURFACE_GROUPS = {
     SOURCE_SURFACE_SOURCE_SELF_FIXTURE: {
         SOURCE_SURFACE_SOURCE_SELF_FIXTURE,
         SOURCE_SURFACE_REVIEW_RUN,
         SOURCE_SURFACE_MERGE_GATE,
         SOURCE_SURFACE_CLOSEOUT_RECONCILIATION,
+        SOURCE_SURFACE_RETIRE_WORKSPACE,
     },
 }
 REVIEW_RUN_FIXTURE_CATEGORY = "review-run-fixture"
 CLOSEOUT_RECONCILIATION_FIXTURE_CATEGORY = "closeout-reconciliation-fixture"
+RETIRE_WORKSPACE_FIXTURE_CATEGORY = "retire-workspace-fixture"
 SOURCE_SNAPSHOT_EXCLUDED_ROOTS = {
     ".loom/cache",
     ".loom/runtime",
@@ -8810,9 +8814,377 @@ def check_closeout_reconciliation_fixture(root: Path) -> list[Failure]:
     return failures
 
 
+def check_retire_workspace_fixture(root: Path) -> list[Failure]:
+    failures: list[Failure] = []
+    category = RETIRE_WORKSPACE_FIXTURE_CATEGORY
+    flow_temp_roots: list[Path] = []
+    example_target = root / "examples/new-project"
+    tool_path = root / "tools/loom_flow.py"
+    if not tool_path.exists() or not example_target.exists():
+        return failures
+
+    flow_tmp_path: Path | None = None
+    with loom_check_temporary_directory(prefix="loom-check-flow-") as tmp:
+        flow_tmp_path = tmp
+        flow_temp_roots.append(flow_tmp_path)
+        lifecycle_target = tmp / "new-project"
+        shutil.copytree(example_target, lifecycle_target)
+        temp_root = lifecycle_target / ".loom/flow/tmp"
+        residue = temp_root / "loom-owned-residue"
+        residue.mkdir(parents=True, exist_ok=True)
+        (residue / ".loom-owned").write_text("owned\n", encoding="utf-8")
+        (residue / "sentinel.txt").write_text("temp\n", encoding="utf-8")
+
+        progress_path = lifecycle_target / ".loom/progress/INIT-0001.md"
+        progress_before_handoff = progress_path.read_text(encoding="utf-8")
+        handoff_payload, handoff_error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "flow",
+                "handoff",
+                "--target",
+                str(lifecycle_target),
+                "--item",
+                "INIT-0001",
+            ],
+        )
+        if handoff_error:
+            failures.append(Failure(category, f"`flow handoff` lifecycle fixture failed: {handoff_error}"))
+        elif handoff_payload.get("result") not in {"pass", "block"}:
+            failures.append(Failure(category, "`flow handoff` lifecycle fixture must return pass or block"))
+        require_lifecycle_expectations_payload(
+            failures,
+            category=category,
+            context="`flow handoff` lifecycle fixture",
+            payload=handoff_payload.get("lifecycle_expectations") if isinstance(handoff_payload, dict) else None,
+        )
+        if progress_path.read_text(encoding="utf-8") != progress_before_handoff:
+            failures.append(Failure(category, "`flow handoff` must not rewrite the recovery entry"))
+
+        status_path = lifecycle_target / ".loom/status/current.md"
+        for operation in ("create", "attach", "cleanup", "retire"):
+            progress_before_operation = progress_path.read_text(encoding="utf-8")
+            status_before_operation = status_path.read_text(encoding="utf-8")
+            payload, error = load_command_json(
+                root,
+                [
+                    "python3",
+                    "tools/loom_flow.py",
+                    "workspace",
+                    operation,
+                    "--target",
+                    str(lifecycle_target),
+                    "--item",
+                    "INIT-0001",
+                ],
+            )
+            if error:
+                failures.append(Failure(category, f"`workspace {operation}` failed: {error}"))
+                continue
+            if payload.get("result") != "pass":
+                failures.append(
+                    Failure(
+                        category,
+                        f"`workspace {operation}` must pass on a clean temp copy, got `{payload.get('result')}`",
+                    )
+                )
+            require_lifecycle_expectations_payload(
+                failures,
+                category=category,
+                context=f"`workspace {operation}`",
+                payload=payload.get("lifecycle_expectations") if isinstance(payload, dict) else None,
+            )
+            if operation == "cleanup" and residue.exists():
+                failures.append(Failure(category, "`workspace cleanup` must remove marked Loom-owned residue"))
+            if operation == "retire":
+                if payload.get("retire_scope") != "local_only":
+                    failures.append(Failure(category, "`workspace retire` must report local-only retire scope"))
+                if payload.get("versioned_carrier_updates") != []:
+                    failures.append(Failure(category, "`workspace retire` must not report versioned carrier updates"))
+                if progress_path.read_text(encoding="utf-8") != progress_before_operation:
+                    failures.append(Failure(category, "`workspace retire` must not rewrite the recovery entry"))
+                if status_path.read_text(encoding="utf-8") != status_before_operation:
+                    failures.append(Failure(category, "`workspace retire` must not rewrite the status surface"))
+
+        locate_payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "workspace",
+                "locate",
+                "--target",
+                str(lifecycle_target),
+                "--item",
+                "INIT-0001",
+            ],
+        )
+        if error:
+            failures.append(Failure(category, f"`workspace locate` after retire failed: {error}"))
+        elif locate_payload.get("retire_scope") == "local_only":
+            failures.append(Failure(category, "`workspace locate` must not treat local-only retire evidence as versioned checkpoint truth"))
+        progress_after_retire = progress_path.read_text(encoding="utf-8")
+        for stable_line in (
+            "- Current Checkpoint: admission checkpoint",
+            "- Current Stop:",
+            "- Next Step:",
+            "- Blockers:",
+            "- Latest Validation Summary:",
+            "## Execution Ledger",
+        ):
+            if stable_line not in progress_after_retire:
+                failures.append(Failure(category, f"`workspace retire` must preserve recovery field `{stable_line}`"))
+    if flow_tmp_path is not None and flow_tmp_path.exists():
+        failures.append(Failure(category, "`loom-check-flow` temporary directory must be removed after the fixture completes"))
+
+    with loom_check_temporary_directory(prefix="loom-check-active-carrier-") as tmp:
+        active_target = Path(tmp) / "new-project"
+        shutil.copytree(example_target, active_target)
+        source_work_item = active_target / ".loom/work-items/INIT-0001.md"
+        source_recovery = active_target / ".loom/progress/INIT-0001.md"
+        stale_item = active_target / ".loom/work-items/STALE-0002.md"
+        stale_recovery = active_target / ".loom/progress/STALE-0002.md"
+        stale_item.write_text(
+            source_work_item.read_text(encoding="utf-8")
+            .replace("INIT-0001", "STALE-0002")
+            .replace(".loom/progress/STALE-0002.md", ".loom/progress/STALE-0002.md"),
+            encoding="utf-8",
+        )
+        stale_recovery.write_text(
+            source_recovery.read_text(encoding="utf-8")
+            .replace("INIT-0001", "STALE-0002")
+            .replace("- Current Checkpoint: admission checkpoint", "- Current Checkpoint: retired"),
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "purity-check", "--target", str(active_target), "--item", "INIT-0001"],
+        )
+        if error:
+            failures.append(Failure(category, f"`purity-check` stale active carrier fixture failed: {error}"))
+        elif payload.get("result") != "pass":
+            failures.append(Failure(category, "terminal stale active carrier must not block current item purity"))
+        else:
+            diagnostics = payload.get("purity", {}).get("active_workspace_diagnostics", [])
+            if not any(isinstance(entry, dict) and entry.get("classification") == "stale_carrier" for entry in diagnostics):
+                failures.append(Failure(category, "`purity-check` must expose stale active carrier diagnostics"))
+
+        malformed_item = active_target / ".loom/work-items/MALFORMED-0003.md"
+        malformed_item.write_text(
+            "# Broken Work Item\n\n- Item ID: MALFORMED-0003\n",
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "purity-check", "--target", str(active_target), "--item", "INIT-0001"],
+        )
+        if error:
+            failures.append(Failure(category, f"`purity-check` malformed unrelated carrier fixture failed: {error}"))
+        elif payload.get("result") != "pass":
+            failures.append(Failure(category, "malformed unrelated active carrier must not block current item purity"))
+        else:
+            diagnostics = payload.get("purity", {}).get("active_workspace_diagnostics", [])
+            unknown_entries = [
+                entry
+                for entry in diagnostics
+                if isinstance(entry, dict)
+                and entry.get("work_item_locator") == ".loom/work-items/MALFORMED-0003.md"
+            ]
+            if not unknown_entries:
+                failures.append(Failure(category, "`purity-check` must expose malformed unrelated carrier diagnostics"))
+            elif any(entry.get("blocking") for entry in unknown_entries):
+                failures.append(Failure(category, "malformed unrelated carrier diagnostics must be report-only"))
+
+        active_recovery = active_target / ".loom/progress/STALE-0002.md"
+        active_recovery.write_text(
+            active_recovery.read_text(encoding="utf-8").replace("- Current Checkpoint: retired", "- Current Checkpoint: build"),
+            encoding="utf-8",
+        )
+        payload, error = load_command_json(
+            root,
+            ["python3", "tools/loom_flow.py", "state-check", "--target", str(active_target), "--item", "INIT-0001"],
+        )
+        if error:
+            failures.append(Failure(category, f"`state-check` shared workspace fixture failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure(category, "shared active workspace conflict must block state-check"))
+        else:
+            diagnostics = payload.get("checks", {}).get("active_workspace_diagnostics", [])
+            if not any(isinstance(entry, dict) and entry.get("classification") == "shared_workspace_conflict" for entry in diagnostics):
+                failures.append(Failure(category, "`state-check` must expose shared workspace conflict diagnostics"))
+
+    with loom_check_temporary_directory(prefix="loom-check-missing-workspace-") as tmp:
+        missing_workspace_target = Path(tmp) / "new-project"
+        shutil.copytree(example_target, missing_workspace_target)
+        work_item = missing_workspace_target / ".loom/work-items/INIT-0001.md"
+        work_item.write_text(
+            work_item.read_text(encoding="utf-8").replace("- Workspace Entry: .", "- Workspace Entry: "),
+            encoding="utf-8",
+        )
+        for label, command in (
+            (
+                "workspace locate",
+                ["python3", "tools/loom_flow.py", "workspace", "locate", "--target", str(missing_workspace_target), "--item", "INIT-0001"],
+            ),
+            (
+                "workspace attach",
+                ["python3", "tools/loom_flow.py", "workspace", "attach", "--target", str(missing_workspace_target), "--item", "INIT-0001"],
+            ),
+            (
+                "workspace retire",
+                ["python3", "tools/loom_flow.py", "workspace", "retire", "--target", str(missing_workspace_target), "--item", "INIT-0001"],
+            ),
+            (
+                "purity-check",
+                ["python3", "tools/loom_flow.py", "purity-check", "--target", str(missing_workspace_target), "--item", "INIT-0001"],
+            ),
+            (
+                "flow resume",
+                ["python3", "tools/loom_flow.py", "flow", "resume", "--target", str(missing_workspace_target), "--item", "INIT-0001"],
+            ),
+            (
+                "host-lifecycle",
+                ["python3", "tools/loom_flow.py", "host-lifecycle", "--target", str(missing_workspace_target), "--item", "INIT-0001"],
+            ),
+            (
+                "flow handoff",
+                ["python3", "tools/loom_flow.py", "flow", "handoff", "--target", str(missing_workspace_target), "--item", "INIT-0001"],
+            ),
+        ):
+            payload, error = load_command_json(root, command)
+            if error:
+                failures.append(Failure(category, f"`{label}` missing workspace fixture failed to emit JSON: {error}"))
+                continue
+            if payload.get("result") not in {"block", "fallback"}:
+                failures.append(Failure(category, f"`{label}` must fail closed when Workspace Entry is missing"))
+            missing_text = json.dumps(payload.get("missing_inputs", []), ensure_ascii=False)
+            payload_text = json.dumps(payload, ensure_ascii=False)
+            workspace_needles = (
+                "Workspace Entry",
+                "workspace entry",
+                "workspace_entry",
+                "missing_workspace_entry",
+                "fact-chain",
+            )
+            if not any(needle in missing_text or needle in payload_text for needle in workspace_needles):
+                failures.append(Failure(category, f"`{label}` must report the missing workspace locator"))
+
+    with loom_check_temporary_directory(prefix="loom-check-unowned-temp-") as tmp:
+        unowned_target = Path(tmp) / "new-project"
+        shutil.copytree(example_target, unowned_target)
+        unowned_note = unowned_target / ".loom/flow/tmp/user-note.txt"
+        unowned_note.parent.mkdir(parents=True, exist_ok=True)
+        unowned_note.write_text("user residue\n", encoding="utf-8")
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                "tools/loom_flow.py",
+                "workspace",
+                "cleanup",
+                "--target",
+                str(unowned_target),
+                "--item",
+                "INIT-0001",
+            ],
+        )
+        if error:
+            failures.append(Failure(category, f"`workspace cleanup` unowned temp fixture failed: {error}"))
+        elif payload.get("result") != "block":
+            failures.append(Failure(category, "`workspace cleanup` must block on unmarked temp content"))
+        if not unowned_note.exists():
+            failures.append(Failure(category, "`workspace cleanup` must not delete non-Loom-owned temp content"))
+
+
+    with loom_check_temporary_directory(prefix="loom-check-dirty-workspace-") as tmp:
+        dirty_target = Path(tmp) / "new-project"
+        shutil.copytree(example_target, dirty_target)
+        for args in (
+            ["git", "init"],
+            ["git", "config", "user.email", "loom-check@example.com"],
+            ["git", "config", "user.name", "loom-check"],
+            ["git", "add", "."],
+            ["git", "commit", "-m", "baseline"],
+        ):
+            result = run_command(root, args, cwd=dirty_target)
+            if result.returncode != 0:
+                detail = result.stderr.strip() or result.stdout.strip() or "git setup failed"
+                failures.append(Failure(category, f"`dirty workspace` setup failed: {detail}"))
+                break
+        (dirty_target / "foreign-residue.txt").write_text("pending\n", encoding="utf-8")
+        dirty_add = run_command(root, ["git", "add", "foreign-residue.txt"], cwd=dirty_target)
+        if dirty_add.returncode != 0:
+            detail = dirty_add.stderr.strip() or dirty_add.stdout.strip() or "git add failed"
+            failures.append(Failure(category, f"`dirty workspace` sample setup failed: {detail}"))
+        for label, command in (
+            (
+                "purity-check dirty sample",
+                ["python3", "tools/loom_flow.py", "purity-check", "--target", str(dirty_target), "--item", "INIT-0001"],
+            ),
+            (
+                "workspace cleanup dirty sample",
+                ["python3", "tools/loom_flow.py", "workspace", "cleanup", "--target", str(dirty_target), "--item", "INIT-0001"],
+            ),
+            (
+                "workspace retire dirty sample",
+                ["python3", "tools/loom_flow.py", "workspace", "retire", "--target", str(dirty_target), "--item", "INIT-0001"],
+            ),
+        ):
+            payload, error = load_command_json(root, command)
+            if error:
+                failures.append(Failure(category, f"`{label}` failed: {error}"))
+                continue
+            if payload.get("result") != "block":
+                failures.append(Failure(category, f"`{label}` must block when non-Loom residue is present"))
+
+    with loom_check_temporary_directory(prefix="loom-check-retire-missing-install-layout-") as tmp:
+        broken_install = Path(tmp) / "broken-install" / "skills"
+        retire_target = Path(tmp) / "retire-target"
+        shutil.copytree(root / "skills", broken_install)
+        shutil.copytree(example_target, retire_target)
+        for layout_path in (
+            broken_install / "install-layout.json",
+            broken_install / "loom-retire" / ".loom-runtime" / "install-layout.json",
+        ):
+            if layout_path.exists():
+                layout_path.unlink()
+        payload, error = load_command_json(
+            root,
+            [
+                "python3",
+                str(broken_install / "loom-retire" / "scripts" / "loom-retire.py"),
+                "purity-check",
+                "--target",
+                str(retire_target),
+                "--item",
+                "INIT-0001",
+            ],
+        )
+        if error:
+            failures.append(Failure(category, f"`installed purity-check missing install-layout` failed unexpectedly: {error}"))
+        else:
+            if payload.get("result") != "block":
+                failures.append(Failure(category, "`installed purity-check missing install-layout` must block when install-layout is missing"))
+            require_runtime_state_payload(
+                failures,
+                category=category,
+                context="`installed purity-check missing install-layout`",
+                payload=payload.get("runtime_state"),
+                expected_scene="installed-runtime",
+                expected_carrier="installed-skills-root",
+                allowed_results={"block"},
+            )
+
+    for flow_temp_root in flow_temp_roots:
+        if flow_temp_root.exists() and not remove_temp_tree(flow_temp_root, attempts=20, delay_seconds=0.25):
+            failures.append(Failure(category, f"`flow lifecycle fixture` must not leave temporary directory residue: {flow_temp_root}"))
+    return failures
+
+
 def check_daily_execution_cli(root: Path) -> list[Failure]:
     failures: list[Failure] = []
-    flow_temp_roots: list[Path] = []
     example_target = root / "examples/new-project"
     tool_path = root / "tools/loom_flow.py"
     if not tool_path.exists() or not example_target.exists():
@@ -10107,280 +10479,6 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
             if "parallel_truth_drift" not in failure_blob:
                 failures.append(Failure("daily-execution-cli", "`host mirror overwrite` must expose parallel_truth_drift"))
 
-    flow_tmp_path: Path | None = None
-    with loom_check_temporary_directory(prefix="loom-check-flow-") as tmp:
-        flow_tmp_path = tmp
-        flow_temp_roots.append(flow_tmp_path)
-        lifecycle_target = tmp / "new-project"
-        shutil.copytree(example_target, lifecycle_target)
-        temp_root = lifecycle_target / ".loom/flow/tmp"
-        residue = temp_root / "loom-owned-residue"
-        residue.mkdir(parents=True, exist_ok=True)
-        (residue / ".loom-owned").write_text("owned\n", encoding="utf-8")
-        (residue / "sentinel.txt").write_text("temp\n", encoding="utf-8")
-
-        progress_path = lifecycle_target / ".loom/progress/INIT-0001.md"
-        progress_before_handoff = progress_path.read_text(encoding="utf-8")
-        handoff_payload, handoff_error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "flow",
-                "handoff",
-                "--target",
-                str(lifecycle_target),
-                "--item",
-                "INIT-0001",
-            ],
-        )
-        if handoff_error:
-            failures.append(Failure("daily-execution-cli", f"`flow handoff` lifecycle fixture failed: {handoff_error}"))
-        elif handoff_payload.get("result") not in {"pass", "block"}:
-            failures.append(Failure("daily-execution-cli", "`flow handoff` lifecycle fixture must return pass or block"))
-        require_lifecycle_expectations_payload(
-            failures,
-            category="daily-execution-cli",
-            context="`flow handoff` lifecycle fixture",
-            payload=handoff_payload.get("lifecycle_expectations") if isinstance(handoff_payload, dict) else None,
-        )
-        if progress_path.read_text(encoding="utf-8") != progress_before_handoff:
-            failures.append(Failure("daily-execution-cli", "`flow handoff` must not rewrite the recovery entry"))
-
-        status_path = lifecycle_target / ".loom/status/current.md"
-        for operation in ("create", "attach", "cleanup", "retire"):
-            progress_before_operation = progress_path.read_text(encoding="utf-8")
-            status_before_operation = status_path.read_text(encoding="utf-8")
-            payload, error = load_command_json(
-                root,
-                [
-                    "python3",
-                    "tools/loom_flow.py",
-                    "workspace",
-                    operation,
-                    "--target",
-                    str(lifecycle_target),
-                    "--item",
-                    "INIT-0001",
-                ],
-            )
-            if error:
-                failures.append(Failure("daily-execution-cli", f"`workspace {operation}` failed: {error}"))
-                continue
-            if payload.get("result") != "pass":
-                failures.append(
-                    Failure(
-                        "daily-execution-cli",
-                        f"`workspace {operation}` must pass on a clean temp copy, got `{payload.get('result')}`",
-                    )
-                )
-            require_lifecycle_expectations_payload(
-                failures,
-                category="daily-execution-cli",
-                context=f"`workspace {operation}`",
-                payload=payload.get("lifecycle_expectations") if isinstance(payload, dict) else None,
-            )
-            if operation == "cleanup" and residue.exists():
-                failures.append(Failure("daily-execution-cli", "`workspace cleanup` must remove marked Loom-owned residue"))
-            if operation == "retire":
-                if payload.get("retire_scope") != "local_only":
-                    failures.append(Failure("daily-execution-cli", "`workspace retire` must report local-only retire scope"))
-                if payload.get("versioned_carrier_updates") != []:
-                    failures.append(Failure("daily-execution-cli", "`workspace retire` must not report versioned carrier updates"))
-                if progress_path.read_text(encoding="utf-8") != progress_before_operation:
-                    failures.append(Failure("daily-execution-cli", "`workspace retire` must not rewrite the recovery entry"))
-                if status_path.read_text(encoding="utf-8") != status_before_operation:
-                    failures.append(Failure("daily-execution-cli", "`workspace retire` must not rewrite the status surface"))
-
-        locate_payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "workspace",
-                "locate",
-                "--target",
-                str(lifecycle_target),
-                "--item",
-                "INIT-0001",
-            ],
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`workspace locate` after retire failed: {error}"))
-        elif locate_payload.get("retire_scope") == "local_only":
-            failures.append(Failure("daily-execution-cli", "`workspace locate` must not treat local-only retire evidence as versioned checkpoint truth"))
-        progress_after_retire = progress_path.read_text(encoding="utf-8")
-        for stable_line in (
-            "- Current Checkpoint: admission checkpoint",
-            "- Current Stop:",
-            "- Next Step:",
-            "- Blockers:",
-            "- Latest Validation Summary:",
-            "## Execution Ledger",
-        ):
-            if stable_line not in progress_after_retire:
-                failures.append(Failure("daily-execution-cli", f"`workspace retire` must preserve recovery field `{stable_line}`"))
-    if flow_tmp_path is not None and flow_tmp_path.exists():
-        failures.append(Failure("daily-execution-cli", "`loom-check-flow` temporary directory must be removed after the fixture completes"))
-
-    with loom_check_temporary_directory(prefix="loom-check-active-carrier-") as tmp:
-        active_target = Path(tmp) / "new-project"
-        shutil.copytree(example_target, active_target)
-        source_work_item = active_target / ".loom/work-items/INIT-0001.md"
-        source_recovery = active_target / ".loom/progress/INIT-0001.md"
-        stale_item = active_target / ".loom/work-items/STALE-0002.md"
-        stale_recovery = active_target / ".loom/progress/STALE-0002.md"
-        stale_item.write_text(
-            source_work_item.read_text(encoding="utf-8")
-            .replace("INIT-0001", "STALE-0002")
-            .replace(".loom/progress/STALE-0002.md", ".loom/progress/STALE-0002.md"),
-            encoding="utf-8",
-        )
-        stale_recovery.write_text(
-            source_recovery.read_text(encoding="utf-8")
-            .replace("INIT-0001", "STALE-0002")
-            .replace("- Current Checkpoint: admission checkpoint", "- Current Checkpoint: retired"),
-            encoding="utf-8",
-        )
-        payload, error = load_command_json(
-            root,
-            ["python3", "tools/loom_flow.py", "purity-check", "--target", str(active_target), "--item", "INIT-0001"],
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`purity-check` stale active carrier fixture failed: {error}"))
-        elif payload.get("result") != "pass":
-            failures.append(Failure("daily-execution-cli", "terminal stale active carrier must not block current item purity"))
-        else:
-            diagnostics = payload.get("purity", {}).get("active_workspace_diagnostics", [])
-            if not any(isinstance(entry, dict) and entry.get("classification") == "stale_carrier" for entry in diagnostics):
-                failures.append(Failure("daily-execution-cli", "`purity-check` must expose stale active carrier diagnostics"))
-
-        malformed_item = active_target / ".loom/work-items/MALFORMED-0003.md"
-        malformed_item.write_text(
-            "# Broken Work Item\n\n- Item ID: MALFORMED-0003\n",
-            encoding="utf-8",
-        )
-        payload, error = load_command_json(
-            root,
-            ["python3", "tools/loom_flow.py", "purity-check", "--target", str(active_target), "--item", "INIT-0001"],
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`purity-check` malformed unrelated carrier fixture failed: {error}"))
-        elif payload.get("result") != "pass":
-            failures.append(Failure("daily-execution-cli", "malformed unrelated active carrier must not block current item purity"))
-        else:
-            diagnostics = payload.get("purity", {}).get("active_workspace_diagnostics", [])
-            unknown_entries = [
-                entry
-                for entry in diagnostics
-                if isinstance(entry, dict)
-                and entry.get("work_item_locator") == ".loom/work-items/MALFORMED-0003.md"
-            ]
-            if not unknown_entries:
-                failures.append(Failure("daily-execution-cli", "`purity-check` must expose malformed unrelated carrier diagnostics"))
-            elif any(entry.get("blocking") for entry in unknown_entries):
-                failures.append(Failure("daily-execution-cli", "malformed unrelated carrier diagnostics must be report-only"))
-
-        active_recovery = active_target / ".loom/progress/STALE-0002.md"
-        active_recovery.write_text(
-            active_recovery.read_text(encoding="utf-8").replace("- Current Checkpoint: retired", "- Current Checkpoint: build"),
-            encoding="utf-8",
-        )
-        payload, error = load_command_json(
-            root,
-            ["python3", "tools/loom_flow.py", "state-check", "--target", str(active_target), "--item", "INIT-0001"],
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`state-check` shared workspace fixture failed: {error}"))
-        elif payload.get("result") != "block":
-            failures.append(Failure("daily-execution-cli", "shared active workspace conflict must block state-check"))
-        else:
-            diagnostics = payload.get("checks", {}).get("active_workspace_diagnostics", [])
-            if not any(isinstance(entry, dict) and entry.get("classification") == "shared_workspace_conflict" for entry in diagnostics):
-                failures.append(Failure("daily-execution-cli", "`state-check` must expose shared workspace conflict diagnostics"))
-
-    with loom_check_temporary_directory(prefix="loom-check-missing-workspace-") as tmp:
-        missing_workspace_target = Path(tmp) / "new-project"
-        shutil.copytree(example_target, missing_workspace_target)
-        work_item = missing_workspace_target / ".loom/work-items/INIT-0001.md"
-        work_item.write_text(
-            work_item.read_text(encoding="utf-8").replace("- Workspace Entry: .", "- Workspace Entry: "),
-            encoding="utf-8",
-        )
-        for label, command in (
-            (
-                "workspace locate",
-                ["python3", "tools/loom_flow.py", "workspace", "locate", "--target", str(missing_workspace_target), "--item", "INIT-0001"],
-            ),
-            (
-                "workspace attach",
-                ["python3", "tools/loom_flow.py", "workspace", "attach", "--target", str(missing_workspace_target), "--item", "INIT-0001"],
-            ),
-            (
-                "workspace retire",
-                ["python3", "tools/loom_flow.py", "workspace", "retire", "--target", str(missing_workspace_target), "--item", "INIT-0001"],
-            ),
-            (
-                "purity-check",
-                ["python3", "tools/loom_flow.py", "purity-check", "--target", str(missing_workspace_target), "--item", "INIT-0001"],
-            ),
-            (
-                "flow resume",
-                ["python3", "tools/loom_flow.py", "flow", "resume", "--target", str(missing_workspace_target), "--item", "INIT-0001"],
-            ),
-            (
-                "host-lifecycle",
-                ["python3", "tools/loom_flow.py", "host-lifecycle", "--target", str(missing_workspace_target), "--item", "INIT-0001"],
-            ),
-            (
-                "flow handoff",
-                ["python3", "tools/loom_flow.py", "flow", "handoff", "--target", str(missing_workspace_target), "--item", "INIT-0001"],
-            ),
-        ):
-            payload, error = load_command_json(root, command)
-            if error:
-                failures.append(Failure("daily-execution-cli", f"`{label}` missing workspace fixture failed to emit JSON: {error}"))
-                continue
-            if payload.get("result") not in {"block", "fallback"}:
-                failures.append(Failure("daily-execution-cli", f"`{label}` must fail closed when Workspace Entry is missing"))
-            missing_text = json.dumps(payload.get("missing_inputs", []), ensure_ascii=False)
-            payload_text = json.dumps(payload, ensure_ascii=False)
-            workspace_needles = (
-                "Workspace Entry",
-                "workspace entry",
-                "workspace_entry",
-                "missing_workspace_entry",
-                "fact-chain",
-            )
-            if not any(needle in missing_text or needle in payload_text for needle in workspace_needles):
-                failures.append(Failure("daily-execution-cli", f"`{label}` must report the missing workspace locator"))
-
-    with loom_check_temporary_directory(prefix="loom-check-unowned-temp-") as tmp:
-        unowned_target = Path(tmp) / "new-project"
-        shutil.copytree(example_target, unowned_target)
-        unowned_note = unowned_target / ".loom/flow/tmp/user-note.txt"
-        unowned_note.parent.mkdir(parents=True, exist_ok=True)
-        unowned_note.write_text("user residue\n", encoding="utf-8")
-        payload, error = load_command_json(
-            root,
-            [
-                "python3",
-                "tools/loom_flow.py",
-                "workspace",
-                "cleanup",
-                "--target",
-                str(unowned_target),
-                "--item",
-                "INIT-0001",
-            ],
-        )
-        if error:
-            failures.append(Failure("daily-execution-cli", f"`workspace cleanup` unowned temp fixture failed: {error}"))
-        elif payload.get("result") != "block":
-            failures.append(Failure("daily-execution-cli", "`workspace cleanup` must block on unmarked temp content"))
-        if not unowned_note.exists():
-            failures.append(Failure("daily-execution-cli", "`workspace cleanup` must not delete non-Loom-owned temp content"))
-
     with loom_check_temporary_directory(prefix="loom-check-authoring-") as tmp:
         authoring_target = Path(tmp) / "new-project"
         shutil.copytree(example_target, authoring_target)
@@ -10463,7 +10561,7 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
         elif payload.get("result") != "pass":
             failures.append(Failure("daily-execution-cli", "`work-item update` must pass on a clean temp copy"))
 
-        poisoned_authoring_target = temp_root / "authoring-poisoned-workspace"
+        poisoned_authoring_target = Path(tmp) / "authoring-poisoned-workspace"
         shutil.copytree(authoring_target, poisoned_authoring_target)
         poisoned_work_item = poisoned_authoring_target / ".loom/work-items/NEXT-0001.md"
         poisoned_before = poisoned_work_item.read_text(encoding="utf-8").replace(
@@ -13030,9 +13128,6 @@ def check_daily_execution_cli(root: Path) -> list[Failure]:
                     allowed_results={"block"},
                 )
 
-    for flow_temp_root in flow_temp_roots:
-        if flow_temp_root.exists() and not remove_temp_tree(flow_temp_root, attempts=20, delay_seconds=0.25):
-            failures.append(Failure("daily-execution-cli", f"`flow lifecycle fixture` must not leave temporary directory residue: {flow_temp_root}"))
     return failures
 
 
@@ -21700,6 +21795,7 @@ def collect_source_failures(root: Path, source_surface: str = SOURCE_SURFACE_FUL
         (SOURCE_SURFACE_REVIEW_RUN, "review-run", lambda: check_review_run_fixture(root)),
         (SOURCE_SURFACE_MERGE_GATE, "merge-gate", lambda: check_daily_execution_cli(root)),
         (SOURCE_SURFACE_CLOSEOUT_RECONCILIATION, "closeout-reconciliation", lambda: check_closeout_reconciliation_fixture(root)),
+        (SOURCE_SURFACE_RETIRE_WORKSPACE, "retire-workspace", lambda: check_retire_workspace_fixture(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "py-compile-cache-hygiene", lambda: check_py_compile_cache_hygiene(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "repo-companion", lambda: check_repo_companion_interface_contracts(root)),
         (SOURCE_SURFACE_SOURCE_SELF_FIXTURE, "repo-interop", lambda: check_repo_interop_contracts(root)),
@@ -21818,7 +21914,7 @@ def check_loom_check_profile_contract(root: Path) -> list[Failure]:
     source_text = (root / "src/skills/shared/scripts/loom_check.py").read_text(encoding="utf-8")
     if "source/distribution" not in source_text or "--profile" not in source_text:
         failures.append(Failure(category, "`loom_check.py` must document source/distribution scope and expose `--profile`"))
-    for anchor in ("--source-surface", "contract-only", "source-self-fixture", "review-run", "merge-gate", "closeout-reconciliation", "bootstrap-regression", "distribution-regression", "loom_check: start source surface="):
+    for anchor in ("--source-surface", "contract-only", "source-self-fixture", "review-run", "merge-gate", "closeout-reconciliation", "retire-workspace", "bootstrap-regression", "distribution-regression", "loom_check: start source surface="):
         if anchor not in source_text:
             failures.append(Failure(category, f"`loom_check.py` must expose source surface contract anchor `{anchor}`"))
     init_text = (root / "src/skills/shared/scripts/loom_init.py").read_text(encoding="utf-8")
