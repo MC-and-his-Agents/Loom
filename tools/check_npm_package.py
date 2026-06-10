@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Validate the root Loom npm package contract and dry-run payload."""
+"""Validate the root Loom npm package manifest and dry-run payload surfaces."""
 
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -78,20 +80,106 @@ REQUIRED_MANIFEST_FILES = (
     "docs/methodology/templates/execution-breakdown.md",
     "docs/methodology/templates/spec-suite.md",
 )
+SURFACE_AGGREGATE = "aggregate"
+SURFACE_MANIFEST = "npm-package-manifest"
+SURFACE_PAYLOAD = "npm-pack-payload"
+
+
+@dataclass(frozen=True)
+class SurfaceDefinition:
+    name: str
+    command: str
+    description: str
+    evidence_locators: tuple[str, ...]
+    evidence_labels: tuple[str, ...]
+    failure_label: str
+
+
+SURFACES: dict[str, SurfaceDefinition] = {
+    SURFACE_AGGREGATE: SurfaceDefinition(
+        name=SURFACE_AGGREGATE,
+        command="python3 tools/check_npm_package.py",
+        description="Aggregate npm package validation; runs manifest and packed payload checks.",
+        evidence_locators=(
+            "package.json",
+            "VERSION",
+            "npm pack --dry-run --json --ignore-scripts",
+        ),
+        evidence_labels=(SURFACE_MANIFEST, SURFACE_PAYLOAD),
+        failure_label="npm-package-validation-failed",
+    ),
+    SURFACE_MANIFEST: SurfaceDefinition(
+        name=SURFACE_MANIFEST,
+        command=f"python3 tools/check_npm_package.py --surface {SURFACE_MANIFEST}",
+        description="Root package manifest validation for name, version, bin, publish config, and managed files.",
+        evidence_locators=("package.json", "VERSION"),
+        evidence_labels=(SURFACE_MANIFEST,),
+        failure_label="npm-package-manifest-failed",
+    ),
+    SURFACE_PAYLOAD: SurfaceDefinition(
+        name=SURFACE_PAYLOAD,
+        command=f"python3 tools/check_npm_package.py --surface {SURFACE_PAYLOAD}",
+        description="Dry-run npm pack payload validation for required and forbidden package contents.",
+        evidence_locators=(
+            "package.json",
+            "npm pack --dry-run --json --ignore-scripts",
+        ),
+        evidence_labels=(SURFACE_PAYLOAD,),
+        failure_label="npm-pack-payload-failed",
+    ),
+}
+SURFACE_ALIASES = {
+    SURFACE_AGGREGATE: SURFACE_AGGREGATE,
+    "all": SURFACE_AGGREGATE,
+    "manifest": SURFACE_MANIFEST,
+    SURFACE_MANIFEST: SURFACE_MANIFEST,
+    "payload": SURFACE_PAYLOAD,
+    SURFACE_PAYLOAD: SURFACE_PAYLOAD,
+}
+
+
+class ValidationFailure(AssertionError):
+    def __init__(
+        self,
+        surface: str,
+        message: str,
+        *,
+        evidence_locators: tuple[str, ...] | None = None,
+        fallback_to: tuple[str, ...] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.surface = surface
+        self.message = message
+        definition = SURFACES[surface]
+        self.evidence_locators = evidence_locators or definition.evidence_locators
+        self.fallback_to = fallback_to or definition.evidence_locators
+
+    @property
+    def failure_label(self) -> str:
+        return SURFACES[self.surface].failure_label
+
+    def __str__(self) -> str:
+        return self.message
 
 
 def load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def fail(message: str) -> None:
-    raise AssertionError(message)
+def fail(
+    surface: str,
+    message: str,
+    *,
+    evidence_locators: tuple[str, ...] | None = None,
+    fallback_to: tuple[str, ...] | None = None,
+) -> None:
+    raise ValidationFailure(surface, message, evidence_locators=evidence_locators, fallback_to=fallback_to)
 
 
 def npm_version_from_root() -> str:
     version = VERSION.read_text(encoding="utf-8").strip()
     if not version.startswith("v"):
-        fail(f"VERSION must use v-prefixed release form, got {version!r}")
+        fail(SURFACE_MANIFEST, f"VERSION must use v-prefixed release form, got {version!r}", evidence_locators=("VERSION",))
     return version[1:]
 
 
@@ -105,64 +193,167 @@ def npm_pack_files() -> set[str]:
         stderr=subprocess.PIPE,
     )
     if completed.returncode != 0:
-        fail(f"npm pack --dry-run failed\nSTDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}")
+        fail(
+            SURFACE_PAYLOAD,
+            f"npm pack --dry-run failed\nSTDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}",
+            evidence_locators=("npm pack --dry-run --json --ignore-scripts",),
+        )
     try:
         payload = json.loads(completed.stdout)
     except json.JSONDecodeError as exc:
-        fail(f"npm pack --dry-run did not emit JSON: {exc}\n{completed.stdout}")
+        fail(
+            SURFACE_PAYLOAD,
+            f"npm pack --dry-run did not emit JSON: {exc}\n{completed.stdout}",
+            evidence_locators=("npm pack --dry-run --json --ignore-scripts",),
+        )
     if not isinstance(payload, list) or not payload:
-        fail("npm pack --dry-run returned an empty payload")
+        fail(
+            SURFACE_PAYLOAD,
+            "npm pack --dry-run returned an empty payload",
+            evidence_locators=("npm pack --dry-run --json --ignore-scripts",),
+        )
     files = payload[0].get("files", [])
     return {item.get("path", "") for item in files if isinstance(item, dict)}
 
 
-def main() -> int:
+def validate_manifest() -> dict[str, Any]:
     package = load_json(PACKAGE_JSON)
     if package.get("name") != EXPECTED_PACKAGE:
-        fail(f"package name must be {EXPECTED_PACKAGE}")
+        fail(SURFACE_MANIFEST, f"package name must be {EXPECTED_PACKAGE}", evidence_locators=("package.json:name",))
     if package.get("version") != npm_version_from_root():
-        fail("package version must match root VERSION without the v prefix")
+        fail(
+            SURFACE_MANIFEST,
+            "package version must match root VERSION without the v prefix",
+            evidence_locators=("package.json:version", "VERSION"),
+        )
     if package.get("bin", {}).get("loom") != EXPECTED_BIN:
-        fail(f"bin loom must point at {EXPECTED_BIN}")
+        fail(SURFACE_MANIFEST, f"bin loom must point at {EXPECTED_BIN}", evidence_locators=("package.json:bin.loom",))
     if package.get("publishConfig", {}).get("access") != "public":
-        fail("publishConfig.access must be public")
+        fail(
+            SURFACE_MANIFEST,
+            "publishConfig.access must be public",
+            evidence_locators=("package.json:publishConfig.access",),
+        )
     manifest_text = json.dumps(package, sort_keys=True)
     for forbidden in FORBIDDEN_MANIFEST_STRINGS:
         if forbidden in manifest_text:
-            fail(f"root package manifest must not reference deprecated installer surface: {forbidden}")
+            fail(
+                SURFACE_MANIFEST,
+                f"root package manifest must not reference deprecated installer surface: {forbidden}",
+                evidence_locators=("package.json",),
+            )
     manifest_files = package.get("files")
     if not isinstance(manifest_files, list):
-        fail("package files must explicitly enumerate the root CLI payload")
+        fail(
+            SURFACE_MANIFEST,
+            "package files must explicitly enumerate the root CLI payload",
+            evidence_locators=("package.json:files",),
+        )
     missing_manifest_files = sorted(item for item in REQUIRED_MANIFEST_FILES if item not in manifest_files)
     if missing_manifest_files:
-        fail(f"package files must include CLI-managed payload surfaces: {missing_manifest_files}")
+        fail(
+            SURFACE_MANIFEST,
+            f"package files must include CLI-managed payload surfaces: {missing_manifest_files}",
+            evidence_locators=("package.json:files",),
+        )
     forbidden_manifest_files = sorted(item for item in manifest_files if isinstance(item, str) and item.startswith(FORBIDDEN_PREFIXES))
     if forbidden_manifest_files:
-        fail(f"package files must not include forbidden repository/internal surfaces: {forbidden_manifest_files}")
+        fail(
+            SURFACE_MANIFEST,
+            f"package files must not include forbidden repository/internal surfaces: {forbidden_manifest_files}",
+            evidence_locators=("package.json:files",),
+        )
+    return package
 
+
+def validate_payload() -> set[str]:
     missing_sources = sorted(path for path in REQUIRED_FILES if not (REPO_ROOT / path).exists())
     if missing_sources:
-        fail(f"required package source files are missing: {missing_sources}")
+        fail(
+            SURFACE_PAYLOAD,
+            f"required package source files are missing: {missing_sources}",
+            evidence_locators=tuple(missing_sources),
+        )
 
     pack_files = npm_pack_files()
     missing_pack_files = sorted(REQUIRED_FILES - pack_files)
     if missing_pack_files:
-        fail(f"npm pack payload is missing required files: {missing_pack_files}")
+        fail(
+            SURFACE_PAYLOAD,
+            f"npm pack payload is missing required files: {missing_pack_files}",
+            evidence_locators=("npm pack --dry-run --json --ignore-scripts",),
+        )
 
     forbidden = sorted(path for path in pack_files if path.startswith(FORBIDDEN_PREFIXES))
     if forbidden:
-        fail(f"npm pack payload contains forbidden repository/internal files: {forbidden[:20]}")
+        fail(
+            SURFACE_PAYLOAD,
+            f"npm pack payload contains forbidden repository/internal files: {forbidden[:20]}",
+            evidence_locators=("npm pack --dry-run --json --ignore-scripts",),
+        )
     forbidden_parts = sorted(
         path
         for path in pack_files
         if any(part in path for part in FORBIDDEN_PATH_PARTS)
     )
     if forbidden_parts:
-        fail(f"npm pack payload contains Python cache files: {forbidden_parts[:20]}")
+        fail(
+            SURFACE_PAYLOAD,
+            f"npm pack payload contains Python cache files: {forbidden_parts[:20]}",
+            evidence_locators=("npm pack --dry-run --json --ignore-scripts",),
+        )
+    return pack_files
 
+
+def surface_pass(surface: str, *, payload_file_count: int | None = None) -> dict[str, Any]:
+    definition = SURFACES[surface]
+    payload: dict[str, Any] = {
+        "surface": surface,
+        "result": "pass",
+        "evidence_labels": list(definition.evidence_labels),
+        "evidence_locators": list(definition.evidence_locators),
+        "command": definition.command,
+    }
+    if payload_file_count is not None:
+        payload["payload_file_count"] = payload_file_count
+    return payload
+
+
+def emit_manifest_pass(package: dict[str, Any]) -> None:
     print(json.dumps({
         "schema_version": "loom-npm-package-check/v1",
         "result": "pass",
+        "surface": SURFACE_MANIFEST,
+        "package": EXPECTED_PACKAGE,
+        "version": package["version"],
+        "bin": "loom",
+        "required_manifest_files": sorted(REQUIRED_MANIFEST_FILES),
+        "forbidden_prefixes": list(FORBIDDEN_PREFIXES),
+        "evidence_label": SURFACE_MANIFEST,
+        "evidence_locators": list(SURFACES[SURFACE_MANIFEST].evidence_locators),
+    }, indent=2))
+
+
+def emit_payload_pass(pack_files: set[str]) -> None:
+    print(json.dumps({
+        "schema_version": "loom-npm-package-check/v1",
+        "result": "pass",
+        "surface": SURFACE_PAYLOAD,
+        "package": EXPECTED_PACKAGE,
+        "payload_file_count": len(pack_files),
+        "required_files": sorted(REQUIRED_FILES),
+        "forbidden_prefixes": list(FORBIDDEN_PREFIXES),
+        "forbidden_path_parts": list(FORBIDDEN_PATH_PARTS),
+        "evidence_label": SURFACE_PAYLOAD,
+        "evidence_locators": list(SURFACES[SURFACE_PAYLOAD].evidence_locators),
+    }, indent=2))
+
+
+def emit_aggregate_pass(package: dict[str, Any], pack_files: set[str]) -> None:
+    print(json.dumps({
+        "schema_version": "loom-npm-package-check/v1",
+        "result": "pass",
+        "surface": SURFACE_AGGREGATE,
         "package": EXPECTED_PACKAGE,
         "version": package["version"],
         "bin": "loom",
@@ -171,19 +362,85 @@ def main() -> int:
         "required_manifest_files": sorted(REQUIRED_MANIFEST_FILES),
         "forbidden_prefixes": list(FORBIDDEN_PREFIXES),
         "forbidden_path_parts": list(FORBIDDEN_PATH_PARTS),
+        "evidence_labels": [SURFACE_MANIFEST, SURFACE_PAYLOAD],
+        "evidence_locators": list(SURFACES[SURFACE_AGGREGATE].evidence_locators),
+        "surfaces": [
+            surface_pass(SURFACE_MANIFEST),
+            surface_pass(SURFACE_PAYLOAD, payload_file_count=len(pack_files)),
+        ],
     }, indent=2))
+
+
+def emit_surface_list() -> None:
+    print(json.dumps({
+        "schema_version": "loom-npm-package-check/v1",
+        "result": "pass",
+        "surfaces": [
+            {
+                "surface": definition.name,
+                "command": definition.command,
+                "description": definition.description,
+                "evidence_labels": list(definition.evidence_labels),
+                "evidence_locators": list(definition.evidence_locators),
+                "failure_label": definition.failure_label,
+            }
+            for definition in SURFACES.values()
+        ],
+    }, indent=2))
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--surface",
+        choices=sorted(SURFACE_ALIASES),
+        default=SURFACE_AGGREGATE,
+        help=(
+            "Validation surface to run. Stable surfaces: aggregate, "
+            f"{SURFACE_MANIFEST}, {SURFACE_PAYLOAD}."
+        ),
+    )
+    parser.add_argument(
+        "--list-surfaces",
+        action="store_true",
+        help="List targetable npm package validation surfaces and their evidence locators.",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv or [])
+    if args.list_surfaces:
+        emit_surface_list()
+        return 0
+
+    surface = SURFACE_ALIASES[args.surface]
+    if surface == SURFACE_MANIFEST:
+        emit_manifest_pass(validate_manifest())
+        return 0
+    if surface == SURFACE_PAYLOAD:
+        emit_payload_pass(validate_payload())
+        return 0
+
+    package = validate_manifest()
+    pack_files = validate_payload()
+    emit_aggregate_pass(package, pack_files)
     return 0
 
 
 if __name__ == "__main__":
     try:
-        raise SystemExit(main())
-    except AssertionError as exc:
+        raise SystemExit(main(sys.argv[1:]))
+    except ValidationFailure as exc:
         print(json.dumps({
             "schema_version": "loom-npm-package-check/v1",
             "result": "block",
-            "failed_layer": "npm-package-payload",
+            "surface": exc.surface,
+            "evidence_label": exc.surface,
+            "failure_label": exc.failure_label,
+            "failed_layer": exc.surface,
             "fail_closed_reason": str(exc),
-            "fallback_to": ["docs/adoption/cli-only-install-contract.md", "npm pack --dry-run --json --ignore-scripts"],
+            "evidence_locators": list(exc.evidence_locators),
+            "fallback_to": list(exc.fallback_to),
         }, indent=2), file=sys.stderr)
         raise SystemExit(1)

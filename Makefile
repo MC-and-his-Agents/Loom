@@ -1,4 +1,4 @@
-.PHONY: loom-check check py-compile skills-check skills-doc-reference-sync-check skills-generated-tree-drift-check host-adapter-check version-surface-check release-surface-check release-surface-doc-contract-check release-surface-workflow-contract-check release-surface-installer-sunset-guard-check release-surface-forbidden-patterns-check cli-contract-check npm-package-check loom-check-runtime-regression loom-check-runtime-locking loom-check-runtime-single-flight-locking loom-check-runtime-worktree-local-lock-paths loom-check-runtime-installer-regression-lock-output loom-demo-new-project loom-demo-new-project-check loom-demo-new-project-generation-check loom-demo-new-project-sync loom-self-plugin-check daily-execution-cli-fast daily-execution-cli-full
+.PHONY: loom-check check py-compile skills-check skills-doc-reference-sync-check skills-generated-tree-drift-check host-adapter-check version-surface-check release-surface-check release-surface-doc-contract-check release-surface-workflow-contract-check release-surface-installer-sunset-guard-check release-surface-forbidden-patterns-check cli-contract-check npm-package-check npm-package-manifest-check npm-pack-payload-check loom-check-runtime-regression loom-check-runtime-locking loom-check-runtime-single-flight-locking loom-check-runtime-worktree-local-lock-paths loom-check-runtime-installer-regression-lock-output loom-demo-new-project loom-demo-new-project-check loom-demo-new-project-generation-check loom-demo-new-project-sync loom-self-plugin-check daily-execution-cli-fast daily-execution-cli-full
 .PHONY: repo-local-cli-fast repo-local-cli-full repo-local-cli-setup-demo-bootstrap repo-local-cli-init-runtime repo-local-cli-fact-chain repo-local-cli-flow-gates repo-local-cli-workspace-locate repo-local-cli-purity-check repo-local-cli-runtime-state-scene-conflict-negative
 
 REPO_LOCAL_CLI_GROUPS := setup-demo-bootstrap init-runtime fact-chain flow-gates workspace-locate purity-check runtime-state-scene-conflict-negative
@@ -45,6 +45,12 @@ cli-contract-check:
 npm-package-check:
 	python3 tools/check_npm_package.py
 	npm run test:package
+
+npm-package-manifest-check:
+	python3 tools/check_npm_package.py --surface npm-package-manifest
+
+npm-pack-payload-check:
+	python3 tools/check_npm_package.py --surface npm-pack-payload
 
 loom-check-runtime-regression:
 	python3 tools/check_loom_check_runtime_regressions.py
