@@ -3,19 +3,31 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 
 sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parent.parent
 SHARED_SCRIPTS = ROOT / "skills/shared/scripts"
+
+
+@dataclass(frozen=True)
+class RuntimeRegressionSurface:
+    name: str
+    fixture_group: str
+    run: Callable[[list[str]], None]
+    selectable: bool = False
 
 
 def load_loom_check():
@@ -44,6 +56,10 @@ def run(args: list[str], *, env: dict[str, str] | None = None, timeout: float = 
 
 def fail(message: str, failures: list[str]) -> None:
     failures.append(message)
+
+
+def format_duration(seconds: float) -> str:
+    return f"{seconds:.2f}s"
 
 
 def current_loom_check_temp_dirs() -> set[Path]:
@@ -167,24 +183,159 @@ def check_demo_fixture_stays_clean(failures: list[str]) -> None:
         fail("demo bootstrap fixture check must not dirty examples/new-project", failures)
 
 
-def main() -> int:
-    failures: list[str] = []
-    temp_dir_baseline = current_loom_check_temp_dirs()
-    loom_check = load_loom_check()
-    check_cli_single_flight(loom_check, failures)
-    check_worktree_local_lock_paths(loom_check, failures)
-    check_runtime_purity_helpers(loom_check, failures)
-    check_installer_busy_output(failures)
-    check_demo_fixture_stays_clean(failures)
-    check_temp_dir_cleanup(temp_dir_baseline, failures)
+def runtime_regression_surfaces(loom_check, temp_dir_baseline: set[Path]) -> tuple[RuntimeRegressionSurface, ...]:
+    return (
+        RuntimeRegressionSurface(
+            name="single-flight-locking",
+            fixture_group="locking",
+            run=lambda failures: check_cli_single_flight(loom_check, failures),
+            selectable=True,
+        ),
+        RuntimeRegressionSurface(
+            name="worktree-local-lock-paths",
+            fixture_group="locking",
+            run=lambda failures: check_worktree_local_lock_paths(loom_check, failures),
+            selectable=True,
+        ),
+        RuntimeRegressionSurface(
+            name="runtime-purity-helpers",
+            fixture_group="aggregate-runtime-regression",
+            run=lambda failures: check_runtime_purity_helpers(loom_check, failures),
+        ),
+        RuntimeRegressionSurface(
+            name="installer-regression-lock-output",
+            fixture_group="locking",
+            run=check_installer_busy_output,
+            selectable=True,
+        ),
+        RuntimeRegressionSurface(
+            name="demo-fixture-cleanliness",
+            fixture_group="aggregate-runtime-regression",
+            run=check_demo_fixture_stays_clean,
+        ),
+        RuntimeRegressionSurface(
+            name="temp-dir-cleanup",
+            fixture_group="aggregate-runtime-regression",
+            run=lambda failures: check_temp_dir_cleanup(temp_dir_baseline, failures),
+        ),
+    )
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--surface",
+        action="append",
+        dest="surfaces",
+        help="Run only the named runtime regression surface. May be passed more than once.",
+    )
+    parser.add_argument(
+        "--fixture-group",
+        action="append",
+        dest="fixture_groups",
+        help="Run only surfaces in the named fixture group. May be passed more than once.",
+    )
+    parser.add_argument(
+        "--list-surfaces",
+        action="store_true",
+        help="List available surface names and fixture groups without running checks.",
+    )
+    return parser.parse_args(argv)
+
+
+def select_surfaces(
+    surfaces: tuple[RuntimeRegressionSurface, ...],
+    *,
+    requested_names: list[str] | None,
+    requested_groups: list[str] | None,
+) -> tuple[RuntimeRegressionSurface, ...]:
+    selectable = tuple(surface for surface in surfaces if surface.selectable)
+    selected = surfaces
+    if requested_names:
+        wanted = set(requested_names)
+        known = {surface.name for surface in selectable}
+        missing = wanted - known
+        if missing:
+            raise ValueError("unknown surface(s): " + ", ".join(sorted(missing)))
+        selected = tuple(surface for surface in selectable if surface.name in wanted)
+    if requested_groups:
+        wanted_groups = set(requested_groups)
+        known_groups = {surface.fixture_group for surface in selectable}
+        missing_groups = wanted_groups - known_groups
+        if missing_groups:
+            raise ValueError("unknown fixture group(s): " + ", ".join(sorted(missing_groups)))
+        candidates = selected if requested_names else selectable
+        selected = tuple(surface for surface in candidates if surface.fixture_group in wanted_groups)
+    if not selected:
+        raise ValueError("surface filters selected no checks")
+    return selected
+
+
+def run_surfaces(surfaces: tuple[RuntimeRegressionSurface, ...]) -> int:
+    failures: list[tuple[RuntimeRegressionSurface, float, str]] = []
+    suite_start = time.perf_counter()
+    total = len(surfaces)
+    for index, surface in enumerate(surfaces, start=1):
+        start = time.perf_counter()
+        surface_failures: list[str] = []
+        print(
+            f"[{index}/{total}] runtime-regression surface={surface.name} fixture_group={surface.fixture_group} start",
+            file=sys.stderr,
+        )
+        try:
+            surface.run(surface_failures)
+        except Exception as exc:
+            surface_failures.append(f"raised {type(exc).__name__}: {exc}")
+        elapsed = time.perf_counter() - start
+        if surface_failures:
+            for message in surface_failures:
+                failures.append((surface, elapsed, message))
+            print(
+                f"[{index}/{total}] runtime-regression surface={surface.name} fixture_group={surface.fixture_group} failed in {format_duration(elapsed)} failures={len(surface_failures)}",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"[{index}/{total}] runtime-regression surface={surface.name} fixture_group={surface.fixture_group} passed in {format_duration(elapsed)}",
+                file=sys.stderr,
+            )
 
     if failures:
         print("loom_check runtime regression: FAILED")
-        for item in failures:
-            print(f"- {item}")
+        for surface, elapsed, message in failures:
+            print(
+                f"- surface={surface.name} fixture_group={surface.fixture_group} duration={format_duration(elapsed)}: {message}"
+            )
         return 1
-    print("loom_check runtime regression: OK")
+    total_elapsed = time.perf_counter() - suite_start
+    print(f"loom_check runtime regression: OK ({total} surfaces, {format_duration(total_elapsed)})")
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(sys.argv[1:] if argv is None else argv)
+    temp_dir_baseline = current_loom_check_temp_dirs()
+    loom_check = load_loom_check()
+    surfaces = runtime_regression_surfaces(loom_check, temp_dir_baseline)
+    if args.list_surfaces:
+        for surface in surfaces:
+            if not surface.selectable:
+                continue
+            print(f"{surface.name}\t{surface.fixture_group}")
+        return 0
+    try:
+        selected = select_surfaces(
+            surfaces,
+            requested_names=args.surfaces,
+            requested_groups=args.fixture_groups,
+        )
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        print("available surfaces:", file=sys.stderr)
+        for surface in surfaces:
+            print(f"- {surface.name} (fixture_group={surface.fixture_group})", file=sys.stderr)
+        return 2
+    return run_surfaces(selected)
 
 
 if __name__ == "__main__":

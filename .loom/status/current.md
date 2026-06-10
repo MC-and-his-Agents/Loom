@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1401
-- Goal: Split demo bootstrap generation validation from fixture drift comparison while preserving the aggregate demo fixture check.
-- Scope: Issue #1401 only: tools/check_demo_bootstrap_fixture.py generation surface, demo-bootstrap-generation failure labels and evidence locators, Makefile generation alias, WI-1401 Loom carriers, scheduler-owned review/pr-gate/controlled merge/no_release closeout, and scheduler-owned stale terminal checkpoint correction for already-merged/closed WI-1397 required to clear active-state purity after #1397 closeout. No #1402 fixture drift/cleanliness split, #1403 canonicalization diagnostics, #1404 docs/evidence closeout, skills validation, release/package validation, runtime regression validation, broad fixture scenario changes, external-visible behavior, or Round 9+ scope.
-- Execution Path: issue #1401 -> branch work/1401-demo-bootstrap-generation-validation -> PR #1417 -> scheduler-owned review/pr-gate/controlled merge/no_release closeout
+- Item ID: WI-1405
+- Goal: Split runtime locking validation into named surfaces for same-worktree single-flight locking, worktree-local lock paths, and installer regression lock output while preserving aggregate runtime regression validation.
+- Scope: Issue #1405 only: tools/check_loom_check_runtime_regressions.py locking surface registry/selectors, Makefile locking targets, WI-1405 minimal suite/progress/work-item/review/status carriers, scheduler-owned review/pr-gate/controlled merge/no_release closeout. No #1406 subprocess environment purity split, #1407 tempdir cleanup or fixture cleanliness split, #1408 aggregate closeout, release/package validation, skills validation, demo bootstrap changes, broad runtime behavior changes, or external-visible behavior.
+- Execution Path: issue #1405 -> branch work/1405-runtime-locking-validation-surfaces -> PR #1418 -> scheduler-owned review/pr-gate/controlled merge/no_release closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1401.md
-- Review Entry: .loom/reviews/WI-1401.json
-- Validation Entry: git diff --check; tools/check_demo_bootstrap_fixture.py generation and aggregate fixture surfaces; Makefile alias; suite inspect/validate for WI-1401; fact-chain/state-check after scheduler activation; PR metadata preflight/readback; hosted checks
-- Closing Condition: PR #1417 for #1401 is reviewed/gated by the scheduler on the current head, merged through the controlled path, and no_release closeout consumes the demo bootstrap generation validation surface while preserving the existing aggregate fixture drift check.
+- Recovery Entry: .loom/progress/WI-1405.md
+- Review Entry: .loom/reviews/WI-1405.json
+- Validation Entry: git diff --check; tools/check_loom_check_runtime_regressions.py --list-surfaces; Makefile locking targets; suite inspect/validate for WI-1405; fact-chain/state-check after scheduler activation; PR metadata preflight/readback; hosted checks
+- Closing Condition: PR #1418 for #1405 is reviewed/gated by the scheduler on the current head, merged through the controlled path, issue #1405 is closed, and no_release closeout is consumed by #1263/#1255.
 - Current Checkpoint: merge
-- Current Stop: Scheduler-owned WI-1401 merge gate is active: PR #1417 was rebased onto latest `origin/main`, PR body/head metadata was refreshed for head `345f78d79de9d3c9b8fc69b164096e758ff068ff`, local validation and fact-chain activation passed, and stale terminal WI-1397 checkpoint drift was classified and corrected for active-state purity.
-- Next Step: Record current-head scheduler review, refresh carrier/shadow evidence, run PR gate and controlled merge checks, wait for fresh hosted checks on the current head, then execute controlled merge and post-merge no_release closeout if gates pass.
+- Current Stop: Scheduler gate refresh for WI-1405 is active on branch `work/1405-runtime-locking-validation-surfaces`: runtime locking implementation, minimal suite, evidence-map, task carrier, fact-chain, and current-head local runtime regression validation passed at head `6e83c657ce6c5c019d3cdd868963d3165ab971f4`. Scheduler review and PR metadata/head/hosted checks still need final refresh after the review-carrier commit.
+- Next Step: Record current-head scheduler review, commit the review carrier, push the branch, refresh PR #1418 body/head metadata, wait for hosted checks on the pushed head, then run scheduler-owned PR gate, controlled merge, issue closeout, and parent #1263/#1255 convergence.
 - Blockers: None
-- Latest Validation Summary: Scheduler gate refresh for WI-1401: PR #1417 is open and non-draft on base `main` at `036d993a2a48a5fcdff0000052467a5170dfefb1`, with head `345f78d79de9d3c9b8fc69b164096e758ff068ff`; PR metadata preflight passed; `python3 tools/check_demo_bootstrap_fixture.py --help`, `python3 tools/py_compile_clean.py tools/check_demo_bootstrap_fixture.py`, `git diff --check origin/main...HEAD`, `python3 tools/check_demo_bootstrap_fixture.py --surface generation --timeout 180`, `make loom-demo-new-project-check`, `python3 tools/loom.py suite inspect --target . --item WI-1401 --json`, expected `suite validate` not_applicable with `blocking_gaps=[]`, and `python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1401` passed. Carrier refresh dry-run passed after scheduler activation. `state-check` active conflict against terminal WI-1397 was classified as stale terminal checkpoint drift and corrected.
-- Recovery Boundary: WI-1401 only: demo bootstrap generation-only validation surface, generation-specific failure labels/evidence locators, preservation of existing aggregate fixture drift check behavior, optional local Makefile alias, WI-1401 progress/spec/work-item/review/status carriers, #1401 PR metadata, scheduler-owned merge checkpoint, PR gate, controlled merge, no_release closeout, and required stale terminal checkpoint correction for already-merged/closed WI-1397. Do not implement #1402 fixture drift/cleanliness split, #1403 canonicalization diagnostics, #1404 docs/evidence closeout, skills validation, release/package validation, runtime regression validation, broad fixture scenario changes, external-visible behavior, or Round 9+ scope.
-- Current Lane: demo-bootstrap-generation-validation
+- Latest Validation Summary: Scheduler current-head validation passed for WI-1405 at `6e83c657ce6c5c019d3cdd868963d3165ab971f4`: `python3 tools/check_loom_check_runtime_regressions.py --list-surfaces`; `python3 tools/py_compile_clean.py tools/check_loom_check_runtime_regressions.py`; `python3 tools/loom.py suite inspect --target . --item WI-1405 --json`; `python3 tools/loom.py suite validate --target . --item WI-1405 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1405 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1405 --json`; `python3 .loom/bin/loom_flow.py checkpoint build --target . --item WI-1405`; `python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1405`; `git diff --check`; `make loom-check-runtime-single-flight-locking`; `make loom-check-runtime-worktree-local-lock-paths`; `make loom-check-runtime-installer-regression-lock-output`; `make loom-check-runtime-locking`; `make loom-check-runtime-regression`. Lock residue checks confirmed `.loom/runtime/loom_check.lock` and `packages/loom-installer/.installer-regression-lock` absent after validation.
+- Recovery Boundary: WI-1405 only: runtime locking validation surfaces in `tools/check_loom_check_runtime_regressions.py`, Makefile aliases, WI-1405 minimal suite/evidence/task-carrier/progress/work-item/review/status carriers, PR #1418 metadata refresh, scheduler-owned PR gate, controlled merge, issue closeout, and no_release closeout consumption. Do not implement #1406 subprocess environment purity split, #1407 tempdir cleanup or fixture cleanliness split, #1408 aggregate closeout, release/package validation, skills validation, demo bootstrap changes, or broad runtime behavior changes.
+- Current Lane: runtime-locking-validation-surfaces
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1401.md
-- Dynamic Truth: .loom/progress/WI-1401.md
+- Static Truth: .loom/work-items/WI-1405.md
+- Dynamic Truth: .loom/progress/WI-1405.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
