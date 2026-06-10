@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1383
-- Goal: Freeze the minimal release validation and release closeout evidence contract that downstream release-required work (#1296/#1246/#1293) and #1260 can consume.
-- Scope: Issue #1383 only: docs-only release validation evidence contract, WI-1383 Loom carriers, and scheduler-owned stale terminal carrier sync for already-merged/closed WI-1254 required to clear active-state purity. No release/package checker split, no release/package tooling edits, no package/version/workflow/runtime behavior changes, no npm publish, no tags, no GitHub Release, and no downstream issue implementation.
-- Execution Path: issue #1383 -> branch work/1383-release-validation-evidence-contract -> PR #1416 -> scheduler-owned review/pr-gate/controlled merge/no_release closeout
+- Item ID: WI-1397
+- Goal: Split tools/skills_surface.py validation for docs/reference sync and generated tree drift into named, targetable surfaces while preserving the aggregate skills check.
+- Scope: Issue #1397 only: tools/skills_surface.py docs/reference sync and generated tree drift surfaces, Makefile aliases, WI-1397 Loom carriers, scheduler-owned review/pr-gate/controlled merge/no_release closeout, and scheduler-owned stale terminal carrier sync for already-merged/closed WI-1383 required to clear active-state purity after #1383 closeout. No #1398 metadata/cache checks, #1399 launcher smoke, #1400 docs/evidence convergence, release/package, demo bootstrap, runtime regression, generated skills content changes, or Round 9+ scope.
+- Execution Path: issue #1397 -> branch work/1397-skills-sync-drift-surfaces -> PR #1419 -> scheduler-owned review/pr-gate/controlled merge/no_release closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1383.md
-- Review Entry: .loom/reviews/WI-1383.json
-- Validation Entry: git diff --check; focused release contract readback; python3 tools/check_release_surface.py; python3 tools/check_npm_package.py; npm run test:package; suite inspect/validate for WI-1383; fact-chain/verify; PR metadata preflight/readback; hosted checks
-- Closing Condition: PR #1416 for #1383 is reviewed/gated by the scheduler on the current head, merged through the controlled path, and no_release closeout consumes the release validation evidence contract without implementing #1260 release/package checker splits or changing CLI/package runtime behavior.
+- Recovery Entry: .loom/progress/WI-1397.md
+- Review Entry: .loom/reviews/WI-1397.json
+- Validation Entry: git diff --check; tools/skills_surface.py targeted surfaces and aggregate check; Makefile aliases; tools/loom.py skills check; suite inspect/validate for WI-1397; fact-chain/state-check after scheduler activation; PR metadata preflight/readback; hosted checks
+- Closing Condition: PR #1419 for #1397 is reviewed/gated by the scheduler on the current head, merged through the controlled path, and no_release closeout consumes the named skills sync/drift validation surfaces while preserving the aggregate skills check.
 - Current Checkpoint: merge
-- Current Stop: Scheduler current-head code review was recorded for WI-1383 at reviewed_head 9609bcf9a471b4d5c5720a830ea4748219ebffc6 with decision allow and no findings.
-- Next Step: Commit and push the WI-1383 review artifact, update PR metadata to the review-carrier head, rerun PR gate and hosted checks, then proceed to controlled merge and no_release closeout if gates pass.
-- Blockers: None recorded.
-- Latest Validation Summary: Scheduler local validation passed for WI-1383 after carrier activation and evidence-record refresh: git diff --check origin/main...HEAD; git diff --check; focused release evidence label/readback review; python3 tools/check_release_surface.py; python3 tools/check_npm_package.py; npm run test:package; python3 tools/loom.py suite inspect --target . --item WI-1383 --json; python3 tools/loom.py suite validate --target . --item WI-1383 --json returned expected result=not_applicable with blocking_gaps=[]; python3 .loom/bin/loom_init.py fact-chain --target .; python3 .loom/bin/loom_init.py verify --target .; python3 .loom/bin/loom_flow.py state-check --target . --item WI-1383; python3 .loom/bin/loom_flow.py checkpoint build --target . --item WI-1383; python3 .loom/bin/loom_flow.py flow review --target . --item WI-1383 --issue 1383 --pr 1416 --branch work/1383-release-validation-evidence-contract; python3 .loom/bin/loom_flow.py pr-metadata preflight --target . --surface merge_ready --pr 1416 --head-sha <current PR head>. Exact head binding is carried by the PR metadata machine carrier and the Loom review record reviewed_head field.
-- Recovery Boundary: WI-1383 only: docs-only release validation evidence contract, WI-1383 carriers, scheduler-owned current-head review, PR gate, controlled merge, and no_release closeout. No full #1260 release/npm checker split, no release/package tooling edits, no package/version/workflow/runtime behavior changes, no npm publish, no tags, no GitHub Release, no Round 9+ work, and no downstream issue implementation.
-- Current Lane: release-validation-evidence-contract
+- Current Stop: Scheduler-owned WI-1397 merge gate is active: implementation, carrier activation, PR metadata/head readback, local validation, current-head semantic review, fact-chain, state-check, and carrier refresh classification are complete for the current PR #1419 branch head.
+- Next Step: Update PR #1419 metadata to the final branch head, run PR gate and controlled merge checks, wait for fresh hosted checks on that head, then execute controlled merge and post-merge no_release closeout if gates pass.
+- Blockers: None
+- Latest Validation Summary: Scheduler gate refresh for WI-1397: PR #1419 is open, non-draft, and MERGEABLE on the latest Round 8 base after #1383 merged; PR metadata preflight, fact-chain, state-check, targeted skills surfaces, aggregate skills check, carrier refresh dry-run/write, and shadow-parity --blocking passed. The previous pr-gate fallback was narrowed to Current Checkpoint still being build; scheduler advanced the checkpoint to merge and refreshed shadow evidence for controlled merge readiness.
+- Recovery Boundary: WI-1397 only: scheduler-owned merge checkpoint, PR gate, controlled merge, no_release closeout, and required carrier/shadow refresh for the #1397 skills sync/drift surfaces. Do not implement #1398 metadata/cache checks, #1399 launcher smoke, #1400 docs/evidence closeout, release/package validation, demo bootstrap validation, runtime regression validation, generated skills content changes, or Round 9+ scope.
+- Current Lane: skills-sync-drift-surfaces
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1383.md
-- Dynamic Truth: .loom/progress/WI-1383.md
+- Static Truth: .loom/work-items/WI-1397.md
+- Dynamic Truth: .loom/progress/WI-1397.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
