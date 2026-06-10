@@ -2,12 +2,12 @@
   "schema_version": "loom-review/v1",
   "item_id": "WI-1405",
   "decision": "allow",
-  "kind": "general_review",
-  "summary": "Implementation review allow: WI-1405 current-head validation passed for suite/evidence/carrier/fact-chain and runtime locking plus aggregate regression checks at a3c63bc7fd690d02868054eba711f394ddeb6dcb. Diff remains limited to runtime locking selectors, Makefile targets, and WI-1405 Loom carriers/review inputs; aggregate runtime regression remains fail-closed; #1406/#1407/#1408 and release/package, skills, demo bootstrap, and external-visible runtime behavior remain out of scope.",
+  "kind": "code_review",
+  "summary": "Closeout review allow: PR #1422 is a closeout-only carrier/status/shadow sync for WI-1405 after PR #1418 merged and issue #1405 closed. Diff is limited to WI-1405 Loom progress, status, task-carrier, review, and shadow evidence; no runtime checker, Makefile, release/package, skills, demo bootstrap, workflow, CLI/runtime behavior, or external-visible behavior changes. Local git diff --check, fact-chain, carrier refresh dry-run, suite evidence validate, suite carrier validate, and PR metadata preflight pass at head 2969221d76cdb23f90f5ff97b54541c633436183; release judgment remains no_release; #1406/#1407/#1408 and parent #1263/#1255 remain follow-up scope.",
   "reviewer": "scheduler:019eb28d-ac3b-7623-8955-12542fa2e08d",
-  "authored_at": "2026-06-10T20:53:36Z",
-  "reviewed_head": "a3c63bc7fd690d02868054eba711f394ddeb6dcb",
-  "reviewed_validation_summary": "Scheduler current-head validation passed for WI-1405 at `6e83c657ce6c5c019d3cdd868963d3165ab971f4`: `python3 tools/check_loom_check_runtime_regressions.py --list-surfaces`; `python3 tools/py_compile_clean.py tools/check_loom_check_runtime_regressions.py`; `python3 tools/loom.py suite inspect --target . --item WI-1405 --json`; `python3 tools/loom.py suite validate --target . --item WI-1405 --json`; `python3 tools/loom.py suite evidence validate --target . --item WI-1405 --json`; `python3 tools/loom.py suite carrier validate --target . --item WI-1405 --json`; `python3 .loom/bin/loom_flow.py checkpoint build --target . --item WI-1405`; `python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1405`; `git diff --check`; `make loom-check-runtime-single-flight-locking`; `make loom-check-runtime-worktree-local-lock-paths`; `make loom-check-runtime-installer-regression-lock-output`; `make loom-check-runtime-locking`; `make loom-check-runtime-regression`. Lock residue checks confirmed `.loom/runtime/loom_check.lock` and `packages/loom-installer/.installer-regression-lock` absent after validation.",
+  "authored_at": "2026-06-10T21:19:43Z",
+  "reviewed_head": "2969221d76cdb23f90f5ff97b54541c633436183",
+  "reviewed_validation_summary": "Terminal closeout readback for WI-1405: PR #1418 merged at 2026-06-10T21:01:08Z with merge commit `7c151d6e85c8d6b0609b4681ed1b80089e16811f`; issue #1405 closed at 2026-06-10T21:01:09Z; hosted `loom-check` and rerun `loom-pr-merge-gate` passed on head `12c499eb1097878144f4ec7c49fa1f094e5a9009`; local `pr gate`, `flow merge-ready`, controlled merge check, `fact-chain`, `state-check`, `suite evidence validate`, `suite carrier validate`, `carrier refresh --dry-run`, and `git diff --check` passed; terminal no_release metadata is recorded.",
   "fallback_to": null,
   "findings": [],
   "blocking_issues": [],
@@ -16,7 +16,7 @@
     "work_item": ".loom/work-items/WI-1405.md",
     "recovery_entry": ".loom/progress/WI-1405.md",
     "status_surface": ".loom/status/current.md",
-    "build_checkpoint": "pass",
+    "build_checkpoint": "terminal_closeout_not_applicable",
     "budget_risk": {
       "schema_version": "loom-execution-budget-risk/v1",
       "status": "not_applicable",
@@ -27,16 +27,16 @@
       "budget_summary": "execution budget is not collected for this invocation.",
       "adapter_evidence_locator": "",
       "provenance": {
-        "source": "github_host"
+        "source": "scheduler_closeout_review"
       }
     },
-    "engine_adapter": null,
-    "engine_evidence": null,
-    "normalized_findings": null,
-    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/56ec/Loom/tools/loom.py suite evidence validate --target /Users/mc/.codex/worktrees/56ec/Loom --item WI-1405 --json",
-    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/56ec/Loom/tools/loom.py suite carrier validate --target /Users/mc/.codex/worktrees/56ec/Loom --item WI-1405 --json",
+    "engine_adapter": "scheduler_manual_review",
+    "engine_evidence": "PR #1422 head 2969221d76cdb23f90f5ff97b54541c633436183; local validation and GitHub readback recorded in reviewed_validation_summary",
+    "normalized_findings": [],
+    "suite_evidence_validation": "python3 tools/loom.py suite evidence validate --target . --item WI-1405 --json",
+    "suite_carrier_validation": "python3 tools/loom.py suite carrier validate --target . --item WI-1405 --json",
     "suite_evidence_map": ".loom/specs/WI-1405/evidence-map.md",
-    "suite_consistency_analysis": null,
+    "suite_consistency_analysis": "not_applicable_for_closeout_only_pr",
     "suite_task_carriers": [
       ".loom/specs/WI-1405/task-carrier.md"
     ],
@@ -52,6 +52,6 @@
   },
   "semantic_review_disposition": {
     "status": "passed",
-    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+    "reason": "Scheduler-authored closeout review approved PR #1422 head 2969221d76cdb23f90f5ff97b54541c633436183 for merge checkpoint consumption. The only subsequent acceptable head drift is the review carrier commit itself."
   }
 }
