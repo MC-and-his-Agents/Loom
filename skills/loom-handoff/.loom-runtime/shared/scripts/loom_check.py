@@ -1886,6 +1886,27 @@ def prepend_path_env(bin_dir: Path, extra: dict[str, str] | None = None) -> dict
     return env
 
 
+def review_run_fixture_env(bin_dir: Path, env_root: Path, extra: dict[str, str] | None = None) -> dict[str, str]:
+    env_root.mkdir(parents=True, exist_ok=True)
+    home = env_root / "home"
+    temp_root = env_root / "tmp"
+    home.mkdir(parents=True, exist_ok=True)
+    temp_root.mkdir(parents=True, exist_ok=True)
+    env = prepend_path_env(
+        bin_dir,
+        {
+            "HOME": str(home),
+            "CODEX_HOME": str(home / ".codex"),
+            "TMPDIR": str(temp_root),
+            "TEMP": str(temp_root),
+            "TMP": str(temp_root),
+        },
+    )
+    if extra:
+        env.update(extra)
+    return env
+
+
 def write_fake_codex(
     path: Path,
     *,
