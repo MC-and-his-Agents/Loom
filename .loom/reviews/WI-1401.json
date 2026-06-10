@@ -1,39 +1,49 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1401",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "345f78d79de9d3c9b8fc69b164096e758ff068ff",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Scheduler semantic review for WI-1401 allows the merge checkpoint carrier refresh. The implementation splits a named demo-bootstrap-generation surface from fixture drift comparison, preserves the default aggregate loom-demo-new-project-check success contract, adds stable generation timeout/command-failed labels and evidence locators, keeps fixture-drift diagnostics isolated, adds a Makefile generation alias, and does not expand into #1402/#1403/#1404, skills, release/package, runtime regression, generated fixture contents, or external-visible behavior. Scheduler carrier changes activate WI-1401 and terminalize stale WI-1397 checkpoint drift for active-state purity only.",
+  "reviewer": "round-8-scheduler",
+  "authored_at": "2026-06-10T20:04:31Z",
+  "reviewed_head": "71e1ba4c5130b099c5ed5e15896152b260033c23",
+  "reviewed_validation_summary": "Scheduler gate refresh for WI-1401: PR #1417 is open and non-draft on base `main` at `036d993a2a48a5fcdff0000052467a5170dfefb1`, with head `345f78d79de9d3c9b8fc69b164096e758ff068ff`; PR metadata preflight passed; `python3 tools/check_demo_bootstrap_fixture.py --help`, `python3 tools/py_compile_clean.py tools/check_demo_bootstrap_fixture.py`, `git diff --check origin/main...HEAD`, `python3 tools/check_demo_bootstrap_fixture.py --surface generation --timeout 180`, `make loom-demo-new-project-check`, `python3 tools/loom.py suite inspect --target . --item WI-1401 --json`, expected `suite validate` not_applicable with `blocking_gaps=[]`, and `python3 .loom/bin/loom_flow.py fact-chain --target . --item WI-1401` passed. Carrier refresh dry-run passed after scheduler activation. `state-check` active conflict against terminal WI-1397 was classified as stale terminal checkpoint drift and corrected.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1401.md",
+    "recovery_entry": ".loom/progress/WI-1401.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "unavailable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is unavailable; budget risk remains advisory and non-blocking",
+      "budget_summary": "github control plane: Get \"https://api.github.com/repos/MC-and-his-Agents/Loom\": EOF",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_control_plane",
+        "error_count": 1
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": ".loom/progress/WI-1401.md",
+    "normalized_findings": ".loom/progress/WI-1401.md",
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
 }
