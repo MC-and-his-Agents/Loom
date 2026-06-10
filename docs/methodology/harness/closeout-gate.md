@@ -116,6 +116,8 @@ closeout 消费 behavior/test evidence 的语义如下：
 - host PR checks evidence 只证明当前 head 的检查状态和 freshness，不替代 Loom review record 或 reconciliation audit；当 versioned `merge-ready` execution_attempt 未被 retained runtime 写入版本控制时，可作为 legacy merge-ready freshness fallback，但必须在 subcheck 中标记 `source=host_pr_checks` 与 `fallback_reason=missing_versioned_execution_attempt`
 - review record 必须 `decision == allow`、kind 属于 implementation review，并且 `reviewed_validation_summary` 与当前 validation summary 一致；`reviewed_head` 必须覆盖 PR head，若 review 后到 PR head 的差异只包含 review / recovery / status / owned runtime evidence carriers，可作为 `carrier-only` head binding 消费
 - merge-ready evidence 优先来自同一 Work Item 的 successful `merge-ready` execution attempt，且 `head_sha` 与 PR head 一致；若 retained execution_attempt 存在但 stale、invalid 或 head mismatch，不得回退到 host checks
+- 当 validation summary 引用 `daily-execution-cli-fast` / `daily-execution-cli-full` 时，closeout 必须保留两者的消费边界：fast run 只能作为 focused troubleshooting 或本地迭代证据；full run 或等价 full aggregate 才能作为默认 daily-execution-cli retained validation basis。若 closeout 只能找到 fast locator，必须返回 `block` 或记录拥有方明确的 narrow-scope rationale、remaining risk、recheck condition 与 scheduler-owned gate disposition。
+- 默认 `no_release` closeout 仍必须消费 release/no-release 判断本身。`daily-execution-cli-full` pass 可以支持 no-release 的验证依据，但不能替代 PR metadata、review、fact-chain、hosted checks、controlled merge、target branch readback、reconciliation audit 或 release judgment。
 - 若证据只覆盖 merge 前 `HEAD`，必须能通过 PR / merge commit / main 包含关系证明该证据仍覆盖当前主干结果
 - 若 closeout 发现主干、issue、project 或 evidence locator 无法互相回链，必须返回 `block`
 - 若 subagent 输出没有被整合到 review record、验证摘要或 merge-ready basis，closeout 不得把它作为 `absorbed` 或 `closed_out` 依据
