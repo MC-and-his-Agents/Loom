@@ -1,39 +1,57 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1249",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "06b8676ddd8cb9b055c39327abd9e2de5e84c522",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Current-head implementation review approves #1249 daily-execution-cli observability: stable start/progress/end stderr evidence is additive, elapsed/result/failure metadata is captured, failure details identify scenario/command/summary/metadata, command membership and allowed result semantics remain unchanged, runtime/demo copies are byte-for-byte aligned, and branch-local carrier changes stay limited to PR #1409 readiness.",
+  "reviewer": "scheduler-thread-019eaf94-f0bd-79a3-a396-83d6428b2777",
+  "authored_at": "2026-06-10T05:51:18Z",
+  "reviewed_head": "af00603d0a657b31344b7525e9feaeaf9ab98988",
+  "reviewed_validation_summary": "2026-06-10 #1249 worker validation passed before carrier activation on PR #1409 head 06b8676ddd8cb9b055c39327abd9e2de5e84c522: git diff --check; focused py_compile_clean for touched loom_check.py copies; make skills-check; tools/loom_check.py --profile source --source-surface merge-gate . passed with per-scenario event=start/progress/end for all 30 command inventory labels and fixture groups; synthetic failure metadata harness passed; authorized demo fixture sync passed make loom-demo-new-project-check and demo runtime py_compile_clean; hosted py-compile/demo-bootstrap/repo-local-cli/loom-check/gate/release-judgment passed; live PR metadata preflight passed. Branch-local carrier activation validation passed for WI-1249: git diff --check; fact-chain; suite validate; suite evidence validate; suite carrier validate. Flow review preflight now reads WI-1249 and only falls back on out-of-scope WI-1259 active carrier conflict plus scheduler-owned spec review artifact absence.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1249.md",
+    "recovery_entry": ".loom/progress/WI-1249.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/24a2/Loom/tools/loom.py suite evidence validate --target /Users/mc/.codex/worktrees/24a2/Loom --item WI-1249 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/24a2/Loom/tools/loom.py suite carrier validate --target /Users/mc/.codex/worktrees/24a2/Loom --item WI-1249 --json",
+    "suite_evidence_map": ".loom/specs/WI-1249/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1249/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
 }
