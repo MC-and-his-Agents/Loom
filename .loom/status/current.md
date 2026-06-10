@@ -2,22 +2,22 @@
 
 ## Derived Fact Chain View
 
-- Item ID: WI-1405
-- Goal: Split runtime locking validation into named surfaces for same-worktree single-flight locking, worktree-local lock paths, and installer regression lock output while preserving aggregate runtime regression validation.
-- Scope: Issue #1405 only: tools/check_loom_check_runtime_regressions.py locking surface registry/selectors, Makefile locking targets, WI-1405 minimal suite/progress/work-item/review/status carriers, scheduler-owned review/pr-gate/controlled merge/no_release closeout. No #1406 subprocess environment purity split, #1407 tempdir cleanup or fixture cleanliness split, #1408 aggregate closeout, release/package validation, skills validation, demo bootstrap changes, broad runtime behavior changes, or external-visible behavior.
-- Execution Path: issue #1405 -> branch work/1405-runtime-locking-validation-surfaces -> PR #1418 -> scheduler-owned review/pr-gate/controlled merge/no_release closeout
+- Item ID: WI-1393
+- Goal: Split tools/check_release_surface.py release surface validation into named, targetable contract/workflow/guard surfaces while preserving aggregate release surface validation behavior.
+- Scope: Issue #1393 only: tools/check_release_surface.py named release-doc-contract, release-workflow-contract, installer-sunset-guard, and forbidden-release-surface-patterns surfaces; Makefile aliases; docs/adoption/loom-cli-release-surface.md locator updates consuming the #1383 evidence contract; WI-1393 Loom carriers; scheduler-owned review/pr-gate/controlled merge/no_release closeout. No #1394 npm package split, #1395 installed/global CLI smoke, #1396 docs/evidence convergence, release publishing, package/runtime behavior, hosted workflow semantic changes, parent #1260 closeout, umbrella #1255 closeout, or Round 9+ scope.
+- Execution Path: issue #1393 -> branch work/1393-release-surface-validator-split -> PR #1423 -> scheduler-owned review/pr-gate/controlled merge/no_release closeout
 - Workspace Entry: .
-- Recovery Entry: .loom/progress/WI-1405.md
-- Review Entry: .loom/reviews/WI-1405.json
-- Validation Entry: git diff --check; tools/check_loom_check_runtime_regressions.py --list-surfaces; Makefile locking targets; suite inspect/validate for WI-1405; fact-chain/state-check after scheduler activation; PR metadata preflight/readback; hosted checks
-- Closing Condition: PR #1418 for #1405 is reviewed/gated by the scheduler on the current head, merged through the controlled path, issue #1405 is closed, and no_release closeout is consumed by #1263/#1255.
-- Current Checkpoint: closed_out
-- Current Stop: WI-1405 terminal closeout facts have been consumed: PR #1418 merged into `main` at 2026-06-10T21:01:08Z with merge commit `7c151d6e85c8d6b0609b4681ed1b80089e16811f`; issue #1405 closed at 2026-06-10T21:01:09Z; hosted `loom-check` and rerun `loom-pr-merge-gate` passed on head `12c499eb1097878144f4ec7c49fa1f094e5a9009`; no_release terminal metadata is recorded in `.loom/progress/WI-1405.md`.
-- Next Step: None for WI-1405. Runtime subprocess environment purity, tempdir cleanup/fixture cleanliness, and aggregate runtime evidence continue in #1406, #1407, and #1408; parent #1263/#1255 consume this closeout later.
-- Blockers: None
-- Latest Validation Summary: Terminal closeout readback for WI-1405: PR #1418 merged at 2026-06-10T21:01:08Z with merge commit `7c151d6e85c8d6b0609b4681ed1b80089e16811f`; issue #1405 closed at 2026-06-10T21:01:09Z; hosted `loom-check` and rerun `loom-pr-merge-gate` passed on head `12c499eb1097878144f4ec7c49fa1f094e5a9009`; local `pr gate`, `flow merge-ready`, controlled merge check, `fact-chain`, `state-check`, `suite evidence validate`, `suite carrier validate`, `carrier refresh --dry-run`, and `git diff --check` passed; terminal no_release metadata is recorded.
-- Recovery Boundary: WI-1405 is terminal. Do not reopen or modify implementation scope here; subsequent runtime stream work remains in #1406, #1407, and #1408.
-- Current Lane: runtime-locking-validation-surfaces
+- Recovery Entry: .loom/progress/WI-1393.md
+- Review Entry: .loom/reviews/WI-1393.json
+- Validation Entry: git diff --check; tools/check_release_surface.py --list-surfaces and targeted #1393 surfaces; Makefile release-surface aliases; aggregate check_release_surface.py; check_npm_package.py compatibility; suite inspect/validate for WI-1393; fact-chain/state-check after scheduler activation; PR metadata preflight/readback; hosted checks
+- Closing Condition: PR #1423 for #1393 is reviewed/gated by the scheduler on the current head, merged through the controlled path, issue #1393 is closed, and no_release closeout is consumable by #1260/#1255.
+- Current Checkpoint: merge
+- Current Stop: Scheduler consumed T1393 waiting-scheduler-gate report for PR #1423 head `f71830b39ed7dc8c9cfd915fa6402b94960f9c58` and is binding WI-1393 root carrier/review state for merge-ready consumption after local validation, PR metadata/head readback, and hosted worker-relevant checks passed.
+- Next Step: Complete scheduler-owned current-head review, PR gate, controlled merge, and no_release closeout/readback for PR #1423.
+- Blockers: None recorded.
+- Latest Validation Summary: 2026-06-10 local worker validation passed for the release surface split: `git diff --check`; `python3 tools/check_release_surface.py --help`; `python3 tools/check_release_surface.py --list-surfaces`; targeted `python3 tools/check_release_surface.py --surface release-doc-contract`, `--surface release-workflow-contract`, `--surface installer-sunset-guard`, and `--surface forbidden-release-surface-patterns`; aggregate `python3 tools/check_release_surface.py`; `python3 tools/check_release_surface.py --surface aggregate-release-surface --show-surface-evidence`; Makefile aliases for the four named release surfaces; `python3 tools/py_compile_clean.py tools/check_release_surface.py`; `python3 tools/check_npm_package.py`; and `python3 tools/loom.py suite inspect --target . --item WI-1393 --json`. `python3 tools/loom.py suite validate --target . --item WI-1393 --json` returned `result=not_applicable`, `blocking_gaps=[]`, and `findings=[]` with the expected not_applicable exit classification for this suite path decision.
+- Recovery Boundary: Only #1393 release surface validator split and minimal WI-1393 PR-readiness carriers are in scope. Do not implement #1394 npm package manifest/payload split, #1395 installed/global CLI smoke, #1396 docs/evidence convergence, parent #1260 closeout, umbrella #1255 closeout, release cutting, `VERSION`/tag/GitHub Release/npm publish changes, package runtime behavior, skills/demo/runtime regression changes, guardian/formal review, controlled merge, or `.loom/reviews/**` writes.
+- Current Lane: release-surface-validator-split
 
 ## Runtime Evidence
 
@@ -29,7 +29,7 @@
 
 ## Sources
 
-- Static Truth: .loom/work-items/WI-1405.md
-- Dynamic Truth: .loom/progress/WI-1405.md
+- Static Truth: .loom/work-items/WI-1393.md
+- Dynamic Truth: .loom/progress/WI-1393.md
 - Locator Truth: .loom/bootstrap/init-result.json
 - Fact Chain CLI: python3 .loom/bin/loom_init.py fact-chain --target .
