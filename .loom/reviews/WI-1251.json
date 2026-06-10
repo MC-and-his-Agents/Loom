@@ -1,39 +1,48 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1251",
-  "decision": "fallback",
-  "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "a9d6dfdb2c84e7761f457657a004283a48dfa00c",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "decision": "allow",
+  "kind": "code_review",
+  "summary": "Scheduler current-head review allows PR #1413 at head 2ef0ee8d after live readback, #1252 terminal carrier cleanup, focused fallback fixture validation, state-check, suite not_applicable validation, and PR metadata readback. The change isolates Codex App fallback fixture HOME/CODEX_HOME/temp discovery from workstation state, verifies missing-proof and explicit-fallback paths use controlled fake inputs, and preserves fail-closed review/gate boundaries. No blocking findings remain.",
+  "reviewer": "scheduler-thread-019eaf94",
+  "authored_at": "2026-06-10T13:18:29Z",
+  "reviewed_head": "2ef0ee8d4ef9e814e2cb3f5ece38870d5fcb18b1",
+  "reviewed_validation_summary": "After rebase onto origin/main dba1f55690150336211c767069c9189df90c000a and the review_run_fixture_env helper fix, focused validation passed: git diff --check; git diff --check origin/main...HEAD; PYTHONDONTWRITEBYTECODE=1 python3 tools/py_compile_clean.py over canonical/generated/runtime/demo loom_check.py copies plus tools/check_loom_check_runtime_regressions.py; python3 tools/skills_surface.py check; PYTHONDONTWRITEBYTECODE=1 python3 tools/check_loom_check_runtime_regressions.py; make loom-demo-new-project-check; PYTHONDONTWRITEBYTECODE=1 python3 tools/loom_check.py --profile source --source-surface review-run .; suite inspect passed with Suite path: not_applicable at .loom/specs/WI-1251/spec.md; suite validate exits 1 with result=not_applicable and blocking_gaps=[]; fact-chain and verify pass. carrier refresh --dry-run and shadow-parity remain blocked by scheduler-owned stale review scaffold/shadow drift.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1251.md",
+    "recovery_entry": ".loom/progress/WI-1251.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "not_applicable",
+    "suite_carrier_validation": "not_applicable",
+    "suite_evidence_map": null,
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [],
+    "suite_evidence_consumed_contracts": [],
+    "suite_carrier_consumed_contracts": []
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
 }
