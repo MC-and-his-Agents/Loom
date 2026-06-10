@@ -243,6 +243,26 @@ python3 tools/loom_check.py --profile source --source-surface daily-execution-cl
 
 The fast entry is a local smoke surface only. Merge-ready, release readiness, and source full self-checks must continue to consume `daily-execution-cli-full`, `merge-gate`, `source-self-fixture`, `full`, or equivalent full aggregate evidence, plus current PR head, review, fact-chain, hosted checks, PR metadata, release/no-release, and scheduler-owned gate inputs.
 
+The command matrix records these as validation surfaces, not new top-level
+`loom` commands. Evidence summaries that cite them must preserve:
+
+- the exact surface name (`daily-execution-cli-fast` or
+  `daily-execution-cli-full`);
+- the command form that was run (`make ...` or `python3 tools/loom_check.py
+  --profile source --source-surface ... .`);
+- result, elapsed time, and current head / PR head binding;
+- failure summary scoped to the failed surface or child scenario;
+- whether the run is focused proof, full bucket proof, hosted-check readback, or
+  scheduler-owned gate input.
+
+For merge-ready, fast evidence can support troubleshooting and review context
+but cannot satisfy the daily-execution-cli bucket. Full evidence must be paired
+with review, fact-chain, PR metadata, hosted checks, release/no-release, and
+scheduler-owned gate readback. For closeout, retained evidence must link the
+full validation basis to the PR head, merge commit, target branch, and
+`no_release` judgment or explicitly record a narrower scope rationale and
+remaining risk.
+
 This covers #899 and #901 by asserting that required names appear in `loom help --json`, version output is structured, and installed-state positive and negative fixtures behave consistently.
 
 For #906-#909 it also checks:

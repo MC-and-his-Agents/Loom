@@ -56,6 +56,28 @@ python3 tools/loom_check.py --profile source --source-surface daily-execution-cl
 
 Fast daily CLI proof 不替代 full validation、hosted `repo-local-cli` / `loom-check` checks、current-head review、PR gate、merge-ready、controlled merge、release/no-release 判断或 closeout。
 
+Expected evidence:
+
+| Entry | Evidence to record | Merge-ready role | Closeout role |
+| --- | --- | --- | --- |
+| `make daily-execution-cli-fast` | command, `daily-execution-cli-fast` selector, result, elapsed time, current head, and focused failure summary | focused local proof only; may explain why a touched runtime smoke path is ready for review | advisory troubleshooting input only, unless the owning closeout scope explicitly requires no broader daily CLI coverage |
+| `make daily-execution-cli-full` | command, `daily-execution-cli-full` selector, result, elapsed time, current head, and failed child scenario or fixture group when blocked | authoritative daily-execution-cli bucket input, still alongside review, fact-chain, hosted checks, PR metadata, release/no-release, and scheduler-owned gates | retained validation input that closeout can backlink to PR head, merge commit, target branch, and no_release evidence |
+
+Troubleshooting signals:
+
+- Fast passes while full fails: keep the PR out of merge-ready and classify the
+  full bucket child failure; the fast run only narrows the unaffected runtime
+  smoke path.
+- Full passes while hosted checks fail: classify hosted check freshness,
+  command group, branch protection, or CI environment separately; do not rewrite
+  local evidence as hosted proof.
+- PR metadata, review, fact-chain, release/no-release, or scheduler-owned gate
+  failures: keep those findings separate from daily-execution-cli failures and
+  repair the owning carrier or gate input.
+- Closeout evidence missing the full run: link the retained full validation or
+  record the explicit scope rationale and remaining risk. A fast-only locator is
+  not enough for default merge-ready or no_release closeout.
+
 | Order | Frozen group name | CI step name | Local alias | Execution surface |
 | --- | --- | --- | --- | --- |
 | 0 | `setup-demo-bootstrap` | `repo-local-cli: setup-demo-bootstrap` | `make repo-local-cli-fast GROUP=setup-demo-bootstrap` or `make repo-local-cli-setup-demo-bootstrap` | `make loom-demo-new-project-check` from repo root. |

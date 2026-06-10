@@ -233,6 +233,37 @@ merge-ready 与 release 判断必须消费 full validation 或显式等价的全
 - closeout-friendly contract-only pass
 - 历史 stale run
 
+### 5.5 Daily execution CLI evidence requirements
+
+`daily-execution-cli-fast` 与 `daily-execution-cli-full` 必须在证据中保留不同角色：
+
+| Surface | Expected evidence | Valid consumers | Not valid for |
+| --- | --- | --- | --- |
+| `daily-execution-cli-fast` | command、surface selector、`runtime-smoke` scope、result、elapsed time、failure summary when blocked、current `HEAD` / PR head binding | local iteration、focused proof、pre-review context、troubleshooting a touched runtime surface | merge-ready pass、release / no-release judgment、full bucket closeout basis |
+| `daily-execution-cli-full` | command、surface selector、full bucket scope、result、elapsed time、child surface or scenario failure summary、current `HEAD` / PR head binding | authoritative daily-execution-cli bucket proof, merge-ready evidence input, release/no-release evidence input, closeout retained validation input | replacing review, PR metadata preflight, hosted checks, fact-chain, controlled merge, or scheduler-owned gates |
+
+When a Work Item cites both surfaces, the validation summary must state whether
+the fast run is only focused proof and whether the full run is the retained
+authority. If the full run is intentionally omitted, the summary must identify
+the owning gate or scope rationale that makes full daily-execution-cli coverage
+not required for that item; otherwise merge-ready must treat the evidence as
+incomplete.
+
+Troubleshooting signals should stay surface-specific:
+
+- `daily-execution-cli-fast` failure means the touched runtime smoke path is
+  broken or the local runtime/bootstrap fixture is unreadable; rerun the same
+  fast surface after fixing the focused cause.
+- `daily-execution-cli-full` failure means the full daily-execution-cli bucket
+  is not authoritative for merge-ready; classify the failed child scenario or
+  fixture group before rerunning heavy validation.
+- Hosted `repo-local-cli` or `loom-check` failure is a host/CI readback signal,
+  not proof that the local fast or full run was skipped; read the hosted command
+  group, PR head, and required-check freshness separately.
+- PR metadata, fact-chain, review, release/no-release, and scheduler-owned gate
+  failures must remain separate findings. They cannot be repaired by rerunning
+  `daily-execution-cli-fast` or `daily-execution-cli-full` alone.
+
 ## 6. Command Matrix Consumption
 
 命令矩阵与后续 CLI/test tooling 应遵守：
