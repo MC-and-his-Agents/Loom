@@ -1,39 +1,57 @@
 {
   "schema_version": "loom-review/v1",
   "item_id": "WI-1405",
-  "decision": "fallback",
+  "decision": "allow",
   "kind": "general_review",
-  "summary": "Formal review has not been recorded yet.",
-  "reviewer": "not yet assigned",
-  "reviewed_head": "27d3deba925ace0667726ed1bf8a5f4c9f0288f6",
-  "reviewed_validation_summary": "No validation recorded yet.",
-  "fallback_to": "admission",
-  "findings": [
-    {
-      "id": "scaffolded-block-1",
-      "summary": "Review artifact scaffolded but not yet concluded.",
-      "severity": "block",
-      "rebuttal": null,
-      "disposition": {
-        "status": "rejected",
-        "summary": "Scaffold placeholder must be replaced by a real formal review conclusion."
+  "summary": "Implementation review allow: WI-1405 current-head validation passed for suite/evidence/carrier/fact-chain and runtime locking plus aggregate regression checks. Diff remains limited to runtime locking selectors, Makefile targets, and WI-1405 Loom carriers/review inputs; aggregate runtime regression remains fail-closed; #1406/#1407/#1408 and release/package, skills, demo bootstrap, and external-visible runtime behavior remain out of scope.",
+  "reviewer": "scheduler:019eb28d-ac3b-7623-8955-12542fa2e08d",
+  "authored_at": "2026-06-10T20:49:48Z",
+  "reviewed_head": "6e83c657ce6c5c019d3cdd868963d3165ab971f4",
+  "reviewed_validation_summary": "Local validation passed for WI-1405: `python3 tools/check_loom_check_runtime_regressions.py --list-surfaces`; `make loom-check-runtime-single-flight-locking`; `make loom-check-runtime-worktree-local-lock-paths`; `make loom-check-runtime-installer-regression-lock-output`; `make loom-check-runtime-locking`; `make loom-check-runtime-regression`; `python3 tools/py_compile_clean.py tools/check_loom_check_runtime_regressions.py`; `python3 tools/loom.py suite inspect --target . --item WI-1405 --json`; `python3 tools/loom.py suite validate --target . --item WI-1405 --json`; `git diff --check`. Tracked-file status after runtime checks showed only intentional source/carrier edits and no lock residue at `.loom/runtime/loom_check.lock` or `packages/loom-installer/.installer-regression-lock`. PR #1418 metadata preflight/readback passed for branch `work/1405-runtime-locking-validation-surfaces`; the PR body machine block is expected to be refreshed to the final pushed head after this carrier sync commit.",
+  "fallback_to": null,
+  "findings": [],
+  "blocking_issues": [],
+  "follow_ups": [],
+  "consumed_inputs": {
+    "work_item": ".loom/work-items/WI-1405.md",
+    "recovery_entry": ".loom/progress/WI-1405.md",
+    "status_surface": ".loom/status/current.md",
+    "build_checkpoint": "pass",
+    "budget_risk": {
+      "schema_version": "loom-execution-budget-risk/v1",
+      "status": "not_applicable",
+      "enforcement": "advisory",
+      "highest_risk": "none",
+      "risk_dimensions": [],
+      "summary": "execution budget is not_applicable; budget risk remains advisory and non-blocking",
+      "budget_summary": "execution budget is not collected for this invocation.",
+      "adapter_evidence_locator": "",
+      "provenance": {
+        "source": "github_host"
       }
     },
-    {
-      "id": "scaffolded-warn-1",
-      "summary": "Record a real review before asking merge checkpoint to consume it.",
-      "severity": "warn",
-      "rebuttal": null,
-      "disposition": {
-        "status": "deferred",
-        "summary": "This follow-up stays open until a real review is recorded."
-      }
-    }
-  ],
-  "blocking_issues": [
-    "Review artifact scaffolded but not yet concluded."
-  ],
-  "follow_ups": [
-    "Record a real review before asking merge checkpoint to consume it."
-  ]
+    "engine_adapter": null,
+    "engine_evidence": null,
+    "normalized_findings": null,
+    "suite_evidence_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/56ec/Loom/tools/loom.py suite evidence validate --target /Users/mc/.codex/worktrees/56ec/Loom --item WI-1405 --json",
+    "suite_carrier_validation": "/Users/mc/.local/python-stable/bin/python3 /Users/mc/.codex/worktrees/56ec/Loom/tools/loom.py suite carrier validate --target /Users/mc/.codex/worktrees/56ec/Loom --item WI-1405 --json",
+    "suite_evidence_map": ".loom/specs/WI-1405/evidence-map.md",
+    "suite_consistency_analysis": null,
+    "suite_task_carriers": [
+      ".loom/specs/WI-1405/task-carrier.md"
+    ],
+    "suite_evidence_consumed_contracts": [
+      "docs/methodology/harness/full-spec-suite-cli-surface.md",
+      "docs/methodology/templates/evidence-map.md"
+    ],
+    "suite_carrier_consumed_contracts": [
+      "docs/methodology/harness/task-carrier-contract.md",
+      "docs/methodology/templates/execution-breakdown.md",
+      "docs/methodology/harness/full-spec-suite-cli-surface.md"
+    ]
+  },
+  "semantic_review_disposition": {
+    "status": "passed",
+    "reason": "Authored implementation review approved the current head for merge checkpoint consumption."
+  }
 }
